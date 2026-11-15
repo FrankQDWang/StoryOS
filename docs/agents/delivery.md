@@ -4,17 +4,27 @@ This document gives the rules to deliver a specification and its tickets. The ru
 
 ## Roles
 
-- **Author:** decides each change of the product, a contract, a number, or a waiver. The author approves the ticket graph of a specification. The author approves a ticket that must add more than 1500 counted lines only when the lines above the limit are mechanical or generated.
-- **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts the executor of each chain, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Only the coordinator changes the integration branch. The coordinator approves a split of a ticket only for its size. Before dispatch, the coordinator splits each other ticket that must add more than 1500 counted lines.
+- **Author:** decides each change of the product, a contract, a number, a waiver, and each merge of an aggregate pull request into `main`. The author approves the ticket graph of a specification. The [standing approvals](#standing-approvals) need no question. A report to the author follows the Reports rule of `AGENTS.md`. The author approves a ticket that must add more than 1500 counted lines only when the lines above the limit are mechanical or generated.
+- **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts the executor of each chain, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Before dispatch, it splits each ticket that must add more than 1500 counted lines, and it approves another split only for its size.
 - **Executor:** one session for an ordered chain of tickets, in one worktree. Each ticket has its own branch and pull request. The executor implements each ticket, runs its review and checks, and sends its final report. It does not merge.
-- **Reviewer:** a new read-only Codex thread for each review axis. `make review` starts it. The reviewer is never the agent tool that implements the ticket. [Codex review](#codex-review) tells who runs `make review`.
+- **Reviewer:** a new read-only Codex thread for each review axis. The reviewer is never the agent tool that implements the ticket.
+
+## Standing approvals
+
+The author approved these items for all work. Do them without a question:
+
+- Start the chains of each ready ticket of an approved ticket graph. The approval of the graph also releases its execution, unless the author says that it does not.
+- After the merge of a ticket, archive its executor session, and remove its worktree and its merged branches.
+- Remove a heavy-run slot when the session of its owner file ended.
+- Do a fix that a triage decision of the author approved.
+- Send a live model request ([Live model requests](#live-model-requests)).
 
 ## Branches and pull requests
 
 - The coordinator makes one integration branch for each specification from an exact `main` commit. During the specification, the coordinator can freeze `main`.
 - Each ticket branch starts from the current tip of the integration branch. Two chains never change the same files at the same time.
-- The ticket pull request goes into the integration branch. Its body starts with `Closes #<ticket>. Parent: #<specification>.`, so that `make review` finds the ticket. It carries the evidence of [Check Evidence Line](#check-evidence-line) and [Codex review](#codex-review).
-- After the last ticket merges, the coordinator opens one aggregate pull request from the integration branch to `main`. Its body has a `Closes #<issue>` line for the specification and for each delivered ticket. It has no closing reference for an unmet product stage gate or for another specification.
+- The ticket pull request goes into the integration branch. Its body starts with `Closes #<ticket>. Parent: #<specification>.`, so that `make review` finds the ticket.
+- The aggregate pull request goes from the integration branch to `main`. Its body has a `Closes #<issue>` line for the specification and for each delivered ticket. It has no closing reference for an unmet product stage gate or for another specification.
 - Implementation commits go to `main` only through the aggregate pull request. Each merge is an ordinary merge commit, unless the specification requires another method.
 - GitHub closes linked issues only for a pull request into the default branch.
 
@@ -58,11 +68,11 @@ Ask the coordinator only for a real decision. A product, contract, number, or wa
 
 ### 5. Open the pull request
 
-When `make check-fast` and the tests that the ticket adds or changes pass, push the branch and open the pull request into the integration branch. Use the `pr` skill for the body. The GitHub `verify` check runs on each push.
+When `make check-fast` and the tests that the ticket adds or changes pass, push the branch and open the pull request into the integration branch. Use the `pr` skill for the body.
 
 ### 6. Review
 
-Before round 1, complete each evidence record that an acceptance criterion requires, for example a live request record.
+Before round 1, complete each evidence record that an acceptance criterion requires.
 
 Run the [Codex review](#codex-review) rounds until a round passes. Handle each Sourcery review thread: fix the finding, or reply with the reason. Then resolve the thread.
 
@@ -93,7 +103,7 @@ After the merge of the first ticket that requires `make check-full`, and again b
 
 After the last ticket merges, the coordinator opens the aggregate pull request and puts a Check Evidence Line of its head in the body. The aggregate pull request has the same merge gate as a ticket pull request, unless the specification gives another review. The coordinator runs the review and merges.
 
-Then the coordinator synchronizes `main` and reads the state of each linked issue. A closed state alone does not prove acceptance. The coordinator evaluates each parent user story on the `main` tree and posts the Resolution on the parent. It closes each issue that passed and is still open. It opens again each issue that GitHub closed and that did not pass. Then it refreshes the current map.
+Then the coordinator synchronizes `main`. A closed issue alone does not prove acceptance, so the coordinator evaluates each parent user story on the `main` tree and posts the Resolution on the parent. It closes each issue that passed and is still open. It opens again each issue that GitHub closed and that did not pass. Then it refreshes the current map.
 
 ### 10. Retrospect and clean up
 
@@ -108,7 +118,7 @@ The three tiers of ADR 0070:
 | Command | When | Typical time |
 |---|---|---|
 | `make check-fast` | After each edit, with the Web source guards. The GitHub `verify` check runs it. | about 1 minute after a build |
-| `make check` | On the head of each pull request. It is the default goal. | about 10 minutes |
+| `make check` | On the head of each pull request. | about 10 minutes |
 | `make check-full` | Only when the ticket or an explicit request requires a complete local run. Then run it in place of `make check`. | about 20 minutes |
 
 Each tier prints one line at the end:
@@ -117,7 +127,7 @@ Each tier prints one line at the end:
 Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result=PASS time=<UTC time> duration=<seconds>s
 ```
 
-- Only a line of `make check` or `make check-full` with `result=PASS` is merge evidence. A line of `make check-fast` is not.
+- Only a line of `make check` or `make check-full` with `result=PASS` is merge evidence.
 - `make check` and `make check-full` stop at the start when the working tree has changes. A line with `tree=DIRTY` is not evidence.
 - When each changed file is a document under `docs/` or at the root that no code names, `make check` runs only the `make check-fast` steps, and its line ends with `scope=documents`.
 - Copy the line into the pull request body exactly. The coordinator compares its commit with the head of the pull request. A review round does not need the line.
@@ -129,7 +139,7 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 ### Who runs it
 
 - When Claude Code implements the ticket, the executor runs `make review PR=<number>`.
-- When Codex implements the ticket, nobody runs `make review`, because Codex cannot review its own work. The coordinator starts a separate read-only Claude Code session. That session runs the `code-review` skill of the `mattpocock-skills` plugin on the pull request, with the [review prompt](review-prompt.md) rules. It posts one verdict comment for each axis with the heading `## <Standards or Spec> review, round <n>: <PASS or FAIL>`. The round rules below apply.
+- When Codex implements the ticket, nobody runs `make review`, because Codex cannot review its own work. A separate read-only Claude Code session, which the coordinator starts, runs the `code-review` skill of the `mattpocock-skills` plugin on the pull request, with the [review prompt](review-prompt.md) rules. It posts one verdict comment for each axis with the heading `## <Standards or Spec> review, round <n>: <PASS or FAIL>`. The round rules below apply.
 
 ### What `make review` does
 
@@ -139,14 +149,14 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 - No line of the pull request body has the word `pending`.
 - The GitHub `verify` check of the head passes. The command waits for it, for `WAIT` seconds (default 1200).
 
-Then it sends the [review prompt](review-prompt.md) and a request to one new read-only Codex thread for each axis. The command posts one verdict comment for each axis, and it adds a link to each verdict in the `## Review verdicts` section of the pull request body. The command retries GitHub network errors, and it stops the Codex brokers of its own jobs.
+Then it sends the [review prompt](review-prompt.md) and a request to one new read-only Codex thread for each axis. The command posts one verdict comment for each axis, and it adds a link to each verdict in the `## Review verdicts` section of the pull request body. It stops the Codex brokers of its own jobs.
 
 ### Rounds
 
 - A pull request gets at most three rounds.
 - Only a blocking finding fails a round. A finding on format, lint, names, or ASD-STE100 wording never fails a round.
 - After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier only after a round passes: a fix or a base merge replaces the head of an earlier heavy run, and a round beside `make check-full` can lose its Codex job. The [merge gate](#merge-gate) still needs a line for the final head.
-- After a passed round, a new round starts only after a change to the diff of the ticket. The command refuses a round when the tree did not change.
+- After a passed round, a new round starts only after a change to the diff of the ticket.
 - A merge of the base branch after a passed round needs no new round when it does not change the diff of the ticket. Compare `git diff <base>...<head>` before and after the merge. Send the Check Evidence Line of the new head and the GitHub `verify` check to the coordinator.
 
 ### After round 3
@@ -155,8 +165,7 @@ When round 3 has open blocking findings, do not start a fourth round. Send the f
 
 1. The coordinator reviews the fix in a pull request comment that names the new head.
 2. The fix adds a test that fails before the fix.
-3. `make check` passes on the new head, and its Check Evidence Line is in the body.
-4. The GitHub `verify` check of the new head passes.
+3. The new head meets the conditions 1 and 2 of the [merge gate](#merge-gate).
 
 Then the coordinator review comment replaces the verdicts of round 3.
 
@@ -229,7 +238,7 @@ FILE=test/browser-exact-dist/production-host.integration.test.ts sh -ec '
 
 ## Live model requests
 
-Do not stop to ask before a live model request. The author gave a standing permission. [ADR 0049](../adr/0049-admit-an-author-authorized-runtime-qualification.md) gives the contract of a qualification request.
+[ADR 0049](../adr/0049-admit-an-author-authorized-runtime-qualification.md) gives the contract of a qualification request.
 
 1. Before the run, write the plan: the purpose and the planned number of requests. Automatic requests, for example a late retrieval or a recovery `Retrieve`, count. When the ticket names a token limit, the plan also gives the expected reported input of each request and the total. A request with a prior reference has the full conversation as its input. When the total is above the limit, send the plan to the coordinator and wait for the answer.
 2. Send the requests.
@@ -247,4 +256,4 @@ Before the session ends, stop each process that you started:
 - Each development server.
 - Each disposable database, and each heavy-run slot.
 
-The author's own `ChatGPT.app` and `CodexCLI.app` processes are not yours. Keep them running.
+Keep the author's own `ChatGPT.app` and `CodexCLI.app` processes running.
