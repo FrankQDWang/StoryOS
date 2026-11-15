@@ -1,13 +1,13 @@
 use super::{
     SkillInstructionSource, SkillInstructionUnavailable, SkillProvenance, SkillRequirement,
-    SkillSelectionUnavailable, admit_skill_selections, assemble_skill_instructions,
-    skill_reference_well_formed,
+    SkillSelectionUnavailable, admit_skill_selections, assemble_skill_catalog,
+    assemble_skill_instructions, skill_reference_well_formed,
 };
 use crate::assemble_context::{SelectedProjection, count_context_item_tokens};
 use crate::{
     ContextSourceClass, CurrentPassageAssemblyRecord, FrontmatterValue, ProjectionMode,
-    SKILL_MD_PATH, SkillFileInput, SkillPackage, SkillPackageInput, SkillPackageReference,
-    SkillSet, ToolResultSource, admit_skill_package,
+    SKILL_MD_PATH, SkillCatalogEntry, SkillFileInput, SkillPackage, SkillPackageInput,
+    SkillPackageReference, SkillSet, ToolResultSource, admit_skill_package, hex_sha256,
 };
 
 fn package(name: &str) -> SkillPackage {
@@ -37,6 +37,13 @@ fn requirement(package: &SkillPackage) -> SkillRequirement {
         skill_name: package.name.clone(),
         package_digest: package.package_digest.clone(),
         provenance: SkillProvenance::AuthorSelected,
+    }
+}
+
+fn entry(package: &SkillPackage) -> SkillCatalogEntry {
+    SkillCatalogEntry {
+        reference: package.reference(),
+        description: package.description.clone(),
     }
 }
 
@@ -156,7 +163,8 @@ fn a_snapshot_with_no_skill_md_text_is_unavailable() {
 }
 
 #[test]
-fn the_expected_input_counts_the_skill_text_only_when_the_request_sends_the_current_input() {
+fn the_expected_input_counts_the_skill_and_catalog_text_only_when_the_request_sends_the_current_input()
+ {
     let alpha = package("alpha-voice");
     let skill_tokens = count_context_item_tokens(&skill_md(&alpha.name));
     let mut plain = decision();
@@ -166,6 +174,8 @@ fn the_expected_input_counts_the_skill_text_only_when_the_request_sends_the_curr
     };
     let mut selected = plain.clone();
     assemble_skill_instructions(&mut selected, vec![source]).unwrap();
+    assemble_skill_catalog(&mut selected, &[entry(&alpha)]);
+    let catalog_tokens = count_context_item_tokens(&crate::skill_catalog_text(&[entry(&alpha)]));
     let output = SelectedProjection {
         source_class: ContextSourceClass::ToolResult,
         source_version: "tool-call-1".to_owned(),
@@ -204,13 +214,55 @@ fn the_expected_input_counts_the_skill_text_only_when_the_request_sends_the_curr
     let full = sent(&plain, crate::PriorInput::Replaced);
 
     // An incremental request sends only the Tool output. A request that sends its current input
-    // again also sends the Skill text.
+    // again also sends the Skill text and the catalog text.
     assert_eq!(
         [
             sent(&plain, crate::PriorInput::Current),
             sent(&selected, crate::PriorInput::Current),
             sent(&selected, crate::PriorInput::Replaced),
         ],
-        [7, 7, full + skill_tokens]
+        [7, 7, full + skill_tokens + catalog_tokens]
+    );
+}
+
+#[test]
+fn the_pinned_catalog_adds_one_exact_catalog_item_after_the_skill_instruction_items() {
+    let (alpha, beta) = (package("alpha-voice"), package("beta-notes"));
+    let mut record = decision();
+    let source = SkillInstructionSource {
+        requirement: requirement(&beta),
+        skill_md: Some(skill_md(&beta.name).into_bytes()),
+    };
+    assemble_skill_instructions(&mut record, vec![source]).unwrap();
+    let before = record.selected.clone();
+    let text = "{\"description\":\"Use it for alpha-voice.\",\"name\":\"alpha-voice\"}\n\
+                {\"description\":\"Use it for beta-notes.\",\"name\":\"beta-notes\"}";
+    let mut empty = decision();
+
+    assemble_skill_catalog(&mut record, &[entry(&beta), entry(&alpha)]);
+    assemble_skill_catalog(&mut empty, &[]);
+    assert_eq!(
+        (
+            record.selected.clone(),
+            record.operation_requirement.skill_catalog.clone(),
+            crate::decode_assembly_record(&crate::encode_assembly_record(&record)),
+            empty,
+        ),
+        (
+            [
+                before,
+                vec![SelectedProjection {
+                    source_class: ContextSourceClass::SkillCatalog,
+                    source_version: format!("sha256:{}", hex_sha256(text.as_bytes())),
+                    projection_mode: ProjectionMode::ExactRequired,
+                    token_count: count_context_item_tokens(text),
+                    content: text.to_owned(),
+                }],
+            ]
+            .concat(),
+            Some(vec![alpha.reference(), beta.reference()]),
+            Some(record.clone()),
+            decision(),
+        )
     );
 }

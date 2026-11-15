@@ -9,6 +9,8 @@ use crate::{CONTEXT_ITEM_TOKEN_LIMIT, admit_archive_path, canonical_json, hex_sh
 pub const SKILL_PACKAGE_FILE_LIMIT: usize = 64;
 pub const SKILL_PACKAGE_BYTE_LIMIT: u64 = 1_048_576;
 pub const SKILL_SET_LIMIT: usize = 32;
+/// The most counted tokens of the catalog text of one deployment (ADR 0089 section 9).
+pub const SKILL_CATALOG_TOKEN_LIMIT: u64 = 32_000;
 pub const SKILL_PACKAGE_INVENTORY_PROFILE: &str = "storyos.skill-package.inventory.sha256.v1";
 pub const SKILL_MD_PATH: &str = "SKILL.md";
 const NAME_MAX_CHARACTERS: usize = 64;
@@ -55,7 +57,8 @@ pub struct SkillFile {
 }
 
 /// The immutable reference to one package: its name and its package digest.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SkillPackageReference {
     pub name: String,
     pub package_digest: String,
@@ -81,6 +84,13 @@ impl SkillPackage {
         SkillPackageReference {
             name: self.name.clone(),
             package_digest: self.package_digest.clone(),
+        }
+    }
+
+    fn catalog_entry(&self) -> SkillCatalogEntry {
+        SkillCatalogEntry {
+            reference: self.reference(),
+            description: self.description.clone(),
         }
     }
 }
@@ -277,22 +287,69 @@ pub struct SkillSet {
     packages: Vec<SkillPackage>,
 }
 
-/// A Skill set above `SKILL_SET_LIMIT` packages (`skill_limit_exceeded`).
+/// The rule that refuses a Skill set. `label` gives the text of the startup refusal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SkillLimitExceeded;
+pub enum SkillSetRefusal {
+    /// More than `SKILL_SET_LIMIT` packages.
+    SkillLimitExceeded,
+    /// A catalog text above `SKILL_CATALOG_TOKEN_LIMIT` counted tokens.
+    CatalogLimitExceeded,
+}
+
+impl SkillSetRefusal {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::SkillLimitExceeded => "skill_limit_exceeded",
+            Self::CatalogLimitExceeded => "skill_catalog_limit_exceeded",
+        }
+    }
+}
 
 impl SkillSet {
-    pub fn new(mut packages: Vec<SkillPackage>) -> Result<Self, SkillLimitExceeded> {
+    pub fn new(mut packages: Vec<SkillPackage>) -> Result<Self, SkillSetRefusal> {
         if packages.len() > SKILL_SET_LIMIT {
-            return Err(SkillLimitExceeded);
+            return Err(SkillSetRefusal::SkillLimitExceeded);
         }
         packages.sort_by(|left, right| left.name.cmp(&right.name));
+        let catalog: Vec<_> = packages.iter().map(SkillPackage::catalog_entry).collect();
+        if count_context_item_tokens(&skill_catalog_text(&catalog)) > SKILL_CATALOG_TOKEN_LIMIT {
+            return Err(SkillSetRefusal::CatalogLimitExceeded);
+        }
         Ok(Self { packages })
     }
 
     pub fn packages(&self) -> &[SkillPackage] {
         &self.packages
     }
+}
+
+/// One Skill Catalog Entry of a Run: the reference and the description of one Skill.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SkillCatalogEntry {
+    pub reference: SkillPackageReference,
+    pub description: String,
+}
+
+/// The text of the `skill_catalog` item: one canonical JSON line with the `name` and the
+/// `description` of each entry, in the order of the Skill names. The text has no digest, because
+/// the model names a Skill by its name (ADR 0089 section 3).
+pub fn skill_catalog_text(entries: &[SkillCatalogEntry]) -> String {
+    let mut lines: Vec<_> = entries
+        .iter()
+        .map(|entry| {
+            let line = serde_json::json!({
+                "name": entry.reference.name,
+                "description": entry.description,
+            });
+            (&entry.reference.name, canonical_json(&line))
+        })
+        .collect();
+    lines.sort();
+    lines
+        .into_iter()
+        .map(|(_, line)| line)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// What one `createAgentRun` writes for the Skill set of the deployment (ADR 0089 section 2).

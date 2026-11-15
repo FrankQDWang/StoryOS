@@ -70,6 +70,14 @@ The request forms change, so Stage 6 adds one mapping revision, one head Model R
 - The head Model Registration is `018f0000-0000-7001-8000-00000000fa21`. It is Registration `018f0000-0000-7001-8000-00000000fa20` with the mapping `v7`. It keeps the profile, the requirement, and the request bounds, so it needs no new qualification. Until a later ticket adds a Skill Tool, the mapping `v7` declares the four Host Tools of the Host Tool Registration `018f0000-0000-7001-8000-0000000e0102`.
 - The rule that refused an author message with the words "load a skill" is removed. Such a message dispatches on each Registration.
 
+[S6-03a](https://github.com/FrankQDWang/StoryOS/issues/1530) recorded these names on 2026-11-15:
+
+- The catalog item is one `skill_catalog` Context item in the Context Assembly of each RunStep of a Run whose pinned catalog has a Skill. Its projection mode is `exact_required`. Its text has one line for each Skill, in the order of the Skill names: the canonical JSON object with `name` and `description`. The text has no digest. The source version of the item is `sha256:` and the SHA-256 of the text. A Run with no Skill in its pinned catalog has no catalog item.
+- The Operation Requirement records the pinned SkillPackage References in the field `skill_catalog`: a list of objects with `name` and `package_digest`, in the order of the Skill names.
+- The Core function `skill_catalog_text` makes the text, and `assemble_skill_catalog` adds the item after the `skill_instruction` items. The adapter reader `run_skill_catalog` reads the pinned catalog of a Run and the description of each Snapshot.
+- The mapping `v7` sends the item as one section of the user message: the heading `Skill catalog`, then the exact item text, after the `Skill instruction` sections and before the section `Working text`. The item is a part of the current input and of its digest (ADR 0085), and the expected input of ADR 0056 counts it when the request sends the current input.
+- `SkillSet::new` refuses a set of Skills whose catalog text is above 32,000 counted tokens (section 9). The start of the Server then stops with the rule `skill_catalog_limit_exceeded`.
+
 **Compaction.** The rules of ADR 0093 apply. The `SKILL.md` text of a Skill, loaded or selected, keeps its exact form in each request after a compaction. The result of a `read_skill_resource` call also keeps its exact form, as the result of each Host Tool does (ADR 0093 section 5). The author decided on 2026-11-15 that the first release has no stub for a long resource result.
 
 ### 4. The provision by the operator is the disclosure consent

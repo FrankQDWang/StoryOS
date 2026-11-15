@@ -343,7 +343,57 @@ fn a_skill_set_has_at_most_32_packages_in_the_order_of_their_names() {
     assert_eq!(names, expected);
     assert_eq!(
         SkillSet::new((0..=SKILL_SET_LIMIT).map(package).collect()),
-        Err(SkillLimitExceeded)
+        Err(SkillSetRefusal::SkillLimitExceeded)
+    );
+}
+
+fn described(name: &str, description: &str) -> SkillPackage {
+    let mut package = with_field("name", text(name));
+    package.directory_name = name.to_owned();
+    let fields = package.frontmatter.as_mut().expect("standard fields");
+    fields.retain(|(key, _)| key != "description");
+    fields.push(("description".to_owned(), text(description)));
+    admit_skill_package(package).expect("valid package")
+}
+
+#[test]
+fn the_catalog_text_has_one_canonical_json_line_for_each_skill_in_name_order() {
+    let entries = [
+        described("style-guide", "写「对白」时用 \"规则\"。"),
+        described("plot-notes", "Use it for plot notes."),
+    ]
+    .map(|package| package.catalog_entry());
+
+    assert_eq!(
+        skill_catalog_text(&entries),
+        "{\"description\":\"Use it for plot notes.\",\"name\":\"plot-notes\"}\n\
+         {\"description\":\"写「对白」时用 \\\"规则\\\"。\",\"name\":\"style-guide\"}"
+    );
+}
+
+#[test]
+fn a_skill_set_refuses_a_catalog_text_above_32000_tokens() {
+    let long = "d".repeat(1024);
+    let set = |last: usize| {
+        let mut packages: Vec<_> = (0..30)
+            .map(|index| described(&format!("skill-{index:02}"), &long))
+            .collect();
+        packages.push(described("skill-30", &"d".repeat(last)));
+        packages
+    };
+    let tokens = |packages: &[SkillPackage]| {
+        let entries: Vec<_> = packages.iter().map(SkillPackage::catalog_entry).collect();
+        count_context_item_tokens(&skill_catalog_text(&entries))
+    };
+    let last = 1 + usize::try_from(SKILL_CATALOG_TOKEN_LIMIT - tokens(&set(1))).unwrap();
+
+    assert_eq!(tokens(&set(last)), SKILL_CATALOG_TOKEN_LIMIT);
+    assert_eq!(
+        [
+            SkillSet::new(set(last)).map(|set| set.packages().len()),
+            SkillSet::new(set(last + 1)).map(|set| set.packages().len()),
+        ],
+        [Ok(31), Err(SkillSetRefusal::CatalogLimitExceeded)]
     );
 }
 

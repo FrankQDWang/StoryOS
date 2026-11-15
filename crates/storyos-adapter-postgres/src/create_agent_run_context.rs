@@ -141,6 +141,14 @@ pub(crate) async fn persist_current_passage_assembly(
             )))
         },
     )?;
+    let catalog = crate::skill_package_snapshot::run_skill_catalog(
+        client,
+        command.project_scope,
+        command.run_id,
+    )
+    .await
+    .map_err(agent_run_database_error)?;
+    storyos_core::assemble_skill_catalog(&mut record, &catalog);
     if let Some(candidates) = command.tool_results {
         storyos_core::assemble_tool_result_continuation(&mut record, candidates);
     }

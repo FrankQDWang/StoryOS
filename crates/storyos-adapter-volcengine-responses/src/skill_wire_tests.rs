@@ -197,3 +197,30 @@ async fn each_skill_instruction_item_is_one_exact_section_before_the_working_tex
         )}]}])
     );
 }
+
+/// ADR 0089 section 3: the `skill_catalog` item is one section `Skill catalog` with the exact
+/// catalog text, after the `skill_instruction` sections and before the working text.
+#[tokio::test]
+async fn the_skill_catalog_item_is_one_exact_section_after_the_skill_instruction_sections() {
+    let skill = "Keep each line short.";
+    let catalog = "{\"description\":\"Use it for <dialogue> & \\\"voice\\\".\",\"name\":\"dialogue\"}\n\
+                   {\"description\":\"Use it for plot notes.\",\"name\":\"plot-notes\"}";
+    let request = v7(vec![
+        item(
+            ContextSourceClass::AuthorInstruction,
+            "Tighten this paragraph.",
+        ),
+        item(ContextSourceClass::WorkingTarget, "The rain fell hard."),
+        item(ContextSourceClass::SkillInstruction, skill),
+        item(ContextSourceClass::SkillCatalog, catalog),
+    ]);
+
+    assert_eq!(
+        body(request).await["input"],
+        json!([{"role": "user", "content": [{"type": "input_text", "text": format!(
+            "Author request:\nTighten this paragraph.\n\nSkill instruction:\n{skill}\n\nSkill \
+             catalog:\n{catalog}\n\nWorking text:\nThe rain fell hard.\n\nTarget blocks:\n\
+             [block_id: 018f0000-0000-7001-8000-0000000000b1]\nThe rain fell hard on the old roof."
+        )}]}])
+    );
+}

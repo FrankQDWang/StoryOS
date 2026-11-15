@@ -43,6 +43,7 @@ fn requirement(input: &CurrentPassageAssembly) -> OperationRequirementRecord {
         tool_results: None,
         earlier_author_messages: None,
         skill_requirements: None,
+        skill_catalog: None,
         instruction: input.instruction.clone(),
         destination_identity: input.destination_identity.clone(),
         item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,
