@@ -33,6 +33,9 @@ Set `STORYOS_SKILLS_DIR` in the environment of `storyos-server` to the absolute 
 | One package | 1 to 64 files, and at most 1,048,576 bytes |
 | `SKILL.md` | UTF-8 text of at most 32,000 tokens |
 | Skills of one deployment | 32 |
+| The catalog text of one deployment | 32,000 tokens |
+
+The catalog text has one line for each Skill, with its name and its description. A set of Skills whose catalog text is above the limit stops the start with the rule `skill_catalog_limit_exceeded`.
 
 A resource file that is not UTF-8 text, or that is above 32,000 tokens, stays in the package, but the Agent cannot read it.
 

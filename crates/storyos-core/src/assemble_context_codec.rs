@@ -61,6 +61,9 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
     if let Some(requirements) = &record.operation_requirement.skill_requirements {
         payload["operation_requirement"]["skill_requirements"] = serde_json::json!(requirements);
     }
+    if let Some(catalog) = &record.operation_requirement.skill_catalog {
+        payload["operation_requirement"]["skill_catalog"] = serde_json::json!(catalog);
+    }
     if let Some(resolution) = record.operation_requirement.ordinary_resolution {
         payload["operation_requirement"]["ordinary_resolution"] = serde_json::json!({
             "profile_revision": crate::ORDINARY_PASSAGE_PROFILE, "disposition": resolution,
@@ -154,6 +157,11 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 .ok()?,
             skill_requirements: requirement
                 .get("skill_requirements")
+                .map(|value| serde_json::from_value(value.clone()))
+                .transpose()
+                .ok()?,
+            skill_catalog: requirement
+                .get("skill_catalog")
                 .map(|value| serde_json::from_value(value.clone()))
                 .transpose()
                 .ok()?,

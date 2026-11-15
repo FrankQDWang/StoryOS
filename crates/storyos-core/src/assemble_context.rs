@@ -139,6 +139,9 @@ pub struct OperationRequirementRecord {
     /// The Skill requirements of the Run, in the order of the Skill names. Each RunStep of the
     /// Run copies them (ADR 0089 section 5).
     pub skill_requirements: Option<Vec<super::SkillRequirement>>,
+    /// The SkillPackage Reference of each Skill of the catalog that the Run pinned, in the order
+    /// of the Skill names (ADR 0089 section 3).
+    pub skill_catalog: Option<Vec<super::SkillPackageReference>>,
     pub instruction: InstructionBindingInput,
     pub destination_identity: String,
     pub item_token_limit: u64,
@@ -298,6 +301,7 @@ pub fn assemble_current_passage_context(
             tool_results: None,
             earlier_author_messages: None,
             skill_requirements: None,
+            skill_catalog: None,
             instruction: input.instruction.clone(),
             destination_identity: input.destination_identity.clone(),
             item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,
