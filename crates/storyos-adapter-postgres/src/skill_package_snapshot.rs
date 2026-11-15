@@ -6,8 +6,8 @@ use std::collections::BTreeSet;
 
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectScope};
 use storyos_core::{
-    SKILL_MD_PATH, SkillInstructionSource, SkillPackage, SkillPackageReference, SkillRequirement,
-    SkillSet, plan_skill_catalog,
+    SKILL_MD_PATH, SkillCatalogEntry, SkillInstructionSource, SkillPackage, SkillPackageReference,
+    SkillRequirement, SkillSet, plan_skill_catalog,
 };
 use tokio_postgres::Client;
 
@@ -187,6 +187,44 @@ pub(crate) async fn skill_instruction_sources(
         });
     }
     Ok(sources)
+}
+
+/// The pinned catalog of `run_id`, with the description of the Snapshot of each entry, in the
+/// order of the Skill names. A Run with no catalog rows gives an empty list.
+pub(crate) async fn run_skill_catalog(
+    client: &Client,
+    scope: &ProjectScope,
+    run_id: &str,
+) -> Result<Vec<SkillCatalogEntry>, tokio_postgres::Error> {
+    let rows = client
+        .query(
+            "SELECT entry.skill_name, entry.package_digest, snapshot.description
+               FROM storyos.agent_run_skill_catalog_entries AS entry
+               JOIN storyos.skill_package_snapshots AS snapshot
+                 ON (snapshot.owner_user_id, snapshot.project_id, snapshot.package_digest,
+                     snapshot.skill_name) =
+                    (entry.owner_user_id, entry.project_id, entry.package_digest,
+                     entry.skill_name)
+              WHERE entry.owner_user_id = $1::text::uuid AND entry.project_id = $2::text::uuid
+                AND entry.run_id = $3::text::uuid
+              ORDER BY entry.skill_name COLLATE \"C\"",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &run_id,
+            ],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|row| SkillCatalogEntry {
+            reference: SkillPackageReference {
+                name: row.get(/*idx*/ 0),
+                package_digest: row.get(/*idx*/ 1),
+            },
+            description: row.get(/*idx*/ 2),
+        })
+        .collect())
 }
 
 #[cfg(test)]

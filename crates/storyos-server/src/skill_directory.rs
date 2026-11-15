@@ -7,9 +7,9 @@ use std::io::Read as _;
 use std::path::Path;
 
 use storyos_core::{
-    FrontmatterValue, SKILL_MD_PATH, SKILL_PACKAGE_BYTE_LIMIT, SKILL_PACKAGE_FILE_LIMIT,
-    SKILL_SET_LIMIT, SkillFileInput, SkillPackage, SkillPackageInput, SkillPackageRefusal,
-    SkillSet, admit_skill_package, skill_md_frontmatter,
+    FrontmatterValue, SKILL_CATALOG_TOKEN_LIMIT, SKILL_MD_PATH, SKILL_PACKAGE_BYTE_LIMIT,
+    SKILL_PACKAGE_FILE_LIMIT, SKILL_SET_LIMIT, SkillFileInput, SkillPackage, SkillPackageInput,
+    SkillPackageRefusal, SkillSet, SkillSetRefusal, admit_skill_package, skill_md_frontmatter,
 };
 use yaml_rust2::{Yaml, YamlLoader};
 
@@ -33,6 +33,8 @@ pub enum SkillDirectoryRefusal {
         rule: SkillPackageRefusal,
     },
     SkillLimitExceeded,
+    /// The catalog text of the Skill set is above its token limit (ADR 0089 section 9).
+    CatalogLimitExceeded,
 }
 
 impl fmt::Display for SkillDirectoryRefusal {
@@ -59,7 +61,13 @@ impl fmt::Display for SkillDirectoryRefusal {
             ),
             Self::SkillLimitExceeded => write!(
                 formatter,
-                "STORYOS_SKILLS_DIR: the Skill directory has more than {SKILL_SET_LIMIT} packages: skill_limit_exceeded"
+                "STORYOS_SKILLS_DIR: the Skill directory has more than {SKILL_SET_LIMIT} packages: {}",
+                SkillSetRefusal::SkillLimitExceeded.label()
+            ),
+            Self::CatalogLimitExceeded => write!(
+                formatter,
+                "STORYOS_SKILLS_DIR: the Skill catalog text is above {SKILL_CATALOG_TOKEN_LIMIT} tokens: {}",
+                SkillSetRefusal::CatalogLimitExceeded.label()
             ),
         }
     }
@@ -106,7 +114,10 @@ pub fn read_skill_directory(directory: Option<&Path>) -> Result<SkillSet, SkillD
         .into_iter()
         .map(|name| read_package(&directory.join(&name), name))
         .collect::<Result<_, _>>()?;
-    SkillSet::new(packages).map_err(|_| SkillDirectoryRefusal::SkillLimitExceeded)
+    SkillSet::new(packages).map_err(|refusal| match refusal {
+        SkillSetRefusal::SkillLimitExceeded => SkillDirectoryRefusal::SkillLimitExceeded,
+        SkillSetRefusal::CatalogLimitExceeded => SkillDirectoryRefusal::CatalogLimitExceeded,
+    })
 }
 
 fn read_package(root: &Path, package: String) -> Result<SkillPackage, SkillDirectoryRefusal> {

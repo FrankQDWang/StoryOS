@@ -51,6 +51,24 @@ fn an_invalid_skill_package_stops_the_start_with_the_package_and_the_rule() {
 }
 
 #[test]
+fn a_catalog_text_above_32000_tokens_stops_the_start_with_the_rule() {
+    let root = std::env::temp_dir().join(format!("storyos-skills-{}", uuid::Uuid::now_v7()));
+    let description = "d".repeat(1024);
+    for index in 0..31 {
+        let name = format!("skill-{index:02}");
+        fs::create_dir_all(root.join(&name)).unwrap();
+        fs::write(
+            root.join(&name).join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: {description}\n---\n"),
+        )
+        .unwrap();
+    }
+    let stderr = refused_stderr(&start_with_skills_dir(&root));
+    fs::remove_dir_all(&root).unwrap();
+    assert!(stderr.contains("skill_catalog_limit_exceeded"), "{stderr}");
+}
+
+#[test]
 fn a_skills_dir_that_is_not_a_directory_stops_the_start_with_its_name() {
     let stderr = refused_stderr(&start_with_skills_dir(Path::new(
         "/__storyos_missing_skills",

@@ -1,5 +1,5 @@
-//! The explicit Skill selection of one Run and its `skill_instruction` Context items (ADR 0089
-//! sections 3, 5, and 7).
+//! The explicit Skill selection of one Run, its `skill_instruction` Context items, and the
+//! `skill_catalog` Context item of the pinned catalog (ADR 0089 sections 3, 5, and 7).
 
 use std::collections::BTreeMap;
 
@@ -9,7 +9,7 @@ use crate::assemble_context::{
     ConsideredSource, ContextSourceClass, CurrentPassageAssemblyRecord, ProjectionMode,
     SelectedProjection, count_context_item_tokens,
 };
-use crate::{SkillPackageReference, SkillSet};
+use crate::{SkillCatalogEntry, SkillPackageReference, SkillSet, hex_sha256, skill_catalog_text};
 
 /// The most Skills that one message selects.
 pub const SKILL_SELECTION_LIMIT: usize = 8;
@@ -124,6 +124,42 @@ pub fn assemble_skill_instructions(
     }
     record.operation_requirement.skill_requirements = Some(requirements);
     Ok(())
+}
+
+/// Records the references of `catalog`, the pinned catalog of the Run, in the Operation
+/// Requirement of `record`, and adds one `skill_catalog` item with the catalog text. Call it after
+/// `assemble_skill_instructions`, so that the item comes after the `skill_instruction` items. An
+/// empty catalog adds nothing. The Server admitted the catalog text in its token limit (ADR 0089
+/// section 9).
+pub fn assemble_skill_catalog(
+    record: &mut CurrentPassageAssemblyRecord,
+    catalog: &[SkillCatalogEntry],
+) {
+    if catalog.is_empty() {
+        return;
+    }
+    let text = skill_catalog_text(catalog);
+    let token_count = count_context_item_tokens(&text);
+    let source_version = format!("sha256:{}", hex_sha256(text.as_bytes()));
+    record.considered.push(ConsideredSource {
+        source_class: ContextSourceClass::SkillCatalog,
+        source_version: source_version.clone(),
+        token_count,
+        eligible: true,
+    });
+    record.selected.push(SelectedProjection {
+        source_class: ContextSourceClass::SkillCatalog,
+        source_version,
+        projection_mode: ProjectionMode::ExactRequired,
+        token_count,
+        content: text,
+    });
+    let mut references: Vec<_> = catalog
+        .iter()
+        .map(|entry| entry.reference.clone())
+        .collect();
+    references.sort();
+    record.operation_requirement.skill_catalog = Some(references);
 }
 
 #[cfg(test)]

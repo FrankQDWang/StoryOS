@@ -275,14 +275,15 @@ pub use set_current_chapter::{
 };
 pub use skill_instruction::{
     SKILL_SELECTION_LIMIT, SkillInstructionSource, SkillInstructionUnavailable, SkillProvenance,
-    SkillRequirement, SkillSelectionUnavailable, admit_skill_selections,
+    SkillRequirement, SkillSelectionUnavailable, admit_skill_selections, assemble_skill_catalog,
     assemble_skill_instructions, skill_reference_well_formed,
 };
 pub use skill_package::{
-    FrontmatterValue, SKILL_MD_PATH, SKILL_PACKAGE_BYTE_LIMIT, SKILL_PACKAGE_FILE_LIMIT,
-    SKILL_PACKAGE_INVENTORY_PROFILE, SKILL_SET_LIMIT, SkillCatalogPlan, SkillFile, SkillFileInput,
-    SkillLimitExceeded, SkillPackage, SkillPackageInput, SkillPackageReference,
-    SkillPackageRefusal, SkillSet, admit_skill_package, plan_skill_catalog, skill_md_frontmatter,
+    FrontmatterValue, SKILL_CATALOG_TOKEN_LIMIT, SKILL_MD_PATH, SKILL_PACKAGE_BYTE_LIMIT,
+    SKILL_PACKAGE_FILE_LIMIT, SKILL_PACKAGE_INVENTORY_PROFILE, SKILL_SET_LIMIT, SkillCatalogEntry,
+    SkillCatalogPlan, SkillFile, SkillFileInput, SkillPackage, SkillPackageInput,
+    SkillPackageReference, SkillPackageRefusal, SkillSet, SkillSetRefusal, admit_skill_package,
+    plan_skill_catalog, skill_catalog_text, skill_md_frontmatter,
 };
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
