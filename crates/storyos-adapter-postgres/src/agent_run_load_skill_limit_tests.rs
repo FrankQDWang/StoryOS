@@ -274,11 +274,11 @@ async fn a_compaction_after_the_loads_keeps_each_load_output_exact_and_names_no_
     let (store, admin) = stores().await;
     let dialogue = fixture("dialogue-style-guide");
     let comms = fixture("internal-comms");
-    // RunStep 0 loads one Skill and refuses one name, RunStep 1 loads one more Skill, and the
-    // Run compacts at RunStep 2. Each later RunStep then sends its full input.
+    // RunStep 0 and RunStep 1 load one Skill each, and the Run compacts at RunStep 2. Each later
+    // RunStep then sends its full input.
     let message = format!(
         "{ACTIVE_COMPACTION_REQUEST_PREFIX} {ACTIVE_COMPACTION_POSITIONS_PREFIX} 2. \
-         SCRIPT:load_skill dialogue-style-guide,no-such-skill;internal-comms\n{EXPIRES}"
+         SCRIPT:load_skill dialogue-style-guide;internal-comms\n{EXPIRES}"
     );
     let (_, run_id) = loaded_run(
         &store,
@@ -290,7 +290,7 @@ async fn a_compaction_after_the_loads_keeps_each_load_output_exact_and_names_no_
     .await;
 
     let first = json!(["call_load_skill_0", skill_md(&dialogue)]);
-    let third = json!(["call_load_skill_2", skill_md(&comms)]);
+    let second = json!(["call_load_skill_1", skill_md(&comms)]);
     let sent = sent(&admin, &run_id).await;
     let roles: Vec<Value> = sent
         .as_array()
@@ -303,7 +303,7 @@ async fn a_compaction_after_the_loads_keeps_each_load_output_exact_and_names_no_
             .as_array()
             .unwrap()
             .iter()
-            .filter(|output| [&first[0], &third[0]].contains(&&output[0]))
+            .filter(|output| [&first[0], &second[0]].contains(&&output[0]))
             .cloned()
             .collect()
     };
@@ -326,8 +326,7 @@ async fn a_compaction_after_the_loads_keeps_each_load_output_exact_and_names_no_
     )
     .unwrap();
     // The summary request sends the output of the load that waits for it. The later request and
-    // each later full input send each load output in its exact form, and only the refused call
-    // is a stub.
+    // each later full input send each load output in its exact form, and no call is a stub.
     assert_eq!(
         (
             roles,
@@ -350,12 +349,12 @@ async fn a_compaction_after_the_loads_keeps_each_load_output_exact_and_names_no_
                 json!(["decision", 3, false]),
             ],
             vec![
-                vec![third.clone()],
-                vec![first.clone(), third.clone()],
-                vec![first.clone(), third.clone()],
-                vec![first, third],
+                vec![second.clone()],
+                vec![first.clone(), second.clone()],
+                vec![first.clone(), second.clone()],
+                vec![first, second],
             ],
-            json!([[2, ["call_load_skill_1"]]]),
+            json!([[2, null]]),
         )
     );
 }

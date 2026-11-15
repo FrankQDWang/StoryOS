@@ -106,7 +106,9 @@ No record holds the Skills of a Project Conversation. In a later message, the mo
 
 ### 6. Joint use
 
-Each loaded Skill is one separate, attributable Context item. The order of the items serves only reproducible serialization. The Host merges nothing and ranks nothing. The Host finds no Skill Conflict. When two Skills ask for incompatible things, the Agent asks the author in its answer.
+Each loaded Skill is one separate, attributable Context item. The order of the items serves only reproducible serialization. The Host merges nothing and ranks nothing.
+
+[S6-03c](https://github.com/FrankQDWang/StoryOS/issues/1531) recorded the order on 2026-11-15. A selected Skill is a section of the first RunStep in the order of its name. A loaded Skill is the output of its own call, in the item order of the call: the RunStep of the call, then the position of the call in its response. Two loads are two outputs and two Context items, also when one response has the two calls, and a full input sends them again in the same order. The Host finds no Skill Conflict. When two Skills ask for incompatible things, the Agent asks the author in its answer.
 
 ### 7. A Skill that is not available
 
@@ -127,6 +129,8 @@ After a turn, the panel names each Skill that the turn used, in the place where 
 | One Run | 8 Skill loads and 16 resource reads |
 
 A package above its limit, a `SKILL.md` above its limit, and a set of Skills above its limit or with a catalog text above its limit fail the validation at the start of the Server. A file that is not UTF-8 text, or that is above the token limit, stays in the package, and a read of it is a refused call. An explicit selection uses one of the 8 loads.
+
+[S6-03c](https://github.com/FrankQDWang/StoryOS/issues/1531) recorded the load refusals on 2026-11-15. The Core function `admit_skill_load` decides them from the pinned catalog, the selected Skills, and the settled loads of the Run, in this order: `skill_not_in_catalog`, `skill_already_loaded` (a settled load of the Run or a selected Skill has the name), and `skill_load_limit` (the selected Skills and the settled loads are 8). The Host executes the calls of one response in call order, so each settled load counts for the calls after it.
 
 ## Considered options
 
