@@ -89,9 +89,9 @@ pub struct SkillInstructionSource {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SkillInstructionUnavailable;
 
-/// Records the requirements of `sources` in the Operation Requirement of `record`, and adds one
-/// `skill_instruction` item for each: the exact `SKILL.md` text with the package digest as its
-/// source version. The Host does not shorten, merge, or rank the items. The reader admitted each
+/// Records the requirements of `sources` in the Operation Requirement of `record`. Adds one
+/// `skill_instruction` item for each source. The item has the exact `SKILL.md` text, and its
+/// source version is the package digest. The Host does not shorten, merge, or rank the items. The reader admitted each
 /// `SKILL.md` in the item token limit (ADR 0089 section 9).
 pub fn assemble_skill_instructions(
     record: &mut CurrentPassageAssemblyRecord,
