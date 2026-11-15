@@ -15,6 +15,12 @@ use crate::credential::SettingsCredentials;
 const REFERENCE: &str = storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE;
 const CREDENTIAL_CANARY: &str = "storyos-credential-canary-7f3c";
 
+/// Keeps the tests that reach the `prepare` span apart. While the process has one subscriber,
+/// `tracing` decides the interest of a callsite from the thread that reaches it first, and it
+/// keeps that decision. A thread with no subscriber must not be first while the Diagnostic
+/// Projection test has its subscriber, or that test gets no `prepare` span.
+static PREPARE_SPAN_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Records each resolved reference and returns a test value that is not a real credential.
 struct RecordingResolver {
     available: bool,
@@ -91,6 +97,7 @@ async fn prepare(
 
 #[tokio::test]
 async fn each_request_uses_the_adapter_of_its_registration_and_its_credential_reference() {
+    let _test_guard = PREPARE_SPAN_TEST_LOCK.lock().await;
     let reference = CredentialReference(REFERENCE.to_owned());
 
     assert_eq!(
@@ -145,6 +152,7 @@ impl std::io::Write for Projection {
 
 #[tokio::test]
 async fn a_resolved_credential_never_reaches_the_diagnostic_projection() {
+    let _test_guard = PREPARE_SPAN_TEST_LOCK.lock().await;
     let projection = Projection::default();
     let writer = projection.clone();
     let subscriber = tracing_subscriber::fmt()
