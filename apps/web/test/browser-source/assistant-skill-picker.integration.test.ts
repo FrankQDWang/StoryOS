@@ -9,7 +9,7 @@ import skillsFixture from "../../../../generated/golden-wire/storyos-public-rele
 import steerFixture from "../../../../generated/golden-wire/storyos-public-release-1/steer-agent-run.json";
 import treeFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json";
 import { digestCreateAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { CreateAgentRunRequest, SkillCatalogEntry, SteerAgentRunRequest }
+import type { CreateAgentRunRequest, SkillCatalogEntry, SkillUseInspect, SteerAgentRunRequest }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import type { ChapterTextReference } from "../../src/selection-reference.ts";
@@ -59,7 +59,7 @@ afterEach(async () => {
  * progress, and `create` gives the answer of each createAgentRun in order (the default admits the Run).
  */
 async function openPanel(setup: { skills?: SkillCatalogEntry[] | "failed"; claimed?: boolean;
-  create?: Array<"unavailable" | "refused"> } = {}) {
+  create?: Array<"unavailable" | "refused">; uses?: SkillUseInspect[] } = {}) {
   if (setup.claimed === true) {
     sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
       scope, message: "Help with this passage.", chapterId: CHAPTER,
@@ -85,8 +85,10 @@ async function openPanel(setup: { skills?: SkillCatalogEntry[] | "failed"; claim
     if (init?.method === "GET") {
       const runId = path.split("/").at(-1)!;
       const inProgress = runId === RUN_IN_PROGRESS && !posts.some((post) => post.route === "steering-inputs");
+      // The Run read of the first admitted Run gives `uses`.
       return jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: runId,
-        status: inProgress ? "claimed" : "completed", decision: inProgress ? { kind: "absent" } : advisory });
+        status: inProgress ? "claimed" : "completed", decision: inProgress ? { kind: "absent" } : advisory,
+        ...runId === RUNS[0] && setup.uses !== undefined ? { skill_uses: setup.uses } : {} });
     }
     posts.push({ route: path.split("/").at(-1)!, body: JSON.parse(String(init?.body)) as Post["body"] });
     if (path.endsWith("/anti-forgery-challenges")) return jsonResponse(challengeFixture);
@@ -159,6 +161,16 @@ async function openPanel(setup: { skills?: SkillCatalogEntry[] | "failed"; claim
       await act(async () => root?.unmount());
       await mount();
     },
+    /** The outcome sentence and the Skill lines of each turn, each Skill list as its label and the number of
+     * elements in it that are not a line, and whether a digest shows. */
+    skillTurns: () => ({
+      turns: [...host.querySelectorAll("[data-assistant-history-run], [data-assistant-current-run]")].map((section) =>
+        [...section.querySelectorAll(".assistant-result, [data-assistant-skill-uses] li")]
+          .map((line) => line.textContent)),
+      lists: [...host.querySelectorAll("[data-assistant-skill-uses]")].map((list) =>
+        [list.getAttribute("aria-label"), list.querySelectorAll(":scope > :not(li), li *").length]),
+      digestShown: panel.view().digestShown,
+    }),
     view: () => {
       const picker = host.querySelector("[data-skill-picker]");
       const labels = (selector: string) => [...host.querySelectorAll(`${selector} [data-sent-reference-label], `
@@ -377,3 +389,24 @@ it("keeps the message and its references and removes the Skill chips when the Se
     reads: 2,
   });
 });
+
+it("names the Skills of a turn after its outcome sentence as plain text, and its history turn keeps them at a reload",
+  async () => {
+    const reason = "保持**对白**简短，参见 [指南](https://example.org/guide)。";
+    const panel = await openPanel({ uses: [{ provenance: "author_selected", name: "dialogue-style-guide" },
+      { provenance: "agent_selected", name: "internal-comms", reason }] });
+    await panel.type("Help with the dialogue.");
+    await panel.send();
+    const current = panel.skillTurns();
+    await panel.type("Next.");
+    await panel.send();
+    await panel.reload();
+    const lines = ["Keep the second sentence.", "使用了你选择的技能「dialogue-style-guide」",
+      `使用了技能「internal-comms」：${reason}`];
+
+    // The second Run used no Skill, so its turn shows no list.
+    expect({ current, reloaded: panel.skillTurns() }).toEqual({
+      current: { turns: [lines], lists: [["本次使用的技能", 0]], digestShown: false },
+      reloaded: { turns: [lines, ["Keep the second sentence."]], lists: [["本次使用的技能", 0]], digestShown: false },
+    });
+  });
