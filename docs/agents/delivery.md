@@ -5,7 +5,7 @@ This document gives the rules to deliver a specification and its tickets. The ru
 ## Roles
 
 - **Author:** decides each change of the product, a contract, a number, a waiver, and each merge of an aggregate pull request into `main`. The author approves the ticket graph of a specification. The [standing approvals](#standing-approvals) need no question. A report to the author follows the Reports rule of `AGENTS.md`. The author approves a ticket that must add more than 1500 counted lines only when the lines above the limit are mechanical or generated.
-- **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts the executor of each chain, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Before dispatch, it splits each ticket that must add more than 1500 counted lines, and it approves another split only for its size.
+- **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts the executor of each chain, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Before dispatch, it splits each ticket that must add more than 1500 counted lines and that the author did not approve. It approves a split only for its size.
 - **Executor:** one session for an ordered chain of tickets, in one worktree. Each ticket has its own branch and pull request. The executor implements each ticket, runs its review and checks, and sends its final report. It does not merge.
 - **Reviewer:** a new read-only Codex thread for each review axis. The reviewer is never the agent tool that implements the ticket.
 
@@ -13,8 +13,8 @@ This document gives the rules to deliver a specification and its tickets. The ru
 
 The author approved these items for all work. Do them without a question:
 
-- Start the chains of each ready ticket of an approved ticket graph. The approval of the graph also releases its execution, unless the author says that it does not.
-- After the merge of a ticket, archive its executor session, and remove its worktree and its merged branches.
+- Start the chains of each ready ticket of an approved ticket graph. The approval of the graph also releases its execution, unless the author says otherwise.
+- After the merge of a ticket, remove its merged branches. After the last ticket of a chain merges, archive the executor session and remove its worktree.
 - Remove a heavy-run slot when the session of its owner file ended.
 - Do a fix that a triage decision of the author approved.
 - Send a live model request ([Live model requests](#live-model-requests)).
@@ -82,7 +82,7 @@ After a round passes, merge the current integration tip into the branch. Then ru
 
 ### 7. Final report
 
-End the work with one report to the coordinator. Do not merge the pull request. Give these items:
+End the work with one report to the coordinator. Give these items:
 
 - The pull request link.
 - The head commit and its tree.
@@ -139,7 +139,7 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 ### Who runs it
 
 - When Claude Code implements the ticket, the executor runs `make review PR=<number>`.
-- When Codex implements the ticket, nobody runs `make review`, because Codex cannot review its own work. A separate read-only Claude Code session, which the coordinator starts, runs the `code-review` skill of the `mattpocock-skills` plugin on the pull request, with the [review prompt](review-prompt.md) rules. It posts one verdict comment for each axis with the heading `## <Standards or Spec> review, round <n>: <PASS or FAIL>`. The round rules below apply.
+- When Codex implements the ticket, nobody runs `make review`, because Codex cannot review its own work. The coordinator starts a separate read-only Claude Code session. It runs the `code-review` skill of the `mattpocock-skills` plugin, with the [review prompt](review-prompt.md) rules. It posts one verdict comment for each axis with the heading `## <Standards or Spec> review, round <n>: <PASS or FAIL>`. The round rules below apply.
 
 ### What `make review` does
 
@@ -243,7 +243,7 @@ FILE=test/browser-exact-dist/production-host.integration.test.ts sh -ec '
 1. Before the run, write the plan: the purpose and the planned number of requests. Automatic requests, for example a late retrieval or a recovery `Retrieve`, count. When the ticket names a token limit, the plan also gives the expected reported input of each request and the total. A request with a prior reference has the full conversation as its input. When the total is above the limit, send the plan to the coordinator and wait for the answer.
 2. Send the requests.
 3. Log each request: the time, the request ID, and the result.
-4. Keep the raw evidence of the run on a Git tag `evidence/<name>-<date>`, and not in `main`. The tag has the wire payload of each request, the ToolCalls, the plan, and the Server and Worker logs. It has no database dump, no Project Export Archive, and no second copy of a public read. Before the push, examine each file for a key, an e-mail address, and a home path. The record of the run names the tag.
+4. Keep the raw evidence of the run on a Git tag `evidence/<name>-<date>`. The tag has the wire payload of each request, the ToolCalls, the plan, and the Server and Worker logs. It has no database dump, no Project Export Archive, and no second copy of a public read. Before the push, examine each file for a key, an e-mail address, and a home path. The record of the run names the tag.
 
 Stop and report to the coordinator only for an anomaly: an unexpected status, more requests than the plan, or an unexpected time or cost.
 
