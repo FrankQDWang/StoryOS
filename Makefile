@@ -6,7 +6,8 @@
 BASE ?= origin/main
 # These node-contract files need the release package, so make check runs them after it builds the package.
 CHECK_PACKAGE_CONTRACT_FILES = test/node-contract/protocol-http.integration.test.ts test/node-contract/production-build.test.ts
-CHECK_FAST_STEPS = cargo fmt --all -- --check; \
+CHECK_FAST_STEPS = scripts/verify-web-source-guards.sh; \
+	cargo fmt --all -- --check; \
 	cargo clippy --workspace --all-targets --all-features -- -D warnings; \
 	pnpm install --frozen-lockfile; \
 	pnpm --dir apps/web run typecheck; \

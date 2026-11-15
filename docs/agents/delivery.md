@@ -26,7 +26,7 @@ When Wayfinder has resolved the required decisions, use the `to-spec` skill, the
 
 A ticket body has Parent, What to build, observable acceptance criteria, and its native blockers. Name stable Requirement IDs, authoritative inputs, and interfaces when the parent delegates them. Use an expand-contract sequence only when a wide refactor cannot stay a complete passing vertical slice.
 
-`make check` does not run the project-scope guards and the exact-dist browser journeys. A ticket that changes a Web test, a browser journey, a panel surface, or a wire form requires `make check-full`, and its body says so.
+`make check` does not run the exact-dist browser journeys and the recovery drill. A ticket that changes a browser journey, a file that a journey loads, a panel surface, or a wire form requires `make check-full`, and its body says so.
 
 When a specification changes a request form of a real route, the live run is a ticket after the first slice that sends that form. Do not make it the last ticket, because its findings give more tickets.
 
@@ -99,7 +99,7 @@ Then the coordinator synchronizes `main` and reads the state of each linked issu
 
 Use the `retro` skill before the work context is cleared. Record each environment finding that you can act on in its owner issue or contract. Remove the worktrees and the temporary branches only after their work and evidence are kept. Keep unrelated work and historical evidence.
 
-A closed ticket keeps its contract and its delivery evidence. These rules apply to new work. A historical record tells the workflow of its own commit.
+A closed ticket keeps its contract and its delivery evidence. A historical record tells the workflow of its own commit.
 
 ## Check Evidence Line
 
@@ -107,7 +107,7 @@ The three tiers of ADR 0070:
 
 | Command | When | Typical time |
 |---|---|---|
-| `make check-fast` | After each edit. The GitHub `verify` check runs it. | about 1 minute after a build |
+| `make check-fast` | After each edit, with the Web source guards. The GitHub `verify` check runs it. | about 1 minute after a build |
 | `make check` | On the head of each pull request. It is the default goal. | about 10 minutes |
 | `make check-full` | Only when the ticket or an explicit request requires a complete local run. Then run it in place of `make check`. | about 20 minutes |
 
@@ -121,7 +121,7 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 - `make check` and `make check-full` stop at the start when the working tree has changes. A line with `tree=DIRTY` is not evidence.
 - Copy the line into the pull request body exactly. The coordinator compares its commit with the head of the pull request. A review round does not need the line.
 - Each new head needs a new line. This includes a merge of the base branch.
-- Start a long tier in the background, and wait for the process to exit. The line is the last output of the tier. A step that passed is not the result of the run.
+- Start a long tier in the background, and wait for the process to exit. The result is the line, its last output, and not a step that passed.
 
 ## Codex review
 
