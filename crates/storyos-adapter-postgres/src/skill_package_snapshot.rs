@@ -188,3 +188,7 @@ pub(crate) async fn skill_instruction_sources(
     }
     Ok(sources)
 }
+
+#[cfg(test)]
+#[path = "skill_instruction_context_tests.rs"]
+mod tests;
