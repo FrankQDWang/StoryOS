@@ -5,14 +5,14 @@ This document gives the rules to deliver a specification and its tickets. The ru
 ## Roles
 
 - **Author:** decides each change of the product, a contract, a number, or a waiver. The author approves the ticket graph of a specification. The author approves a ticket that must add more than 1500 counted lines only when the lines above the limit are mechanical or generated.
-- **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts one executor for each ready ticket, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Only the coordinator changes the integration branch. The coordinator approves a split of a ticket only for its size. Before dispatch, the coordinator splits each other ticket that must add more than 1500 counted lines.
-- **Executor:** one session for each ticket, in its own worktree and branch. It implements the ticket, opens the ticket pull request, runs the checks and the review, and sends the final report. It does not merge.
+- **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts the executor of each chain, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Only the coordinator changes the integration branch. The coordinator approves a split of a ticket only for its size. Before dispatch, the coordinator splits each other ticket that must add more than 1500 counted lines.
+- **Executor:** one session for an ordered chain of tickets, in one worktree. Each ticket has its own branch and pull request. The executor implements each ticket, runs its review and checks, and sends its final report. It does not merge.
 - **Reviewer:** a new read-only Codex thread for each review axis. `make review` starts it. The reviewer is never the agent tool that implements the ticket. [Codex review](#codex-review) tells who runs `make review`.
 
 ## Branches and pull requests
 
 - The coordinator makes one integration branch for each specification from an exact `main` commit. During the specification, the coordinator can freeze `main`.
-- Each ticket has its own branch and worktree from the current tip of the integration branch. Two executors never change the same files at the same time.
+- Each ticket branch starts from the current tip of the integration branch. Two chains never change the same files at the same time.
 - The ticket pull request goes into the integration branch. Its body starts with `Closes #<ticket>. Parent: #<specification>.`, so that `make review` finds the ticket. It carries the evidence of [Check Evidence Line](#check-evidence-line) and [Codex review](#codex-review).
 - After the last ticket merges, the coordinator opens one aggregate pull request from the integration branch to `main`. Its body has a `Closes #<issue>` line for the specification and for each delivered ticket. It has no closing reference for an unmet product stage gate or for another specification.
 - Implementation commits go to `main` only through the aggregate pull request. Each merge is an ordinary merge commit, unless the specification requires another method.
@@ -32,9 +32,9 @@ When a specification changes a request form of a real route, the live run is a t
 
 ### 2. Dispatch
 
-The coordinator uses the `implement-spec` skill for the whole specification. A ticket is ready when its blockers are satisfied. A blocker is satisfied when its ticket pull request merged into the integration branch and that merge commit is an ancestor of the integration tip, and the dependent contract permits integration delivery. A product release gate, an external acceptance, and an explicit `main`-only gate still require their specified final evidence. Keep the native edge until the aggregate pull request merges. Unknown or failed evidence blocks the dispatch. Run independent ready tickets in parallel.
+The coordinator uses the `implement-spec` skill for the whole specification. A ticket is ready when its blockers are satisfied. A blocker is satisfied when its ticket pull request merged into the integration branch and that merge commit is an ancestor of the integration tip, and the dependent contract permits integration delivery. A product release gate, an external acceptance, and an explicit `main`-only gate still require their specified final evidence. Keep the native edge until the aggregate pull request merges. Unknown or failed evidence blocks the dispatch.
 
-The brief of an executor names the ticket, the integration branch and its tip, the files to read, and the items that earlier tickets gave to this ticket.
+Before the release, the coordinator puts the ready tickets into chains. At most three chains run at the same time. A chain has the tickets that depend on each other or change the same files, in dependency order. When the author releases the execution, the coordinator starts each chain session in that turn. The brief names the ordered tickets, the integration tip, the files to read, and the items of earlier tickets. The coordinator adds a later ticket to the end of a running chain with one message. Only a ticket that no chain can take gets a new chain, within that limit. When a ticket stops on a question or a failure, the coordinator can move the later tickets of its chain to another chain with one message.
 
 The ticket body is the only owner of the acceptance contract of the ticket. Before the coordinator sends a brief, it edits the ticket body with each decision that changes the scope or a criterion. The brief links to the ticket and does not give such a decision again.
 
@@ -42,7 +42,7 @@ The ticket body is the only owner of the acceptance contract of the ticket. Befo
 
 The executor reads the current ticket, the current parent, the native dependencies, `AGENTS.md`, [CODING_STANDARDS.md](../../CODING_STANDARDS.md), and the contracts and ADRs that the ticket names. Then it claims the ticket at once. It sends no plan for approval and does not wait for a reply.
 
-To claim, assign the issue and post the [Claim](#claim). GitHub keeps the edit history of each issue body, so the Claim has no copy or hash of the body. When the coordinator changes the parent or the ticket, it tells the executor. The executor reads the changed body and posts a new Claim before it continues.
+To claim, assign the issue and post the [Claim](#claim). When the coordinator changes the parent or the ticket, it tells the executor. The executor reads the changed body and posts a new Claim before it continues.
 
 A session that works gets a message only after its turn. Thus the coordinator puts each decision in the ticket body first, and then it sends the message. The executor reads the ticket body again before it opens the pull request and before the final report.
 
@@ -66,7 +66,7 @@ Before round 1, complete each evidence record that an acceptance criterion requi
 
 Run the [Codex review](#codex-review) rounds until a round passes. Handle each Sourcery review thread: fix the finding, or reply with the reason. Then resolve the thread.
 
-When a finding says that the contract does not ask for a change, ask the coordinator to change the ticket body before the next round. Then post a new Claim, as [section 3](#3-read-then-claim) requires.
+When a finding says that the contract does not ask for a change, ask the coordinator to change the ticket body before the next round, and post a new [Claim](#claim).
 
 After a round passes, merge the current integration tip into the branch. Then run the required tier one time on that head: `make check`, or only `make check-full` when the ticket or a request requires it. Put its Check Evidence Line in the body. Report the result of `make check-full` to the coordinator before any push, body edit, or comment.
 
@@ -81,7 +81,7 @@ End the work with one report to the coordinator. Do not merge the pull request. 
 - Each finding that the ticket does not fix, with its owner issue.
 - The state of the worktree: clean or dirty.
 
-After the final report, make no commit, push, or pull request for the ticket. When a message of the coordinator arrives after the report, reply with the facts only. A change after the report needs a new request of the coordinator.
+Write the hand-over notes of the ticket for later tickets and a retro. After the report, change the ticket only on a new request of the coordinator, and reply to a message with the facts only. After the merge, the coordinator sends the new integration tip in one message. Then start the next ticket at step 3, on a branch from that tip.
 
 ### 8. Merge the ticket
 
@@ -128,19 +128,18 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 
 ### Who runs it
 
-- When Claude Code implements the ticket, the executor runs `make review PR=<number>`. The Codex plugin does the review.
+- When Claude Code implements the ticket, the executor runs `make review PR=<number>`.
 - When Codex implements the ticket, nobody runs `make review`, because Codex cannot review its own work. The coordinator starts a separate read-only Claude Code session. That session runs the `code-review` skill of the `mattpocock-skills` plugin on the pull request, with the [review prompt](review-prompt.md) rules. It posts one verdict comment for each axis with the heading `## <Standards or Spec> review, round <n>: <PASS or FAIL>`. The round rules below apply.
-- The coordinator runs the review of the aggregate pull request.
 
 ### What `make review` does
 
 `make review PR=<number>` runs one round on the two axes, Standards and Spec. Before it starts, it requires these conditions:
 
 - The worktree is clean and at the head of the pull request.
-- No line of the pull request body has the word `pending`. The command prints each such line.
+- No line of the pull request body has the word `pending`.
 - The GitHub `verify` check of the head passes. The command waits for it, for `WAIT` seconds (default 1200).
 
-Then it sends the [review prompt](review-prompt.md) and a request to one new read-only Codex thread for each axis. The request has the base and head commits, the Check Evidence Line of the head when the body has one, the scoped diff command, the pull request body, and the bodies of the closed issues. The command posts one verdict comment for each axis, and it adds a link to each verdict in the `## Review verdicts` section of the pull request body. It changes only the list lines of that section. The command retries GitHub network errors, and it stops the Codex brokers of its own jobs.
+Then it sends the [review prompt](review-prompt.md) and a request to one new read-only Codex thread for each axis. The command posts one verdict comment for each axis, and it adds a link to each verdict in the `## Review verdicts` section of the pull request body. The command retries GitHub network errors, and it stops the Codex brokers of its own jobs.
 
 ### Rounds
 
@@ -148,7 +147,7 @@ Then it sends the [review prompt](review-prompt.md) and a request to one new rea
 - Only a blocking finding fails a round. A finding on format, lint, names, or ASD-STE100 wording never fails a round.
 - After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier only after a round passes: a fix or a base merge replaces the head of an earlier heavy run, and a round beside `make check-full` can lose its Codex job. The [merge gate](#merge-gate) still needs a line for the final head.
 - After a passed round, a new round starts only after a change to the diff of the ticket. The command refuses a round when the tree did not change.
-- A merge of the base branch after a passed round needs no new round when it does not change the diff of the ticket. Compare `git diff <base>...<head>` before and after the merge. Send the Check Evidence Line of the new head and the GitHub `verify` check to the coordinator. The coordinator accepts the merge with this evidence.
+- A merge of the base branch after a passed round needs no new round when it does not change the diff of the ticket. Compare `git diff <base>...<head>` before and after the merge. Send the Check Evidence Line of the new head and the GitHub `verify` check to the coordinator.
 
 ### After round 3
 
@@ -171,7 +170,7 @@ A pull request merges only when these three conditions are true:
 
 ## Templates
 
-Replace each `<...>` field. Write `none` for an empty field. Write the comment in ASD-STE100.
+Replace each `<...>` field. Write `none` for an empty field.
 
 ### Claim
 
@@ -201,7 +200,7 @@ On the parent, the Merge line names the aggregate pull request and its merge com
 
 ## Parallel resources
 
-Each worktree owns its source, `target/`, `node_modules/`, release package, and development database. Do not share these directories through symlinks. The coordinator limits the number of executors to the CPU and memory of the host.
+Each worktree owns its source, `target/`, `node_modules/`, release package, and development database. Do not share these directories through symlinks. The coordinator limits the chains to the CPU and memory of the host.
 
 ### Heavy runs on a shared host
 
@@ -209,7 +208,7 @@ Before `make check` or `make check-full`, take one of three slots. Run `mkdir -p
 
 ### Development PostgreSQL
 
-- `scripts/dev-postgres.sh with <command> ...` runs a command with a new database. The `run` form is the same. The command owns a unique database and gives its environment to the child. It removes the container and its anonymous volume on success, failure, or interruption. `make check` uses the `with` form.
+- `scripts/dev-postgres.sh with <command> ...` runs a command with a new database. The command owns a unique database and gives its environment to the child. It removes the container and its anonymous volume on success, failure, or interruption.
 - For interactive development, use `up --interactive`, then `reload`, `env`, and `down`. These commands use the canonical checkout path. `down` also removes the anonymous data volume.
 - Do not share database environment variables between worktrees.
 - The new commands do not use or remove the old `storyos-dev-postgres` container.
