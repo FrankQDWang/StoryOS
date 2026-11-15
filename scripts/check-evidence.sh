@@ -1,9 +1,15 @@
 #!/bin/sh
 # Run one check tier and print its Check Evidence Line (ADR 0070).
-# usage: scripts/check-evidence.sh <tier> command...
+# usage: scripts/check-evidence.sh <tier> [--scope <scope>] command...
+# A scope adds the field scope=<scope> at the end of the line.
 set -u
 tier=$1
 shift
+scope=
+if [ "${1:-}" = --scope ]; then
+  scope=" scope=$2"
+  shift 2
+fi
 dirty() {
   [ -n "$(git status --porcelain --untracked-files=all)" ]
 }
@@ -23,6 +29,6 @@ if [ "$dirty_at_start" -eq 1 ] || dirty; then
   tree=DIRTY
   echo "The working tree has changes. This line is not evidence for a pull request."
 fi
-printf 'Check Evidence Line: tier=%s commit=%s tree=%s result=%s time=%s duration=%ss\n' \
-  "$tier" "$(git rev-parse HEAD)" "$tree" "$result" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(($(date +%s) - started))"
+printf 'Check Evidence Line: tier=%s commit=%s tree=%s result=%s time=%s duration=%ss%s\n' \
+  "$tier" "$(git rev-parse HEAD)" "$tree" "$result" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(($(date +%s) - started))" "$scope"
 exit "$code"
