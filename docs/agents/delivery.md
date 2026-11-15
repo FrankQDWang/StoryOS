@@ -1,6 +1,6 @@
 # Delivery
 
-This document gives the rules to deliver a specification and its tickets. The rules apply to each agent client, for example Claude Code and Codex. [ADR 0070](../adr/0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md) gives the check tiers and the merge gate. The [Issue tracker](issue-tracker.md) gives the `gh` conventions, ticket publication, the Wayfinder map, and the command that starts a workflow skill in each client.
+This document gives the rules to deliver a specification and its tickets. [ADR 0070](../adr/0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md) gives the check tiers and the merge gate. The [Issue tracker](issue-tracker.md) gives the `gh` conventions, ticket publication, the Wayfinder map, and the command that starts a workflow skill in each client.
 
 ## Roles
 
@@ -32,7 +32,11 @@ The author approved these items for all work. Do them without a question:
 
 ### 1. Specify and split
 
-When Wayfinder has resolved the required decisions, use the `to-spec` skill, then the `to-tickets` skill. The parent owns the complete acceptance contract. Show the tracer-bullet breakdown, the test seams, and the real blocking edges to the author for approval. Publish the approved tickets as native children with native blocking edges and the `ready-for-agent` label. Each ticket fits one implementation context and the [change size](../../CODING_STANDARDS.md#change-size) rule.
+When Wayfinder has resolved the required decisions, use the `to-spec` skill, then the `to-tickets` skill. The parent owns the complete acceptance contract.
+
+The author owns each product default. Before the approval of the ticket graph, the coordinator shows the author each product behaviour that the specification decides and the author did not, as one set of choices in product words with a recommendation each. The specification body records each answer, and the coordinator publishes only when each choice has an answer. For each new state or position of an AgentRun, the parent has one acceptance line for each author action (an edit of the Chapter or of a candidate, a steering input, a cancel, a pause), or the reason why that action cannot occur in that state. For an invariant that more than one entry can break, the parent lists the entries, and one ticket owns the proof of each entry.
+
+Show the tracer-bullet breakdown, the test seams, and the real blocking edges to the author for approval. Publish the approved tickets as native children with native blocking edges and the `ready-for-agent` label. Each ticket fits one implementation context and the [change size](../../CODING_STANDARDS.md#change-size) rule.
 
 A ticket body has Parent, What to build, observable acceptance criteria, and its native blockers. Name stable Requirement IDs, authoritative inputs, and interfaces when the parent delegates them. Use an expand-contract sequence only when a wide refactor cannot stay a complete passing vertical slice.
 
@@ -42,19 +46,19 @@ When a specification changes a request form of a real route, the live run is a t
 
 ### 2. Dispatch
 
-The coordinator uses the `implement-spec` skill for the whole specification. A ticket is ready when its blockers are satisfied. A blocker is satisfied when its ticket pull request merged into the integration branch and that merge commit is an ancestor of the integration tip, and the dependent contract permits integration delivery. A product release gate, an external acceptance, and an explicit `main`-only gate still require their specified final evidence. Keep the native edge until the aggregate pull request merges. Unknown or failed evidence blocks the dispatch.
+The coordinator uses the `implement-spec` skill for the whole specification. A ticket is ready when each blocker ticket merged into the integration branch, that merge commit is an ancestor of the integration tip, and the dependent contract permits integration delivery. A product release gate, an external acceptance, and an explicit `main`-only gate still require their specified final evidence. Keep the native edge until the aggregate pull request merges. Unknown or failed evidence blocks the dispatch.
 
 Before the release, the coordinator puts the ready tickets into chains. At most three chains run at the same time. A chain has the tickets that depend on each other or change the same files, in dependency order. When the author releases the execution, the coordinator starts each chain session in that turn. The brief names the ordered tickets, the integration tip, the files to read, and the items of earlier tickets. The coordinator adds a later ticket to the end of a running chain with one message. Only a ticket that no chain can take gets a new chain, within that limit. When a ticket stops on a question or a failure, the coordinator can move the later tickets of its chain to another chain with one message.
 
-The ticket body is the only owner of the acceptance contract of the ticket. Before the coordinator sends a brief, it edits the ticket body with each decision that changes the scope or a criterion. The brief links to the ticket and does not give such a decision again.
+The ticket body is the only owner of its acceptance contract. Before the brief, the coordinator puts each decision that changes the scope or a criterion in the ticket body, and the brief only links to it.
 
 ### 3. Read, then claim
 
-The executor reads the current ticket, the current parent, the native dependencies, `AGENTS.md`, [CODING_STANDARDS.md](../../CODING_STANDARDS.md), and the contracts and ADRs that the ticket names. Then it claims the ticket at once. It sends no plan for approval and does not wait for a reply.
+The executor reads the current ticket, the current parent, the native dependencies, `AGENTS.md`, [CODING_STANDARDS.md](../../CODING_STANDARDS.md), and the contracts and ADRs that the ticket names. Then it claims the ticket at once, with no plan for approval and no wait for a reply.
 
 To claim, assign the issue and post the [Claim](#claim). When the coordinator changes the parent or the ticket, it tells the executor. The executor reads the changed body and posts a new Claim before it continues.
 
-A session that works gets a message only after its turn. Thus the coordinator puts each decision in the ticket body first, and then it sends the message. The executor reads the ticket body again before it opens the pull request and before the final report.
+The coordinator puts each decision in the ticket body first, and then it sends the message. The executor reads the ticket body again before it opens the pull request and before the final report.
 
 Ask the coordinator only for a real decision. A product, contract, number, or waiver question goes to the author through the coordinator.
 
@@ -64,7 +68,7 @@ Ask the coordinator only for a real decision. A product, contract, number, or wa
 - After each product or test edit, run `make check-fast`.
 - Commit on the ticket branch.
 - Wait for `make check`, `make check-full`, and `make review` in the turn that starts the command. Do not end a turn while one of them runs: the end of a turn can stop the Codex jobs of the session.
-- When the counted lines will exceed the [change size](../../CODING_STANDARDS.md#change-size) limit, stop and report to the coordinator. The coordinator splits the ticket.
+- When the counted lines will exceed the [change size](../../CODING_STANDARDS.md#change-size) limit, stop and report to the coordinator, which splits the ticket.
 
 ### 5. Open the pull request
 
@@ -82,7 +86,7 @@ After a round passes, merge the current integration tip into the branch. Then ru
 
 ### 7. Final report
 
-End the work with one report to the coordinator. Give these items:
+Give one report to the coordinator with these items:
 
 - The pull request link.
 - The head commit and its tree.
@@ -91,7 +95,7 @@ End the work with one report to the coordinator. Give these items:
 - Each finding that the ticket does not fix, with its owner issue.
 - The state of the worktree: clean or dirty.
 
-Write the hand-over notes of the ticket for later tickets and a retro. After the report, change the ticket only on a new request of the coordinator, and reply to a message with the facts only. After the merge, the coordinator sends the new integration tip in one message. Then start the next ticket at step 3, on a branch from that tip.
+Write the hand-over notes for later tickets and a retro. After the report, change the ticket only on a new request of the coordinator, and reply to a message with the facts only. After the merge, the coordinator sends the new integration tip in one message. Then start the next ticket at step 3, on a branch from that tip.
 
 ### 8. Merge the ticket
 
@@ -101,7 +105,7 @@ After the merge of the first ticket that requires `make check-full`, and again b
 
 ### 9. Merge the specification
 
-After the last ticket merges, the coordinator opens the aggregate pull request and puts a Check Evidence Line of its head in the body. The aggregate pull request has the same merge gate as a ticket pull request, unless the specification gives another review. The coordinator runs the review and merges.
+After the last ticket merges, the coordinator opens the aggregate pull request and puts a Check Evidence Line of its head in the body. The aggregate pull request has the merge gate of a ticket pull request, unless the specification gives another review. The coordinator runs the review and merges.
 
 Then the coordinator synchronizes `main`. A closed issue alone does not prove acceptance, so the coordinator evaluates each parent user story on the `main` tree and posts the Resolution on the parent. It closes each issue that passed and is still open. It opens again each issue that GitHub closed and that did not pass. Then it refreshes the current map.
 
@@ -109,7 +113,7 @@ Then the coordinator synchronizes `main`. A closed issue alone does not prove ac
 
 Use the `retro` skill before the work context is cleared. Record each environment finding that you can act on in its owner issue or contract. Remove the worktrees and the temporary branches only after their work and evidence are kept. Keep unrelated work and historical evidence.
 
-A closed ticket keeps its contract and its delivery evidence. A historical record tells the workflow of its own commit.
+A closed ticket and a historical record keep the workflow of their own commit.
 
 ## Check Evidence Line
 
@@ -119,7 +123,7 @@ The three tiers of ADR 0070:
 |---|---|---|
 | `make check-fast` | After each edit, with the Web source guards. The GitHub `verify` check runs it. | about 1 minute after a build |
 | `make check` | On the head of each pull request. | about 10 minutes |
-| `make check-full` | Only when the ticket or an explicit request requires a complete local run. Then run it in place of `make check`. | about 20 minutes |
+| `make check-full` | Only when the ticket or a request requires it, in place of `make check`. | about 20 minutes |
 
 Each tier prints one line at the end:
 
@@ -130,8 +134,8 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 - Only a line of `make check` or `make check-full` with `result=PASS` is merge evidence.
 - `make check` and `make check-full` stop at the start when the working tree has changes. A line with `tree=DIRTY` is not evidence.
 - When each changed file is a document under `docs/` or at the root that no code names, `make check` runs only the `make check-fast` steps, and its line ends with `scope=documents`.
-- Copy the line into the pull request body exactly. The coordinator compares its commit with the head of the pull request. A review round does not need the line.
-- Each new head needs a new line. This includes a merge of the base branch.
+- Copy the line into the pull request body exactly. A review round does not need the line.
+- Each new head, also a merge of the base branch, needs a new line.
 - Start a long tier in the background, and wait for the process to exit. The result is the line, its last output, and not a step that passed.
 
 ## Codex review
@@ -149,7 +153,7 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 - No line of the pull request body has the word `pending`.
 - The GitHub `verify` check of the head passes. The command waits for it, for `WAIT` seconds (default 1200).
 
-Then it sends the [review prompt](review-prompt.md) and a request to one new read-only Codex thread for each axis. The command posts one verdict comment for each axis, and it adds a link to each verdict in the `## Review verdicts` section of the pull request body. It stops the Codex brokers of its own jobs.
+Then it sends the [review prompt](review-prompt.md) and the request to one new read-only Codex thread for each axis, posts one verdict comment for each axis, and links each verdict in the `## Review verdicts` section of the body. It stops the Codex brokers of its own jobs.
 
 ### Rounds
 
@@ -157,7 +161,7 @@ Then it sends the [review prompt](review-prompt.md) and a request to one new rea
 - Only a blocking finding fails a round. A finding on format, lint, names, or ASD-STE100 wording never fails a round.
 - After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier only after a round passes: a fix or a base merge replaces the head of an earlier heavy run, and a round beside `make check-full` can lose its Codex job. The [merge gate](#merge-gate) still needs a line for the final head.
 - After a passed round, a new round starts only after a change to the diff of the ticket.
-- A merge of the base branch after a passed round needs no new round when it does not change the diff of the ticket. Compare `git diff <base>...<head>` before and after the merge. Send the Check Evidence Line of the new head and the GitHub `verify` check to the coordinator.
+- A merge of the base branch after a passed round needs no new round when it does not change the diff of the ticket. Compare `git diff <base>...<head>` before and after the merge.
 
 ### After round 3
 
@@ -240,10 +244,10 @@ FILE=test/browser-exact-dist/production-host.integration.test.ts sh -ec '
 
 [ADR 0049](../adr/0049-admit-an-author-authorized-runtime-qualification.md) gives the contract of a qualification request.
 
-1. Before the run, write the plan: the purpose and the planned number of requests. Automatic requests, for example a late retrieval or a recovery `Retrieve`, count. When the ticket names a token limit, the plan also gives the expected reported input of each request and the total. A request with a prior reference has the full conversation as its input. When the total is above the limit, send the plan to the coordinator and wait for the answer.
+1. Before the run, write the plan: the purpose and the planned number of requests. Automatic requests, for example a recovery `Retrieve`, count. When the ticket names a token limit, the plan also gives the expected reported input of each request and the total. A request with a prior reference has the full conversation as its input. When the total is above the limit, send the plan to the coordinator and wait for the answer.
 2. Send the requests.
 3. Log each request: the time, the request ID, and the result.
-4. Keep the raw evidence of the run on a Git tag `evidence/<name>-<date>`. The tag has the wire payload of each request, the ToolCalls, the plan, and the Server and Worker logs. It has no database dump, no Project Export Archive, and no second copy of a public read. Before the push, examine each file for a key, an e-mail address, and a home path. The record of the run names the tag.
+4. Keep the raw evidence on a Git tag, as `AGENTS.md` says. The tag has the wire payloads and the Server and Worker logs, and no second copy of a public read. Before the push, examine each file for a key, an e-mail address, and a home path. The record of the run names the tag.
 
 Stop and report to the coordinator only for an anomaly: an unexpected status, more requests than the plan, or an unexpected time or cost.
 
