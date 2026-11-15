@@ -320,11 +320,12 @@ def review(pr, wait):
     for axis, (result, _, url, _) in results.items():
         print(f"{axis}: {result} {url}")
     if all(result == "PASS" for result, _, _, _ in results.values()):
-        print(f"Next: send the PR link and the verdict links to the coordinator session. {BASE_MERGE}")
+        print("Next: merge the current base into the branch. Then run make check, or make check-full when the ticket "
+              "requires it, one time on that head, put its Check Evidence Line in the PR body, and send the PR link and "
+              f"the verdict links to the coordinator session. {BASE_MERGE}")
     elif number < ROUNDS:
-        print(f"Next: fix the blocking findings, commit, push, and run make review PR={pr} again. Run make check, or "
-              "make check-full when the ticket requires it, at the same time as the round or after the round passes. "
-              "The merge gate needs its line for the final head.")
+        print(f"Next: fix the blocking findings, commit, push, and run make review PR={pr} again. Run no make check "
+              "or make check-full before a round passes. The merge gate needs its line for the final head.")
     else:
         print("Next: this was the last round. Send the open blocking findings to the coordinator session.")
 
