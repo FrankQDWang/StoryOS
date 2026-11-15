@@ -43,14 +43,14 @@ fn long_package() -> SkillPackage {
     )
 }
 
-fn skill_md(package: &SkillPackage) -> String {
+pub(super) fn skill_md(package: &SkillPackage) -> String {
     let file = package.files.iter().find(|file| file.path == SKILL_MD_PATH);
     String::from_utf8(file.unwrap().bytes.clone()).unwrap()
 }
 
 /// Completes the first Run of a new Project of the tool loop profile, then admits and completes
 /// one Run with `message` that pins the catalog of `skills` and selects no Skill.
-async fn loaded_run(
+pub(super) async fn loaded_run(
     store: &PostgresProjectReader,
     admin: &Client,
     prefixes: [&str; 2],
@@ -75,7 +75,7 @@ async fn loaded_run(
 
 /// The status of the Run, and each ToolCall as its function name, state, refusal, Host result,
 /// and whether it has no Destination Attempt and pins the Host Tool Registration `…0e0103`.
-async fn calls(admin: &Client, run_id: &str) -> Value {
+pub(super) async fn calls(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
             "SELECT jsonb_build_array(run.status, (SELECT jsonb_agg(jsonb_build_array(
@@ -113,7 +113,7 @@ async fn requests(admin: &Client, run_id: &str) -> Value {
 
 /// The Tool sources of the Operation Requirement and each selected `skill_instruction` item of
 /// the Context Assembly with `role` at `position`.
-async fn record(admin: &Client, run_id: &str, role: &str, position: i32) -> Value {
+pub(super) async fn record(admin: &Client, run_id: &str, role: &str, position: i32) -> Value {
     let row = admin
         .query_one(
             "SELECT jsonb_build_array(payload #> '{operation_requirement,tool_results}',
@@ -129,7 +129,7 @@ async fn record(admin: &Client, run_id: &str, role: &str, position: i32) -> Valu
     serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
 }
 
-const TOOLS: [&str; 5] = [
+pub(super) const TOOLS: [&str; 5] = [
     "propose_edit",
     "submit_research",
     "read_tool_result",
