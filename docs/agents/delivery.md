@@ -234,6 +234,7 @@ Do not stop to ask before a live model request. The author gave a standing permi
 1. Before the run, write the plan: the purpose and the planned number of requests. Automatic requests, for example a late retrieval or a recovery `Retrieve`, count. When the ticket names a token limit, the plan also gives the expected reported input of each request and the total. A request with a prior reference has the full conversation as its input. When the total is above the limit, send the plan to the coordinator and wait for the answer.
 2. Send the requests.
 3. Log each request: the time, the request ID, and the result.
+4. Keep the raw evidence of the run on a Git tag `evidence/<name>-<date>`, and not in `main`. The tag has the wire payload of each request, the ToolCalls, the plan, and the Server and Worker logs. It has no database dump, no Project Export Archive, and no second copy of a public read. Before the push, examine each file for a key, an e-mail address, and a home path. The record of the run names the tag.
 
 Stop and report to the coordinator only for an anomaly: an unexpected status, more requests than the plan, or an unexpected time or cost.
 
