@@ -61,6 +61,7 @@ fn run_input(chapter_id: String) -> CreateAgentRunInput {
         destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
         research: Some(&storyos_core::RESEARCH_TOOL_OFFER),
         skills: Default::default(),
+        skill_selections: Vec::new(),
     }
 }
 
@@ -348,6 +349,15 @@ async fn a_create_agent_run_refusal_writes_no_row_and_a_missing_run_is_damaged()
     .await;
     let refused = store.create_agent_run(&call.envelope, &call.input).await;
     let key = &call.envelope.challenge_binding.idempotency_key;
+    // A deployment with no Skill refuses each selection before Admission (ADR 0089 section 7).
+    let mut selecting = create_agent_run_call(&store, /*base*/ 0x4600).await;
+    selecting.input.skill_selections = vec![storyos_core::SkillPackageReference {
+        name: "internal-comms".to_owned(),
+        package_digest: format!("sha256:{}", "3c".repeat(32)),
+    }];
+    let selection_refused = store
+        .create_agent_run(&selecting.envelope, &selecting.input)
+        .await;
     let call_without_run = create_agent_run_call(&store, /*base*/ 0xb310).await;
     let missing_run = damaged_replay(&store, &admin, &call_without_run, |receipt_id| {
         format!("DELETE FROM storyos.agent_runs WHERE receipt_id = '{receipt_id}'::uuid")
@@ -360,5 +370,13 @@ async fn a_create_agent_run_refusal_writes_no_row_and_a_missing_run_is_damaged()
         ))
     ));
     assert_eq!(request_rows(&admin, key).await, [0, 0, 0, 1]);
+    assert!(matches!(
+        selection_refused,
+        Err(RefusableCommandError::RefusedBeforeAdmission(
+            CreateAgentRunRefusal::SkillSelectionUnavailable
+        ))
+    ));
+    let selecting_key = &selecting.envelope.challenge_binding.idempotency_key;
+    assert_eq!(request_rows(&admin, selecting_key).await, [0, 0, 0, 1]);
     assert_eq!(missing_run, ReplayError::Unavailable);
 }

@@ -18,6 +18,8 @@ pub(crate) struct PassageContextInput<'a> {
     pub passage_targets: Option<&'a [storyos_core::PassageContextTarget]>,
     pub candidate_target: Option<&'a storyos_core::ProposalCandidateTarget>,
     pub selection_references: Option<&'a [storyos_core::SelectionReference]>,
+    /// The Skill requirements of the Run, in the order of the Skill names (ADR 0089 section 5).
+    pub skill_requirements: &'a [storyos_core::SkillRequirement],
     /// The resolved ToolCalls of a `tool_result_continuation`, in item order.
     pub tool_results: Option<&'a [storyos_core::ToolResultCandidate<'a>]>,
 }
@@ -125,6 +127,20 @@ pub(crate) async fn persist_current_passage_assembly(
         }
     };
     let mut record = record;
+    let sources = crate::skill_package_snapshot::skill_instruction_sources(
+        client,
+        command.project_scope,
+        command.skill_requirements,
+    )
+    .await
+    .map_err(agent_run_database_error)?;
+    storyos_core::assemble_skill_instructions(&mut record, sources).map_err(
+        |storyos_core::SkillInstructionUnavailable| {
+            CreateAgentRunError::Unavailable(Box::new(std::io::Error::other(
+                "The SkillPackage Snapshot has no SKILL.md text",
+            )))
+        },
+    )?;
     if let Some(candidates) = command.tool_results {
         storyos_core::assemble_tool_result_continuation(&mut record, candidates);
     }

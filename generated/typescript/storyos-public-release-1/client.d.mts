@@ -375,7 +375,9 @@ export type InstructionBinding = { "kind": "absent" };
 
 export type AssistanceCause = { "kind": "author_request" };
 
-export type CreateAgentRunInput = { conversation: ConversationSelection, author_message: AuthorMessage, working_target: AssistanceWorkingTarget, instruction: InstructionBinding, cause: AssistanceCause, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type SkillPackageReference = { name: string, package_digest: string, };
+
+export type CreateAgentRunInput = { conversation: ConversationSelection, author_message: AuthorMessage, working_target: AssistanceWorkingTarget, instruction: InstructionBinding, cause: AssistanceCause, skill_selections?: Array<SkillPackageReference>, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type CreateAgentRunRequest = { command_schema: string, create_agent_run_input: CreateAgentRunInput, };
 

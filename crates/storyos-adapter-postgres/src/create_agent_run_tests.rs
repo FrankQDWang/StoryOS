@@ -15,7 +15,7 @@ use crate::command_sequence::tests::{
 use tokio_postgres::{Client, NoTls};
 
 #[path = "create_agent_run_skill_tests.rs"]
-mod skill_tests;
+pub(crate) mod skill_tests;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -85,6 +85,7 @@ fn run_command(
             destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
             research: None,
             skills: Default::default(),
+            skill_selections: Vec::new(),
         },
     )
 }

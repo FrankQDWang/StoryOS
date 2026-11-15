@@ -118,6 +118,10 @@ pub(crate) async fn open_next_step(
             decision_position: &next_position,
             passage_targets: requirement.passage_targets.as_deref(),
             candidate_target: requirement.candidate_target.as_ref(),
+            skill_requirements: requirement
+                .skill_requirements
+                .as_deref()
+                .unwrap_or_default(),
             selection_references: references.as_deref(),
             tool_results: Some(&candidates),
         },

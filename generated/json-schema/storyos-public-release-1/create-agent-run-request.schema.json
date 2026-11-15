@@ -167,6 +167,14 @@
         "security_policy_revision": {
           "type": "string"
         },
+        "skill_selections": {
+          "items": {
+            "$ref": "#/$defs/SkillPackageReference"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        },
         "working_target": {
           "$ref": "#/$defs/AssistanceWorkingTarget"
         }
@@ -341,6 +349,26 @@
           "type": "object"
         }
       ]
+    },
+    "SkillPackageReference": {
+      "additionalProperties": false,
+      "description": "The immutable reference to one Skill of the deployment: its name and its package digest.",
+      "properties": {
+        "name": {
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "type": "string"
+        },
+        "package_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "package_digest"
+      ],
+      "type": "object"
     }
   },
   "$id": "storyos.command.create-agent-run.request.v2",

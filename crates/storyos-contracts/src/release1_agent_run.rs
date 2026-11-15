@@ -135,9 +135,33 @@ pub struct CreateAgentRunInput {
     pub working_target: AssistanceWorkingTarget,
     pub instruction: InstructionBinding,
     pub cause: AssistanceCause,
+    // The Skills that the author selected for this Run (ADR 0089 section 5). The field can be
+    // absent, but its value cannot be null.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "skill_selections"
+    )]
+    #[schemars(with = "Vec<SkillPackageReference>", length(min = 1, max = 8))]
+    #[ts(optional)]
+    pub skill_selections: Option<Vec<SkillPackageReference>>,
     pub client_contract_revision: String,
     pub security_policy_revision: String,
     pub correlation_id: String,
+}
+
+fn skill_selections<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<SkillPackageReference>>, D::Error> {
+    Vec::deserialize(deserializer).map(Some)
+}
+
+/// The immutable reference to one Skill of the deployment: its name and its package digest.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SkillPackageReference {
+    pub name: String,
+    pub package_digest: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

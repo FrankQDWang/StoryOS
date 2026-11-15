@@ -28,7 +28,7 @@ fn chapter(lead: &str) -> String {
 }
 
 /// One package of `fixtures/skill-packages/`.
-fn fixture(name: &str) -> SkillPackage {
+pub(crate) fn fixture(name: &str) -> SkillPackage {
     fn collect(root: &Path, directory: &Path, files: &mut Vec<SkillFileInput>) {
         for entry in std::fs::read_dir(directory).unwrap() {
             let path = entry.unwrap().path();
@@ -83,7 +83,7 @@ fn skill_md(name: &str) -> SkillFileInput {
     }
 }
 
-fn set(packages: Vec<SkillPackage>) -> Arc<SkillSet> {
+pub(crate) fn set(packages: Vec<SkillPackage>) -> Arc<SkillSet> {
     Arc::new(SkillSet::new(packages).unwrap())
 }
 

@@ -23,8 +23,9 @@ use crate::release1_agent_run::{
     OptionalReferenceRecoveryInspect, OptionalUnknownCreateSuccessorInspect,
     OriginalResultRetrievalDisposition, PassageTarget, ProjectionMode, ProposalCandidateTarget,
     ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
-    ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect, ToolCallInspect,
-    ToolCallOutcomeInspect, UnknownCreateSuccessorDisposition,
+    ReferenceRecoveryDisposition, SkillPackageReference, SourceAvailability,
+    TokenCountingProfileInspect, ToolCallInspect, ToolCallOutcomeInspect,
+    UnknownCreateSuccessorDisposition,
 };
 use crate::release1_operation_registry::{ClientOverride, RegisteredOperation};
 use crate::release1_project_activity::ProjectActivityKind;
@@ -90,6 +91,7 @@ pub(super) const CREATE_AGENT_RUN_ROW: OperationRow = OperationRow {
         ProposalCandidateTarget::decl,
         InstructionBinding::decl,
         AssistanceCause::decl,
+        SkillPackageReference::decl,
         CreateAgentRunInput::decl,
         CreateAgentRunRequest::decl,
         AgentRunRef::decl,
@@ -328,6 +330,18 @@ const CREATE_AGENT_RUN_REQUEST: &[Patch] = &[
     Patch(
         Edit::MinLength(1),
         &["/$defs/AuthorMessage/properties/text"],
+    ),
+    Patch(
+        Edit::Pattern("^[a-z0-9]+(-[a-z0-9]+)*$"),
+        &["/$defs/SkillPackageReference/properties/name"],
+    ),
+    Patch(
+        Edit::MaxLength(64),
+        &["/$defs/SkillPackageReference/properties/name"],
+    ),
+    Patch(
+        Edit::Pattern("^sha256:[0-9a-f]{64}$"),
+        &["/$defs/SkillPackageReference/properties/package_digest"],
     ),
     Patch(SCHEMA_ID, &["/properties/command_schema"]),
 ];

@@ -40,6 +40,8 @@ pub enum CreateAgentRunRefusal {
     InaccessibleConversation,
     ConversationBusy,
     InvalidChapterJoin,
+    /// A Skill selection names a reference that the Server does not offer (ADR 0089 section 7).
+    SkillSelectionUnavailable,
 }
 
 /// The Core Transition Outcome of a createAgentRun. It has no zero-authority outcome.

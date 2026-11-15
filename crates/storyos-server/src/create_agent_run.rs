@@ -121,6 +121,7 @@ fn create_agent_run_input(
         }
     };
     valid_uuid(chapter_id)?;
+    let skill_selections = super::skill_selections::resolve(input.skill_selections.as_deref())?;
     Ok(CreateAgentRunInput {
         conversation: match &input.conversation {
             contracts::ConversationSelection::New => ConversationSelection::New,
@@ -144,6 +145,7 @@ fn create_agent_run_input(
             .map(|_| &storyos_core::RESEARCH_TOOL_OFFER),
         destination,
         skills,
+        skill_selections,
     })
 }
 
@@ -926,6 +928,11 @@ fn refusal_problem(refusal: CreateAgentRunRefusal) -> ApiError {
             StatusCode::UNPROCESSABLE_ENTITY,
             "invalid_chapter_join",
             "The Working Target Chapter is invalid.",
+        ),
+        CreateAgentRunRefusal::SkillSelectionUnavailable => problem(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "skill_selection_unavailable",
+            "A selected Skill is not available. Send the message again without it.",
         ),
         CreateAgentRunRefusal::InaccessibleConversation | CreateAgentRunRefusal::MissingProject => {
             resource_unavailable()

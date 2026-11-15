@@ -58,6 +58,7 @@ mod session_bootstrap;
 mod set_current_chapter;
 mod settings;
 mod skill_directory;
+mod skill_selections;
 mod snapshot;
 mod steer_agent_run;
 mod takeover;
