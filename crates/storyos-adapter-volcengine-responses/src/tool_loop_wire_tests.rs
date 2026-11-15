@@ -362,6 +362,7 @@ async fn the_later_request_sends_the_earlier_author_messages_before_the_current_
     let summary = RequestContextItem {
         source_class: ContextSourceClass::ConversationSummary,
         content: "The author keeps the rain.".to_owned(),
+        full_input_only: false,
     };
     let later = body(CreateRequest {
         context: [vec![summary], request.context.clone()].concat(),

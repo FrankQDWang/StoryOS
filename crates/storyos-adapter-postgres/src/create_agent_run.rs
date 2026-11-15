@@ -137,7 +137,7 @@ impl ProjectCommand for CreateAgentRunInput {
             },
         })
         .map_err(RefusableCommandError::RefusedBeforeAdmission)?;
-        let skill_requirements =
+        let mut skill_requirements =
             storyos_core::admit_skill_selections(&self.skills, &self.skill_selections).map_err(
                 |storyos_core::SkillSelectionUnavailable| {
                     RefusableCommandError::RefusedBeforeAdmission(
@@ -145,6 +145,13 @@ impl ProjectCommand for CreateAgentRunInput {
                     )
                 },
             )?;
+        if let ConversationSelection::Existing { conversation_id } = &self.conversation {
+            let earlier = earlier_skill_requirements(client, scope, conversation_id).await?;
+            skill_requirements.extend(storyos_core::conversation_skill_requirements(
+                &earlier,
+                &skill_requirements,
+            ));
+        }
         let destination =
             self.destination
                 .clone()
@@ -349,6 +356,40 @@ async fn conversation_admission(
     } else {
         ConversationAdmission::ExistingIdle
     })
+}
+
+/// The Skill requirements of each earlier Run of the Project Conversation, oldest Run first, from
+/// the Operation Requirement of its first RunStep (ADR 0089 section 5). Each Run of the table
+/// passed Admission. A message that `createAgentRun` refused before Admission has no Run.
+async fn earlier_skill_requirements(
+    client: &Client,
+    scope: &ProjectScope,
+    conversation_id: &str,
+) -> Result<Vec<Vec<storyos_core::SkillRequirement>>, ProjectCommandError> {
+    let rows = client
+        .query(
+            "SELECT (manifest.payload #> '{operation_requirement,skill_requirements}')::text
+               FROM storyos.agent_runs AS run
+               JOIN storyos.context_assembly_manifests AS manifest
+                 ON (manifest.owner_user_id, manifest.project_id, manifest.run_id) =
+                    (run.owner_user_id, run.project_id, run.run_id)
+                AND manifest.manifest_role = 'decision' AND manifest.decision_position = 0
+              WHERE run.owner_user_id = $1::text::uuid
+                AND run.project_id = $2::text::uuid
+                AND run.conversation_id = $3::text::uuid
+                AND manifest.payload #> '{operation_requirement,skill_requirements}' IS NOT NULL
+              ORDER BY run.run_id",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &conversation_id,
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    rows.iter()
+        .map(|row| serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).map_err(unavailable))
+        .collect()
 }
 
 fn sequence_error(error: CreateAgentRunError) -> ProjectCommandError {

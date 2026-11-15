@@ -1,7 +1,8 @@
-//! The explicit Skill selection of one Run, its `skill_instruction` Context items, and the
+//! The explicit Skill selection of one Run, the Skills that the author selected in the earlier
+//! Runs of its Project Conversation, their `skill_instruction` Context items, and the
 //! `skill_catalog` Context item of the pinned catalog (ADR 0089 sections 3, 5, and 7).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -14,12 +15,19 @@ use crate::{SkillCatalogEntry, SkillPackageReference, SkillSet, hex_sha256, skil
 /// The most Skills that one message selects.
 pub const SKILL_SELECTION_LIMIT: usize = 8;
 
+/// The most Skills that the author selected that are in effect for one Run: the selections of
+/// the Run and the Skills of its Project Conversation (ADR 0089 section 5).
+pub const CONVERSATION_SKILL_LIMIT: usize = 8;
+
 /// Why a Run has a Skill requirement.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SkillProvenance {
     /// The author selected the Skill in the message of the Run.
     AuthorSelected,
+    /// The author selected the Skill in an earlier Run of the same Project Conversation, and the
+    /// Run did not select it again (ADR 0089 section 5).
+    ConversationSelected,
 }
 
 /// One Run Skill Requirement of an Operation Requirement.
@@ -75,6 +83,65 @@ pub fn admit_skill_selections(
             provenance: SkillProvenance::AuthorSelected,
         })
         .collect())
+}
+
+/// The `conversation_selected` requirements of a new Run, in the order of the Skill names.
+/// `earlier` has the Skill requirements of each earlier admitted Run of the same Project
+/// Conversation, oldest Run first. Only an `author_selected` requirement is a selection. For each
+/// Skill name, the newest selection gives the package digest. The selections of the new Run in
+/// `selected` are the newest, so they count in the limit of `CONVERSATION_SKILL_LIMIT` names, and
+/// the new Run does not get them again. Inside one Run, the names count in name order.
+pub fn conversation_skill_requirements(
+    earlier: &[Vec<SkillRequirement>],
+    selected: &[SkillRequirement],
+) -> Vec<SkillRequirement> {
+    let own: BTreeSet<&str> = selected
+        .iter()
+        .map(|requirement| requirement.skill_name.as_str())
+        .collect();
+    let mut in_effect = own.clone();
+    let mut inherited = BTreeMap::new();
+    let selections = earlier.iter().rev().flat_map(|run| {
+        run.iter()
+            .filter(|requirement| requirement.provenance == SkillProvenance::AuthorSelected)
+    });
+    for requirement in selections {
+        if in_effect.len() == CONVERSATION_SKILL_LIMIT {
+            break;
+        }
+        if in_effect.insert(requirement.skill_name.as_str()) {
+            inherited.insert(&requirement.skill_name, &requirement.package_digest);
+        }
+    }
+    inherited
+        .into_iter()
+        .map(|(name, digest)| SkillRequirement {
+            skill_name: name.clone(),
+            package_digest: digest.clone(),
+            provenance: SkillProvenance::ConversationSelected,
+        })
+        .collect()
+}
+
+/// Whether the selected `item` of `record` is the `SKILL.md` of a `conversation_selected`
+/// requirement. The Provider conversation holds that text after the first request that sends it,
+/// so a request sends the item only with a full input and no prior response, and the current
+/// input digest does not count it (ADR 0089 section 5).
+pub fn is_conversation_skill(
+    record: &CurrentPassageAssemblyRecord,
+    item: &SelectedProjection,
+) -> bool {
+    item.source_class == ContextSourceClass::SkillInstruction
+        && !crate::is_skill_load_output(record, item)
+        && record
+            .operation_requirement
+            .skill_requirements
+            .iter()
+            .flatten()
+            .any(|requirement| {
+                requirement.provenance == SkillProvenance::ConversationSelected
+                    && requirement.package_digest == item.source_version
+            })
 }
 
 /// One requirement and the `SKILL.md` bytes of the Snapshot of the Project with its digest, or

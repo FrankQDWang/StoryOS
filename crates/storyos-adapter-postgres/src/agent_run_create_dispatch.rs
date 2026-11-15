@@ -231,7 +231,11 @@ pub(crate) async fn create_request(
         Some(prior) => prior.unexecuted_calls(&tool_outputs)?,
         None => Vec::new(),
     };
-    let input = record_input(record, assembly, &run.author_message);
+    let mut input = record_input(record, assembly, &run.author_message);
+    // The prior response holds the text of each Skill of the Conversation (ADR 0089 section 5).
+    if previous_response_reference.is_some() {
+        input.context.retain(|item| !item.full_input_only);
+    }
     Ok(CreateRequest {
         attempt,
         purpose: probe.map_or(CreatePurpose::Decision, |probe| {
@@ -284,6 +288,7 @@ pub(crate) fn record_input(
             .map(|item| RequestContextItem {
                 source_class: item.source_class,
                 content: item.content.clone(),
+                full_input_only: storyos_core::is_conversation_skill(&assembly, item),
             })
             .collect(),
         earlier_author_messages: earlier

@@ -145,6 +145,7 @@ fn the_compaction_estimate_counts_each_text_that_the_request_sends() {
             .map(|item| RequestContextItem {
                 source_class: item.source_class,
                 content: item.content.clone(),
+                full_input_only: false,
             })
             .collect(),
         declared_targets: vec![chapter.clone(), pending_candidate(&chapter)],
@@ -304,6 +305,7 @@ fn a_continuation_sends_each_output_with_its_call_id_after_the_original_calls() 
             RequestContextItem {
                 source_class: ContextSourceClass::ToolResult,
                 content: "<tool_result source=\"call-2\" state=\"ok\">x</tool_result>".to_owned(),
+                full_input_only: false,
             },
         ],
         ..request

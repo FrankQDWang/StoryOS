@@ -286,9 +286,10 @@ pub use set_current_chapter::{
     SetCurrentChapterRefusal, SetCurrentChapterResult, set_current_chapter,
 };
 pub use skill_instruction::{
-    SKILL_SELECTION_LIMIT, SkillInstructionSource, SkillInstructionUnavailable, SkillProvenance,
-    SkillRequirement, SkillSelectionUnavailable, admit_skill_selections, assemble_skill_catalog,
-    assemble_skill_instructions, skill_reference_well_formed,
+    CONVERSATION_SKILL_LIMIT, SKILL_SELECTION_LIMIT, SkillInstructionSource,
+    SkillInstructionUnavailable, SkillProvenance, SkillRequirement, SkillSelectionUnavailable,
+    admit_skill_selections, assemble_skill_catalog, assemble_skill_instructions,
+    conversation_skill_requirements, is_conversation_skill, skill_reference_well_formed,
 };
 pub use skill_package::{
     FrontmatterValue, SKILL_CATALOG_TOKEN_LIMIT, SKILL_MD_PATH, SKILL_PACKAGE_BYTE_LIMIT,

@@ -231,14 +231,15 @@ impl CompactionTrigger {
 /// no Tool result sends the new turn: each selected item, each selection reference text, and
 /// each declared target text. A later RunStep sends the outputs of the calls of its prior
 /// response, and the current input again only when the prior response did not read it (ADR 0085).
+/// The request continues a prior response, so it does not send the `SKILL.md` of a Skill of the
+/// Conversation (ADR 0089 section 5).
 fn sent_input_tokens(
     record: &crate::CurrentPassageAssemblyRecord,
     facts: &CompactionRequestFacts<'_>,
 ) -> u64 {
-    let current = record
-        .selected
-        .iter()
-        .filter(|item| !crate::is_function_output(record, item));
+    let current = record.selected.iter().filter(|item| {
+        !crate::is_function_output(record, item) && !crate::is_conversation_skill(record, item)
+    });
     let tool_results = crate::function_outputs(record);
     let outputs: u64 = tool_results
         .iter()

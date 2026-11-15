@@ -179,6 +179,11 @@ pub enum ToolOutputOrigin {
 pub struct RequestContextItem {
     pub source_class: ContextSourceClass,
     pub content: String,
+    /// Whether the Provider conversation holds the item after the first request that sends it:
+    /// the `SKILL.md` of a Skill of the Project Conversation (ADR 0089 section 5). Only a request
+    /// with a full input and no prior response sends such an item, and the current input digest
+    /// does not count it.
+    pub full_input_only: bool,
 }
 
 /// One admitted Proposal target that the request declares to the destination.
@@ -233,12 +238,13 @@ impl CurrentInput<'_> {
             .context
             .iter()
             .filter(|item| {
-                !matches!(
-                    item.source_class,
-                    ContextSourceClass::HostControl
-                        | ContextSourceClass::ToolResult
-                        | ContextSourceClass::ConversationSummary
-                )
+                !item.full_input_only
+                    && !matches!(
+                        item.source_class,
+                        ContextSourceClass::HostControl
+                            | ContextSourceClass::ToolResult
+                            | ContextSourceClass::ConversationSummary
+                    )
             })
             .map(|item| serde_json::json!([item.source_class.name(), item.content]))
             .collect();

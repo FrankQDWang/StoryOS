@@ -102,13 +102,22 @@ fn pinned(packages: &[SkillPackage]) -> Value {
 }
 
 fn recorded(packages: &[SkillPackage]) -> Value {
+    with_provenance(packages, "author_selected")
+}
+
+/// The requirements of the Skills of the Conversation `packages` of a later Run.
+fn of_conversation(packages: &[SkillPackage]) -> Value {
+    with_provenance(packages, "conversation_selected")
+}
+
+fn with_provenance(packages: &[SkillPackage], provenance: &str) -> Value {
     packages
         .iter()
         .map(|package| {
             json!({
                 "skill_name": package.name,
                 "package_digest": package.package_digest,
-                "provenance": "author_selected",
+                "provenance": provenance,
             })
         })
         .collect()
@@ -148,7 +157,7 @@ async fn selected_run(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn each_run_step_selects_the_catalog_and_only_a_selected_run_selects_the_exact_skill_md() {
+async fn each_run_step_selects_the_catalog_and_a_later_run_that_continues_sends_no_skill_md() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -177,7 +186,8 @@ async fn each_run_step_selects_the_catalog_and_only_a_selected_run_selects_the_e
 
     // The first request sends one section for each Skill in name order, then the catalog. The
     // request after the `finish` output continues with an unchanged input, so it sends no Skill
-    // text and no catalog.
+    // text and no catalog. The later Run records the Skills of the Conversation, and its first
+    // request continues the prior response, which holds their text (ADR 0089 section 5).
     let (catalog, pinned) = (catalog(&packages), pinned(&packages));
     assert_eq!(
         (
@@ -196,7 +206,10 @@ async fn each_run_step_selects_the_catalog_and_only_a_selected_run_selects_the_e
                 [1, recorded(&packages), pinned]
             ]),
             json!([["decision", 0, [], [catalog]], ["decision", 1, [], []]]),
-            json!([[0, null, pinned], [1, null, pinned]]),
+            json!([
+                [0, of_conversation(&packages), pinned],
+                [1, of_conversation(&packages), pinned]
+            ]),
         )
     );
 }
@@ -287,3 +300,6 @@ async fn a_full_input_sends_the_same_skill_and_catalog_text_and_a_summary_reques
         )
     );
 }
+
+#[path = "conversation_skill_context_tests.rs"]
+mod conversation;
