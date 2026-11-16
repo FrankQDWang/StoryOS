@@ -98,12 +98,12 @@ async fn a_run_binds_only_a_current_revision_with_text_other_than_white_space() 
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, none) = queued(&store, "db1").await;
+    let (scope, chapter_id, none) = queued(&store, "bc1").await;
     let blank = saved(&store, &scope, 0xdd11, " \n\u{3000}", 0).await;
-    let white_space = admit_run(&store, &scope, &chapter_id, "db2", FAKE, "Help again.").await;
+    let white_space = admit_run(&store, &scope, &chapter_id, "bc2", FAKE, "Help again.").await;
     let text = " Write in the past tense.\n";
     let current = saved(&store, &scope, 0xdd12, text, 1).await;
-    let bound = admit_run(&store, &scope, &chapter_id, "db3", FAKE, "Help again.").await;
+    let bound = admit_run(&store, &scope, &chapter_id, "bc3", FAKE, "Help again.").await;
     let context = |run_id: String| {
         let admin = &admin;
         async move { assemblies(admin, &run_id).await }
@@ -149,11 +149,11 @@ async fn a_run_binds_the_revision_of_its_own_project() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (project_a, chapter_a, _) = queued(&store, "db4").await;
-    let (project_b, _, _) = queued(&store, "db5").await;
+    let (project_a, chapter_a, _) = queued(&store, "bc4").await;
+    let (project_b, _, _) = queued(&store, "bc5").await;
     let revision_a = saved(&store, &project_a, 0xdd41, "Rule of Project A.", 0).await;
     saved(&store, &project_b, 0xdd51, "Rule of Project B.", 0).await;
-    let run_id = admit_run(&store, &project_a, &chapter_a, "db6", FAKE, "Help again.").await;
+    let run_id = admit_run(&store, &project_a, &chapter_a, "bc6", FAKE, "Help again.").await;
     let payloads: String = admin
         .query_one(
             "SELECT string_agg(payload::text, ' ') FROM storyos.context_assembly_manifests
@@ -193,11 +193,11 @@ async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, first) = queued(&store, "db7").await;
+    let (scope, chapter_id, first) = queued(&store, "bc7").await;
     complete(&store, &admin, &scope, &first).await;
     let first_text = "Write in the past tense.";
     let first_revision = saved(&store, &scope, 0xdd71, first_text, 0).await;
-    let steered = admit_run(&store, &scope, &chapter_id, "db8", FAKE, "Help again.").await;
+    let steered = admit_run(&store, &scope, &chapter_id, "bc8", FAKE, "Help again.").await;
     // The author saves a new text after the admission of the Run.
     let next_text = "Write in the present tense.";
     let next_revision = saved(&store, &scope, 0xdd72, next_text, 1).await;
@@ -214,10 +214,10 @@ async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
         &store,
         &scope,
         &chapter_id,
-        "db9",
+        "bc9",
         FAKE,
         "Help again.",
-        conversation_of("db8"),
+        conversation_of("bc8"),
         None,
     )
     .await;
@@ -258,11 +258,11 @@ async fn the_next_run_after_a_removal_sends_no_project_instruction() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, first) = queued(&store, "dbd").await;
+    let (scope, chapter_id, first) = queued(&store, "bcd").await;
     complete(&store, &admin, &scope, &first).await;
     let text = "Write in the past tense.";
     saved(&store, &scope, 0xddd1, text, 0).await;
-    let bound = admit_run(&store, &scope, &chapter_id, "dbe", FAKE, "Help again.").await;
+    let bound = admit_run(&store, &scope, &chapter_id, "bce", FAKE, "Help again.").await;
     complete(&store, &admin, &scope, &bound).await;
     // The author removes the Project Instruction.
     saved(&store, &scope, 0xddd2, "", 1).await;
@@ -270,10 +270,10 @@ async fn the_next_run_after_a_removal_sends_no_project_instruction() {
         &store,
         &scope,
         &chapter_id,
-        "dbf",
+        "bcf",
         FAKE,
         "Help again.",
-        conversation_of("dbe"),
+        conversation_of("bce"),
         None,
     )
     .await;
@@ -300,14 +300,14 @@ async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, first) = queued(&store, "dbb").await;
+    let (scope, chapter_id, first) = queued(&store, "bcb").await;
     complete(&store, &admin, &scope, &first).await;
     let text = "Write in the past tense.";
     let revision = saved(&store, &scope, 0xddb1, text, 0).await;
     let message = format!(
         "{ACTIVE_COMPACTION_REQUEST_PREFIX} {ACTIVE_COMPACTION_POSITIONS_PREFIX} 1. Help again."
     );
-    let compacted = admit_run(&store, &scope, &chapter_id, "dbc", FAKE, &message).await;
+    let compacted = admit_run(&store, &scope, &chapter_id, "bcc", FAKE, &message).await;
     // The author saves a new text after the admission of the Run.
     saved(&store, &scope, 0xddb2, "Write in the present tense.", 1).await;
     complete(&store, &admin, &scope, &compacted).await;
