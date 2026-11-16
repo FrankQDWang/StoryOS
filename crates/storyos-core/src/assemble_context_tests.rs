@@ -473,6 +473,27 @@ fn each_stage_7_source_class_and_purpose_roundtrips_with_its_persisted_name() {
 }
 
 #[test]
+fn the_host_schedule_cause_roundtrips_with_its_persisted_name() {
+    let mut record = assemble_current_passage_context(&complete_input());
+    record.operation_requirement.purpose = ContextPurpose::MemoryCapture;
+    record.operation_requirement.cause = ContextCause::HostSchedule;
+    let payload = encode_assembly_record(&record);
+    let author = encode_assembly_record(&assemble_current_passage_context(&complete_input()));
+    let mut unknown = payload.clone();
+    unknown["operation_requirement"]["cause"] = serde_json::json!("host_timer");
+
+    assert_eq!(
+        (
+            payload["operation_requirement"]["cause"].clone(),
+            author["operation_requirement"].get("cause"),
+            decode_assembly_record(&payload),
+            decode_assembly_record(&unknown),
+        ),
+        (serde_json::json!("host_schedule"), None, Some(record), None)
+    );
+}
+
+#[test]
 fn historical_assembly_without_block_selection_remains_readable() {
     let record = assemble_current_passage_context(&complete_input());
     let mut payload = encode_assembly_record(&record);
