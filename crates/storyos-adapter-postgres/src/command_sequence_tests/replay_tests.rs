@@ -263,12 +263,12 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         observed.push((UPDATE_PROJECT_ASSISTANCE.kind, outcome));
     }
 
-    let scope = seed_project(&store, "e440").await;
+    let scope = seed_project(&store, "ef40").await;
     for (suffix, text, expected_revision) in [
-        (0xe441, "Write in the past tense.", 0),
-        (0xe442, "Write in the past tense.", 1),
-        (0xe443, "A stale text.", 0),
-        (0xe444, "", 1),
+        (0xef41, "Write in the past tense.", 0),
+        (0xef42, "Write in the past tense.", 1),
+        (0xef43, "A stale text.", 0),
+        (0xef44, "", 1),
     ] {
         let input = UpdateProjectInstructionInput {
             text: text.to_owned(),

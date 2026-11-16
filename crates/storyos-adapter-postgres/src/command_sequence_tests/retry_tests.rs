@@ -124,7 +124,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
-            &update_project_instruction_call(&store, /*base*/ 0xe420).await,
+            &update_project_instruction_call(&store, /*base*/ 0xef20).await,
         )
         .await,
         in_progress_retry(

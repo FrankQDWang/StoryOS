@@ -152,7 +152,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         evidence_replays(
             &store,
             &admin,
-            &update_project_instruction_call(&store, /*base*/ 0xe430).await,
+            &update_project_instruction_call(&store, /*base*/ 0xef30).await,
         )
         .await,
         evidence_replays(

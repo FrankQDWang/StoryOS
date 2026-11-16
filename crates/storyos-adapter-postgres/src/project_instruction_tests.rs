@@ -93,7 +93,7 @@ async fn each_save_keeps_its_exact_text_as_one_immutable_revision() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let scope = seed_project(&store, "e300").await;
+    let scope = seed_project(&store, "ee00").await;
     assert_eq!(
         open_project_instruction(&store, &scope).await.unwrap(),
         None
@@ -101,12 +101,12 @@ async fn each_save_keeps_its_exact_text_as_one_immutable_revision() {
     let above_limit = "字".repeat(CONTEXT_ITEM_TOKEN_LIMIT as usize + 1);
     let mut outcomes = Vec::new();
     for (suffix, text, expected_revision) in [
-        (0xe301, " Write in the past tense.\n", 0),
-        (0xe302, "Keep the first person.", 1),
-        (0xe303, "A stale text.", 1),
-        (0xe304, "Keep the first person.", 2),
-        (0xe305, above_limit.as_str(), 2),
-        (0xe306, "", 2),
+        (0xee01, " Write in the past tense.\n", 0),
+        (0xee02, "Keep the first person.", 1),
+        (0xee03, "A stale text.", 1),
+        (0xee04, "Keep the first person.", 2),
+        (0xee05, above_limit.as_str(), 2),
+        (0xee06, "", 2),
     ] {
         outcomes.push(save(&store, &scope, suffix, text, expected_revision).await);
     }
@@ -160,15 +160,15 @@ async fn a_save_writes_and_reads_only_its_own_project_scope() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let project_a = seed_project(&store, "e310").await;
-    let project_b = seed_project(&store, "e320").await;
-    let foreign = seed_owned_project(&store, OTHER_USER, "e330").await;
-    let saved = applied(&save(&store, &project_a, 0xe311, "Project A text.", 0).await);
+    let project_a = seed_project(&store, "ee10").await;
+    let project_b = seed_project(&store, "ee20").await;
+    let foreign = seed_owned_project(&store, OTHER_USER, "ee30").await;
+    let saved = applied(&save(&store, &project_a, 0xee11, "Project A text.", 0).await);
 
     assert_eq!(
         (
-            save(&store, &project_b, 0xe321, "Project A text.", 1).await,
-            save(&store, &foreign, 0xe331, "", 0).await,
+            save(&store, &project_b, 0xee21, "Project A text.", 1).await,
+            save(&store, &foreign, 0xee31, "", 0).await,
             open_project_instruction(&store, &project_b).await.unwrap(),
             open_project_instruction(&store, &foreign).await.unwrap(),
             revision_rows(&admin, &project_a).await,
@@ -198,8 +198,8 @@ async fn the_runtime_role_cannot_change_or_delete_a_revision() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let scope = seed_project(&store, "e340").await;
-    let saved = applied(&save(&store, &scope, 0xe341, "Kept text.", 0).await);
+    let scope = seed_project(&store, "ee40").await;
+    let saved = applied(&save(&store, &scope, 0xee41, "Kept text.", 0).await);
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();

@@ -390,7 +390,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
-            &update_project_instruction_call(&store, /*base*/ 0xe410).await,
+            &update_project_instruction_call(&store, /*base*/ 0xef10).await,
         )
         .await,
         failed_then_settled(
