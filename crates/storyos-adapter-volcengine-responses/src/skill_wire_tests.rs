@@ -40,6 +40,7 @@ pub(crate) fn first(mapping: &str, registration: &str) -> CreateRequest {
             bound: &[],
             model_registration_revision: registration,
             skill_catalog: false,
+            memory_use: false,
         }),
         ..request
     }
@@ -57,6 +58,7 @@ fn v7(context: Vec<RequestContextItem>) -> CreateRequest {
             bound: &[],
             model_registration_revision: storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision,
             skill_catalog,
+            memory_use: false,
         }),
         ..first(V7, storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision)
     }
@@ -150,6 +152,7 @@ async fn a_v8_request_has_the_bytes_of_the_v7_request_of_the_same_input() {
                 .context
                 .iter()
                 .any(|item| item.source_class == ContextSourceClass::SkillCatalog),
+            memory_use: false,
         }),
         ..request.clone()
     };

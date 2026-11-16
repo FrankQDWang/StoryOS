@@ -20,6 +20,7 @@
 //! - `SCRIPT:search_manuscript ...` gets the manuscript search script of
 //!   `search_manuscript_plan`.
 //! - `SCRIPT:write_memory ...` gets the Memory write script of `write_memory_plan`.
+//! - `SCRIPT:read_memory_entry ...` gets the Memory read script of `read_memory_entry_plan`.
 //! - `SCRIPT:partial`, `SCRIPT:incomplete`, `SCRIPT:failed`, `SCRIPT:cancelled`,
 //!   `SCRIPT:unknown`, `SCRIPT:tool_partial`, and `SCRIPT:refusal` get the response outcome of
 //!   `create_plan::response_outcome` in the first request.
@@ -57,6 +58,9 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
         return planned;
     }
     if let Some(planned) = crate::search_manuscript_plan::plan(request) {
+        return planned;
+    }
+    if let Some(planned) = crate::read_memory_entry_plan::plan(request) {
         return planned;
     }
     if let Some(planned) = crate::write_memory_plan::plan(request) {

@@ -117,6 +117,7 @@ impl ValidatedToolCall {
             }
             ToolIntake::SearchManuscript { query } => json!({ "query": query }),
             ToolIntake::WriteMemory(write) => write.arguments(),
+            ToolIntake::ReadMemoryEntry { entry } => json!({ "entry": entry }),
         }
     }
 

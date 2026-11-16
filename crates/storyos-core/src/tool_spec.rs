@@ -43,6 +43,8 @@ pub enum ToolOperation {
     /// The Host Tool with which the Agent writes one Memory Entry on the request of the author
     /// (ADR 0094 section 5).
     WriteMemory,
+    /// The Host Tool with which the Agent reads one Memory Entry (ADR 0094 section 4).
+    ReadMemoryEntry,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -146,6 +148,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::READ_CHAPTER_TOOL_SPEC,
         &crate::SEARCH_MANUSCRIPT_TOOL_SPEC,
         &crate::WRITE_MEMORY_TOOL_SPEC,
+        &crate::READ_MEMORY_ENTRY_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -187,6 +190,9 @@ pub enum ToolIntake {
         query: String,
     },
     WriteMemory(crate::MemoryWrite),
+    ReadMemoryEntry {
+        entry: i64,
+    },
 }
 
 /// Why the arguments of a function call do not fit the typed intake.
@@ -281,6 +287,7 @@ impl ToolSpec {
             ToolOperation::ReadChapter => crate::read_chapter::intake(arguments),
             ToolOperation::SearchManuscript => crate::search_manuscript::intake(arguments),
             ToolOperation::WriteMemory => crate::write_memory::intake(arguments),
+            ToolOperation::ReadMemoryEntry => crate::read_memory_entry::intake(arguments),
         }
     }
 }
@@ -341,7 +348,8 @@ impl ServerArguments {
                 | ToolIntake::ReadSkillResource { .. }
                 | ToolIntake::ReadChapter { .. }
                 | ToolIntake::SearchManuscript { .. }
-                | ToolIntake::WriteMemory(_),
+                | ToolIntake::WriteMemory(_)
+                | ToolIntake::ReadMemoryEntry { .. },
             )
             | (
                 Self::Fetch { .. },
@@ -354,7 +362,8 @@ impl ServerArguments {
                 | ToolIntake::ReadSkillResource { .. }
                 | ToolIntake::ReadChapter { .. }
                 | ToolIntake::SearchManuscript { .. }
-                | ToolIntake::WriteMemory(_),
+                | ToolIntake::WriteMemory(_)
+                | ToolIntake::ReadMemoryEntry { .. },
             ) => {
                 return None;
             }

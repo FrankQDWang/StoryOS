@@ -1,9 +1,12 @@
-//! The reads of Agent Memory for a Run (ADR 0094 sections 3 and 4): the pin of the Memory
-//! revision and the current Memory Entries at a revision. No diagnostic records a title, a
-//! description, or a text of an entry (ADR 0047).
+//! The reads of Agent Memory for a Run (ADR 0094 sections 3, 4, and 8): the pin of the Memory
+//! revision, the current Memory Entries at a revision, the read of one entry, and the time of the
+//! last read of each entry. No diagnostic records a title, a description, or a text of an entry
+//! (ADR 0047).
 
 use storyos_application::ProjectScope;
-use storyos_core::{CurrentMemoryEntry, MemoryEntryType, MemoryIndexEntry, MemoryVersionWrite};
+use storyos_core::{
+    CurrentMemoryEntry, MemoryEntryRead, MemoryEntryType, MemoryIndexEntry, MemoryVersionWrite,
+};
 
 fn invalid(message: &'static str) -> Box<dyn std::error::Error + Send + Sync> {
     Box::new(std::io::Error::other(message))
@@ -135,6 +138,92 @@ pub(crate) async fn current_memory(
         })
         .collect::<Result<_, Box<dyn std::error::Error + Send + Sync>>>()?;
     Ok((revision, next, entries))
+}
+
+/// The time form of a Memory record: RFC 3339 in UTC with milliseconds, so that the order of
+/// the texts is the order of the times.
+const TIME_FORM: &str = r#"YYYY-MM-DD"T"HH24:MI:SS.MS"Z""#;
+
+/// The current version of the entry with the number `number` of the Project now, or `None` when no
+/// current entry has the number.
+pub(crate) async fn read_current_entry(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    number: i64,
+) -> Result<Option<MemoryEntryRead>, Box<dyn std::error::Error + Send + Sync>> {
+    let row = client
+        .query_opt(
+            "SELECT memory_entry_id::text, version::text, entry_type, title, description, origin,
+                    to_char(recorded_at AT TIME ZONE 'UTC', $4), text
+               FROM (SELECT DISTINCT ON (memory_entry_id) *
+                       FROM storyos.memory_entry_versions
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND entry_number = $3::text::numeric
+                      ORDER BY memory_entry_id, memory_revision DESC) AS latest
+              WHERE state = 'current'",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &number.to_string(),
+                &TIME_FORM,
+            ],
+        )
+        .await?;
+    row.map(|row| {
+        Ok(MemoryEntryRead {
+            memory_entry_id: row.get(0),
+            version: numeric(row.get(1))?,
+            entry_type: MemoryEntryType::parse(row.get(2))
+                .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
+            title: row.get(3),
+            description: row.get(4),
+            origin: row.get(5),
+            changed_at: row.get(6),
+            text: row.get(7),
+        })
+    })
+    .transpose()
+}
+
+/// For each current entry of the Project, in number order: its identity, its number, and the time
+/// of its last read, or `None` when no Run read it. Only a read of a Run of the author counts
+/// (ADR 0094 section 8), and the Memory Index is not a read. The consolidation pass uses it.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the pruning of S7-D4b #1586 calls it")
+)]
+pub(crate) async fn last_memory_reads(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+) -> Result<Vec<(String, u64, Option<String>)>, Box<dyn std::error::Error + Send + Sync>> {
+    let rows = client
+        .query(
+            "SELECT latest.memory_entry_id::text, latest.entry_number::text,
+                    to_char(max(read.read_at) AT TIME ZONE 'UTC', $3)
+               FROM (SELECT DISTINCT ON (memory_entry_id) *
+                       FROM storyos.memory_entry_versions
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                      ORDER BY memory_entry_id, memory_revision DESC) AS latest
+               LEFT JOIN (storyos.memory_entry_reads AS read
+                          JOIN storyos.agent_runs AS run
+                            ON (run.owner_user_id, run.project_id, run.run_id) =
+                               (read.owner_user_id, read.project_id, read.run_id)
+                           AND run.run_kind = 'author')
+                 ON (read.owner_user_id, read.project_id, read.memory_entry_id) =
+                    (latest.owner_user_id, latest.project_id, latest.memory_entry_id)
+              WHERE latest.state = 'current'
+              GROUP BY latest.memory_entry_id, latest.entry_number
+              ORDER BY latest.entry_number",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &TIME_FORM,
+            ],
+        )
+        .await?;
+    rows.iter()
+        .map(|row| Ok((row.get(0), numeric(row.get(1))?, row.get(2))))
+        .collect()
 }
 
 /// The origin, the cause, and the source references of one version.

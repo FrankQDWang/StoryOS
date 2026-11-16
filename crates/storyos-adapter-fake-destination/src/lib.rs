@@ -5,6 +5,7 @@ mod load_plan;
 mod propose_edit_plan;
 mod prose_changes;
 mod read_chapter_plan;
+mod read_memory_entry_plan;
 mod read_plan;
 mod recovery_plan;
 mod research_plan;
