@@ -1,0 +1,13 @@
+## Live run plan (S7-D1b)
+
+Written before the first request.
+
+- Purpose: show on the real route that the route accepts the declaration of `read_memory_entry` and the read sentences of the section `Memory index`, that the model calls `read_memory_entry` with the number of an entry when a question needs the text of that entry, and that it answers from that text. The record also gives the title that the model writes for a `character` entry after the F1 rule of the `write_memory` description.
+- Product code: branch `claude/s7-d1b-read-memory-entry`, head `c482f970` (tree `4425d862`), on `stage7-memory` `f6c6de7a`. Release package from that clean head, manifest `sha256:b53070b5dad41cb641f57785e4700cb14143aa9e39264d0cb3004d816e191041`. Head Model Registration of the deployment (mapping `v8`), Agent Plan route through the admitted path (ADR 0049, ADR 0050). The key reaches the Worker only through the typed settings. No step reads the env file.
+- Project: a new Project with one Chapter and one paragraph that the author types in the editor. No Memory Entry at the start.
+- Run 1 (new Conversation): the author asks the assistant to remember a setting of one character with many details. The description of an entry has at most 100 characters, so the details go into the text. Expected: RunStep 0 has one `write_memory` call with `create`, RunStep 1 calls `finish`, and the closing request gives the answer.
+- Run 2 (new Conversation): the request has the section `Memory index` with the entry of Run 1, and the author asks a question about one detail of that setting that is only in the text. Expected: RunStep 0 has one `read_memory_entry` call with the number of the entry, RunStep 1 calls `finish`, and the answer gives the detail from the text.
+- Requests: 6 expected (3 + 3), planned 6, at most 9 (one more Run 2 if the description gives the answer, so that the model has no cause to read). Each automatic request counts. No Exa exchange.
+- Expected reported input of each request: about 2,900 tokens for the first request of a Run (Host instructions, nine Tools, the Chapter list, the Chapter), plus about 100 tokens for the section `Memory index` in Run 2, plus the earlier items of the Run for each later request. Run 1: about 2,900, 3,300, and 3,400. Run 2: about 3,000, 3,500, and 3,600. Total about 20,000 tokens. The limit of the ticket is 100,000 reported input tokens.
+- Request guard: the `live_guard` triggers of the record of 2026-11-14 with a cap of 9 model requests and 0 Exa exchanges. Above the cap, the trigger refuses the claim transaction, so nothing goes out.
+- Raw evidence: a tag `evidence/699-live-memory-read-2026-11-17`. Record: `docs/research/agent-plan-live-memory-read-2026-11-17.md`, in its own pull request.
