@@ -47,39 +47,25 @@ impl ProjectConversationReader for PostgresProjectReader {
         // The first Run and the newest Run are the first and the last Run in Run identity order.
         let rows = transaction
             .query(
-                "SELECT conversation.conversation_id::text AS conversation_id,
-                        first_run.author_message AS first_author_message,
-                        to_char(first_run.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS first_run_created_at,
-                        to_char(newest_run.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS newest_run_created_at,
-                        newest_run.status
-                   FROM storyos.project_conversations AS conversation
-                  CROSS JOIN LATERAL (
-                        SELECT run.author_message, receipt.created_at
-                          FROM storyos.agent_runs AS run
-                          JOIN storyos.domain_receipts AS receipt
-                            ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
-                               (run.owner_user_id, run.project_id, run.receipt_id)
-                         WHERE (run.owner_user_id, run.project_id, run.conversation_id) =
-                               (conversation.owner_user_id, conversation.project_id,
-                                conversation.conversation_id)
-                         ORDER BY run.run_id
-                         LIMIT 1) AS first_run
-                  CROSS JOIN LATERAL (
-                        SELECT run.status::text AS status, receipt.created_at
-                          FROM storyos.agent_runs AS run
-                          JOIN storyos.domain_receipts AS receipt
-                            ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
-                               (run.owner_user_id, run.project_id, run.receipt_id)
-                         WHERE (run.owner_user_id, run.project_id, run.conversation_id) =
-                               (conversation.owner_user_id, conversation.project_id,
-                                conversation.conversation_id)
-                         ORDER BY run.run_id DESC
-                         LIMIT 1) AS newest_run
-                  WHERE conversation.owner_user_id = $1::text::uuid
-                    AND conversation.project_id = $2::text::uuid
-                  ORDER BY newest_run.created_at DESC, conversation.conversation_id DESC
+                "SELECT conversation_id, first_author_message, status,
+                        to_char(first_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
+                          AS first_run_created_at,
+                        to_char(newest_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
+                          AS newest_run_created_at
+                   FROM (SELECT run.conversation_id::text AS conversation_id,
+                                (array_agg(run.author_message ORDER BY run.run_id))[1]
+                                  AS first_author_message,
+                                (array_agg(run.status::text ORDER BY run.run_id DESC))[1] AS status,
+                                (array_agg(receipt.created_at ORDER BY run.run_id))[1] AS first_at,
+                                (array_agg(receipt.created_at ORDER BY run.run_id DESC))[1] AS newest_at
+                           FROM storyos.agent_runs AS run
+                           JOIN storyos.domain_receipts AS receipt
+                             ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
+                                (run.owner_user_id, run.project_id, run.receipt_id)
+                          WHERE run.owner_user_id = $1::text::uuid
+                            AND run.project_id = $2::text::uuid
+                          GROUP BY run.conversation_id) AS conversation
+                  ORDER BY newest_at DESC, conversation_id DESC
                   LIMIT $3",
                 &[
                     &scope.owner_user_id.as_ref(),
@@ -131,12 +117,20 @@ impl ProjectConversationReader for PostgresProjectReader {
             transaction.commit().await.map_err(read_error)?;
             return Ok(None);
         }
+        // The end time of an ended Run is the recorded time of its last Run event, or the time of
+        // its Receipt when it has no Run event. The read time is the clock of the same database.
         let rows = transaction
             .query(
                 "SELECT run.run_id::text AS run_id, run.author_message,
                         run.chapter_id::text AS chapter_id, run.status::text AS status,
                         to_char(receipt.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS created_at
+                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS created_at,
+                        floor(extract(epoch FROM GREATEST(receipt.created_at,
+                          (SELECT max(event.recorded_at) FROM storyos.agent_run_events AS event
+                            WHERE (event.owner_user_id, event.project_id, event.run_id) =
+                                  (run.owner_user_id, run.project_id, run.run_id))))
+                          * 1000000)::bigint AS last_recorded_at,
+                        floor(extract(epoch FROM statement_timestamp()) * 1000000)::bigint AS read_time
                    FROM storyos.agent_runs AS run
                    JOIN storyos.domain_receipts AS receipt
                      ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
@@ -154,52 +148,25 @@ impl ProjectConversationReader for PostgresProjectReader {
             )
             .await
             .map_err(read_error)?;
-        let newest_first = rows
-            .iter()
-            .map(|row| {
-                Ok(ProjectConversationRunItem {
-                    run_id: row.get("run_id"),
-                    author_message: row.get("author_message"),
-                    chapter_id: row.get("chapter_id"),
-                    status: status(row.get("status"))?,
-                    created_at: row.get("created_at"),
-                })
-            })
-            .collect::<Result<Vec<_>, ProjectReadError>>()?;
-        let Some(newest) = newest_first.first() else {
+        transaction.commit().await.map_err(read_error)?;
+        let Some(newest) = rows.first() else {
             return Err(ProjectReadError::unavailable(std::io::Error::other(
                 "the Project Conversation has no Run",
             )));
         };
-        // The end time of an ended Run is the recorded time of its last Run event, or the time of
-        // its Receipt when it has no Run event. The read time is the clock of the same database.
-        let times = transaction
-            .query_one(
-                "SELECT floor(extract(epoch FROM GREATEST(receipt.created_at,
-                          (SELECT max(event.recorded_at) FROM storyos.agent_run_events AS event
-                            WHERE (event.owner_user_id, event.project_id, event.run_id) =
-                                  (run.owner_user_id, run.project_id, run.run_id))))
-                          * 1000000)::bigint,
-                        floor(extract(epoch FROM clock_timestamp()) * 1000000)::bigint
-                   FROM storyos.agent_runs AS run
-                   JOIN storyos.domain_receipts AS receipt
-                     ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
-                        (run.owner_user_id, run.project_id, run.receipt_id)
-                  WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
-                    AND run.run_id = $3::text::uuid",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &newest.run_id,
-                ],
-            )
-            .await
-            .map_err(read_error)?;
-        transaction.commit().await.map_err(read_error)?;
+        let runs = rows.iter().map(|row| {
+            Ok(ProjectConversationRunItem {
+                run_id: row.get("run_id"),
+                author_message: row.get("author_message"),
+                chapter_id: row.get("chapter_id"),
+                status: status(row.get("status"))?,
+                created_at: row.get("created_at"),
+            })
+        });
         Ok(Some(StoredProjectConversationRuns {
-            newest_run_last_recorded_at: clock(times.get(/*idx*/ 0))?,
-            read_time: clock(times.get(/*idx*/ 1))?,
-            newest_first,
+            newest_first: runs.collect::<Result<_, ProjectReadError>>()?,
+            newest_run_last_recorded_at: clock(newest.get("last_recorded_at"))?,
+            read_time: clock(newest.get("read_time"))?,
         }))
     }
 }

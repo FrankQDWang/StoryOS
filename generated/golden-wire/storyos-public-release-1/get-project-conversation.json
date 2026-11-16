@@ -14,13 +14,6 @@
       "created_at": "2026-11-16T09:30:00.000Z",
       "run_id": "018f0000-0000-7001-8000-000000000d12",
       "status": "completed"
-    },
-    {
-      "author_message": "Keep the voice of the narrator.",
-      "chapter_id": "018f0000-0000-7001-8000-000000000301",
-      "created_at": "2026-11-16T10:15:00.000Z",
-      "run_id": "018f0000-0000-7001-8000-000000000d13",
-      "status": "completed"
     }
   ],
   "schema_id": "storyos.query.project-conversation.response.v1"

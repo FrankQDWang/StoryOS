@@ -113,6 +113,10 @@ A model records too many small details when only its instructions limit it. The 
 - The writing assistant panel has a list of the Project Conversations of the Project. The author opens an earlier Conversation again, reads it, and continues it. Each Conversation keeps its own Provider continuation.
 - The origin of a Memory Entry on the settings page opens its source Conversation.
 - The list has no rename control and no delete control.
+- The two queries of the list are `listProjectConversations` (`GET /api/v1/projects/{project_id}/conversations`) and `getProjectConversation` (`GET /api/v1/projects/{project_id}/conversations/{conversation_id}`). Each read writes no row.
+- An entry of the list has the Conversation identity, the label, the Receipt times of the first Run and of the newest Run, and the status of the newest Run. The label is the start of the first author message, at most `PROJECT_CONVERSATION_LABEL_MAX_CHARACTERS` (80) characters. The entry with the newest Run is first. The list has at most `PROJECT_CONVERSATION_LIST_MAX_ENTRIES` (64) entries, the newest ones.
+- The Conversation read gives each Run in Run identity order: the Run identity, the author message, the Chapter identity, the status, and the Receipt time. It has at most `PROJECT_CONVERSATION_RUNS_MAX_ENTRIES` (64) Runs, the newest ones. A longer list or a longer Conversation gives `completeness` `truncated`.
+- The Conversation read has `earlier_turns_expired`. The Core function `earlier_turns_expired` makes it true when the newest Run ended more than `AGENT_PLAN_STORED_RESPONSE_RETENTION` (72 hours) before the read. The end time of an ended Run is the recorded time of its last Run event, or the time of its Receipt when it has no Run event. The response has no Provider time and no Provider reference.
 
 ### 11. What changes in ADR 0035 and the Memory contract
 
