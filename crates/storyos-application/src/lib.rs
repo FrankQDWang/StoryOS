@@ -62,6 +62,7 @@ mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_structure;
 mod manuscript_tree;
+mod memory_entries;
 mod open_proposal_list;
 mod pinned_export_source;
 mod project_activity;
@@ -157,6 +158,9 @@ pub use manuscript_structure::{
 pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterNode,
     GetManuscriptTree, ManuscriptTreeReader, VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
+};
+pub use memory_entries::{
+    MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem, list_memory_entries,
 };
 pub use model_gateway::{complete_agent_run, complete_agent_run_with_tools};
 pub use model_gateway_ports::{

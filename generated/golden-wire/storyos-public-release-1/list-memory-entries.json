@@ -1,0 +1,26 @@
+{
+  "correlation_id": "018f0000-0000-7001-8000-000000000940",
+  "entries": [
+    {
+      "changed_at": "2026-11-16T03:00:00.000Z",
+      "description": "The ferry worker, six years older than Lin Zhou.",
+      "entry_number": "1",
+      "entry_type": "character",
+      "memory_entry_id": "018f0000-0000-7001-8000-000000000941",
+      "origin": "author_request",
+      "source": {
+        "availability": "available",
+        "conversation_id": "018f0000-0000-7001-8000-000000000942",
+        "kind": "conversation"
+      },
+      "text": "Lin Xue keeps a brass compass.",
+      "title": "Lin Xue",
+      "version": "1"
+    }
+  ],
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "schema_id": "storyos.query.memory-entries.response.v1"
+}
