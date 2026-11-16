@@ -64,7 +64,9 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     // The audit query reads the closing RunStep, which also selects the result of the `finish` call (ADR 0091).
     assert.deepEqual(first.context.selected.filter((input) => input.source_class !== "host_control")
       .map((input) => [input.source_class, input.content]),
+    // ADR 0095: the Chapter list gives the length of the Chapter in characters.
     [["author_instruction", message], ["working_target", original],
+      ["chapter_list", `{"volume":"Volume A"}\n[1,${[...original].length},"Chapter A","current"]`],
       ["tool_result", '<tool_result source="call_finish" state="empty">The tool answered with no entry.</tool_result>']]);
     assert.ok(first.evidence.some((item) => item.kind === "provider_opaque"));
     assert.equal(first.run_id, firstId);

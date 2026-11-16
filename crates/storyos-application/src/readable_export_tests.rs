@@ -53,6 +53,9 @@ fn search_chapter(id: &str, text: &str) -> ManuscriptSearchChapterFact {
         chapter_id: ChapterId::new(id),
         volume_order: 1,
         chapter_order: 1,
+        volume_title: "Volume".to_owned(),
+        title: "Chapter".to_owned(),
+        head_revision_id: "revision".to_owned(),
         blocks: vec![ManuscriptSearchBlockFact {
             manuscript_block_id: format!("{id}-block"),
             text: text.to_owned(),

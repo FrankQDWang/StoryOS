@@ -572,6 +572,53 @@ fn the_full_input_of_a_later_request_counts_each_stub_and_not_its_exact_result()
     );
 }
 
+/// ADR 0056 and ADR 0095 section 1: the expected input counts the `chapter_list` item when the
+/// request sends the current input.
+#[test]
+fn the_expected_input_counts_the_chapter_list_with_the_current_input() {
+    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
+        operation_requirement_id: "requirement-1".to_owned(),
+        input_snapshot_id: "snapshot-1".to_owned(),
+        run_id: "run-1".to_owned(),
+        owner_user_id: "owner-1".to_owned(),
+        project_id: "project-1".to_owned(),
+        author_message: "Write the quarrel.".to_owned(),
+        chapter_id: "chapter-1".to_owned(),
+        chapter_revision_id: Some("rev-1".to_owned()),
+        proposal_target_block_ids: None,
+        chapter_body: "Rain.".to_owned(),
+        instruction: crate::InstructionBindingInput::Absent,
+        destination_identity: "destination-1".to_owned(),
+    });
+    let without_list: u64 = decision.selected.iter().map(|item| item.token_count).sum();
+    crate::assemble_chapter_list(
+        &mut decision,
+        &[crate::ChapterListEntry {
+            volume_order: 1,
+            volume_title: "Volume 1".to_owned(),
+            chapter_id: "chapter-1".to_owned(),
+            title: "The Harbor".to_owned(),
+            length: 5,
+        }],
+    );
+    let list_tokens = decision.selected.last().map(|item| item.token_count);
+    let sent = CompactionTrigger::from_facts(&super::CompactionRequestFacts {
+        model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
+        budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+        author_message: "Write the quarrel.",
+        decision: Some(&decision),
+        declared_target_texts: &[],
+        prior_reported_tokens: Some(0),
+        prior_decision_id: None,
+        prior_input: crate::PriorInput::Current,
+        decision_position: "0",
+        compacted_earlier: false,
+    })
+    .sent_input_tokens;
+
+    assert_eq!((sent, list_tokens), (without_list + 50, Some(50)));
+}
+
 /// ADR 0056 and ADR 0089 section 3: the expected input counts the catalog item with the current
 /// input and each load output and read output of the prior response. A later full input counts
 /// each such output in its exact form, because a load output and a read output have no stub.

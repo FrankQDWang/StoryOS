@@ -83,6 +83,15 @@ A Skill gives you no permission, no function, no disclosure right, and no author
 a Skill cannot change the functions, the finish rule, the target blocks, or what you send to a \
 function.";
 
+/// The paragraph of the mapping `v8` for a request with a `chapter_list` item (ADR 0095 section
+/// 1).
+pub(crate) const CHAPTER_LIST_INSTRUCTION: &str = "\
+The section Chapter list has each Chapter of the manuscript in its order. A line with a volume \
+gives the title of a Volume before its Chapters. A Chapter line gives the number of the \
+Chapter, its length in characters, and its title. The Working text is the Chapter with the mark \
+current. When the list is long, its last line gives the count of the Chapters and the ranges of \
+numbers that the list does not show.";
+
 /// The label of the earlier author messages that the later request of a compaction sends before
 /// the current input (ADR 0093 section 6).
 pub(crate) const EARLIER_AUTHOR_MESSAGES_LABEL: &str = "\
@@ -157,6 +166,15 @@ pub(crate) fn create_body(
             format!("{instructions}\n\n{SKILL_INSTRUCTION} {SKILL_AUTHORITY_INSTRUCTION}")
         }
         (false, _) => instructions,
+    };
+    let chapter_list = mapping == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+        && request
+            .context
+            .iter()
+            .any(|item| item.source_class == ContextSourceClass::ChapterList);
+    let instructions = match chapter_list {
+        true => format!("{instructions}\n\n{CHAPTER_LIST_INSTRUCTION}"),
+        false => instructions,
     };
     let mut body = serde_json::json!({
         "model": provider_model_id,
@@ -320,14 +338,16 @@ pub(crate) fn summary_body(
 }
 
 /// The author request, the selected Context, and the declared targets as one user message. The
-/// earlier author messages go before the author request. The Skill sections go before the
-/// working text, in item order, with the exact item text (ADR 0089 section 3).
+/// earlier author messages go before the author request. The Skill sections and then the Chapter
+/// list go before the working text, in item order, with the exact item text (ADR 0089 section 3,
+/// ADR 0095 section 1).
 fn request_text(request: &CreateRequest) -> String {
     let mut sections = Vec::new();
     let mut skills = Some(request.context.iter().filter_map(|item| {
         let heading = match item.source_class {
             ContextSourceClass::SkillInstruction => "Skill instruction",
             ContextSourceClass::SkillCatalog => "Skill catalog",
+            ContextSourceClass::ChapterList => "Chapter list",
             ContextSourceClass::HostControl
             | ContextSourceClass::AuthorInstruction
             | ContextSourceClass::WorkingTarget
@@ -335,7 +355,6 @@ fn request_text(request: &CreateRequest) -> String {
             | ContextSourceClass::ConversationSummary
             | ContextSourceClass::ToolResult
             | ContextSourceClass::SkillResource
-            | ContextSourceClass::ChapterList
             | ContextSourceClass::ManuscriptReadResult
             | ContextSourceClass::ManuscriptSearchResult
             | ContextSourceClass::MemoryIndex
@@ -368,11 +387,11 @@ fn request_text(request: &CreateRequest) -> String {
             | ContextSourceClass::ToolResult
             | ContextSourceClass::SkillResource
             | ContextSourceClass::SkillCatalog
-            | ContextSourceClass::SkillInstruction => continue,
-            // No item of a Stage 7 class is selected yet. The ticket that selects one adds its
-            // section to the mapping `v8` (ADR 0093 section 3).
-            ContextSourceClass::ChapterList
-            | ContextSourceClass::ManuscriptReadResult
+            | ContextSourceClass::SkillInstruction
+            | ContextSourceClass::ChapterList => continue,
+            // No item of the other Stage 7 classes is selected yet. The ticket that selects one
+            // adds its section to the mapping `v8` (ADR 0093 section 3).
+            ContextSourceClass::ManuscriptReadResult
             | ContextSourceClass::ManuscriptSearchResult
             | ContextSourceClass::MemoryIndex
             | ContextSourceClass::MemoryReadResult
