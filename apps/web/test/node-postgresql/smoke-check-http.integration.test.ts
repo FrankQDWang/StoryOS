@@ -114,7 +114,9 @@ async function buildReadFixture() {
   await settleOnce();
   const tree = await client.getManuscriptTree({ baseUrl: story.baseUrl, projectId: story.projectId,
     fetchImpl: story.fetchImpl });
-  return { story, proposal, edit, session, snapshotId: tree.snapshot.snapshot_id,
+  const { conversation_id: conversationId } = await client.getAgentRun({ baseUrl: story.baseUrl,
+    projectId: story.projectId, runId: proposal.source.run_id, fetchImpl: story.fetchImpl });
+  return { story, proposal, edit, session, snapshotId: tree.snapshot.snapshot_id, conversationId,
     archiveId: archive.response.effect.export_id, readableId: readable.response.effect.export_id,
     ...await researchSource(proposal.source.run_id) };
 }
@@ -559,6 +561,13 @@ const READS: Record<string, ReadRow> = {
   getAgentRun: {
     call: ({ story, proposal }, fetchImpl) => client.getAgentRun({ ...scope(story), fetchImpl,
       runId: proposal.source.run_id }),
+  },
+  listProjectConversations: {
+    call: ({ story }, fetchImpl) => client.listProjectConversations({ ...scope(story), fetchImpl }),
+  },
+  getProjectConversation: {
+    call: ({ story, conversationId }, fetchImpl) => client.getProjectConversation({ ...scope(story), fetchImpl,
+      conversationId }),
   },
   listResearchSources: {
     call: ({ story, proposal }, fetchImpl) => client.listResearchSources({ ...scope(story), fetchImpl,

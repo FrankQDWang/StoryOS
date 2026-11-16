@@ -1,0 +1,20 @@
+{
+  "completeness": "complete",
+  "conversation_id": "018f0000-0000-7001-8000-000000000d02",
+  "correlation_id": "018f0000-0000-7001-8000-000000000d11",
+  "earlier_turns_expired": false,
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "runs": [
+    {
+      "author_message": "Help with this passage.",
+      "chapter_id": "018f0000-0000-7001-8000-000000000301",
+      "created_at": "2026-11-16T09:30:00.000Z",
+      "run_id": "018f0000-0000-7001-8000-000000000d12",
+      "status": "completed"
+    }
+  ],
+  "schema_id": "storyos.query.project-conversation.response.v1"
+}

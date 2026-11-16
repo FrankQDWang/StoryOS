@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "AgentRunStatus": {
+      "enum": [
+        "queued",
+        "claimed",
+        "waiting",
+        "paused",
+        "completed",
+        "refused",
+        "cancelled"
+      ],
+      "type": "string"
+    },
+    "ProjectConversationCompleteness": {
+      "description": "`truncated` when the Host bound removed the oldest entries or Runs.",
+      "enum": [
+        "complete",
+        "truncated"
+      ],
+      "type": "string"
+    },
+    "ProjectConversationEntry": {
+      "additionalProperties": false,
+      "description": "One Project Conversation in the list. The times are the Receipt times of the `createAgentRun`\ncommands of its first Run and of its newest Run.",
+      "properties": {
+        "conversation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "first_run_created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "newest_run_created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "newest_run_status": {
+          "$ref": "#/$defs/AgentRunStatus"
+        }
+      },
+      "required": [
+        "conversation_id",
+        "label",
+        "first_run_created_at",
+        "newest_run_created_at",
+        "newest_run_status"
+      ],
+      "type": "object"
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.query.project-conversations.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "completeness": {
+      "$ref": "#/$defs/ProjectConversationCompleteness"
+    },
+    "conversations": {
+      "items": {
+        "$ref": "#/$defs/ProjectConversationEntry"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "schema_id": {
+      "const": "storyos.query.project-conversations.response.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "completeness",
+    "conversations"
+  ],
+  "title": "StoryOS Project Conversations Response",
+  "type": "object"
+}
