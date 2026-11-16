@@ -225,6 +225,13 @@ impl ProjectCommand for CreateAgentRunInput {
             &self.skills,
         )
         .await?;
+        let memory_revision = crate::memory_entries::memory_revision_pin(
+            client,
+            &envelope.project_scope,
+            &applied.run_id,
+        )
+        .await
+        .map_err(|error| sequence_error(CreateAgentRunError::Unavailable(error)))?;
         context::persist_current_passage_assembly(
             client,
             &context::PassageContextInput {
@@ -238,6 +245,7 @@ impl ProjectCommand for CreateAgentRunInput {
                 candidate_target: None,
                 selection_references: self.selection_references.as_deref(),
                 skill_requirements: &skill_requirements,
+                memory_revision,
                 tool_results: None,
             },
             &assistance.processing_destination_identity,

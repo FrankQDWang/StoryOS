@@ -292,6 +292,7 @@ pub(crate) async fn advance(
                 .skill_requirements
                 .as_deref()
                 .unwrap_or_default(),
+            memory_revision: requirement.memory_revision,
             selection_references: input.references.as_deref(),
             tool_results: (!candidates.is_empty()).then_some(candidates.as_slice()),
         },
