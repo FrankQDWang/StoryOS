@@ -7,10 +7,11 @@ use storyos_application::{
     AgentRunWorkStore, ClaimedAgentRun, ClaimedArchiveExport, ClaimedExportWork,
     ClaimedReadableExport, CompleteAgentRun, CompleteAgentRunError, CompleteArchiveExport,
     CompleteArchiveExportError, CompleteReadableExport, CompleteReadableExportError,
-    ContractFaultObserver, DiagnosticField, DiagnosticId, ExportWorkStore, GatewayClock,
-    ModelDispatchStore, ModelProviderAdapter, ProjectReadError, SqlState, ToolDestinationAdapter,
-    ToolDispatchStore, claim_next_agent_run, claim_next_export_work, complete_agent_run_with_tools,
-    complete_archive_export, complete_readable_export,
+    ContractFaultObserver, DiagnosticField, DiagnosticId, EmbeddingProviderAdapter,
+    ExportWorkStore, GatewayClock, ModelDispatchStore, ModelProviderAdapter, ProjectReadError,
+    SqlState, ToolDestinationAdapter, ToolDispatchStore, claim_next_agent_run,
+    claim_next_export_work, complete_agent_run_with_tools, complete_archive_export,
+    complete_readable_export,
 };
 
 const ATTEMPTS: u64 = 4;
@@ -27,12 +28,13 @@ impl<T> WorkerStore for T where
 {
 }
 
-/// The destination side of the Worker loop: one Model Provider Adapter, its fault observer, and
-/// the Tool destination of the ToolDispatch phase.
-pub struct ModelDestination<A, O, T> {
+/// The destination side of the Worker loop: one Model Provider Adapter, its fault observer, the
+/// Tool destination of the ToolDispatch phase, and the embedding adapter (ADR 0095 section 3).
+pub struct ModelDestination<A, O, T, E> {
     pub adapter: A,
     pub observer: O,
     pub tools: T,
+    pub embeddings: E,
 }
 
 /// The lease of a readable export claim: the `STORYOS_EXPORT_LEASE_TTL_SECS` setting, or 30
@@ -41,9 +43,14 @@ pub fn readable_export_lease_ttl(seconds: Option<u64>) -> Duration {
     Duration::from_secs(seconds.unwrap_or(/*default*/ 30))
 }
 
-pub async fn run<A: ModelProviderAdapter, O: ContractFaultObserver, T: ToolDestinationAdapter>(
+pub async fn run<
+    A: ModelProviderAdapter,
+    O: ContractFaultObserver,
+    T: ToolDestinationAdapter,
+    E: EmbeddingProviderAdapter,
+>(
     store: impl WorkerStore,
-    destination: ModelDestination<A, O, T>,
+    destination: ModelDestination<A, O, T, E>,
 ) {
     loop {
         if !step(&store, &destination).await {
@@ -56,9 +63,10 @@ pub async fn run_once<
     A: ModelProviderAdapter,
     O: ContractFaultObserver,
     T: ToolDestinationAdapter,
+    E: EmbeddingProviderAdapter,
 >(
     store: &impl WorkerStore,
-    destination: &ModelDestination<A, O, T>,
+    destination: &ModelDestination<A, O, T, E>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match claim_after_contention(|| claim_next_export_work(store)).await? {
         Some(ClaimedExportWork::Readable(claim)) => {
@@ -92,9 +100,9 @@ pub async fn claim_only<A: ModelProviderAdapter>(
     Ok(())
 }
 
-async fn step<A: ModelProviderAdapter, O: ContractFaultObserver, T: ToolDestinationAdapter>(
+async fn step<A: ModelProviderAdapter, O: ContractFaultObserver, T: ToolDestinationAdapter, E>(
     store: &impl WorkerStore,
-    destination: &ModelDestination<A, O, T>,
+    destination: &ModelDestination<A, O, T, E>,
 ) -> bool {
     match claim_next_export_work(store).await {
         Ok(Some(ClaimedExportWork::Readable(claim))) => matches!(
@@ -199,9 +207,10 @@ async fn agent_run_claim<
     A: ModelProviderAdapter,
     O: ContractFaultObserver,
     T: ToolDestinationAdapter,
+    E,
 >(
     store: &impl WorkerStore,
-    destination: &ModelDestination<A, O, T>,
+    destination: &ModelDestination<A, O, T, E>,
     claim: &ClaimedAgentRun,
     policy: Retry,
 ) -> Result<CompleteAgentRun, CompleteAgentRunError> {

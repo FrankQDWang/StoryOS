@@ -141,6 +141,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             adapter: storyos_adapter_fake_destination::FakeDestination,
             observer: storyos_application::NoContractFaults,
             tools: storyos_application::NoToolDestination,
+            // The in-process Worker takes only the fake embedding adapter (ADR 0039).
+            embeddings: storyos_adapter_fake_destination::FakeEmbeddings,
         };
         let worker = tokio::spawn(storyos_worker::run(store, destination));
         tokio::spawn(async move {
