@@ -492,6 +492,7 @@ pub fn is_function_output(
             | ContextSourceClass::ManuscriptReadResult
             | ContextSourceClass::ManuscriptSearchResult
             | ContextSourceClass::MemoryReadResult
+            | ContextSourceClass::MemorySearchResult
     ) || is_skill_load_output(record, item)
 }
 

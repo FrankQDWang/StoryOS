@@ -46,6 +46,7 @@ mod research_synthesis;
 mod retrieve_original_result;
 mod run_result;
 mod search_manuscript;
+mod search_memory;
 mod submit_research;
 mod tool_call;
 mod tool_call_recovery;
@@ -329,6 +330,7 @@ pub use search_manuscript::{
     MANUSCRIPT_SEARCH_MATCH_LIMIT, SEARCH_MANUSCRIPT_TOOL_SPEC, admit_manuscript_search,
     exact_matches,
 };
+pub use search_memory::{SEARCH_MEMORY_TOOL_SPEC, search_memory};
 pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
     SetCurrentChapterRefusal, SetCurrentChapterResult, set_current_chapter,
