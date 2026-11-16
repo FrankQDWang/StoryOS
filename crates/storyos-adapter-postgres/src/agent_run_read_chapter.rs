@@ -1,10 +1,10 @@
 //! The in-process execution of a `read_chapter` call (ADR 0095 section 1). It reads the live
 //! Chapters of the Project of the Run in manuscript order, with the authoritative head of each,
-//! and it settles the call with the text of the Chapter that has the number, or refuses it with
-//! the reason. It reads no Proposal candidate, and it writes no Outbound Disclosure Event.
+//! and it settles the call with the text of the Blocks of the range of the Chapter that has the
+//! number, or refuses it with the reason. It reads no Proposal candidate, and it writes no Outbound Disclosure Event.
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::{ReadableChapter, ToolCallState};
+use storyos_core::{BlockRange, ReadableChapter, ToolCallState};
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
 
@@ -31,17 +31,18 @@ pub(crate) async fn readable_chapters(
     .collect())
 }
 
-/// Reads the Chapter with the number `chapter` for the pending call `row`, and settles or refuses
-/// `row`.
+/// Reads the Blocks `range` of the Chapter with the number `chapter` for the pending call `row`,
+/// and settles or refuses `row`.
 pub(crate) async fn execute(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     chapter: i64,
+    range: BlockRange,
 ) -> Result<(), CompleteAgentRunError> {
     let chapters = readable_chapters(client, claim).await?;
     let (state, refusal, result) =
-        match storyos_core::admit_chapter_read(&chapters, chapter, &row.call_id) {
+        match storyos_core::admit_chapter_read(&chapters, chapter, range, &row.call_id) {
             Ok(result) => (ToolCallState::Settled, None, result),
             Err(refusal) => (
                 ToolCallState::Refused,
