@@ -4,7 +4,9 @@
 //! the Embedding Registration. The configuration by the operator is the consent.
 
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectScope};
-use storyos_core::{EmbeddingRegistration, GrantScope};
+use storyos_core::{
+    EmbeddingBindingFacts, EmbeddingRegistration, GrantScope, embedding_binding_to_make,
+};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
@@ -31,8 +33,7 @@ pub(crate) const CURRENT_EMBEDDING_BINDING: &str = "
      ORDER BY binding.project_model_use_binding_revision DESC
      LIMIT 1";
 
-/// The embedding Registration that `createAgentRun` binds: `None` when the deployment has no
-/// embedding configuration, or when the current records of the Project match it.
+/// The embedding Registration that `createAgentRun` binds (`embedding_binding_to_make`).
 pub(crate) async fn embedding_plan(
     client: &Client,
     scope: &ProjectScope,
@@ -48,20 +49,20 @@ pub(crate) async fn embedding_plan(
         )
         .await
         .map_err(unavailable)?;
-    let current = row.is_some_and(|row| {
-        (
-            row.get::<_, &str>(/*idx*/ 1),
-            row.get::<_, Option<&str>>(/*idx*/ 3),
-            row.get::<_, &str>(/*idx*/ 6),
-            row.get::<_, Option<&str>>(/*idx*/ 7),
-        ) == (
-            registration.revision,
-            Some(GrantScope::ManuscriptEmbeddingV1.as_str()),
-            registration.destination.as_str(),
-            registration.destination.credential_reference(),
-        )
-    });
-    Ok((!current).then_some(registration))
+    Ok(embedding_binding_to_make(
+        Some(registration),
+        row.as_ref().map(embedding_binding_facts),
+    ))
+}
+
+/// The facts of one row of `CURRENT_EMBEDDING_BINDING`.
+pub(crate) fn embedding_binding_facts(row: &tokio_postgres::Row) -> EmbeddingBindingFacts<'_> {
+    EmbeddingBindingFacts {
+        registration_revision: row.get(/*idx*/ 1),
+        grant_scope: row.get(/*idx*/ 3),
+        destination_kind: row.get(/*idx*/ 6),
+        credential_reference: row.get(/*idx*/ 7),
+    }
 }
 
 /// Writes a new Processing Destination Identity with its evidence, the Project Destination Grant

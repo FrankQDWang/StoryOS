@@ -8,14 +8,14 @@ use storyos_application::{
     ProjectReadError, ProjectScope,
 };
 use storyos_core::{
-    EmbeddingAdmissionFacts, EmbeddingBindingFacts, EmbeddingInput, EmbeddingRefusal,
-    EmbeddingRegistration, MANUSCRIPT_EMBEDDING_PURPOSE, admit_embedding,
+    EmbeddingAdmissionFacts, EmbeddingInput, EmbeddingRefusal, EmbeddingRegistration,
+    MANUSCRIPT_EMBEDDING_PURPOSE, admit_embedding,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
-use crate::project_embedding_binding::CURRENT_EMBEDDING_BINDING;
+use crate::project_embedding_binding::{CURRENT_EMBEDDING_BINDING, embedding_binding_facts};
 
 /// Whether each reference of `input` is in the Project Scope.
 async fn source_in_scope(
@@ -94,10 +94,7 @@ impl EmbeddingDispatchStore for PostgresProjectReader {
             .map_err(read_error)?;
         let admission = admit_embedding(&EmbeddingAdmissionFacts {
             registration,
-            binding: binding.as_ref().map(|row| EmbeddingBindingFacts {
-                registration_revision: row.get(/*idx*/ 1),
-                grant_scope: row.get(/*idx*/ 3),
-            }),
+            binding: binding.as_ref().map(embedding_binding_facts),
             source_in_scope: in_scope,
             input,
         });

@@ -70,6 +70,7 @@ impl ExposureFacts<'_> {
             | ToolOperation::SubmitResearch
             | ToolOperation::ReadToolResult
             | ToolOperation::ReadChapter
+            | ToolOperation::SearchManuscript
             | ToolOperation::Finish => true,
             // The web research Tools are Tools of the research binding, not Host Tools.
             ToolOperation::WebSearch | ToolOperation::WebFetch => false,
@@ -115,6 +116,7 @@ impl ToolOperation {
             Self::LoadSkill => "load_skill",
             Self::ReadSkillResource => "read_skill_resource",
             Self::ReadChapter => "read_chapter",
+            Self::SearchManuscript => "search_manuscript",
         }
     }
 
@@ -139,6 +141,7 @@ impl ToolOperation {
             Self::LoadSkill => crate::load_skill::DESCRIPTION,
             Self::ReadSkillResource => crate::read_skill_resource::DESCRIPTION,
             Self::ReadChapter => crate::read_chapter::DESCRIPTION,
+            Self::SearchManuscript => crate::search_manuscript::DESCRIPTION,
         }
     }
 }
@@ -188,6 +191,7 @@ impl ExposedTool {
             ToolOperation::LoadSkill => crate::load_skill::parameters(),
             ToolOperation::ReadSkillResource => crate::read_skill_resource::parameters(),
             ToolOperation::ReadChapter => crate::read_chapter::parameters(),
+            ToolOperation::SearchManuscript => crate::search_manuscript::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,

@@ -418,12 +418,13 @@ fn the_form_of_a_result_follows_the_installed_stubs_and_the_waiting_decision() {
     );
 }
 
-/// ADR 0095 section 1: the settled result of `read_chapter` is a `manuscript_read_result` item
-/// with the trust `data_only` and the ToolCall identity as its source version. It is a function
+/// ADR 0095 section 1: the settled result of `read_chapter` is a `manuscript_read_result` item,
+/// and the settled result of `search_manuscript` is a `manuscript_search_result` item, each with
+/// the trust `data_only` and the ToolCall identity as its source version. Each is a function
 /// output, it keeps its exact form in the stub form, and the bound cut gives the mode
 /// `deterministic_excerpt`. The output of a refused read stays a `tool_result` item.
 #[test]
-fn a_settled_chapter_read_is_a_manuscript_read_result_that_keeps_its_exact_form() {
+fn a_settled_manuscript_read_or_search_keeps_its_exact_form_in_its_class() {
     fn read<'a>(id: &'a str, state: ToolCallState, text: &'a str) -> ToolResultCandidate<'a> {
         ToolResultCandidate {
             output: ToolResultOutput::of_spec(Some(crate::READ_CHAPTER_TOOL_SPEC.revision)),
@@ -431,6 +432,14 @@ fn a_settled_chapter_read_is_a_manuscript_read_result_that_keeps_its_exact_form(
             arguments: "{\"chapter\":2}",
             form: ToolResultForm::Stub,
             ..candidate(id, state, Some(text))
+        }
+    }
+    fn search<'a>(id: &'a str, text: &'a str) -> ToolResultCandidate<'a> {
+        ToolResultCandidate {
+            output: ToolResultOutput::of_spec(Some(crate::SEARCH_MANUSCRIPT_TOOL_SPEC.revision)),
+            function_name: "search_manuscript",
+            arguments: "{\"query\":\"Rain\"}",
+            ..read(id, ToolCallState::Settled, text)
         }
     }
     // A result above the stub limit, and a result above the item limit.
@@ -444,6 +453,8 @@ fn a_settled_chapter_read_is_a_manuscript_read_result_that_keeps_its_exact_form(
             ToolCallState::Refused,
             "The Host refused this call.",
         ),
+        search("search-1", long),
+        search("search-2", above),
     ];
     let mut record = passage();
     assemble_tool_result_continuation(&mut record, &candidates);
@@ -483,6 +494,20 @@ fn a_settled_chapter_read_is_a_manuscript_read_result_that_keeps_its_exact_form(
                 ContextSourceClass::ToolResult,
                 crate::tool_result_source_version("read-3", &[]),
                 ProjectionMode::ExactRequired,
+                true,
+            ),
+            (
+                "data_only",
+                ContextSourceClass::ManuscriptSearchResult,
+                crate::tool_result_source_version("search-1", &[]),
+                ProjectionMode::ExactRequired,
+                true,
+            ),
+            (
+                "data_only",
+                ContextSourceClass::ManuscriptSearchResult,
+                crate::tool_result_source_version("search-2", &[]),
+                ProjectionMode::DeterministicExcerpt,
                 true,
             ),
         ]

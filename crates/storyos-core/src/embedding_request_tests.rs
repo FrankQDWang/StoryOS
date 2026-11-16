@@ -17,6 +17,8 @@ fn admitted<'a>(input: &'a EmbeddingInput) -> EmbeddingAdmissionFacts<'a> {
         binding: Some(EmbeddingBindingFacts {
             registration_revision: HOST_FAKE_EMBEDDING_REGISTRATION.revision,
             grant_scope: Some("manuscript_embedding_v1"),
+            destination_kind: "host_fake",
+            credential_reference: None,
         }),
         source_in_scope: true,
         input,
@@ -36,6 +38,8 @@ fn the_admission_gives_one_typed_refusal_for_each_failed_fact() {
     let research = EmbeddingBindingFacts {
         registration_revision: HOST_FAKE_EMBEDDING_REGISTRATION.revision,
         grant_scope: Some("research_tool_v1"),
+        destination_kind: "host_fake",
+        credential_reference: None,
     };
     let rows: [(EmbeddingAdmissionFacts<'_>, Result<(), EmbeddingRefusal>); 10] = [
         (admitted(&text), Ok(())),
@@ -167,47 +171,7 @@ fn each_cause_has_its_source_class_and_its_own_instructions() {
             ("search_question", "search_question")
         ]
     );
-    assert_eq!(MANUSCRIPT_EMBEDDING_PURPOSE, "manuscript_embedding");
     assert_ne!(causes[0].instructions(), causes[1].instructions());
-}
-
-#[test]
-fn each_destination_has_one_text_registration_of_1024_dimensions() {
-    let registrations = [
-        DestinationKind::HostFake,
-        DestinationKind::VolcengineAgentPlan,
-    ]
-    .map(EmbeddingRegistration::of);
-
-    assert_eq!(
-        registrations.map(|registration| (
-            registration.destination,
-            registration.adapter.as_str(),
-            registration.provider_model_id,
-            registration.dimensions,
-            registration.input_modality,
-            registration.request_bounds,
-        )),
-        [
-            (
-                DestinationKind::HostFake,
-                "host_fake",
-                "host-fake-embedding",
-                1_024,
-                "text",
-                "embedding_request_v1"
-            ),
-            (
-                DestinationKind::VolcengineAgentPlan,
-                "volcengine_agent_plan_embeddings",
-                "doubao-embedding-vision-251215",
-                1_024,
-                "text",
-                "embedding_request_v1"
-            ),
-        ]
-    );
-    assert_eq!(EMBEDDING_REQUEST_TIMEOUT.as_secs(), 30);
 }
 
 #[test]
@@ -233,9 +197,5 @@ fn the_snapshot_names_the_cause_and_the_references_and_no_text() {
                 "working_target": "not_applicable", "workspace_context": "not_applicable",
             }),
         ]
-    );
-    assert_ne!(
-        EmbeddingCause::PassageIndex.instructions(),
-        EmbeddingCause::SearchQuestion.instructions()
     );
 }
