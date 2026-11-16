@@ -36,6 +36,8 @@ pub enum ToolOperation {
     LoadSkill,
     /// The Host Tool with which the Agent reads one file of a Skill that its Run has (ADR 0089).
     ReadSkillResource,
+    /// The Host Tool with which the Agent reads the text of one Chapter (ADR 0095).
+    ReadChapter,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -136,6 +138,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::READ_TOOL_RESULT_TOOL_SPEC,
         &crate::LOAD_SKILL_TOOL_SPEC,
         &crate::READ_SKILL_RESOURCE_TOOL_SPEC,
+        &crate::READ_CHAPTER_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -167,6 +170,9 @@ pub enum ToolIntake {
     ReadSkillResource {
         skill: String,
         path: String,
+    },
+    ReadChapter {
+        chapter: i64,
     },
 }
 
@@ -254,6 +260,7 @@ impl ToolSpec {
             ToolOperation::ReadToolResult => crate::read_tool_result::intake(arguments),
             ToolOperation::LoadSkill => crate::load_skill::intake(arguments),
             ToolOperation::ReadSkillResource => crate::read_skill_resource::intake(arguments),
+            ToolOperation::ReadChapter => crate::read_chapter::intake(arguments),
         }
     }
 }
@@ -311,7 +318,8 @@ impl ServerArguments {
                 | ToolIntake::SubmitResearch { .. }
                 | ToolIntake::ReadToolResult { .. }
                 | ToolIntake::LoadSkill { .. }
-                | ToolIntake::ReadSkillResource { .. },
+                | ToolIntake::ReadSkillResource { .. }
+                | ToolIntake::ReadChapter { .. },
             )
             | (
                 Self::Fetch { .. },
@@ -321,7 +329,8 @@ impl ServerArguments {
                 | ToolIntake::SubmitResearch { .. }
                 | ToolIntake::ReadToolResult { .. }
                 | ToolIntake::LoadSkill { .. }
-                | ToolIntake::ReadSkillResource { .. },
+                | ToolIntake::ReadSkillResource { .. }
+                | ToolIntake::ReadChapter { .. },
             ) => {
                 return None;
             }

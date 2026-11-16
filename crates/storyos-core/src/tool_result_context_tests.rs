@@ -347,7 +347,7 @@ fn only_a_long_research_result_or_read_in_the_stub_form_becomes_a_stub() {
         research("call_short", "High water at 10.42.", ToolResultForm::Stub),
         research("call_exact", &long, ToolResultForm::Exact),
         ToolResultCandidate {
-            output: ToolResultOutput::HostTool,
+            output: ToolResultOutput::HostTool(crate::ContextSourceClass::ToolResult),
             function_name: "propose_edit",
             ..research("call_host", &long, ToolResultForm::Stub)
         },
@@ -415,5 +415,76 @@ fn the_form_of_a_result_follows_the_installed_stubs_and_the_waiting_decision() {
                 ToolResultForm::Stub,
             ],
         )
+    );
+}
+
+/// ADR 0095 section 1: the settled result of `read_chapter` is a `manuscript_read_result` item
+/// with the trust `data_only` and the ToolCall identity as its source version. It is a function
+/// output, it keeps its exact form in the stub form, and the bound cut gives the mode
+/// `deterministic_excerpt`. The output of a refused read stays a `tool_result` item.
+#[test]
+fn a_settled_chapter_read_is_a_manuscript_read_result_that_keeps_its_exact_form() {
+    fn read<'a>(id: &'a str, state: ToolCallState, text: &'a str) -> ToolResultCandidate<'a> {
+        ToolResultCandidate {
+            output: ToolResultOutput::of_spec(Some(crate::READ_CHAPTER_TOOL_SPEC.revision)),
+            function_name: "read_chapter",
+            arguments: "{\"chapter\":2}",
+            form: ToolResultForm::Stub,
+            ..candidate(id, state, Some(text))
+        }
+    }
+    // A result above the stub limit, and a result above the item limit.
+    let (long, above) = ("Rain. ".repeat(5_000), "a".repeat(40_000));
+    let (long, above) = (long.as_str(), above.as_str());
+    let candidates = [
+        read("read-1", ToolCallState::Settled, long),
+        read("read-2", ToolCallState::Settled, above),
+        read(
+            "read-3",
+            ToolCallState::Refused,
+            "The Host refused this call.",
+        ),
+    ];
+    let mut record = passage();
+    assemble_tool_result_continuation(&mut record, &candidates);
+    stub_selected_results(&mut record, &candidates);
+    let outputs: Vec<_> = function_outputs(&record)
+        .into_iter()
+        .map(|(source, item)| {
+            (
+                source.trust.as_str(),
+                item.source_class,
+                item.source_version.clone(),
+                item.projection_mode,
+                item.content.starts_with("<tool_result source=\""),
+            )
+        })
+        .collect();
+
+    assert_eq!(
+        outputs,
+        [
+            (
+                "data_only",
+                ContextSourceClass::ManuscriptReadResult,
+                crate::tool_result_source_version("read-1", &[]),
+                ProjectionMode::ExactRequired,
+                true,
+            ),
+            (
+                "data_only",
+                ContextSourceClass::ManuscriptReadResult,
+                crate::tool_result_source_version("read-2", &[]),
+                ProjectionMode::DeterministicExcerpt,
+                true,
+            ),
+            (
+                "data_only",
+                ContextSourceClass::ToolResult,
+                crate::tool_result_source_version("read-3", &[]),
+                ProjectionMode::ExactRequired,
+                true,
+            ),
+        ]
     );
 }

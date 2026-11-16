@@ -129,12 +129,13 @@ pub(super) async fn record(admin: &Client, run_id: &str, role: &str, position: i
     serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
 }
 
-pub(crate) const TOOLS: [&str; 6] = [
+pub(crate) const TOOLS: [&str; 7] = [
     "propose_edit",
     "submit_research",
     "read_tool_result",
     "load_skill",
     "read_skill_resource",
+    "read_chapter",
     "finish",
 ];
 
@@ -333,6 +334,7 @@ async fn each_refused_load_gives_its_reason_and_a_run_with_no_skill_declares_no_
             "propose_edit",
             "submit_research",
             "read_tool_result",
+            "read_chapter",
             "finish"
         ])
     );

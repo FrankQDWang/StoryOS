@@ -136,6 +136,7 @@ async fn the_first_run_of_a_project_binds_research_and_its_tool_call_dispatches(
                 "propose_edit",
                 "submit_research",
                 "read_tool_result",
+                "read_chapter",
                 "finish"
             ]),
             "settled".to_owned(),
