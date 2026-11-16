@@ -38,11 +38,23 @@ pub(crate) async fn execute(
             return crate::agent_run_read_skill_resource::execute(client, claim, row, skill, path)
                 .await;
         }
-        ToolIntake::ReadChapter { chapter } => {
-            return crate::agent_run_read_chapter::execute(client, claim, row, *chapter).await;
+        ToolIntake::ReadChapter {
+            chapter,
+            first_block,
+            last_block,
+        } => {
+            let range = storyos_core::BlockRange {
+                first: *first_block,
+                last: *last_block,
+            };
+            return crate::agent_run_read_chapter::execute(client, claim, row, *chapter, range)
+                .await;
         }
         ToolIntake::SearchManuscript { query } => {
             return crate::agent_run_search_manuscript::execute(client, claim, row, query).await;
+        }
+        ToolIntake::WriteMemory(write) => {
+            return crate::agent_run_write_memory::execute(client, claim, row, write).await;
         }
         ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } | ToolIntake::Finish => {}
     }

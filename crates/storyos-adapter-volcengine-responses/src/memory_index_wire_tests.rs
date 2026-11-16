@@ -4,6 +4,7 @@ use storyos_core::ContextSourceClass;
 
 use crate::skill_wire_tests::{body, closing, first, item, summary};
 
+const V7: &str = storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION;
 const V8: &str = storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION;
 
 /// A request of the mapping `v8` with `context`.
@@ -72,5 +73,43 @@ async fn the_memory_index_is_one_exact_section_after_the_chapter_list_with_its_p
             ),
             instructions(body(summary(without)).await),
         )
+    );
+}
+
+/// ADR 0094 section 5: each decision and closing request of the mapping `v8` declares
+/// `write_memory` and has one paragraph: the model calls the Tool only when the author asks for a
+/// lasting change of Memory and never on its own decision, an entry is a short synthesis or an
+/// intent and not a copy of a passage, a character or a pair of characters that the Index lists
+/// gets a change and not a second entry, and the model tells the author when the Host refuses a
+/// write. A request of the mapping `v7` and a summary request have no paragraph.
+#[tokio::test]
+async fn each_v8_request_has_the_write_memory_paragraph_of_adr_0094() {
+    let paragraph = "Call write_memory only when the author asks you to remember something, to \
+         change what you remember, or to forget something, and never on your own decision. An \
+         entry is a short synthesis or an intent, not a copy of a passage. For a character or a \
+         pair of characters that the section Memory index lists, change that entry and do not \
+         create a second one. When the Host refuses a write, tell the author.";
+    let request = v8(Vec::new());
+    let v7 = first(V7, storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision);
+    let paragraphs = |body: serde_json::Value| {
+        let declared = (body["tools"].as_array().into_iter().flatten())
+            .any(|tool| tool["name"] == "write_memory");
+        let count = body["instructions"]
+            .as_str()
+            .unwrap()
+            .matches(paragraph)
+            .count();
+        (declared, count)
+    };
+
+    assert_eq!(
+        [
+            paragraphs(body(request.clone()).await),
+            paragraphs(body(closing(request.clone())).await),
+            paragraphs(body(summary(request)).await),
+            paragraphs(body(v7.clone()).await),
+            paragraphs(body(closing(v7)).await),
+        ],
+        [(true, 1), (true, 1), (false, 0), (false, 0), (false, 0)]
     );
 }

@@ -6,7 +6,7 @@ use crate::{
     ContextSourceClass, FINISH_TOOL_SPEC, LOAD_SKILL_TOOL_SPEC, ModelRegistration,
     PROPOSE_EDIT_TOOL_SPEC, READ_CHAPTER_TOOL_SPEC, READ_SKILL_RESOURCE_TOOL_SPEC,
     READ_TOOL_RESULT_TOOL_SPEC, SEARCH_MANUSCRIPT_TOOL_SPEC, SUBMIT_RESEARCH_TOOL_SPEC, ToolIntake,
-    ToolOperation, ToolRegistrationKind, ToolResultText, ToolSpec,
+    ToolOperation, ToolRegistrationKind, ToolResultText, ToolSpec, WRITE_MEMORY_TOOL_SPEC,
 };
 
 /// The Tool Registration of the Host Tools. It has no server, credential, or destination.
@@ -60,7 +60,7 @@ pub const SKILL_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistrat
 };
 
 /// The current Host Tools: the six Host Tools of the mapping `v7`, `read_chapter`, and
-/// `search_manuscript`, to which
+/// `search_manuscript`, and `write_memory`, to which
 /// the Stage 7 tickets add their Tools before `finish` (ADR 0093 section 3, ADR 0094, ADR 0095).
 /// `ExposureFacts::has_host_tool` decides which of them a RunStep declares.
 pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
@@ -73,6 +73,7 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
         &READ_SKILL_RESOURCE_TOOL_SPEC,
         &READ_CHAPTER_TOOL_SPEC,
         &SEARCH_MANUSCRIPT_TOOL_SPEC,
+        &WRITE_MEMORY_TOOL_SPEC,
         &FINISH_TOOL_SPEC,
     ],
     ..FIRST_HOST_TOOL_REGISTRATION
@@ -92,7 +93,8 @@ pub fn host_tool_result_class(spec: &ToolSpec) -> ContextSourceClass {
         | ToolOperation::SubmitResearch
         | ToolOperation::ReadToolResult
         | ToolOperation::LoadSkill
-        | ToolOperation::ReadSkillResource => ContextSourceClass::ToolResult,
+        | ToolOperation::ReadSkillResource
+        | ToolOperation::WriteMemory => ContextSourceClass::ToolResult,
     }
 }
 
@@ -149,7 +151,8 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         // The store executes `propose_edit`, because it opens a Proposal, `submit_research`,
         // because it records a Research Artifact, `read_tool_result`, because it reads a stored
         // ToolCall, and `load_skill` and `read_skill_resource`, because they read a SkillPackage
-        // Snapshot, and `read_chapter` and `search_manuscript`, because they read the manuscript.
+        // Snapshot, `read_chapter` and `search_manuscript`, because they read the manuscript, and
+        // `write_memory`, because it writes a Memory Entry.
         ToolIntake::WebSearch { .. }
         | ToolIntake::WebFetch { .. }
         | ToolIntake::ProposeEdit(_)
@@ -158,7 +161,8 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         | ToolIntake::LoadSkill { .. }
         | ToolIntake::ReadSkillResource { .. }
         | ToolIntake::ReadChapter { .. }
-        | ToolIntake::SearchManuscript { .. } => None,
+        | ToolIntake::SearchManuscript { .. }
+        | ToolIntake::WriteMemory(_) => None,
     }
 }
 

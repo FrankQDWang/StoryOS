@@ -282,9 +282,9 @@ const NON_PUBLIC_OPERATIONS: &[NonPublic] = &[
         reason: "External attempts use internal manifest-before-egress boundaries and are not author-selectable public routes.",
     },
     NonPublic {
-        name: "RecordMemoryNote",
+        name: "WriteMemory",
         source: Owner::Memory,
-        reason: "Author-requested ToolCall records a Note Artifact, not an immediate Memory publication.",
+        reason: "The Host Tool write_memory of an AgentRun writes one Memory Entry version in the Tool Gateway transaction when the author asks for it (ADR 0094 section 5); no public route writes an entry.",
     },
     NonPublic {
         name: "MaintainProjectMemory",

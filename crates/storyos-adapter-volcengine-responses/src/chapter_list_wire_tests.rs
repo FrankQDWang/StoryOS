@@ -137,12 +137,17 @@ async fn the_read_chapter_and_search_paragraphs_follow_the_chapter_list_paragrap
         (
             instructions(&declared),
             no_search.clone(),
-            names[names.len() - 3..].to_vec(),
+            names[names.len() - 4..].to_vec(),
         ),
         (
             format!("{no_read}\n\n{READ_CHAPTER}\n\n{SEARCH_MANUSCRIPT}"),
             format!("{no_read}\n\n{READ_CHAPTER}"),
-            vec!["read_chapter", "search_manuscript", "finish"],
+            vec![
+                "read_chapter",
+                "search_manuscript",
+                "write_memory",
+                "finish"
+            ],
         )
     );
 }
@@ -179,5 +184,40 @@ async fn the_project_instruction_is_before_the_skill_sections_and_the_chapter_li
              Working text:\nThe rain fell hard.\n\nTarget blocks:\n[block_id: \
              018f0000-0000-7001-8000-0000000000b1]\nThe rain fell hard on the old roof."
         )}]}])
+    );
+}
+
+/// ADR 0095 section 1: the mapping `v8` declares `read_chapter` as a strict function with the
+/// range of Blocks: `first_block` and `last_block` are required, and each takes null.
+#[tokio::test]
+async fn the_read_chapter_declaration_has_the_range_of_blocks() {
+    let declared = body(v8(vec![item(
+        ContextSourceClass::WorkingTarget,
+        "The rain fell hard.",
+    )]))
+    .await;
+    let read = declared["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "read_chapter")
+        .unwrap()
+        .clone();
+
+    assert_eq!(
+        (
+            &read["type"],
+            &read["strict"],
+            &read["parameters"]["required"],
+            &read["parameters"]["properties"]["first_block"]["type"],
+            &read["parameters"]["properties"]["last_block"]["type"],
+        ),
+        (
+            &json!("function"),
+            &json!(true),
+            &json!(["chapter", "first_block", "last_block"]),
+            &json!(["integer", "null"]),
+            &json!(["integer", "null"]),
+        )
     );
 }

@@ -12,6 +12,7 @@ mod research_plan;
 mod search_manuscript_plan;
 mod skill_resource_plan;
 mod tool_loop_plan;
+mod write_memory_plan;
 
 pub use embedding::{
     EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER, EMBEDDING_UNKNOWN_MARKER,

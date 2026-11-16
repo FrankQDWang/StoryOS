@@ -40,6 +40,9 @@ pub enum ToolOperation {
     ReadChapter,
     /// The Host Tool with which the Agent finds an exact term in the manuscript (ADR 0095).
     SearchManuscript,
+    /// The Host Tool with which the Agent writes one Memory Entry on the request of the author
+    /// (ADR 0094 section 5).
+    WriteMemory,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -142,6 +145,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::READ_SKILL_RESOURCE_TOOL_SPEC,
         &crate::READ_CHAPTER_TOOL_SPEC,
         &crate::SEARCH_MANUSCRIPT_TOOL_SPEC,
+        &crate::WRITE_MEMORY_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -176,10 +180,13 @@ pub enum ToolIntake {
     },
     ReadChapter {
         chapter: i64,
+        first_block: Option<i64>,
+        last_block: Option<i64>,
     },
     SearchManuscript {
         query: String,
     },
+    WriteMemory(crate::MemoryWrite),
 }
 
 /// Why the arguments of a function call do not fit the typed intake.
@@ -273,6 +280,7 @@ impl ToolSpec {
             ToolOperation::ReadSkillResource => crate::read_skill_resource::intake(arguments),
             ToolOperation::ReadChapter => crate::read_chapter::intake(arguments),
             ToolOperation::SearchManuscript => crate::search_manuscript::intake(arguments),
+            ToolOperation::WriteMemory => crate::write_memory::intake(arguments),
         }
     }
 }
@@ -332,7 +340,8 @@ impl ServerArguments {
                 | ToolIntake::LoadSkill { .. }
                 | ToolIntake::ReadSkillResource { .. }
                 | ToolIntake::ReadChapter { .. }
-                | ToolIntake::SearchManuscript { .. },
+                | ToolIntake::SearchManuscript { .. }
+                | ToolIntake::WriteMemory(_),
             )
             | (
                 Self::Fetch { .. },
@@ -344,7 +353,8 @@ impl ServerArguments {
                 | ToolIntake::LoadSkill { .. }
                 | ToolIntake::ReadSkillResource { .. }
                 | ToolIntake::ReadChapter { .. }
-                | ToolIntake::SearchManuscript { .. },
+                | ToolIntake::SearchManuscript { .. }
+                | ToolIntake::WriteMemory(_),
             ) => {
                 return None;
             }
