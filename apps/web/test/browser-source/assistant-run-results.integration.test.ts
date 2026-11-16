@@ -43,6 +43,10 @@ const ALL = completedRun(artifactFixture.artifact.lineage.run_id, [research, pro
 const WITH_SKILLS = { ...ALL, skill_uses: [{ provenance: "author_selected", name: "dialogue-style-guide" },
   { provenance: "agent_selected", name: "internal-comms", reason: "The request asks for an update." }] };
 const SKILL_LINES = ["使用了你选择的技能「dialogue-style-guide」", "使用了技能「internal-comms」：The request asks for an update."];
+// ADR 0095 section 1: the manuscript Tool uses of the turn go after its Skills.
+const WITH_USES = { ...WITH_SKILLS, manuscript_uses: [{ kind: "keyword_search", query: "Lin" },
+  { kind: "chapter_read", chapter_id: CHAPTER, title: "Fog" }] };
+const USE_LINES = ["在全书中搜索了「Lin」", "查阅了章节「Fog」"];
 const ARTIFACT_LINES = [
   "High water was at 10.42. The port log is not available.",
   "High water at Liverpool was at 10.42. [1]",
@@ -84,6 +88,7 @@ async function renderPanel(runs: readonly { run_id: string }[], stored: object) 
 /** The result lines of one exchange in their order, with the controls that go with them. */
 function shownResults(section: Element | null) {
   return [...section?.querySelectorAll(".assistant-result, [data-assistant-skill-uses] li, "
+    + "[data-assistant-manuscript-uses] li, "
     + "[data-assistant-research-artifact] p, [data-assistant-research-artifact] li, [data-assistant-use-research], "
     + "[data-proposal-location]") ?? []]
     .map(item => item.textContent);
@@ -105,6 +110,8 @@ it.each([
     [RESEARCH_SYNTHESIS_SENTENCE, ...ARTIFACT_LINES, "用到故事里", PROPOSAL_SENTENCE, LOCATION, ANSWER]],
   ["a Research Artifact, a Proposal, a final answer text, and two Skills", WITH_SKILLS,
     [RESEARCH_SYNTHESIS_SENTENCE, ...SKILL_LINES, ...ARTIFACT_LINES, "用到故事里", PROPOSAL_SENTENCE, LOCATION, ANSWER]],
+  ["two Skills, a search, and a read of a Chapter", WITH_USES, [RESEARCH_SYNTHESIS_SENTENCE, ...SKILL_LINES,
+    ...USE_LINES, ...ARTIFACT_LINES, "用到故事里", PROPOSAL_SENTENCE, LOCATION, ANSWER]],
   ["a Proposal and a final answer text", completedRun("018f0000-0000-7001-8000-000000000d31", [proposal, answer]),
     [PROPOSAL_SENTENCE, LOCATION, ANSWER]],
 ])("shows each result of a Run with %s in the order of the model", async (_, run, expected) => {
@@ -121,20 +128,23 @@ it.each([
   });
 });
 
-it("shows the same results in the history turn of the Conversation", async () => {
+it.each([
+  ["no manuscript Tool use", ALL, []],
+  ["a search and a read of a Chapter", WITH_USES, [...SKILL_LINES, ...USE_LINES]],
+])("shows the same results in the history turn of a Run with %s", async (_, earlier, lines) => {
   const current = { ...agentRunFixture, project_scope: scope, run_id: "018f0000-0000-7001-8000-000000000d41",
     status: "queued", decision: { kind: "absent" } };
   await inActEnvironment(async () => {
-    const panel = await renderPanel([ALL, current], { message: "Use this in the story.",
+    const panel = await renderPanel([earlier, current], { message: "Use this in the story.",
       correlationId: "018f0000-0000-7001-8000-000000000d14", idempotencyKey: "018f0000-0000-7001-8000-000000000d15",
       snapshotId: "018f0000-0000-7001-8000-000000000d16", runId: current.run_id,
       history: [{ requestId: "018f0000-0000-7001-8000-000000000d17", chapterId: CHAPTER, conversationId: CONVERSATION,
-        runId: ALL.run_id, run: ALL, message: "Check the tides and revise the passage.", status: "completed",
+        runId: earlier.run_id, run: earlier, message: "Check the tides and revise the passage.", status: "completed",
         result: PROPOSAL_SENTENCE }] });
     try {
       // The button "用到故事里" stays with the current Run (#1427).
-      expect(shownResults(panel.host.querySelector(`[data-assistant-history-run="${ALL.run_id}"]`)))
-        .toEqual([RESEARCH_SYNTHESIS_SENTENCE, ...ARTIFACT_LINES, PROPOSAL_SENTENCE, LOCATION, ANSWER]);
+      expect(shownResults(panel.host.querySelector(`[data-assistant-history-run="${earlier.run_id}"]`)))
+        .toEqual([RESEARCH_SYNTHESIS_SENTENCE, ...lines, ...ARTIFACT_LINES, PROPOSAL_SENTENCE, LOCATION, ANSWER]);
     } finally {
       await panel.remove();
     }

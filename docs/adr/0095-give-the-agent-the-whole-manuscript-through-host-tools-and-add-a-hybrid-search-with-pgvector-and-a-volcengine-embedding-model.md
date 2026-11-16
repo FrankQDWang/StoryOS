@@ -65,6 +65,12 @@ The rules of a Host Tool apply ([ADR 0091](0091-replace-the-typed-reply-form-wit
 - **The refusal.** `admit_chapter_read` decides one more refusal, after `chapter_not_found`: `block_range_invalid`. `first_block` is below 1 or above the count of the Blocks of the head, or `last_block` is below the first Block of the range. The result gives the count of the Blocks. The numbers name the Blocks of the head at the time of the call.
 - **The fake model.** A number of the script `SCRIPT:read_chapter` can have a range, `<number>:<first>-<last>`, where each part is the JSON text of its argument.
 
+[S7-B2b](https://github.com/FrankQDWang/StoryOS/issues/1573) recorded these names of the record of the manuscript Tool uses on 2026-11-17:
+
+- **The record.** The Run read of `getAgentRun` has the optional field `manuscript_uses`. Each entry is `chapter_read` with the `chapter_id` and the title of a Chapter that a settled `read_chapter` call gave, or `keyword_search` with the query of a settled `search_manuscript` call. The title is the title in the header of the stored result, so it is the title at the time of the read. The Run has one entry for each Chapter and one entry for each query, in the order of the first use: the RunStep position, and then the position of the call in its response. A call that did not settle gives no entry. The field is absent when the Run has no entry, and a read of one Model Attempt has no such field.
+- **The rule.** The record has no table. The Core function `manuscript_uses` makes the entries from the stored ToolCalls of the Run in its Project (`StoredManuscriptCall`), and the adapter loads them (ADR 0039). The contract type is `ManuscriptUseInspect`.
+- **The panel.** After a settled turn, the writing assistant panel shows each entry as one plain line after the first result of the turn and after the lines of the Skills: `查阅了章节「<title>」` for a read and `在全书中搜索了「<query>」` for a search. The current turn and each history turn show the lines from the Run read that the panel holds for the turn. The list has no control and shows no text of a result (ADR 0040).
+
 ### 2. The vector store
 
 - The vectors are in PostgreSQL with the `pgvector` extension, in the Project Scope and below the same Project Isolation as each other record.

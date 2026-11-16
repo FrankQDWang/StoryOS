@@ -986,6 +986,54 @@
       ],
       "type": "object"
     },
+    "ManuscriptUseInspect": {
+      "description": "One manuscript Tool use of a Run (ADR 0095 section 1). No entry has a result text or a\nToolCall identity.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "The Agent read the Chapter with a settled `read_chapter` call. The title is the title at\nthe time of the read.",
+          "properties": {
+            "chapter_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "chapter_read",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "chapter_id",
+            "title"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The Agent searched the manuscript for the exact text `query` with a settled\n`search_manuscript` call.",
+          "properties": {
+            "kind": {
+              "const": "keyword_search",
+              "type": "string"
+            },
+            "query": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "query"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "OptionalActiveCompactionInspect": {
       "oneOf": [
         {
@@ -2483,6 +2531,15 @@
         "$ref": "#/$defs/AgentRunStreamItemInspect"
       },
       "type": "array"
+    },
+    "manuscript_uses": {
+      "items": {
+        "$ref": "#/$defs/ManuscriptUseInspect"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
     },
     "memory_settings_revision": {
       "format": "uuid",
