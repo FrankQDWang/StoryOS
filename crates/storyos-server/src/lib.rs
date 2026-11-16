@@ -162,6 +162,8 @@ pub struct ServerConfig {
     pub session_cookie_secure: SessionCookieSecure,
     /// The one model destination that this deployment offers. `None` offers no assistance.
     pub model_destination: Option<storyos_core::DeploymentDestination>,
+    /// The embedding Registration of the deployment (ADR 0095 section 3). `None` offers none.
+    pub embedding: Option<&'static storyos_core::EmbeddingRegistration>,
     /// The Skills of the deployment, read one time at the start of the Server (ADR 0089).
     pub skills: Arc<storyos_core::SkillSet>,
 }

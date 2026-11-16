@@ -31,6 +31,7 @@ pub(super) async fn create_agent_run(
     request: Request,
 ) -> Result<(StatusCode, Json<contracts::CreateAgentRunResponse>), ApiError> {
     let destination = state.config.model_destination.clone();
+    let embedding = state.config.embedding;
     let skills = Arc::clone(&state.config.skills);
     let admitted = admit(
         &state,
@@ -38,7 +39,9 @@ pub(super) async fn create_agent_run(
         &[],
         request,
         &CREATE_AGENT_RUN,
-        |body: &contracts::CreateAgentRunRequest| create_agent_run_input(body, destination, skills),
+        |body: &contracts::CreateAgentRunRequest| {
+            create_agent_run_input(body, destination, embedding, skills)
+        },
     )
     .await?;
     let message = &admitted.input.author_message;
@@ -92,6 +95,7 @@ pub(super) async fn create_agent_run(
 fn create_agent_run_input(
     body: &contracts::CreateAgentRunRequest,
     destination: Option<storyos_core::DeploymentDestination>,
+    embedding: Option<&'static storyos_core::EmbeddingRegistration>,
     skills: Arc<storyos_core::SkillSet>,
 ) -> Result<CreateAgentRunInput, ApiError> {
     let input = &body.create_agent_run_input;
@@ -144,6 +148,7 @@ fn create_agent_run_input(
             .as_ref()
             .map(|_| &storyos_core::RESEARCH_TOOL_OFFER),
         destination,
+        embedding,
         skills,
         skill_selections,
     })
