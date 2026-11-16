@@ -478,7 +478,8 @@ pub fn is_skill_load_output(
 
 /// Whether the selected `item` of `record` is the output of a function call: a `tool_result`
 /// item, the output of a load, a `skill_resource` item, which only a read gives, or a
-/// `manuscript_read_result` item, which only a `read_chapter` call gives.
+/// `manuscript_read_result` or `manuscript_search_result` item, which only a `read_chapter` or a
+/// `search_manuscript` call gives.
 pub fn is_function_output(
     record: &CurrentPassageAssemblyRecord,
     item: &SelectedProjection,
@@ -488,6 +489,7 @@ pub fn is_function_output(
         ContextSourceClass::ToolResult
             | ContextSourceClass::SkillResource
             | ContextSourceClass::ManuscriptReadResult
+            | ContextSourceClass::ManuscriptSearchResult
     ) || is_skill_load_output(record, item)
 }
 

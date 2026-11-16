@@ -743,11 +743,11 @@ fn the_expected_input_counts_the_skill_catalog_and_each_exact_load_and_read_outp
     );
 }
 
-/// ADR 0056 and ADR 0095 section 1: the expected input counts each `read_chapter` output of the
-/// prior response, with its boundary. A later full input counts each such output in its exact
-/// form, because a read of a Chapter has no stub.
+/// ADR 0056 and ADR 0095 section 1: the expected input counts each `read_chapter` and
+/// `search_manuscript` output of the prior response, with its boundary. A later full input counts
+/// each such output in its exact form, because a read or a search of the manuscript has no stub.
 #[test]
-fn the_expected_input_counts_each_exact_chapter_read_output() {
+fn the_expected_input_counts_each_exact_chapter_read_and_search_output() {
     let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
         operation_requirement_id: "requirement-1".to_owned(),
         input_snapshot_id: "snapshot-1".to_owned(),
@@ -778,13 +778,15 @@ fn the_expected_input_counts_each_exact_chapter_read_output() {
         })
         .sent_input_tokens
     };
-    // Two long reads of the prior response, above the stub limit.
+    // A long read and a long search of the prior response, above the stub limit.
     let texts = ["Rain fell. ".repeat(1_400), "The quay. ".repeat(1_800)];
+    let specs = [
+        crate::READ_CHAPTER_TOOL_SPEC,
+        crate::SEARCH_MANUSCRIPT_TOOL_SPEC,
+    ];
     let candidates = |form| -> Vec<crate::ToolResultCandidate<'_>> {
-        ["read-1", "read-2"]
-            .iter()
-            .zip(&texts)
-            .map(|(id, text)| crate::ToolResultCandidate {
+        (["read-1", "search-1"].iter().zip(&texts).zip(&specs))
+            .map(|((id, text), spec)| crate::ToolResultCandidate {
                 tool_call_id: id,
                 call_id: id,
                 owner_user_id: "owner-1",
@@ -795,11 +797,9 @@ fn the_expected_input_counts_each_exact_chapter_read_output() {
                 state: crate::ToolCallState::Settled,
                 result_text: Some(text),
                 sources: &[],
-                output: crate::ToolResultOutput::of_spec(Some(
-                    crate::READ_CHAPTER_TOOL_SPEC.revision,
-                )),
-                function_name: "read_chapter",
-                arguments: "{\"chapter\":1}",
+                output: crate::ToolResultOutput::of_spec(Some(spec.revision)),
+                function_name: spec.operation.function_name(),
+                arguments: "{}",
                 form,
                 skill: None,
                 resource_path: None,
@@ -812,7 +812,7 @@ fn the_expected_input_counts_each_exact_chapter_read_output() {
     );
     let reads: u64 = texts
         .iter()
-        .zip(["read-1", "read-2"])
+        .zip(["read-1", "search-1"])
         .map(|(text, id)| {
             crate::assemble_context::count_context_item_tokens(
                 &crate::ToolResultProjection::Ok(text).continuation_text(id),

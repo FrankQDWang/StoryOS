@@ -127,35 +127,18 @@ pub fn admit_chapter_read(
              the blocks after it.]"
         )
     };
-    // The token count is additive, so the cost of a text is the sum of the costs of its parts.
-    let cost = |text: &str| count_context_item_tokens(&crate::tool_result::escape(text));
-    let budget = CONTEXT_ITEM_TOKEN_LIMIT.saturating_sub(count_context_item_tokens(
-        &ToolResultProjection::Ok("").continuation_text(call_id),
-    ));
     let costs: Vec<u64> = (0..read.blocks.len())
-        .map(|index| cost(&block(index)))
+        .map(|index| text_cost(&block(index)))
         .collect();
-    let total: u64 = costs.iter().sum();
     let count = read.blocks.len();
-    let kept = match cost(&header(count)) + total <= budget {
-        true => count,
-        false => {
-            let mut kept = 0;
-            let mut used = 0;
-            while kept + 1 < count {
-                let with_next = used + costs[kept];
-                if cost(&header(kept + 1)) + with_next + cost(&continues(kept + 2)) > budget {
-                    break;
-                }
-                used = with_next;
-                kept += 1;
-            }
-            kept
-        }
-    };
-    // When the first Block does not fit with the line after it, the result still has the first
-    // Block and the line, and the bounded projection cuts the text with its mark.
-    let kept = kept.max(count.min(1));
+    let kept = kept_prefix(
+        &costs,
+        |kept| match kept < count {
+            true => text_cost(&header(kept)) + text_cost(&continues(kept + 1)),
+            false => text_cost(&header(kept)),
+        },
+        call_id,
+    );
     let blocks: String = (0..kept).map(block).collect();
     let tail = match kept < count {
         true => continues(kept + 1),
@@ -163,6 +146,34 @@ pub fn admit_chapter_read(
     };
     let text = format!("{}{blocks}{tail}", header(kept));
     Ok(crate::host_tool_result(&text))
+}
+
+/// The counted tokens of `text` in a `tool_result` item, after its escape. The token count is
+/// additive, so the cost of a text is the sum of the costs of its parts.
+pub(crate) fn text_cost(text: &str) -> u64 {
+    count_context_item_tokens(&crate::tool_result::escape(text))
+}
+
+/// The count of the parts with the costs `costs` that a result keeps from its first part, for the
+/// native call `call_id`. `frame` gives the cost of the other text of a result that keeps `kept`
+/// parts. The result keeps each part while its `tool_result` item, with its boundary and its
+/// escape, fits in the item limit. When the first part does not fit, the result keeps it, and the
+/// bounded projection cuts the result with its mark (ADR 0085 section 2).
+pub(crate) fn kept_prefix(costs: &[u64], frame: impl Fn(usize) -> u64, call_id: &str) -> usize {
+    let budget = CONTEXT_ITEM_TOKEN_LIMIT.saturating_sub(count_context_item_tokens(
+        &ToolResultProjection::Ok("").continuation_text(call_id),
+    ));
+    let count = costs.len();
+    if frame(count) + costs.iter().sum::<u64>() <= budget {
+        return count;
+    }
+    let mut kept = 0;
+    let mut used = 0;
+    while kept + 1 < count && frame(kept + 1) + used + costs[kept] <= budget {
+        used += costs[kept];
+        kept += 1;
+    }
+    kept.max(count.min(1))
 }
 
 #[cfg(test)]

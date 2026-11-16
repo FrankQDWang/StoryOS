@@ -8,15 +8,13 @@ use storyos_core::{ReadableChapter, ToolCallState};
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
 
-/// Reads the Chapter with the number `chapter` for the pending call `row`, and settles or refuses
-/// `row`.
-pub(crate) async fn execute(
+/// The live Chapters of the Project of the Run in manuscript order, each with the text of each
+/// Block of its authoritative head. The Host Tools of the manuscript read them.
+pub(crate) async fn readable_chapters(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    row: &ToolCallRow,
-    chapter: i64,
-) -> Result<(), CompleteAgentRunError> {
-    let chapters: Vec<ReadableChapter> = crate::manuscript_search::read_live_chapter_blocks(
+) -> Result<Vec<ReadableChapter>, CompleteAgentRunError> {
+    Ok(crate::manuscript_search::read_live_chapter_blocks(
         client,
         &claim.project_scope,
         crate::manuscript_search::LiveChapterReadExtent::AllChapters,
@@ -30,7 +28,18 @@ pub(crate) async fn execute(
         revision_id: fact.head_revision_id,
         blocks: fact.blocks.into_iter().map(|block| block.text).collect(),
     })
-    .collect();
+    .collect())
+}
+
+/// Reads the Chapter with the number `chapter` for the pending call `row`, and settles or refuses
+/// `row`.
+pub(crate) async fn execute(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    row: &ToolCallRow,
+    chapter: i64,
+) -> Result<(), CompleteAgentRunError> {
+    let chapters = readable_chapters(client, claim).await?;
     let (state, refusal, result) =
         match storyos_core::admit_chapter_read(&chapters, chapter, &row.call_id) {
             Ok(result) => (ToolCallState::Settled, None, result),
@@ -57,4 +66,4 @@ pub(crate) async fn execute(
 
 #[cfg(test)]
 #[path = "agent_run_read_chapter_tests.rs"]
-mod tests;
+pub(crate) mod tests;
