@@ -42,7 +42,7 @@ async fn project_facts(admin: &Client, scope: &ProjectScope) -> (Vec<String>, i6
 }
 
 /// Pauses the queued Runs of the Project, because later HTTP files drain all queued work.
-async fn park_queued_runs(admin: &Client, scope: &ProjectScope) {
+pub(crate) async fn park_queued_runs(admin: &Client, scope: &ProjectScope) {
     admin
         .execute(
             "UPDATE storyos.agent_runs

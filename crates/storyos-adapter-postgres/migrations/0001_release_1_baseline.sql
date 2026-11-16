@@ -4016,6 +4016,7 @@ CREATE TABLE storyos.agent_runs (
     predecessor_run_id uuid,
     active_decision_position numeric(20,0) DEFAULT 0 NOT NULL,
     model_registration_revision uuid NOT NULL,
+    project_instruction_revision_id uuid,
     CONSTRAINT agent_runs_active_decision_position_check CHECK (((active_decision_position >= (0)::numeric) AND (active_decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT agent_runs_author_message_check CHECK (((char_length(author_message) >= 1) AND (char_length(author_message) <= 8000))),
     CONSTRAINT agent_runs_claim_generation_check CHECK ((claim_generation >= 0)),
@@ -4026,7 +4027,8 @@ CREATE TABLE storyos.agent_runs (
     CONSTRAINT agent_runs_owner_user_id_project_id_grant_id_fkey FOREIGN KEY (owner_user_id, project_id, grant_id) REFERENCES storyos.project_destination_grants(owner_user_id, project_id, grant_id) MATCH FULL,
     CONSTRAINT agent_runs_owner_user_id_project_id_project_model_use_bind_fkey FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision) MATCH FULL,
     CONSTRAINT agent_runs_owner_user_id_project_id_receipt_id_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL,
-    CONSTRAINT agent_runs_predecessor_fk FOREIGN KEY (owner_user_id, project_id, predecessor_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)
+    CONSTRAINT agent_runs_predecessor_fk FOREIGN KEY (owner_user_id, project_id, predecessor_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id),
+    CONSTRAINT agent_runs_project_instruction_revision_fkey FOREIGN KEY (owner_user_id, project_id, project_instruction_revision_id) REFERENCES storyos.project_instruction_revisions(owner_user_id, project_id, instruction_revision_id)
 );
 
 CREATE INDEX agent_runs_binding_idx ON storyos.agent_runs USING btree (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision);
