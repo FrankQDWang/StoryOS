@@ -48,6 +48,7 @@ These contracts stay deferred. Their glossary entries stay, and no released Stag
 - A Project has at most one Project Instruction: one text that the author writes on the settings page. Each save makes one immutable Revision. An empty text means that no Project Instruction is configured.
 - `createAgentRun` binds the current Revision, and the bound text is in the context of the Run with the rank of the Context contract: below the current instruction of the author and above a Skill instruction. A Run in progress keeps its Revision. A change applies to the next Run.
 - The text obeys the Context item limit ([ADR 0052](0052-set-the-context-item-limit-from-the-measured-model-input.md)). A save above the limit is refused, and the text is never shortened.
+- The names: the table `project_instruction_revisions` keeps each Revision with its identity `instruction_revision_id` and its revision counter `revision`. The command `updateProjectInstruction` (`PUT /api/v1/projects/{project_id}/instruction`) saves the text, and its Activity kind is `project_instruction_updated`. The query `getProjectInstruction` (`GET` on the same path) reads the current Revision. A save above the limit gets the problem code `instruction_over_item_limit`.
 
 ### 3. The Memory Entry
 
