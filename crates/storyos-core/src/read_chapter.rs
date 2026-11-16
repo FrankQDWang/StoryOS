@@ -1,5 +1,6 @@
 //! The Host Tool `read_chapter` (ADR 0095 section 1): the Agent reads the text of one Chapter of
-//! the manuscript. The call names the Chapter by its number in the Chapter list. The result is the
+//! the manuscript, or a range of its Blocks. The call names the Chapter by its number in the
+//! Chapter list, and the range by the numbers of its first and last Block. The result is the
 //! authoritative head text of the Chapter at the time of the call, in the bounds of one Context
 //! item, and the next request sends it as the output of the call. The call has no external effect
 //! and gives the Agent no target.
@@ -23,7 +24,9 @@ pub const READ_CHAPTER_TOOL_SPEC: ToolSpec = ToolSpec {
 };
 
 pub(crate) const DESCRIPTION: &str = "Reads the text of one Chapter of the manuscript. Call it \
-when the author request needs the text of a Chapter that is not the Working text.";
+when the author request needs the text of a Chapter that is not the Working text. Give a range of \
+Blocks to continue a Chapter after an earlier result or to read the Blocks near a match of \
+search_manuscript.";
 
 /// The strict JSON Schema of the arguments.
 pub(crate) fn parameters() -> Value {
@@ -33,9 +36,19 @@ pub(crate) fn parameters() -> Value {
             "chapter": {
                 "type": "integer",
                 "description": "The number of a Chapter in the section Chapter list."
+            },
+            "first_block": {
+                "type": ["integer", "null"],
+                "description": "The number of the first Block to read, from 1. Null reads from \
+                                the first Block of the Chapter."
+            },
+            "last_block": {
+                "type": ["integer", "null"],
+                "description": "The number of the last Block to read. Null reads to the last \
+                                Block of the Chapter."
             }
         },
-        "required": ["chapter"],
+        "required": ["chapter", "first_block", "last_block"],
         "additionalProperties": false
     })
 }
@@ -44,14 +57,23 @@ pub(crate) fn parameters() -> Value {
 #[serde(deny_unknown_fields)]
 struct Arguments {
     chapter: i64,
+    first_block: Option<i64>,
+    last_block: Option<i64>,
 }
 
-/// The typed intake. A value that is not an integer does not fit. The manuscript at the time of
-/// the call decides each integer.
+/// The typed intake. A value that is not an integer or, for a Block, null does not fit. The
+/// manuscript at the time of the call decides each integer.
 pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
-    let Arguments { chapter } =
-        Arguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
-    Ok(ToolIntake::ReadChapter { chapter })
+    let Arguments {
+        chapter,
+        first_block,
+        last_block,
+    } = Arguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
+    Ok(ToolIntake::ReadChapter {
+        chapter,
+        first_block,
+        last_block,
+    })
 }
 
 /// Why the Host refused one validated `read_chapter` call. The result gives the reason.
@@ -59,6 +81,9 @@ pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
 pub enum ChapterReadRefusal {
     /// No live Chapter of the Project has the number at the time of the call.
     NotFound,
+    /// The first Block is below 1 or above the count `blocks` of the Blocks of the Chapter, or
+    /// the last Block is below the first Block.
+    BlockRangeInvalid { blocks: usize },
 }
 
 impl ChapterReadRefusal {
@@ -66,16 +91,20 @@ impl ChapterReadRefusal {
     pub fn label(self) -> &'static str {
         match self {
             Self::NotFound => "chapter_not_found",
+            Self::BlockRangeInvalid { .. } => "block_range_invalid",
         }
     }
 
     /// The result of the refused call: the reason in one sentence.
     pub fn result(self) -> ToolResultText {
         let reason = match self {
-            Self::NotFound => {
-                "no Chapter of the manuscript has this number now: use a number of the section \
-                 Chapter list"
-            }
+            Self::NotFound => "no Chapter of the manuscript has this number now: use a number of \
+                               the section Chapter list"
+                .to_owned(),
+            Self::BlockRangeInvalid { blocks } => format!(
+                "the range of Blocks is not in this Chapter, which has {blocks} Blocks now: give a \
+                 first_block from 1 to {blocks}, or null, and a last_block that is not below it"
+            ),
         };
         crate::host_tool_result(&format!(
             "The Host refused this call because {reason}, so no result is available, and this is \
@@ -95,53 +124,81 @@ pub struct ReadableChapter {
     pub blocks: Vec<String>,
 }
 
-/// The result of a read of the Chapter with the number `chapter` in `chapters`, for the native
-/// call `call_id`. The result has one header line and then whole Blocks from the first Block
-/// while the `tool_result` item of the call, with its boundary and its escape, fits in the item
-/// limit. The first Block that does not fit ends the result with one line that says where the
-/// Chapter continues. When the first Block does not fit with that line, the result has only the
-/// first Block and the line, and the bounded projection cuts it with its mark (ADR 0085 section 2).
+/// The numbers of the first and the last Block that a call names. `None` is the first or the last
+/// Block of the Chapter.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct BlockRange {
+    pub first: Option<i64>,
+    pub last: Option<i64>,
+}
+
+/// The result of a read of the Blocks `range` of the Chapter with the number `chapter` in
+/// `chapters`, for the native call `call_id`. A last Block above the count of the Blocks reads to
+/// the last Block. The result has one header line and then whole Blocks from the first Block of
+/// the range while the `tool_result` item of the call, with its boundary and its escape, fits in
+/// the item limit. The first Block that does not fit ends the result with one line that says
+/// where the Chapter continues. When the first Block does not fit with that line, the result has
+/// only the first Block and the line, and the bounded projection cuts it with its mark (ADR 0085
+/// section 2).
 pub fn admit_chapter_read(
     chapters: &[ReadableChapter],
     chapter: i64,
+    range: BlockRange,
     call_id: &str,
 ) -> Result<ToolResultText, ChapterReadRefusal> {
     let read = usize::try_from(chapter)
         .ok()
         .and_then(|number| chapters.get(number.checked_sub(1)?))
         .ok_or(ChapterReadRefusal::NotFound)?;
-    let header = |last_block: usize| {
+    let count = read.blocks.len();
+    let invalid = ChapterReadRefusal::BlockRangeInvalid { blocks: count };
+    // The index of the first Block of the range, and the index after its last Block.
+    let start = match range.first {
+        None => 0,
+        Some(first) => {
+            usize::try_from(first)
+                .ok()
+                .filter(|first| (1..=count).contains(first))
+                .ok_or(invalid)?
+                - 1
+        }
+    };
+    let end = match range.last {
+        None => count,
+        Some(last) if last < i64::try_from(start + 1).unwrap_or(i64::MAX) => return Err(invalid),
+        Some(last) => usize::try_from(last).map_or(count, |last| last.min(count)),
+    };
+    let header = |kept: usize| {
         crate::project_archive::canonical_json(&json!({
             "chapter": chapter,
             "title": read.title,
             "chapter_id": read.chapter_id,
             "revision_id": read.revision_id,
-            "blocks": read.blocks.len(),
-            "last_block": last_block,
+            "blocks": count,
+            "first_block": start + 1,
+            "last_block": start + kept,
         }))
     };
     let block = |index: usize| format!("\n[block {}]\n{}", index + 1, read.blocks[index]);
     let continues = |next: usize| {
         format!(
             "\n[The Chapter continues at block {next}. This result does not have block {next} or \
-             the blocks after it.]"
+             the blocks after it. Read them with first_block {next}.]"
         )
     };
-    let costs: Vec<u64> = (0..read.blocks.len())
-        .map(|index| text_cost(&block(index)))
-        .collect();
-    let count = read.blocks.len();
+    let costs: Vec<u64> = (start..end).map(|index| text_cost(&block(index))).collect();
+    let wanted = end - start;
     let kept = kept_prefix(
         &costs,
-        |kept| match kept < count {
-            true => text_cost(&header(kept)) + text_cost(&continues(kept + 1)),
+        |kept| match kept < wanted {
+            true => text_cost(&header(kept)) + text_cost(&continues(start + kept + 1)),
             false => text_cost(&header(kept)),
         },
         call_id,
     );
-    let blocks: String = (0..kept).map(block).collect();
-    let tail = match kept < count {
-        true => continues(kept + 1),
+    let blocks: String = (start..start + kept).map(block).collect();
+    let tail = match kept < wanted {
+        true => continues(start + kept + 1),
         false => String::new(),
     };
     let text = format!("{}{blocks}{tail}", header(kept));

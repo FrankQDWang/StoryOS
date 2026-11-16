@@ -34,7 +34,7 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
             )),
             (_, Some(number)) => Some((
                 ToolOperation::ReadChapter,
-                format!("{{\"chapter\":{number}}}"),
+                crate::read_chapter_plan::arguments(number),
             )),
             (None, None) => None,
         }

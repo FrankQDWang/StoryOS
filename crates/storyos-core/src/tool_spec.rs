@@ -176,6 +176,8 @@ pub enum ToolIntake {
     },
     ReadChapter {
         chapter: i64,
+        first_block: Option<i64>,
+        last_block: Option<i64>,
     },
     SearchManuscript {
         query: String,
