@@ -4,7 +4,9 @@
 //! identifiers `call_read_chapter_0`, `call_read_chapter_1`, and so on across the groups. The
 //! first request gets the first group, and the request that sends the outputs of the reads of the
 //! groups before a group gets that group. Each number is the JSON text of the argument `chapter`,
-//! so a script can also give a value that is not an integer. Each other request gets the usual
+//! so a script can also give a value that is not an integer. A number can have a range of Blocks,
+//! `<number>:<first>-<last>`, where `<first>` and `<last>` are the JSON text of `first_block` and
+//! `last_block`, for example `2:3-null`. Each other request gets the usual
 //! script of the fake model, so the next request calls `finish`. The script can follow the
 //! compaction prefix of the Host fake (ADR 0093).
 
@@ -42,7 +44,7 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
                     function_call(
                         ToolOperation::ReadChapter,
                         &format!("_{}", first + index),
-                        &format!("{{\"chapter\":{number}}}"),
+                        &arguments(number),
                     )
                 })
                 .collect();
@@ -51,4 +53,16 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
         first += numbers.len();
     }
     None
+}
+
+/// The arguments of the call of the script token `number`: `<number>` or
+/// `<number>:<first>-<last>`.
+pub(crate) fn arguments(number: &str) -> String {
+    match number.split_once(':') {
+        Some((chapter, range)) => {
+            let (first, last) = range.split_once('-').unwrap_or((range, "null"));
+            format!("{{\"chapter\":{chapter},\"first_block\":{first},\"last_block\":{last}}}")
+        }
+        None => format!("{{\"chapter\":{number}}}"),
+    }
 }

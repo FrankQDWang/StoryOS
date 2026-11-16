@@ -108,7 +108,13 @@ impl ValidatedToolCall {
             ToolIntake::ReadSkillResource { skill, path } => {
                 json!({ "skill": skill, "path": path })
             }
-            ToolIntake::ReadChapter { chapter } => json!({ "chapter": chapter }),
+            ToolIntake::ReadChapter {
+                chapter,
+                first_block,
+                last_block,
+            } => {
+                json!({ "chapter": chapter, "first_block": first_block, "last_block": last_block })
+            }
             ToolIntake::SearchManuscript { query } => json!({ "query": query }),
         }
     }

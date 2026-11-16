@@ -28,23 +28,29 @@ use crate::create_volume_authority_tests::{NamedEdit, adjusted_edit_command};
 use crate::set_current_chapter_authority_tests::open_session_request;
 
 /// The expected result of a read of the Chapter `number`: the header line and each Block.
-pub(crate) fn read_text(
+pub(crate) fn read_text(number: i64, chapter: (&str, &str, &str), blocks: &[&str]) -> String {
+    range_text(number, chapter, (blocks.len(), 1), blocks)
+}
+
+/// The expected result of a read of the Blocks `blocks` of the Chapter `number`, which has
+/// `count` Blocks, from the Block `first`.
+fn range_text(
     number: i64,
     (title, chapter_id, revision_id): (&str, &str, &str),
+    (count, first): (usize, usize),
     blocks: &[&str],
 ) -> String {
     let header = json!({
-        "blocks": blocks.len(),
+        "blocks": count,
         "chapter": number,
         "chapter_id": chapter_id,
-        "last_block": blocks.len(),
+        "first_block": first,
+        "last_block": first + blocks.len() - 1,
         "revision_id": revision_id,
         "title": title,
     });
-    let blocks: String = blocks
-        .iter()
-        .enumerate()
-        .map(|(index, text)| format!("\n[block {}]\n{text}", index + 1))
+    let blocks: String = (blocks.iter().enumerate())
+        .map(|(index, text)| format!("\n[block {}]\n{text}", first + index))
         .collect();
     format!("{header}{blocks}")
 }
@@ -426,7 +432,7 @@ async fn a_later_read_gives_the_new_head_and_the_chapter_that_has_the_number_now
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_chapter_above_the_item_limit_gives_its_whole_blocks_that_fit() {
+async fn a_chapter_above_the_item_limit_gives_its_whole_blocks_that_fit_and_a_range_the_rest() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -445,39 +451,34 @@ async fn a_chapter_above_the_item_limit_gives_its_whole_blocks_that_fit() {
         &scope,
         &chapter_a,
         "176",
-        "SCRIPT:read_chapter 1",
+        "SCRIPT:read_chapter 1;1:2-null",
         new,
     )
     .await;
     complete(&store, &admin, &scope, &run_id).await;
 
     // The result has the first Block and one line that says where the Chapter continues, and its
-    // output fits in the item limit.
+    // output fits in the item limit. The second read gives the rest from block 2.
     let revision = head(&admin, &chapter_a).await.0;
-    let header = json!({
-        "blocks": 2,
-        "chapter": 1,
-        "chapter_id": chapter_a,
-        "last_block": 1,
-        "revision_id": revision,
-        "title": "Chapter A",
-    });
+    let a = ("Chapter A", chapter_a.as_str(), revision.as_str());
     let text = format!(
-        "{header}\n[block 1]\n{first}\n[The Chapter continues at block 2. This result does not \
-         have block 2 or the blocks after it.]"
+        "{}\n[The Chapter continues at block 2. This result does not have block 2 or the blocks \
+         after it. Read them with first_block 2.]",
+        range_text(1, a, (2, 1), &[&first])
     );
+    let rest = range_text(1, a, (2, 2), &[&second]);
     let output = sent(&admin, &run_id).await[1][2][0][1].clone();
     let ids = call_ids(&admin, &run_id, Some("read_chapter")).await;
     assert_eq!(
         (
-            calls(&admin, &run_id).await[1][0].clone(),
+            calls(&admin, &run_id).await[1].as_array().unwrap()[..2].to_vec(),
             output.clone(),
             storyos_core::count_stored_text(output.as_str().unwrap()).character_count
                 <= storyos_core::CONTEXT_ITEM_TOKEN_LIMIT,
             outputs_record(&admin, &run_id, 1).await[1].clone(),
         ),
         (
-            settled(&text),
+            vec![settled(&text), settled(&rest)],
             boundary("call_read_chapter_0", "ok", &text),
             true,
             json!([["manuscript_read_result", ids[0], "exact_required"]]),
@@ -551,5 +552,92 @@ async fn the_same_number_reads_the_chapter_of_the_project_of_each_run() {
     assert_eq!(
         results.iter().map(|(got, _)| got).collect::<Vec<_>>(),
         results.iter().map(|(_, want)| want).collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_range_gives_its_blocks_and_a_range_outside_the_chapter_is_refused() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let blocks = ["One.", "Two.", "Three.", "Four."];
+    let (scope, chapter_a, _, _) = project(&store, &admin, "2a1", 0x4b10, &blocks).await;
+    // A range in the middle, a last Block above the count, and the three invalid ranges.
+    let message = "SCRIPT:read_chapter 1:2-3,1:3-9,1:0-2,1:5-5,1:3-2";
+    let new = ConversationSelection::New;
+    let run_id = admitted(&store, &scope, &chapter_a, "2a2", message, new).await;
+    complete(&store, &admin, &scope, &run_id).await;
+
+    let revision = head(&admin, &chapter_a).await.0;
+    let a = ("Chapter A", chapter_a.as_str(), revision.as_str());
+    let invalid = ChapterReadRefusal::BlockRangeInvalid { blocks: 4 };
+    let refused = json!([
+        "read_chapter",
+        "refused",
+        invalid.label(),
+        invalid.result().text,
+        true
+    ]);
+    // Each refused call gives the count of the Blocks, and the Run continues.
+    assert_eq!(
+        calls(&admin, &run_id).await,
+        json!([
+            "completed",
+            [
+                settled(&range_text(1, a, (4, 2), &["Two.", "Three."])),
+                settled(&range_text(1, a, (4, 3), &["Three.", "Four."])),
+                refused,
+                refused,
+                refused,
+                finish(),
+            ]
+        ])
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_later_range_names_the_blocks_of_the_new_head() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_a, _, session) =
+        project(&store, &admin, "2a3", 0x4b20, &["Rain.", "Wind."]).await;
+    let first_head = head(&admin, &chapter_a).await.0;
+    let new = ConversationSelection::New;
+    let message = "SCRIPT:read_chapter 1:2-2;1:2-2";
+    let run_id = admitted(&store, &scope, &chapter_a, "2a4", message, new).await;
+    // While the second request is out, the author adds the Block "Snow." before "Rain.".
+    let edit = (session.as_str(), 2, "4b23");
+    let edit = write_blocks(&store, &admin, &scope, edit, &chapter_a, &["Snow.", ""]).await;
+    let author = AuthorAt::new(
+        &store,
+        Moment::DuringRequest(2),
+        AuthorAction::Edit(Box::new(edit)),
+    );
+    settle(&store, &admin, &scope, &run_id, &author)
+        .await
+        .unwrap();
+
+    // The same range names block 2 of each head: the second header has the new count and the
+    // new revision.
+    let new_head = head(&admin, &chapter_a).await.0;
+    let at = |revision: &str, count, text: &str| {
+        let a = ("Chapter A", chapter_a.as_str(), revision);
+        settled(&range_text(1, a, (count, 2), &[text]))
+    };
+    assert_eq!(
+        calls(&admin, &run_id).await,
+        json!([
+            "completed",
+            [
+                at(&first_head, 2, "Wind."),
+                at(&new_head, 3, "Rain."),
+                finish()
+            ]
+        ])
     );
 }

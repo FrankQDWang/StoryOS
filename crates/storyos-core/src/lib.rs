@@ -249,7 +249,7 @@ pub use project_export::{
     export_project_archive,
 };
 pub use read_chapter::{
-    ChapterReadRefusal, READ_CHAPTER_TOOL_SPEC, ReadableChapter, admit_chapter_read,
+    BlockRange, ChapterReadRefusal, READ_CHAPTER_TOOL_SPEC, ReadableChapter, admit_chapter_read,
 };
 pub use read_skill_resource::{
     READ_SKILL_RESOURCE_TOOL_SPEC, SKILL_RESOURCE_READ_LIMIT, SkillResourceReadFacts,
