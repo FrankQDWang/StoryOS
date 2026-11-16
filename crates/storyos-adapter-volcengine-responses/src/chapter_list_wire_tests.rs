@@ -78,3 +78,38 @@ async fn the_chapter_list_is_one_exact_section_before_the_working_text_with_its_
         )
     );
 }
+
+/// ADR 0094 section 2 and ADR 0095 section 1: in the item order of a Run with a bound Project
+/// Instruction, the section `Project instruction` is after the author request and before the
+/// Skill sections, and the section `Chapter list` is after the Skill sections and before the
+/// working text.
+#[tokio::test]
+async fn the_project_instruction_is_before_the_skill_sections_and_the_chapter_list() {
+    let list = "[1,19,\"The Harbor\",\"current\"]";
+    let request = v8(vec![
+        item(
+            ContextSourceClass::AuthorInstruction,
+            "Tighten this paragraph.",
+        ),
+        item(
+            ContextSourceClass::InstructionBinding,
+            "Write in past tense.",
+        ),
+        item(ContextSourceClass::WorkingTarget, "The rain fell hard."),
+        item(
+            ContextSourceClass::SkillInstruction,
+            "Keep each line short.",
+        ),
+        item(ContextSourceClass::ChapterList, list),
+    ]);
+
+    assert_eq!(
+        body(request).await["input"],
+        json!([{"role": "user", "content": [{"type": "input_text", "text": format!(
+            "Author request:\nTighten this paragraph.\n\nProject instruction:\nWrite in past \
+             tense.\n\nSkill instruction:\nKeep each line short.\n\nChapter list:\n{list}\n\n\
+             Working text:\nThe rain fell hard.\n\nTarget blocks:\n[block_id: \
+             018f0000-0000-7001-8000-0000000000b1]\nThe rain fell hard on the old roof."
+        )}]}])
+    );
+}

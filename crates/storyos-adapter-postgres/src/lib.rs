@@ -45,6 +45,10 @@ mod project_settings_tests;
 mod project_instruction_tests;
 
 #[cfg(test)]
+#[path = "instruction_binding_tests.rs"]
+mod instruction_binding_tests;
+
+#[cfg(test)]
 #[path = "create_agent_run_tests.rs"]
 mod create_agent_run_tests;
 

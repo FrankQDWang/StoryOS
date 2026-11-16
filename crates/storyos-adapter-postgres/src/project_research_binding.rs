@@ -151,4 +151,4 @@ pub(crate) async fn insert_research_binding(
 
 #[cfg(test)]
 #[path = "project_research_binding_tests.rs"]
-mod tests;
+pub(crate) mod tests;
