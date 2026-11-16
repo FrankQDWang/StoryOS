@@ -114,6 +114,7 @@ fn research_exposure() -> ToolExposure {
         }],
         model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
         skill_catalog: false,
+        memory_use: false,
     })
 }
 
@@ -123,6 +124,7 @@ pub(crate) fn host_exposure() -> ToolExposure {
         bound: &[],
         model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
         skill_catalog: false,
+        memory_use: false,
     })
 }
 

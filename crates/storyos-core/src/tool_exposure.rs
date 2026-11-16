@@ -56,6 +56,9 @@ pub struct ExposureFacts<'a> {
     pub model_registration_revision: &'a str,
     /// Whether the pinned catalog of the Run has a Skill (ADR 0089 section 3).
     pub skill_catalog: bool,
+    /// Whether the Conversation Memory Settings that the Run captured have `use_enabled`. A Run
+    /// with no settings, as a background Run, has no use (ADR 0094 section 4).
+    pub memory_use: bool,
 }
 
 impl ExposureFacts<'_> {
@@ -75,6 +78,7 @@ impl ExposureFacts<'_> {
             // A request of the author is not a read and not a capture of Memory, so the Tool does
             // not depend on the Conversation Memory Settings (ADR 0094 section 5).
             ToolOperation::WriteMemory => true,
+            ToolOperation::ReadMemoryEntry => self.memory_use,
             // The web research Tools are Tools of the research binding, not Host Tools.
             ToolOperation::WebSearch | ToolOperation::WebFetch => false,
         }
@@ -121,6 +125,7 @@ impl ToolOperation {
             Self::ReadChapter => "read_chapter",
             Self::SearchManuscript => "search_manuscript",
             Self::WriteMemory => "write_memory",
+            Self::ReadMemoryEntry => "read_memory_entry",
         }
     }
 
@@ -147,6 +152,7 @@ impl ToolOperation {
             Self::ReadChapter => crate::read_chapter::DESCRIPTION,
             Self::SearchManuscript => crate::search_manuscript::DESCRIPTION,
             Self::WriteMemory => crate::write_memory::DESCRIPTION,
+            Self::ReadMemoryEntry => crate::read_memory_entry::DESCRIPTION,
         }
     }
 }
@@ -198,6 +204,7 @@ impl ExposedTool {
             ToolOperation::ReadChapter => crate::read_chapter::parameters(),
             ToolOperation::SearchManuscript => crate::search_manuscript::parameters(),
             ToolOperation::WriteMemory => crate::write_memory::parameters(),
+            ToolOperation::ReadMemoryEntry => crate::read_memory_entry::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,

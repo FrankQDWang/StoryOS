@@ -34,6 +34,7 @@ mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
 mod read_chapter;
+mod read_memory_entry;
 mod read_skill_resource;
 mod read_tool_result;
 mod rebuild_expired_reference;
@@ -251,6 +252,9 @@ pub use project_export::{
 };
 pub use read_chapter::{
     BlockRange, ChapterReadRefusal, READ_CHAPTER_TOOL_SPEC, ReadableChapter, admit_chapter_read,
+};
+pub use read_memory_entry::{
+    MEMORY_READ_NOT_FOUND, MemoryEntryRead, READ_MEMORY_ENTRY_TOOL_SPEC, memory_read_not_found,
 };
 pub use read_skill_resource::{
     READ_SKILL_RESOURCE_TOOL_SPEC, SKILL_RESOURCE_READ_LIMIT, SkillResourceReadFacts,
