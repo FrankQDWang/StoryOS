@@ -10,7 +10,7 @@ use storyos_core::{MemoryEntryType, MemoryIndexEntry};
 use tokio_postgres::{Client, NoTls};
 
 use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_steering::tests::queued;
+use crate::command_sequence::tests::seed_project;
 use crate::project_archive_build::tests::{export_command, zip_store_files};
 
 /// One version row: the entry number, the version, the Memory revision, the state, the type, the
@@ -79,8 +79,8 @@ async fn the_runtime_role_cannot_change_a_version_and_each_project_reads_only_it
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (first, _, _) = queued(&store, "c51").await;
-    let (second, _, _) = queued(&store, "c52").await;
+    let first = seed_project(&store, "c510").await;
+    let second = seed_project(&store, "c520").await;
     let versions = [(1, 1, 1, "current", "character", "林舟", "船夫。")];
     write_versions(&admin, &first, &versions).await;
     let versions = [(1, 1, 1, "current", "other", "渡口", "旧渡口。")];
@@ -128,7 +128,7 @@ async fn the_archive_of_a_project_has_each_version_and_its_memory_head() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, _, _) = queued(&store, "c53").await;
+    let scope = seed_project(&store, "c530").await;
     let versions = [
         (1, 1, 1, "current", "foreshadowing", "铃", "铃声。"),
         (2, 1, 2, "current", "character", "阿青", "妹妹。"),
