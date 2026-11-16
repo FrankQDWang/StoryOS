@@ -1,5 +1,6 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts"]}
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -246,7 +247,7 @@ test("failed gates pause and a restart keeps that pause", async () => {
 });
 
 test("cancellation after the fence prohibits the successor", async () => {
-  const hold = join(tmpdir(), "storyos-s3-24-fence.hold");
+  const hold = join(tmpdir(), `storyos-s3-24-fence-${randomBytes(6).toString("hex")}.hold`);
   const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
@@ -317,7 +318,7 @@ test("cancellation after the fence prohibits the successor", async () => {
 });
 
 test("a crash after the fence resumes the same successor once", async () => {
-  const hold = join(tmpdir(), "storyos-s3-24-crash.hold");
+  const hold = join(tmpdir(), `storyos-s3-24-crash-${randomBytes(6).toString("hex")}.hold`);
   const started = await startServer();
   let worker: ReturnType<typeof heldWorker> | undefined;
   let projectId = "";
@@ -379,7 +380,7 @@ test("a crash after the fence resumes the same successor once", async () => {
 });
 
 test("a late predecessor updates evidence and usage only", async () => {
-  const hold = join(tmpdir(), "storyos-s3-24-late.hold");
+  const hold = join(tmpdir(), `storyos-s3-24-late-${randomBytes(6).toString("hex")}.hold`);
   const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
@@ -453,7 +454,7 @@ test("a late predecessor updates evidence and usage only", async () => {
 });
 
 test("cancellation during the successor stream aborts the successor once", async () => {
-  const hold = join(tmpdir(), "storyos-g03-successor-stream.hold");
+  const hold = join(tmpdir(), `storyos-g03-successor-stream-${randomBytes(6).toString("hex")}.hold`);
   const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
