@@ -86,7 +86,6 @@ pub struct GetProjectInstructionResponse {
     pub schema_id: String,
     pub correlation_id: String,
     pub project_scope: crate::release1::ProjectScope,
-    /// `null` when the Project has no Revision.
     #[schemars(required)]
     pub instruction: Option<ProjectInstruction>,
 }

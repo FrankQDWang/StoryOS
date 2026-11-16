@@ -77,11 +77,7 @@ export type UpdateProjectAssistanceResponse = { schema_id: string, correlation_i
 
 export type ProjectInstruction = { instruction_revision_id: string, revision: string, text: string, };
 
-export type GetProjectInstructionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, 
-/**
- * `null` when the Project has no Revision.
- */
-instruction: ProjectInstruction | null, };
+export type GetProjectInstructionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, instruction: ProjectInstruction | null, };
 
 export type UpdateProjectInstructionInput = { text: string, expected_instruction_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 

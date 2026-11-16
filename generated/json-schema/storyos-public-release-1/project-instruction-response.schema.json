@@ -2,7 +2,7 @@
   "$defs": {
     "ProjectInstruction": {
       "additionalProperties": false,
-      "description": "`null` when the Project has no Revision.",
+      "description": "One immutable Revision of the Project Instruction with its exact text.",
       "properties": {
         "instruction_revision_id": {
           "format": "uuid",
