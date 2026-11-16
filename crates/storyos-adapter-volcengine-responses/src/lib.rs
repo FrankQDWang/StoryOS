@@ -1,11 +1,16 @@
 //! The Model Provider Adapter of the Volcengine Agent Plan Responses route (ADR 0033, ADR 0039).
 
+mod embedding;
 mod probe;
 mod response;
 mod stream;
 mod wire;
 
 use std::time::Duration;
+
+pub use embedding::{
+    AgentPlanEmbeddings, EmbeddingObservation, EmbeddingRequest, PreparedEmbedding,
+};
 
 use storyos_application::{
     CacheSetting, CreatePurpose, CredentialResolver, DestinationRequest, ModelProviderAdapter,
@@ -290,15 +295,7 @@ async fn send(
     let unknown = Observation::OutcomeUnknown {
         response_reference: None,
     };
-    let Ok(client) = reqwest::Client::builder()
-        .http1_only()
-        .pool_max_idle_per_host(/*max*/ 0)
-        .retry(reqwest::retry::never())
-        .redirect(reqwest::redirect::Policy::none())
-        .no_proxy()
-        .timeout(timeout)
-        .build()
-    else {
+    let Some(client) = single_request_client(timeout) else {
         return Sent::Settled(Observation::NotSubmitted);
     };
     // A failed read is OutcomeUnknown, also a timeout before the connection. It proves nothing.
@@ -329,6 +326,19 @@ async fn send(
         });
     }
     Sent::Accepted(response)
+}
+
+/// A client for one request: HTTP/1.1, no pooled connection, no retry, no redirect, and no proxy.
+fn single_request_client(timeout: Duration) -> Option<reqwest::Client> {
+    reqwest::Client::builder()
+        .http1_only()
+        .pool_max_idle_per_host(/*max*/ 0)
+        .retry(reqwest::retry::never())
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .timeout(timeout)
+        .build()
+        .ok()
 }
 
 /// The HTTP status and the native error code. The Provider message text is not kept. An input

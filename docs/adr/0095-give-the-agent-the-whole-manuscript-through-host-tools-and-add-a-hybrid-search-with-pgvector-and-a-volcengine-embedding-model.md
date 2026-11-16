@@ -65,6 +65,8 @@ One ticket answers the open points before a ticket builds the hybrid search:
 
 The probe sends its live requests on a path that the ticket names before its dispatch, in the rules of the live model requests of [Delivery](../agents/delivery.md). When the probe fails for the Volcengine model, an amendment of this ADR selects a local model. The study names `Qwen3-Embedding-0.6B` and `bge-m3` as candidates.
 
+The probe of 2026-11-16 answered these points ([record](../research/embedding-and-pgvector-probe-2026-11-16.md)). The Volcengine model works on the route of the plan, so no local model is selected.
+
 ### 6. The request revisions of Stage 7
 
 [S7-B0](https://github.com/FrankQDWang/StoryOS/issues/1567) recorded these names on 2026-11-16. They are the one set of request revisions of Stage 7 for the requests of the Agent Plan mapping. The later Stage 7 tickets add their items, their Tools, their sections, their request forms, and their instruction paragraphs to these revisions in place, by the rule of ADR 0093 section 3: `main` has no `v8`, no `fa22`, and no `…0e0104` before the aggregate pull request of [#365](https://github.com/FrankQDWang/StoryOS/issues/365) merges.
