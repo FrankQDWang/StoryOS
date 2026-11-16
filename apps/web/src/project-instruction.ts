@@ -35,7 +35,8 @@ export type InstructionSaveFlight = {
 
 type Connection = { baseUrl: string; fetchImpl: typeof fetch; scope: ProjectScope };
 
-const sameScope = (actual: ProjectScope, expected: ProjectScope) =>
+/** Whether a response is of the Project Scope of the page. */
+export const sameScope = (actual: ProjectScope, expected: ProjectScope) =>
   actual.owner_user_id === expected.owner_user_id && actual.project_id === expected.project_id;
 
 /** Reads the current Project Instruction. A response of another Project Scope gives `undefined`. */

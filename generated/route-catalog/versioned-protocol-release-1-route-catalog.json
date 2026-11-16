@@ -1137,6 +1137,64 @@
       "wire_owner": "protocol"
     },
     {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "positive": "storyos.golden.listMemoryEntries.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "listMemoryEntries",
+      "path": "/api/v1/projects/{project_id}/memory-entries",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_visibility"
+      ],
+      "schemas": {
+        "request": "storyos.query.memory-entries.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.memory-entries.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:memory",
+      "wire_owner": "protocol"
+    },
+    {
       "action_class": "session_control",
       "activity": {
         "no_effect": [],
@@ -4071,7 +4129,8 @@
           "getProjectAssistance",
           "updateProjectAssistance",
           "getProjectInstruction",
-          "updateProjectInstruction"
+          "updateProjectInstruction",
+          "listMemoryEntries"
         ]
       },
       {
