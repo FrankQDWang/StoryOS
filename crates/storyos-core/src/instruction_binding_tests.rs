@@ -174,8 +174,5 @@ fn the_expected_input_counts_the_item_when_the_request_sends_the_current_input()
     };
 
     // The author message has 23 tokens, the working text 17, and the instruction 24.
-    assert_eq!(
-        (sent(&assembled()), sent(&record)),
-        (23 + 17, 23 + 17 + 24)
-    );
+    assert_eq!((sent(&assembled()), sent(&record)), (23 + 17, 23 + 17 + 24));
 }

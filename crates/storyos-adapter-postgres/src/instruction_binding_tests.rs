@@ -127,8 +127,17 @@ async fn a_run_binds_only_a_current_revision_with_text_other_than_white_space() 
                     ["author_instruction", "working_target"]]]),
             json!([["decision", 0, {"kind": "absent"}, ["absent"],
                     ["author_instruction", "working_target"]]]),
-            json!([["decision", 0, required(&current), [current],
-                    ["author_instruction", "instruction_binding", "working_target"]]]),
+            json!([[
+                "decision",
+                0,
+                required(&current),
+                [current],
+                [
+                    "author_instruction",
+                    "instruction_binding",
+                    "working_target"
+                ]
+            ]]),
         )
     );
 }
@@ -286,8 +295,7 @@ async fn the_next_run_after_a_removal_sends_no_project_instruction() {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_request_does_not()
-{
+async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_request_does_not() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -318,9 +326,19 @@ async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_
                 json!(["compaction", 1, []]),
                 json!(["later_request", 1, [revision]]),
             ],
-            json!(["later_request", 1, required(&revision), [revision],
-                   ["conversation_summary", "author_instruction", "instruction_binding",
-                    "working_target", "tool_result"]]),
+            json!([
+                "later_request",
+                1,
+                required(&revision),
+                [revision],
+                [
+                    "conversation_summary",
+                    "author_instruction",
+                    "instruction_binding",
+                    "working_target",
+                    "tool_result"
+                ]
+            ]),
             json!([
                 ["decision", 0, [text]],
                 ["compaction", 1, []],
