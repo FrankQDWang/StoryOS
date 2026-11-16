@@ -564,8 +564,8 @@ async fn a_range_gives_its_blocks_and_a_range_outside_the_chapter_is_refused() {
     let (store, admin) = stores().await;
     let blocks = ["One.", "Two.", "Three.", "Four."];
     let (scope, chapter_a, _, _) = project(&store, &admin, "2a1", 0x4b10, &blocks).await;
-    // A range in the middle, a last Block above the count, and the three invalid ranges.
-    let message = "SCRIPT:read_chapter 1:2-3,1:3-9,1:0-2,1:5-5,1:3-2";
+    // A range in the middle, a last Block above the count, and four invalid ranges.
+    let message = "SCRIPT:read_chapter 1:2-3,1:3-9,1:0-2,1:-2-3,1:5-5,1:3-2";
     let new = ConversationSelection::New;
     let run_id = admitted(&store, &scope, &chapter_a, "2a2", message, new).await;
     complete(&store, &admin, &scope, &run_id).await;
@@ -588,6 +588,7 @@ async fn a_range_gives_its_blocks_and_a_range_outside_the_chapter_is_refused() {
             [
                 settled(&range_text(1, a, (4, 2), &["Two.", "Three."])),
                 settled(&range_text(1, a, (4, 3), &["Three.", "Four."])),
+                refused,
                 refused,
                 refused,
                 refused,

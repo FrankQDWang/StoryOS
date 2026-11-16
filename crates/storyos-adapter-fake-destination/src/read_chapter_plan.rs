@@ -56,13 +56,41 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
 }
 
 /// The arguments of the call of the script token `number`: `<number>` or
-/// `<number>:<first>-<last>`.
+/// `<number>:<first>-<last>`. The separator is the first `-` after the first character of the
+/// range, so `<first>` can have a sign.
 pub(crate) fn arguments(number: &str) -> String {
     match number.split_once(':') {
         Some((chapter, range)) => {
-            let (first, last) = range.split_once('-').unwrap_or((range, "null"));
+            let separator = range.char_indices().skip(1).find(|&(_, c)| c == '-');
+            let (first, last) = match separator {
+                Some((index, _)) => (&range[..index], &range[index + 1..]),
+                None => (range, "null"),
+            };
             format!("{{\"chapter\":{chapter},\"first_block\":{first},\"last_block\":{last}}}")
         }
         None => format!("{{\"chapter\":{number}}}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Each part of a range keeps its sign (#1613 round 1).
+    #[test]
+    fn each_part_of_a_range_is_the_json_text_of_its_argument() {
+        let parsed: Vec<serde_json::Value> = ["2", "1:2-3", "1:-2-3", "1:2--3", "1:3-null", "1:4"]
+            .into_iter()
+            .map(|token| serde_json::from_str(&super::arguments(token)).unwrap())
+            .collect();
+        assert_eq!(
+            parsed,
+            [
+                serde_json::json!({"chapter": 2}),
+                serde_json::json!({"chapter": 1, "first_block": 2, "last_block": 3}),
+                serde_json::json!({"chapter": 1, "first_block": -2, "last_block": 3}),
+                serde_json::json!({"chapter": 1, "first_block": 2, "last_block": -3}),
+                serde_json::json!({"chapter": 1, "first_block": 3, "last_block": null}),
+                serde_json::json!({"chapter": 1, "first_block": 4, "last_block": null}),
+            ]
+        );
     }
 }
