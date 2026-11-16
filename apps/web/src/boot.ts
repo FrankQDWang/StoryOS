@@ -128,28 +128,9 @@ export async function openControlledProject(options: {
   if (boot.kind !== "protected-ready") return boot;
 
   try {
-    const projectValue: unknown = await getProject({ ...queryOptions, projectId });
-    const projectView = projectValue as {
-      project_scope?: { owner_user_id?: unknown; project_id?: unknown };
-      project?: { project_id?: unknown; open?: { kind?: unknown; current_chapter_id?: unknown } };
-    };
-    const scope = projectView?.project_scope;
-    const ownerUserId = scope?.owner_user_id;
-    if (!validUuid(ownerUserId)
-      || scope?.project_id !== projectId
-      || projectView?.project?.project_id !== projectId) throw new Error("Project Scope mismatch");
-    const project = projectValue as GetProjectResponse;
-    const listed = await listProjects(queryOptions);
-    const listedItem = listed.projects.find((entry) =>
-      entry.project_scope.project_id === projectId);
-    if (listedItem === undefined) {
-      return {
-        kind: "project-blocked",
-        code: "project_unavailable",
-        heading: "StoryOS 无法打开项目",
-        message: "无法读取这个受控项目或其当前章节。",
-      };
-    }
+    const project = await readSessionProject(queryOptions, projectId);
+    if (project === undefined) return projectUnavailable();
+    const ownerUserId = project.project_scope.owner_user_id;
     if (project.project.open.kind === "empty") {
       const treeValue: unknown = await getManuscriptTree({ ...queryOptions, projectId });
       const treeView = treeValue as {
@@ -180,7 +161,7 @@ export async function openControlledProject(options: {
     const chapterOwnerUserId = chapterView?.project_scope?.owner_user_id;
     if (!validUuid(chapterOwnerUserId)
       || chapterOwnerUserId !== ownerUserId
-      || chapterView?.project_scope?.project_id !== scope.project_id
+      || chapterView?.project_scope?.project_id !== projectId
       || chapterView?.chapter?.chapter_id !== chapterId) throw new Error("Chapter Scope mismatch");
     const chapter = chapterValue as GetChapterResponse;
     const editor = await openEditorWorkspace({
@@ -188,15 +169,62 @@ export async function openControlledProject(options: {
     });
     return { kind: "project-ready", profile: boot.profile, project, chapter, editor };
   } catch (error) {
-    const blockedState: ProjectBlockedState = {
-      kind: "project-blocked",
-      code: "project_unavailable",
-      heading: "StoryOS 无法打开项目",
-      message: "无法读取这个受控项目或其当前章节。",
-    };
+    return projectUnavailable(error);
+  }
+}
+
+/** The settings page of a Project in the Scope of the session (ADR 0094 section 9). It opens no Editor Session. */
+export async function openProjectSettings(options: {
+  baseUrl: string;
+  projectId: string;
+  fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+}): Promise<ControlledProjectState> {
+  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal } = options;
+  const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
+  const boot = await bootProtectedWebClient(queryOptions);
+  if (boot.kind !== "protected-ready") return boot;
+  try {
+    const project = await readSessionProject(queryOptions, projectId);
+    return project === undefined
+      ? projectUnavailable()
+      : { kind: "project-settings-ready", profile: boot.profile, project };
+  } catch (error) {
+    return projectUnavailable(error);
+  }
+}
+
+/** The Project when its read has the Scope of the path and the Project list of the session has it. */
+async function readSessionProject(
+  queryOptions: StoryOSQueryOptions,
+  projectId: string,
+): Promise<GetProjectResponse | undefined> {
+  const projectValue: unknown = await getProject({ ...queryOptions, projectId });
+  const projectView = projectValue as {
+    project_scope?: { owner_user_id?: unknown; project_id?: unknown };
+    project?: { project_id?: unknown; open?: { kind?: unknown; current_chapter_id?: unknown } };
+  };
+  const scope = projectView?.project_scope;
+  if (!validUuid(scope?.owner_user_id)
+    || scope?.project_id !== projectId
+    || projectView?.project?.project_id !== projectId) throw new Error("Project Scope mismatch");
+  const listed = await listProjects(queryOptions);
+  return listed.projects.some((entry) => entry.project_scope.project_id === projectId)
+    ? projectValue as GetProjectResponse
+    : undefined;
+}
+
+function projectUnavailable(error?: unknown): ProjectBlockedState {
+  const blockedState: ProjectBlockedState = {
+    kind: "project-blocked",
+    code: "project_unavailable",
+    heading: "StoryOS 无法打开项目",
+    message: "无法读取这个受控项目或其当前章节。",
+  };
+  if (error !== undefined) {
     Object.defineProperty(blockedState, PROJECT_OPEN_DIAGNOSTIC_CAUSE, {
       value: new Error("Controlled Project open failed.", { cause: error }),
     });
-    return blockedState;
   }
+  return blockedState;
 }
