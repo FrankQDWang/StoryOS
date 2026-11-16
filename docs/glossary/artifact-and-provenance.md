@@ -108,20 +108,20 @@ _Avoid_: Plugin-owned state, MCP-owned truth
 A Core Artifact presenting one independently reviewable semantic fact or object without carrying an authoritative change command. It can serve as a source for a Proposal but cannot be accepted directly; independently selectable alternatives remain separate Candidates.
 _Avoid_: Proposal, pending truth
 
-**Memory Document**:
-A versioned, non-authoritative Artifact containing a generated conversation summary, consolidated memory notes, or memory navigation summary under one Project Scope. Its source references aid inspection and fresh lookup without proving every statement or a complete semantic influence history.
-_Avoid_: Authoritative fact, per-claim Candidate, Admission Decision, hidden model state
+**Memory Entry**:
+A short, readable text of one Project in Agent Memory, with a title, a one-line description, a type, an origin, and its source references. Its type is writing preference, foreshadowing, character, relationship, major event, or other. Its origin is the request of the author, a Project Conversation, or a Chapter. It holds a synthesis or an intent and not a copy of a passage, and it is not Authoritative State. Background work cannot change or delete an entry whose origin is the request of the author; it can only record a conflict flag on it ([ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)).
+_Avoid_: Memory Document, Memory Note, Fiction Assertion, Author Preference, per-claim Candidate, hidden model state
 
-**Memory Note**:
-An inspectable, author-requested Artifact containing plain-language guidance to add, correct, or forget generated Memory, linked to the requesting author Message. Recording the note requests later consolidation; it does not prove publication, physical deletion, an access prohibition, or a change to Authoritative State.
-_Avoid_: Author Preference, semantic suppression rule, deletion receipt, context exclusion
+**Memory Observation**:
+A typed statement that one background capture got from one settled Project Conversation or one Chapter. It waits for the consolidation pass, which can make it a part of a Memory Entry or drop it. It is not a Memory Entry: the Agent does not read it, and the Memory Index does not list it.
+_Avoid_: Memory Note, Memory Candidate, Admission Decision, Memory Entry
 
 **Memory Publication**:
 The durable, Project Scope-bound identity of one complete published set of exact Memory Document revisions and its navigation summary, linked to the maintenance outcome that produced it. Current publication and current read availability are separate: a newer set does not rewrite earlier inputs or make a restricted older payload readable.
 _Avoid_: Latest Artifact alias, search index, authoritative fact, semantic correctness proof
 
 **Inferred Preference**:
-A non-binding interpretation of prior author action or feedback that can appear in Agent Memory with its sources and uncertainty. Repetition, confidence, author silence, or prior use never turns it into an authoritative constraint or lets it override a current author instruction.
+Deferred as a separate record on 2026-11-16 by [ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md); a habit that the author states in a Conversation is a Memory Entry. A non-binding interpretation of prior author action or feedback that can appear in Agent Memory with its sources and uncertainty. Repetition, confidence, author silence, or prior use never turns it into an authoritative constraint or lets it override a current author instruction.
 _Avoid_: Hidden policy, binding preference, implicit instruction, procedural memory
 
 **Operational Lesson**:

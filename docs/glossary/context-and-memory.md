@@ -5,7 +5,7 @@ This file is one design area of the [StoryOS glossary](../../GLOSSARY.md).
 ## Language
 
 **Author Preference**:
-An explicit, future-facing, scope-bounded author-owned creative or working constraint within Authoritative State. When an unambiguous author instruction maps deterministically to its domain action, that instruction is its authorization; local or ambiguous feedback cannot create one and may only source an Inferred Preference.
+Deferred on 2026-11-16 by [ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md): the Project Instruction is the one lasting instruction that the author writes; no released Stage implements this record. An explicit, future-facing, scope-bounded author-owned creative or working constraint within Authoritative State. When an unambiguous author instruction maps deterministically to its domain action, that instruction is its authorization; local or ambiguous feedback cannot create one and may only source an Inferred Preference.
 _Avoid_: Inferred Preference, hidden rule, globalized feedback, memory confirmation
 
 **Project Instruction**:
@@ -25,8 +25,12 @@ The fixed order in which StoryOS product, domain, safety, permission, Capability
 _Avoid_: Prompt order, last text wins, Skill override, model-chosen priority
 
 **Agent Memory**:
-Project Scope-bound, inspectable, generated reference material that helps the Agent carry useful context across Project Conversations and AgentRuns. It can be corrected and read selectively, but grants no authority, instruction priority, execution permission, or guarantee of current truth.
+Project Scope-bound, inspectable reference material that helps the Agent carry useful context across Project Conversations and AgentRuns: the Memory Entries of one Project. An entry comes from a request of the author or from background capture. Memory can be corrected and read selectively, but grants no authority, instruction priority, execution permission, or guarantee of current truth.
 _Avoid_: Authoritative State, Provider continuation, active context compaction, hidden persistent memory
+
+**Memory Index**:
+The bounded Context item of a Run that lists the type, the title, the description, and the conflict flag of each current Memory Entry, in groups by type. It navigates to Agent Memory and never holds the text of an entry; the Agent reads an entry with a Host Tool ([ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)).
+_Avoid_: Memory navigation summary, whole Memory collection, loaded Memory
 
 **Conversation Memory Settings**:
 The independent author settings on one exact Project Conversation that control new Agent Memory reads and that conversation's eligibility for future Memory extraction. They may change only when every associated foreground root AgentRun is Terminal, or none exists; independent background Memory work does not prevent the change, which neither deletes published Memory nor rewrites recorded context or earlier disclosure.

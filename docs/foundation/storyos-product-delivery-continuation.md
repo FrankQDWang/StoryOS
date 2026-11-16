@@ -109,56 +109,58 @@ package inspection step, and the revocation step of the earlier journey.
 | S6-EVD-001 | Standard-package compatibility, exact selection/snapshot, progressive loading, composition, and instruction-authority evidence. |
 | S6-EVD-002 | A change of the Skills of the deployment with a Run in progress, the refusal of an invalid or oversized package at the start of the Server, active-run binding, and editor-regression evidence. ADR 0089 withdrew the Tool-role, script, outcome-obligation, and revocation evidence. |
 
-## 4. Stage 7: Structured project continuity and Memory
+## 4. Stage 7: Project continuity and Memory
 
 | ID | Production obligation | Semantic owner |
 | --- | --- | --- |
-| S7-REQ-001 | Preserve one Project main Agent across distinct Project Conversations using their existing identities. Cross-conversation continuity uses eligible Project sources and generated Memory; each conversation retains its own Provider continuation. Do not load the entire transcript or Memory collection by default. | Project Agent and Context owners |
-| S7-REQ-002 | Represent author-owned world facts, characters, relationships, and timeline with the accepted fiction assertion, Story Scope, and Epistemic Scope semantics. Conflicting claims remain distinguishable; generated claims need explicit author-authorized settlement before authority. | Artifact and Research/Memory owners |
-| S7-REQ-003 | Keep current feedback, explicit future-facing Author Preferences, and Inferred Preferences distinct. Inference is never an automatic lasting rule. The author can inspect and change explicit preferences through their owning commands. | Research/Memory and Admission owners |
-| S7-REQ-004 | Support optional author-edited Project Instruction, immutable revisions, and exact top-level Run binding. Existing bindings stay fixed across Subruns and context compaction; absence does not block ordinary assistance. This does not defer any instruction binding already required in an earlier stage. | Context and AgentRun owners |
-| S7-REQ-005 | Extract from bounded eligible idle conversation snapshots and consolidate generated Memory Documents through fenced background work. Publish one complete set of exact revisions and a bounded navigation summary atomically. Keep source references, model/prompt/input identities, pending Notes, and maintenance outcomes inspectable. Search/read tools use currently permitted publications; indexes rebuild from retained documents without model calls. Generation is separate and need not reproduce identical text. | Research/Memory, storage, trust, and retention owners |
-| S7-REQ-006 | Apply the release's independent conversation Memory defaults and atomic idle-only settings contract. Offer author inspection of settings, publication, documents, Notes, sources, and maintenance outcomes even with Agent use disabled. Ordinary corrections remain Messages; an explicit lasting Memory request may record a Note for later consolidation. Note-recorded, published, no-op, failed, and unavailable are distinct. Retire semantic Include/Pin/Exclude and per-claim Admission/Suppression controls without aliases. | Context, Memory, and Protocol owners |
-| S7-REQ-007 | Deliver Memory source restrictions, lifecycle, qualified generated-payload cleanup, archive/export/restore, and recovery under exact source/destination bindings. Preserve current publication/Artifact Head/author/active-work/shared-payload protections and identity/use/Decision/gap evidence. Real covered-copy restrictions fence stale work and retained copies; ordinary corrections do not reset continuation. Existing active compaction and Provider continuation stay separate. Independently enabled embedding keeps its own capability, permission, budget, and disclosure gates; basic Memory recall does not require embedding. | Context, Model Gateway, persistence, and retention owners |
+| S7-REQ-001 | Preserve one Project main Agent across distinct Project Conversations using their existing identities. Cross-conversation continuity uses the Project Instruction, the manuscript tools, and Agent Memory; each conversation retains its own Provider continuation. Do not load the entire transcript, manuscript, or Memory collection by default. | Project Agent and Context owners |
+| S7-REQ-002 | Withdrawn for Stage 7 by ADR 0094. The structured fiction records stay deferred. A character, a relationship, and a major event are Memory Entries of S7-REQ-005, and they are not Authoritative State. | Artifact and Research/Memory owners |
+| S7-REQ-003 | Withdrawn for Stage 7 by ADR 0094. The Author Preference and the Inferred Preference stay deferred as separate records. The lasting instruction of the author is the Project Instruction of S7-REQ-004. A habit that the author states in a Conversation is a Memory Entry, and a Memory Entry is never an instruction. | Research/Memory and Admission owners |
+| S7-REQ-004 | Support optional author-edited Project Instruction, immutable revisions, and exact top-level Run binding. The author writes it on the settings page of the Project (ADR 0094). Existing bindings stay fixed across Subruns and context compaction; absence does not block ordinary assistance. This does not defer any instruction binding already required in an earlier stage. | Context and AgentRun owners |
+| S7-REQ-005 | Keep Agent Memory as typed Memory Entries (ADR 0094). The Agent writes an entry at once on the request of the author. Bounded background captures of quiet Project Conversations and of changed Chapters give typed Memory Observations. A fenced consolidation pass applies validated typed operations in one transaction and prunes the entries. Background work cannot change an entry of the author; it records a conflict flag. A bounded Memory Index is in the context of a Run, and the Agent searches and reads entries with Host Tools without embedding. Keep origins, source references, model/prompt/input identities, and maintenance outcomes recorded. | Research/Memory, storage, trust, and retention owners |
+| S7-REQ-006 | Apply the Host defaults of the Conversation Memory Settings with no author control (ADR 0094). Offer author inspection of each Memory Entry with its origin, source, and conflict flag on the settings page, and a delete that background work does not undo. Ordinary corrections remain Messages. Retire semantic Include/Pin/Exclude and per-claim Admission/Suppression controls without aliases. | Context, Memory, and Protocol owners |
+| S7-REQ-007 | Give the Agent the whole manuscript (ADR 0095): the Chapter list in the context, a keyword search, a read, and a hybrid search. The vector index is rebuildable, and the embedding requests keep their own grant scope, bounds, and disclosure record. Deliver archive/export/restore and recovery of the Memory records. Existing active compaction and Provider continuation stay separate; ordinary corrections do not reset continuation. Memory recall does not require embedding. The removal of superseded Memory payload bytes and the fence of a covered-copy restriction stay deferred (ADR 0094). | Context, Model Gateway, persistence, and retention owners |
 
 **Author journey S7-JRN-001.**
 
-1. Write and explicitly establish a fiction fact or Author Preference. Let an
-   eligible settled conversation contribute to background extraction and
-   consolidation, then inspect its complete publication and source references.
-2. Continue in a second Project Conversation with the release defaults. Inspect
-   bounded navigation and on-demand reads, distinguishing read/sent evidence
-   from model attention and generated recall from author-owned truth.
-3. Correct an inference through ordinary conversation. Explicitly request a
-   lasting Memory change, inspect its recorded Note, and later inspect the
-   separate maintenance outcome. Neither acknowledgement promises exact forgetting.
-4. Change use and contribution independently while idle. Verify refusal while
-   foreground work is busy, captured Run settings, disabled new reads or
-   extraction, and continued author inspection. Inspect no-publication-yet,
-   valid empty publication, and unavailable publication as distinct states.
-5. Edit an optional Project Instruction and verify old/new Run bindings.
-   Exercise a real source/copy restriction, its narrow or conservative set-wide
-   unavailability, and reconstruction from allowed inputs without lifting old
-   payload fences. Ordinary source edits do not rewrite conversation history.
-6. Recover interrupted or stale maintenance without partial publication; rebuild
-   the index without a model call. Exercise qualified old generated-payload
-   cleanup and inspect retained identity, use records, and explicit gaps.
-   Export and restore the allowed documents, pending work, and lifecycle evidence;
-   missing evidence keeps recovery on Hold. Continue writing with Memory unavailable.
+1. Write a Project Instruction on the settings page of the Project and verify
+   the old and new Run bindings.
+2. Ask the Agent to remember a foreshadowing, and inspect the entry and its
+   origin on the settings page. Let a quiet Project Conversation and a changed
+   Chapter contribute through background capture and consolidation, then
+   inspect the entries and their sources.
+3. Continue in a second Project Conversation. The Agent uses the Memory Index
+   and reads an entry. It finds a passage of another Chapter with the keyword
+   search and with the hybrid search. Distinguish read/sent evidence from model
+   attention and generated recall from author-owned truth.
+4. Change a Chapter so that an entry of the author conflicts with it. Background
+   work records a conflict flag and keeps the text; the Agent asks the author,
+   and the entry changes only after the answer. Delete an entry, and verify
+   that background work does not create it again.
+5. Recover interrupted or stale background work without a partial result;
+   build the vector index again without loss. Export and restore the Project
+   with its Memory records. Continue writing with Memory and the embedding
+   source unavailable.
+
+[ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)
+withdrew the fiction fact, Author Preference, settings change, copy
+restriction, and payload cleanup steps of the earlier journey.
+[ADR 0095](../adr/0095-give-the-agent-the-whole-manuscript-through-host-tools-and-add-a-hybrid-search-with-pgvector-and-a-volcengine-embedding-model.md)
+added the manuscript search steps.
 
 Stage 7 adds no semantic exclusion classifier, per-claim memory confirmation,
 precise-forgetting oracle, or required project policy made from generated text.
-Background maintenance does not block the editor and may change only its
-admitted generated-document set. It cannot change Skills, ToolSpecs, policy,
-credentials, Author Preferences, or Authoritative State. The current Memory
-and retention contracts own publication concurrency and cleanup conditions;
-this stage supplies their implementation and measured profile qualification.
+Background maintenance does not block the editor and may change only the
+Memory Entries that the author did not ask for. It cannot change Skills,
+ToolSpecs, policy, credentials, the Project Instruction, or Authoritative
+State. ADR 0094 and ADR 0095 own the mechanism; this stage supplies their
+implementation and measured limits.
 
 | ID | Mandatory evidence |
 | --- | --- |
-| S7-EVD-001 | Cross-conversation identity, structured truth, explicit preference, instruction revision/binding, generated-recall limitations, and author-authority evidence. |
-| S7-EVD-002 | Independent default/settings behavior and idle/admission race, eligible extraction, complete publication, stale/duplicate work refusal, bounded recall, author inspection, Note origin and distinct maintenance outcomes. Include AP-22 hostile-input, wrong-Scope, forbidden-write, secret, oversize, disabled, and unavailable-source cases; inspect records and effects, not semantic truth. |
-| S7-EVD-003 | Context and independently enabled embedding/disclosure, exact publication reads, active-compaction separation, real covered-copy restrictions, allowed-input/index rebuild, and Memory recovery/portability. Cover cleanup racing publication or byte acquisition, protected/shared payloads, pending Notes, failed maintenance, missing lifecycle evidence, and truthful gaps with the editor still usable. |
+| S7-EVD-001 | Cross-conversation identity, Project Instruction revision/binding, generated-recall limitations, and author-authority evidence. ADR 0094 withdrew the structured-truth and explicit-preference evidence. |
+| S7-EVD-002 | Host default settings behavior, eligible capture of Conversations and Chapters, the bounds of a capture, atomic consolidation, stale/duplicate work refusal, the protection and the conflict flag of an author entry, bounded recall, and author inspection and delete. Include AP-22 hostile-input, wrong-Scope, forbidden-write, secret, oversize, disabled, and unavailable-source cases; inspect records and effects, not semantic truth. |
+| S7-EVD-003 | Manuscript search and read, the embedding disclosure and its grant scope, vector index rebuild, the refusal of a stale vector hit, active-compaction separation, and Memory recovery/portability. Cover failed maintenance and truthful gaps with the editor still usable. ADR 0094 withdrew the covered-copy restriction and payload cleanup evidence. |
 
 ## 5. Stage 8: Transcript MCP Apps
 

@@ -33,7 +33,7 @@ The complete Core Transition outcome for one Manuscript Structure Transition or 
 _Avoid_: Per-command persist, Author Edit settlement, browser settlement
 
 **Fiction Assertion**:
-An addressable fiction-domain statement composed of one Proposition, Story Scope, and Epistemic Scope. Its owning Authoritative Revision or Artifact determines authority; the Assertion shape itself does not, and only incompatible Propositions under genuinely overlapping scopes conflict.
+Deferred on 2026-11-16 by [ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md); no released Stage implements it as a typed record. An addressable fiction-domain statement composed of one Proposition, Story Scope, and Epistemic Scope. Its owning Authoritative Revision or Artifact determines authority; the Assertion shape itself does not, and only incompatible Propositions under genuinely overlapping scopes conflict.
 _Avoid_: Flat entity property, universal canon fact, memory fact
 
 **Proposition**:
@@ -41,11 +41,11 @@ The content asserted about exact project subjects, separate from where or when i
 _Avoid_: Unscoped fact, belief, database field
 
 **Story Scope**:
-The work, fictional world or continuity, branch, story time, scene, and narrative position within which a Fiction Assertion applies. Story-world validity and narrative revelation are distinct, while audit time is neither.
+Deferred on 2026-11-16 by [ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md); no released Stage implements it as a typed record. The work, fictional world or continuity, branch, story time, scene, and narrative position within which a Fiction Assertion applies. Story-world validity and narrative revelation are distinct, while audit time is neither.
 _Avoid_: Audit timestamp, chapter number as story time, global story fact
 
 **Epistemic Scope**:
-The holder or in-fiction source and epistemic relation that frames a Proposition as project fact or as something known, believed, suspected, claimed, remembered, or retold. Different holders and relations are not interchangeable, and project truth never automatically becomes character knowledge or permitted revelation.
+Deferred on 2026-11-16 by [ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md); no released Stage implements it as a typed record. The holder or in-fiction source and epistemic relation that frames a Proposition as project fact or as something known, believed, suspected, claimed, remembered, or retold. Different holders and relations are not interchangeable, and project truth never automatically becomes character knowledge or permitted revelation.
 _Avoid_: Belief owner only, narrator truth, automatic knowledge propagation
 
 **Authoritative Revision**:
