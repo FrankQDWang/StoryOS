@@ -55,7 +55,8 @@ import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
 import { navigateProposal, type ProposalFocus, type ProposalNavigation } from "./proposal-navigation.ts";
 import { ProjectSettingsLink, ProjectSettingsView } from "./project-settings.tsx";
-import { WritingWorkspace, addressParameter, removeAddressParameter } from "./writing-workspace.tsx";
+import { WritingWorkspace } from "./writing-workspace.tsx";
+import { ADDRESS_CHAPTER_NOT_FOUND_SENTENCE, useAddressChapter } from "./address-chapter.ts";
 
 interface Stage1ViewProps {
   state: ControlledProjectState;
@@ -66,8 +67,6 @@ interface Stage1ViewProps {
   writingTimers?: ChallengeAdmissionTimers | undefined;
 }
 
-/** The sentence of an address Chapter that the workspace cannot open. */
-const ADDRESS_CHAPTER_NOT_FOUND_SENTENCE = "找不到这个章节。";
 
 interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   state: ProjectReadyState;
@@ -309,29 +308,9 @@ function ProjectReadyView({
     })();
   };
 
-  // The address `/projects/{project_id}?chapter={chapter_id}` opens its Chapter one time, with the steps of a click in
-  // the manuscript tree. Until that ends, the Conversation of the address waits (see `WritingWorkspace`).
-  const addressChapter = useRef(addressParameter("chapter"));
-  const [holdAddressConversation, setHoldAddressConversation] = useState(addressChapter.current !== undefined);
-  useEffect(() => {
-    const chapterId = addressChapter.current;
-    if (chapterId === undefined || tree === undefined) return;
-    addressChapter.current = undefined;
-    removeAddressParameter("chapter");
-    const release = () => setHoldAddressConversation(false);
-    if (chapterId === currentChapterId) {
-      release();
-      return;
-    }
-    // A Chapter of another Project, or a value that is not a Chapter identity, is not in the tree of this Project.
-    const known = tree.volumes.some((volume) => volume.chapters.some((chapter) => chapter.chapter_id === chapterId));
-    if (!known || state.editor.kind !== "editor-ready" || state.editor.session.writer.kind !== "current_writer") {
-      setSwitchRecovery(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE);
-      release();
-      return;
-    }
-    void selectChapter(chapterId).then((reopened) => { if (!reopened) release(); });
-  }, [tree]);
+  const holdAddressConversation = useAddressChapter({ tree, currentChapterId, open: selectChapter,
+    canChangeCurrentChapter: state.editor.kind === "editor-ready" && state.editor.session.writer.kind === "current_writer",
+    onNotFound: () => setSwitchRecovery(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
 
   const removeFromTree = (noun: "章节" | "卷", remove: (expectedTreeRevision: string) => Promise<{
     effect: { kind: string };
@@ -729,6 +708,7 @@ function EmptyProjectReadyView({
   const [title, setTitle] = useState(project.project.title);
   const [revision, setRevision] = useState<string>();
   const [volumeRemoval, setVolumeRemoval] = useState<string>();
+  const [addressNotice, setAddressNotice] = useState<string>();
   useEffect(() => {
     void listProjects({ baseUrl, fetchImpl }).then((response) => {
       const item = response.projects.find((entry) =>
@@ -737,8 +717,12 @@ function EmptyProjectReadyView({
       setRevision(item.revision);
     }).catch(() => {});
   }, [baseUrl, fetchImpl, project.project.project_id]);
+  // A Project with no Chapter has no Chapter to open from the address.
+  const holdAddressConversation = useAddressChapter({ tree, currentChapterId: undefined, canChangeCurrentChapter: false,
+    open: async () => false, onNotFound: () => setAddressNotice(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
   return (
     <WritingWorkspace
+      holdAddressConversation={holdAddressConversation}
       assistant={{
         scope: project.project_scope,
         canSubmit: false,
@@ -761,8 +745,8 @@ function EmptyProjectReadyView({
             />
           <ManuscriptSearchPanel projectId={project.project.project_id} baseUrl={baseUrl}
             fetchImpl={fetchImpl} chapterTitles={new Map()} />
-          {volumeRemoval === undefined ? null : (
-            <p role="alert">{volumeRemoval}</p>
+          {(volumeRemoval ?? addressNotice) === undefined ? null : (
+            <p role="alert">{volumeRemoval ?? addressNotice}</p>
           )}
           <ManuscriptTree
             projectId={project.project.project_id}
