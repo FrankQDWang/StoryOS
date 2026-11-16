@@ -1,5 +1,6 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts"]}
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -196,7 +197,7 @@ test("missing, unsupported, unbounded, foreign, incomplete, and unknown results 
 });
 
 test("a cancelled Run reconciles the late result as evidence only", async () => {
-  const hold = join(tmpdir(), "storyos-s3-23-dispatch.hold");
+  const hold = join(tmpdir(), `storyos-s3-23-dispatch-${randomBytes(6).toString("hex")}.hold`);
   const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
