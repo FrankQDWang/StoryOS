@@ -3995,19 +3995,27 @@ CREATE POLICY conversation_memory_settings_exact_scope ON storyos.conversation_m
 
 GRANT SELECT,INSERT ON TABLE storyos.conversation_memory_settings TO storyos_runtime;
 
+-- The kind of an AgentRun (ADR 0094 section 5). A Run of the author has its Project Conversation, its
+-- Conversation Memory Settings revision, its Chapter, its author message, and the Receipt of
+-- `createAgentRun`. A background Run (`memory_capture`, `memory_consolidation`) has none of them, so
+-- the two foreign keys of these columns use `MATCH SIMPLE`, as the current Chapter of a Project does,
+-- and `agent_runs_kind_shape` refuses each other form. For the same reason, the Conversation of
+-- `model_attempts` and the Receipt of `operation_requirements` and of `context_assembly_manifests`
+-- are empty for a background Run.
+
 CREATE TABLE storyos.agent_runs (
     owner_user_id uuid NOT NULL,
     project_id uuid NOT NULL,
     run_id uuid NOT NULL,
     project_agent_id uuid NOT NULL,
-    conversation_id uuid NOT NULL,
-    memory_settings_revision uuid NOT NULL,
+    conversation_id uuid,
+    memory_settings_revision uuid,
     grant_id uuid NOT NULL,
     project_model_use_binding_revision uuid NOT NULL,
-    chapter_id uuid NOT NULL,
-    author_message text NOT NULL,
+    chapter_id uuid,
+    author_message text,
     status storyos.agent_run_status NOT NULL,
-    receipt_id uuid NOT NULL,
+    receipt_id uuid,
     claim_generation bigint DEFAULT 0 NOT NULL,
     fence_token bigint DEFAULT 0 NOT NULL,
     lease_expires_at timestamp with time zone,
@@ -4017,16 +4025,19 @@ CREATE TABLE storyos.agent_runs (
     active_decision_position numeric(20,0) DEFAULT 0 NOT NULL,
     model_registration_revision uuid NOT NULL,
     project_instruction_revision_id uuid,
+    run_kind text NOT NULL,
     CONSTRAINT agent_runs_active_decision_position_check CHECK (((active_decision_position >= (0)::numeric) AND (active_decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT agent_runs_author_message_check CHECK (((char_length(author_message) >= 1) AND (char_length(author_message) <= 8000))),
     CONSTRAINT agent_runs_claim_generation_check CHECK ((claim_generation >= 0)),
     CONSTRAINT agent_runs_fence_token_check CHECK ((fence_token >= 0)),
+    CONSTRAINT agent_runs_kind_shape CHECK (((((run_kind = 'author'::text) AND (conversation_id IS NOT NULL) AND (memory_settings_revision IS NOT NULL) AND (chapter_id IS NOT NULL) AND (author_message IS NOT NULL) AND (receipt_id IS NOT NULL)) OR ((run_kind <> 'author'::text) AND (conversation_id IS NULL) AND (memory_settings_revision IS NULL) AND (chapter_id IS NULL) AND (author_message IS NULL) AND (receipt_id IS NULL))) IS TRUE)),
+    CONSTRAINT agent_runs_run_kind_check CHECK ((run_kind = ANY (ARRAY['author'::text, 'memory_capture'::text, 'memory_consolidation'::text]))),
     CONSTRAINT agent_runs_pkey PRIMARY KEY (owner_user_id, project_id, run_id),
     CONSTRAINT agent_runs_binding_registration_fkey FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) MATCH FULL,
-    CONSTRAINT agent_runs_owner_user_id_project_id_conversation_id_memory_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision) MATCH FULL,
+    CONSTRAINT agent_runs_owner_user_id_project_id_conversation_id_memory_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision),
     CONSTRAINT agent_runs_owner_user_id_project_id_grant_id_fkey FOREIGN KEY (owner_user_id, project_id, grant_id) REFERENCES storyos.project_destination_grants(owner_user_id, project_id, grant_id) MATCH FULL,
     CONSTRAINT agent_runs_owner_user_id_project_id_project_model_use_bind_fkey FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision) MATCH FULL,
-    CONSTRAINT agent_runs_owner_user_id_project_id_receipt_id_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL,
+    CONSTRAINT agent_runs_owner_user_id_project_id_receipt_id_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id),
     CONSTRAINT agent_runs_predecessor_fk FOREIGN KEY (owner_user_id, project_id, predecessor_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id),
     CONSTRAINT agent_runs_project_instruction_revision_fkey FOREIGN KEY (owner_user_id, project_id, project_instruction_revision_id) REFERENCES storyos.project_instruction_revisions(owner_user_id, project_id, instruction_revision_id)
 );
@@ -4063,14 +4074,14 @@ CREATE TABLE storyos.operation_requirements (
     operation_requirement_id uuid NOT NULL,
     run_id uuid NOT NULL,
     input_snapshot_id uuid NOT NULL,
-    receipt_id uuid NOT NULL,
+    receipt_id uuid,
     payload jsonb NOT NULL,
     requirement_role text DEFAULT 'primary'::text NOT NULL,
     decision_position numeric(20,0) DEFAULT 0 NOT NULL,
     CONSTRAINT operation_requirements_decision_position_check CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT operation_requirements_requirement_role_check CHECK ((requirement_role = ANY (ARRAY['primary'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text]))),
     CONSTRAINT operation_requirements_pkey PRIMARY KEY (owner_user_id, project_id, operation_requirement_id),
-    CONSTRAINT operation_requirements_owner_user_id_project_id_receipt_id_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL,
+    CONSTRAINT operation_requirements_owner_user_id_project_id_receipt_id_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id),
     CONSTRAINT operation_requirements_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL
 );
 
@@ -4096,7 +4107,7 @@ CREATE TABLE storyos.context_assembly_manifests (
     destination_context_manifest_id uuid,
     outbound_disclosure_manifest_id uuid,
     payload jsonb NOT NULL,
-    receipt_id uuid NOT NULL,
+    receipt_id uuid,
     manifest_role text DEFAULT 'decision'::text NOT NULL,
     decision_position numeric(20,0) DEFAULT 0 NOT NULL,
     disclosure_grant_id uuid,
@@ -4110,7 +4121,7 @@ CREATE TABLE storyos.context_assembly_manifests (
     CONSTRAINT context_assembly_manifests_owner_user_id_project_id_operati_key UNIQUE (owner_user_id, project_id, operation_requirement_id),
     CONSTRAINT context_assembly_manifests_pkey PRIMARY KEY (owner_user_id, project_id, context_assembly_manifest_id),
     CONSTRAINT context_assembly_manifests_owner_user_id_project_id_operat_fkey FOREIGN KEY (owner_user_id, project_id, operation_requirement_id) REFERENCES storyos.operation_requirements(owner_user_id, project_id, operation_requirement_id) MATCH FULL,
-    CONSTRAINT context_assembly_manifests_owner_user_id_project_id_receip_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL,
+    CONSTRAINT context_assembly_manifests_owner_user_id_project_id_receip_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id),
     CONSTRAINT context_assembly_manifests_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL
 );
 
@@ -4139,7 +4150,7 @@ CREATE TABLE storyos.model_attempts (
     outbound_disclosure_manifest_id uuid NOT NULL,
     wire_payload_projection_id uuid NOT NULL,
     model_invocation_id uuid NOT NULL,
-    conversation_id uuid NOT NULL,
+    conversation_id uuid,
     decision_id uuid,
     continuation_binding_id uuid,
     dispatch_state text NOT NULL,
@@ -4149,7 +4160,7 @@ CREATE TABLE storyos.model_attempts (
     CONSTRAINT model_attempts_decision_position_check CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT model_attempts_dispatch_state_check CHECK ((dispatch_state = ANY (ARRAY['uncertain'::text, 'settled'::text]))),
     CONSTRAINT model_attempts_pkey PRIMARY KEY (owner_user_id, project_id, model_attempt_id),
-    CONSTRAINT model_attempts_owner_user_id_project_id_conversation_id_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id) MATCH FULL,
+    CONSTRAINT model_attempts_owner_user_id_project_id_conversation_id_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id),
     CONSTRAINT model_attempts_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL
 );
 

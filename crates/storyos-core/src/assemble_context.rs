@@ -54,6 +54,9 @@ pub enum ContextCause {
     /// Each ToolCall of the durable function request Decision of the prior RunStep is resolved,
     /// and its result goes to the model (Operation Requirement `tool_result_continuation`).
     ToolResultContinuation,
+    /// The Host starts background work on its schedule, with no request of the author
+    /// (ADR 0094 sections 5 and 6).
+    HostSchedule,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

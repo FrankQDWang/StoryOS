@@ -2,6 +2,7 @@ use storyos_application::{
     ConversationSelection, CreateAgentRunApplied, CreateAgentRunError, CreateAgentRunInput,
     ProjectCommandEnvelope,
 };
+use storyos_core::AgentRunKind;
 
 use super::agent_run_database_error;
 
@@ -187,7 +188,7 @@ async fn insert_queued_run(
                (owner_user_id, project_id, run_id, project_agent_id, conversation_id,
                 memory_settings_revision, grant_id, project_model_use_binding_revision,
                 chapter_id, author_message, status, receipt_id, model_registration_revision,
-                project_instruction_revision_id)
+                project_instruction_revision_id, run_kind)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
                      $9::text::uuid, $10, 'queued', $11::text::uuid,
@@ -196,7 +197,7 @@ async fn insert_queued_run(
                        WHERE binding.owner_user_id = $1::text::uuid
                          AND binding.project_id = $2::text::uuid
                          AND binding.project_model_use_binding_revision = $8::text::uuid),
-                     $12::text::uuid)",
+                     $12::text::uuid, $13)",
             &[
                 &envelope.project_scope.owner_user_id.as_ref(),
                 &envelope.project_scope.project_id.as_ref(),
@@ -210,6 +211,7 @@ async fn insert_queued_run(
                 &command.author_message,
                 &envelope.ids.receipt_id,
                 &instruction_revision_id,
+                &AgentRunKind::Author.name(),
             ],
         )
         .await
