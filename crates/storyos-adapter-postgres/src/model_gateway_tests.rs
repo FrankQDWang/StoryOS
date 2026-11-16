@@ -362,7 +362,7 @@ pub(crate) async fn admit_run_in(
     conversation: ConversationSelection,
     research: Option<&'static ResearchToolOffer>,
 ) -> String {
-    let input = (conversation, research, None);
+    let input = (conversation, research, None, None);
     admit_with(
         store,
         scope,
@@ -371,6 +371,28 @@ pub(crate) async fn admit_run_in(
         destination,
         author_message,
         input,
+        Default::default(),
+    )
+    .await
+}
+
+/// Admits one queued AgentRun of a new conversation of the tool loop profile, as `admit_run`
+/// does, in a deployment with the embedding configuration `embedding`.
+pub(crate) async fn admit_embedding_run(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    embedding: Option<&'static storyos_core::EmbeddingRegistration>,
+) -> String {
+    admit_with(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        DeploymentDestination::HostFakeToolLoop,
+        "Help with this passage.",
+        (ConversationSelection::New, None, None, embedding),
         Default::default(),
     )
     .await
@@ -387,7 +409,7 @@ pub(crate) async fn admit_referenced_run(
     author_message: &str,
     references: Vec<SelectionReference>,
 ) -> String {
-    let input = (ConversationSelection::New, None, Some(references));
+    let input = (ConversationSelection::New, None, Some(references), None);
     admit_with(
         store,
         scope,
@@ -419,7 +441,7 @@ pub(crate) async fn admit_selected_run(
         prefix,
         DeploymentDestination::HostFakeToolLoop,
         author_message,
-        (conversation, None, None),
+        (conversation, None, None, None),
         skills,
     )
     .await
@@ -436,10 +458,11 @@ async fn admit_with(
     prefix: &str,
     destination: DeploymentDestination,
     author_message: &str,
-    (conversation, research, selection_references): (
+    (conversation, research, selection_references, embedding): (
         ConversationSelection,
         Option<&'static ResearchToolOffer>,
         Option<Vec<SelectionReference>>,
+        Option<&'static storyos_core::EmbeddingRegistration>,
     ),
     (skills, skill_selections): (std::sync::Arc<SkillSet>, Vec<SkillPackageReference>),
 ) -> String {
@@ -466,6 +489,7 @@ async fn admit_with(
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
             destination: Some(destination),
             research,
+            embedding,
             skills,
             skill_selections,
         },

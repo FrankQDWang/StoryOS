@@ -25,6 +25,10 @@ pub enum GrantScope {
     /// the source classes `agent_query` and `agent_url_selection`, no length bound, no Ambient
     /// Context. It covers no model request.
     ResearchToolV1,
+    /// The embedding destination that `createAgentRun` binds (ADR 0095 section 3): the Purpose
+    /// `manuscript_embedding` and the source classes `chapter_passage` and `search_question`.
+    /// These names are not Context values. It covers no model request.
+    ManuscriptEmbeddingV1,
 }
 
 impl GrantScope {
@@ -39,6 +43,7 @@ impl GrantScope {
             Self::ProjectWritingAssistanceV4 => "project_writing_assistance_v4",
             Self::ProjectWritingAssistanceV5 => "project_writing_assistance_v5",
             Self::ResearchToolV1 => "research_tool_v1",
+            Self::ManuscriptEmbeddingV1 => "manuscript_embedding_v1",
         }
     }
 
@@ -50,12 +55,14 @@ impl GrantScope {
             "project_writing_assistance_v4" => Some(Self::ProjectWritingAssistanceV4),
             "project_writing_assistance_v5" => Some(Self::ProjectWritingAssistanceV5),
             "research_tool_v1" => Some(Self::ResearchToolV1),
+            "manuscript_embedding_v1" => Some(Self::ManuscriptEmbeddingV1),
             _ => None,
         }
     }
 
     /// The revision of a writing assistance scope. Each revision names each Purpose and each
-    /// source class of the revision before it. The research scope names no model request.
+    /// source class of the revision before it. The research scope and the embedding scope name
+    /// no model request.
     fn writing_revision(self) -> Option<u8> {
         match self {
             Self::ProjectWritingAssistanceV1 => Some(1),
@@ -63,7 +70,17 @@ impl GrantScope {
             Self::ProjectWritingAssistanceV3 => Some(3),
             Self::ProjectWritingAssistanceV4 => Some(4),
             Self::ProjectWritingAssistanceV5 => Some(5),
-            Self::ResearchToolV1 => None,
+            Self::ResearchToolV1 | Self::ManuscriptEmbeddingV1 => None,
+        }
+    }
+
+    /// Whether the scope names the Purpose `manuscript_embedding` and the source class of
+    /// `cause`. Only the embedding scope names them.
+    pub fn names_embedding(self, cause: crate::EmbeddingCause) -> bool {
+        match cause {
+            crate::EmbeddingCause::PassageIndex | crate::EmbeddingCause::SearchQuestion => {
+                self == Self::ManuscriptEmbeddingV1
+            }
         }
     }
 

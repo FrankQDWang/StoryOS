@@ -174,6 +174,7 @@ mod pinned_export_source;
 mod project_archive_build;
 mod project_conversations;
 mod project_destination_binding;
+mod project_embedding_binding;
 mod project_export;
 mod project_export_work;
 mod project_research_binding;

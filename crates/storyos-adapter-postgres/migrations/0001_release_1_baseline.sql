@@ -3738,9 +3738,10 @@ CREATE TABLE storyos.project_destination_grants (
     processing_destination_identity uuid NOT NULL,
     grant_kind text NOT NULL,
     grant_scope text,
-    CONSTRAINT project_destination_grants_grant_scope_check CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'research_tool_v1'::text]))),
-    CONSTRAINT project_destination_grants_kind_check CHECK ((grant_kind = ANY (ARRAY['host_fake_use'::text, 'volcengine_agent_plan_use'::text, 'research_tool_use'::text]))),
+    CONSTRAINT project_destination_grants_grant_scope_check CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'research_tool_v1'::text, 'manuscript_embedding_v1'::text]))),
+    CONSTRAINT project_destination_grants_kind_check CHECK ((grant_kind = ANY (ARRAY['host_fake_use'::text, 'volcengine_agent_plan_use'::text, 'research_tool_use'::text, 'manuscript_embedding_use'::text]))),
     CONSTRAINT project_destination_grants_research_scope CHECK (((grant_kind = 'research_tool_use'::text) = (grant_scope IS NOT DISTINCT FROM 'research_tool_v1'::text))),
+    CONSTRAINT project_destination_grants_embedding_scope CHECK (((grant_kind = 'manuscript_embedding_use'::text) = (grant_scope IS NOT DISTINCT FROM 'manuscript_embedding_v1'::text))),
     CONSTRAINT project_destination_grants_pkey PRIMARY KEY (owner_user_id, project_id, grant_id),
     CONSTRAINT project_destination_grants_owner_user_id_project_id_proces_fkey FOREIGN KEY (owner_user_id, project_id, processing_destination_identity) REFERENCES storyos.processing_destination_identities(owner_user_id, project_id, processing_destination_identity) MATCH FULL
 );
@@ -3764,14 +3765,15 @@ CREATE TABLE storyos.project_external_use_binding_revisions (
     grant_id uuid NOT NULL,
     model_registration_revision uuid,
     tool_registration_revision uuid,
+    embedding_registration_revision uuid,
     credential_source text NOT NULL,
     credential_reference text,
     budget_bounds text NOT NULL,
     CONSTRAINT project_external_use_binding_revisio_credential_reference_check CHECK (((char_length(credential_reference) >= 1) AND (char_length(credential_reference) <= 500))),
-    CONSTRAINT project_external_use_binding_revisions_budget_bounds_check CHECK ((budget_bounds = ANY (ARRAY['not_required'::text, 'unqualified'::text, 'agent_plan_request_v1'::text, 'agent_plan_request_v2'::text, 'agent_plan_request_v3'::text, 'agent_plan_request_v4'::text]))),
+    CONSTRAINT project_external_use_binding_revisions_budget_bounds_check CHECK ((budget_bounds = ANY (ARRAY['not_required'::text, 'unqualified'::text, 'agent_plan_request_v1'::text, 'agent_plan_request_v2'::text, 'agent_plan_request_v3'::text, 'agent_plan_request_v4'::text, 'embedding_request_v1'::text]))),
     CONSTRAINT project_external_use_binding_revisions_credential_shape CHECK (((credential_source = 'none'::text) = (credential_reference IS NULL))),
     CONSTRAINT project_external_use_binding_revisions_credential_source_check CHECK ((credential_source = ANY (ARRAY['none'::text, 'operator_quota'::text]))),
-    CONSTRAINT project_external_use_binding_revisions_registration_shape CHECK ((num_nonnulls(model_registration_revision, tool_registration_revision) = 1)),
+    CONSTRAINT project_external_use_binding_revisions_registration_shape CHECK ((num_nonnulls(model_registration_revision, tool_registration_revision, embedding_registration_revision) = 1)),
     CONSTRAINT project_external_use_binding_revisions_evidence_revision_check CHECK (((evidence_revision >= (1)::numeric) AND (evidence_revision <= '18446744073709551615'::numeric))),
     CONSTRAINT project_external_use_binding_revisions_pkey PRIMARY KEY (owner_user_id, project_id, project_model_use_binding_revision),
     CONSTRAINT project_external_use_binding_revisions_registration_key UNIQUE (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision),
@@ -4114,7 +4116,7 @@ CREATE TABLE storyos.context_assembly_manifests (
     disclosure_grant_scope text,
     CONSTRAINT context_assembly_manifests_decision_position_check CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT context_assembly_manifests_destination_pair CHECK (((((destination_context_manifest_id IS NULL) AND (outbound_disclosure_manifest_id IS NULL)) OR ((destination_context_manifest_id IS NOT NULL) AND (outbound_disclosure_manifest_id IS NOT NULL))) IS TRUE)),
-    CONSTRAINT context_assembly_manifests_disclosure_grant_scope_check CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'research_tool_v1'::text]))),
+    CONSTRAINT context_assembly_manifests_disclosure_grant_scope_check CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'research_tool_v1'::text, 'manuscript_embedding_v1'::text]))),
     CONSTRAINT context_assembly_manifests_disclosure_grant_shape CHECK (((disclosure_grant_id IS NULL) = (disclosure_grant_scope IS NULL))),
     CONSTRAINT context_assembly_manifests_manifest_role_check CHECK ((manifest_role = ANY (ARRAY['decision'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text]))),
     CONSTRAINT context_assembly_manifests_sufficiency_check CHECK ((sufficiency = ANY (ARRAY['complete'::text, 'blocked'::text]))),
@@ -4239,6 +4241,7 @@ CREATE POLICY tool_calls_exact_scope ON storyos.tool_calls USING (((owner_user_i
 GRANT SELECT,INSERT ON TABLE storyos.tool_calls TO storyos_runtime;
 
 GRANT UPDATE(state, refusal, destination_attempt_id, attempt, effect_outcome, result_text, result_digest, result_bytes) ON TABLE storyos.tool_calls TO storyos_runtime;
+
 
 -- Activity Run Events. An append-only record of the AgentRun: one `tool_call_settled` event for each
 -- resolved ToolCall, one `tool_call_late_result` event when a result arrived after the fence of a
