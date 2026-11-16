@@ -41,6 +41,7 @@ fn each_current_mapping_declares_search_manuscript_with_a_strict_schema() {
             bound: &[],
             model_registration_revision: revision,
             skill_catalog: false,
+            memory_use: false,
         })
         .tools
         .into_iter()

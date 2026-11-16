@@ -4273,6 +4273,35 @@ CREATE POLICY agent_run_events_exact_scope ON storyos.agent_run_events USING (((
 
 GRANT SELECT,INSERT ON TABLE storyos.agent_run_events TO storyos_runtime;
 
+-- Memory Entry reads (ADR 0094 sections 4 and 8). A settled `read_memory_entry` call writes one row in
+-- the transaction that settles it: the ToolCall, its Run, and the entry version that StoryOS gave to
+-- the Run. The newest row of an entry is the time of its last read. A refused read writes no row. The
+-- runtime role can only read and insert them.
+
+CREATE TABLE storyos.memory_entry_reads (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    tool_call_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    memory_entry_id uuid NOT NULL,
+    version numeric(20,0) NOT NULL,
+    read_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    CONSTRAINT memory_entry_reads_pkey PRIMARY KEY (owner_user_id, project_id, tool_call_id),
+    CONSTRAINT memory_entry_reads_tool_call_fkey FOREIGN KEY (owner_user_id, project_id, tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL,
+    CONSTRAINT memory_entry_reads_run_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT memory_entry_reads_version_fkey FOREIGN KEY (owner_user_id, project_id, memory_entry_id, version) REFERENCES storyos.memory_entry_versions(owner_user_id, project_id, memory_entry_id, version) MATCH FULL
+);
+
+CREATE INDEX memory_entry_reads_entry_idx ON storyos.memory_entry_reads USING btree (owner_user_id, project_id, memory_entry_id, read_at);
+
+ALTER TABLE storyos.memory_entry_reads ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_entry_reads FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_entry_reads_exact_scope ON storyos.memory_entry_reads USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.memory_entry_reads TO storyos_runtime;
+
 -- Source Snapshots and Source Gaps. The settlement of a research ToolCall writes them in its own
 -- transaction: one immutable Snapshot for each captured search entry or page, and one Gap for each
 -- requested URL that the server reported as failed, empty, or missing. The revisions of one URL in a

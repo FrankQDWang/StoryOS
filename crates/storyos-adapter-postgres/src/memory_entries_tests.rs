@@ -44,14 +44,14 @@ pub(crate) async fn write_versions(admin: &Client, scope: &ProjectScope, version
     }
 }
 
-/// The Project Export Archive of the Project of `scope`, with the export identities of `lead`:
-/// each version row as its number, version, Memory revision, and state, in text order, and each
-/// head row as its Memory revision and next number.
-pub(crate) async fn archived(
+/// The rows of each file `canonical/<name>.json` of `names`, in order, of the Project Export
+/// Archive of the Project of `scope`, with the export identities of `lead`.
+pub(crate) async fn archived_rows<const N: usize>(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     lead: &str,
-) -> (Vec<Value>, Vec<Value>) {
+    names: [&str; N],
+) -> [Vec<Value>; N] {
     let (export, input) = export_command(scope, lead);
     issue_project_command_challenge(
         store,
@@ -75,11 +75,29 @@ pub(crate) async fn archived(
         panic!("the Project Export must return verified ZIP bytes");
     };
     let files = zip_store_files(&zip);
-    let packed = |name: &str| -> Vec<Value> {
-        let rows = &files.iter().find(|(file, _)| file == name).unwrap().1;
+    names.map(|name| {
+        let name = format!("canonical/{name}.json");
+        let rows = &files.iter().find(|(file, _)| *file == name).unwrap().1;
         serde_json::from_slice(rows).unwrap()
-    };
-    let mut versions: Vec<Value> = packed("canonical/memory_entry_versions.json")
+    })
+}
+
+/// The Project Export Archive of the Project of `scope`, with the export identities of `lead`:
+/// each version row as its number, version, Memory revision, and state, in text order, and each
+/// head row as its Memory revision and next number.
+pub(crate) async fn archived(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    lead: &str,
+) -> (Vec<Value>, Vec<Value>) {
+    let [versions, heads] = archived_rows(
+        store,
+        scope,
+        lead,
+        ["memory_entry_versions", "project_memory_heads"],
+    )
+    .await;
+    let mut versions: Vec<Value> = versions
         .iter()
         .map(|row| {
             json!([
@@ -91,7 +109,7 @@ pub(crate) async fn archived(
         })
         .collect();
     versions.sort_by_key(Value::to_string);
-    let heads: Vec<Value> = packed("canonical/project_memory_heads.json")
+    let heads: Vec<Value> = heads
         .iter()
         .map(|row| json!([row["memory_revision"], row["next_entry_number"]]))
         .collect();
@@ -101,7 +119,10 @@ pub(crate) async fn archived(
 
 /// The result of each statement of `statements` for the runtime role in the Scope of `scope`:
 /// the count of the rows or the SQL state of the refusal.
-async fn as_runtime(scope: &ProjectScope, statements: &[&str]) -> Vec<Result<u64, String>> {
+pub(crate) async fn as_runtime(
+    scope: &ProjectScope,
+    statements: &[&str],
+) -> Vec<Result<u64, String>> {
     let url = std::env::var("STORYOS_TEST_DATABASE_URL").expect("run through the script");
     let (mut runtime, connection) = tokio_postgres::connect(&url, NoTls).await.unwrap();
     tokio::spawn(connection);

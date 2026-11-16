@@ -27,6 +27,7 @@ fn exposure(bound: &[BoundTool], model_registration_revision: &str) -> ToolExpos
         bound,
         model_registration_revision,
         skill_catalog: false,
+        memory_use: false,
     })
 }
 
@@ -132,6 +133,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             bound: &[],
             model_registration_revision: revision,
             skill_catalog: true,
+            memory_use: true,
         })
     };
     let without_skill = |registration| {
@@ -139,14 +141,17 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
         exposure.tools.retain(|tool| {
             !matches!(
                 tool.spec.operation,
-                crate::ToolOperation::LoadSkill | crate::ToolOperation::ReadSkillResource
+                crate::ToolOperation::LoadSkill
+                    | crate::ToolOperation::ReadSkillResource
+                    | crate::ToolOperation::ReadMemoryEntry
             )
         });
         exposure
     };
     // The mapping `v8` and the fake tool loop mapping declare `…0e0104`, and a Run that pinned
     // the Registration of the mapping `v7` keeps `…0e0103`. Each declares `load_skill` and
-    // `read_skill_resource` only for a Run whose pinned catalog has a Skill (ADR 0089 section 3).
+    // `read_skill_resource` only for a Run whose pinned catalog has a Skill (ADR 0089 section 3),
+    // and `read_memory_entry` only for a Run whose captured settings have use (ADR 0094 section 4).
     for (revision, registration) in [
         (
             HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
@@ -195,6 +200,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
                 "read_chapter",
                 "search_manuscript",
                 "write_memory",
+                "read_memory_entry",
                 "finish"
             ]
         )
@@ -210,14 +216,14 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             "018f0000-0000-7001-8000-0000000e0104",
             "018f0000-0000-7001-8000-0000000e0103",
             "018f0000-0000-7001-8000-0000000e0102",
-            9,
+            10,
         )
     );
     let declared = host(&HOST_TOOL_REGISTRATION);
     assert_eq!(
         (
             declared.tools[4].declaration().parameters,
-            declared.tools[8].declaration().parameters,
+            declared.tools[9].declaration().parameters,
         ),
         (
             json!({
