@@ -24,6 +24,7 @@ import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import { ProjectConversationList } from "./project-conversation-list.tsx";
 import { readOpenedConversation, type OpenedConversation, type OpenedRun } from "./project-conversation-read.ts";
 import { ResearchTurn, researchDecision } from "./research-turn.tsx";
+import { ManuscriptUseList } from "./manuscript-use-list.tsx";
 import { RunResultList } from "./run-result-list.tsx";
 import { SkillUseList } from "./skill-use-list.tsx";
 import type { ProposalDestination } from "./proposal-navigation.ts";
@@ -725,7 +726,8 @@ export function WritingAssistantPanel({
                   onNavigate={onNavigateProposal} />
                 : <>
                   {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
-                  {exchange.run === undefined ? null : <SkillUseList run={exchange.run} />}
+                  {exchange.run === undefined ? null
+                    : <><SkillUseList run={exchange.run} /><ManuscriptUseList run={exchange.run} /></>}
                   {exchange.run === undefined || context === undefined || !researchDecision(exchange.run) ? null
                     : <ResearchTurn context={context} run={exchange.run} history />}
                   {exchange.run?.decision.kind !== "prose_change" ? null
@@ -749,6 +751,7 @@ export function WritingAssistantPanel({
                   sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal}>{useResearch}</RunResultList>
                 : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
                   <SkillUseList run={run} />
+                  <ManuscriptUseList run={run} />
                   {context === undefined ? null : <ResearchTurn context={context} run={run}>{useResearch}</ResearchTurn>}
                   {run.decision.kind !== "prose_change" ? null : <ProposalLocationLinks locations={run.decision.locations ?? []}
                     tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} />}</>}
