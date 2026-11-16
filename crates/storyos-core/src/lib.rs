@@ -28,6 +28,7 @@ mod host_tool;
 mod instruction_binding;
 mod load_skill;
 mod manuscript_payload;
+mod manuscript_use;
 mod memory_entry;
 mod memory_index;
 mod model_output;
@@ -199,6 +200,7 @@ pub use manuscript_payload::{
     ManuscriptPayload, VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
     upgrade_legacy_manuscript,
 };
+pub use manuscript_use::{ManuscriptUse, StoredManuscriptCall, manuscript_uses};
 pub use memory_entry::{
     MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference,
     MemorySourceReferenceRead, memory_revision_pin, read_memory_source_references,

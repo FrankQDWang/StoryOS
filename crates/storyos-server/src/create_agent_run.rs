@@ -222,6 +222,21 @@ pub(super) async fn get_agent_run(
                     })
                     .collect()
             }),
+        manuscript_uses: record
+            .manuscript_uses
+            .filter(|uses| !uses.is_empty())
+            .map(|uses| {
+                uses.into_iter()
+                    .map(|manuscript_use| match manuscript_use {
+                        storyos_core::ManuscriptUse::ChapterRead { chapter_id, title } => {
+                            contracts::ManuscriptUseInspect::ChapterRead { chapter_id, title }
+                        }
+                        storyos_core::ManuscriptUse::KeywordSearch { query } => {
+                            contracts::ManuscriptUseInspect::KeywordSearch { query }
+                        }
+                    })
+                    .collect()
+            }),
         model_attempt: inspect_model(record.model.as_ref()),
         active_compaction: inspect_active_compaction(record.compactions.last()),
         compactions: (!record.compactions.is_empty()).then(|| {
