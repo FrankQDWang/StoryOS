@@ -127,6 +127,7 @@ async fn a_read_after_a_write_of_the_same_run_gives_the_current_version_and_the_
 
     let text = read_result(&admin, &scope, 1).await;
     let created = "The Host created the Memory entry 1 with the title \"林舟\".";
+    let write = call_id(&admin, &run_id, "call_write_memory_0").await;
     let read = call_id(&admin, &run_id, "call_read_memory_entry_0").await;
     assert_eq!(
         (
@@ -145,19 +146,28 @@ async fn a_read_after_a_write_of_the_same_run_gives_the_current_version_and_the_
                     finish()
                 ]
             ]),
-            vec![json!("true 1 1")],
+            vec![json!("t 1 1")],
             json!([
                 "decision",
                 2,
-                [[
-                    "call_read_memory_entry_0",
-                    boundary("call_read_memory_entry_0", "ok", &text)
-                ]],
+                [
+                    [
+                        "call_write_memory_0",
+                        boundary("call_write_memory_0", "ok", created)
+                    ],
+                    [
+                        "call_read_memory_entry_0",
+                        boundary("call_read_memory_entry_0", "ok", &text)
+                    ]
+                ],
                 false
             ]),
             json!([
-                [["data_only", "ok"]],
-                [["memory_read_result", read, "exact_required"]]
+                [["data_only", "ok"], ["data_only", "ok"]],
+                [
+                    ["tool_result", write, "exact_required"],
+                    ["memory_read_result", read, "exact_required"]
+                ]
             ]),
             true,
         )
@@ -212,14 +222,14 @@ async fn a_read_of_a_deleted_or_missing_entry_is_refused_and_each_run_reads_its_
         ),
         (
             json!(["completed", [refused(), refused(), settled(&lin), finish()]]),
-            vec![json!("true 1 1")],
+            vec![json!("t 1 1")],
             vec![
                 json!("tool_result"),
                 json!("tool_result"),
                 json!("memory_read_result")
             ],
             json!(["completed", [settled(&bell), finish()]]),
-            vec![json!("true 1 1")],
+            vec![json!("t 1 1")],
         )
     );
 }
@@ -415,8 +425,7 @@ async fn a_run_with_no_memory_use_declares_no_read() {
 
     let declared: Value = admin
         .query_one(
-            "SELECT jsonb_path_query_array((payload #>> '{wire,serialized_payload}')::jsonb,
-                      '$.tools[*].name')::text
+            "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'tools')::text
                FROM storyos.model_attempts
               WHERE run_id = $1::text::uuid AND decision_position = 0",
             &[&run_id],
