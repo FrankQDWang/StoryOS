@@ -3335,6 +3335,124 @@
       },
       "triggers": {}
     },
+    "memory_entry_versions": {
+      "columns": {
+        "cause": {
+          "default": null,
+          "nullable": false,
+          "type": "jsonb"
+        },
+        "description": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "entry_number": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "entry_type": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "memory_entry_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "memory_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "origin": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "recorded_at": {
+          "default": "statement_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "source_references": {
+          "default": null,
+          "nullable": false,
+          "type": "jsonb"
+        },
+        "state": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "text": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "title": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "version": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        }
+      },
+      "constraints": {
+        "memory_entry_versions_bounds": "CHECK (((entry_number >= (1)::numeric) AND (entry_number <= '18446744073709551615'::numeric) AND (version >= (1)::numeric) AND (version <= '18446744073709551615'::numeric) AND (memory_revision >= (1)::numeric) AND (memory_revision <= '18446744073709551615'::numeric)))",
+        "memory_entry_versions_number_key": "UNIQUE (owner_user_id, project_id, entry_number, version)",
+        "memory_entry_versions_origin_check": "CHECK ((origin = ANY (ARRAY['author_request'::text, 'conversation'::text, 'chapter'::text])))",
+        "memory_entry_versions_pkey": "PRIMARY KEY (owner_user_id, project_id, memory_entry_id, version)",
+        "memory_entry_versions_project_fkey": "FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL",
+        "memory_entry_versions_revision_key": "UNIQUE (owner_user_id, project_id, memory_entry_id, memory_revision)",
+        "memory_entry_versions_shape": "CHECK (((char_length(title) >= 1) AND (char_length(description) >= 1) AND (jsonb_typeof(cause) = 'object'::text) AND (jsonb_typeof(source_references) = 'array'::text)))",
+        "memory_entry_versions_state_check": "CHECK ((state = ANY (ARRAY['current'::text, 'deleted'::text])))",
+        "memory_entry_versions_type_check": "CHECK ((entry_type = ANY (ARRAY['writing_preference'::text, 'foreshadowing'::text, 'character'::text, 'relationship'::text, 'major_event'::text, 'other'::text])))"
+      },
+      "indexes": {
+        "memory_entry_versions_number_key": "CREATE UNIQUE INDEX memory_entry_versions_number_key ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, entry_number, version)",
+        "memory_entry_versions_one_number": "CREATE UNIQUE INDEX memory_entry_versions_one_number ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, entry_number) WHERE (version = (1)::numeric)",
+        "memory_entry_versions_pkey": "CREATE UNIQUE INDEX memory_entry_versions_pkey ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, memory_entry_id, version)",
+        "memory_entry_versions_revision_idx": "CREATE INDEX memory_entry_versions_revision_idx ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, memory_revision)",
+        "memory_entry_versions_revision_key": "CREATE UNIQUE INDEX memory_entry_versions_revision_key ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, memory_entry_id, memory_revision)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_entry_versions_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "migration_phase_checksums": {
       "columns": {
         "attempt_id": {
@@ -5067,6 +5185,59 @@
       "privileges": [
         "storyos_owner=arwdDxt/storyos_owner",
         "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "project_memory_heads": {
+      "columns": {
+        "memory_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "next_entry_number": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        }
+      },
+      "constraints": {
+        "project_memory_heads_bounds": "CHECK (((memory_revision >= (1)::numeric) AND (memory_revision <= '18446744073709551615'::numeric) AND (next_entry_number >= (1)::numeric) AND (next_entry_number <= '18446744073709551615'::numeric)))",
+        "project_memory_heads_pkey": "PRIMARY KEY (owner_user_id, project_id)",
+        "project_memory_heads_project_fkey": "FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL"
+      },
+      "indexes": {
+        "project_memory_heads_pkey": "CREATE UNIQUE INDEX project_memory_heads_pkey ON storyos.project_memory_heads USING btree (owner_user_id, project_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "project_memory_heads_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=arw/storyos_owner"
       ],
       "row_level_security": {
         "enabled": true,
