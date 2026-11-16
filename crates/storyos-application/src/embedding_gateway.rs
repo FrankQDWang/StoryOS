@@ -154,7 +154,7 @@ pub async fn dispatch_embedding(
     input: &EmbeddingInput,
 ) -> Result<EmbeddingResult, ProjectReadError> {
     let refused = |refusal: EmbeddingRefusal| {
-        tracing::Span::current().record("observation", refusal.code());
+        tracing::Span::current().record("observation", refusal.code().diagnostic());
         Ok(EmbeddingResult::Refused(refusal))
     };
     let Some(configured) = registration else {
@@ -174,7 +174,7 @@ pub async fn dispatch_embedding(
     let observation = adapter.exchange(prepared.prepared).await;
     let (record, vector) = settle(configured, &observation);
     let span = tracing::Span::current();
-    span.record("observation", record.settlement.as_str());
+    span.record("observation", record.settlement.as_str().diagnostic());
     match record.usage {
         EmbeddingUsage::Reported { input_tokens } => {
             span.record("usage", "reported");
