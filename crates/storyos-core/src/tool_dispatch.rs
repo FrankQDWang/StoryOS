@@ -81,6 +81,7 @@ impl ToolEffectRequest {
             | ToolIntake::LoadSkill { .. }
             | ToolIntake::ReadSkillResource { .. }
             | ToolIntake::ReadChapter { .. }
+            | ToolIntake::SearchManuscript { .. }
             | ToolIntake::WriteMemory(_) => Vec::new(),
         };
         Some(Self {

@@ -38,6 +38,8 @@ pub enum ToolOperation {
     ReadSkillResource,
     /// The Host Tool with which the Agent reads the text of one Chapter (ADR 0095).
     ReadChapter,
+    /// The Host Tool with which the Agent finds an exact term in the manuscript (ADR 0095).
+    SearchManuscript,
     /// The Host Tool with which the Agent writes one Memory Entry on the request of the author
     /// (ADR 0094 section 5).
     WriteMemory,
@@ -142,6 +144,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::LOAD_SKILL_TOOL_SPEC,
         &crate::READ_SKILL_RESOURCE_TOOL_SPEC,
         &crate::READ_CHAPTER_TOOL_SPEC,
+        &crate::SEARCH_MANUSCRIPT_TOOL_SPEC,
         &crate::WRITE_MEMORY_TOOL_SPEC,
     ]
     .into_iter()
@@ -177,6 +180,9 @@ pub enum ToolIntake {
     },
     ReadChapter {
         chapter: i64,
+    },
+    SearchManuscript {
+        query: String,
     },
     WriteMemory(crate::MemoryWrite),
 }
@@ -214,6 +220,14 @@ struct FetchArguments {
 #[serde(deny_unknown_fields)]
 struct NoArguments {}
 
+/// Whether `query` fits the query rule: 1 to 512 characters, not only white space, and no
+/// control character.
+pub(crate) fn query_fits(query: &str) -> bool {
+    !query.trim().is_empty()
+        && query.chars().count() <= QUERY_MAX_CHARS
+        && !query.chars().any(char::is_control)
+}
+
 impl ToolSpec {
     /// Validates the complete arguments of one function call against the typed intake. A search
     /// takes a query of 1 to 512 characters and an optional result count of 1 to 10. A fetch
@@ -229,10 +243,7 @@ impl ToolSpec {
                     result_count,
                 } = SearchArguments::deserialize(arguments)
                     .map_err(|_| IntakeRefusal::Malformed)?;
-                if query.trim().is_empty()
-                    || query.chars().count() > QUERY_MAX_CHARS
-                    || query.chars().any(char::is_control)
-                {
+                if !query_fits(&query) {
                     return Err(IntakeRefusal::Query);
                 }
                 if result_count.is_some_and(|count| count == 0 || count > RESULT_COUNT_MAX) {
@@ -266,6 +277,7 @@ impl ToolSpec {
             ToolOperation::LoadSkill => crate::load_skill::intake(arguments),
             ToolOperation::ReadSkillResource => crate::read_skill_resource::intake(arguments),
             ToolOperation::ReadChapter => crate::read_chapter::intake(arguments),
+            ToolOperation::SearchManuscript => crate::search_manuscript::intake(arguments),
             ToolOperation::WriteMemory => crate::write_memory::intake(arguments),
         }
     }
@@ -326,6 +338,7 @@ impl ServerArguments {
                 | ToolIntake::LoadSkill { .. }
                 | ToolIntake::ReadSkillResource { .. }
                 | ToolIntake::ReadChapter { .. }
+                | ToolIntake::SearchManuscript { .. }
                 | ToolIntake::WriteMemory(_),
             )
             | (
@@ -338,6 +351,7 @@ impl ServerArguments {
                 | ToolIntake::LoadSkill { .. }
                 | ToolIntake::ReadSkillResource { .. }
                 | ToolIntake::ReadChapter { .. }
+                | ToolIntake::SearchManuscript { .. }
                 | ToolIntake::WriteMemory(_),
             ) => {
                 return None;

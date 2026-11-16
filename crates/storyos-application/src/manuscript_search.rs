@@ -4,7 +4,8 @@ use crate::{CanonicalSnapshot, ChapterId, ProjectReadError, ProjectScope};
 
 pub const MANUSCRIPT_SEARCH_LIMIT_PROFILE_REVISION: &str = "storyos.foundation.absolute.v1";
 pub(super) const MANUSCRIPT_SEARCH_PROJECTION_KIND: &str = "manuscript_search";
-pub(super) const MANUSCRIPT_SEARCH_PAGE_ITEM_LIMIT: usize = 500;
+pub(super) const MANUSCRIPT_SEARCH_PAGE_ITEM_LIMIT: usize =
+    storyos_core::MANUSCRIPT_SEARCH_MATCH_LIMIT;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ManuscriptSearchSelection {
@@ -179,12 +180,12 @@ fn evaluate_search(
             for block in &chapter.blocks {
                 let mut byte = 0;
                 let mut utf16 = 0;
-                while let Some(found) = block.text[byte..].find(&request.query_text) {
+                // The author search and the Host Tool `search_manuscript` have one exact match.
+                for start_byte in storyos_core::exact_matches(&block.text, &request.query_text) {
                     if items.len() == MANUSCRIPT_SEARCH_PAGE_ITEM_LIMIT {
                         truncated = true;
                         break;
                     }
-                    let start_byte = byte + found;
                     utf16 += utf16_len(&block.text[byte..start_byte]);
                     items.push(ManuscriptSearchMatch {
                         chapter_id: chapter.chapter_id.clone(),

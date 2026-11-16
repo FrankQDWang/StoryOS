@@ -17,6 +17,8 @@
 //! - `SCRIPT:load_skill ...` gets the load script of `load_plan`.
 //! - `SCRIPT:read_skill_resource ...` gets the resource script of `skill_resource_plan`.
 //! - `SCRIPT:read_chapter ...` gets the Chapter read script of `read_chapter_plan`.
+//! - `SCRIPT:search_manuscript ...` gets the manuscript search script of
+//!   `search_manuscript_plan`.
 //! - `SCRIPT:write_memory ...` gets the Memory write script of `write_memory_plan`.
 //! - `SCRIPT:partial`, `SCRIPT:incomplete`, `SCRIPT:failed`, `SCRIPT:cancelled`,
 //!   `SCRIPT:unknown`, `SCRIPT:tool_partial`, and `SCRIPT:refusal` get the response outcome of
@@ -52,6 +54,9 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
         return planned;
     }
     if let Some(planned) = crate::read_chapter_plan::plan(request) {
+        return planned;
+    }
+    if let Some(planned) = crate::search_manuscript_plan::plan(request) {
         return planned;
     }
     if let Some(planned) = crate::write_memory_plan::plan(request) {

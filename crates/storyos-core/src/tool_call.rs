@@ -109,6 +109,7 @@ impl ValidatedToolCall {
                 json!({ "skill": skill, "path": path })
             }
             ToolIntake::ReadChapter { chapter } => json!({ "chapter": chapter }),
+            ToolIntake::SearchManuscript { query } => json!({ "query": query }),
             ToolIntake::WriteMemory(write) => write.arguments(),
         }
     }

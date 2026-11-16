@@ -193,6 +193,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
                 "load_skill",
                 "read_skill_resource",
                 "read_chapter",
+                "search_manuscript",
                 "write_memory",
                 "finish"
             ]
@@ -209,14 +210,14 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             "018f0000-0000-7001-8000-0000000e0104",
             "018f0000-0000-7001-8000-0000000e0103",
             "018f0000-0000-7001-8000-0000000e0102",
-            8,
+            9,
         )
     );
     let declared = host(&HOST_TOOL_REGISTRATION);
     assert_eq!(
         (
             declared.tools[4].declaration().parameters,
-            declared.tools[7].declaration().parameters,
+            declared.tools[8].declaration().parameters,
         ),
         (
             json!({
