@@ -104,7 +104,7 @@ export async function verifyProductionProjectSettings(context: BrowserContext): 
     assert.deepEqual([errors, dialogs], [[], []]);
 
     await assertProjectReceipts([setup.projectId], { projects: 1, receipts: { createProject: 1,
-      updateProjectAssistance: 1, createVolume: 1, createChapter: 1, updateProjectInstruction: 2 } });
+      updateProjectAssistance: 1, createVolume: 1, createChapter: 1, applyAuthorEdit: 2, updateProjectInstruction: 2 } });
   } finally {
     for (const close of started.reverse()) await close();
   }
