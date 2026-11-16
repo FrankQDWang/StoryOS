@@ -78,6 +78,15 @@ The rules of a Host Tool apply ([ADR 0091](0091-replace-the-typed-reply-form-wit
 - Before the hybrid search returns a passage, the Host reads the current text of the Chapter. A passage whose text changed after its vector was made is not returned from the vector side.
 - Agent Memory has no vector (ADR 0094).
 
+[S7-C2b1](https://github.com/FrankQDWang/StoryOS/issues/1597) recorded these rules on 2026-11-17:
+
+- **The image.** Local development, the checks, the exact-dist setup, and the recovery drill use `pgvector/pgvector:0.8.7-pg16-bookworm` with the digest of the [record](../research/embedding-and-pgvector-probe-2026-11-16.md) of S7-C1 and `--locale=C.UTF-8`. One variable of `scripts/lib/controlled-postgres.sh` holds it.
+- **The extension.** The migration `0002_passage_vectors.sql` creates the extension in the schema `extensions` and the table `storyos.passage_vectors` only when the database offers `vector`. A database without it activates with the same sources and the same storage identity, and it has no vector table. The store read `vector_store_available` answers if the table exists.
+- **The passages.** The Core function `cut_passages` cuts the blocks of a Chapter in block order. A passage is a sequence of whole blocks, joined with a line feed, of at most `PASSAGE_CHARACTER_LIMIT` (800) characters. A block with no letter and no digit is a scene separator: it ends the passage before it and is in no passage. A block above the limit becomes two or more passages, cut after the last sentence end and its closing marks before the limit, or at the limit. The cut has the revision name `storyos.passage-cut.v1`. The digest of a passage is the SHA-256 of its text.
+- **The request text.** One context line with the title of the Volume and the title of the Chapter, and then the text of the passage. The digest does not include the context line, so a new title does not make a vector stale.
+- **The rows.** One row for each passage: the Project Scope, the Chapter, the Embedding Registration revision, the cut revision, the digest, the `vector(1024)` value, and the time. The row has no text, no block identity, and no position. The table has forced row level security with the exact Scope policy and no vector index.
+- **The function.** The application function `index_chapter_passages` makes the rows of one Chapter equal to its current passages for the current Registration and cut revision. It sends one embedding request with the cause `passage_index` for each passage with no row, and it deletes each other row of the Chapter. For a Chapter that is not live in the Project Scope, it deletes each row. A refused or failed request writes no row, and the result names the passage.
+
 ### 3. The embedding source
 
 - The embedding model is `doubao-embedding-vision-251215` of Volcengine Ark, with text input only and 1,024 dimensions. The request goes through the model destination that the operator of the deployment configures ([ADR 0048](0048-use-the-deployment-model-destination-by-default.md)).
