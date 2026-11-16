@@ -100,6 +100,7 @@ impl ProjectCommand for CreateAgentRunInput {
     type Plan = (
         AssistancePlan,
         ResearchPlan,
+        Option<&'static storyos_core::EmbeddingRegistration>,
         Vec<storyos_core::SkillRequirement>,
     );
     type Settlement = CreateAgentRunSettlement;
@@ -174,8 +175,11 @@ impl ProjectCommand for CreateAgentRunInput {
             },
         };
         let research = research_plan(client, scope, self.research).await?;
+        let embedding =
+            crate::project_embedding_binding::embedding_plan(client, scope, self.embedding).await?;
         Ok(Classification {
-            outcome: outcome.map_applied(|()| ((), (assistance, research, skill_requirements))),
+            outcome: outcome
+                .map_applied(|()| ((), (assistance, research, embedding, skill_requirements))),
             admission: Admission::Project(ProjectActionClass::AgentRunStart),
             heads: ReceiptHeads::default(),
             zero_receipt: ZeroReceipt::Reason,
@@ -188,9 +192,10 @@ impl ProjectCommand for CreateAgentRunInput {
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
         _sequences: &ActivitySequences,
-        (assistance, research, skill_requirements): (
+        (assistance, research, embedding, skill_requirements): (
             AssistancePlan,
             ResearchPlan,
+            Option<&'static storyos_core::EmbeddingRegistration>,
             Vec<storyos_core::SkillRequirement>,
         ),
         _applied: (),
@@ -199,6 +204,15 @@ impl ProjectCommand for CreateAgentRunInput {
             insert_research_binding(client, envelope, offer)
                 .await
                 .map_err(unavailable)?;
+        }
+        if let Some(registration) = embedding {
+            crate::project_embedding_binding::insert_embedding_binding(
+                client,
+                envelope,
+                registration,
+            )
+            .await
+            .map_err(unavailable)?;
         }
         let assistance = match assistance {
             AssistancePlan::Current(record) => record,

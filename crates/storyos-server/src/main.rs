@@ -56,6 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into());
     }
     let model_destination = settings.model_destination()?;
+    let embedding = settings.embedding_registration(model_destination.as_ref())?;
     let skills = storyos_server::read_skill_directory(settings.skills_dir.as_deref())?;
     let assets = storyos_server::WebAssetSet::load(web_root)?;
     or_exit(
@@ -124,6 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         model_destination,
+        embedding,
         skills: std::sync::Arc::new(skills),
     };
     println!("STORYOS_SERVER_URL={printed_server_url}");
