@@ -47,6 +47,11 @@ const SKILL_LINES = ["使用了你选择的技能「dialogue-style-guide」", "�
 const WITH_USES = { ...WITH_SKILLS, manuscript_uses: [{ kind: "keyword_search", query: "Lin" },
   { kind: "chapter_read", chapter_id: CHAPTER, title: "Fog" }] };
 const USE_LINES = ["在全书中搜索了「Lin」", "查阅了章节「Fog」"];
+// ADR 0094 section 5: each Memory write of the turn is one line at the position of its result.
+const create = { kind: "memory_write", decision_id: PROPOSAL_DECISION, action: "create", title: "铜铃" };
+const change = { kind: "memory_write", decision_id: PROPOSAL_DECISION, action: "change", title: "铜铃声" };
+const remove = { kind: "memory_write", decision_id: "018f0000-0000-7001-8000-000000000d27", action: "delete", title: "旧雨" };
+const WITH_WRITES = completedRun("018f0000-0000-7001-8000-000000000d32", [create, proposal, remove, answer]);
 const ARTIFACT_LINES = [
   "High water was at 10.42. The port log is not available.",
   "High water at Liverpool was at 10.42. [1]",
@@ -114,6 +119,8 @@ it.each([
     ...USE_LINES, ...ARTIFACT_LINES, "用到故事里", PROPOSAL_SENTENCE, LOCATION, ANSWER]],
   ["a Proposal and a final answer text", completedRun("018f0000-0000-7001-8000-000000000d31", [proposal, answer]),
     [PROPOSAL_SENTENCE, LOCATION, ANSWER]],
+  ["a create, a Proposal, a delete, and a final answer text", WITH_WRITES,
+    ["已记住：铜铃", PROPOSAL_SENTENCE, LOCATION, "已删除记忆：旧雨", ANSWER]],
 ])("shows each result of a Run with %s in the order of the model", async (_, run, expected) => {
   await inActEnvironment(async () => {
     const panel = await renderPanel([run], { message: "Check the tides and revise the passage.",
@@ -150,3 +157,28 @@ it.each([
     }
   });
 });
+
+it("shows a Memory write as the result of a Run with no other result, also of a cancelled Run in a history turn",
+  async () => {
+    // The author cancelled the earlier Run after its change settled. The entry is stored, so the Run read gives it.
+    const earlier = { ...completedRun("018f0000-0000-7001-8000-000000000d42", [change]), status: "cancelled",
+      decision: { kind: "absent" } };
+    const current = completedRun("018f0000-0000-7001-8000-000000000d43", [create]);
+    await inActEnvironment(async () => {
+      const panel = await renderPanel([earlier, current], { message: "记住铜铃。",
+        correlationId: "018f0000-0000-7001-8000-000000000d18", idempotencyKey: "018f0000-0000-7001-8000-000000000d19",
+        snapshotId: "018f0000-0000-7001-8000-000000000d1a", runId: current.run_id,
+        history: [{ requestId: "018f0000-0000-7001-8000-000000000d1b", chapterId: CHAPTER, conversationId: CONVERSATION,
+          runId: earlier.run_id, run: earlier, message: "改成铜铃声。", status: "cancelled" }] });
+      try {
+        const history = panel.host.querySelector(`[data-assistant-history-run="${earlier.run_id}"]`);
+        const turn = panel.host.querySelector("[data-assistant-current-run]");
+        // The line has no control and no link, and the sentence for a Run with no result is not there.
+        expect([shownResults(history), shownResults(turn),
+          [history, turn].map(section => section?.querySelectorAll("a, button").length)])
+          .toEqual([["已记住：铜铃声"], ["已记住：铜铃"], [0, 0]]);
+      } finally {
+        await panel.remove();
+      }
+    });
+  });

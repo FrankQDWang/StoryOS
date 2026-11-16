@@ -471,7 +471,9 @@ export type ToolCallInspect = { "kind": "search", query: string, outcome: ToolCa
 
 export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, locations?: Array<ProseChangeLocationInspect>, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "tool_request", decision_id: string, calls: Array<ToolCallInspect>, } | { "kind": "research_synthesis", decision_id: string, selected: boolean, research_artifact_id: string, continuation: OptionalContinuationInspect, };
 
-export type AgentRunResultInspect = { "kind": "proposal", decision_id: string, proposal_id: string, locations: Array<ProseChangeLocationInspect>, } | { "kind": "research_artifact", decision_id: string, research_artifact_id: string, } | { "kind": "answer", decision_id: string, text: string, };
+export type AgentRunResultInspect = { "kind": "proposal", decision_id: string, proposal_id: string, locations: Array<ProseChangeLocationInspect>, } | { "kind": "research_artifact", decision_id: string, research_artifact_id: string, } | { "kind": "memory_write", decision_id: string, action: MemoryWriteActionInspect, title: string, } | { "kind": "answer", decision_id: string, text: string, };
+
+export type MemoryWriteActionInspect = "create" | "change" | "delete";
 
 export type SkillUseInspect = { "provenance": "author_selected", name: string, } | { "provenance": "agent_selected", name: string, reason: string, };
 

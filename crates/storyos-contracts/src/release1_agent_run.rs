@@ -531,8 +531,25 @@ pub enum AgentRunResultInspect {
         decision_id: String,
         research_artifact_id: String,
     },
+    /// The Memory Entry change that one settled `write_memory` call wrote, with the title of the
+    /// version that it wrote (ADR 0094 section 5). It has no entry identity and no entry text
+    /// (ADR 0040).
+    MemoryWrite {
+        decision_id: String,
+        action: MemoryWriteActionInspect,
+        title: String,
+    },
     /// The final answer text of a completed Run. A final answer with no text is no result.
     Answer { decision_id: String, text: String },
+}
+
+/// The action of one `write_memory` call.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryWriteActionInspect {
+    Create,
+    Change,
+    Delete,
 }
 
 /// What one ToolCall asked for, from its validated arguments, and how it settled.

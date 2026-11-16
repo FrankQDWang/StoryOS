@@ -78,6 +78,18 @@ pub enum MemoryWriteAction {
     Delete,
 }
 
+impl MemoryWriteAction {
+    /// The action that wrote one stored version: a deleted state is a delete, the first version of
+    /// an entry is a create, and each other version is a change.
+    pub fn of_version(state: MemoryEntryState, first_version: bool) -> Self {
+        match (state, first_version) {
+            (MemoryEntryState::Deleted, _) => Self::Delete,
+            (MemoryEntryState::Current, true) => Self::Create,
+            (MemoryEntryState::Current, false) => Self::Change,
+        }
+    }
+}
+
 /// The validated arguments of one `write_memory` call. A null value is `None`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryWrite {
