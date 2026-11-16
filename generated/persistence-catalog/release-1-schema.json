@@ -623,12 +623,12 @@
         },
         "author_message": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "text"
         },
         "chapter_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "claim_generation": {
@@ -638,7 +638,7 @@
         },
         "conversation_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "fence_token": {
@@ -658,7 +658,7 @@
         },
         "memory_settings_revision": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "model_registration_revision": {
@@ -698,13 +698,18 @@
         },
         "receipt_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "run_id": {
           "default": null,
           "nullable": false,
           "type": "uuid"
+        },
+        "run_kind": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
         },
         "settlement": {
           "default": null,
@@ -728,13 +733,15 @@
         "agent_runs_binding_registration_fkey": "FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) MATCH FULL",
         "agent_runs_claim_generation_check": "CHECK ((claim_generation >= 0))",
         "agent_runs_fence_token_check": "CHECK ((fence_token >= 0))",
-        "agent_runs_owner_user_id_project_id_conversation_id_memory_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision) MATCH FULL",
+        "agent_runs_kind_shape": "CHECK (((((run_kind = 'author'::text) AND (conversation_id IS NOT NULL) AND (memory_settings_revision IS NOT NULL) AND (chapter_id IS NOT NULL) AND (author_message IS NOT NULL) AND (receipt_id IS NOT NULL)) OR ((run_kind <> 'author'::text) AND (conversation_id IS NULL) AND (memory_settings_revision IS NULL) AND (chapter_id IS NULL) AND (author_message IS NULL) AND (receipt_id IS NULL))) IS TRUE))",
+        "agent_runs_owner_user_id_project_id_conversation_id_memory_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision)",
         "agent_runs_owner_user_id_project_id_grant_id_fkey": "FOREIGN KEY (owner_user_id, project_id, grant_id) REFERENCES storyos.project_destination_grants(owner_user_id, project_id, grant_id) MATCH FULL",
         "agent_runs_owner_user_id_project_id_project_model_use_bind_fkey": "FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision) MATCH FULL",
-        "agent_runs_owner_user_id_project_id_receipt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL",
+        "agent_runs_owner_user_id_project_id_receipt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id)",
         "agent_runs_pkey": "PRIMARY KEY (owner_user_id, project_id, run_id)",
         "agent_runs_predecessor_fk": "FOREIGN KEY (owner_user_id, project_id, predecessor_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)",
-        "agent_runs_project_instruction_revision_fkey": "FOREIGN KEY (owner_user_id, project_id, project_instruction_revision_id) REFERENCES storyos.project_instruction_revisions(owner_user_id, project_id, instruction_revision_id)"
+        "agent_runs_project_instruction_revision_fkey": "FOREIGN KEY (owner_user_id, project_id, project_instruction_revision_id) REFERENCES storyos.project_instruction_revisions(owner_user_id, project_id, instruction_revision_id)",
+        "agent_runs_run_kind_check": "CHECK ((run_kind = ANY (ARRAY['author'::text, 'memory_capture'::text, 'memory_consolidation'::text])))"
       },
       "indexes": {
         "agent_runs_binding_idx": "CREATE INDEX agent_runs_binding_idx ON storyos.agent_runs USING btree (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision)",
@@ -2057,7 +2064,7 @@
         },
         "receipt_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "run_id": {
@@ -2079,7 +2086,7 @@
         "context_assembly_manifests_manifest_role_check": "CHECK ((manifest_role = ANY (ARRAY['decision'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text])))",
         "context_assembly_manifests_owner_user_id_project_id_operat_fkey": "FOREIGN KEY (owner_user_id, project_id, operation_requirement_id) REFERENCES storyos.operation_requirements(owner_user_id, project_id, operation_requirement_id) MATCH FULL",
         "context_assembly_manifests_owner_user_id_project_id_operati_key": "UNIQUE (owner_user_id, project_id, operation_requirement_id)",
-        "context_assembly_manifests_owner_user_id_project_id_receip_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL",
+        "context_assembly_manifests_owner_user_id_project_id_receip_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id)",
         "context_assembly_manifests_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
         "context_assembly_manifests_pkey": "PRIMARY KEY (owner_user_id, project_id, context_assembly_manifest_id)",
         "context_assembly_manifests_sufficiency_check": "CHECK ((sufficiency = ANY (ARRAY['complete'::text, 'blocked'::text])))"
@@ -3439,7 +3446,7 @@
         },
         "conversation_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "decision_id": {
@@ -3516,7 +3523,7 @@
       "constraints": {
         "model_attempts_decision_position_check": "CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric)))",
         "model_attempts_dispatch_state_check": "CHECK ((dispatch_state = ANY (ARRAY['uncertain'::text, 'settled'::text])))",
-        "model_attempts_owner_user_id_project_id_conversation_id_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id) MATCH FULL",
+        "model_attempts_owner_user_id_project_id_conversation_id_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id)",
         "model_attempts_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
         "model_attempts_pkey": "PRIMARY KEY (owner_user_id, project_id, model_attempt_id)"
       },
@@ -3697,7 +3704,7 @@
         },
         "receipt_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "requirement_role": {
@@ -3713,7 +3720,7 @@
       },
       "constraints": {
         "operation_requirements_decision_position_check": "CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric)))",
-        "operation_requirements_owner_user_id_project_id_receipt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL",
+        "operation_requirements_owner_user_id_project_id_receipt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id)",
         "operation_requirements_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
         "operation_requirements_pkey": "PRIMARY KEY (owner_user_id, project_id, operation_requirement_id)",
         "operation_requirements_requirement_role_check": "CHECK ((requirement_role = ANY (ARRAY['primary'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text])))"

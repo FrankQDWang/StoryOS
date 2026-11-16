@@ -55,6 +55,9 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
         payload["operation_requirement"]["cause"] = serde_json::json!("tool_result_continuation");
         payload["operation_requirement"]["tool_results"] = serde_json::json!(sources);
     }
+    if record.operation_requirement.cause == ContextCause::HostSchedule {
+        payload["operation_requirement"]["cause"] = serde_json::json!("host_schedule");
+    }
     if let Some(sources) = &record.operation_requirement.earlier_author_messages {
         payload["operation_requirement"]["earlier_author_messages"] = serde_json::json!(sources);
     }
@@ -115,6 +118,7 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
             cause: match requirement.get("cause").map(serde_json::Value::as_str) {
                 None => ContextCause::AuthorRequest,
                 Some(Some("tool_result_continuation")) => ContextCause::ToolResultContinuation,
+                Some(Some("host_schedule")) => ContextCause::HostSchedule,
                 Some(_) => return None,
             },
             chapter_id: requirement.get("chapter_id")?.as_str()?.to_owned(),

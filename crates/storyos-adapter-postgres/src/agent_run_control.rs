@@ -4,7 +4,7 @@
 use storyos_application::{
     AgentRunControlRefusal, ProjectCommandError, ProjectScope, RefusableCommandError,
 };
-use storyos_core::AgentRunStatus;
+use storyos_core::{AgentRunKind, AgentRunStatus};
 use tokio_postgres::Client;
 
 use crate::command_sequence::unavailable;
@@ -27,7 +27,8 @@ pub(crate) enum FencedStatus {
 }
 
 /// Locks the AgentRun row of the Project and parses its status. A missing AgentRun is a refusal
-/// before Admission.
+/// before Admission. A background Run is not a Run of the author, so the three control commands
+/// refuse it as a missing Run (ADR 0094 section 5).
 pub(crate) async fn lock_agent_run(
     client: &Client,
     scope: &ProjectScope,
@@ -39,12 +40,13 @@ pub(crate) async fn lock_agent_run(
                     active_decision_position::text
                FROM storyos.agent_runs
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
+                AND run_id = $3::text::uuid AND run_kind = $4
               FOR UPDATE",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &run_id,
+                &AgentRunKind::Author.name(),
             ],
         )
         .await

@@ -153,11 +153,12 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                 &scope.project_id.as_ref(),
                 &run_id,
             ];
+            // A background Run is not a Run of the author (ADR 0094 section 5).
             let run = client
                 .query_opt(
                     "SELECT 1 FROM storyos.agent_runs
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                        AND run_id = $3::text::uuid",
+                        AND run_id = $3::text::uuid AND run_kind = 'author'",
                     &params,
                 )
                 .await
