@@ -121,6 +121,7 @@ mod agent_run_results;
 mod agent_run_retrieval;
 mod agent_run_retrieval_dispatch;
 mod agent_run_search_manuscript;
+mod agent_run_search_memory;
 mod agent_run_skill_uses;
 mod agent_run_steering;
 mod agent_run_submit_research;

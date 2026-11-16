@@ -10,6 +10,7 @@ mod read_plan;
 mod recovery_plan;
 mod research_plan;
 mod search_manuscript_plan;
+mod search_memory_plan;
 mod skill_resource_plan;
 mod tool_loop_plan;
 mod write_memory_plan;

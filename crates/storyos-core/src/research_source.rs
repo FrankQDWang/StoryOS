@@ -140,7 +140,8 @@ pub fn capture_research_sources(
         | ToolIntake::ReadChapter { .. }
         | ToolIntake::SearchManuscript { .. }
         | ToolIntake::WriteMemory(_)
-        | ToolIntake::ReadMemoryEntry { .. } => &[],
+        | ToolIntake::ReadMemoryEntry { .. }
+        | ToolIntake::SearchMemory { .. } => &[],
     };
     match (settlement.state, &settlement.result) {
         (ToolCallState::Settled, Some(result)) => match format {
