@@ -9,6 +9,7 @@ mod assemble_context;
 mod chapter_list;
 mod compact_active_context;
 mod continuation_input;
+mod conversation_retention;
 mod create_admission;
 mod create_agent_run;
 mod create_chapter;
@@ -120,6 +121,7 @@ pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput, PriorInput,
     continuation_boundary_matches, continuation_mapping_can_represent, map_continuation_input,
 };
+pub use conversation_retention::earlier_turns_expired;
 pub use create_admission::{
     CreateAdmission, CreateAdmissionFacts, RouteFacts, admit_create, admit_route,
 };
@@ -149,8 +151,8 @@ pub use delete_volume::{
 };
 pub use deployment_destination::{
     AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_CREDENTIAL_REFERENCE, AGENT_PLAN_ELIGIBILITY_EVIDENCE,
-    AGENT_PLAN_ENDPOINT, BudgetBounds, DeploymentDestination, DestinationKind, RequestBounds,
-    RuntimeQualification,
+    AGENT_PLAN_ENDPOINT, AGENT_PLAN_STORED_RESPONSE_RETENTION, BudgetBounds, DeploymentDestination,
+    DestinationKind, RequestBounds, RuntimeQualification,
 };
 pub use earlier_author_messages::{
     EARLIER_AUTHOR_MESSAGES_TOKEN_LIMIT, EarlierAuthorMessage, EarlierAuthorMessageSource,

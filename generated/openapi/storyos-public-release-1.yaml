@@ -3,7 +3,7 @@ info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
   x-storyos-contract-revision: release1-wire-catalog-2026-09-27-expiry-rebuild
-  x-storyos-implemented-slice: getProtocolProfile,createProjectChallenge,createProject,createProjectCommandChallenge,listProjects,getProject,updateProject,getProjectAssistance,updateProjectAssistance,getProjectInstruction,updateProjectInstruction,createEditorSession,getEditorSession,takeOverProjectWriter,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,applyAuthorEdit,acceptProposal,rejectProposalOperations,withdrawProposal,replanProposal,reopenWithdrawnProposal,reopenRejectedOperations,undoLatestAuthorAction,createAgentRun,getAgentRun,steerAgentRun,pauseAgentRun,cancelAgentRun,listSkills,listResearchSources,getResearchSource,getResearchArtifact,exportProjectArchive,exportHumanReadableManuscript,getManuscriptTree,getChapter,getStatistics,getProposal,listChapterOpenProposals,getApplyAuthorEditOutcome,getSnapshot,activityStream,searchManuscript,getExportOperation,getHumanReadableManuscriptExport
+  x-storyos-implemented-slice: getProtocolProfile,createProjectChallenge,createProject,createProjectCommandChallenge,listProjects,getProject,updateProject,getProjectAssistance,updateProjectAssistance,getProjectInstruction,updateProjectInstruction,createEditorSession,getEditorSession,takeOverProjectWriter,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,applyAuthorEdit,acceptProposal,rejectProposalOperations,withdrawProposal,replanProposal,reopenWithdrawnProposal,reopenRejectedOperations,undoLatestAuthorAction,createAgentRun,getAgentRun,listProjectConversations,getProjectConversation,steerAgentRun,pauseAgentRun,cancelAgentRun,listSkills,listResearchSources,getResearchSource,getResearchArtifact,exportProjectArchive,exportHumanReadableManuscript,getManuscriptTree,getChapter,getStatistics,getProposal,listChapterOpenProposals,getApplyAuthorEditOutcome,getSnapshot,activityStream,searchManuscript,getExportOperation,getHumanReadableManuscriptExport
 paths:
   /api/v1/protocol:
     get:
@@ -2097,6 +2097,92 @@ paths:
             application/json:
               schema:
                 $ref: '../json-schema/storyos-public-release-1/agent-run-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Active release conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/conversations:
+    get:
+      operationId: listProjectConversations
+      summary: List the Project Conversations of one Project
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Project Conversations of one Project
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/project-conversations-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Active release conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/conversations/{conversation_id}:
+    get:
+      operationId: getProjectConversation
+      summary: Read the Runs of one Project Conversation
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Project Conversations of one Project
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/project-conversation-response.schema.json'
         '400':
           description: Invalid request
         '401':

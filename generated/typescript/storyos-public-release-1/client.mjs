@@ -446,6 +446,17 @@ export async function getAgentRun({ projectId, runId, modelAttemptId, ...options
   return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}${query}` });
 }
 
+export async function listProjectConversations({ projectId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("listProjectConversations requires projectId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/conversations` });
+}
+
+export async function getProjectConversation({ projectId, conversationId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getProjectConversation requires projectId");
+  if (typeof conversationId !== "string" || conversationId.length === 0) throw new TypeError("getProjectConversation requires conversationId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}` });
+}
+
 export async function digestSteerAgentRun(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestSteerAgentRun requires request");
   const canonical = canonicalJson(request);
