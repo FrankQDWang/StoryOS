@@ -55,7 +55,7 @@ import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
 import { navigateProposal, type ProposalFocus, type ProposalNavigation } from "./proposal-navigation.ts";
 import { ProjectSettingsLink, ProjectSettingsView } from "./project-settings.tsx";
-import { WritingWorkspace } from "./writing-workspace.tsx";
+import { WritingWorkspace, addressParameter, removeAddressParameter } from "./writing-workspace.tsx";
 
 interface Stage1ViewProps {
   state: ControlledProjectState;
@@ -65,6 +65,9 @@ interface Stage1ViewProps {
   /** The timers of the Editor Session writing controller. The default is the global timers. */
   writingTimers?: ChallengeAdmissionTimers | undefined;
 }
+
+/** The sentence of an address Chapter that the workspace cannot open. */
+const ADDRESS_CHAPTER_NOT_FOUND_SENTENCE = "找不到这个章节。";
 
 interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   state: ProjectReadyState;
@@ -237,19 +240,21 @@ function ProjectReadyView({
     })();
   };
 
-  // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026).
-  const selectChapter = (chapterId: string) => {
-    if (structureInFlightRef.current) return;
-    if (chapterId === selectedChapterIdRef.current) return;
+  // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026). The result is true
+  // when the command changed the Current Chapter and the workspace opens again at the Chapter.
+  const selectChapter = (chapterId: string): Promise<boolean> => {
+    if (structureInFlightRef.current) return Promise.resolve(false);
+    if (chapterId === selectedChapterIdRef.current) return Promise.resolve(false);
     if (state.editor.kind !== "editor-ready" || writing === undefined) {
       browseChapter(chapterId);
-      return;
+      return Promise.resolve(false);
     }
     structureInFlightRef.current = true;
     const editorSessionId = state.editor.session.editor_session.editor_session_id;
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
-    void (async () => {
+    return (async () => {
+      let reopened = false;
       try {
         const quiet = await writing.runAfterQuiesce("settled", async () => {
           if (generation !== switchGenerationRef.current) return;
@@ -280,6 +285,7 @@ function ProjectReadyView({
             setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
             return;
           }
+          reopened = switched.effect.kind === "authoritative_applied";
           onReopened(await openControlledProject({
             baseUrl,
             projectId: state.project.project.project_id,
@@ -299,8 +305,33 @@ function ProjectReadyView({
       } finally {
         structureInFlightRef.current = false;
       }
+      return reopened;
     })();
   };
+
+  // The address `/projects/{project_id}?chapter={chapter_id}` opens its Chapter one time, with the steps of a click in
+  // the manuscript tree. Until that ends, the Conversation of the address waits (see `WritingWorkspace`).
+  const addressChapter = useRef(addressParameter("chapter"));
+  const [holdAddressConversation, setHoldAddressConversation] = useState(addressChapter.current !== undefined);
+  useEffect(() => {
+    const chapterId = addressChapter.current;
+    if (chapterId === undefined || tree === undefined) return;
+    addressChapter.current = undefined;
+    removeAddressParameter("chapter");
+    const release = () => setHoldAddressConversation(false);
+    if (chapterId === currentChapterId) {
+      release();
+      return;
+    }
+    // A Chapter of another Project, or a value that is not a Chapter identity, is not in the tree of this Project.
+    const known = tree.volumes.some((volume) => volume.chapters.some((chapter) => chapter.chapter_id === chapterId));
+    if (!known || state.editor.kind !== "editor-ready" || state.editor.session.writer.kind !== "current_writer") {
+      setSwitchRecovery(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE);
+      release();
+      return;
+    }
+    void selectChapter(chapterId).then((reopened) => { if (!reopened) release(); });
+  }, [tree]);
 
   const removeFromTree = (noun: "章节" | "卷", remove: (expectedTreeRevision: string) => Promise<{
     effect: { kind: string };
@@ -394,6 +425,7 @@ function ProjectReadyView({
   return (
     <WritingWorkspace
       writer={writer}
+      holdAddressConversation={holdAddressConversation}
       onNavigateProposal={(destination) => navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
         onOpened: (next, focus, notice) => {

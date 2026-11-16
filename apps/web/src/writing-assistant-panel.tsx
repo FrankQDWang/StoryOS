@@ -284,7 +284,7 @@ export function WritingAssistantPanel({
   collapsed, context, onOpenedProposal, onNavigateProposal, scheduleRefresh = scheduleRunRefresh,
   requestedConversationId,
 }: {
-  /** The Conversation that the workspace address names. The panel opens it one time after the workspace loads. */
+  /** The Conversation that the workspace address names. The panel opens it one time, when it first gets it. */
   requestedConversationId?: string | undefined;
   /** Schedules the next read of a Run that has not settled. Tests inject their own clock. */
   scheduleRefresh?: RefreshSchedule;
@@ -310,7 +310,7 @@ export function WritingAssistantPanel({
   const [listOpen, setListOpen] = useState(false);
   // The address opens its Conversation only after the panel read the stored request, so that it knows its state.
   const [storedReadDone, setStoredReadDone] = useState(reference === undefined);
-  const requested = useRef(requestedConversationId);
+  const requestedOpened = useRef(false);
 
   useEffect(() => {
     if (context === undefined) {
@@ -497,11 +497,11 @@ export function WritingAssistantPanel({
   };
 
   useEffect(() => {
-    const conversationId = requested.current;
-    if (conversationId === undefined || context === undefined || !storedReadDone) return;
-    requested.current = undefined;
+    const conversationId = requestedConversationId;
+    if (conversationId === undefined || requestedOpened.current || context === undefined || !storedReadDone) return;
+    requestedOpened.current = true;
     void openConversation(conversationId, CONVERSATION_NOT_FOUND_SENTENCE);
-  }, [storedReadDone, context === undefined]);
+  }, [storedReadDone, context === undefined, requestedConversationId]);
 
   /** `onRecorded` runs in the same step that stores the request record, before the request goes. */
   const submit = (message: string, onAdmitted: () => void, frozen?: SentReferences, onRecorded?: () => void,
