@@ -2,6 +2,7 @@
 
 mod accept_proposal;
 mod agent_run_control;
+mod agent_run_kind;
 mod append_proposal_generation_batch;
 mod archive_path;
 mod archive_zip;
@@ -93,6 +94,7 @@ pub use agent_run_control::{
     PauseAgentRunNoEffect, SteerAgentRunConflict, SteerAgentRunNoEffect, SteeringReader,
     classify_cancel_agent_run, classify_pause_agent_run, classify_steer_agent_run,
 };
+pub use agent_run_kind::AgentRunKind;
 pub use append_proposal_generation_batch::{
     AppendProposalGenerationBatch, AppendProposalGenerationBatchConflict,
     AppendProposalGenerationBatchRefusal, AppendProposalGenerationBatchResult,

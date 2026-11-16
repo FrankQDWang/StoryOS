@@ -4,7 +4,7 @@ use storyos_application::{
     ProjectScope, RequestAttempt, UserId,
 };
 use storyos_core::{
-    AssistanceAvailability, BudgetBounds, CreateAdmission as CoreCreateAdmission,
+    AgentRunKind, AssistanceAvailability, BudgetBounds, CreateAdmission as CoreCreateAdmission,
     CreateAdmissionFacts, ModelAdapter, RouteFacts, RuntimeQualification,
 };
 
@@ -46,12 +46,14 @@ pub(crate) enum WorkPhase {
     ToolCalls,
 }
 
-/// Claims the next AgentRun whose Model Registration binds one of `model_kinds`.
+/// Claims the next AgentRun whose Model Registration binds one of `model_kinds`. The Worker claims
+/// only a Run of a dispatched kind, so a queued background Run stays queued (ADR 0094 section 5).
 async fn claim_agent_run_row(
     transaction: &tokio_postgres::Transaction<'_>,
     lease_seconds: i64,
     model_kinds: &[&str],
 ) -> Result<Option<ClaimedAgentRun>, ProjectReadError> {
+    let run_kinds = AgentRunKind::DISPATCHED.map(AgentRunKind::name);
     let claimed = transaction
         .query_opt(
             "WITH next_work AS (
@@ -60,6 +62,7 @@ async fn claim_agent_run_row(
                  JOIN storyos.model_registration_revisions AS registration
                    ON registration.model_registration_revision = run.model_registration_revision
                 WHERE registration.model_kind = ANY($2::text[])
+                  AND run.run_kind = ANY($3::text[])
                   AND (run.status = 'queued'
                    OR (
                      run.status = 'claimed'
@@ -92,7 +95,7 @@ async fn claim_agent_run_row(
                     run.project_id::text,
                     run.run_id::text,
                     run.fence_token",
-            &[&lease_seconds, &model_kinds],
+            &[&lease_seconds, &model_kinds, &run_kinds.as_slice()],
         )
         .await
         .map_err(read_error)?;

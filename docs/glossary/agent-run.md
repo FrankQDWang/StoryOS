@@ -20,6 +20,14 @@ _Avoid_: Artifact, temporary log
 A durable execution aggregate for one bounded user-, event-, or schedule-triggered intent, owning its plan, steps, Capability Grant, budget, approvals, ToolCalls, produced results, and terminal outcome. A nonterminal AgentRun survives process restarts and may wait, pause, and resume; a terminal AgentRun is retained and immutable, while continuation or retry creates a new causally linked AgentRun.
 _Avoid_: Conversation, transcript, live model session, reopened Run
 
+**AgentRun Kind**:
+The kind of one AgentRun: `author` for a Run of the author, or a background kind for the Memory work of ADR 0094 (`memory_capture`, `memory_consolidation`). A Run of the author has its Project Conversation, its Conversation Memory Settings revision, its Chapter, its author message, and the Receipt of `createAgentRun`.
+_Avoid_: Run type, Purpose
+
+**Background Run**:
+An AgentRun of a background kind. It has no Project Conversation, no author message, no Receipt, and no Project Activity event, and no read or command of the author gets it. The Worker claims it only when it can dispatch its kind.
+_Avoid_: Proactive Trigger, hidden Run of the author
+
 **Proactive Trigger**:
 An author-enabled, versioned project rule that maps a schedule or exact project event to a bounded AgentRun grant template and admission policy. It is neither a running Agent nor a source of authority, and disabling it prevents only future occurrences.
 _Avoid_: Cron process, background Agent, implicit permission, user-triggered Run
