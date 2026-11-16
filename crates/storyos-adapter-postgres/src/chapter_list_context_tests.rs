@@ -3,13 +3,16 @@
 
 use serde_json::{Value, json};
 use storyos_application::{
-    ChapterId, ConversationSelection, CreateChapterInput, IssueProjectCommandChallenge,
-    ProjectScope, UpdateChapterInput, VerifiedExportArchive, claim_next_archive_export,
-    complete_archive_export, get_verified_export_archive, issue_project_command_challenge,
+    ApplyAuthorEditCommand, ChallengeRateClass, ChapterId, ConversationSelection,
+    CreateChapterInput, EditorSessionId, EditorSessionStore, IssueProjectCommandChallenge,
+    ProjectScope, SetCurrentChapterInput, UpdateChapterInput, VerifiedExportArchive,
+    claim_next_archive_export, complete_archive_export, get_verified_export_archive,
+    issue_project_command_challenge,
 };
 use storyos_core::{
-    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CreateChapterPlacement,
-    DeploymentDestination, hex_sha256,
+    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, AuthorEditPrimitive,
+    AuthorEditUnit, CreateChapterPlacement, DeploymentDestination, SelectionSnapshot,
+    TransitionOutcome, UTF16_COORDINATE_PROFILE, hex_sha256,
 };
 use tokio_postgres::Client;
 
@@ -18,9 +21,12 @@ use crate::agent_run_dispatch::tests::{admit_run_in, stores};
 use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
 use crate::command_sequence::tests::{
-    CREATE_CHAPTER, CommandCall, UPDATE_CHAPTER, issued, update_chapter,
+    CREATE_CHAPTER, CommandCall, SET_CURRENT_CHAPTER, UPDATE_CHAPTER, create_chapter, issued,
+    update_chapter,
 };
+use crate::create_volume_authority_tests::{NamedEdit, adjusted_edit_command};
 use crate::project_archive_build::tests::{export_command, zip_store_files};
+use crate::set_current_chapter_authority_tests::open_session_request;
 
 /// The list of the fixture Project: one Volume with its Chapter, the Current Chapter of the Run.
 const FIXTURE_LIST: &str = "{\"volume\":\"Volume A\"}\n[1,0,\"Chapter A\",\"current\"]";
@@ -287,6 +293,162 @@ async fn a_rename_and_a_new_chapter_between_two_run_steps_send_the_new_list_as_a
                 ["decision", 0, [FIXTURE_LIST], null],
                 ["decision", 1, [with_new], true]
             ]),
+        )
+    );
+}
+
+/// The head of `chapter_id` and its first Block.
+async fn head(admin: &Client, chapter_id: &str) -> (String, String) {
+    let row = admin
+        .query_one(
+            "SELECT head.current_revision_id::text, member.manuscript_block_id::text
+               FROM storyos.authoritative_heads AS head
+               JOIN storyos.manuscript_revision_members AS member
+                 ON member.revision_id = head.current_revision_id
+              WHERE head.manuscript_object_id = $1::text::uuid
+              ORDER BY member.block_order
+              LIMIT 1",
+            &[&chapter_id],
+        )
+        .await
+        .unwrap();
+    (row.get(/*idx*/ 0), row.get(/*idx*/ 1))
+}
+
+/// The Author Edit of the Editor Session `editor_session_id` that replaces the first `length`
+/// characters of the head of `chapter_id` with `text`. `sequence` is its local intent sequence.
+async fn replace_text(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    (editor_session_id, sequence): (&str, u64),
+    chapter_id: &str,
+    (length, text): (u32, &str),
+) -> ApplyAuthorEditCommand {
+    let (revision, block) = head(admin, chapter_id).await;
+    let edit = NamedEdit {
+        editor_session_id,
+        chapter_id,
+        expected_revision_id: &revision,
+        suffix: &format!("0f2{sequence}"),
+        local_intent_sequence: sequence,
+        text: "",
+        proposal_target: None,
+    };
+    adjusted_edit_command(store, scope, edit, |command| {
+        // The Author Edit class keeps the Shared Challenges of the Project for the Runs.
+        command.challenge_binding.challenge_rate_policy_revision =
+            ChallengeRateClass::AuthorEdit.policy_revision().to_owned();
+        command.author_edit_units = vec![AuthorEditUnit {
+            normalized_primitives: vec![AuthorEditPrimitive::ReplaceBlockSelection {
+                manuscript_block_id: block,
+                from: 0,
+                to: length,
+                text: text.to_owned(),
+            }],
+            selection_snapshot: SelectionSnapshot {
+                coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
+                from: 0,
+                to: length,
+            },
+        }];
+    })
+    .await
+}
+
+/// The selection of `chapter_id` as the Current Chapter of the Project in place of `from`, by
+/// the Editor Session `editor_session_id`, with a fresh challenge `suffix`. An Author Edit
+/// changes only the Current Chapter of the Project.
+async fn select(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    (editor_session_id, suffix): (&EditorSessionId, u16),
+    chapter_id: &str,
+    from: &str,
+) -> CommandCall<SetCurrentChapterInput> {
+    let input = SetCurrentChapterInput {
+        editor_session_id: editor_session_id.clone(),
+        chapter_id: chapter_id.to_owned(),
+        expected_current_chapter_id: from.to_owned(),
+        expected_target_revision_id: head(admin, chapter_id).await.0,
+    };
+    issued(store, scope, suffix, &SET_CURRENT_CHAPTER, input).await
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_edit_of_another_chapter_that_keeps_its_length_sends_no_replaced_input() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, current, first) = queued(&store, "0ee").await;
+    complete(&store, &admin, &scope, &first).await;
+    let volume_id: String = admin
+        .query_one(
+            "SELECT parent_volume_id::text FROM storyos.manuscript_objects
+              WHERE manuscript_object_id = $1::text::uuid",
+            &[&current],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let input = CreateChapterInput {
+        volume_id,
+        title: "Fog".to_owned(),
+        placement: CreateChapterPlacement::Append,
+        expected_tree_revision: 3,
+    };
+    let call = issued(&store, &scope, 0x0f13, &CREATE_CHAPTER, input).await;
+    let edited = match create_chapter(&store, &call).await.unwrap().outcome {
+        TransitionOutcome::Applied(applied) => applied.effect.chapter_id,
+        other => panic!("{other:?}"),
+    };
+    let request = open_session_request(&store, &scope, "0f20").await;
+    store.create_editor_session(&request).await.unwrap();
+    let writer = &request.editor_session_id;
+    let call = select(&store, &admin, &scope, (writer, 0x0f14), &edited, &current).await;
+    store
+        .set_current_chapter(&call.envelope, &call.input)
+        .await
+        .unwrap();
+    let rain = (writer.as_ref(), 1);
+    let rain = replace_text(&store, &admin, &scope, rain, &edited, (0, "Rain.")).await;
+    store.apply_author_edit(&rain).await.unwrap();
+    let call = select(&store, &admin, &scope, (writer, 0x0f15), &current, &edited).await;
+    store
+        .set_current_chapter(&call.envelope, &call.input)
+        .await
+        .unwrap();
+    let before = head(&admin, &edited).await.0;
+    let new = ConversationSelection::New;
+    let run_id = admitted(&store, &scope, &current, "0ef", "Help.", new).await;
+    // While the first request is out, the author opens the other Chapter and edits it.
+    let call = select(&store, &admin, &scope, (writer, 0x0f16), &edited, &current).await;
+    let snow = (writer.as_ref(), 2);
+    let snow = replace_text(&store, &admin, &scope, snow, &edited, (5, "Snow.")).await;
+    let author = AuthorAt::new(
+        &store,
+        Moment::DuringRequest(1),
+        AuthorAction::Sequence(vec![
+            AuthorAction::SetCurrentChapter(Box::new(call)),
+            AuthorAction::Edit(Box::new(snow)),
+        ]),
+    );
+    settle(&store, &admin, &scope, &run_id, &author)
+        .await
+        .unwrap();
+
+    // The head of the other Chapter moves, and its length stays. The list text stays, so the
+    // closing request continues with an unchanged input and sends no list (ADR 0085).
+    let list = "{\"volume\":\"Volume A\"}\n[1,0,\"Chapter A\",\"current\"]\n[2,5,\"Fog\"]";
+    assert_ne!(head(&admin, &edited).await.0, before);
+    assert_eq!(
+        (recorded(&admin, &run_id).await, sent(&admin, &run_id).await),
+        (
+            json!([[0, [item(list)]], [1, [item(list)]]]),
+            json!([["decision", 0, [list], null], ["decision", 1, [], null]]),
         )
     );
 }

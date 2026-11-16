@@ -61,6 +61,7 @@ pub(crate) enum AuthorAction {
     DeleteChapter(Box<CommandCall<storyos_application::DeleteChapterInput>>),
     UpdateChapter(Box<CommandCall<storyos_application::UpdateChapterInput>>),
     CreateChapter(Box<CommandCall<storyos_application::CreateChapterInput>>),
+    SetCurrentChapter(Box<CommandCall<storyos_application::SetCurrentChapterInput>>),
     /// Each action in order.
     Sequence(Vec<AuthorAction>),
 }
@@ -163,6 +164,12 @@ impl<'a> AuthorAt<'a> {
                 }
                 AuthorAction::CreateChapter(call) => {
                     crate::command_sequence::tests::create_chapter(self.store, call)
+                        .await
+                        .unwrap();
+                }
+                AuthorAction::SetCurrentChapter(call) => {
+                    self.store
+                        .set_current_chapter(&call.envelope, &call.input)
                         .await
                         .unwrap();
                 }
