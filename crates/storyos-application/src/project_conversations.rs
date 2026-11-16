@@ -37,9 +37,9 @@ pub struct ProjectConversationRunItem {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredProjectConversationRuns {
     pub newest_first: Vec<ProjectConversationRunItem>,
-    /// The recorded time of the last Run event of the newest Run, or its Receipt time when it
-    /// has no Run event.
-    pub newest_run_last_recorded_at: SystemTime,
+    /// The recorded time of the newest Run event of the Conversation, over all its Runs. `None`
+    /// when the Conversation has no Run event.
+    pub newest_event_at: Option<SystemTime>,
     pub read_time: SystemTime,
 }
 
@@ -150,11 +150,7 @@ pub async fn read_project_conversation(
         return Ok(None);
     };
     let expired = stored.newest_first.first().is_some_and(|newest| {
-        earlier_turns_expired(
-            newest.status,
-            stored.newest_run_last_recorded_at,
-            stored.read_time,
-        )
+        earlier_turns_expired(newest.status, stored.newest_event_at, stored.read_time)
     });
     let (mut runs, completeness) =
         bounded(stored.newest_first, PROJECT_CONVERSATION_RUNS_MAX_ENTRIES);

@@ -32,15 +32,9 @@ async function rowCounts(projectId: string): Promise<string> {
   `);
 }
 
-/** Moves the Receipt time and each Run event time of the Run back by 73 hours. */
+/** Moves each Run event time of the Run back by 73 hours. */
 async function moveBack(projectId: string, runId: string): Promise<void> {
   await queryPostgres(`
-    UPDATE storyos.domain_receipts AS receipt
-       SET created_at = receipt.created_at - interval '73 hours'
-      FROM storyos.agent_runs AS run
-     WHERE run.project_id = '${projectId}'::uuid AND run.run_id = '${runId}'::uuid
-       AND (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
-           (run.owner_user_id, run.project_id, run.receipt_id);
     UPDATE storyos.agent_run_events SET recorded_at = recorded_at - interval '73 hours'
      WHERE project_id = '${projectId}'::uuid AND run_id = '${runId}'::uuid;
   `);
@@ -106,7 +100,7 @@ test("listProjectConversations and getProjectConversation give the Conversations
   });
   assert.deepEqual(otherRuns.map((run) => run.run_id), [other.effect.run_id]);
 
-  // The newest Run of the Conversation ended more than 72 hours before the read.
+  // The newest Run event of the Conversation is more than 72 hours old at the time of the read.
   await moveBack(prepared.projectId, second.effect.run_id);
   const moved = await rowCounts(prepared.projectId);
   assert.equal((await read(first.conversation_id)).earlier_turns_expired, true);

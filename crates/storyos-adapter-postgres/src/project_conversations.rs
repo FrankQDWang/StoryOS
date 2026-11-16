@@ -117,19 +117,22 @@ impl ProjectConversationReader for PostgresProjectReader {
             transaction.commit().await.map_err(read_error)?;
             return Ok(None);
         }
-        // The end time of an ended Run is the recorded time of its last Run event, or the time of
-        // its Receipt when it has no Run event. The read time is the clock of the same database.
+        // The newest Run event of the Conversation, over all its Runs, decides. The read time is
+        // the clock of the same database.
         let rows = transaction
             .query(
                 "SELECT run.run_id::text AS run_id, run.author_message,
                         run.chapter_id::text AS chapter_id, run.status::text AS status,
                         to_char(receipt.created_at AT TIME ZONE 'UTC',
                                 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS created_at,
-                        floor(extract(epoch FROM GREATEST(receipt.created_at,
-                          (SELECT max(event.recorded_at) FROM storyos.agent_run_events AS event
-                            WHERE (event.owner_user_id, event.project_id, event.run_id) =
-                                  (run.owner_user_id, run.project_id, run.run_id))))
-                          * 1000000)::bigint AS last_recorded_at,
+                        (SELECT floor(extract(epoch FROM max(event.recorded_at)) * 1000000)::bigint
+                           FROM storyos.agent_run_events AS event
+                           JOIN storyos.agent_runs AS earlier
+                             ON (earlier.owner_user_id, earlier.project_id, earlier.run_id) =
+                                (event.owner_user_id, event.project_id, event.run_id)
+                          WHERE (earlier.owner_user_id, earlier.project_id, earlier.conversation_id) =
+                                (run.owner_user_id, run.project_id, run.conversation_id))
+                          AS newest_event_at,
                         floor(extract(epoch FROM statement_timestamp()) * 1000000)::bigint AS read_time
                    FROM storyos.agent_runs AS run
                    JOIN storyos.domain_receipts AS receipt
@@ -165,7 +168,10 @@ impl ProjectConversationReader for PostgresProjectReader {
         });
         Ok(Some(StoredProjectConversationRuns {
             newest_first: runs.collect::<Result<_, ProjectReadError>>()?,
-            newest_run_last_recorded_at: clock(newest.get("last_recorded_at"))?,
+            newest_event_at: newest
+                .get::<_, Option<i64>>("newest_event_at")
+                .map(clock)
+                .transpose()?,
             read_time: clock(newest.get("read_time"))?,
         }))
     }

@@ -14,7 +14,7 @@ use super::{
 use crate::{ProjectId, ProjectReadError, ProjectScope, UserId};
 
 /// Gives the first `limit` of `count` stored items, as the store does. The newest Run has
-/// `status` and ended `elapsed` before the read.
+/// `status`, and the newest Run event is `elapsed` before the read.
 struct FixtureReader {
     count: usize,
     status: AgentRunStatus,
@@ -67,7 +67,7 @@ impl ProjectConversationReader for FixtureReader {
         };
         Ok(Some(StoredProjectConversationRuns {
             newest_first: (0..self.count.min(limit)).map(run).collect(),
-            newest_run_last_recorded_at: end(),
+            newest_event_at: Some(end()),
             read_time: end() + self.elapsed,
         }))
     }

@@ -115,8 +115,9 @@ pub struct ProjectConversationRun {
     pub created_at: String,
 }
 
-/// The Runs of one Project Conversation. `earlier_turns_expired` is true when the newest Run ended
-/// more than the Provider retention before the read.
+/// The Runs of one Project Conversation. `earlier_turns_expired` is true when the newest Run is
+/// in a terminal state and the newest Run event of the Conversation is older than the Provider
+/// retention at the time of the read.
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct GetProjectConversationResponse {

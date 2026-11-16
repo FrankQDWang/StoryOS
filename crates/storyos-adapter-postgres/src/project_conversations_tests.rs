@@ -17,6 +17,7 @@ use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{
     RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
 };
+use crate::agent_run_steering::tests::cancellation;
 
 const MESSAGES: [&str; 4] = [
     "Help with this passage.",
@@ -278,33 +279,58 @@ async fn each_conversation_keeps_its_own_provider_continuation() {
     );
 }
 
-/// Moves the Receipt time of the Run back by `receipt` hours, and sets each Run event time of
-/// the Run to `events` hours before now.
-async fn move_back(admin: &Client, run_id: &str, receipt: i32, events: i32) {
-    let receipts = "UPDATE storyos.domain_receipts AS receipt
-                       SET created_at = created_at - make_interval(hours => $2)
-                      FROM storyos.agent_runs AS run
-                     WHERE run.run_id = $1::text::uuid
-                       AND (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
-                           (run.owner_user_id, run.project_id, run.receipt_id)";
-    admin.execute(receipts, &[&run_id, &receipt]).await.unwrap();
-    let events_query = "UPDATE storyos.agent_run_events
-                           SET recorded_at = clock_timestamp() - make_interval(hours => $2)
-                         WHERE run_id = $1::text::uuid";
-    admin
-        .execute(events_query, &[&run_id, &events])
+/// Sets each Run event time of the Run to `hours` before now.
+async fn move_events(admin: &Client, run_id: &str, hours: i32) {
+    let query = "UPDATE storyos.agent_run_events
+                    SET recorded_at = clock_timestamp() - make_interval(hours => $2)
+                  WHERE run_id = $1::text::uuid";
+    admin.execute(query, &[&run_id, &hours]).await.unwrap();
+}
+
+/// Admits a Run of `conversation` and cancels it before its first Tool call, so it has no Run
+/// event. Its Receipt moves back 100 hours, so a read that used the Receipt time would expire.
+async fn cancelled_run(
+    (store, admin): (&PostgresProjectReader, &Client),
+    (scope, chapter_id): (&ProjectScope, &str),
+    (prefix, suffix): (&str, u16),
+    conversation: Selection,
+) -> String {
+    let message = MESSAGES[3];
+    let run = admit_run_in(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        HostFakeToolLoop,
+        message,
+        conversation,
+        None,
+    )
+    .await;
+    let cancel = cancellation(store, scope, suffix, &run).await;
+    store
+        .cancel_agent_run(&cancel.envelope, &cancel.input)
         .await
         .unwrap();
+    let receipts = "UPDATE storyos.domain_receipts AS receipt
+                       SET created_at = created_at - interval '100 hours'
+                      FROM storyos.agent_runs AS run
+                     WHERE run.run_id = $1::text::uuid AND run.status = 'cancelled'
+                       AND (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
+                           (run.owner_user_id, run.project_id, run.receipt_id)";
+    assert_eq!(admin.execute(receipts, &[&run]).await.unwrap(), 1);
+    run
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn the_earlier_turns_expire_after_the_retention_from_the_last_run_event() {
+async fn the_earlier_turns_expire_after_the_retention_from_the_newest_run_event() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, _, run_id) = queued_run_offering(&store, "da9", HostFakeToolLoop, None).await;
+    let (scope, chapter_id, run_id) =
+        queued_run_offering(&store, "da9", HostFakeToolLoop, None).await;
     complete(&store, &admin, &scope, &run_id).await;
     let conversation = conversation_of(&admin, &run_id).await;
     let query = "SELECT count(*) FROM storyos.agent_run_events WHERE run_id = $1::text::uuid";
@@ -313,15 +339,28 @@ async fn the_earlier_turns_expire_after_the_retention_from_the_last_run_event() 
         .await
         .unwrap()
         .get(/*idx*/ 0);
+    let read = async |id: &str| {
+        let read = read_project_conversation(&store, &scope, id).await;
+        read.unwrap().unwrap().earlier_turns_expired
+    };
     let mut expired = Vec::new();
-    // The Receipt is older than the retention each time, so the last Run event decides.
     for hours in [71, 73] {
-        move_back(&admin, &run_id, 100, hours).await;
-        let read = read_project_conversation(&store, &scope, &conversation)
-            .await
-            .unwrap();
-        expired.push(read.unwrap().earlier_turns_expired);
+        move_events(&admin, &run_id, hours).await;
+        expired.push(read(&conversation).await);
     }
+    // A newest Run with no Run event: the old event of the earlier Run decides.
+    let existing = Selection::Existing {
+        conversation_id: conversation.clone(),
+    };
+    let place = (&scope, chapter_id.as_str());
+    cancelled_run((&store, &admin), place, ("dab", 0xdab0), existing).await;
+    expired.push(read(&conversation).await);
+    // A Conversation with no Run event gives false, though its Receipt is old.
+    let lone = cancelled_run((&store, &admin), place, ("dac", 0xdac0), Selection::New).await;
+    expired.push(read(&conversation_of(&admin, &lone).await).await);
 
-    assert_eq!((events > 0, expired), (true, vec![false, true]));
+    assert_eq!(
+        (events > 0, expired),
+        (true, vec![false, true, true, false])
+    );
 }
