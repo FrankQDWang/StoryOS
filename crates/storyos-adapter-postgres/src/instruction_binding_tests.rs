@@ -13,6 +13,7 @@ use crate::agent_run_dispatch::tests::{admit_run, admit_run_in, stores};
 use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
 use crate::project_instruction_tests::{applied, save};
+use crate::project_research_binding::tests::park_queued_runs;
 
 const FAKE: DeploymentDestination = DeploymentDestination::HostFakeToolLoop;
 
@@ -109,6 +110,7 @@ async fn a_run_binds_only_a_current_revision_with_text_other_than_white_space() 
         async move { assemblies(admin, &run_id).await }
     };
 
+    park_queued_runs(&admin, &scope).await;
     assert_ne!(blank, current);
     assert_eq!(
         (
@@ -164,6 +166,8 @@ async fn a_run_binds_the_revision_of_its_own_project() {
         .await
         .unwrap()
         .get(/*idx*/ 0);
+    park_queued_runs(&admin, &project_a).await;
+    park_queued_runs(&admin, &project_b).await;
 
     assert_eq!(
         (
@@ -223,6 +227,7 @@ async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
     )
     .await;
     complete(&store, &admin, &scope, &next).await;
+    park_queued_runs(&admin, &scope).await;
 
     assert_eq!(
         (
@@ -279,6 +284,7 @@ async fn the_next_run_after_a_removal_sends_no_project_instruction() {
     )
     .await;
     complete(&store, &admin, &scope, &removed).await;
+    park_queued_runs(&admin, &scope).await;
 
     assert_eq!(
         (
@@ -313,6 +319,7 @@ async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_
     saved(&store, &scope, 0xddb2, "Write in the present tense.", 1).await;
     complete(&store, &admin, &scope, &compacted).await;
     let later = assemblies(&admin, &compacted).await[3].clone();
+    park_queued_runs(&admin, &scope).await;
 
     assert_eq!(
         (
