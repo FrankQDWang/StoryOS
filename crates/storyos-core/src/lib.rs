@@ -44,6 +44,7 @@ mod research_destination;
 mod research_source;
 mod research_synthesis;
 mod retrieve_original_result;
+mod run_result;
 mod search_manuscript;
 mod submit_research;
 mod tool_call;
@@ -323,6 +324,7 @@ pub use revision_comparison::{
     ExactRevisionTexts, RangeMapping, ReplacementSpan, RevisionComparison,
     RevisionComparisonAccess, inspect_revision_comparison, map_unchanged_range, utf16_slice,
 };
+pub use run_result::{RunCallPosition, run_results};
 pub use search_manuscript::{
     MANUSCRIPT_SEARCH_MATCH_LIMIT, SEARCH_MANUSCRIPT_TOOL_SPEC, admit_manuscript_search,
     exact_matches,

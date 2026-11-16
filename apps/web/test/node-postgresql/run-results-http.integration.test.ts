@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import { stopStoryOSServer as stopRealServer, queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
-import { PROSE, admitRun, drainLeftoverWork, freshNamespace, id, inspectRun, prepare, settleOnce, startServer }
-  from "../support/http-harness.ts";
+import { PROSE, TestServer, admitRun, createStory, drainLeftoverWork, freshNamespace, id, inspectRun, postRun,
+  prepare, runRequest, settleOnce, settleRun, startServer } from "../support/http-harness.ts";
 import { fakeExaMcp } from "../support/research-journey-fakes.ts";
 
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
@@ -59,4 +59,40 @@ test("the Run read gives each result in the order in which the model made them",
     await stopRealServer(started.server);
     await mcp.close();
   }
+});
+
+// ADR 0094 section 5: each settled `write_memory` call is a result of its own Run, in the Scope of its Project.
+test("the Run read of a Project gives only the Memory writes of its own Run", async () => {
+  await drainLeftoverWork();
+  const started = await startServer();
+  try {
+    const server = TestServer.at(started.baseUrl);
+    /** Creates one Project, and admits and settles one Run that writes the entry `title`. */
+    const written = async (title: string) => {
+      const story = await createStory(server, { title: `${title} Novel`, assistance: true, chapters: ["Chapter A"] });
+      const create = { type: "other", title, description: "一条记忆。", text: `${title}会再出现。` };
+      const request = runRequest(story.chapterIds[0] ?? "", story.key(), `SCRIPT:write_memory create ${JSON.stringify(create)}`);
+      const created = await postRun(started.baseUrl, story.fetchImpl, story.projectId, story.key(), request);
+      assert.equal(created.effect.kind, "admitted");
+      const runId = created.effect.kind === "admitted" ? created.effect.run_id : "";
+      return { story, run: await settleRun(started.baseUrl, story, runId) };
+    };
+    const bell = await written("铜铃");
+    const boat = await written("林舟");
+
+    for (const [{ run }, title] of [[bell, "铜铃"], [boat, "林舟"]] as const) {
+      assert.equal(run.status, "completed");
+      assert.deepEqual(run.results?.map((result) => result.kind), ["memory_write", "answer"]);
+      const [write] = run.results ?? [];
+      assert.ok(write?.kind === "memory_write");
+      assert.deepEqual([write.action, write.title], ["create", title]);
+      // A Memory write gives no decision kind: the public decision stays the final answer.
+      assert.equal(run.decision.kind, "advisory");
+    }
+    // The other Project has no such Run.
+    await assert.rejects(inspectRun(started.baseUrl, boat.story, bell.run.run_id));
+  } finally {
+    await stopRealServer(started.server);
+  }
+  await drainLeftoverWork();
 });
