@@ -62,7 +62,7 @@ pub(crate) fn parameters() -> Value {
                 "Markdown, at most 600 characters, or 1500 for a character. Null keeps the text."
             )
         },
-        "required": ["action", "entry", "type", "title", "description", "text"],
+        "required": KEYS,
         "additionalProperties": false
     })
 }
@@ -100,6 +100,9 @@ impl MemoryWrite {
     }
 }
 
+/// The keys of the arguments. The strict schema requires each one, also when its value is null.
+const KEYS: [&str; 6] = ["action", "entry", "type", "title", "description", "text"];
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Arguments {
@@ -114,6 +117,10 @@ struct Arguments {
 
 /// The typed intake. The ToolCall record cannot hold U+0000, so a value with it does not fit.
 pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
+    let object = arguments.as_object().ok_or(IntakeRefusal::Malformed)?;
+    if !KEYS.iter().all(|key| object.contains_key(*key)) {
+        return Err(IntakeRefusal::Malformed);
+    }
     let arguments = Arguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
     let entry_type = match arguments.entry_type.as_deref() {
         Some(token) => Some(MemoryEntryType::parse(token).ok_or(IntakeRefusal::Malformed)?),

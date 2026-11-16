@@ -213,8 +213,8 @@ fn a_write_above_the_index_limits_is_refused_with_memory_index_full() {
     );
 }
 
-/// The schema is strict, an unknown type does not fit, and a value with U+0000 does not fit,
-/// because the ToolCall record cannot hold it. The canonical arguments keep each null.
+/// The schema is strict: each key is necessary, also for a null value, and an unknown type does
+/// not fit. A value with U+0000 does not fit, because the ToolCall record cannot hold it. The canonical arguments keep each null.
 #[test]
 fn the_intake_is_strict_and_the_arguments_keep_each_null() {
     let refused = |value: Value| WRITE_MEMORY_TOOL_SPEC.intake(&value).err();
@@ -233,6 +233,7 @@ fn the_intake_is_strict_and_the_arguments_keep_each_null() {
             refused(full(json!({"text": "a\u{0}b"}))),
             refused(full(json!({"extra": 1}))),
             refused(full(json!({"action": "merge"}))),
+            refused(json!({"action": "delete", "entry": 2})),
             write(json!({"action": "delete", "entry": 2})).arguments(),
             parameters["required"].as_array().map(Vec::len),
             parameters["additionalProperties"].clone(),
@@ -241,6 +242,7 @@ fn the_intake_is_strict_and_the_arguments_keep_each_null() {
         (
             Some(IntakeRefusal::Malformed),
             Some(IntakeRefusal::UnstorableText),
+            Some(IntakeRefusal::Malformed),
             Some(IntakeRefusal::Malformed),
             Some(IntakeRefusal::Malformed),
             json!({"action": "delete", "entry": 2, "type": null, "title": null, "description": null, "text": null}),

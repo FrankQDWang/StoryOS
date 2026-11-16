@@ -7,7 +7,7 @@ use serde_json::json;
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{MemoryWrite, ToolCallState};
 
-use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
+use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
 use crate::memory_entries::{VersionSource, current_memory, write_memory_version};
 
 /// Decides and writes the Memory change of the pending call `row`, and settles or refuses `row`.
@@ -23,6 +23,7 @@ pub(crate) async fn execute(
         .map_err(CompleteAgentRunError::Unavailable)?;
     let (state, refusal, result) = match storyos_core::decide_memory_write(write, &entries, next) {
         Ok(version) => {
+            // A background Run has no Conversation (S7-D3a), and it cannot write an entry.
             let conversation_id: String = client
                 .query_one(
                     "SELECT conversation_id::text FROM storyos.agent_runs
@@ -36,7 +37,8 @@ pub(crate) async fn execute(
                 )
                 .await
                 .map_err(crate::agent_run_work::complete_database_error)?
-                .get(0);
+                .get::<_, Option<String>>(0)
+                .ok_or_else(|| damaged("A Memory write needs the Conversation of its Run"))?;
             let source = VersionSource {
                 origin: "author_request",
                 cause: json!({ "kind": "author_request" }),
