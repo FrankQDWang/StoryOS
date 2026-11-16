@@ -3424,6 +3424,76 @@
       },
       "triggers": {}
     },
+    "memory_entry_reads": {
+      "columns": {
+        "memory_entry_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "read_at": {
+          "default": "statement_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "run_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "tool_call_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "version": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        }
+      },
+      "constraints": {
+        "memory_entry_reads_pkey": "PRIMARY KEY (owner_user_id, project_id, tool_call_id)",
+        "memory_entry_reads_run_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
+        "memory_entry_reads_tool_call_fkey": "FOREIGN KEY (owner_user_id, project_id, tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL",
+        "memory_entry_reads_version_fkey": "FOREIGN KEY (owner_user_id, project_id, memory_entry_id, version) REFERENCES storyos.memory_entry_versions(owner_user_id, project_id, memory_entry_id, version) MATCH FULL"
+      },
+      "indexes": {
+        "memory_entry_reads_entry_idx": "CREATE INDEX memory_entry_reads_entry_idx ON storyos.memory_entry_reads USING btree (owner_user_id, project_id, memory_entry_id, read_at)",
+        "memory_entry_reads_pkey": "CREATE UNIQUE INDEX memory_entry_reads_pkey ON storyos.memory_entry_reads USING btree (owner_user_id, project_id, tool_call_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_entry_reads_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "memory_entry_versions": {
       "columns": {
         "cause": {

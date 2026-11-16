@@ -84,7 +84,7 @@ async fn memory_head(admin: &Client, scope: &ProjectScope) -> Option<(i64, i64)>
 
 /// The text of each `memory_index` item of the decision Context Assembly at the RunStep 0 of the
 /// Run.
-async fn first_index(admin: &Client, run_id: &str) -> Value {
+pub(crate) async fn first_index(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
             "SELECT COALESCE(jsonb_path_query_array(payload,

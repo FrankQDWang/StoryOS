@@ -38,6 +38,7 @@ fn each_current_mapping_declares_read_chapter_with_a_strict_schema() {
             bound: &[],
             model_registration_revision: revision,
             skill_catalog: false,
+            memory_use: false,
         })
         .tools
         .into_iter()

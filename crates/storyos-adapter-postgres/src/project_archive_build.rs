@@ -158,6 +158,7 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "memory_entry_versions",
         "canonical/memory_entry_versions.json",
     ),
+    ("memory_entry_reads", "canonical/memory_entry_reads.json"),
     (
         "operation_requirements",
         "canonical/operation_requirements.json",

@@ -110,7 +110,8 @@ pub(crate) async fn outputs_record(admin: &Client, run_id: &str, position: i32) 
                                                           item ->> 'projection_mode'))
                          FROM jsonb_array_elements(payload -> 'selected') AS item
                         WHERE item ->> 'source_class'
-                              IN ('tool_result', 'manuscript_read_result', 'manuscript_search_result')))::text
+                              IN ('tool_result', 'manuscript_read_result', 'manuscript_search_result',
+                                   'memory_read_result')))::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'
                 AND decision_position = $2::text::numeric",

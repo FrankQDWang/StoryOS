@@ -4,9 +4,10 @@
 
 use crate::{
     ContextSourceClass, FINISH_TOOL_SPEC, LOAD_SKILL_TOOL_SPEC, ModelRegistration,
-    PROPOSE_EDIT_TOOL_SPEC, READ_CHAPTER_TOOL_SPEC, READ_SKILL_RESOURCE_TOOL_SPEC,
-    READ_TOOL_RESULT_TOOL_SPEC, SEARCH_MANUSCRIPT_TOOL_SPEC, SUBMIT_RESEARCH_TOOL_SPEC, ToolIntake,
-    ToolOperation, ToolRegistrationKind, ToolResultText, ToolSpec, WRITE_MEMORY_TOOL_SPEC,
+    PROPOSE_EDIT_TOOL_SPEC, READ_CHAPTER_TOOL_SPEC, READ_MEMORY_ENTRY_TOOL_SPEC,
+    READ_SKILL_RESOURCE_TOOL_SPEC, READ_TOOL_RESULT_TOOL_SPEC, SEARCH_MANUSCRIPT_TOOL_SPEC,
+    SUBMIT_RESEARCH_TOOL_SPEC, ToolIntake, ToolOperation, ToolRegistrationKind, ToolResultText,
+    ToolSpec, WRITE_MEMORY_TOOL_SPEC,
 };
 
 /// The Tool Registration of the Host Tools. It has no server, credential, or destination.
@@ -74,6 +75,7 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
         &READ_CHAPTER_TOOL_SPEC,
         &SEARCH_MANUSCRIPT_TOOL_SPEC,
         &WRITE_MEMORY_TOOL_SPEC,
+        &READ_MEMORY_ENTRY_TOOL_SPEC,
         &FINISH_TOOL_SPEC,
     ],
     ..FIRST_HOST_TOOL_REGISTRATION
@@ -86,6 +88,7 @@ pub fn host_tool_result_class(spec: &ToolSpec) -> ContextSourceClass {
     match spec.operation {
         ToolOperation::ReadChapter => ContextSourceClass::ManuscriptReadResult,
         ToolOperation::SearchManuscript => ContextSourceClass::ManuscriptSearchResult,
+        ToolOperation::ReadMemoryEntry => ContextSourceClass::MemoryReadResult,
         ToolOperation::WebSearch
         | ToolOperation::WebFetch
         | ToolOperation::Finish
@@ -151,8 +154,9 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         // The store executes `propose_edit`, because it opens a Proposal, `submit_research`,
         // because it records a Research Artifact, `read_tool_result`, because it reads a stored
         // ToolCall, and `load_skill` and `read_skill_resource`, because they read a SkillPackage
-        // Snapshot, `read_chapter` and `search_manuscript`, because they read the manuscript, and
-        // `write_memory`, because it writes a Memory Entry.
+        // Snapshot, `read_chapter` and `search_manuscript`, because they read the manuscript,
+        // `write_memory`, because it writes a Memory Entry, and `read_memory_entry`, because it
+        // reads a Memory Entry and records the read.
         ToolIntake::WebSearch { .. }
         | ToolIntake::WebFetch { .. }
         | ToolIntake::ProposeEdit(_)
@@ -162,7 +166,8 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         | ToolIntake::ReadSkillResource { .. }
         | ToolIntake::ReadChapter { .. }
         | ToolIntake::SearchManuscript { .. }
-        | ToolIntake::WriteMemory(_) => None,
+        | ToolIntake::WriteMemory(_)
+        | ToolIntake::ReadMemoryEntry { .. } => None,
     }
 }
 

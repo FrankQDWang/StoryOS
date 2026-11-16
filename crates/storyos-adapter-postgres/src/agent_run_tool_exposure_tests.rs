@@ -104,7 +104,8 @@ pub(crate) fn function_call_stream(reference: &str) -> String {
     ])
 }
 
-/// The Exposure of the research Tool and the Host Tools on the current Agent Plan Registration.
+/// The Exposure of the research Tool and the Host Tools on the current Agent Plan Registration,
+/// for a Run with Memory use.
 fn research_exposure() -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
         bound: &[BoundTool {
@@ -114,15 +115,18 @@ fn research_exposure() -> ToolExposure {
         }],
         model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
         skill_catalog: false,
+        memory_use: true,
     })
 }
 
-/// The Exposure of the Host Tools alone on the current Agent Plan Registration.
+/// The Exposure of the Host Tools alone on the current Agent Plan Registration, for a Run with
+/// Memory use.
 pub(crate) fn host_exposure() -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
         bound: &[],
         model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
         skill_catalog: false,
+        memory_use: true,
     })
 }
 

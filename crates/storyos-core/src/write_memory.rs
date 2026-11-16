@@ -31,7 +31,9 @@ pub const MEMORY_DESCRIPTION_MAX_CHARS: usize = 100;
 pub(crate) const DESCRIPTION: &str = "Creates, changes, or deletes one entry of the Memory of \
 this Project. Call it only when the author asks you to remember something, to change what you \
 remember, or to forget something. An entry is a short synthesis or an intent, not a copy of a \
-passage. For a change or a delete, give the id of an entry of the section Memory index.";
+passage. The title names the subject of the entry and holds no fact: for a character, the title is \
+only the name of the character. A fact goes into the description and the text. For a change or a \
+delete, give the id of an entry of the section Memory index.";
 
 /// The strict JSON Schema of the arguments. Each field is required, and a field that the action
 /// does not use takes null.
