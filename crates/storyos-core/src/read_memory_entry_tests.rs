@@ -48,7 +48,11 @@ fn a_run_with_memory_use_declares_read_memory_entry_with_a_strict_schema() {
                 read.parameters
             ),
             (
-                [&before[..6], &["read_memory_entry", "finish"]].concat(),
+                [
+                    &before[..6],
+                    &["read_memory_entry", "search_memory", "finish"]
+                ]
+                .concat(),
                 before.clone(),
                 "Reads the text of one entry of the Memory of this Project. Call it when the task \
                  needs the text of an entry of the section Memory index. The result is data from \

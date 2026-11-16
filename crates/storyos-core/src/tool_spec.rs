@@ -45,6 +45,9 @@ pub enum ToolOperation {
     WriteMemory,
     /// The Host Tool with which the Agent reads one Memory Entry (ADR 0094 section 4).
     ReadMemoryEntry,
+    /// The Host Tool with which the Agent finds the Memory Entries that hold an exact term (ADR
+    /// 0094 section 4).
+    SearchMemory,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -149,6 +152,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::SEARCH_MANUSCRIPT_TOOL_SPEC,
         &crate::WRITE_MEMORY_TOOL_SPEC,
         &crate::READ_MEMORY_ENTRY_TOOL_SPEC,
+        &crate::SEARCH_MEMORY_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -192,6 +196,9 @@ pub enum ToolIntake {
     WriteMemory(crate::MemoryWrite),
     ReadMemoryEntry {
         entry: i64,
+    },
+    SearchMemory {
+        query: String,
     },
 }
 
@@ -288,6 +295,7 @@ impl ToolSpec {
             ToolOperation::SearchManuscript => crate::search_manuscript::intake(arguments),
             ToolOperation::WriteMemory => crate::write_memory::intake(arguments),
             ToolOperation::ReadMemoryEntry => crate::read_memory_entry::intake(arguments),
+            ToolOperation::SearchMemory => crate::search_memory::intake(arguments),
         }
     }
 }
@@ -349,7 +357,8 @@ impl ServerArguments {
                 | ToolIntake::ReadChapter { .. }
                 | ToolIntake::SearchManuscript { .. }
                 | ToolIntake::WriteMemory(_)
-                | ToolIntake::ReadMemoryEntry { .. },
+                | ToolIntake::ReadMemoryEntry { .. }
+                | ToolIntake::SearchMemory { .. },
             )
             | (
                 Self::Fetch { .. },
@@ -363,7 +372,8 @@ impl ServerArguments {
                 | ToolIntake::ReadChapter { .. }
                 | ToolIntake::SearchManuscript { .. }
                 | ToolIntake::WriteMemory(_)
-                | ToolIntake::ReadMemoryEntry { .. },
+                | ToolIntake::ReadMemoryEntry { .. }
+                | ToolIntake::SearchMemory { .. },
             ) => {
                 return None;
             }
