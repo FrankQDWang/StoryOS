@@ -81,6 +81,7 @@ mod snapshot;
 mod takeover;
 mod undo_latest_author_action;
 mod update_project_assistance;
+mod update_project_instruction;
 mod withdraw_proposal;
 
 pub use author_edit::{
@@ -237,6 +238,10 @@ pub use undo_latest_author_action::{
 pub use update_project_assistance::{
     ProjectAssistanceAcknowledgement, ProjectAssistanceRecord, UpdateProjectAssistanceInput,
     UpdateProjectAssistanceSettlement,
+};
+pub use update_project_instruction::{
+    ProjectInstructionRevision, ProjectInstructionSaved, UpdateProjectInstructionError,
+    UpdateProjectInstructionInput, UpdateProjectInstructionSettlement,
 };
 pub use withdraw_proposal::{
     CurrentProducerWithdrawal, CurrentProducerWithdrawalSettlement, ProposalWithdrawn,
@@ -517,6 +522,12 @@ pub trait ProjectReader: Sync {
         &self,
         scope: &ProjectScope,
     ) -> impl Future<Output = Result<Option<ProjectAssistanceRecord>, ProjectReadError>> + Send;
+
+    /// The current Revision of the Project Instruction, or `None` when the Project has none.
+    fn read_project_instruction(
+        &self,
+        scope: &ProjectScope,
+    ) -> impl Future<Output = Result<Option<ProjectInstructionRevision>, ProjectReadError>> + Send;
 }
 
 pub async fn open_project(
@@ -531,6 +542,13 @@ pub async fn open_project_assistance(
     scope: &ProjectScope,
 ) -> Result<Option<ProjectAssistanceRecord>, ProjectReadError> {
     reader.read_project_assistance(scope).await
+}
+
+pub async fn open_project_instruction(
+    reader: &impl ProjectReader,
+    scope: &ProjectScope,
+) -> Result<Option<ProjectInstructionRevision>, ProjectReadError> {
+    reader.read_project_instruction(scope).await
 }
 
 pub async fn open_current_chapter(

@@ -1,0 +1,13 @@
+{
+  "correlation_id": "018f0000-0000-7001-8000-000000000930",
+  "instruction": {
+    "instruction_revision_id": "018f0000-0000-7001-8000-000000000931",
+    "revision": "1",
+    "text": "Write in the past tense."
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "schema_id": "storyos.query.project-instruction.response.v1"
+}

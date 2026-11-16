@@ -129,6 +129,26 @@ export async function updateProjectAssistance({ projectId, request, idempotencyK
   return commandJson({ ...options, method: "PUT", path: `/api/v1/projects/${encodeURIComponent(projectId)}/assistance`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
+export async function getProjectInstruction({ projectId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getProjectInstruction requires projectId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/instruction` });
+}
+
+export async function digestUpdateProjectInstruction(request, cryptoImpl = globalThis.crypto) {
+  if (!request || typeof request !== "object") throw new TypeError("digestUpdateProjectInstruction requires request");
+  const canonical = canonicalJson(request);
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+  return { algorithm: "sha256", profile: "storyos.command.updateProjectInstruction.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
+}
+
+export async function updateProjectInstruction({ projectId, request, idempotencyKey, antiForgery, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("updateProjectInstruction requires projectId");
+  if (!request || typeof request !== "object") throw new TypeError("updateProjectInstruction requires request");
+  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("updateProjectInstruction requires security bindings");
+  return commandJson({ ...options, method: "PUT", path: `/api/v1/projects/${encodeURIComponent(projectId)}/instruction`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+}
+
 export async function digestCreateEditorSession(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestCreateEditorSession requires request");
   const canonical = { client_contract_revision: request.client_contract_revision, command_schema: request.command_schema, correlation_id: request.correlation_id, security_policy_revision: request.security_policy_revision };

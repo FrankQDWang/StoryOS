@@ -3,7 +3,7 @@ info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
   x-storyos-contract-revision: release1-wire-catalog-2026-09-27-expiry-rebuild
-  x-storyos-implemented-slice: getProtocolProfile,createProjectChallenge,createProject,createProjectCommandChallenge,listProjects,getProject,updateProject,getProjectAssistance,updateProjectAssistance,createEditorSession,getEditorSession,takeOverProjectWriter,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,applyAuthorEdit,acceptProposal,rejectProposalOperations,withdrawProposal,replanProposal,reopenWithdrawnProposal,reopenRejectedOperations,undoLatestAuthorAction,createAgentRun,getAgentRun,steerAgentRun,pauseAgentRun,cancelAgentRun,listSkills,listResearchSources,getResearchSource,getResearchArtifact,exportProjectArchive,exportHumanReadableManuscript,getManuscriptTree,getChapter,getStatistics,getProposal,listChapterOpenProposals,getApplyAuthorEditOutcome,getSnapshot,activityStream,searchManuscript,getExportOperation,getHumanReadableManuscriptExport
+  x-storyos-implemented-slice: getProtocolProfile,createProjectChallenge,createProject,createProjectCommandChallenge,listProjects,getProject,updateProject,getProjectAssistance,updateProjectAssistance,getProjectInstruction,updateProjectInstruction,createEditorSession,getEditorSession,takeOverProjectWriter,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,applyAuthorEdit,acceptProposal,rejectProposalOperations,withdrawProposal,replanProposal,reopenWithdrawnProposal,reopenRejectedOperations,undoLatestAuthorAction,createAgentRun,getAgentRun,steerAgentRun,pauseAgentRun,cancelAgentRun,listSkills,listResearchSources,getResearchSource,getResearchArtifact,exportProjectArchive,exportHumanReadableManuscript,getManuscriptTree,getChapter,getStatistics,getProposal,listChapterOpenProposals,getApplyAuthorEditOutcome,getSnapshot,activityStream,searchManuscript,getExportOperation,getHumanReadableManuscriptExport
 paths:
   /api/v1/protocol:
     get:
@@ -440,6 +440,120 @@ paths:
           description: Unsupported content type
         '422':
           description: Update Project Assistance refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/instruction:
+    get:
+      operationId: getProjectInstruction
+      summary: Read the current Revision of the Project Instruction
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Current Project Instruction Revision
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/project-instruction-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Active release conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+    put:
+      operationId: updateProjectInstruction
+      summary: Save the Project Instruction as one new immutable Revision
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/update-project-instruction-request.schema.json'
+      responses:
+        '200':
+          description: Project Instruction saved
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/update-project-instruction-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency binding conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Update Project Instruction refused
         '428':
           description: Precondition required
         '429':

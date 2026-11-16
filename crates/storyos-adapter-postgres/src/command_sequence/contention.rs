@@ -4,7 +4,9 @@ use storyos_application::{
     AcceptanceRefusalReason, AgentRunControlRefusal, ArchiveExportRefusal, DiagnosticField as _,
     ProjectCommandError, RefusableCommandError,
 };
-use storyos_core::{CreateAgentRunRefusal, ExportHumanReadableManuscriptRefusal};
+use storyos_core::{
+    CreateAgentRunRefusal, ExportHumanReadableManuscriptRefusal, UpdateProjectInstructionRefusal,
+};
 use tokio_postgres::error::SqlState;
 
 /// The settlement error of one project command.
@@ -58,6 +60,14 @@ impl RefusalCode for CreateAgentRunRefusal {
             Self::ConversationBusy => "conversation_busy",
             Self::InvalidChapterJoin => "invalid_chapter_join",
             Self::SkillSelectionUnavailable => "skill_selection_unavailable",
+        }
+    }
+}
+
+impl RefusalCode for UpdateProjectInstructionRefusal {
+    fn refusal_code(&self) -> &'static str {
+        match self {
+            Self::InstructionOverItemLimit => "instruction_over_item_limit",
         }
     }
 }

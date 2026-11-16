@@ -2,7 +2,7 @@ use storyos_application::{
     AcceptProposalInput, CreateChapterInput, CreateVolumeInput, DeleteChapterInput,
     DeleteVolumeInput, RejectProposalOperationsInput, ReopenWithdrawnProposalInput,
     SetCurrentChapterInput, UpdateChapterInput, UpdateProjectAssistanceInput, UpdateProjectInput,
-    UpdateVolumeInput, WithdrawProposalInput,
+    UpdateProjectInstructionInput, UpdateVolumeInput, WithdrawProposalInput,
 };
 use storyos_application::{
     CancelAgentRunInput, ChapterId, EditorSessionId, PauseAgentRunInput, VolumeId,
@@ -19,8 +19,8 @@ use super::agent_run::{
     create_agent_run_call, park_run, pause_agent_run, seed_run,
 };
 use super::project_session::{
-    TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE, take_over_project_writer,
-    take_over_project_writer_call,
+    TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE,
+    UPDATE_PROJECT_INSTRUCTION, take_over_project_writer, take_over_project_writer_call,
 };
 use super::proposal_decision::{
     REJECT_PROPOSAL_OPERATIONS, REOPEN_REJECTED_OPERATIONS, REOPEN_WITHDRAWN_PROPOSAL,
@@ -36,7 +36,7 @@ use super::structure::{
     new_chapter, new_volume, update_chapter, update_volume,
 };
 use super::support::{
-    CommandCall, issued, replayed_outcome, seed_project, stores, two_chapter_writer,
+    CommandCall, SequenceError, issued, replayed_outcome, seed_project, stores, two_chapter_writer,
     with_new_request_ids,
 };
 
@@ -261,6 +261,34 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         )
         .await;
         observed.push((UPDATE_PROJECT_ASSISTANCE.kind, outcome));
+    }
+
+    let scope = seed_project(&store, "ef40").await;
+    for (suffix, text, expected_revision) in [
+        (0xef41, "Write in the past tense.", 0),
+        (0xef42, "Write in the past tense.", 1),
+        (0xef43, "A stale text.", 0),
+        (0xef44, "", 1),
+    ] {
+        let input = UpdateProjectInstructionInput {
+            text: text.to_owned(),
+            expected_revision,
+        };
+        let call = issued(&store, &scope, suffix, &UPDATE_PROJECT_INSTRUCTION, input).await;
+        let outcome = replayed_outcome(
+            &store,
+            &admin,
+            &call,
+            async |store: &PostgresProjectReader,
+                   call: &CommandCall<UpdateProjectInstructionInput>| {
+                store
+                    .update_project_instruction(&call.envelope, &call.input)
+                    .await
+                    .map_err(SequenceError::sequence)
+            },
+        )
+        .await;
+        observed.push((UPDATE_PROJECT_INSTRUCTION.kind, outcome));
     }
 
     let call = take_over_project_writer_call(&store, /*base*/ 0x5da0).await;
@@ -570,6 +598,10 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             (CommandKind::UpdateProjectAssistance, no_effect),
             (CommandKind::UpdateProjectAssistance, conflicted),
             (CommandKind::UpdateProjectAssistance, activity_applied),
+            (CommandKind::UpdateProjectInstruction, activity_applied),
+            (CommandKind::UpdateProjectInstruction, no_effect),
+            (CommandKind::UpdateProjectInstruction, conflicted),
+            (CommandKind::UpdateProjectInstruction, activity_applied),
             (CommandKind::TakeOverProjectWriter, writer_takeover),
             (CommandKind::ReopenWithdrawnProposal, proposal_revised),
             (CommandKind::ReopenWithdrawnProposal, no_effect),
