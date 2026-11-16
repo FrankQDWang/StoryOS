@@ -497,11 +497,7 @@ export type ListProjectConversationsResponse = { schema_id: string, correlation_
 
 export type ProjectConversationRun = { run_id: string, author_message: string, chapter_id: string, status: AgentRunStatus, created_at: string, };
 
-export type GetProjectConversationResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, conversation_id: string, completeness: ProjectConversationCompleteness, 
-/**
- * True when the newest Run ended more than the Provider retention before the read.
- */
-earlier_turns_expired: boolean, runs: Array<ProjectConversationRun>, };
+export type GetProjectConversationResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, conversation_id: string, completeness: ProjectConversationCompleteness, earlier_turns_expired: boolean, runs: Array<ProjectConversationRun>, };
 
 export type SteerAgentRunInput = { conversation_id: string, author_message: AuthorMessage, selection_references?: Array<SelectionReference>, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
