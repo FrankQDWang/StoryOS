@@ -360,7 +360,7 @@ pub(crate) async fn replace_text(
 /// The selection of `chapter_id` as the Current Chapter of the Project in place of `from`, by
 /// the Editor Session `editor_session_id`, with a fresh challenge `suffix`. An Author Edit
 /// changes only the Current Chapter of the Project.
-async fn select(
+pub(crate) async fn select(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,

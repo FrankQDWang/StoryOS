@@ -28,7 +28,7 @@ use crate::create_volume_authority_tests::{NamedEdit, adjusted_edit_command};
 use crate::set_current_chapter_authority_tests::open_session_request;
 
 /// The expected result of a read of the Chapter `number`: the header line and each Block.
-fn read_text(
+pub(crate) fn read_text(
     number: i64,
     (title, chapter_id, revision_id): (&str, &str, &str),
     blocks: &[&str],
@@ -53,12 +53,12 @@ fn settled(text: &str) -> Value {
     json!(["read_chapter", "settled", null, text, true])
 }
 
-fn finish() -> Value {
+pub(crate) fn finish() -> Value {
     json!(["finish", "settled", null, "", true])
 }
 
 /// The output of the call `call_id` in its `tool_result` boundary with the state `state`.
-fn boundary(call_id: &str, state: &str, text: &str) -> Value {
+pub(crate) fn boundary(call_id: &str, state: &str, text: &str) -> Value {
     let escaped = text
         .replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -71,7 +71,7 @@ fn boundary(call_id: &str, state: &str, text: &str) -> Value {
 
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, each
 /// Tool output that it sent, and whether it sent the current input.
-async fn sent(admin: &Client, run_id: &str) -> Value {
+pub(crate) async fn sent(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
             "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
@@ -92,7 +92,7 @@ async fn sent(admin: &Client, run_id: &str) -> Value {
 
 /// The trust and state of each `tool_results` source, and the class, source version, and
 /// projection mode of each function output item, of the decision Context Assembly at `position`.
-async fn outputs_record(admin: &Client, run_id: &str, position: i32) -> Value {
+pub(crate) async fn outputs_record(admin: &Client, run_id: &str, position: i32) -> Value {
     let row = admin
         .query_one(
             "SELECT jsonb_build_array(
@@ -103,7 +103,8 @@ async fn outputs_record(admin: &Client, run_id: &str, position: i32) -> Value {
                                                           item ->> 'source_version',
                                                           item ->> 'projection_mode'))
                          FROM jsonb_array_elements(payload -> 'selected') AS item
-                        WHERE item ->> 'source_class' IN ('tool_result', 'manuscript_read_result')))::text
+                        WHERE item ->> 'source_class'
+                              IN ('tool_result', 'manuscript_read_result', 'manuscript_search_result')))::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'
                 AND decision_position = $2::text::numeric",
@@ -114,14 +115,16 @@ async fn outputs_record(admin: &Client, run_id: &str, position: i32) -> Value {
     serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
 }
 
-/// The identity of each `read_chapter` call of the Run, in call order.
-async fn read_ids(admin: &Client, run_id: &str) -> Vec<String> {
+/// The identity of each call of the Run with the function name `name`, in call order, or of
+/// each call when `name` is `None`.
+pub(crate) async fn call_ids(admin: &Client, run_id: &str, name: Option<&str>) -> Vec<String> {
     admin
         .query(
             "SELECT tool_call_id::text FROM storyos.tool_calls
-              WHERE run_id = $1::text::uuid AND function_name = 'read_chapter'
+              WHERE run_id = $1::text::uuid AND function_name = COALESCE($2, function_name)
+                AND function_name <> 'finish'
               ORDER BY decision_position, call_position",
-            &[&run_id],
+            &[&run_id, &name],
         )
         .await
         .unwrap()
@@ -132,7 +135,7 @@ async fn read_ids(admin: &Client, run_id: &str) -> Vec<String> {
 
 /// The Author Edit of the Editor Session `session` that writes `sentences` into the empty first
 /// Block of `chapter_id` and splits them into one Block each.
-async fn write_blocks(
+pub(crate) async fn write_blocks(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
@@ -185,7 +188,7 @@ async fn write_blocks(
 /// A new Project whose Chapter A has the Blocks `sentences`, a second empty Chapter `Fog` at its
 /// end, and an open Editor Session. `lead` names the Project. `suffix` is the challenge of the
 /// new Chapter, `suffix + 1` the Editor Session, and `suffix + 2` the Author Edit.
-async fn project(
+pub(crate) async fn project(
     store: &PostgresProjectReader,
     admin: &Client,
     lead: &str,
@@ -300,7 +303,7 @@ async fn reads_settle_with_the_head_text_and_the_next_request_sends_each_as_a_ma
     assert_eq!(outputs[2][2][6], rejected);
     // The settled reads are `manuscript_read_result` items with the ToolCall identity, and the
     // refused reads stay `tool_result` items. Each has the trust `data_only`.
-    let ids = read_ids(&admin, &run_id).await;
+    let ids = call_ids(&admin, &run_id, Some("read_chapter")).await;
     let settled_at = |index: usize| index < 3;
     let sources: Vec<Value> = (0..ids.len())
         .map(|i| json!(["data_only", if settled_at(i) { "ok" } else { "rejected" }]))
@@ -316,29 +319,40 @@ async fn reads_settle_with_the_head_text_and_the_next_request_sends_each_as_a_ma
         json!([sources, items])
     );
     // The public ToolCall list has no Host ToolCall.
+    assert!(no_public_call(&store, &admin, &scope, &run_id, &ids[0]).await);
+}
+
+/// Whether the public ToolCall list of the Model Attempt of the call `tool_call_id` is empty.
+pub(crate) async fn no_public_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    run_id: &str,
+    tool_call_id: &str,
+) -> bool {
     let attempt_id: String = admin
         .query_one(
             "SELECT model_attempt_id::text FROM storyos.tool_calls
               WHERE tool_call_id = $1::text::uuid",
-            &[&ids[0]],
+            &[&tool_call_id],
         )
         .await
         .unwrap()
         .get(/*idx*/ 0);
     let public = store
         .read_agent_run(
-            &scope,
-            &run_id,
+            scope,
+            run_id,
             &AgentRunReadSelection::ModelAttempt(attempt_id),
         )
         .await
         .unwrap()
         .unwrap()
         .decision;
-    assert!(matches!(
+    matches!(
         public,
         AgentRunDecisionInspect::ToolRequest { ref calls, .. } if calls.is_empty()
-    ));
+    )
 }
 
 #[tokio::test]
@@ -453,7 +467,7 @@ async fn a_chapter_above_the_item_limit_gives_its_whole_blocks_that_fit() {
          have block 2 or the blocks after it.]"
     );
     let output = sent(&admin, &run_id).await[1][2][0][1].clone();
-    let ids = read_ids(&admin, &run_id).await;
+    let ids = call_ids(&admin, &run_id, Some("read_chapter")).await;
     assert_eq!(
         (
             calls(&admin, &run_id).await[1][0].clone(),
@@ -500,7 +514,7 @@ async fn a_full_input_after_an_expired_reference_sends_each_read_output_again() 
             json!(["decision", 1, [read], true]),
         )
     );
-    let ids = read_ids(&admin, &run_id).await;
+    let ids = call_ids(&admin, &run_id, Some("read_chapter")).await;
     assert_eq!(
         outputs_record(&admin, &run_id, 1).await,
         json!([
