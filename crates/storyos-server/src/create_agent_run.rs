@@ -924,6 +924,32 @@ fn inspect_source_class(class: storyos_core::ContextSourceClass) -> contracts::C
         storyos_core::ContextSourceClass::SkillResource => {
             contracts::ContextSourceClass::SkillResource
         }
+        storyos_core::ContextSourceClass::ChapterList => contracts::ContextSourceClass::ChapterList,
+        storyos_core::ContextSourceClass::ManuscriptReadResult => {
+            contracts::ContextSourceClass::ManuscriptReadResult
+        }
+        storyos_core::ContextSourceClass::ManuscriptSearchResult => {
+            contracts::ContextSourceClass::ManuscriptSearchResult
+        }
+        storyos_core::ContextSourceClass::MemoryIndex => contracts::ContextSourceClass::MemoryIndex,
+        storyos_core::ContextSourceClass::MemoryReadResult => {
+            contracts::ContextSourceClass::MemoryReadResult
+        }
+        storyos_core::ContextSourceClass::MemorySearchResult => {
+            contracts::ContextSourceClass::MemorySearchResult
+        }
+        storyos_core::ContextSourceClass::MemoryCaptureInput => {
+            contracts::ContextSourceClass::MemoryCaptureInput
+        }
+        storyos_core::ContextSourceClass::MemoryDeleteMarks => {
+            contracts::ContextSourceClass::MemoryDeleteMarks
+        }
+        storyos_core::ContextSourceClass::MemoryEntries => {
+            contracts::ContextSourceClass::MemoryEntries
+        }
+        storyos_core::ContextSourceClass::MemoryObservations => {
+            contracts::ContextSourceClass::MemoryObservations
+        }
     }
 }
 

@@ -42,6 +42,10 @@ pub enum ContextPurpose {
     CurrentPassageAssistance,
     /// The summary request of an active compaction of the current Conversation.
     ActiveContextCompaction,
+    /// The capture of a quiet Project Conversation or a changed Chapter (ADR 0094 section 5).
+    MemoryCapture,
+    /// The consolidation pass of the Memory Observations (ADR 0094 section 6).
+    MemoryConsolidation,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -69,6 +73,27 @@ pub enum ContextSourceClass {
     SkillInstruction,
     /// The text of one resource file of a Skill (ADR 0089 section 3).
     SkillResource,
+    /// The order, the title, and the length of each Chapter of the Project (ADR 0095 section 1).
+    /// Each Stage 7 class is Data-only Context.
+    ChapterList,
+    /// The result of a read of the manuscript (ADR 0095 section 1).
+    ManuscriptReadResult,
+    /// The result of a keyword search or a hybrid search of the manuscript (ADR 0095 section 1).
+    ManuscriptSearchResult,
+    /// The type, the title, and the description of each current Memory Entry (ADR 0094 section 4).
+    MemoryIndex,
+    /// The result of a read of one Memory Entry (ADR 0094 section 4).
+    MemoryReadResult,
+    /// The result of a keyword search of the Memory Entries (ADR 0094 section 4).
+    MemorySearchResult,
+    /// The messages or the Chapter text that one capture reads (ADR 0094 section 5).
+    MemoryCaptureInput,
+    /// The marks of the entries that the author deleted (ADR 0094 section 6).
+    MemoryDeleteMarks,
+    /// The current entries that a consolidation pass gets (ADR 0094 section 6).
+    MemoryEntries,
+    /// The Memory Observations that a consolidation pass gets (ADR 0094 section 6).
+    MemoryObservations,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

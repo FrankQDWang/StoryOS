@@ -58,6 +58,24 @@ pub struct ExposureFacts<'a> {
     pub skill_catalog: bool,
 }
 
+impl ExposureFacts<'_> {
+    /// Whether the Tool Exposure of the RunStep has the Host Tool `operation`. Each Host Tool has
+    /// one rule of the facts of the RunStep. `load_skill` and `read_skill_resource` need a Skill
+    /// in the pinned catalog of the Run, so a Run with no Skill declares the Tools of before
+    /// (ADR 0089 section 3).
+    fn has_host_tool(&self, operation: ToolOperation) -> bool {
+        match operation {
+            ToolOperation::LoadSkill | ToolOperation::ReadSkillResource => self.skill_catalog,
+            ToolOperation::ProposeEdit
+            | ToolOperation::SubmitResearch
+            | ToolOperation::ReadToolResult
+            | ToolOperation::Finish => true,
+            // The web research Tools are Tools of the research binding, not Host Tools.
+            ToolOperation::WebSearch | ToolOperation::WebFetch => false,
+        }
+    }
+}
+
 /// One Tool that the request declares.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExposedTool {
@@ -206,9 +224,7 @@ impl ToolExposure {
     /// The Exposure of the facts. A binding exposes its Tools only when the Registration
     /// revision is active and known, the Decision is compatible, and the pinned Model
     /// Registration has qualified function calling. Each other binding exposes nothing, and a
-    /// second Tool of one function name stays out. The Host Tools follow. `load_skill` and
-    /// `read_skill_resource` are Host Tools only of a Run whose pinned catalog has a Skill, so a
-    /// Run with no Skill declares the Tools of before (ADR 0089 section 3).
+    /// second Tool of one function name stays out. The Host Tools that the facts permit follow.
     pub fn compute(facts: &ExposureFacts<'_>) -> Self {
         let Some(registration) =
             model_registration(facts.model_registration_revision).filter(|registration| {
@@ -247,13 +263,7 @@ impl ToolExposure {
         tools.extend(
             host.tools
                 .iter()
-                .filter(|spec| {
-                    facts.skill_catalog
-                        || !matches!(
-                            spec.operation,
-                            ToolOperation::LoadSkill | ToolOperation::ReadSkillResource
-                        )
-                })
+                .filter(|spec| facts.has_host_tool(spec.operation))
                 .map(|spec| ExposedTool {
                     name: spec.operation.function_name(),
                     registration_id: host.id,

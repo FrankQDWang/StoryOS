@@ -136,7 +136,7 @@ fn only_a_qualified_profile_or_an_authorized_qualification_of_its_requirement_re
 fn the_head_registration_pins_a_dated_version_and_each_revision_is_distinct() {
     let agent_plan: Vec<_> = [
         "fa02", "fa03", "fa04", "fa05", "fa06", "fa07", "fa08", "fa09", "fa10", "fa11", "fa12",
-        "fa13", "fa14", "fa15", "fa16", "fa17", "fa19", "fa20", "fa21",
+        "fa13", "fa14", "fa15", "fa16", "fa17", "fa19", "fa20", "fa21", "fa22",
     ]
     .iter()
     .map(|suffix| {
@@ -157,10 +157,10 @@ fn the_head_registration_pins_a_dated_version_and_each_revision_is_distinct() {
         (
             [
                 vec![Some("doubao-seed-2.1-pro"); 12],
-                vec![Some("doubao-seed-2-1-pro-260915"); 7]
+                vec![Some("doubao-seed-2-1-pro-260915"); 8]
             ]
             .concat(),
-            "018f0000-0000-7001-8000-00000000fa21",
+            "018f0000-0000-7001-8000-00000000fa22",
             "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v4",
             "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v1",
         )
@@ -168,23 +168,25 @@ fn the_head_registration_pins_a_dated_version_and_each_revision_is_distinct() {
 }
 
 #[test]
-fn the_head_registration_of_the_mapping_v7_keeps_the_profile_and_the_requirement_of_fa20() {
+fn the_head_registration_of_the_mapping_v8_keeps_the_profile_and_the_requirement_of_fa21() {
     let mapping = |suffix: &str| {
         model_registration(&format!("018f0000-0000-7001-8000-00000000{suffix}"))
             .map(|registration| registration.mapping_revision)
     };
-    let pinned = crate::AGENT_PLAN_READ_RESULT_REGISTRATION;
+    let pinned = crate::AGENT_PLAN_SKILL_REGISTRATION;
 
     assert_eq!(
         (
             mapping("fa20"),
             mapping("fa21"),
+            mapping("fa22"),
             AGENT_PLAN_REGISTRATION.qualified(),
             crate::HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
         ),
         (
             Some("storyos.volcengine-agent-plan.responses.create.v6"),
             Some("storyos.volcengine-agent-plan.responses.create.v7"),
+            Some("storyos.volcengine-agent-plan.responses.create.v8"),
             true,
             "018f0000-0000-7001-8000-00000000fa18",
         )

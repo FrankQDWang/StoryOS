@@ -124,7 +124,7 @@ async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_sco
 
     assert_eq!(
         grant_scope.as_deref(),
-        Some("project_writing_assistance_v4")
+        Some("project_writing_assistance_v5")
     );
     // The `finish` RunStep and the closing RunStep.
     assert_eq!(
@@ -133,7 +133,7 @@ async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_sco
     );
     let admitted = serde_json::json!({
         "grant_id": grant_id,
-        "grant_scope": "project_writing_assistance_v4"
+        "grant_scope": "project_writing_assistance_v5"
     });
     assert_eq!(
         grant_evidence(&admin, &run_id).await,
@@ -188,10 +188,10 @@ async fn a_grant_without_a_scope_refuses_before_dispatch_and_the_next_run_rebind
         }
     );
     assert_ne!(new_grant, old_grant);
-    assert_eq!(new_scope.as_deref(), Some("project_writing_assistance_v4"));
+    assert_eq!(new_scope.as_deref(), Some("project_writing_assistance_v5"));
     let admitted = serde_json::json!({
         "grant_id": new_grant,
-        "grant_scope": "project_writing_assistance_v4"
+        "grant_scope": "project_writing_assistance_v5"
     });
     assert_eq!(
         grant_evidence(&admin, &rebound_run).await,
@@ -229,31 +229,40 @@ async fn binding_rows(
     serde_json::from_str(&text).unwrap()
 }
 
-/// ADR 0089 section 4 and ADR 0051: a grant with the third scope gets new binding records with
-/// the fourth scope at the next `createAgentRun`, with no action of the author.
+/// ADR 0094, ADR 0095, and ADR 0051: a grant with the fourth scope gets new binding records with
+/// the fifth scope at the next `createAgentRun`, with no action of the author. The grant of
+/// another Project does not change.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_grant_with_the_third_scope_gets_new_records_with_the_fourth_scope_at_the_next_run() {
+async fn a_grant_with_the_fourth_scope_gets_new_records_with_the_fifth_scope_at_the_next_run() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, pinned_run) =
         queued_run(&store, "b01", DeploymentDestination::HostFakeToolLoop).await;
-    let earlier = open_project_assistance(&store, &scope)
-        .await
-        .unwrap()
-        .unwrap();
-    admin
-        .execute(
-            "UPDATE storyos.project_destination_grants
-                SET grant_scope = 'project_writing_assistance_v3'
-              WHERE grant_id = $1::text::uuid",
-            &[&earlier.grant_id],
-        )
-        .await
-        .unwrap();
+    let (other_scope, _, other_run) =
+        queued_run(&store, "b07", DeploymentDestination::HostFakeToolLoop).await;
+    let mut earlier_records = Vec::new();
+    for scope in [&scope, &other_scope] {
+        let earlier = open_project_assistance(&store, scope)
+            .await
+            .unwrap()
+            .unwrap();
+        admin
+            .execute(
+                "UPDATE storyos.project_destination_grants
+                    SET grant_scope = 'project_writing_assistance_v4'
+                  WHERE grant_id = $1::text::uuid",
+                &[&earlier.grant_id],
+            )
+            .await
+            .unwrap();
+        earlier_records.push(earlier);
+    }
+    let [earlier, other] = <[_; 2]>::try_from(earlier_records).unwrap();
     let earlier_rows = binding_rows(&admin, &earlier).await;
+    let other_rows = binding_rows(&admin, &other).await;
 
     let rebound_run = admit_run(
         &store,
@@ -281,6 +290,10 @@ async fn a_grant_with_the_third_scope_gets_new_records_with_the_fourth_scope_at_
     };
     let stale = settle(&store, &admin, &FakeDestination, &scope, &pinned_run).await;
     settle(&store, &admin, &FakeDestination, &scope, &rebound_run).await;
+    let other_current = open_project_assistance(&store, &other_scope)
+        .await
+        .unwrap()
+        .unwrap();
 
     assert_eq!(
         (
@@ -288,9 +301,10 @@ async fn a_grant_with_the_third_scope_gets_new_records_with_the_fourth_scope_at_
             pinned,
             binding_rows(&admin, &earlier).await,
             stale.settlement,
+            (other_current, binding_rows(&admin, &other).await),
         ),
         (
-            Some("project_writing_assistance_v4".to_owned()),
+            Some("project_writing_assistance_v5".to_owned()),
             (
                 current.grant_id.clone(),
                 current.project_model_use_binding_revision.clone()
@@ -300,6 +314,7 @@ async fn a_grant_with_the_third_scope_gets_new_records_with_the_fourth_scope_at_
                 r#"{"kind": "execution_refused", "capability": "model_use_binding_stale"}"#
                     .to_owned()
             ),
+            (other.clone(), other_rows),
         )
     );
     assert!(
@@ -315,12 +330,22 @@ async fn a_grant_with_the_third_scope_gets_new_records_with_the_fourth_scope_at_
     );
     let admitted = serde_json::json!({
         "grant_id": current.grant_id,
-        "grant_scope": "project_writing_assistance_v4"
+        "grant_scope": "project_writing_assistance_v5"
     });
     assert_eq!(
         grant_evidence(&admin, &rebound_run).await,
         ("completed".to_owned(), Some(admitted.clone()), admitted)
     );
+    // The HTTP phases drain the queued Runs of the shared database, so the test parks its Run.
+    admin
+        .execute(
+            "UPDATE storyos.agent_runs
+                SET status = 'paused', lease_expires_at = NULL, wakeup_pending = false
+              WHERE run_id = $1::text::uuid AND status = 'queued'",
+            &[&other_run],
+        )
+        .await
+        .unwrap();
 }
 
 /// Changes the pinned grant when the request of `stage` is prepared, after its admission and

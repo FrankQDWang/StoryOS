@@ -379,6 +379,8 @@ fn encode_purpose(purpose: ContextPurpose) -> &'static str {
     match purpose {
         ContextPurpose::CurrentPassageAssistance => "current_passage_assistance",
         ContextPurpose::ActiveContextCompaction => "active_context_compaction",
+        ContextPurpose::MemoryCapture => "memory_capture",
+        ContextPurpose::MemoryConsolidation => "memory_consolidation",
     }
 }
 
@@ -386,6 +388,8 @@ fn decode_purpose(value: &str) -> Option<ContextPurpose> {
     match value {
         "current_passage_assistance" => Some(ContextPurpose::CurrentPassageAssistance),
         "active_context_compaction" => Some(ContextPurpose::ActiveContextCompaction),
+        "memory_capture" => Some(ContextPurpose::MemoryCapture),
+        "memory_consolidation" => Some(ContextPurpose::MemoryConsolidation),
         _ => None,
     }
 }
@@ -408,6 +412,16 @@ fn encode_source_class(class: ContextSourceClass) -> &'static str {
         ContextSourceClass::SkillCatalog => "skill_catalog",
         ContextSourceClass::SkillInstruction => "skill_instruction",
         ContextSourceClass::SkillResource => "skill_resource",
+        ContextSourceClass::ChapterList => "chapter_list",
+        ContextSourceClass::ManuscriptReadResult => "manuscript_read_result",
+        ContextSourceClass::ManuscriptSearchResult => "manuscript_search_result",
+        ContextSourceClass::MemoryIndex => "memory_index",
+        ContextSourceClass::MemoryReadResult => "memory_read_result",
+        ContextSourceClass::MemorySearchResult => "memory_search_result",
+        ContextSourceClass::MemoryCaptureInput => "memory_capture_input",
+        ContextSourceClass::MemoryDeleteMarks => "memory_delete_marks",
+        ContextSourceClass::MemoryEntries => "memory_entries",
+        ContextSourceClass::MemoryObservations => "memory_observations",
     }
 }
 
@@ -422,6 +436,16 @@ fn decode_source_class(value: &str) -> Option<ContextSourceClass> {
         "skill_catalog" => Some(ContextSourceClass::SkillCatalog),
         "skill_instruction" => Some(ContextSourceClass::SkillInstruction),
         "skill_resource" => Some(ContextSourceClass::SkillResource),
+        "chapter_list" => Some(ContextSourceClass::ChapterList),
+        "manuscript_read_result" => Some(ContextSourceClass::ManuscriptReadResult),
+        "manuscript_search_result" => Some(ContextSourceClass::ManuscriptSearchResult),
+        "memory_index" => Some(ContextSourceClass::MemoryIndex),
+        "memory_read_result" => Some(ContextSourceClass::MemoryReadResult),
+        "memory_search_result" => Some(ContextSourceClass::MemorySearchResult),
+        "memory_capture_input" => Some(ContextSourceClass::MemoryCaptureInput),
+        "memory_delete_marks" => Some(ContextSourceClass::MemoryDeleteMarks),
+        "memory_entries" => Some(ContextSourceClass::MemoryEntries),
+        "memory_observations" => Some(ContextSourceClass::MemoryObservations),
         _ => None,
     }
 }

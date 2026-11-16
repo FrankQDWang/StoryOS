@@ -390,6 +390,87 @@ fn each_skill_source_class_roundtrips_with_its_persisted_name() {
     assert_eq!(decode_assembly_record(&payload), Some(record));
 }
 
+/// The Stage 7 source classes of ADR 0095 section 1 and ADR 0094 sections 4 to 6, with their
+/// persisted names.
+const STAGE_7_SOURCE_CLASSES: [(ContextSourceClass, &str); 10] = [
+    (ContextSourceClass::ChapterList, "chapter_list"),
+    (
+        ContextSourceClass::ManuscriptReadResult,
+        "manuscript_read_result",
+    ),
+    (
+        ContextSourceClass::ManuscriptSearchResult,
+        "manuscript_search_result",
+    ),
+    (ContextSourceClass::MemoryIndex, "memory_index"),
+    (ContextSourceClass::MemoryReadResult, "memory_read_result"),
+    (
+        ContextSourceClass::MemorySearchResult,
+        "memory_search_result",
+    ),
+    (
+        ContextSourceClass::MemoryCaptureInput,
+        "memory_capture_input",
+    ),
+    (ContextSourceClass::MemoryDeleteMarks, "memory_delete_marks"),
+    (ContextSourceClass::MemoryEntries, "memory_entries"),
+    (
+        ContextSourceClass::MemoryObservations,
+        "memory_observations",
+    ),
+];
+
+#[test]
+fn each_stage_7_source_class_and_purpose_roundtrips_with_its_persisted_name() {
+    let mut record = assemble_current_passage_context(&complete_input());
+    record.selected = STAGE_7_SOURCE_CLASSES
+        .map(|(source_class, _)| SelectedProjection {
+            source_class,
+            source_version: "sha256:source".to_owned(),
+            projection_mode: ProjectionMode::ExactRequired,
+            token_count: 3,
+            content: "Data <text> & \"quotes\"".to_owned(),
+        })
+        .to_vec();
+    let with_purpose = |purpose| {
+        let mut record = record.clone();
+        record.operation_requirement.purpose = purpose;
+        record
+    };
+    let records = [
+        with_purpose(ContextPurpose::MemoryCapture),
+        with_purpose(ContextPurpose::MemoryConsolidation),
+    ];
+    let payloads = records
+        .clone()
+        .map(|record| encode_assembly_record(&record));
+
+    assert_eq!(
+        (
+            payloads[0]["selected"]
+                .as_array()
+                .expect("selected")
+                .iter()
+                .map(|item| item["source_class"].as_str().expect("class"))
+                .collect::<Vec<_>>(),
+            payloads
+                .clone()
+                .map(|payload| payload["operation_requirement"]["purpose"].clone()),
+        ),
+        (
+            STAGE_7_SOURCE_CLASSES.map(|(_, name)| name).to_vec(),
+            [
+                serde_json::json!("memory_capture"),
+                serde_json::json!("memory_consolidation")
+            ],
+        )
+    );
+    assert_eq!(
+        payloads.map(|payload| decode_assembly_record(&payload)),
+        records.map(Some)
+    );
+}
+
 #[test]
 fn historical_assembly_without_block_selection_remains_readable() {
     let record = assemble_current_passage_context(&complete_input());

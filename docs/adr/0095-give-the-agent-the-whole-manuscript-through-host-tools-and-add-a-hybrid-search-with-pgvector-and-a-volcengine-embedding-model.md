@@ -65,6 +65,17 @@ One ticket answers the open points before a ticket builds the hybrid search:
 
 The probe sends its live requests on a path that the ticket names before its dispatch, in the rules of the live model requests of [Delivery](../agents/delivery.md). When the probe fails for the Volcengine model, an amendment of this ADR selects a local model. The study names `Qwen3-Embedding-0.6B` and `bge-m3` as candidates.
 
+### 6. The request revisions of Stage 7
+
+[S7-B0](https://github.com/FrankQDWang/StoryOS/issues/1567) recorded these names on 2026-11-16. They are the one set of request revisions of Stage 7 for the requests of the Agent Plan mapping. The later Stage 7 tickets add their items, their Tools, their sections, their request forms, and their instruction paragraphs to these revisions in place, by the rule of ADR 0093 section 3: `main` has no `v8`, no `fa22`, and no `…0e0104` before the aggregate pull request of [#365](https://github.com/FrankQDWang/StoryOS/issues/365) merges.
+
+- **The source classes.** The Core and the public contract get ten Context source classes. Each of them is Data-only Context. The manuscript classes are `chapter_list` (the Chapter list of section 1), `manuscript_read_result` (the result of the read), and `manuscript_search_result` (the result of the keyword search and of the hybrid search). The Memory classes of ADR 0094 are `memory_index`, `memory_read_result`, `memory_search_result`, `memory_capture_input`, `memory_delete_marks`, `memory_entries`, and `memory_observations`. `getAgentRun` shows the classes of a Run of the author.
+- **The Purposes.** The Core gets the Purposes `memory_capture` and `memory_consolidation` of the background Memory work (ADR 0094 sections 5 and 6).
+- **The grant scope.** The scope revision `project_writing_assistance_v5` names each Purpose and each source class of `project_writing_assistance_v4`, the ten source classes, and the two Purposes. It is the scope of each new grant (ADR 0051, amendment of 2026-11-16).
+- **The mapping and the Registrations.** The mapping revision is `storyos.volcengine-agent-plan.responses.create.v8`. The head Model Registration is `018f0000-0000-7001-8000-00000000fa22`: Registration `fa21` with the mapping `v8`. The Host Tool Registration revision `018f0000-0000-7001-8000-0000000e0104` has the six Host Tools of `…0e0103`, and the mapping `v8` and the fake tool loop mapping declare it (ADR 0053, amendment of 2026-11-16). Until a later ticket selects an item of a new class or adds a Tool, a request of `v8` has the bytes of the `v7` request of the same input.
+- **The Exposure rule.** One Core function decides if the Tool Exposure of a RunStep has a Host Tool, from the facts of the RunStep. Each Host Tool has one rule. Each later ticket that adds a Host Tool adds its fact and its rule.
+- **The embedding request.** The embedding request of section 3 is not a request of this mapping. Its ticket adds its own grant scope value, `manuscript_embedding_v1`, with the Purpose `manuscript_embedding` and the classes `chapter_passage` and `search_question`. These are not values of the Context Purpose or of the Context source class, because no Context item has them.
+
 ## Considered options
 
 - One search that always uses the vector side was rejected by the author. The keyword search is cheaper and answers most questions.
