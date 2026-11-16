@@ -15,6 +15,7 @@ const PROJECT = "018f0000-0000-7001-8000-0000000a2001";
 const FOREIGN = "018f0000-0000-7001-8000-0000000a2002";
 const SCOPE = { owner_user_id: OWNER, project_id: PROJECT };
 const INSTRUCTION = `/api/v1/projects/${PROJECT}/instruction`;
+const MEMORY = `/api/v1/projects/${PROJECT}/memory-entries`;
 const PROJECT_VIEW: GetProjectResponse = {
   schema_id: "storyos.query.project.response.v1",
   correlation_id: "018f0000-0000-7001-8000-0000000a2010",
@@ -50,6 +51,10 @@ function fakeServer(saves: SaveAnswer[] = []) {
         correlation_id: "018f0000-0000-7001-8000-0000000a2013", project_scope: SCOPE,
         instruction: { instruction_revision_id: "018f0000-0000-7001-8000-0000000a2014", revision: "1",
           text: "Old rule." } });
+    }
+    if (path === MEMORY) {
+      return jsonResponse({ schema_id: "storyos.query.memory-entries.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-0000000a2017", project_scope: SCOPE, entries: [] });
     }
     if (path.endsWith("/anti-forgery-challenges")) {
       return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-11-16T12:05:00.000Z",
@@ -145,10 +150,11 @@ it("opens the settings page of a Project of the session and no other Project or 
     ["项目设置", null],
     ["项目指令", null],
     ["保存后从下一次请求开始生效，进行中的请求不受影响。", null],
+    ["记忆", null],
   ]);
   // The page opens no Editor Session.
   expect(server.sent.map(({ method, path }) => `${method} ${path}`)).toEqual([
-    "GET /api/v1/protocol", `GET /api/v1/projects/${PROJECT}`, "GET /api/v1/projects", `GET ${INSTRUCTION}`]);
+    "GET /api/v1/protocol", `GET /api/v1/projects/${PROJECT}`, "GET /api/v1/projects", `GET ${INSTRUCTION}`, `GET ${MEMORY}`]);
 
   const foreign = fakeServer();
   const blocked = await open(`/projects/${FOREIGN}/settings`, foreign.fetchImpl);
