@@ -270,18 +270,7 @@ async fn stored_tool_calls(
                 state: ToolCallState::parse(row.get(/*idx*/ 7))
                     .ok_or_else(|| damaged("The ToolCall is damaged"))?,
                 result_text: row.get(/*idx*/ 8),
-                output: match row.get::<_, Option<&str>>(/*idx*/ 9) {
-                    Some(spec) if spec == storyos_core::READ_TOOL_RESULT_TOOL_SPEC.revision => {
-                        ToolResultOutput::StoredRead
-                    }
-                    Some(spec)
-                        if storyos_core::tool_spec(spec)
-                            .is_some_and(|spec| spec.envelope.is_some()) =>
-                    {
-                        ToolResultOutput::Research
-                    }
-                    Some(_) | None => ToolResultOutput::HostTool,
-                },
+                output: ToolResultOutput::of_spec(row.get(/*idx*/ 9)),
                 function_name: row.get(/*idx*/ 10),
                 arguments: canonical_arguments(row.get(/*idx*/ 11))?,
                 installed_stub: row.get(/*idx*/ 12),

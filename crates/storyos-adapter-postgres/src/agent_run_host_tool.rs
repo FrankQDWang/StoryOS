@@ -38,6 +38,9 @@ pub(crate) async fn execute(
             return crate::agent_run_read_skill_resource::execute(client, claim, row, skill, path)
                 .await;
         }
+        ToolIntake::ReadChapter { chapter } => {
+            return crate::agent_run_read_chapter::execute(client, claim, row, *chapter).await;
+        }
         ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } | ToolIntake::Finish => {}
     }
     let refused_beside: bool = client

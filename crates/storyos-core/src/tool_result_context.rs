@@ -96,12 +96,27 @@ pub enum ToolResultOutput {
     /// The bounded projection of the result of a research Tool with its source tag and its
     /// citable sources.
     Research,
-    /// The bounded projection of the result of a Host Tool. `read_tool_result` cannot read it, so
-    /// it keeps its exact form.
-    HostTool,
+    /// The bounded projection of the result of a Host Tool, with the source class of its settled
+    /// result. `read_tool_result` cannot read it, so it keeps its exact form.
+    HostTool(ContextSourceClass),
     /// The settled result of a `read_tool_result` call as it is: it already is the bounded form
     /// of the call that it read (ADR 0093). A refusal of the read is projected.
     StoredRead,
+}
+
+impl ToolResultOutput {
+    /// The output of a ToolCall that pinned the ToolSpec revision `spec_revision`. A revision that
+    /// this build does not know gives a `tool_result` item.
+    pub fn of_spec(spec_revision: Option<&str>) -> Self {
+        match spec_revision.and_then(crate::tool_spec) {
+            Some(spec) if spec.revision == crate::READ_TOOL_RESULT_TOOL_SPEC.revision => {
+                Self::StoredRead
+            }
+            Some(spec) if spec.envelope.is_some() => Self::Research,
+            Some(spec) => Self::HostTool(crate::host_tool_result_class(spec)),
+            None => Self::HostTool(ContextSourceClass::ToolResult),
+        }
+    }
 }
 
 /// The form in which the request sends one result (ADR 0093 section 5).
@@ -243,8 +258,17 @@ pub fn assemble_tool_result_continuation(
                     ProjectionMode::ExactRequired,
                 ),
             ),
+            // The settled result of a Host Tool has the class of its ToolSpec, and each other
+            // output is a `tool_result` item.
             None => (
-                ContextSourceClass::ToolResult,
+                match (candidate.output, candidate.state, projection) {
+                    (
+                        ToolResultOutput::HostTool(class),
+                        ToolCallState::Settled,
+                        ToolResultProjection::Ok(_) | ToolResultProjection::Empty,
+                    ) => class,
+                    _ => ContextSourceClass::ToolResult,
+                },
                 candidate_item(candidate, projection, requirement.item_token_limit),
             ),
         };
@@ -329,7 +353,9 @@ fn candidate_item(
             kept_result_tokens: None,
         },
         (
-            ToolResultOutput::StoredRead | ToolResultOutput::Research | ToolResultOutput::HostTool,
+            ToolResultOutput::StoredRead
+            | ToolResultOutput::Research
+            | ToolResultOutput::HostTool(_),
             _,
         ) => project_item(
             candidate.call_id,
@@ -355,7 +381,7 @@ fn candidate_item(
             }
         }
         ToolResultOutput::Research => Some(None),
-        ToolResultOutput::HostTool => None,
+        ToolResultOutput::HostTool(_) => None,
     };
     let stub_applies = candidate.form == ToolResultForm::Stub
         && matches!(projection, ToolResultProjection::Ok(_))
@@ -451,14 +477,17 @@ pub fn is_skill_load_output(
 }
 
 /// Whether the selected `item` of `record` is the output of a function call: a `tool_result`
-/// item, the output of a load, or a `skill_resource` item, which only a read gives.
+/// item, the output of a load, a `skill_resource` item, which only a read gives, or a
+/// `manuscript_read_result` item, which only a `read_chapter` call gives.
 pub fn is_function_output(
     record: &CurrentPassageAssemblyRecord,
     item: &SelectedProjection,
 ) -> bool {
     matches!(
         item.source_class,
-        ContextSourceClass::ToolResult | ContextSourceClass::SkillResource
+        ContextSourceClass::ToolResult
+            | ContextSourceClass::SkillResource
+            | ContextSourceClass::ManuscriptReadResult
     ) || is_skill_load_output(record, item)
 }
 
