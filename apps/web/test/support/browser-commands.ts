@@ -27,6 +27,7 @@ import { verifyProductionMultiProposal } from "./production-multi-proposal-comma
 import { verifyProductionSelectionReference } from "./production-selection-reference-command.ts";
 import { verifyProductionResearchJourney } from "./production-research-journey-command.ts";
 import { verifyProductionSkillJourney } from "./production-skill-journey-command.ts";
+import { verifyProductionProjectConversations } from "./production-project-conversations-command.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
@@ -124,6 +125,8 @@ export const storyOSBrowserCommands = {
         await verifyProductionResearchJourney(context.context);
       } else if (request.scenario === "skill_journey") {
         await verifyProductionSkillJourney(context.context);
+      } else if (request.scenario === "project_conversations") {
+        await verifyProductionProjectConversations(context.context);
       } else if (request.scenario === "run_evidence") {
         await verifyProductionRunEvidence(context.context);
       } else if (request.scenario === "captured_memory") {
