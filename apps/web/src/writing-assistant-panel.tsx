@@ -21,6 +21,8 @@ import {
   stoppedWithoutResult,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
+import { ProjectConversationList } from "./project-conversation-list.tsx";
+import { readOpenedConversation, type OpenedConversation, type OpenedRun } from "./project-conversation-read.ts";
 import { ResearchTurn, researchDecision } from "./research-turn.tsx";
 import { RunResultList } from "./run-result-list.tsx";
 import { SkillUseList } from "./skill-use-list.tsx";
@@ -31,6 +33,9 @@ import { clearDraftReferences, draftEntries, draftLabels, setRunReferences } fro
 import { SKILL_UNAVAILABLE_SENTENCE, skillSelectionUnavailable } from "./skill-selection.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
+export const CONVERSATION_NOT_FOUND_SENTENCE = "找不到这段对话。";
+export const CONVERSATION_OPEN_FAILED_SENTENCE = "无法打开这段对话，请稍后再试。";
+export const EARLIER_TURNS_EXPIRED_SENTENCE = "这段对话已超过 72 小时，助手可能不记得之前的内容。";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type TranscriptExchange = {
@@ -55,8 +60,10 @@ type RequestReference = {
   message: string;
   chapterId: string;
   correlationId: string;
-  idempotencyKey: string;
-  snapshotId: string;
+  /** The key and the Snapshot of a request of this browser session. A Conversation that the panel opened from the
+   * Host has neither, because its Runs have their identities. */
+  idempotencyKey?: string;
+  snapshotId?: string;
   runId?: string;
   conversationId?: string;
   conversationChoice?: "new";
@@ -69,6 +76,8 @@ type RequestReference = {
   /** The names of the Skills that the message selected, for their labels. */
   skillNames?: string[];
   guidance?: GuidanceReferences[];
+  /** The Conversation that the panel opened from the Host, for its notice lines. */
+  opened?: OpenedConversation;
 };
 
 /** The references of a message, their labels for the history, and their draft keys. */
@@ -125,9 +134,12 @@ function readReference(scope: ProjectScope): RequestReference | undefined {
       || typeof ref.message !== "string"
       || !UUID.test(ref.chapterId)
       || !UUID.test(ref.correlationId)
-      || !UUID.test(ref.idempotencyKey)
-      || !UUID.test(ref.snapshotId)
+      || (ref.idempotencyKey === undefined ? ref.runId === undefined : !UUID.test(ref.idempotencyKey))
+      || (ref.snapshotId === undefined ? ref.runId === undefined : !UUID.test(ref.snapshotId))
       || (ref.runId !== undefined && !UUID.test(ref.runId))
+      || (ref.opened !== undefined && (ref.opened === null || typeof ref.opened !== "object"
+        || ![ref.opened.conversationId, ref.opened.firstRunId, ref.opened.newestRunId].every((value) => UUID.test(value))
+        || typeof ref.opened.truncated !== "boolean" || typeof ref.opened.expired !== "boolean"))
       || (ref.conversationId !== undefined && !UUID.test(ref.conversationId))
       || (ref.conversationChoice !== undefined && ref.conversationChoice !== "new")
       || (ref.history !== undefined && (!Array.isArray(ref.history)
@@ -204,6 +216,20 @@ function resultText(run: GetAgentRunResponse): string | undefined {
   }
 }
 
+/** The names of the Skills that the author selected for a Run that the panel read from the Host (ADR 0089 section 8). */
+function selectedSkillNames(run: GetAgentRunResponse): { skillNames?: string[] } {
+  const names = (run.skill_uses ?? []).flatMap((use) => use.provenance === "author_selected" ? [use.name] : []);
+  return names.length === 0 ? {} : { skillNames: names };
+}
+
+/** One exchange of a Conversation that the panel opened from the Host. It has no reference label (ADR 0062). */
+function openedExchange({ row, run }: OpenedRun): TranscriptExchange {
+  const result = resultText(run);
+  return { requestId: row.run_id, chapterId: row.chapter_id, runId: row.run_id, conversationId: run.conversation_id,
+    run, message: row.author_message, status: run.status, ...selectedSkillNames(run),
+    ...(result === undefined ? {} : { result }) };
+}
+
 /** The Proposals that a Run shows: each Proposal result of a settled Run, or else the Proposal of its decision. */
 function shownProposals(run: GetAgentRunResponse): { decisionId: string; proposalId?: string; locations: ProseChangeLocationInspect[] }[] {
   const results = runResults(run);
@@ -255,7 +281,10 @@ const runLabels: Record<GetAgentRunResponse["status"], string> = {
 
 export function WritingAssistantPanel({
   collapsed, context, onOpenedProposal, onNavigateProposal, scheduleRefresh = scheduleRunRefresh,
+  requestedConversationId,
 }: {
+  /** The Conversation that the workspace address names. The panel opens it one time after the workspace loads. */
+  requestedConversationId?: string | undefined;
   /** Schedules the next read of a Run that has not settled. Tests inject their own clock. */
   scheduleRefresh?: RefreshSchedule;
   onNavigateProposal?: ((destination: ProposalDestination) => void) | undefined;
@@ -277,6 +306,10 @@ export function WritingAssistantPanel({
   const [skills, setSkills] = useState<SkillCatalogEntry[]>();
   // A refused selection reads the Skills of the deployment again.
   const [skillReads, setSkillReads] = useState(0);
+  const [listOpen, setListOpen] = useState(false);
+  // The address opens its Conversation only after the panel read the stored request, so that it knows its state.
+  const [storedReadDone, setStoredReadDone] = useState(reference === undefined);
+  const requested = useRef(requestedConversationId);
 
   useEffect(() => {
     if (context === undefined) {
@@ -316,6 +349,7 @@ export function WritingAssistantPanel({
       readReference(current.scope)?.correlationId === current.correlationId;
     let runId = current.runId;
     if (runId === undefined) {
+      if (current.snapshotId === undefined) return;
       const body = await activityStream({
         baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
         projectId: current.scope.project_id, snapshotId: current.snapshotId,
@@ -347,12 +381,22 @@ export function WritingAssistantPanel({
     setRun(result);
     // The Run exists, so its references go from the composer also after a lost acknowledgement.
     clearDraftReferences(current.scope, current.referenceKeys ?? []);
+    if (!await showProposals(current, result)) return;
+    setStatus("");
+    return result;
+  };
+
+  /** Gives each Proposal of the Run to the editor. Gives false when the request record changed during a read. */
+  const showProposals = async (current: RequestReference, result: GetAgentRunResponse): Promise<boolean> => {
+    if (context === undefined) return false;
+    const stillCurrent = () =>
+      readReference(current.scope)?.correlationId === current.correlationId;
     for (const proposal of shownProposals(result)) {
       for (const location of proposal.locations) {
         if (location.outcome.kind === "revised") {
           const response = await getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
             projectId: current.scope.project_id, proposalId: location.outcome.proposal_id });
-          if (!stillCurrent()) return;
+          if (!stillCurrent()) return false;
           if (response.project_scope.owner_user_id === current.scope.owner_user_id
             && response.project_scope.project_id === current.scope.project_id
             && response.proposal.source.kind === "agent_run_decision") onOpenedProposal?.({
@@ -368,8 +412,7 @@ export function WritingAssistantPanel({
         proposalId: proposal.proposalId, runId: result.run_id, decisionId: proposal.decisionId,
       });
     }
-    setStatus("");
-    return result;
+    return true;
   };
 
   const inspectResult = async (): Promise<void> => {
@@ -389,7 +432,8 @@ export function WritingAssistantPanel({
 
   useEffect(() => {
     if (reference === undefined || context === undefined) return;
-    void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
+    void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"))
+      .finally(() => setStoredReadDone(true));
     return () => { inspectSequence.current += 1; };
   }, [context?.scope.owner_user_id, context?.scope.project_id]);
 
@@ -415,6 +459,48 @@ export function WritingAssistantPanel({
     });
   }, [reference?.runId, run, terminal, failedReads]);
   const unresolved = reference !== undefined && (!terminal || reference.conversationId === undefined);
+
+  /**
+   * Opens a Conversation of the Project from the Host (ADR 0094 section 10). Its newest Run becomes the current
+   * exchange, and the panel shows the exchanges of no other Conversation. A failure keeps the panel as it was.
+   */
+  const openConversation = async (conversationId: string, failure: string) => {
+    if (context === undefined) return;
+    if (!UUID.test(conversationId) || sending || unresolved) {
+      setStatus(failure);
+      return;
+    }
+    setListOpen(false);
+    setSending(true);
+    setStatus("");
+    try {
+      const { runs, opened } = await readOpenedConversation({
+        scope: context.scope, baseUrl: context.baseUrl, fetchImpl: context.fetchImpl, conversationId,
+      });
+      const newest = runs.at(-1)!;
+      const next: RequestReference = {
+        scope: context.scope, message: newest.row.author_message, chapterId: newest.row.chapter_id,
+        correlationId: uuidV7(context.cryptoImpl), runId: newest.row.run_id, conversationId,
+        history: runs.slice(0, -1).map(openedExchange), opened, ...selectedSkillNames(newest.run),
+      };
+      inspectSequence.current += 1;
+      saveReference(next);
+      setReference(next);
+      setRun(newest.run);
+      void showProposals(next, newest.run).catch(() => {});
+    } catch {
+      setStatus(failure);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  useEffect(() => {
+    const conversationId = requested.current;
+    if (conversationId === undefined || context === undefined || !storedReadDone) return;
+    requested.current = undefined;
+    void openConversation(conversationId, CONVERSATION_NOT_FOUND_SENTENCE);
+  }, [storedReadDone, context === undefined]);
 
   /** `onRecorded` runs in the same step that stores the request record, before the request goes. */
   const submit = (message: string, onAdmitted: () => void, frozen?: SentReferences, onRecorded?: () => void,
@@ -469,11 +555,12 @@ export function WritingAssistantPanel({
       const entries = draftEntries(context.scope);
       const sent = frozen ?? { references: entries.map((entry) => entry.reference), labels: draftLabels(entries),
         keys: entries.map((entry) => entry.key) };
-      const current: RequestReference = {
+      const current: RequestReference & { idempotencyKey: string } = {
         scope: context.scope, message, chapterId: context.chapterId!,
         correlationId: uuidV7(context.cryptoImpl),
         idempotencyKey: uuidV7(context.cryptoImpl),
         snapshotId: tree.snapshot.snapshot_id,
+        ...(previous?.opened === undefined ? {} : { opened: previous.opened }),
         ...(previous?.conversationId === undefined || previous.conversationChoice === "new"
           ? {} : { conversationId: previous.conversationId }),
         history: previous === undefined || previousRun === undefined ? [] : [
@@ -581,6 +668,14 @@ export function WritingAssistantPanel({
       .finally(() => setSending(false));
   };
 
+  // The lines of an opened Conversation come only from its read (S7-F1a). The panel calculates no time.
+  const earlierHidden = (runId: string | undefined) => reference?.opened?.truncated
+    && runId === reference.opened.firstRunId
+    ? <p className="assistant-status" data-assistant-earlier-hidden="">更早的消息没有显示。</p> : null;
+  const earlierExpired = (runId: string | undefined) => reference?.opened?.expired
+    && runId === reference.opened.newestRunId
+    ? <p className="assistant-status" data-assistant-earlier-expired="">{EARLIER_TURNS_EXPIRED_SENTENCE}</p> : null;
+
   const useResearch = <button type="button" data-assistant-use-research="" disabled={sending || unresolved}
     onClick={() => submit(USE_RESEARCH_MESSAGE, () => {}, { references: [], labels: [], keys: [] })}>用到故事里</button>;
 
@@ -604,13 +699,21 @@ export function WritingAssistantPanel({
               setReference(selected);
               setStatus("");
             }}>新对话</button>
+          <button type="button" data-assistant-conversation-history="" aria-expanded={listOpen}
+            disabled={context === undefined || unresolved || sending}
+            onClick={() => setListOpen((open) => !open)}>历史对话</button>
         </header>
         <div className="assistant-conversation" aria-live="polite">
+          {listOpen && context !== undefined ? <ProjectConversationList scope={context.scope} baseUrl={context.baseUrl}
+            fetchImpl={context.fetchImpl} currentConversationId={reference?.conversationId} disabled={unresolved || sending}
+            onSelect={(conversationId) => void openConversation(conversationId, CONVERSATION_OPEN_FAILED_SENTENCE)} />
+            : null}
           {availability === "unavailable" ? (
             <p className="assistant-status">写作助手当前不可用。你仍可以直接写作。</p>
           ) : null}
           {reference?.history?.map((exchange, index, history) => (
             <section className="assistant-exchange" key={exchange.requestId} data-assistant-history-run={exchange.runId}>
+              {earlierHidden(exchange.runId)}
               {index > 0 && history[index - 1]?.conversationId !== exchange.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
               <AuthorMessages message={exchange.message} labels={exchange.referenceLabels}
@@ -629,10 +732,12 @@ export function WritingAssistantPanel({
                     : <ProposalLocationLinks locations={exchange.run.decision.locations ?? []} tree={context?.tree}
                       sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} />}
                 </>}
+              {earlierExpired(exchange.runId)}
             </section>
           ))}
           {reference === undefined ? null : (
             <section className="assistant-exchange" data-assistant-current-run="">
+              {earlierHidden(reference.runId)}
               {(reference.history?.length ?? 0) > 0
                 && reference.history?.at(-1)?.conversationId !== reference.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
@@ -651,6 +756,7 @@ export function WritingAssistantPanel({
                 void inspectResult();
               }}>检查结果</button> : null}
               {resultUnavailable ? <p role="status">请求结果暂不可读取，请稍后检查。</p> : null}
+              {earlierExpired(reference.runId)}
             </section>
           )}
           {reference?.conversationChoice === "new"
