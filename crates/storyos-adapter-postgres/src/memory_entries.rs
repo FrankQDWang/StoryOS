@@ -3,7 +3,7 @@
 //! description, or a text of an entry (ADR 0047).
 
 use storyos_application::ProjectScope;
-use storyos_core::{MemoryEntryType, MemoryIndexEntry};
+use storyos_core::{CurrentMemoryEntry, MemoryEntryType, MemoryIndexEntry, MemoryVersionWrite};
 
 fn invalid(message: &'static str) -> Box<dyn std::error::Error + Send + Sync> {
     Box::new(std::io::Error::other(message))
@@ -85,6 +85,115 @@ pub(crate) async fn read_memory_index(
             })
         })
         .collect()
+}
+
+/// The Memory of the Project now: the Memory revision, the next entry number, and the last
+/// version of each current entry. A Project with no head has the revision 0 and the number 1.
+pub(crate) async fn current_memory(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+) -> Result<(u64, u64, Vec<CurrentMemoryEntry>), Box<dyn std::error::Error + Send + Sync>> {
+    let values: [&(dyn tokio_postgres::types::ToSql + Sync); 2] =
+        [&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()];
+    let head = client
+        .query_opt(
+            "SELECT memory_revision::text, next_entry_number::text
+               FROM storyos.project_memory_heads
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &values,
+        )
+        .await?;
+    let (revision, next) = match head {
+        Some(row) => (numeric(row.get(0))?, numeric(row.get(1))?),
+        None => (0, 1),
+    };
+    let rows = client
+        .query(
+            "SELECT memory_entry_id::text, entry_number::text, version::text, entry_type, title,
+                    description, text
+               FROM (SELECT DISTINCT ON (memory_entry_id) *
+                       FROM storyos.memory_entry_versions
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                      ORDER BY memory_entry_id, memory_revision DESC) AS latest
+              WHERE state = 'current'",
+            &values,
+        )
+        .await?;
+    let entries = rows
+        .iter()
+        .map(|row| {
+            Ok(CurrentMemoryEntry {
+                memory_entry_id: row.get(0),
+                number: numeric(row.get(1))?,
+                version: numeric(row.get(2))?,
+                entry_type: MemoryEntryType::parse(row.get(3))
+                    .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
+                title: row.get(4),
+                description: row.get(5),
+                text: row.get(6),
+            })
+        })
+        .collect::<Result<_, Box<dyn std::error::Error + Send + Sync>>>()?;
+    Ok((revision, next, entries))
+}
+
+/// The origin, the cause, and the source references of one version.
+pub(crate) struct VersionSource<'a> {
+    pub origin: &'a str,
+    pub cause: serde_json::Value,
+    pub source_references: serde_json::Value,
+}
+
+/// Writes `version` as the next Memory revision of the Project after `revision`, and moves the
+/// head. A new entry gets the identity `new_entry_id` and the next entry number after it.
+pub(crate) async fn write_memory_version(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    (revision, version, new_entry_id): (u64, &MemoryVersionWrite, &str),
+    source: &VersionSource<'_>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let next_number = match version.memory_entry_id {
+        Some(_) => None,
+        None => Some((version.number + 1).to_string()),
+    };
+    client
+        .execute(
+            "WITH head AS (
+                 INSERT INTO storyos.project_memory_heads AS head
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric,
+                         COALESCE($4::text::numeric, 1))
+                 ON CONFLICT (owner_user_id, project_id) DO UPDATE
+                    SET memory_revision = EXCLUDED.memory_revision,
+                        next_entry_number = COALESCE($4::text::numeric, head.next_entry_number)
+                 RETURNING memory_revision)
+             INSERT INTO storyos.memory_entry_versions
+                 (owner_user_id, project_id, memory_entry_id, entry_number, version,
+                  memory_revision, state, entry_type, origin, title, description, text, cause,
+                  source_references)
+             SELECT $1::text::uuid, $2::text::uuid, $5::text::uuid, $6::text::numeric,
+                    $7::text::numeric, head.memory_revision, $8, $9, $10, $11, $12, $13,
+                    $14::text::jsonb, $15::text::jsonb
+               FROM head",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &(revision + 1).to_string(),
+                &next_number,
+                &version.memory_entry_id.as_deref().unwrap_or(new_entry_id),
+                &version.number.to_string(),
+                &version.version.to_string(),
+                &version.state.as_str(),
+                &version.entry_type.as_str(),
+                &source.origin,
+                &version.title,
+                &version.description,
+                &version.text,
+                &source.cause.to_string(),
+                &source.source_references.to_string(),
+            ],
+        )
+        .await?;
+    Ok(())
 }
 
 #[cfg(test)]

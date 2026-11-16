@@ -135,6 +135,7 @@ mod agent_run_tool_probe;
 mod agent_run_tool_recovery;
 mod agent_run_tool_result;
 mod agent_run_work;
+mod agent_run_write_memory;
 mod author_edit;
 mod author_edit_admission_recovery;
 mod author_edit_outcome;

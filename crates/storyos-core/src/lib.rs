@@ -83,6 +83,7 @@ mod update_project_assistance;
 mod update_project_instruction;
 mod update_volume;
 mod withdraw_proposal;
+mod write_memory;
 
 pub use accept_proposal::{
     AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalOutcome,
@@ -424,6 +425,11 @@ pub use update_volume::{
 pub use withdraw_proposal::{
     WithdrawProposal, WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal,
     WithdrawProposalResult, WithdrawalCause, withdraw_proposal,
+};
+pub use write_memory::{
+    CurrentMemoryEntry, MEMORY_CHARACTER_TEXT_MAX_CHARS, MEMORY_DESCRIPTION_MAX_CHARS,
+    MEMORY_TEXT_MAX_CHARS, MEMORY_TITLE_MAX_CHARS, MemoryVersionWrite, MemoryWrite,
+    MemoryWriteAction, MemoryWriteRefusal, WRITE_MEMORY_TOOL_SPEC, decide_memory_write,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
