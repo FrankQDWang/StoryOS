@@ -53,3 +53,12 @@ The author approved this exception on 2026-11-12 through the coordinator of [#14
 - They did not go through the Model Gateway. A test of the model adapter sent each body directly to the `exchange` of the adapter, so no AgentRun, no Model Attempt, and no Outbound Disclosure Event records them. A test process, and not the Worker, loaded the key through the settings loader.
 - These facts stay true: no key value is in a file, a log, or an output; the record keeps the request bodies; and the tests that sent the requests are not in the repository.
 - The exception permits no later request of this kind. Each later qualification request goes through the admitted path of this ADR.
+
+## Amendment: the embedding probe path (2026-11-16)
+
+The author approved this path on 2026-11-16 through the coordinator of [#365](https://github.com/FrankQDWang/StoryOS/issues/365), for [S7-C1](https://github.com/FrankQDWang/StoryOS/issues/1572). It also covers [ADR 0050](0050-load-server-and-worker-settings-through-one-typed-settings-layer.md).
+
+- The admitted path of this ADR sends only the fixed bodies of a Responses Create request, so it cannot send an embedding request. The Worker command `storyos-worker --probe-embedding <case>` sends one embedding request of the probe of [ADR 0095](0095-give-the-agent-the-whole-manuscript-through-host-tools-and-add-a-hybrid-search-with-pgvector-and-a-volcengine-embedding-model.md) section 5. It has the form of `storyos-worker --discover-exa`.
+- Each request is one `prepare` and one `exchange` of the embedding function of the Volcengine adapter: one POST, no retry, and no redirect. The request has constant text and no Project content. The command reads no database, and it writes the observation as JSON to stdout.
+- The key reaches the request only through the typed Worker settings: the Worker resolves `settings:STORYOS_AGENT_PLAN_API_KEY` (ADR 0050). No test process loads the key. No AgentRun, Model Attempt, or Outbound Disclosure Event records the requests. The [record](../research/embedding-and-pgvector-probe-2026-11-16.md) keeps the request bodies.
+- The command permits only the requests of that probe. S7-C2a2 removes it, and each later embedding request goes through the admitted embedding path of Stage 7.

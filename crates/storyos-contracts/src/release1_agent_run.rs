@@ -236,6 +236,16 @@ pub enum ContextSourceClass {
     SkillCatalog,
     SkillInstruction,
     SkillResource,
+    ChapterList,
+    ManuscriptReadResult,
+    ManuscriptSearchResult,
+    MemoryIndex,
+    MemoryReadResult,
+    MemorySearchResult,
+    MemoryCaptureInput,
+    MemoryDeleteMarks,
+    MemoryEntries,
+    MemoryObservations,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

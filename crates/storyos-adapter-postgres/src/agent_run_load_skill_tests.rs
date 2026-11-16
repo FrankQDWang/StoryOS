@@ -74,7 +74,7 @@ pub(crate) async fn loaded_run(
 }
 
 /// The status of the Run, and each ToolCall as its function name, state, refusal, Host result,
-/// and whether it has no Destination Attempt and pins the Host Tool Registration `…0e0103`.
+/// and whether it has no Destination Attempt and pins the current Host Tool Registration.
 pub(crate) async fn calls(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(

@@ -18,6 +18,9 @@ pub enum GrantScope {
     /// `skill_resource`: the text of the Skills that the operator of the deployment provides
     /// (ADR 0089 section 4).
     ProjectWritingAssistanceV4,
+    /// The fourth scope, the Stage 7 source classes of the manuscript and of Agent Memory, and
+    /// the Purposes `memory_capture` and `memory_consolidation` (ADR 0094, ADR 0095).
+    ProjectWritingAssistanceV5,
     /// The research destination that `createAgentRun` binds (ADR 0090): the Purpose `research`,
     /// the source classes `agent_query` and `agent_url_selection`, no length bound, no Ambient
     /// Context. It covers no model request.
@@ -26,7 +29,7 @@ pub enum GrantScope {
 
 impl GrantScope {
     /// The scope that each new grant records.
-    pub const CURRENT: Self = Self::ProjectWritingAssistanceV4;
+    pub const CURRENT: Self = Self::ProjectWritingAssistanceV5;
 
     pub fn as_str(self) -> &'static str {
         match self {
@@ -34,6 +37,7 @@ impl GrantScope {
             Self::ProjectWritingAssistanceV2 => "project_writing_assistance_v2",
             Self::ProjectWritingAssistanceV3 => "project_writing_assistance_v3",
             Self::ProjectWritingAssistanceV4 => "project_writing_assistance_v4",
+            Self::ProjectWritingAssistanceV5 => "project_writing_assistance_v5",
             Self::ResearchToolV1 => "research_tool_v1",
         }
     }
@@ -44,94 +48,59 @@ impl GrantScope {
             "project_writing_assistance_v2" => Some(Self::ProjectWritingAssistanceV2),
             "project_writing_assistance_v3" => Some(Self::ProjectWritingAssistanceV3),
             "project_writing_assistance_v4" => Some(Self::ProjectWritingAssistanceV4),
+            "project_writing_assistance_v5" => Some(Self::ProjectWritingAssistanceV5),
             "research_tool_v1" => Some(Self::ResearchToolV1),
             _ => None,
         }
     }
 
-    fn names_purpose(self, purpose: ContextPurpose) -> bool {
-        match (self, purpose) {
-            (
-                Self::ProjectWritingAssistanceV1
-                | Self::ProjectWritingAssistanceV2
-                | Self::ProjectWritingAssistanceV3
-                | Self::ProjectWritingAssistanceV4,
-                ContextPurpose::CurrentPassageAssistance,
-            )
-            | (
-                Self::ProjectWritingAssistanceV2
-                | Self::ProjectWritingAssistanceV3
-                | Self::ProjectWritingAssistanceV4,
-                ContextPurpose::ActiveContextCompaction,
-            ) => true,
-            (Self::ProjectWritingAssistanceV1, ContextPurpose::ActiveContextCompaction)
-            | (
-                Self::ResearchToolV1,
-                ContextPurpose::CurrentPassageAssistance | ContextPurpose::ActiveContextCompaction,
-            ) => false,
+    /// The revision of a writing assistance scope. Each revision names each Purpose and each
+    /// source class of the revision before it. The research scope names no model request.
+    fn writing_revision(self) -> Option<u8> {
+        match self {
+            Self::ProjectWritingAssistanceV1 => Some(1),
+            Self::ProjectWritingAssistanceV2 => Some(2),
+            Self::ProjectWritingAssistanceV3 => Some(3),
+            Self::ProjectWritingAssistanceV4 => Some(4),
+            Self::ProjectWritingAssistanceV5 => Some(5),
+            Self::ResearchToolV1 => None,
         }
     }
 
+    fn names_purpose(self, purpose: ContextPurpose) -> bool {
+        let first = match purpose {
+            ContextPurpose::CurrentPassageAssistance => 1,
+            ContextPurpose::ActiveContextCompaction => 2,
+            ContextPurpose::MemoryCapture | ContextPurpose::MemoryConsolidation => 5,
+        };
+        self.writing_revision()
+            .is_some_and(|revision| revision >= first)
+    }
+
     fn names_source_class(self, class: ContextSourceClass) -> bool {
-        match (self, class) {
-            (
-                Self::ProjectWritingAssistanceV1
-                | Self::ProjectWritingAssistanceV2
-                | Self::ProjectWritingAssistanceV3
-                | Self::ProjectWritingAssistanceV4,
-                ContextSourceClass::AuthorInstruction
-                | ContextSourceClass::WorkingTarget
-                | ContextSourceClass::InstructionBinding,
-            )
-            | (
-                Self::ProjectWritingAssistanceV2
-                | Self::ProjectWritingAssistanceV3
-                | Self::ProjectWritingAssistanceV4,
-                ContextSourceClass::ConversationSummary,
-            )
-            | (
-                Self::ProjectWritingAssistanceV3 | Self::ProjectWritingAssistanceV4,
-                ContextSourceClass::ToolResult,
-            )
-            | (
-                Self::ProjectWritingAssistanceV4,
-                ContextSourceClass::SkillCatalog
-                | ContextSourceClass::SkillInstruction
-                | ContextSourceClass::SkillResource,
-            ) => true,
-            (
-                Self::ProjectWritingAssistanceV1
-                | Self::ProjectWritingAssistanceV2
-                | Self::ProjectWritingAssistanceV3
-                | Self::ProjectWritingAssistanceV4,
-                ContextSourceClass::HostControl,
-            )
-            | (Self::ProjectWritingAssistanceV1, ContextSourceClass::ConversationSummary)
-            | (
-                Self::ProjectWritingAssistanceV1 | Self::ProjectWritingAssistanceV2,
-                ContextSourceClass::ToolResult,
-            )
-            | (
-                Self::ProjectWritingAssistanceV1
-                | Self::ProjectWritingAssistanceV2
-                | Self::ProjectWritingAssistanceV3,
-                ContextSourceClass::SkillCatalog
-                | ContextSourceClass::SkillInstruction
-                | ContextSourceClass::SkillResource,
-            )
-            | (
-                Self::ResearchToolV1,
-                ContextSourceClass::AuthorInstruction
-                | ContextSourceClass::WorkingTarget
-                | ContextSourceClass::InstructionBinding
-                | ContextSourceClass::ConversationSummary
-                | ContextSourceClass::HostControl
-                | ContextSourceClass::ToolResult
-                | ContextSourceClass::SkillCatalog
-                | ContextSourceClass::SkillInstruction
-                | ContextSourceClass::SkillResource,
-            ) => false,
-        }
+        let first = match class {
+            ContextSourceClass::HostControl => return false,
+            ContextSourceClass::AuthorInstruction
+            | ContextSourceClass::WorkingTarget
+            | ContextSourceClass::InstructionBinding => 1,
+            ContextSourceClass::ConversationSummary => 2,
+            ContextSourceClass::ToolResult => 3,
+            ContextSourceClass::SkillCatalog
+            | ContextSourceClass::SkillInstruction
+            | ContextSourceClass::SkillResource => 4,
+            ContextSourceClass::ChapterList
+            | ContextSourceClass::ManuscriptReadResult
+            | ContextSourceClass::ManuscriptSearchResult
+            | ContextSourceClass::MemoryIndex
+            | ContextSourceClass::MemoryReadResult
+            | ContextSourceClass::MemorySearchResult
+            | ContextSourceClass::MemoryCaptureInput
+            | ContextSourceClass::MemoryDeleteMarks
+            | ContextSourceClass::MemoryEntries
+            | ContextSourceClass::MemoryObservations => 5,
+        };
+        self.writing_revision()
+            .is_some_and(|revision| revision >= first)
     }
 }
 

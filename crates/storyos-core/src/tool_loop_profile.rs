@@ -26,6 +26,11 @@ pub const AGENT_PLAN_READ_RESULT_MAPPING_REVISION: &str =
 pub const AGENT_PLAN_SKILL_MAPPING_REVISION: &str =
     "storyos.volcengine-agent-plan.responses.create.v7";
 
+/// The tool loop mapping of Stage 7: the mapping `v7` with the manuscript and Memory items and
+/// Tools that the Stage 7 tickets add (ADR 0094, ADR 0095).
+pub const AGENT_PLAN_CONTINUITY_MAPPING_REVISION: &str =
+    "storyos.volcengine-agent-plan.responses.create.v8";
+
 pub const HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
     revision: "storyos.host-fake.capability.v2",
     entries: CapabilityEntries {
@@ -61,10 +66,18 @@ pub const AGENT_PLAN_READ_RESULT_REGISTRATION: ModelRegistration = ModelRegistra
     ..AGENT_PLAN_TOOL_LOOP_REGISTRATION
 };
 
-/// The current Agent Plan Registration: Registration `fa20` with the mapping `v7`. Nothing is
-/// pending, so the link authorizes no probe.
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// Registration `fa20` with the mapping `v7`. An AgentRun that pinned it keeps the mapping
+/// `v7`.
+pub const AGENT_PLAN_SKILL_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa21",
     mapping_revision: AGENT_PLAN_SKILL_MAPPING_REVISION,
     ..AGENT_PLAN_READ_RESULT_REGISTRATION
+};
+
+/// The current Agent Plan Registration: Registration `fa21` with the mapping `v8`. Nothing is
+/// pending, so the link authorizes no probe.
+pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa22",
+    mapping_revision: AGENT_PLAN_CONTINUITY_MAPPING_REVISION,
+    ..AGENT_PLAN_SKILL_REGISTRATION
 };
