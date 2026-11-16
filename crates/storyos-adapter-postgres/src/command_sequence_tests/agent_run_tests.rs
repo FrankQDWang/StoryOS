@@ -13,7 +13,7 @@ use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::set_current_chapter_authority_tests::seed_two_chapters;
 
 use super::damaged_evidence::{ReplayError, damaged_replay};
-use super::project_session::UPDATE_PROJECT_ASSISTANCE;
+use super::project_session::{UPDATE_PROJECT_ASSISTANCE, UPDATE_PROJECT_INSTRUCTION};
 use super::support::{CommandCall, Route, SequenceError, issued, seed_project, stores};
 
 pub(crate) const PAUSE_AGENT_RUN: Route = Route {
@@ -95,6 +95,23 @@ pub(super) async fn create_agent_run_call(
     .await;
     store
         .update_project_assistance(&call.envelope, &call.input)
+        .await
+        .unwrap();
+    // The Run binds this Project Instruction Revision (ADR 0094 section 2).
+    let instruction = storyos_application::UpdateProjectInstructionInput {
+        text: "Write in the past tense.".to_owned(),
+        expected_revision: 0,
+    };
+    let call = issued(
+        store,
+        &scope,
+        base + 5,
+        &UPDATE_PROJECT_INSTRUCTION,
+        instruction,
+    )
+    .await;
+    store
+        .update_project_instruction(&call.envelope, &call.input)
         .await
         .unwrap();
     issued(

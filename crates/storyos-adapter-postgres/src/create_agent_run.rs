@@ -207,12 +207,14 @@ impl ProjectCommand for CreateAgentRunInput {
                 destination,
             } => bind_deployment_destination(client, envelope, &destination, revision).await?,
         };
+        let instruction = project_instruction_binding(client, envelope).await?;
         let applied = write::persist_conversation_and_run(
             client,
             envelope,
             self,
             &assistance.grant_id,
             &assistance.project_model_use_binding_revision,
+            instruction.as_deref(),
         )
         .await
         .map_err(sequence_error)?;
@@ -390,6 +392,26 @@ async fn earlier_skill_requirements(
     rows.iter()
         .map(|row| serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).map_err(unavailable))
         .collect()
+}
+
+/// The Project Instruction Binding of the new Run: the current Revision of the Project, or
+/// `None` for "none configured" (ADR 0094 section 2).
+async fn project_instruction_binding(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+) -> Result<Option<String>, ProjectCommandError> {
+    let current =
+        crate::update_project_instruction::read_current_revision(client, &envelope.project_scope)
+            .await
+            .map_err(|error| unavailable(format!("{error:?}")))?;
+    Ok(storyos_core::project_instruction_binding(
+        current
+            .map(|revision| storyos_core::BoundInstruction {
+                revision_id: revision.instruction_revision_id,
+                text: revision.text,
+            })
+            .as_ref(),
+    ))
 }
 
 fn sequence_error(error: CreateAgentRunError) -> ProjectCommandError {
