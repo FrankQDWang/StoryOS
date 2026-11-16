@@ -51,13 +51,13 @@ These contracts stay deferred. Their glossary entries stay, and no released Stag
 
 ### 3. The Memory Entry
 
-Agent Memory is a set of Memory Entries of one Project. A Memory Entry is a short Markdown text with a title, a one-line description, a type, an origin, its source references, and the times of its creation, its last change, and its last read.
+Agent Memory is a set of Memory Entries of one Project. A Memory Entry is a short Markdown text. It has a title, a one-line description, a type, an origin, and its source references. It records the times of its creation, its last change, and its last read.
 
 - **Types:** writing preference, foreshadowing, character, relationship, major event, and other. The type "other" holds, for example, a decision about the story that the manuscript does not have yet.
 - **Origins:** the request of the author, a Project Conversation, and a Chapter.
 - **Content:** an entry holds a synthesis or an intent. It does not copy a passage. The manuscript stays the source of the exact text, and the Agent reads the manuscript when a task depends on an exact fact.
 - **Authority:** an entry is Data-only Context. It is not Authoritative State, it has no Instruction Authority, and it grants no permission. This is the rule of ADR 0035.
-- **Storage:** the entries have their own records in PostgreSQL, in the Project Scope. Each change keeps the earlier version. The entries use no Artifact family.
+- **Classification and storage:** a Memory Entry is an Artifact in the meaning of [ADR 0001](0001-separate-authoritative-state-artifacts-and-operational-records.md): a durable item that is not Authoritative State. Its records are their own tables in PostgreSQL, in the Project Scope, as the records of the Research Artifact are. They are not a part of the Tool Artifact family that the first form of the Memory contract named. Each change keeps the earlier version, and the versions stay until the Project is deleted.
 
 ### 4. The Memory Index and the read
 
@@ -74,7 +74,7 @@ Agent Memory is a set of Memory Entries of one Project. A Memory Entry is a shor
 
 A capture is one bounded tool loop. The model gets its input, the Memory Index, and read-only Host Tools: the manuscript keyword search and the manuscript read of ADR 0095, and the Memory read. Thus the capture of a Chapter can read or search an earlier Chapter when the Chapter alone does not give sufficient information. The loop ends with a typed list of Memory Observations, which can be empty. The Host validates and stores them. A capture cannot write an entry, start a search on the web, or change the manuscript.
 
-A Memory Observation is not a Memory Entry. The Agent does not read it, and the Index does not list it. Ordinary writing does not wait for this work.
+A Memory Observation is not a Memory Entry. It is an Operational Record of background work, and it stays as the record of its capture until the Project is deleted. The Agent does not read it, and the Index does not list it. Ordinary writing does not wait for this work.
 
 ### 6. Consolidation and pruning
 

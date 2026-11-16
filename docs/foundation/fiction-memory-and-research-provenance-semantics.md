@@ -53,13 +53,15 @@ references. The types are writing preference, foreshadowing, character,
 relationship, major event, and other. The origins are the request of the
 author, a Project Conversation, and a Chapter. An entry holds a synthesis or an
 intent and does not copy a passage. Markdown supports bounded search and read;
-Memory uses no vector database, graph, or embedding call. The entries have
-their own PostgreSQL records in the Project Scope and use no Tool Artifact
-family. A `Memory Observation` is the typed output of one capture. It waits for
-the consolidation pass, and it is not an entry.
+Memory uses no vector database, graph, or embedding call. A Memory Entry is an
+Artifact. Its records are their own PostgreSQL tables in the Project Scope, as
+the records of the Research Artifact are, and they are not a part of the Tool
+Artifact family. A `Memory Observation` is the typed output of one capture. It
+is an Operational Record, it waits for the consolidation pass, and it is not
+an entry.
 
-A change of an entry keeps the earlier version, subject to retention, so that
-the record of an earlier Run stays complete. It does not overwrite an older
+A change of an entry keeps the earlier version until the Project is deleted,
+so that the record of an earlier Run stays complete. It does not overwrite an older
 Run's input evidence or alter the source conversation. An entry version is not
 a separate immutable domain object and decision for each inferred sentence.
 
@@ -121,8 +123,8 @@ Pruning is a named duty of the pass. It removes an entry that later material
 contradicts, joins duplicates, removes first the background entries that no Run
 read for a long time, and keeps the Memory Index in its bound. A Project has
 one entry for each character and one entry for each pair of characters.
-Retention and input budgets bound the set; a successful model output does not
-certify semantic correctness. Any use counter records an observed read, not
+Input budgets and the Host limits bound the set; a successful model output
+does not certify semantic correctness. Any use counter records an observed read, not
 proof that the model attended to the material.
 
 Background work cannot change or delete an entry whose origin is the request of
@@ -272,7 +274,7 @@ forgetting guarantee.
 
 A real deletion or access restriction must cover generated copies that the
 owning policy includes. If the affected content cannot be isolated safely, the
-storage and retention owners must define a conservative document-set boundary,
+storage and retention owners must define a conservative entry-set boundary,
 unavailability, and rebuild from allowed inputs. They must not infer a complete
 semantic dependency graph from model-generated citations. A delete of a
 Memory Entry by the author alone does not constitute physical deletion or
@@ -350,6 +352,6 @@ runtime and schema changes remain with the later approved implementation work.
 7. Current source facts and author authority are independent from remembered
    interpretations. Research evidence retains its exact-source contract.
 8. Source references and reported usage do not prove model influence or truth.
-9. Entry changes preserve historical input identities subject to retention.
+9. Entry changes keep each earlier version until the Project is deleted.
 10. Memory maintenance does not interrupt active writing or bypass a real
     permission, disclosure, Proposal, or Acceptance boundary.

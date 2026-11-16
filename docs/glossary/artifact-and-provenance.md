@@ -109,11 +109,11 @@ A Core Artifact presenting one independently reviewable semantic fact or object 
 _Avoid_: Proposal, pending truth
 
 **Memory Entry**:
-A short, readable text of one Project in Agent Memory, with a title, a one-line description, a type, an origin, and its source references. Its type is writing preference, foreshadowing, character, relationship, major event, or other. Its origin is the request of the author, a Project Conversation, or a Chapter. It holds a synthesis or an intent and not a copy of a passage, and it is not Authoritative State. Background work cannot change or delete an entry whose origin is the request of the author; it can only record a conflict flag on it ([ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)).
+A short, readable Artifact of one Project in Agent Memory, with a title, a one-line description, a type, an origin, and its source references. Its records are their own tables, and its versions stay until the Project is deleted. Its type is writing preference, foreshadowing, character, relationship, major event, or other. Its origin is the request of the author, a Project Conversation, or a Chapter. It holds a synthesis or an intent and not a copy of a passage, and it is not Authoritative State. Background work cannot change or delete an entry whose origin is the request of the author; it can only record a conflict flag on it ([ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)).
 _Avoid_: Memory Document, Memory Note, Fiction Assertion, Author Preference, per-claim Candidate, hidden model state
 
 **Memory Observation**:
-A typed statement that one background capture got from one settled Project Conversation or one Chapter. It waits for the consolidation pass, which can make it a part of a Memory Entry or drop it. It is not a Memory Entry: the Agent does not read it, and the Memory Index does not list it.
+An Operational Record with a typed statement that one background capture got from one settled Project Conversation or one Chapter. It waits for the consolidation pass, which can make it a part of a Memory Entry or drop it. It is not a Memory Entry: the Agent does not read it, and the Memory Index does not list it.
 _Avoid_: Memory Note, Memory Candidate, Admission Decision, Memory Entry
 
 **Memory Publication**:
