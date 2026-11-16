@@ -127,6 +127,7 @@ pub(crate) async fn open_next_step(
                 .skill_requirements
                 .as_deref()
                 .unwrap_or_default(),
+            memory_revision: requirement.memory_revision,
             selection_references: references.as_deref(),
             tool_results: Some(&candidates),
         },

@@ -20,6 +20,9 @@ pub(crate) struct PassageContextInput<'a> {
     pub selection_references: Option<&'a [storyos_core::SelectionReference]>,
     /// The Skill requirements of the Run, in the order of the Skill names (ADR 0089 section 5).
     pub skill_requirements: &'a [storyos_core::SkillRequirement],
+    /// The Memory revision that the Run pinned. Each RunStep of the Run copies it (ADR 0094
+    /// section 4).
+    pub memory_revision: Option<u64>,
     /// The resolved ToolCalls of a `tool_result_continuation`, in item order.
     pub tool_results: Option<&'a [storyos_core::ToolResultCandidate<'a>]>,
 }
@@ -174,6 +177,15 @@ pub(crate) async fn persist_current_passage_assembly(
             })
             .collect::<Vec<_>>(),
     );
+    let memory = match command.memory_revision {
+        Some(revision) => {
+            crate::memory_entries::read_memory_index(client, command.project_scope, revision)
+                .await
+                .map_err(CreateAgentRunError::Unavailable)?
+        }
+        None => Vec::new(),
+    };
+    storyos_core::assemble_memory_index(&mut record, command.memory_revision, &memory);
     if let Some(candidates) = command.tool_results {
         storyos_core::assemble_tool_result_continuation(&mut record, candidates);
     }
@@ -436,3 +448,7 @@ mod tests;
 #[cfg(test)]
 #[path = "chapter_list_context_tests.rs"]
 pub(crate) mod chapter_list_tests;
+
+#[cfg(test)]
+#[path = "memory_index_context_tests.rs"]
+mod memory_index_tests;

@@ -386,3 +386,7 @@ mod skill_wire_tests;
 #[cfg(test)]
 #[path = "chapter_list_wire_tests.rs"]
 mod chapter_list_wire_tests;
+
+#[cfg(test)]
+#[path = "memory_index_wire_tests.rs"]
+mod memory_index_wire_tests;
