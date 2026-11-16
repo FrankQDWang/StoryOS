@@ -124,9 +124,9 @@ async fn a_run_binds_only_a_current_revision_with_text_other_than_white_space() 
             None,
             Some(current.clone()),
             json!([["decision", 0, {"kind": "absent"}, ["absent"],
-                    ["author_instruction", "working_target"]]]),
+                    ["author_instruction", "working_target", "chapter_list"]]]),
             json!([["decision", 0, {"kind": "absent"}, ["absent"],
-                    ["author_instruction", "working_target"]]]),
+                    ["author_instruction", "working_target", "chapter_list"]]]),
             json!([[
                 "decision",
                 0,
@@ -135,7 +135,8 @@ async fn a_run_binds_only_a_current_revision_with_text_other_than_white_space() 
                 [
                     "author_instruction",
                     "instruction_binding",
-                    "working_target"
+                    "working_target",
+                    "chapter_list"
                 ]
             ]]),
         )
@@ -336,6 +337,7 @@ async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_
                     "author_instruction",
                     "instruction_binding",
                     "working_target",
+                    "chapter_list",
                     "tool_result"
                 ]
             ]),
