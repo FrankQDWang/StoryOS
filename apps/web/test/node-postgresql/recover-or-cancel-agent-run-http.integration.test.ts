@@ -1,5 +1,6 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts"]}
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -254,8 +255,8 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
 });
 
 test("cancellation fences late Worker output and does not hide a Proposal", async () => {
-  const dispatchHold = join(tmpdir(), "storyos-s3-17-dispatch.hold");
-  const decisionHold = join(tmpdir(), "storyos-s3-17-decision.hold");
+  const dispatchHold = join(tmpdir(), `storyos-s3-17-dispatch-${randomBytes(6).toString("hex")}.hold`);
+  const decisionHold = join(tmpdir(), `storyos-s3-17-decision-${randomBytes(6).toString("hex")}.hold`);
   const started = await startServer();
   const workers: Array<Promise<void>> = [];
   try {
@@ -396,7 +397,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
 });
 
 test("a Pause before the Cancel still sends one Abort for the in-flight Attempt", async () => {
-  const dispatchHold = join(tmpdir(), "storyos-g03-pause-cancel.hold");
+  const dispatchHold = join(tmpdir(), `storyos-g03-pause-cancel-${randomBytes(6).toString("hex")}.hold`);
   const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
