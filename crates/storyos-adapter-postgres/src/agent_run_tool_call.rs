@@ -285,7 +285,8 @@ pub(crate) fn call_inspect(
         | storyos_core::ToolIntake::LoadSkill { .. }
         | storyos_core::ToolIntake::ReadSkillResource { .. }
         | storyos_core::ToolIntake::ReadChapter { .. }
-        | storyos_core::ToolIntake::SearchManuscript { .. } => {
+        | storyos_core::ToolIntake::SearchManuscript { .. }
+        | storyos_core::ToolIntake::WriteMemory(_) => {
             return Err(damaged());
         }
     })

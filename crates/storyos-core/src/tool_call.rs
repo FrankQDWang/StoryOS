@@ -116,6 +116,7 @@ impl ValidatedToolCall {
                 json!({ "chapter": chapter, "first_block": first_block, "last_block": last_block })
             }
             ToolIntake::SearchManuscript { query } => json!({ "query": query }),
+            ToolIntake::WriteMemory(write) => write.arguments(),
         }
     }
 

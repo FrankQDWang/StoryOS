@@ -110,6 +110,15 @@ the same letter case: it is not a question. The result gives each Block that has
 then you can read the Blocks near a match with read_chapter. The result of search_manuscript is \
 the text of the manuscript at the time of the call, as the result of read_chapter is.";
 
+/// The paragraph of the mapping `v8` for a request that declares `write_memory` (ADR 0094
+/// section 5).
+pub(crate) const WRITE_MEMORY_INSTRUCTION: &str = "\
+Call write_memory only when the author asks you to remember something, to change what you \
+remember, or to forget something, and never on your own decision. An entry is a short synthesis \
+or an intent, not a copy of a passage. For a character or a pair of characters that the section \
+Memory index lists, change that entry and do not create a second one. When the Host refuses a \
+write, tell the author.";
+
 /// The paragraph of the mapping `v8` for a request with a `memory_index` item (ADR 0094 section
 /// 4).
 pub(crate) const MEMORY_INDEX_INSTRUCTION: &str = "\
@@ -192,6 +201,16 @@ pub(crate) fn create_body(
             format!("{instructions}\n\n{SKILL_INSTRUCTION} {SKILL_AUTHORITY_INSTRUCTION}")
         }
         (false, _) => instructions,
+    };
+    let write_memory = mapping == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+        && request
+            .tool_exposure
+            .tools
+            .iter()
+            .any(|tool| tool.spec.operation == storyos_core::ToolOperation::WriteMemory);
+    let instructions = match write_memory {
+        true => format!("{instructions}\n\n{WRITE_MEMORY_INSTRUCTION}"),
+        false => instructions,
     };
     let chapter_list = mapping == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
         && request

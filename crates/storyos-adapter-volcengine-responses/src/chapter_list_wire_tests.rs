@@ -137,12 +137,17 @@ async fn the_read_chapter_and_search_paragraphs_follow_the_chapter_list_paragrap
         (
             instructions(&declared),
             no_search.clone(),
-            names[names.len() - 3..].to_vec(),
+            names[names.len() - 4..].to_vec(),
         ),
         (
             format!("{no_read}\n\n{READ_CHAPTER}\n\n{SEARCH_MANUSCRIPT}"),
             format!("{no_read}\n\n{READ_CHAPTER}"),
-            vec!["read_chapter", "search_manuscript", "finish"],
+            vec![
+                "read_chapter",
+                "search_manuscript",
+                "write_memory",
+                "finish"
+            ],
         )
     );
 }

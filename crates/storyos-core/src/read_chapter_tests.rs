@@ -58,6 +58,7 @@ fn each_current_mapping_declares_read_chapter_with_a_strict_schema() {
                 "read_tool_result",
                 "read_chapter",
                 "search_manuscript",
+                "write_memory",
                 "finish"
             ]
         );
