@@ -3,8 +3,7 @@
 //! Scope, the Conversation Memory Settings, and the Host limits.
 
 use storyos_application::{
-    MemoryEntryListItem, MemoryEntrySourceItem, ProjectId, ProjectScope, UserId,
-    list_memory_entries,
+    MemoryEntrySourceItem, ProjectId, ProjectScope, UserId, list_memory_entries,
 };
 use storyos_core::{
     MEMORY_CHARACTER_TEXT_MAX_CHARS, MEMORY_DESCRIPTION_MAX_CHARS, MEMORY_TITLE_MAX_CHARS,
@@ -18,26 +17,14 @@ use crate::agent_run_steering::tests::queued;
 use crate::command_sequence::tests::{seed_project, titled_chapter};
 use crate::delete_structure_tests::settle_delete_chapter;
 
-/// One version row: the number, the version, the Memory revision, the state, the type, the
-/// origin, the title, the text, and the source references as JSON. The description is the title
-/// with a mark.
-type Row<'a> = (
-    u64,
-    u64,
-    u64,
-    &'a str,
-    &'a str,
-    &'a str,
-    &'a str,
-    &'a str,
-    String,
-);
-
 /// Writes each version of `rows` in the Project of `scope` with SQL, and moves the head of the
-/// Project. The values are test constants.
-async fn write(admin: &Client, scope: &ProjectScope, rows: &[Row<'_>]) {
+/// Project. A row is one line of the number, the version, the Memory revision, the state, the
+/// type, the origin, the title, and the text, with the source references as JSON. The
+/// description is the title with a mark. The values are test constants.
+async fn write(admin: &Client, scope: &ProjectScope, rows: &[(&str, String)]) {
     let (owner, project) = (scope.owner_user_id.as_ref(), scope.project_id.as_ref());
-    for (number, version, revision, state, kind, origin, title, text, sources) in rows {
+    for (line, sources) in rows {
+        let fields: Vec<&str> = line.split(' ').collect();
         admin
             .execute(
                 "INSERT INTO storyos.memory_entry_versions
@@ -48,17 +35,8 @@ async fn write(admin: &Client, scope: &ProjectScope, rows: &[Row<'_>]) {
                          $3::text::numeric, $4::text::numeric, $5::text::numeric, $6, $7, $8, $9,
                          $9 || '。', $10, '{}', $11::text::jsonb)",
                 &[
-                    &owner,
-                    &project,
-                    &number.to_string(),
-                    &version.to_string(),
-                    &revision.to_string(),
-                    state,
-                    kind,
-                    origin,
-                    title,
-                    text,
-                    sources,
+                    &owner, &project, &fields[0], &fields[1], &fields[2], &fields[3], &fields[4],
+                    &fields[5], &fields[6], &fields[7], sources,
                 ],
             )
             .await
@@ -88,39 +66,32 @@ fn chapter(id: &str) -> String {
     format!(r#"[{{"kind":"chapter","chapter_id":"{id}"}}]"#)
 }
 
-/// The number, the version, the type, the origin, the title, the text, and the source of each
-/// listed entry, in list order.
-async fn listed(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-) -> Option<
-    Vec<(
-        u64,
-        u64,
-        &'static str,
-        &'static str,
-        String,
-        String,
-        Option<MemoryEntrySourceItem>,
-    )>,
-> {
-    let entries: Vec<MemoryEntryListItem> = list_memory_entries(store, scope).await.unwrap()?;
-    Some(
-        entries
-            .into_iter()
-            .map(|entry| {
-                (
-                    entry.number,
-                    entry.version,
-                    entry.entry_type.as_str(),
-                    entry.origin.as_str(),
-                    entry.title,
-                    entry.text,
-                    entry.source,
-                )
-            })
-            .collect(),
-    )
+/// Each listed entry as one line: the number, the version, the type, the origin, the title, the
+/// text, and the source with its availability.
+async fn listed(store: &PostgresProjectReader, scope: &ProjectScope) -> Option<Vec<String>> {
+    let entries = list_memory_entries(store, scope).await.unwrap()?;
+    let line = |entry: storyos_application::MemoryEntryListItem| {
+        let source = match entry.source {
+            None => "none".to_owned(),
+            Some(MemoryEntrySourceItem::Conversation {
+                conversation_id,
+                available,
+            }) => {
+                format!("conversation {conversation_id} {available}")
+            }
+            Some(MemoryEntrySourceItem::Chapter {
+                chapter_id,
+                title,
+                available,
+            }) => {
+                format!("chapter {chapter_id} {title:?} {available}")
+            }
+        };
+        let (kind, origin) = (entry.entry_type.as_str(), entry.origin.as_str());
+        let (number, version, title, text) = (entry.number, entry.version, entry.title, entry.text);
+        format!("{number} {version} {kind} {origin} {title} {text} {source}")
+    };
+    Some(entries.into_iter().map(line).collect())
 }
 
 /// The Conversation of the Run `run_id`.
@@ -163,181 +134,68 @@ async fn the_list_has_the_current_entries_in_index_order_with_their_sources() {
     let removed = titled_chapter(&store, &scope, "b750", &volume, "Chapter B", 3).await;
     settle_delete_chapter(&store, &scope, "b751", &removed, 4).await;
     let other = "018f0000-0000-7001-8000-0000000b71ff";
-    write(
-        &admin,
-        &scope,
-        &[
-            (
-                1,
-                1,
-                1,
-                "current",
-                "character",
-                "author_request",
-                "林雪",
-                "旧文",
-                conversation(&talk),
-            ),
-            (
-                2,
-                1,
-                2,
-                "current",
-                "other",
-                "chapter",
-                "旧渡口",
-                "北岸",
-                chapter(&chapter_id),
-            ),
-            (
-                3,
-                1,
-                3,
-                "current",
-                "foreshadowing",
-                "chapter",
-                "铜铃",
-                "铃响",
-                chapter(&removed),
-            ),
-            (
-                4,
-                1,
-                4,
-                "current",
-                "writing_preference",
-                "conversation",
-                "短句",
-                "多用短句",
-                conversation(other),
-            ),
-            (
-                5,
-                1,
-                5,
-                "current",
-                "major_event",
-                "conversation",
-                "大水",
-                "三十年前",
-                conversation(&talk),
-            ),
-            (
-                1,
-                2,
-                6,
-                "current",
-                "character",
-                "author_request",
-                "林雪",
-                "新文",
-                conversation(&talk),
-            ),
-            (
-                5,
-                2,
-                7,
-                "deleted",
-                "major_event",
-                "conversation",
-                "大水",
-                "三十年前",
-                conversation(&talk),
-            ),
-            (
-                6,
-                1,
-                8,
-                "current",
-                "relationship",
-                "conversation",
-                "姐妹",
-                "林舟与林雪",
-                "[]".to_owned(),
-            ),
-        ],
-    )
-    .await;
+    let rows = [
+        (
+            "1 1 1 current character author_request 林雪 旧文",
+            conversation(&talk),
+        ),
+        (
+            "2 1 2 current other chapter 旧渡口 北岸",
+            chapter(&chapter_id),
+        ),
+        (
+            "3 1 3 current foreshadowing chapter 铜铃 铃响",
+            chapter(&removed),
+        ),
+        (
+            "4 1 4 current writing_preference conversation 短句 多用短句",
+            conversation(other),
+        ),
+        (
+            "5 1 5 current major_event conversation 大水 三十年前",
+            conversation(&talk),
+        ),
+        (
+            "1 2 6 current character author_request 林雪 新文",
+            conversation(&talk),
+        ),
+        (
+            "5 2 7 deleted major_event conversation 大水 三十年前",
+            conversation(&talk),
+        ),
+        (
+            "6 1 8 current relationship conversation 姐妹 林舟与林雪",
+            "[]".to_owned(),
+        ),
+    ];
+    write(&admin, &scope, &rows).await;
     let empty = seed_project(&store, "b740").await;
     let hidden = ProjectScope::new(
         UserId::new(scope.owner_user_id.as_ref()),
         ProjectId::new("018f0000-0000-7001-8000-0000000b74ff"),
     );
-    let changed_at: Vec<String> = list_memory_entries(&store, &scope)
-        .await
-        .unwrap()
-        .unwrap()
-        .into_iter()
-        .map(|entry| entry.changed_at)
-        .collect();
+    let entries = list_memory_entries(&store, &scope).await.unwrap().unwrap();
+    let times: Vec<String> = entries.into_iter().map(|entry| entry.changed_at).collect();
 
-    let source = |id: &str, available| MemoryEntrySourceItem::Conversation {
-        conversation_id: id.to_owned(),
-        available,
-    };
     assert_eq!(
         (
             listed(&store, &scope).await,
             listed(&store, &empty).await,
             listed(&store, &hidden).await,
-            changed_at
+            times
                 .iter()
                 .all(|time| time.len() == 24 && time.ends_with('Z') && time.as_bytes()[10] == b'T'),
         ),
         (
             Some(vec![
-                (
-                    4,
-                    1,
-                    "writing_preference",
-                    "conversation",
-                    "短句".to_owned(),
-                    "多用短句".to_owned(),
-                    Some(source(other, false))
+                format!(
+                    "4 1 writing_preference conversation 短句 多用短句 conversation {other} false"
                 ),
-                (
-                    3,
-                    1,
-                    "foreshadowing",
-                    "chapter",
-                    "铜铃".to_owned(),
-                    "铃响".to_owned(),
-                    Some(MemoryEntrySourceItem::Chapter {
-                        chapter_id: removed.clone(),
-                        title: None,
-                        available: false
-                    }),
-                ),
-                (
-                    1,
-                    2,
-                    "character",
-                    "author_request",
-                    "林雪".to_owned(),
-                    "新文".to_owned(),
-                    Some(source(&talk, true))
-                ),
-                (
-                    6,
-                    1,
-                    "relationship",
-                    "conversation",
-                    "姐妹".to_owned(),
-                    "林舟与林雪".to_owned(),
-                    None
-                ),
-                (
-                    2,
-                    1,
-                    "other",
-                    "chapter",
-                    "旧渡口".to_owned(),
-                    "北岸".to_owned(),
-                    Some(MemoryEntrySourceItem::Chapter {
-                        chapter_id: chapter_id.clone(),
-                        title: Some("Chapter A".to_owned()),
-                        available: true,
-                    }),
+                format!("3 1 foreshadowing chapter 铜铃 铃响 chapter {removed} None false"),
+                format!("1 2 character author_request 林雪 新文 conversation {talk} true"),
+                "6 1 relationship conversation 姐妹 林舟与林雪 none".to_owned(),
+                format!(
+                    "2 1 other chapter 旧渡口 北岸 chapter {chapter_id} Some(\"Chapter A\") true"
                 ),
             ]),
             Some(Vec::new()),
@@ -359,22 +217,11 @@ async fn a_conversation_with_no_memory_use_does_not_change_the_list() {
     let (scope, _, run_id) = queued(&store, "b72").await;
     complete(&store, &admin, &scope, &run_id).await;
     let talk = conversation_of(&admin, &run_id).await;
-    write(
-        &admin,
-        &scope,
-        &[(
-            1,
-            1,
-            1,
-            "current",
-            "character",
-            "author_request",
-            "林雪",
-            "船工",
-            conversation(&talk),
-        )],
-    )
-    .await;
+    let row = (
+        "1 1 1 current character author_request 林雪 船工",
+        conversation(&talk),
+    );
+    write(&admin, &scope, &[row]).await;
     let before = listed(&store, &scope).await;
     admin
         .batch_execute(&format!(
