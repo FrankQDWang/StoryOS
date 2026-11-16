@@ -3,7 +3,7 @@
 //! arguments and from the current entries that the store loads, and the store writes the version
 //! in the transaction that settles the ToolCall.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
@@ -68,22 +68,12 @@ pub(crate) fn parameters() -> Value {
 }
 
 /// The action of one `write_memory` call.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryWriteAction {
     Create,
     Change,
     Delete,
-}
-
-impl MemoryWriteAction {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Create => "create",
-            Self::Change => "change",
-            Self::Delete => "delete",
-        }
-    }
 }
 
 /// The validated arguments of one `write_memory` call. A null value is `None`.
@@ -100,7 +90,7 @@ pub struct MemoryWrite {
 impl MemoryWrite {
     pub(crate) fn arguments(&self) -> Value {
         json!({
-            "action": self.action.as_str(),
+            "action": self.action,
             "entry": self.entry,
             "type": self.entry_type.map(MemoryEntryType::as_str),
             "title": self.title,
