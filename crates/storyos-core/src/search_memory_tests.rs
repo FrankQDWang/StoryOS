@@ -1,10 +1,12 @@
 use serde_json::json;
 
 use super::{SEARCH_MEMORY_TOOL_SPEC, search_memory};
+use crate::assemble_context::count_context_item_tokens;
 use crate::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_SKILL_REGISTRATION, ContextSourceClass, CurrentMemoryEntry,
-    ExposureFacts, HOST_FAKE_TOOL_LOOP_REGISTRATION, IntakeRefusal, MemoryEntryType, ToolExposure,
-    ToolIntake,
+    AGENT_PLAN_REGISTRATION, AGENT_PLAN_SKILL_REGISTRATION, CONTEXT_ITEM_TOKEN_LIMIT,
+    ContextSourceClass, CurrentMemoryEntry, ExposureFacts, HOST_FAKE_TOOL_LOOP_REGISTRATION,
+    IntakeRefusal, MEMORY_DESCRIPTION_MAX_CHARS, MEMORY_TITLE_MAX_CHARS, MemoryEntryType,
+    ToolExposure, ToolIntake, ToolResultProjection,
 };
 
 fn names(revision: &str, memory_use: bool) -> Vec<&'static str> {
@@ -15,6 +17,11 @@ fn names(revision: &str, memory_use: bool) -> Vec<&'static str> {
         memory_use,
     });
     exposure.tools.iter().map(|tool| tool.name).collect()
+}
+
+/// The token count of the `tool_result` item of the result `text` of the call `call-1`.
+fn item_tokens(text: &str) -> u64 {
+    count_context_item_tokens(&ToolResultProjection::Ok(text).continuation_text("call-1"))
 }
 
 fn entry(number: u64, entry_type: MemoryEntryType, fields: [&str; 3]) -> CurrentMemoryEntry {
@@ -165,7 +172,7 @@ fn a_search_lists_the_entries_that_hold_the_term_in_the_order_of_the_index() {
             ["林舟", "林雪之妹", "不上船。"],
         ),
     ];
-    let text = |query| search_memory(&entries, query).text;
+    let text = |query| search_memory(&entries, query, "call-1").text;
     assert_eq!(
         (
             text("雪"),
@@ -206,5 +213,46 @@ fn a_search_lists_the_entries_that_hold_the_term_in_the_order_of_the_index() {
                 .to_owned(),
             ContextSourceClass::MemorySearchResult,
         )
+    );
+}
+
+/// ADR 0052 and ADR 0085 section 2: a valid Memory can hold more matches than one Context item.
+/// The result keeps whole entry lines while its item, with its boundary and its escape, fits the
+/// item limit, and the first entry that does not fit ends the result with one line. Thus the
+/// bounded projection does not cut the item. The entries that the result keeps give a complete
+/// result with no line, and one more entry does not fit.
+#[test]
+fn a_result_keeps_whole_entries_while_its_item_fits_the_limit() {
+    let entries: Vec<CurrentMemoryEntry> = (1..=300)
+        .map(|number| {
+            let title = format!("{number:03}{}", "题".repeat(MEMORY_TITLE_MAX_CHARS - 3));
+            let description = format!("铜铃{}", "长".repeat(MEMORY_DESCRIPTION_MAX_CHARS - 2));
+            entry(
+                number,
+                MemoryEntryType::Other,
+                [&title, &description, "铜铃"],
+            )
+        })
+        .collect();
+    let text = |count: usize| search_memory(&entries[..count], "铜铃", "call-1").text;
+    let line = |other: usize| {
+        format!(
+            "\n[This result does not have the other {other} entries with a match. Search for a \
+             more exact term to find them.]"
+        )
+    };
+    let cut = text(300);
+    let kept = cut.matches("\"matched\"").count();
+    let projected = ToolResultProjection::Ok(&cut).bounded_text("call-1", CONTEXT_ITEM_TOKEN_LIMIT);
+    assert_eq!(
+        (
+            (100..300).contains(&kept),
+            cut == format!("{}{}", text(kept), line(300 - kept)),
+            text(kept).contains("[This result"),
+            text(kept + 1) == format!("{}{}", text(kept), line(1)),
+            item_tokens(&cut) <= CONTEXT_ITEM_TOKEN_LIMIT,
+            projected.kept_result_tokens.is_none(),
+        ),
+        (true, true, false, true, true, true)
     );
 }

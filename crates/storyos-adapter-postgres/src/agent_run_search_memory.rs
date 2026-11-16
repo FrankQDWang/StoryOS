@@ -19,7 +19,7 @@ pub(crate) async fn execute(
     let (_, _, entries) = crate::memory_entries::current_memory(client, &claim.project_scope)
         .await
         .map_err(CompleteAgentRunError::Unavailable)?;
-    let result = storyos_core::search_memory(&entries, query);
+    let result = storyos_core::search_memory(&entries, query, &row.call_id);
     resolve(
         client,
         claim,

@@ -214,46 +214,89 @@ async fn each_run_searches_its_own_project_and_no_match_and_a_refused_query_have
     );
 }
 
-/// The message has the compaction prefix of the fake before the search script. The summary
-/// request continues the response of the search, and the later request is a full input: both
-/// send the exact result of the search, because only the result of a research Tool can be a
-/// stub.
+/// The Project has 200 entries that hold the term, more than one Context item can hold. The
+/// message has the compaction prefix of the fake before the search script. The result keeps
+/// whole entry lines in the item limit and ends with one line, so its item stays
+/// `exact_required`. The summary request continues the response of the search, and the later
+/// request is a full input: both send the exact result of the search, because only the result of
+/// a research Tool can be a stub.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_compaction_after_a_search_keeps_the_exact_result() {
+async fn a_compaction_after_a_large_search_keeps_the_exact_bounded_result() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "d49").await;
     complete(&store, &admin, &scope, &first).await;
-    let versions = [(1, 1, 1, "current", "relationship", "林舟与林雪", "姐妹。")];
+    let fields: Vec<(String, String)> = (1..=200)
+        .map(|number| {
+            (
+                format!("{number:03}{}", "题".repeat(27)),
+                format!("铜铃{}", "长".repeat(98)),
+            )
+        })
+        .collect();
+    let versions: Vec<_> = (fields.iter().zip(1..))
+        .map(|((title, description), number)| {
+            (
+                number,
+                1,
+                number,
+                "current",
+                "other",
+                title.as_str(),
+                description.as_str(),
+            )
+        })
+        .collect();
     write_versions(&admin, &scope, &versions).await;
     let message = format!(
         "{ACTIVE_COMPACTION_REQUEST_PREFIX} {ACTIVE_COMPACTION_POSITIONS_PREFIX} 1. \
-         SCRIPT:search_memory 姐妹"
+         SCRIPT:search_memory 铜铃"
     );
     let new = ConversationSelection::New;
     let run_id = admitted(&store, &scope, &chapter_id, "d4a", &message, new).await;
     complete(&store, &admin, &scope, &run_id).await;
 
-    let text = "{\"type\":\"relationship\"}\n{\"description\":\"姐妹。\",\"id\":1,\
-                \"matched\":[\"description\",\"text\"],\"title\":\"林舟与林雪\"}";
+    let (search, text): (String, String) = {
+        let row = admin
+            .query_one(
+                "SELECT tool_call_id::text, result_text FROM storyos.tool_calls
+                  WHERE run_id = $1::text::uuid AND call_id = 'call_search_memory'",
+                &[&run_id],
+            )
+            .await
+            .unwrap();
+        (row.get(/*idx*/ 0), row.get(/*idx*/ 1))
+    };
+    let kept = text.matches("\"matched\"").count();
+    let line = format!(
+        "\n[This result does not have the other {} entries with a match. Search for a more exact \
+         term to find them.]",
+        200 - kept
+    );
     let output = json!([[
         "call_search_memory",
-        boundary("call_search_memory", "ok", text)
+        boundary("call_search_memory", "ok", &text)
     ]]);
     let sent = sent(&admin, &run_id).await;
     assert_eq!(
         (
             calls(&admin, &run_id).await[0].clone(),
+            (50..200).contains(&kept),
+            text.ends_with(&line),
             json!([sent[1][0], sent[1][2]]),
             json!([sent[2][0], sent[2][2], sent[2][3]]),
+            outputs_record(&admin, &run_id, 1).await[1].clone(),
         ),
         (
             json!("completed"),
+            true,
+            true,
             json!(["compaction", output]),
             json!(["decision", output, true]),
+            json!([["memory_search_result", search, "exact_required"]]),
         )
     );
 }
