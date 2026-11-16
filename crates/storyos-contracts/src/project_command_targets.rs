@@ -36,6 +36,12 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.update-project-assistance.request.v1",
     ),
     target(
+        CommandKind::UpdateProjectInstruction,
+        "PUT",
+        "/api/v1/projects/{project_id}/instruction",
+        "storyos.command.update-project-instruction.request.v1",
+    ),
+    target(
         CommandKind::CreateEditorSession,
         "POST",
         "/api/v1/projects/{project_id}/editor-sessions",

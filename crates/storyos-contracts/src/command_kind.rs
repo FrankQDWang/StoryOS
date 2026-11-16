@@ -32,6 +32,7 @@ command_kinds! {
     CreateProject => "createProject",
     UpdateProject => "updateProject",
     UpdateProjectAssistance => "updateProjectAssistance",
+    UpdateProjectInstruction => "updateProjectInstruction",
     CreateEditorSession => "createEditorSession",
     TakeOverProjectWriter => "takeOverProjectWriter",
     CreateVolume => "createVolume",
