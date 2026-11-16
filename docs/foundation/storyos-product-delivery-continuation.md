@@ -113,7 +113,7 @@ package inspection step, and the revocation step of the earlier journey.
 
 | ID | Production obligation | Semantic owner |
 | --- | --- | --- |
-| S7-REQ-001 | Preserve one Project main Agent across distinct Project Conversations using their existing identities. Cross-conversation continuity uses the Project Instruction, the manuscript tools, and Agent Memory; each conversation retains its own Provider continuation. Do not load the entire transcript, manuscript, or Memory collection by default. | Project Agent and Context owners |
+| S7-REQ-001 | Preserve one Project main Agent across distinct Project Conversations using their existing identities. The author can open an earlier Project Conversation again and continue it (ADR 0094). Cross-conversation continuity uses the Project Instruction, the manuscript tools, and Agent Memory; each conversation retains its own Provider continuation. Do not load the entire transcript, manuscript, or Memory collection by default. | Project Agent and Context owners |
 | S7-REQ-002 | Withdrawn for Stage 7 by ADR 0094. The structured fiction records stay deferred. A character, a relationship, and a major event are Memory Entries of S7-REQ-005, and they are not Authoritative State. | Artifact and Research/Memory owners |
 | S7-REQ-003 | Withdrawn for Stage 7 by ADR 0094. The Author Preference and the Inferred Preference stay deferred as separate records. The lasting instruction of the author is the Project Instruction of S7-REQ-004. A habit that the author states in a Conversation is a Memory Entry, and a Memory Entry is never an instruction. | Research/Memory and Admission owners |
 | S7-REQ-004 | Support optional author-edited Project Instruction, immutable revisions, and exact top-level Run binding. The author writes it on the settings page of the Project (ADR 0094). Existing bindings stay fixed across Subruns and context compaction; absence does not block ordinary assistance. This does not defer any instruction binding already required in an earlier stage. | Context and AgentRun owners |
@@ -129,8 +129,9 @@ package inspection step, and the revocation step of the earlier journey.
    origin on the settings page. Let a quiet Project Conversation and a changed
    Chapter contribute through background capture and consolidation, then
    inspect the entries and their sources.
-3. Continue in a second Project Conversation. The Agent uses the Memory Index
-   and reads an entry. It finds a passage of another Chapter with the keyword
+3. Continue in a second Project Conversation, then open the first one again
+   from the Conversation list. The Agent uses the Memory Index and reads an
+   entry. It finds a passage of another Chapter with the keyword
    search and with the hybrid search. Distinguish read/sent evidence from model
    attention and generated recall from author-owned truth.
 4. Change a Chapter so that an entry of the author conflicts with it. Background

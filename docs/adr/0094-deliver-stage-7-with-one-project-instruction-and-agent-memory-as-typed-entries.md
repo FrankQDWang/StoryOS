@@ -19,7 +19,7 @@ At `main` `ae03e16b`, the repository has these facts:
 - No fiction record exists: no Fiction Assertion, no Character, no relationship, no timeline record, and no Proposal kind for them.
 - No Memory record exists. The only background work is the settlement of a Run and the Project export.
 - A Run is a tool loop with Host Tools ([ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)). Each Tool result returns to the model through Context Assembly ([ADR 0085](0085-reenter-each-settled-tool-result-through-context-assembly.md)).
-- The Web client has two pages: the Project list and the writing workspace. It has no settings page.
+- The Web client has two pages: the Project list and the writing workspace. It has no settings page. After the author starts a new Project Conversation, no control opens the earlier one again.
 
 The study read the source of three coding assistants and the public material of other products. Its results:
 
@@ -33,7 +33,7 @@ The author described the content of Memory. It is not a copy of the novel. It ho
 
 ### 1. The scope of Stage 7
 
-Stage 7 delivers the Project Instruction, Agent Memory, the manuscript tools of ADR 0095, and one settings page of a Project.
+Stage 7 delivers the Project Instruction, Agent Memory, the manuscript tools of ADR 0095, one settings page of a Project, and a list of the Project Conversations.
 
 These contracts stay deferred. Their glossary entries stay, and no released Stage implements them:
 
@@ -108,7 +108,13 @@ A model records too many small details when only its instructions limit it. The 
 - The Memory section lists the current entries in groups by type. Each entry shows its title, its text, its origin with a link to the source Conversation or Chapter, the time of its last change, and its conflict flag when it has one. Each entry has a delete control.
 - The page has no review queue and no approval step for a background entry. The control of the author is to see each entry, to delete it, and to correct it in a Conversation.
 
-### 10. What changes in ADR 0035 and the Memory contract
+### 10. The Conversation list
+
+- The writing assistant panel has a list of the Project Conversations of the Project. The author opens an earlier Conversation again, reads it, and continues it. Each Conversation keeps its own Provider continuation.
+- The origin of a Memory Entry on the settings page opens its source Conversation.
+- The list has no rename control and no delete control.
+
+### 11. What changes in ADR 0035 and the Memory contract
 
 These parts stay: background generation, readable text, a bounded summary in the context, a read on demand, fallible reference material with no authority, the PostgreSQL authority, and the Project Isolation.
 
