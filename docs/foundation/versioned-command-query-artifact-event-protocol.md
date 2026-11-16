@@ -2160,15 +2160,9 @@ capabilities; Agent Plan entitlement is not proof of every Ark capability.
 ### 13.10 Conversation Memory protocol
 
 The [Memory owner](fiction-memory-and-research-provenance-semantics.md) defines
-the documents and maintenance mechanism. Memory Documents and Memory Notes use
-versioned content roles within the existing Tool Artifact family, not new
-top-level Artifact kinds or per-claim Admission/Suppression records.
-`storyos.artifact.memory-document.v1` contains a closed content role
-`conversation_summary | consolidated_notes | navigation_summary`, bounded
-Markdown payload/reference, and exact known input/source references.
-`storyos.artifact.memory-note.v1` contains bounded plain-language guidance and
-its requesting Message revision. Both retain the existing Artifact envelope,
-Creator, revision, digest, payload availability, and Project Scope contract.
+the maintenance mechanism. ADR 0094 section 3 defines the records of Agent
+Memory: Memory Entries with versions in their own tables in the Project Scope.
+They are not a part of the Tool Artifact family.
 
 `ConversationMemorySettings` binds exact Project Scope, Project Conversation,
 an opaque UUIDv7 settings revision, `use_enabled`, and `contribution_enabled`. Both values are

@@ -151,6 +151,14 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "canonical/agent_run_skill_catalog_entries.json",
     ),
     (
+        "project_memory_heads",
+        "canonical/project_memory_heads.json",
+    ),
+    (
+        "memory_entry_versions",
+        "canonical/memory_entry_versions.json",
+    ),
+    (
         "operation_requirements",
         "canonical/operation_requirements.json",
     ),
