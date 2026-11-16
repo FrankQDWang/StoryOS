@@ -1,3 +1,5 @@
+use serde_json::json;
+
 use super::*;
 
 fn passage(text: &str) -> EmbeddingInput {
@@ -206,4 +208,34 @@ fn each_destination_has_one_text_registration_of_1024_dimensions() {
         ]
     );
     assert_eq!(EMBEDDING_REQUEST_TIMEOUT.as_secs(), 30);
+}
+
+#[test]
+fn the_snapshot_names_the_cause_and_the_references_and_no_text() {
+    let question = EmbeddingInput::Question {
+        tool_call_id: "call-1".to_owned(),
+        text: "Where is the lantern?".to_owned(),
+    };
+
+    assert_eq!(
+        [passage("The tide turned.").snapshot(), question.snapshot()],
+        [
+            json!({
+                "cause": "passage_index", "purpose": "manuscript_embedding",
+                "source_class": "chapter_passage",
+                "texts": [{"chapter_id": "ch-1", "revision_id": "rev-1",
+                           "passage_digest": "sha256:p"}],
+                "working_target": "not_applicable", "workspace_context": "not_applicable",
+            }),
+            json!({
+                "cause": "search_question", "purpose": "manuscript_embedding",
+                "source_class": "search_question", "texts": [{"tool_call_id": "call-1"}],
+                "working_target": "not_applicable", "workspace_context": "not_applicable",
+            }),
+        ]
+    );
+    assert_ne!(
+        EmbeddingCause::PassageIndex.instructions(),
+        EmbeddingCause::SearchQuestion.instructions()
+    );
 }

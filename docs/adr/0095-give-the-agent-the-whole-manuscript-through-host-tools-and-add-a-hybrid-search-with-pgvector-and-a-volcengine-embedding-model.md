@@ -71,6 +71,8 @@ The rules of a Host Tool apply ([ADR 0091](0091-replace-the-typed-reply-form-wit
 - **The bounds.** One request holds one text of one Project. The text has at most 8,192 tokens of the Token Counting Profile ([ADR 0052](0052-set-the-context-item-limit-from-the-measured-model-input.md)), and the request has a timeout of 30 seconds. The Host never shortens a text.
 - **The grant.** With an embedding configuration, `createAgentRun` makes the grant `manuscript_embedding_v1` and its use binding in the command transaction, as it makes the research binding ([ADR 0090](0090-make-web-research-available-in-each-project-without-an-enablement-switch.md)).
 - **The refusals.** One Core function decides the admission of a request. It gives one of these refusals: `embedding_not_configured`, `embedding_binding_absent`, `disclosure_outside_grant`, `embedding_input_out_of_bounds`, and `destination_credential_unavailable`.
+- **The record.** [S7-C2a1b](https://github.com/FrankQDWang/StoryOS/issues/1612) adds the record. One row of `embedding_attempts` is one request: the Destination Attempt Admission Decision, the Operation Input Snapshot, the Wire Payload Projection, the Destination Attempt, and the Outbound Disclosure Event. A refusal writes no row. The Project Export Archive does not hold these rows.
+- **The rule.** The Host does not retry an embedding request and has no fallback. A stopped process leaves its row in OutcomeUnknown. The caller makes a new request, and the new request gets a new row. A vector of another length than 1,024 is an invalid result, and the caller gets no vector.
 
 ### 4. The index maintenance
 

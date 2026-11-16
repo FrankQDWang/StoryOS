@@ -4242,6 +4242,37 @@ GRANT SELECT,INSERT ON TABLE storyos.tool_calls TO storyos_runtime;
 
 GRANT UPDATE(state, refusal, destination_attempt_id, attempt, effect_outcome, result_text, result_digest, result_bytes) ON TABLE storyos.tool_calls TO storyos_runtime;
 
+-- Embedding Attempts (ADR 0095 section 3). One row is one embedding request: the Destination Attempt
+-- Admission Decision, the Operation Input Snapshot, the Wire Payload Projection, the Destination
+-- Attempt, and the Outbound Disclosure Event. A NULL settlement is OutcomeUnknown. The Project Export
+-- Archive does not hold these rows.
+
+CREATE TABLE storyos.embedding_attempts (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    embedding_attempt_id uuid NOT NULL,
+    cause text NOT NULL,
+    grant_id uuid NOT NULL,
+    project_model_use_binding_revision uuid NOT NULL,
+    attempt jsonb NOT NULL,
+    settlement text,
+    CONSTRAINT embedding_attempts_cause_check CHECK ((cause = ANY (ARRAY['passage_index'::text, 'search_question'::text]))),
+    CONSTRAINT embedding_attempts_settlement_check CHECK ((settlement = ANY (ARRAY['vector'::text, 'invalid_result'::text, 'rejected'::text, 'not_submitted'::text, 'outcome_unknown'::text]))),
+    CONSTRAINT embedding_attempts_attempt_check CHECK ((jsonb_typeof(attempt) = 'object'::text)),
+    CONSTRAINT embedding_attempts_pkey PRIMARY KEY (owner_user_id, project_id, embedding_attempt_id),
+    CONSTRAINT embedding_attempts_grant_fkey FOREIGN KEY (owner_user_id, project_id, grant_id) REFERENCES storyos.project_destination_grants(owner_user_id, project_id, grant_id) MATCH FULL,
+    CONSTRAINT embedding_attempts_binding_fkey FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision) MATCH FULL
+);
+
+ALTER TABLE storyos.embedding_attempts ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.embedding_attempts FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY embedding_attempts_exact_scope ON storyos.embedding_attempts USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.embedding_attempts TO storyos_runtime;
+
+GRANT UPDATE(attempt, settlement) ON TABLE storyos.embedding_attempts TO storyos_runtime;
 
 -- Activity Run Events. An append-only record of the AgentRun: one `tool_call_settled` event for each
 -- resolved ToolCall, one `tool_call_late_result` event when a result arrived after the fence of a

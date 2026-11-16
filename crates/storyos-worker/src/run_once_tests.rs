@@ -222,6 +222,7 @@ async fn run_once_claims_again_after_a_serialization_failure() {
         adapter: NoDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
+        embeddings: storyos_application::NoEmbeddingDestination,
     };
 
     run_once(&store, &destination)
@@ -244,6 +245,7 @@ async fn run_once_completes_again_after_a_serialization_failure() {
         adapter: NoDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
+        embeddings: storyos_application::NoEmbeddingDestination,
     };
 
     run_once(&store, &destination)
@@ -266,6 +268,7 @@ async fn run_once_stops_after_one_failure_that_is_not_a_serialization_failure() 
         adapter: NoDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
+        embeddings: storyos_application::NoEmbeddingDestination,
     };
 
     let result = run_once(&store, &destination).await;
