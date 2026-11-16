@@ -180,8 +180,10 @@ Because the table has rows of all Projects, a sequential scan grows with all the
 
 | Image | Result |
 | --- | --- |
-| `pgvector/pgvector:0.8.7-pg16-bookworm` | PASS: `storyos.passage_vectors`, owner `storyos_owner`, forced row level security, pgvector 0.8.7. As `storyos_runtime` in a Scope: one insert, one count of 1, and one nearest read. |
+| `pgvector/pgvector:0.8.7-pg16-bookworm` | PASS: `storyos.passage_vectors`, owner `storyos_owner`, forced row level security, the primary key as its only index, pgvector 0.8.7. As `storyos_runtime` in a Scope: one insert, one count of 1, and one nearest read. |
 | `postgres:16-alpine` | PASS: no vector table and no extension |
+
+The tag holds the output of the first version of the text, which also made an HNSW index. The review of round 1 removed that index, because it contradicts the read form. The table above is the result of the final text.
 
 ### The hosted database
 

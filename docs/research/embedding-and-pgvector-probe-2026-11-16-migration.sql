@@ -1,7 +1,8 @@
 -- A migration text that makes a vector table only when the database offers pgvector (S7-C1,
 -- #1572; ADR 0095 section 4). It runs in the transaction of the Storage Activation after the
 -- baseline, which leaves the role storyos_owner set. The vector extension is not trusted, so the
--- admin role of the activation creates it. S7-C2b1 owns the columns of the real table.
+-- admin role of the activation creates it. The read form is an exact scan, so the table has no vector
+-- index. S7-C2b1 owns the columns of the real table.
 
 RESET ROLE;
 DO $migration$
@@ -28,8 +29,6 @@ BEGIN
         ALTER TABLE storyos.passage_vectors ENABLE ROW LEVEL SECURITY;
         ALTER TABLE storyos.passage_vectors FORCE ROW LEVEL SECURITY;
         CREATE POLICY passage_vectors_exact_scope ON storyos.passage_vectors USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
-        CREATE INDEX passage_vectors_embedding ON storyos.passage_vectors
-            USING hnsw (embedding extensions.vector_cosine_ops);
         GRANT SELECT, INSERT, DELETE ON TABLE storyos.passage_vectors TO storyos_runtime;
     $ddl$;
 END
