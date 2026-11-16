@@ -165,6 +165,18 @@ async fn a_run_binds_the_revision_of_its_own_project() {
     );
 }
 
+/// The version of each considered `instruction_binding` source of each Context Assembly of the
+/// Run, with the role and the RunStep of the assembly.
+async fn versions(admin: &Client, run_id: &str) -> Vec<Value> {
+    assemblies(admin, run_id)
+        .await
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|assembly| json!([assembly[0], assembly[1], assembly[3]]))
+        .collect()
+}
+
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
@@ -189,7 +201,6 @@ async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
     settle(&store, &admin, &scope, &steered, &author)
         .await
         .unwrap();
-    let conversation = conversation_of("db8");
     let next = admit_run_in(
         &store,
         &scope,
@@ -197,45 +208,18 @@ async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
         "db9",
         FAKE,
         "Help again.",
-        conversation.clone(),
+        conversation_of("db8"),
         None,
     )
     .await;
     complete(&store, &admin, &scope, &next).await;
-    // The author removes the Project Instruction.
-    saved(&store, &scope, 0xdd73, "", 2).await;
-    let removed = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "dba",
-        FAKE,
-        "Help again.",
-        conversation,
-        None,
-    )
-    .await;
-    complete(&store, &admin, &scope, &removed).await;
-    let versions = |run_id: String| {
-        let admin = &admin;
-        async move {
-            assemblies(admin, &run_id)
-                .await
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|assembly| json!([assembly[0], assembly[1], assembly[3]]))
-                .collect::<Vec<_>>()
-        }
-    };
 
     assert_eq!(
         (
-            versions(steered.clone()).await,
+            versions(&admin, &steered).await,
             sent(&admin, &steered).await,
+            binding(&admin, &next).await,
             sent(&admin, &next).await,
-            binding(&admin, &removed).await,
-            sent(&admin, &removed).await,
         ),
         (
             // The RunStep that reads the steering input and the RunStep after the Tool result
@@ -252,12 +236,52 @@ async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
                 ["decision", 1, [first_text]],
                 ["decision", 2, []],
             ]),
+            Some(next_revision),
             json!([["decision", 0, [next_text]], ["decision", 1, []]]),
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_next_run_after_a_removal_sends_no_project_instruction() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, first) = queued(&store, "dbd").await;
+    complete(&store, &admin, &scope, &first).await;
+    let text = "Write in the past tense.";
+    saved(&store, &scope, 0xddd1, text, 0).await;
+    let bound = admit_run(&store, &scope, &chapter_id, "dbe", FAKE, "Help again.").await;
+    complete(&store, &admin, &scope, &bound).await;
+    // The author removes the Project Instruction.
+    saved(&store, &scope, 0xddd2, "", 1).await;
+    let removed = admit_run_in(
+        &store,
+        &scope,
+        &chapter_id,
+        "dbf",
+        FAKE,
+        "Help again.",
+        conversation_of("dbe"),
+        None,
+    )
+    .await;
+    complete(&store, &admin, &scope, &removed).await;
+
+    assert_eq!(
+        (
+            sent(&admin, &bound).await,
+            binding(&admin, &removed).await,
+            sent(&admin, &removed).await,
+        ),
+        (
+            json!([["decision", 0, [text]], ["decision", 1, []]]),
             None,
             json!([["decision", 0, []], ["decision", 1, []]]),
         )
     );
-    assert_ne!(first_revision, next_revision);
 }
 
 #[tokio::test]
@@ -276,16 +300,27 @@ async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_
         "{ACTIVE_COMPACTION_REQUEST_PREFIX} {ACTIVE_COMPACTION_POSITIONS_PREFIX} 1. Help again."
     );
     let compacted = admit_run(&store, &scope, &chapter_id, "dbc", FAKE, &message).await;
+    // The author saves a new text after the admission of the Run.
     saved(&store, &scope, 0xddb2, "Write in the present tense.", 1).await;
     complete(&store, &admin, &scope, &compacted).await;
+    let later = assemblies(&admin, &compacted).await[3].clone();
 
     assert_eq!(
         (
-            assemblies(&admin, &compacted).await,
+            versions(&admin, &compacted).await,
+            later,
             sent(&admin, &compacted).await
         ),
         (
-            json!([]),
+            vec![
+                json!(["decision", 0, [revision]]),
+                json!(["decision", 1, [revision]]),
+                json!(["compaction", 1, []]),
+                json!(["later_request", 1, [revision]]),
+            ],
+            json!(["later_request", 1, required(&revision), [revision],
+                   ["conversation_summary", "author_instruction", "instruction_binding",
+                    "working_target", "tool_result"]]),
             json!([
                 ["decision", 0, [text]],
                 ["compaction", 1, []],
@@ -293,5 +328,4 @@ async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_
             ]),
         )
     );
-    let _ = revision;
 }
