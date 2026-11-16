@@ -32,11 +32,13 @@ async function rowCounts(projectId: string): Promise<string> {
   `);
 }
 
-/** Moves each Run event time of the Run back by 73 hours. */
-async function moveBack(projectId: string, runId: string): Promise<void> {
+/** Moves each Run event time of each Run of the Conversation back by 73 hours. */
+async function moveBack(projectId: string, conversationId: string): Promise<void> {
   await queryPostgres(`
-    UPDATE storyos.agent_run_events SET recorded_at = recorded_at - interval '73 hours'
-     WHERE project_id = '${projectId}'::uuid AND run_id = '${runId}'::uuid;
+    UPDATE storyos.agent_run_events AS event SET recorded_at = event.recorded_at - interval '73 hours'
+      FROM storyos.agent_runs AS run
+     WHERE run.project_id = '${projectId}'::uuid AND run.conversation_id = '${conversationId}'::uuid
+       AND (event.owner_user_id, event.project_id, event.run_id) = (run.owner_user_id, run.project_id, run.run_id);
   `);
 }
 
@@ -101,7 +103,7 @@ test("listProjectConversations and getProjectConversation give the Conversations
   assert.deepEqual(otherRuns.map((run) => run.run_id), [other.effect.run_id]);
 
   // The newest Run event of the Conversation is more than 72 hours old at the time of the read.
-  await moveBack(prepared.projectId, second.effect.run_id);
+  await moveBack(prepared.projectId, first.conversation_id);
   const moved = await rowCounts(prepared.projectId);
   assert.equal((await read(first.conversation_id)).earlier_turns_expired, true);
   assert.equal((await read(other.conversation_id)).earlier_turns_expired, false);
