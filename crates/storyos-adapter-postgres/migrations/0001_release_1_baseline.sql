@@ -3868,6 +3868,65 @@ CREATE POLICY project_instruction_revisions_exact_scope ON storyos.project_instr
 
 GRANT SELECT,INSERT ON TABLE storyos.project_instruction_revisions TO storyos_runtime;
 
+-- Agent Memory (ADR 0094 sections 3 and 4)
+
+CREATE TABLE storyos.project_memory_heads (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    memory_revision numeric(20,0) NOT NULL,
+    next_entry_number numeric(20,0) NOT NULL,
+    CONSTRAINT project_memory_heads_bounds CHECK (((memory_revision >= (1)::numeric) AND (memory_revision <= '18446744073709551615'::numeric) AND (next_entry_number >= (1)::numeric) AND (next_entry_number <= '18446744073709551615'::numeric))),
+    CONSTRAINT project_memory_heads_pkey PRIMARY KEY (owner_user_id, project_id),
+    CONSTRAINT project_memory_heads_project_fkey FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL
+);
+
+ALTER TABLE storyos.project_memory_heads ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.project_memory_heads FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY project_memory_heads_exact_scope ON storyos.project_memory_heads USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT,UPDATE ON TABLE storyos.project_memory_heads TO storyos_runtime;
+
+CREATE TABLE storyos.memory_entry_versions (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    memory_entry_id uuid NOT NULL,
+    entry_number numeric(20,0) NOT NULL,
+    version numeric(20,0) NOT NULL,
+    memory_revision numeric(20,0) NOT NULL,
+    state text NOT NULL,
+    entry_type text NOT NULL,
+    origin text NOT NULL,
+    title text NOT NULL,
+    description text NOT NULL,
+    text text NOT NULL,
+    cause jsonb NOT NULL,
+    source_references jsonb NOT NULL,
+    recorded_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    CONSTRAINT memory_entry_versions_bounds CHECK (((entry_number >= (1)::numeric) AND (entry_number <= '18446744073709551615'::numeric) AND (version >= (1)::numeric) AND (version <= '18446744073709551615'::numeric) AND (memory_revision >= (1)::numeric) AND (memory_revision <= '18446744073709551615'::numeric))),
+    CONSTRAINT memory_entry_versions_state_check CHECK ((state = ANY (ARRAY['current'::text, 'deleted'::text]))),
+    CONSTRAINT memory_entry_versions_type_check CHECK ((entry_type = ANY (ARRAY['writing_preference'::text, 'foreshadowing'::text, 'character'::text, 'relationship'::text, 'major_event'::text, 'other'::text]))),
+    CONSTRAINT memory_entry_versions_origin_check CHECK ((origin = ANY (ARRAY['author_request'::text, 'conversation'::text, 'chapter'::text]))),
+    CONSTRAINT memory_entry_versions_shape CHECK (((char_length(title) >= 1) AND (char_length(description) >= 1) AND (jsonb_typeof(cause) = 'object'::text) AND (jsonb_typeof(source_references) = 'array'::text))),
+    CONSTRAINT memory_entry_versions_pkey PRIMARY KEY (owner_user_id, project_id, memory_entry_id, version),
+    CONSTRAINT memory_entry_versions_number_key UNIQUE (owner_user_id, project_id, entry_number, version),
+    CONSTRAINT memory_entry_versions_revision_key UNIQUE (owner_user_id, project_id, memory_entry_id, memory_revision),
+    CONSTRAINT memory_entry_versions_project_fkey FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL
+);
+
+CREATE UNIQUE INDEX memory_entry_versions_one_number ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, entry_number) WHERE (version = (1)::numeric);
+
+CREATE INDEX memory_entry_versions_revision_idx ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, memory_revision);
+
+ALTER TABLE storyos.memory_entry_versions ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_entry_versions FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_entry_versions_exact_scope ON storyos.memory_entry_versions USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.memory_entry_versions TO storyos_runtime;
+
 -- Agents, Conversations, and Agent Runs
 
 CREATE TABLE storyos.project_agents (

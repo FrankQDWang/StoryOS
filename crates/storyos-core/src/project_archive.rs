@@ -192,7 +192,7 @@ pub fn require_delivered_families(
 }
 
 /// The tables that each Project Export Archive must carry.
-pub const PROJECT_EXPORT_TABLES: [&str; 66] = [
+pub const PROJECT_EXPORT_TABLES: [&str; 68] = [
     "acceptance_receipts",
     "acceptance_refusals",
     "agent_run_events",
@@ -221,6 +221,7 @@ pub const PROJECT_EXPORT_TABLES: [&str; 66] = [
     "manuscript_blocks",
     "manuscript_objects",
     "manuscript_revision_members",
+    "memory_entry_versions",
     "pinned_export_sources",
     "project_activity_event_payloads",
     "project_activity_events",
@@ -230,6 +231,7 @@ pub const PROJECT_EXPORT_TABLES: [&str; 66] = [
     "project_export_operations",
     "project_external_use_binding_revisions",
     "project_instruction_revisions",
+    "project_memory_heads",
     "project_policy_revisions",
     "project_writer_generations",
     "projects",

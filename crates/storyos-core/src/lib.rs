@@ -26,6 +26,8 @@ mod host_fake_profile;
 mod host_tool;
 mod load_skill;
 mod manuscript_payload;
+mod memory_entry;
+mod memory_index;
 mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
@@ -187,6 +189,14 @@ pub use manuscript_payload::{
     COORDINATE_VERSION, MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind,
     ManuscriptPayload, VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
     upgrade_legacy_manuscript,
+};
+pub use memory_entry::{
+    MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference,
+    MemorySourceReferenceRead, memory_revision_pin, read_memory_source_references,
+};
+pub use memory_index::{
+    MEMORY_INDEX_MAX_ENTRIES, MEMORY_INDEX_TOKEN_LIMIT, MemoryIndexEntry, assemble_memory_index,
+    memory_index_text,
 };
 pub use model_output::{
     AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, StreamItemRole, StreamItemState,
