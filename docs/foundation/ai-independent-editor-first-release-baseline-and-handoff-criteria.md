@@ -128,9 +128,17 @@ The stage names below are contract identifiers, not separate workflow runtimes:
    mediated actions, replay, and safe fallback inside the Agent transcript.
 9. **Complete Run control and orchestration.** Deliver bounded long work,
    Subruns, controlled proactive execution, and explicit model-policy behavior.
+10. **Author voice.** Work on generated prose that reads as machine-written.
+    Its scope is not decided
+    ([ADR 0096](../adr/0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md)).
 
-The continuation contract defines `S5-*` through `S9-*`. Stage 9 completes
-the current local MVP route. [Eval](eval-evidence-foundation.md) is outside
+The continuation contract defines `S5-*` through `S9-*`. Stage 10 has no
+Requirement until its specification. The release order after Stage 7 is
+Stage 10, then Stage 8 and Stage 9: the number of a stage is its identity, and
+it is not its place in the order. Stage 8 and Stage 9 stay on EXECUTION HOLD,
+and the author decides again about each of them after the release of Stage 10.
+The last stage that the author keeps completes the current local MVP route.
+[Eval](eval-evidence-foundation.md) is outside
 MVP and has no current design, implementation, or release gate. Stage order is the
 serial delivery policy, not proof that every earlier feature is a
 technical dependency. Implementation blockers name actual inputs, interfaces,
