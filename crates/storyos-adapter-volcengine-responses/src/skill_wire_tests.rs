@@ -133,7 +133,7 @@ async fn a_v7_request_with_no_skill_item_has_the_bytes_of_the_v6_request() {
 
 /// ADR 0094 and ADR 0095: the mapping `v8` keeps each section, each instruction paragraph, and
 /// the summary instruction of `v7`, so a request of `v8` has the bytes of the `v7` request of the
-/// same input, also with each Skill item.
+/// same input, also with each Skill item, and only adds the declaration of `read_chapter`.
 #[tokio::test]
 async fn a_v8_request_has_the_bytes_of_the_v7_request_of_the_same_input() {
     let on = |mapping: &str, registration: &str, request: &CreateRequest| CreateRequest {
@@ -166,7 +166,16 @@ async fn a_v8_request_has_the_bytes_of_the_v7_request_of_the_same_input() {
         let registration = storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision;
         v7_bodies.push(body(on(V7, registration, input)).await);
         let registration = storyos_core::AGENT_PLAN_REGISTRATION.revision;
-        v8_bodies.push(body(on(V8, registration, input)).await);
+        let mut v8_body = body(on(V8, registration, input)).await;
+        if let Some(tools) = v8_body
+            .get_mut("tools")
+            .and_then(|tools| tools.as_array_mut())
+        {
+            let before = tools.len();
+            tools.retain(|tool| tool["name"] != "read_chapter");
+            assert_eq!(before, tools.len() + 1);
+        }
+        v8_bodies.push(v8_body);
     }
 
     assert_eq!(v8_bodies, v7_bodies);

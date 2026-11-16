@@ -3,9 +3,10 @@
 //! Outbound Disclosure Event, and it gives the Agent no authority.
 
 use crate::{
-    FINISH_TOOL_SPEC, LOAD_SKILL_TOOL_SPEC, ModelRegistration, PROPOSE_EDIT_TOOL_SPEC,
-    READ_SKILL_RESOURCE_TOOL_SPEC, READ_TOOL_RESULT_TOOL_SPEC, SUBMIT_RESEARCH_TOOL_SPEC,
-    ToolIntake, ToolRegistrationKind, ToolResultText, ToolSpec,
+    ContextSourceClass, FINISH_TOOL_SPEC, LOAD_SKILL_TOOL_SPEC, ModelRegistration,
+    PROPOSE_EDIT_TOOL_SPEC, READ_CHAPTER_TOOL_SPEC, READ_SKILL_RESOURCE_TOOL_SPEC,
+    READ_TOOL_RESULT_TOOL_SPEC, SUBMIT_RESEARCH_TOOL_SPEC, ToolIntake, ToolOperation,
+    ToolRegistrationKind, ToolResultText, ToolSpec,
 };
 
 /// The Tool Registration of the Host Tools. It has no server, credential, or destination.
@@ -58,13 +59,39 @@ pub const SKILL_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistrat
     ..FIRST_HOST_TOOL_REGISTRATION
 };
 
-/// The current Host Tools: the six Host Tools of the mapping `v7`, to which the Stage 7 tickets
-/// add their Tools (ADR 0094, ADR 0095). `ExposureFacts::has_host_tool` decides which of them a
-/// RunStep declares.
+/// The current Host Tools: the six Host Tools of the mapping `v7` and `read_chapter`, to which
+/// the Stage 7 tickets add their Tools before `finish` (ADR 0093 section 3, ADR 0094, ADR 0095).
+/// `ExposureFacts::has_host_tool` decides which of them a RunStep declares.
 pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     revision: "018f0000-0000-7001-8000-0000000e0104",
-    ..SKILL_HOST_TOOL_REGISTRATION
+    tools: &[
+        &PROPOSE_EDIT_TOOL_SPEC,
+        &SUBMIT_RESEARCH_TOOL_SPEC,
+        &READ_TOOL_RESULT_TOOL_SPEC,
+        &LOAD_SKILL_TOOL_SPEC,
+        &READ_SKILL_RESOURCE_TOOL_SPEC,
+        &READ_CHAPTER_TOOL_SPEC,
+        &FINISH_TOOL_SPEC,
+    ],
+    ..FIRST_HOST_TOOL_REGISTRATION
 };
+
+/// The Context source class of the settled result of the Host Tool `spec` (ADR 0095 section 1).
+/// Each Host Tool of the manuscript or of the Memory has its own class, and each other Host Tool
+/// gives a `tool_result` item. The output of a refused call is a `tool_result` item.
+pub fn host_tool_result_class(spec: &ToolSpec) -> ContextSourceClass {
+    match spec.operation {
+        ToolOperation::ReadChapter => ContextSourceClass::ManuscriptReadResult,
+        ToolOperation::WebSearch
+        | ToolOperation::WebFetch
+        | ToolOperation::Finish
+        | ToolOperation::ProposeEdit
+        | ToolOperation::SubmitResearch
+        | ToolOperation::ReadToolResult
+        | ToolOperation::LoadSkill
+        | ToolOperation::ReadSkillResource => ContextSourceClass::ToolResult,
+    }
+}
 
 impl ModelRegistration {
     /// The Host Tools that the request mapping declares. The Agent Plan mapping `v8` and the fake
@@ -119,14 +146,15 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         // The store executes `propose_edit`, because it opens a Proposal, `submit_research`,
         // because it records a Research Artifact, `read_tool_result`, because it reads a stored
         // ToolCall, and `load_skill` and `read_skill_resource`, because they read a SkillPackage
-        // Snapshot.
+        // Snapshot, and `read_chapter`, because it reads the manuscript.
         ToolIntake::WebSearch { .. }
         | ToolIntake::WebFetch { .. }
         | ToolIntake::ProposeEdit(_)
         | ToolIntake::SubmitResearch { .. }
         | ToolIntake::ReadToolResult { .. }
         | ToolIntake::LoadSkill { .. }
-        | ToolIntake::ReadSkillResource { .. } => None,
+        | ToolIntake::ReadSkillResource { .. }
+        | ToolIntake::ReadChapter { .. } => None,
     }
 }
 

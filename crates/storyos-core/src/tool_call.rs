@@ -108,6 +108,7 @@ impl ValidatedToolCall {
             ToolIntake::ReadSkillResource { skill, path } => {
                 json!({ "skill": skill, "path": path })
             }
+            ToolIntake::ReadChapter { chapter } => json!({ "chapter": chapter }),
         }
     }
 

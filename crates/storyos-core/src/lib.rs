@@ -29,6 +29,7 @@ mod manuscript_payload;
 mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
+mod read_chapter;
 mod read_skill_resource;
 mod read_tool_result;
 mod rebuild_expired_reference;
@@ -177,6 +178,7 @@ pub use host_tool::{
     FINISH_DOES_NOT_COUNT_RESULT, FIRST_HOST_TOOL_REGISTRATION, HOST_TOOL_REGISTRATION,
     HOST_TOOL_REGISTRATIONS, HostToolRegistration, READ_RESULT_HOST_TOOL_REGISTRATION,
     SKILL_HOST_TOOL_REGISTRATION, execute_host_tool, host_tool, host_tool_result,
+    host_tool_result_class,
 };
 pub use load_skill::{
     LOAD_SKILL_TOOL_SPEC, LoadSkillRefusal, SKILL_LOAD_LIMIT, SkillLoadFacts, admit_skill_load,
@@ -228,6 +230,9 @@ pub use project_archive::{
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
     export_project_archive,
+};
+pub use read_chapter::{
+    ChapterReadRefusal, READ_CHAPTER_TOOL_SPEC, ReadableChapter, admit_chapter_read,
 };
 pub use read_skill_resource::{
     READ_SKILL_RESOURCE_TOOL_SPEC, SKILL_RESOURCE_READ_LIMIT, SkillResourceReadFacts,

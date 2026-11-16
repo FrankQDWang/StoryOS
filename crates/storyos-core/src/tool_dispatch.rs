@@ -79,7 +79,8 @@ impl ToolEffectRequest {
             | ToolIntake::SubmitResearch { .. }
             | ToolIntake::ReadToolResult { .. }
             | ToolIntake::LoadSkill { .. }
-            | ToolIntake::ReadSkillResource { .. } => Vec::new(),
+            | ToolIntake::ReadSkillResource { .. }
+            | ToolIntake::ReadChapter { .. } => Vec::new(),
         };
         Some(Self {
             external_read: envelope.external_read,
