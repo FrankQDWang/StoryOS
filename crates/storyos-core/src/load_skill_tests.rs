@@ -193,7 +193,7 @@ fn call<'a>(
         state,
         result_text: Some(result_text),
         sources: &[],
-        output: ToolResultOutput::HostTool,
+        output: ToolResultOutput::HostTool(crate::ContextSourceClass::ToolResult),
         function_name: "load_skill",
         arguments: "{}",
         form: ToolResultForm::Stub,

@@ -90,7 +90,7 @@ fn conversation_of(prefix: &str) -> ConversationSelection {
 }
 
 /// Admits one Run of the tool loop profile with `message` in `conversation` of the Project.
-async fn admitted(
+pub(crate) async fn admitted(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     chapter_id: &str,
@@ -113,7 +113,7 @@ async fn admitted(
 }
 
 /// The rename of the fixture Chapter to `title`, with a fresh challenge `suffix`.
-async fn rename(
+pub(crate) async fn rename(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: u16,
@@ -298,7 +298,7 @@ async fn a_rename_and_a_new_chapter_between_two_run_steps_send_the_new_list_as_a
 }
 
 /// The head of `chapter_id` and its first Block.
-async fn head(admin: &Client, chapter_id: &str) -> (String, String) {
+pub(crate) async fn head(admin: &Client, chapter_id: &str) -> (String, String) {
     let row = admin
         .query_one(
             "SELECT head.current_revision_id::text, member.manuscript_block_id::text
@@ -316,12 +316,13 @@ async fn head(admin: &Client, chapter_id: &str) -> (String, String) {
 }
 
 /// The Author Edit of the Editor Session `editor_session_id` that replaces the first `length`
-/// characters of the head of `chapter_id` with `text`. `sequence` is its local intent sequence.
-async fn replace_text(
+/// characters of the head of `chapter_id` with `text`. `sequence` is its local intent sequence,
+/// and `suffix` is its fresh challenge suffix.
+pub(crate) async fn replace_text(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
-    (editor_session_id, sequence): (&str, u64),
+    (editor_session_id, sequence, suffix): (&str, u64, &str),
     chapter_id: &str,
     (length, text): (u32, &str),
 ) -> ApplyAuthorEditCommand {
@@ -330,7 +331,7 @@ async fn replace_text(
         editor_session_id,
         chapter_id,
         expected_revision_id: &revision,
-        suffix: &format!("0f2{sequence}"),
+        suffix,
         local_intent_sequence: sequence,
         text: "",
         proposal_target: None,
@@ -413,7 +414,7 @@ async fn an_edit_of_another_chapter_that_keeps_its_length_sends_no_replaced_inpu
         .set_current_chapter(&call.envelope, &call.input)
         .await
         .unwrap();
-    let rain = (writer.as_ref(), 1);
+    let rain = (writer.as_ref(), 1, "0f21");
     let rain = replace_text(&store, &admin, &scope, rain, &edited, (0, "Rain.")).await;
     store.apply_author_edit(&rain).await.unwrap();
     let call = select(&store, &admin, &scope, (writer, 0x0f15), &current, &edited).await;
@@ -426,7 +427,7 @@ async fn an_edit_of_another_chapter_that_keeps_its_length_sends_no_replaced_inpu
     let run_id = admitted(&store, &scope, &current, "0ef", "Help.", new).await;
     // While the first request is out, the author opens the other Chapter and edits it.
     let call = select(&store, &admin, &scope, (writer, 0x0f16), &edited, &current).await;
-    let snow = (writer.as_ref(), 2);
+    let snow = (writer.as_ref(), 2, "0f22");
     let snow = replace_text(&store, &admin, &scope, snow, &edited, (5, "Snow.")).await;
     let author = AuthorAt::new(
         &store,

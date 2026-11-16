@@ -435,4 +435,4 @@ mod tests;
 
 #[cfg(test)]
 #[path = "chapter_list_context_tests.rs"]
-mod chapter_list_tests;
+pub(crate) mod chapter_list_tests;
