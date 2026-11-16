@@ -9,6 +9,7 @@ use storyos_application::{
 use storyos_core::{MemoryEntryType, MemoryIndexEntry};
 use tokio_postgres::{Client, NoTls};
 
+use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::stores;
 use crate::command_sequence::tests::seed_project;
 use crate::project_archive_build::tests::{export_command, zip_store_files};
@@ -41,6 +42,61 @@ pub(crate) async fn write_versions(admin: &Client, scope: &ProjectScope, version
             .await
             .unwrap();
     }
+}
+
+/// The Project Export Archive of the Project of `scope`, with the export identities of `lead`:
+/// each version row as its number, version, Memory revision, and state, in text order, and each
+/// head row as its Memory revision and next number.
+pub(crate) async fn archived(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    lead: &str,
+) -> (Vec<Value>, Vec<Value>) {
+    let (export, input) = export_command(scope, lead);
+    issue_project_command_challenge(
+        store,
+        &IssueProjectCommandChallenge {
+            binding: export.challenge_binding.clone(),
+            nonce: format!("nonce-export-{lead}"),
+            nonce_digest: export.nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
+        },
+    )
+    .await
+    .unwrap();
+    store.export_project_archive(&export, &input).await.unwrap();
+    let claimed = claim_next_archive_export(store).await.unwrap().unwrap();
+    complete_archive_export(store, &claimed).await.unwrap();
+    let VerifiedExportArchive::Ready(zip) =
+        get_verified_export_archive(store, scope, &input.export_id)
+            .await
+            .unwrap()
+    else {
+        panic!("the Project Export must return verified ZIP bytes");
+    };
+    let files = zip_store_files(&zip);
+    let packed = |name: &str| -> Vec<Value> {
+        let rows = &files.iter().find(|(file, _)| file == name).unwrap().1;
+        serde_json::from_slice(rows).unwrap()
+    };
+    let mut versions: Vec<Value> = packed("canonical/memory_entry_versions.json")
+        .iter()
+        .map(|row| {
+            json!([
+                row["entry_number"],
+                row["version"],
+                row["memory_revision"],
+                row["state"]
+            ])
+        })
+        .collect();
+    versions.sort_by_key(Value::to_string);
+    let heads: Vec<Value> = packed("canonical/project_memory_heads.json")
+        .iter()
+        .map(|row| json!([row["memory_revision"], row["next_entry_number"]]))
+        .collect();
+
+    (versions, heads)
 }
 
 /// The result of each statement of `statements` for the runtime role in the Scope of `scope`:
@@ -135,49 +191,7 @@ async fn the_archive_of_a_project_has_each_version_and_its_memory_head() {
         (1, 2, 3, "deleted", "foreshadowing", "铃", "铃声。"),
     ];
     write_versions(&admin, &scope, &versions).await;
-    let (export, input) = export_command(&scope, "cf");
-    issue_project_command_challenge(
-        &store,
-        &IssueProjectCommandChallenge {
-            binding: export.challenge_binding.clone(),
-            nonce: "nonce-export-cf".to_owned(),
-            nonce_digest: export.nonce_digest.clone(),
-            earlier_revision_nonces: Vec::new(),
-        },
-    )
-    .await
-    .unwrap();
-    store.export_project_archive(&export, &input).await.unwrap();
-    let claimed = claim_next_archive_export(&store).await.unwrap().unwrap();
-    complete_archive_export(&store, &claimed).await.unwrap();
-    let VerifiedExportArchive::Ready(zip) =
-        get_verified_export_archive(&store, &scope, &input.export_id)
-            .await
-            .unwrap()
-    else {
-        panic!("the Project Export must return verified ZIP bytes");
-    };
-    let files = zip_store_files(&zip);
-    let packed = |name: &str| -> Vec<Value> {
-        let rows = &files.iter().find(|(file, _)| file == name).unwrap().1;
-        serde_json::from_slice(rows).unwrap()
-    };
-    let mut versions: Vec<Value> = packed("canonical/memory_entry_versions.json")
-        .iter()
-        .map(|row| {
-            json!([
-                row["entry_number"],
-                row["version"],
-                row["memory_revision"],
-                row["state"]
-            ])
-        })
-        .collect();
-    versions.sort_by_key(Value::to_string);
-    let heads: Vec<Value> = packed("canonical/project_memory_heads.json")
-        .iter()
-        .map(|row| json!([row["memory_revision"], row["next_entry_number"]]))
-        .collect();
+    let (versions, heads) = archived(&store, &scope, "cf").await;
 
     assert_eq!(
         (versions, heads),
