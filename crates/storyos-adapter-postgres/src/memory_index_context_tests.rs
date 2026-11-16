@@ -129,8 +129,8 @@ async fn a_run_keeps_its_pinned_index_and_a_later_run_gets_the_new_index() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let project = seeded(&store, &admin, "dd4").await;
-    let pinned = admitted(&store, &project, "dd5", "Help.", conversation_of("dd4")).await;
+    let project = seeded(&store, &admin, "c54").await;
+    let pinned = admitted(&store, &project, "c55", "Help.", conversation_of("c54")).await;
     // A later transaction deletes the entry 2 and writes the entry 3 before the second RunStep.
     let changes = [
         (2, 2, 3, "deleted", "foreshadowing", "铃", "铃声。"),
@@ -138,7 +138,7 @@ async fn a_run_keeps_its_pinned_index_and_a_later_run_gets_the_new_index() {
     ];
     write_versions(&admin, &project.0, &changes).await;
     complete(&store, &admin, &project.0, &pinned).await;
-    let later = admitted(&store, &project, "dd6", "Help.", conversation_of("dd4")).await;
+    let later = admitted(&store, &project, "c56", "Help.", conversation_of("c54")).await;
     complete(&store, &admin, &project.0, &later).await;
     let new = "{\"type\":\"character\"}\n{\"description\":\"沉默的船夫。\",\"id\":1,\"title\":\"林舟\"}\n\
                {\"description\":\"林舟的妹妹。\",\"id\":3,\"title\":\"阿青\"}";
@@ -168,24 +168,24 @@ async fn a_full_input_a_compaction_a_steering_input_and_a_chapter_edit_send_the_
     let (store, admin) = stores().await;
     // The destination lost the closing reference of the Run before the second Run, so the second
     // Run sends its full input again.
-    let project = seeded(&store, &admin, "dd7").await;
+    let project = seeded(&store, &admin, "c57").await;
     let message = "Help with this passage. SCRIPT:reference-expires";
-    let expiring = admitted(&store, &project, "dd8", message, conversation_of("dd7")).await;
+    let expiring = admitted(&store, &project, "c58", message, conversation_of("c57")).await;
     complete(&store, &admin, &project.0, &expiring).await;
-    let expired = admitted(&store, &project, "dd9", "Help.", conversation_of("dd7")).await;
+    let expired = admitted(&store, &project, "c59", "Help.", conversation_of("c57")).await;
     complete(&store, &admin, &project.0, &expired).await;
-    let project = seeded(&store, &admin, "dda").await;
+    let project = seeded(&store, &admin, "c5a").await;
     let compacting = format!(
         "{ACTIVE_COMPACTION_REQUEST_PREFIX} {ACTIVE_COMPACTION_POSITIONS_PREFIX} 1. Help again."
     );
     let new = ConversationSelection::New;
-    let compacted = admitted(&store, &project, "ddb", &compacting, new).await;
+    let compacted = admitted(&store, &project, "c5b", &compacting, new).await;
     complete(&store, &admin, &project.0, &compacted).await;
-    let steered = admitted(&store, &project, "ddc", "Help.", ConversationSelection::New).await;
+    let steered = admitted(&store, &project, "c5c", "Help.", ConversationSelection::New).await;
     let input = steering(
         &store,
         &project.0,
-        0xdd01,
+        0xcf0a,
         &steered,
         "Keep the voice.",
         None,
@@ -199,15 +199,15 @@ async fn a_full_input_a_compaction_a_steering_input_and_a_chapter_edit_send_the_
     settle(&store, &admin, &project.0, &steered, &author)
         .await
         .unwrap();
-    let project = seeded(&store, &admin, "ddd").await;
-    let renamed = admitted(&store, &project, "dde", "Help.", ConversationSelection::New).await;
+    let project = seeded(&store, &admin, "c5d").await;
+    let renamed = admitted(&store, &project, "c5e", "Help.", ConversationSelection::New).await;
     let rename = UpdateChapterInput {
         chapter_id: ChapterId::new(&project.1),
         title: "Harbor".to_owned(),
         order: 1,
         expected_tree_revision: 3,
     };
-    let call = issued(&store, &project.0, 0xdd02, &UPDATE_CHAPTER, rename).await;
+    let call = issued(&store, &project.0, 0xcf0b, &UPDATE_CHAPTER, rename).await;
     let action = AuthorAction::UpdateChapter(Box::new(call));
     let author = AuthorAt::new(&store, Moment::DuringRequest(1), action);
     settle(&store, &admin, &project.0, &renamed, &author)
@@ -255,7 +255,7 @@ async fn a_run_without_use_or_without_a_current_entry_has_no_index() {
         .await;
     let (store, admin) = stores().await;
     // The first Run of `seeded` starts before each entry, so it has no pin.
-    let (scope, chapter_id, first) = queued(&store, "ddf").await;
+    let (scope, chapter_id, first) = queued(&store, "c5f").await;
     complete(&store, &admin, &scope, &first).await;
     let versions = [(1, 1, 1, "current", "character", "林舟", "沉默的船夫。")];
     write_versions(&admin, &scope, &versions).await;
@@ -274,10 +274,10 @@ async fn a_run_without_use_or_without_a_current_entry_has_no_index() {
         .await
         .unwrap();
     let project = (scope.clone(), chapter_id);
-    let unused = admitted(&store, &project, "de1", "Help.", conversation_of("ddf")).await;
+    let unused = admitted(&store, &project, "cf1", "Help.", conversation_of("c5f")).await;
     complete(&store, &admin, &scope, &unused).await;
     // Each entry of the second Project is deleted, so the pin has no current entry.
-    let (deleted, chapter_id, earlier) = queued(&store, "de2").await;
+    let (deleted, chapter_id, earlier) = queued(&store, "cf2").await;
     complete(&store, &admin, &deleted, &earlier).await;
     let versions = [
         (1, 1, 1, "current", "other", "渡口", "旧渡口。"),
@@ -285,7 +285,7 @@ async fn a_run_without_use_or_without_a_current_entry_has_no_index() {
     ];
     write_versions(&admin, &deleted, &versions).await;
     let project = (deleted.clone(), chapter_id);
-    let empty = admitted(&store, &project, "de3", "Help.", ConversationSelection::New).await;
+    let empty = admitted(&store, &project, "cf3", "Help.", ConversationSelection::New).await;
     complete(&store, &admin, &deleted, &empty).await;
 
     assert_eq!(

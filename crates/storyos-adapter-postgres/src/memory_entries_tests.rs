@@ -79,8 +79,8 @@ async fn the_runtime_role_cannot_change_a_version_and_each_project_reads_only_it
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (first, _, _) = queued(&store, "dd1").await;
-    let (second, _, _) = queued(&store, "dd2").await;
+    let (first, _, _) = queued(&store, "c51").await;
+    let (second, _, _) = queued(&store, "c52").await;
     let versions = [(1, 1, 1, "current", "character", "林舟", "船夫。")];
     write_versions(&admin, &first, &versions).await;
     let versions = [(1, 1, 1, "current", "other", "渡口", "旧渡口。")];
@@ -128,19 +128,19 @@ async fn the_archive_of_a_project_has_each_version_and_its_memory_head() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, _, _) = queued(&store, "dd3").await;
+    let (scope, _, _) = queued(&store, "c53").await;
     let versions = [
         (1, 1, 1, "current", "foreshadowing", "铃", "铃声。"),
         (2, 1, 2, "current", "character", "阿青", "妹妹。"),
         (1, 2, 3, "deleted", "foreshadowing", "铃", "铃声。"),
     ];
     write_versions(&admin, &scope, &versions).await;
-    let (export, input) = export_command(&scope, "dd");
+    let (export, input) = export_command(&scope, "cf");
     issue_project_command_challenge(
         &store,
         &IssueProjectCommandChallenge {
             binding: export.challenge_binding.clone(),
-            nonce: "nonce-export-dd".to_owned(),
+            nonce: "nonce-export-cf".to_owned(),
             nonce_digest: export.nonce_digest.clone(),
             earlier_revision_nonces: Vec::new(),
         },
