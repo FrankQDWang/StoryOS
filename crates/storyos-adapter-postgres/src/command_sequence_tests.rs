@@ -25,6 +25,9 @@ mod admit;
 #[path = "command_sequence_tests/steer_agent_run_tests.rs"]
 mod steer_agent_run;
 
+#[path = "command_sequence_tests/background_run_tests.rs"]
+mod background_run;
+
 #[path = "command_sequence_tests/replay_tests.rs"]
 mod replay;
 
