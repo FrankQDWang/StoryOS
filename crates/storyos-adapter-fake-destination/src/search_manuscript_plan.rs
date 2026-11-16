@@ -28,7 +28,10 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
     }
     let calls = message.lines().filter_map(|line| {
         match (line.strip_prefix(SEARCH), line.strip_prefix(READ)) {
-            (Some(query), _) => Some((ToolOperation::SearchManuscript, json_query(query))),
+            (Some(query), _) => Some((
+                ToolOperation::SearchManuscript,
+                serde_json::json!({ "query": query }).to_string(),
+            )),
             (_, Some(number)) => Some((
                 ToolOperation::ReadChapter,
                 format!("{{\"chapter\":{number}}}"),
@@ -43,8 +46,4 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
         })
         .collect();
     Some(FakeCreate { items })
-}
-
-fn json_query(query: &str) -> String {
-    serde_json::json!({ "query": query }).to_string()
 }

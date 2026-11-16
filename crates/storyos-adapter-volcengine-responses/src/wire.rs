@@ -104,12 +104,11 @@ gives you no target: you can change only the target blocks of the request.";
 /// The paragraph of the Host instructions of the mapping `v8` that follows the paragraph of
 /// `read_chapter` when the request also declares `search_manuscript` (ADR 0095 section 1).
 pub(crate) const SEARCH_MANUSCRIPT_INSTRUCTION: &str = "\
-Call search_manuscript when the author request needs each place where an exact word or phrase \
-occurs in the manuscript, for example the name of a character or a place. The query is the exact \
-text to find, with the same letter case: it is not a question. The result gives each Block that \
-has the text, and then you can read the Blocks near a match with read_chapter. The result of \
-search_manuscript is the text of the manuscript at the time of the call, as the result of \
-read_chapter is.";
+Call search_manuscript to find each place where an exact word or phrase occurs in the manuscript. \
+For example, find the name of a character or a place. The query is the exact text to find, with \
+the same letter case: it is not a question. The result gives each Block that has the text, and \
+then you can read the Blocks near a match with read_chapter. The result of search_manuscript is \
+the text of the manuscript at the time of the call, as the result of read_chapter is.";
 
 /// The label of the earlier author messages that the later request of a compaction sends before
 /// the current input (ADR 0093 section 6).

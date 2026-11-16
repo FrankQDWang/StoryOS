@@ -13,7 +13,7 @@ use crate::{
     ToolResultText, ToolSpec,
 };
 
-/// The count of matches after which a search stops. The author search and the Tool have this one
+/// The count of matches at which a search stops. The author search and the Tool have this one
 /// limit.
 pub const MANUSCRIPT_SEARCH_MATCH_LIMIT: usize = 500;
 
@@ -92,12 +92,13 @@ pub fn admit_manuscript_search(
         for (block, text) in read.blocks.iter().enumerate() {
             let mut count = 0;
             for _ in exact_matches(text, query) {
+                found += 1;
+                count += 1;
+                // The search stops at the match limit, and it is then not complete.
                 if found == MANUSCRIPT_SEARCH_MATCH_LIMIT {
                     complete = false;
                     break;
                 }
-                found += 1;
-                count += 1;
             }
             if count > 0 {
                 hits.push((chapter, block, count));

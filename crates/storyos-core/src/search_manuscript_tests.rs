@@ -171,11 +171,13 @@ fn a_search_with_no_match_says_that_it_is_not_a_failure() {
     );
 }
 
-/// The search stops at the match limit of the author search, and `complete` is then false.
+/// The search stops at the 500th match, the match limit of the author search, and `complete` is
+/// then false (#1610 round 1).
 #[test]
 fn the_search_stops_at_the_match_limit_of_the_author_search() {
     let header = |text: &str| text.lines().next().unwrap().to_owned();
     let full = "x".repeat(MANUSCRIPT_SEARCH_MATCH_LIMIT - 1);
+    let below = [chapter("Harbor", &[&full])];
     let at_limit = [chapter("Harbor", &[&full, "x"])];
     let above = [
         chapter("Harbor", &[&full, "xx", "x"]),
@@ -183,11 +185,13 @@ fn the_search_stops_at_the_match_limit_of_the_author_search() {
     ];
     assert_eq!(
         [
+            header(&search(&below, "x")),
             header(&search(&at_limit, "x")),
             header(&search(&above, "x"))
         ],
         [
-            "{\"blocks\":2,\"blocks_returned\":2,\"complete\":true,\"matches\":500,\"query\":\"x\"}",
+            "{\"blocks\":1,\"blocks_returned\":1,\"complete\":true,\"matches\":499,\"query\":\"x\"}",
+            "{\"blocks\":2,\"blocks_returned\":2,\"complete\":false,\"matches\":500,\"query\":\"x\"}",
             "{\"blocks\":2,\"blocks_returned\":2,\"complete\":false,\"matches\":500,\"query\":\"x\"}",
         ]
     );
