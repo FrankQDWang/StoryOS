@@ -27,6 +27,7 @@ mod release1_project_activity;
 mod release1_project_assistance;
 mod release1_project_export;
 mod release1_project_export_query;
+mod release1_project_instruction;
 mod release1_proposal;
 mod release1_readable_export;
 mod release1_readable_export_query;
@@ -207,6 +208,16 @@ pub use release1_project_export::{
 pub use release1_project_export_query::{
     GET_EXPORT_OPERATION_METHOD, GET_EXPORT_OPERATION_PATH,
     GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID, GetExportOperationResponse,
+};
+pub use release1_project_instruction::{
+    GET_PROJECT_INSTRUCTION_METHOD, GET_PROJECT_INSTRUCTION_PATH,
+    GET_PROJECT_INSTRUCTION_RESPONSE_SCHEMA_ID, GetProjectInstructionResponse, ProjectInstruction,
+    UPDATE_PROJECT_INSTRUCTION_DIGEST_PROFILE, UPDATE_PROJECT_INSTRUCTION_METHOD,
+    UPDATE_PROJECT_INSTRUCTION_PATH, UPDATE_PROJECT_INSTRUCTION_REQUEST_SCHEMA_ID,
+    UPDATE_PROJECT_INSTRUCTION_RESPONSE_SCHEMA_ID, UpdateProjectInstructionConflictReason,
+    UpdateProjectInstructionEffect, UpdateProjectInstructionInput,
+    UpdateProjectInstructionNoEffectReason, UpdateProjectInstructionRequest,
+    UpdateProjectInstructionResponse,
 };
 pub use release1_proposal::{
     AcceptanceRefusalBoundary, AcceptanceRefusalInspect, AcceptanceRefusalReason,

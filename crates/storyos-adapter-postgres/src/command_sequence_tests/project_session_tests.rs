@@ -1,5 +1,8 @@
 use storyos_application::EditorSessionId;
-use storyos_application::{ProjectCommandError, UpdateProjectAssistanceInput, UpdateProjectInput};
+use storyos_application::{
+    ProjectCommandError, UpdateProjectAssistanceInput, UpdateProjectInput,
+    UpdateProjectInstructionInput,
+};
 use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
 use storyos_contracts::CommandKind;
 use storyos_core::AssistanceAvailability;
@@ -26,6 +29,13 @@ pub(crate) const UPDATE_PROJECT_ASSISTANCE: Route = Route {
     method: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_METHOD,
     path: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_PATH,
     schema: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
+};
+
+pub(crate) const UPDATE_PROJECT_INSTRUCTION: Route = Route {
+    kind: CommandKind::UpdateProjectInstruction,
+    method: storyos_contracts::UPDATE_PROJECT_INSTRUCTION_METHOD,
+    path: storyos_contracts::UPDATE_PROJECT_INSTRUCTION_PATH,
+    schema: storyos_contracts::UPDATE_PROJECT_INSTRUCTION_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const TAKE_OVER_PROJECT_WRITER: Route = Route {
@@ -69,6 +79,19 @@ pub(super) async fn update_project_assistance_call(
         destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
     };
     issued(store, &scope, base + 9, &UPDATE_PROJECT_ASSISTANCE, input).await
+}
+
+/// One applicable first save of the Project Instruction in a new Project.
+pub(super) async fn update_project_instruction_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<UpdateProjectInstructionInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let input = UpdateProjectInstructionInput {
+        text: "Write in the past tense.".to_owned(),
+        expected_revision: 0,
+    };
+    issued(store, &scope, base + 9, &UPDATE_PROJECT_INSTRUCTION, input).await
 }
 
 /// One applicable Update Project in a new Project.

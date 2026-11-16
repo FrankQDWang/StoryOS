@@ -284,6 +284,7 @@
         "exportHumanReadableManuscript",
         "exportProjectArchive",
         "updateProjectAssistance",
+        "updateProjectInstruction",
         "createAgentRun",
         "pauseAgentRun",
         "steerAgentRun",

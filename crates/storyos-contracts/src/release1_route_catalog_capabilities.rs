@@ -23,6 +23,8 @@ const CAPABILITIES: &[Capability] = &[
             "updateProject",
             "getProjectAssistance",
             "updateProjectAssistance",
+            "getProjectInstruction",
+            "updateProjectInstruction",
         ],
         operation_actions: &[],
     },

@@ -219,6 +219,7 @@ impl ForwardCommand {
             CommandKind::CreateProject
             | CommandKind::UpdateProject
             | CommandKind::UpdateProjectAssistance
+            | CommandKind::UpdateProjectInstruction
             | CommandKind::CreateEditorSession
             | CommandKind::TakeOverProjectWriter
             | CommandKind::CreateAgentRun

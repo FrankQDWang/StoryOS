@@ -23,6 +23,7 @@ use super::agent_run::{
 };
 use super::project_session::{
     take_over_project_writer_call, update_project_assistance_call, update_project_call,
+    update_project_instruction_call,
 };
 use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
@@ -389,6 +390,12 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
+            &update_project_instruction_call(&store, /*base*/ 0xe410).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
             &take_over_project_writer_call(&store, /*base*/ 0x5fa0).await,
         )
         .await,
@@ -474,7 +481,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             .collect::<Vec<_>>();
         (failures, result)
     };
-    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 9];
+    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10];
     expected.push(rolled_back(ReceiptResult::NoEffect));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     expected.push(rolled_back(ReceiptResult::Refused));
