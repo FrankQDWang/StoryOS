@@ -17,15 +17,15 @@ use crate::release1_agent_run::{
     ConversationSelection, CreateAgentRunEffect, CreateAgentRunInput, CreateAgentRunRequest,
     CreateAgentRunResponse, CurrentAvailabilityInspect, DestinationIo, EvidenceAvailability,
     GET_AGENT_RUN, GetAgentRunRequest, GetAgentRunResponse, HostControlInspect, InstructionBinding,
-    OptionalActiveCompactionInspect, OptionalCompactionInstallInspect, OptionalContinuationInspect,
-    OptionalDecisionInspect, OptionalManifestRef, OptionalModelAttemptInspect,
-    OptionalOpenedProposalInspect, OptionalOriginalResultRetrievalInspect,
-    OptionalReferenceRecoveryInspect, OptionalUnknownCreateSuccessorInspect,
-    OriginalResultRetrievalDisposition, PassageTarget, ProjectionMode, ProposalCandidateTarget,
-    ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
-    ReferenceRecoveryDisposition, SkillPackageReference, SourceAvailability,
-    TokenCountingProfileInspect, ToolCallInspect, ToolCallOutcomeInspect,
-    UnknownCreateSuccessorDisposition,
+    MemoryWriteActionInspect, OptionalActiveCompactionInspect, OptionalCompactionInstallInspect,
+    OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
+    OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
+    OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
+    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
+    ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
+    ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
+    SkillPackageReference, SourceAvailability, TokenCountingProfileInspect, ToolCallInspect,
+    ToolCallOutcomeInspect, UnknownCreateSuccessorDisposition,
 };
 use crate::release1_manuscript_use::ManuscriptUseInspect;
 use crate::release1_operation_registry::{ClientOverride, RegisteredOperation};
@@ -182,6 +182,7 @@ pub(super) const GET_AGENT_RUN_ROW: OperationRow = OperationRow {
         ToolCallInspect::decl,
         OptionalDecisionInspect::decl,
         AgentRunResultInspect::decl,
+        MemoryWriteActionInspect::decl,
         SkillUseInspect::decl,
         ManuscriptUseInspect::decl,
         ContinuationInputMappingInspect::decl,
@@ -516,6 +517,14 @@ const GET_AGENT_RUN_RESPONSE: &[Patch] = &[
     Patch(
         Edit::MaxLength(512),
         &["/$defs/ManuscriptUseInspect/oneOf/1/properties/query"],
+    ),
+    Patch(
+        Edit::MinLength(1),
+        &["/$defs/AgentRunResultInspect/oneOf/2/properties/title"],
+    ),
+    Patch(
+        Edit::MaxLength(30),
+        &["/$defs/AgentRunResultInspect/oneOf/2/properties/title"],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
 ];

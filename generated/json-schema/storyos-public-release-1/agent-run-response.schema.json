@@ -246,6 +246,34 @@
         },
         {
           "additionalProperties": false,
+          "description": "The Memory Entry change that one settled `write_memory` call wrote, with the title of the\nversion that it wrote (ADR 0094 section 5). It has no entry identity and no entry text\n(ADR 0040).",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/MemoryWriteActionInspect"
+            },
+            "decision_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "memory_write",
+              "type": "string"
+            },
+            "title": {
+              "maxLength": 30,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "decision_id",
+            "action",
+            "title"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "The final answer text of a completed Run. A final answer with no text is no result.",
           "properties": {
             "decision_id": {
@@ -1033,6 +1061,15 @@
           "type": "object"
         }
       ]
+    },
+    "MemoryWriteActionInspect": {
+      "description": "The action of one `write_memory` call.",
+      "enum": [
+        "create",
+        "change",
+        "delete"
+      ],
+      "type": "string"
     },
     "OptionalActiveCompactionInspect": {
       "oneOf": [
