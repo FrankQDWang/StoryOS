@@ -686,6 +686,11 @@
           "nullable": false,
           "type": "uuid"
         },
+        "project_instruction_revision_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
         "project_model_use_binding_revision": {
           "default": null,
           "nullable": false,
@@ -728,7 +733,8 @@
         "agent_runs_owner_user_id_project_id_project_model_use_bind_fkey": "FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision) MATCH FULL",
         "agent_runs_owner_user_id_project_id_receipt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL",
         "agent_runs_pkey": "PRIMARY KEY (owner_user_id, project_id, run_id)",
-        "agent_runs_predecessor_fk": "FOREIGN KEY (owner_user_id, project_id, predecessor_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)"
+        "agent_runs_predecessor_fk": "FOREIGN KEY (owner_user_id, project_id, predecessor_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)",
+        "agent_runs_project_instruction_revision_fkey": "FOREIGN KEY (owner_user_id, project_id, project_instruction_revision_id) REFERENCES storyos.project_instruction_revisions(owner_user_id, project_id, instruction_revision_id)"
       },
       "indexes": {
         "agent_runs_binding_idx": "CREATE INDEX agent_runs_binding_idx ON storyos.agent_runs USING btree (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision)",

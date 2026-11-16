@@ -127,6 +127,8 @@ pub(crate) async fn persist_current_passage_assembly(
         }
     };
     let mut record = record;
+    let bound = bound_instruction(client, command.project_scope, command.run_id).await?;
+    storyos_core::assemble_instruction_binding(&mut record, bound.as_ref());
     let sources = crate::skill_package_snapshot::skill_instruction_sources(
         client,
         command.project_scope,
@@ -248,6 +250,37 @@ pub(crate) async fn persist_current_passage_assembly(
         joinable_block_ids: Vec::new(),
         record,
     })
+}
+
+/// The Project Instruction Revision that the Run `run_id` bound at its admission, with its exact
+/// text, or `None` for "none configured". A later save does not change it (ADR 0094 section 2).
+async fn bound_instruction(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    run_id: &str,
+) -> Result<Option<storyos_core::BoundInstruction>, CreateAgentRunError> {
+    let row = client
+        .query_opt(
+            "SELECT revision.instruction_revision_id::text, revision.text
+               FROM storyos.agent_runs AS run
+               JOIN storyos.project_instruction_revisions AS revision
+                 ON (revision.owner_user_id, revision.project_id,
+                     revision.instruction_revision_id) =
+                    (run.owner_user_id, run.project_id, run.project_instruction_revision_id)
+              WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
+                AND run.run_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &run_id,
+            ],
+        )
+        .await
+        .map_err(agent_run_database_error)?;
+    Ok(row.map(|row| storyos_core::BoundInstruction {
+        revision_id: row.get(/*idx*/ 0),
+        text: row.get(/*idx*/ 1),
+    }))
 }
 
 pub(super) async fn load_assembled_context(

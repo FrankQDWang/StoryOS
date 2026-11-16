@@ -28,7 +28,7 @@ type Outcome = Result<
 >;
 
 /// Saves `text` in the Project of `scope` with the Command Challenge `suffix`.
-async fn save(
+pub(crate) async fn save(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: u16,
@@ -50,7 +50,7 @@ async fn save(
     }
 }
 
-fn applied(outcome: &Outcome) -> ProjectInstructionSaved {
+pub(crate) fn applied(outcome: &Outcome) -> ProjectInstructionSaved {
     match outcome {
         Ok(TransitionOutcome::Applied(saved)) => saved.clone(),
         other => panic!("expected an applied save, got {other:?}"),
