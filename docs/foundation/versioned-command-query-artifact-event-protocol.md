@@ -645,7 +645,7 @@ operation registry, and the catalog gets it from the registry.
 | `updateConversationMemorySettings` | command | `POST /api/v1/projects/{project_id}/conversations/{conversation_id}/memory-settings` | sync | memory |
 | `importProjectArchive` | command | `POST /api/v1/projects/{project_id}/imports` | async | storage |
 | `getArtifact` | query | `GET /api/v1/projects/{project_id}/artifacts/{artifact_id}` | read | artifact |
-| `getConversationMemory` | query | `GET /api/v1/projects/{project_id}/conversations/{conversation_id}/memory` | read | memory |
+| `listMemoryEntries` | query | `GET /api/v1/projects/{project_id}/memory-entries` | read | memory |
 | `getCommand` | query | `GET /api/v1/projects/{project_id}/commands/{command_id}` | read | admission |
 | `getReceipt` | query | `GET /api/v1/projects/{project_id}/receipts/{receipt_id}` | read | core |
 | `retrieveContext` | query | `POST /api/v1/projects/{project_id}/queries/retrieval` | read | context |
@@ -2196,13 +2196,14 @@ or a revocation of publication permission. Real access and covered-copy
 restrictions still apply. Neither setting deletes published Memory, rewrites
 recorded context, retracts disclosure, or promises semantic forgetting.
 
-`getConversationMemory` is an author inspection Query at a canonical Snapshot.
-It returns settings and change eligibility, the current published-set identity,
-bounded navigation summary reference, document/Note revision references, known
-source availability, and bounded maintenance outcome references. Empty,
-unavailable, and no-publication-yet are explicit states, not an empty success
-for a failed read. Pagination uses the existing Snapshot contract. Author
-inspection remains available when Agent use is disabled, under current access.
+`listMemoryEntries` is the author read Query of the Memory section of the
+settings page (ADR 0094 section 9). It returns each current Memory Entry of the
+Project in Memory Index order: the identity, the version, the type, the title,
+the description, the text, the origin, the first source reference, and the time
+of the last change. A source record that is not available gives the mark
+`unavailable` and does not fail the read. The read has no pages and writes no
+row. It does not read the Conversation Memory Settings, so the author sees each
+entry that the Agent can read.
 `getArtifact` reads exact document/Note revisions; `retrieveContext` provides
 bounded Agent search/read through current publication and use checks. Neither
 index hits nor a latest Artifact alias can replace a published-set identity.

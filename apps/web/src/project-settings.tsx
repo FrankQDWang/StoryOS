@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode }
 
 import type { ProjectScope } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ProjectSettingsReadyState } from "./editor-types.ts";
+import { MemorySection } from "./memory-section.tsx";
 import { ProjectInstructionSection } from "./project-instruction-section.tsx";
 
 export type SettingsSectionProps = {
@@ -16,6 +17,7 @@ export type SettingsSectionProps = {
 /** The sections of the settings page in page order (ADR 0094 section 9). A later section is one more entry. */
 const SECTIONS: ReadonlyArray<{ key: string; Section: (props: SettingsSectionProps) => ReactNode }> = [
   { key: "instruction", Section: ProjectInstructionSection },
+  { key: "memory", Section: MemorySection },
 ];
 
 const projectSettingsPath = (projectId: string) => `/projects/${projectId}/settings`;
