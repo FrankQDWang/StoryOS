@@ -382,3 +382,7 @@ mod tool_loop_wire_tests;
 #[cfg(test)]
 #[path = "skill_wire_tests.rs"]
 mod skill_wire_tests;
+
+#[cfg(test)]
+#[path = "chapter_list_wire_tests.rs"]
+mod chapter_list_wire_tests;

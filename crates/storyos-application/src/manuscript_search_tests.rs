@@ -50,6 +50,9 @@ fn chapter(
         chapter_id: ChapterId::new(id),
         volume_order,
         chapter_order,
+        volume_title: "Volume".to_owned(),
+        title: "Chapter".to_owned(),
+        head_revision_id: "revision".to_owned(),
         blocks: vec![ManuscriptSearchBlockFact {
             manuscript_block_id: block_id.to_owned(),
             text: text.to_owned(),
