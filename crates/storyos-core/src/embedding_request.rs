@@ -26,15 +26,6 @@ pub enum EmbeddingAdapter {
     VolcengineAgentPlanEmbeddings,
 }
 
-impl EmbeddingAdapter {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::HostFake => "host_fake",
-            Self::VolcengineAgentPlanEmbeddings => "volcengine_agent_plan_embeddings",
-        }
-    }
-}
-
 /// The one global Embedding Registration of a destination. It holds no Project data and no
 /// Credential Reference.
 #[derive(Debug, Eq, PartialEq)]
@@ -181,6 +172,26 @@ impl EmbeddingRefusal {
 pub struct EmbeddingBindingFacts<'a> {
     pub registration_revision: &'a str,
     pub grant_scope: Option<&'a str>,
+    pub destination_kind: &'a str,
+    pub credential_reference: Option<&'a str>,
+}
+
+/// The Registration that `createAgentRun` binds in the Project, or `None`. It is `None` when the
+/// deployment has no embedding configuration, and when the current binding of the Project has the
+/// configured Registration, the scope `manuscript_embedding_v1`, the destination, and the
+/// Credential Reference of that destination.
+pub fn embedding_binding_to_make(
+    configured: Option<&'static EmbeddingRegistration>,
+    current: Option<EmbeddingBindingFacts<'_>>,
+) -> Option<&'static EmbeddingRegistration> {
+    let registration = configured?;
+    let wanted = EmbeddingBindingFacts {
+        registration_revision: registration.revision,
+        grant_scope: Some(GrantScope::ManuscriptEmbeddingV1.as_str()),
+        destination_kind: registration.destination.as_str(),
+        credential_reference: registration.destination.credential_reference(),
+    };
+    (current != Some(wanted)).then_some(registration)
 }
 
 /// The facts that the store loads in the dispatch-claim transaction.

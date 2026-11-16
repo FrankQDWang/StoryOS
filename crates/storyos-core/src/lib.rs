@@ -171,7 +171,7 @@ pub use embedding_request::{
     EMBEDDING_REQUEST_TIMEOUT, EMBEDDING_TEXT_TOKEN_LIMIT, EmbeddingAdapter,
     EmbeddingAdmissionFacts, EmbeddingBindingFacts, EmbeddingCause, EmbeddingInput,
     EmbeddingRefusal, EmbeddingRegistration, HOST_FAKE_EMBEDDING_REGISTRATION,
-    MANUSCRIPT_EMBEDDING_PURPOSE, admit_embedding,
+    MANUSCRIPT_EMBEDDING_PURPOSE, admit_embedding, embedding_binding_to_make,
 };
 pub use finish_rule::{
     FinishRuleOutcome, MAX_RUN_STEPS, PriorStepCall, RunStepLimit, ToolChoice,

@@ -17,7 +17,7 @@ The host-owned, versioned, globally reusable non-authorizing contract identity t
 _Avoid_: Model name, provider alias, deployment name, capability tier, global Credential Reference, provider account
 
 **Embedding Registration**:
-The global Core constant of one embedding destination: its adapter, the exact dated provider model identifier, the mapping revision, the vector dimension, text input only, and the name of the request bounds. It holds no Project data and no Credential Reference. The embedding configuration of the deployment selects one Registration.
+The global Core constant of one embedding destination. It has the adapter, the exact dated provider model identifier, the mapping revision, the vector dimension, the text input, and the name of the request bounds. It holds no Project data and no Credential Reference. The embedding configuration of the deployment selects one Registration.
 _Avoid_: Embedding model setting, embedding Model Registration
 
 **Project Model Use Binding**:
