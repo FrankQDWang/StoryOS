@@ -60,6 +60,7 @@ fn run_input(chapter_id: String) -> CreateAgentRunInput {
         project_agent_id: Uuid::now_v7().to_string(),
         destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
         research: Some(&storyos_core::RESEARCH_TOOL_OFFER),
+        embedding: None,
         skills: Default::default(),
         skill_selections: Vec::new(),
     }

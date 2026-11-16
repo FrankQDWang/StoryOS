@@ -64,6 +64,14 @@ The rules of a Host Tool apply ([ADR 0091](0091-replace-the-typed-reply-form-wit
 - An embedding request sends Chapter text to the same Provider that gets the writing requests. The configuration by the operator is the consent, and the Host records the grant scope with no action of the author. The request needs its own scope revision (ADR 0051), its own bounds, and its own disclosure record.
 - This route is for the personal use of the author, the same as the text model. A commercial use needs another route and a new ADR.
 
+[S7-C2a1](https://github.com/FrankQDWang/StoryOS/issues/1595) recorded these names on 2026-11-16:
+
+- **The configuration.** The Server and the Worker read the setting `STORYOS_EMBEDDING_DESTINATION`. Its value is `host_fake` or `volcengine_agent_plan` ([ADR 0050](0050-load-server-and-worker-settings-through-one-typed-settings-layer.md)). With no value, the deployment has no embedding configuration. A process does not start with an unknown value, or with `volcengine_agent_plan` and another model destination.
+- **The Registration.** Each destination has one global Embedding Registration in the Core: `018f0000-0000-7001-8000-0000000eb001` for the fake destination and `018f0000-0000-7001-8000-0000000eb002` for `doubao-embedding-vision-251215`. It names the adapter, the model, the mapping revision, the dimension 1,024, text input only, and the request bounds `embedding_request_v1`. It holds no Project data and no Credential Reference.
+- **The bounds.** One request holds one text of one Project. The text has at most 8,192 tokens of the Token Counting Profile ([ADR 0052](0052-set-the-context-item-limit-from-the-measured-model-input.md)), and the request has a timeout of 30 seconds. The Host never shortens a text.
+- **The grant.** With an embedding configuration, `createAgentRun` makes the grant `manuscript_embedding_v1` and its use binding in the command transaction, as it makes the research binding ([ADR 0090](0090-make-web-research-available-in-each-project-without-an-enablement-switch.md)).
+- **The refusals.** One Core function decides the admission of a request. It gives one of these refusals: `embedding_not_configured`, `embedding_binding_absent`, `disclosure_outside_grant`, `embedding_input_out_of_bounds`, and `destination_credential_unavailable`.
+
 ### 4. The index maintenance
 
 - Background work makes the vectors of the passages of a Chapter after the authoritative text of that Chapter changed. Ordinary writing does not wait for it.

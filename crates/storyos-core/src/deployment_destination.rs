@@ -49,6 +49,14 @@ impl DestinationKind {
             .into_iter()
             .find(|kind| kind.as_str() == value)
     }
+
+    /// The Credential Reference of the operator quota. The fake destination needs none.
+    pub fn credential_reference(self) -> Option<&'static str> {
+        match self {
+            Self::HostFake => None,
+            Self::VolcengineAgentPlan => Some(AGENT_PLAN_CREDENTIAL_REFERENCE),
+        }
+    }
 }
 
 /// Whether attributable runtime evidence qualifies the route of a compatibility Decision.
@@ -199,10 +207,7 @@ impl DeploymentDestination {
     }
 
     pub fn credential_reference(&self) -> Option<&'static str> {
-        match self {
-            Self::HostFakeToolLoop => None,
-            Self::VolcengineAgentPlan { .. } => Some(AGENT_PLAN_CREDENTIAL_REFERENCE),
-        }
+        self.kind().credential_reference()
     }
 
     pub fn budget_bounds(&self) -> BudgetBounds {
