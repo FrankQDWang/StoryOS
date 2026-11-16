@@ -71,6 +71,10 @@ pub(super) async fn update_project_instruction(
         &UPDATE_PROJECT_INSTRUCTION,
         |body: &contracts::UpdateProjectInstructionRequest| {
             let input = &body.update_project_instruction_input;
+            // PostgreSQL cannot keep U+0000 in the `jsonb` command bytes or in `text`.
+            if input.text.contains('\0') {
+                return Err(invalid_request());
+            }
             Ok(UpdateProjectInstructionInput {
                 text: input.text.clone(),
                 expected_revision: input

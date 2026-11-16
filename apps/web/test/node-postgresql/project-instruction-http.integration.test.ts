@@ -54,6 +54,8 @@ test("updateProjectInstruction saves Revisions that getProjectInstruction and th
   const over = await problemOf(story.send("updateProjectInstruction",
     save(story, "字".repeat(CONTEXT_ITEM_TOKEN_LIMIT + 1), "1")));
   assert.deepEqual([over.status, over.code], [422, "instruction_over_item_limit"]);
+  const nul = await problemOf(story.send("updateProjectInstruction", save(story, "A\u0000B", "1")));
+  assert.deepEqual([nul.status, nul.code], [400, "invalid_request"]);
 
   const second = await story.send("updateProjectInstruction", save(story, "", "1"));
   if (second.response.effect.kind !== "authoritative_applied") throw new Error("the second save must apply");
