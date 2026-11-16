@@ -128,6 +128,14 @@ it("shows each entry in the group of its type with its text, its origin line, an
   }
 });
 
+it("shows the name of each of the six types in the order of the query", async () => {
+  const types = ["writing_preference", "foreshadowing", "character", "relationship", "major_event", "other"] as const;
+  await settingsPage(fakeServer([listed(types.map((entryType, index) => entry(index + 1, { entry_type: entryType })))])
+    .fetchImpl);
+  await expect.poll(() => [...document.querySelectorAll("[data-memory-group] > h3")].map((name) => name.textContent))
+    .toEqual(["写作偏好", "伏笔", "人物", "关系", "重大事件", "其他"]);
+});
+
 it("shows one sentence for a Project with no entry", async () => {
   await settingsPage(fakeServer([listed([])]).fetchImpl);
   await expect.poll(sectionText).toEqual(["助手还没有记住任何内容。"]);

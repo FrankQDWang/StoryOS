@@ -16,8 +16,8 @@ const MESSAGE = `记住林舟。\nSCRIPT:write_memory create ${JSON.stringify({ 
   description: "沉默的船夫。", text: TEXT })}`;
 
 /**
- * ADR 0094 section 9: the author asks the assistant to remember an entry, opens the settings page with the gear, and
- * finds the entry in the group of its type with its text, its origin line, and the link to its source Conversation.
+ * ADR 0094 section 9: the author asks the assistant to remember an entry, and opens the settings page with the gear.
+ * The entry is in the group of its type. It shows its text, its origin line, and the link to its source Conversation.
  */
 export async function verifyProductionMemorySettings(context: BrowserContext): Promise<void> {
   const started: (() => Promise<unknown>)[] = [];

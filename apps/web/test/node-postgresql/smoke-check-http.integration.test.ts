@@ -553,6 +553,9 @@ const READS: Record<string, ReadRow> = {
   getProjectInstruction: {
     call: ({ story }, fetchImpl) => client.getProjectInstruction({ ...scope(story), fetchImpl }),
   },
+  listMemoryEntries: {
+    call: ({ story }, fetchImpl) => client.listMemoryEntries({ ...scope(story), fetchImpl }),
+  },
   listSkills: { call: ({ story }, fetchImpl) => client.listSkills({ ...scope(story), fetchImpl }) },
   getEditorSession: {
     call: ({ story, session }, fetchImpl) => client.getEditorSession({ ...scope(story), fetchImpl,
