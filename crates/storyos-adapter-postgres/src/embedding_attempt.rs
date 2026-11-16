@@ -69,7 +69,6 @@ fn read_error(error: impl std::error::Error + Send + Sync + 'static) -> ProjectR
 }
 
 impl EmbeddingDispatchStore for PostgresProjectReader {
-    #[tracing::instrument(skip_all, level = "debug")]
     async fn embedding_route(
         &self,
         scope: &ProjectScope,

@@ -232,23 +232,10 @@ async fn the_adapter_refuses_before_the_claim_without_the_mapping_the_endpoint_o
 }
 
 #[tokio::test]
-async fn each_reply_form_gives_one_observation_and_a_refusal_keeps_no_provider_text() {
+async fn each_other_reply_form_gives_one_observation() {
     let input = passage("The tide turned.");
-    let over_limit = json!({"error": {
-        "code": "InvalidParameter",
-        "message": "Total tokens of image and text exceed max message tokens. Request id: 0217",
-        "param": "",
-        "type": "BadRequest",
-    }})
-    .to_string();
     let short = Duration::from_millis(/*millis*/ 300);
     let rows = [
-        (
-            Reply::Http(400, over_limit),
-            EmbeddingObservation::Rejected {
-                reason: "input_too_long:http_400:InvalidParameter".to_owned(),
-            },
-        ),
         (
             Reply::Http(200, json!({"data": [{"embedding": [0.25]}]}).to_string()),
             EmbeddingObservation::InvalidResult,
@@ -276,6 +263,37 @@ async fn each_reply_form_gives_one_observation_and_a_refusal_keeps_no_provider_t
         let (observation, _) = exchange(reply, &input, short).await;
         assert_eq!(observation, expected);
     }
+}
+
+#[tokio::test]
+async fn the_text_of_the_probe_above_the_limit_keeps_the_native_reason_and_no_provider_text() {
+    // The text of request E7 of the record of S7-C1, the same text as the fake test
+    // `the_text_of_the_probe_above_the_limit_gets_the_native_reason_of_the_route`. The scripted
+    // reply is the reply of the route to E7.
+    let text = "The probe repeats one constant sentence. ".repeat(25_000);
+    let over_limit = json!({"error": {
+        "code": "InvalidParameter",
+        "message": "Total tokens of image and text exceed max message tokens. Request id: 0217",
+        "param": "",
+        "type": "BadRequest",
+    }})
+    .to_string();
+
+    let (observation, served) = exchange(
+        Reply::Http(400, over_limit),
+        &passage(&text),
+        Duration::from_secs(/*secs*/ 5),
+    )
+    .await;
+
+    let (_, _, body) = served.await.unwrap();
+    assert!(body.contains(&text));
+    assert_eq!(
+        observation,
+        EmbeddingObservation::Rejected {
+            reason: "input_too_long:http_400:InvalidParameter".to_owned(),
+        }
+    );
 }
 
 #[tokio::test]

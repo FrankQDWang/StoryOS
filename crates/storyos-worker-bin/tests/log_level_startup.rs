@@ -100,3 +100,33 @@ fn an_unknown_embedding_destination_or_one_without_its_model_destination_refuses
         ]
     );
 }
+
+#[test]
+fn the_real_embedding_route_without_the_key_names_the_key_and_no_value() {
+    // An empty env file, so that the process reads no other env file.
+    let env_file = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("worker-embedding-{}.env", std::process::id()));
+    std::fs::write(&env_file, "").unwrap();
+    let canary = "storyos-settings-canary-worker-7d2f";
+    let output = Command::new(env!("CARGO_BIN_EXE_storyos-worker"))
+        .arg("--check")
+        .env("STORYOS_EMBEDDING_DESTINATION", "volcengine_agent_plan")
+        .env("STORYOS_MODEL_DESTINATION", "volcengine_agent_plan")
+        .env("STORYOS_EXA_API_KEY", canary)
+        .env("STORYOS_ENV_FILE", &env_file)
+        .env_remove("STORYOS_AGENT_PLAN_API_KEY")
+        .output()
+        .expect("packaged storyos-worker should execute");
+    std::fs::remove_file(&env_file).unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(
+        (
+            output.status.success(),
+            stderr.contains("STORYOS_AGENT_PLAN_API_KEY"),
+            stderr.contains(canary),
+        ),
+        (false, true, false),
+        "{stderr}"
+    );
+}
