@@ -1,0 +1,107 @@
+Isolated Recovery Copy drill: fixture-only
+STORYOS_STORAGE_ACTIVATION=Active
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+
+ Test Files  3 passed (3)
+      Tests  5 passed | 44 skipped (49)
+   Start at  16:25:47
+   Duration  9.43s (transform 98ms, setup 0ms, import 148ms, tests 9.08s, environment 0ms)
+
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+Port 63315 is in use, trying another one...
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:25:57
+   Duration  6.65s (transform 0ms, setup 0ms, import 8ms, tests 5.80s, environment 0ms)
+
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+Port 63315 is in use, trying another one...
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:26:05
+   Duration  11.50s (transform 0ms, setup 0ms, import 34ms, tests 9.54s, environment 0ms)
+
+2026-11-16 08:26:42.094 UTC [1] LOG:  database system is ready to accept connections
+{
+  "archive_mode": "on",
+  "chain_member_count": 1462,
+  "chain_sha256": "9725705b8e670436c1d45e813b7b939131974b75aa8f5525b99f57d01350711d",
+  "destination_kind": "verification_volumes",
+  "failure_domain": {
+    "archive_volume": "storyos-recovery-archive-85032",
+    "backup_volume": "storyos-recovery-backup-85032",
+    "primary_data_volume": "bfee8bffd306541fa05b3339fc3a682a379d8b69b441da8711f4d1faecd009e6"
+  },
+  "family_id": "admin-recovery-copy",
+  "fsync": "on",
+  "full_page_writes": "on",
+  "method": "pg_basebackup",
+  "ordinary_read_execution": "disabled",
+  "required_wal_member": "000000010000000000000004",
+  "role_identities": "storyos_backup:login=true,super=false,bypass=false,repl=true; storyos_restore:login=true,super=false,bypass=false,repl=false; storyos_runtime:login=false,super=false,bypass=false,repl=false",
+  "state": "recovery_hold",
+  "synchronous_commit": "on",
+  "visibility_proof": "absent",
+  "wal_level": "replica"
+}
+sha256:8ab4402f38e61c4c64650346934521959bc6825a957c44f49cc0266b7900253f
+Isolated Recovery Copy restore remains in hold
+Isolated restore passed Recovery Visibility Proof
+Running exact-dist continued writing after restore
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+Port 63315 is in use, trying another one...
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:26:48
+   Duration  1.95s (transform 0ms, setup 0ms, import 16ms, tests 784ms, environment 0ms)
+
+{
+  "continued_writing": {
+    "isolation": "foreign_project_absent",
+    "non_revival": "stale_unattached_chapter_absent",
+    "reload": "settled",
+    "text": "chinese_and_english",
+    "title": "WAL after base backup"
+  },
+  "environment": {
+    "hold_host_port": "34602"
+  },
+  "evidence_class": "EV-PRD",
+  "hold_to_visible": {
+    "restore_state": "visible",
+    "runtime_login": true,
+    "writes_after_enable": "accepted",
+    "writes_after_visibility_before_enable": "refused"
+  },
+  "physical_input": {
+    "catalog_identity": "storyos.persistence.release-1",
+    "chain_sha256": "9725705b8e670436c1d45e813b7b939131974b75aa8f5525b99f57d01350711d",
+    "destination_kind": "verification_volumes",
+    "isolated_target_identity": "storyos-recovery-hold-85032",
+    "method": "pg_basebackup",
+    "recovery_copy_id": "018f0000-0000-7001-8000-0000000000c1",
+    "restore_proof_id": "018f0000-0000-7001-8000-0000000000c2",
+    "visibility_proof_id": "018f0000-0000-7001-8000-0000000000c3"
+  },
+  "rpo": {
+    "bound_seconds": 900,
+    "observed_seconds": 0
+  },
+  "rto": {
+    "bound_seconds": 7200,
+    "observed_seconds": 9
+  }
+}
+sha256:7ebc6811f8b59b3e7283034ca0253bd3698b09a962bdc828be3ba420dec0759b
+Isolated restore continued writing after Recovery Visibility Proof

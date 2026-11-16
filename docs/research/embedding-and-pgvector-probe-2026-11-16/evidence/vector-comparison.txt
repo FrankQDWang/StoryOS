@@ -1,0 +1,13 @@
+E1 len 1024 norm 0.999164
+E2 len 1024 norm 1.001625
+E3 len 2048 norm 0.999416
+E4 len 1024 norm 1.001587
+E5 len 1024 norm 1.002900
+E6 len 1024 norm 0.997785
+E1==E2 exact False max abs diff 0.00586 cos 0.999022
+cos E4,E1 0.5250  distance 0.4750
+cos E4,E5 0.0312  distance 0.9688
+cos E1,E5 0.2037
+cos E6,E1 0.6722  cos E6,E5 0.6388
+cos E3[:1024],E1 1.0000
+E1 first 4 [-0.052001953125, 0.0250244140625, 0.00125885009765625, -0.00604248046875]

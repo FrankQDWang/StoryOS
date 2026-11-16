@@ -1,0 +1,105 @@
+diff --git a/scripts/lib/controlled-postgres.sh b/scripts/lib/controlled-postgres.sh
+index 3fd41ada..c9822656 100644
+--- a/scripts/lib/controlled-postgres.sh
++++ b/scripts/lib/controlled-postgres.sh
+@@ -10,7 +10,7 @@ start_postgres() {
+   name=$1
+   docker run --detach --name "$name" \
+     --env POSTGRES_PASSWORD=admin \
+-    --publish 127.0.0.1::5432 postgres:16-alpine >/dev/null
++    --publish 127.0.0.1::5432 pgvector/pgvector:0.8.7-pg16-bookworm >/dev/null
+   attempt=0
+   until docker logs "$name" 2>&1 | grep -q "PostgreSQL init process complete" \
+     && docker exec "$name" pg_isready -U postgres >/dev/null 2>&1; do
+diff --git a/scripts/verify-recovery-hold.sh b/scripts/verify-recovery-hold.sh
+index 7850813a..72d60d7b 100755
+--- a/scripts/verify-recovery-hold.sh
++++ b/scripts/verify-recovery-hold.sh
+@@ -77,7 +77,7 @@ if [ "$created_volumes" = "1" ]; then
+   docker volume create "$backup_volume" >/dev/null
+   docker volume create "$hold_volume" >/dev/null
+ fi
+-docker run --rm --user root --volume "$archive_volume:/archive" postgres:16-alpine \
++docker run --rm --user root --volume "$archive_volume:/archive" pgvector/pgvector:0.8.7-pg16-bookworm \
+   chown postgres:postgres /archive
+ 
+ docker run --detach --name "$primary" \
+@@ -85,7 +85,7 @@ docker run --detach --name "$primary" \
+   --publish 127.0.0.1::5432 \
+   --env POSTGRES_PASSWORD=admin \
+   --volume "$archive_volume:/var/lib/postgresql/wal_archive" \
+-  postgres:16-alpine \
++  pgvector/pgvector:0.8.7-pg16-bookworm \
+   -c wal_level=replica \
+   -c archive_mode=on \
+   -c "archive_command=test ! -f /var/lib/postgresql/wal_archive/%f && cp %p /var/lib/postgresql/wal_archive/%f" \
+@@ -250,13 +250,13 @@ if [ "$wal_level" != "replica" ] || [ "$archive_mode" != "on" ] \
+   exit 1
+ fi
+ 
+-docker run --rm --user root --volume "$backup_volume:/backup" postgres:16-alpine \
++docker run --rm --user root --volume "$backup_volume:/backup" pgvector/pgvector:0.8.7-pg16-bookworm \
+   chown postgres:postgres /backup
+ docker run --rm --network "$network" --user postgres \
+   --volume "$backup_volume:/backup" \
+   --env PGPASSWORD=backup \
+   --entrypoint pg_basebackup \
+-  postgres:16-alpine \
++  pgvector/pgvector:0.8.7-pg16-bookworm \
+   -h "$primary" -U storyos_backup -D /backup -Fp -Xs --checkpoint=fast --no-password >/dev/null
+ 
+ docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
+@@ -280,7 +280,7 @@ until docker exec "$primary" test -f "/var/lib/postgresql/wal_archive/$archived_
+ done
+ rpo_seconds=$(($(date +%s) - rpo_started))
+ 
+-docker run --rm --volume "$backup_volume:/backup" postgres:16-alpine sh -c '
++docker run --rm --volume "$backup_volume:/backup" pgvector/pgvector:0.8.7-pg16-bookworm sh -c '
+   set -eu
+   test -f /backup/backup_label
+   grep -q "START WAL LOCATION" /backup/backup_label
+@@ -305,7 +305,7 @@ fi
+ chain_manifest=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-chain.XXXXXX")
+ saved_wal=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-wal.XXXXXX")
+ docker run --rm --volume "$archive_volume:/archive" --volume "$backup_volume:/backup" \
+-  postgres:16-alpine sh -c 'find /backup /archive -type f -exec sha256sum {} \; | sort' \
++  pgvector/pgvector:0.8.7-pg16-bookworm sh -c 'find /backup /archive -type f -exec sha256sum {} \; | sort' \
+   >"$chain_manifest"
+ 
+ assert_recovery_chain() {
+@@ -313,7 +313,7 @@ assert_recovery_chain() {
+     --volume "$archive_volume:/archive" \
+     --volume "$backup_volume:/backup" \
+     --volume "$chain_manifest:/manifest:ro" \
+-    postgres:16-alpine sha256sum -c /manifest >/dev/null
++    pgvector/pgvector:0.8.7-pg16-bookworm sha256sum -c /manifest >/dev/null
+ }
+ 
+ assert_recovery_chain
+@@ -347,7 +347,7 @@ rm -f "$saved_wal"
+ docker run --rm --user root \
+   --volume "$backup_volume:/backup" \
+   --volume "$hold_volume:/hold" \
+-  postgres:16-alpine sh -c 'rm -rf /hold/lost+found; find /hold -mindepth 1 -maxdepth 1 -exec rm -rf {} +; cp -a /backup/. /hold/ && chown -R postgres:postgres /hold'
++  pgvector/pgvector:0.8.7-pg16-bookworm sh -c 'rm -rf /hold/lost+found; find /hold -mindepth 1 -maxdepth 1 -exec rm -rf {} +; cp -a /backup/. /hold/ && chown -R postgres:postgres /hold'
+ restore_conf=$(mktemp "${TMPDIR:-/tmp}/storyos-restore-conf.XXXXXX")
+ cat >"$restore_conf" <<EOF
+ restore_command = 'cp /var/lib/postgresql/wal_archive/%f %p'
+@@ -359,7 +359,7 @@ EOF
+ docker run --rm --user root \
+   --volume "$restore_conf:/tmp/restore.conf:ro" \
+   --volume "$hold_volume:/hold" \
+-  postgres:16-alpine sh -c '
++  pgvector/pgvector:0.8.7-pg16-bookworm sh -c '
+     cat /tmp/restore.conf >> /hold/postgresql.auto.conf
+     touch /hold/recovery.signal
+     rm -f /hold/standby.signal
+@@ -373,7 +373,7 @@ docker run --detach --name "$hold" \
+   --publish 127.0.0.1::5432 \
+   --volume "$hold_volume:/var/lib/postgresql/data" \
+   --volume "$archive_volume:/var/lib/postgresql/wal_archive:ro" \
+-  postgres:16-alpine >/dev/null
++  pgvector/pgvector:0.8.7-pg16-bookworm >/dev/null
+ wait_postgres "$hold" restore
+ 
+ docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \

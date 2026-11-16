@@ -1,0 +1,5 @@
+PostgreSQL 16.16 (Debian 16.16-1.pgdg12+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit
+active
+2
+pgvector/pgvector:0.8.7-pg16-bookworm
+dev-postgres-with exit=0

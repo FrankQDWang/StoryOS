@@ -1,0 +1,155 @@
+Pager usage is off.
+SET
+CREATE ROLE
+CREATE ROLE
+CREATE SCHEMA
+CREATE EXTENSION
+GRANT
+CREATE SCHEMA
+GRANT
+SET
+CREATE FUNCTION
+GRANT
+CREATE TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE POLICY
+GRANT
+RESET
+BEGIN
+SET
+INSERT 0 20000
+COMMIT
+BEGIN
+SET
+INSERT 0 1000
+COMMIT
+SET
+SET
+CREATE INDEX
+RESET
+ANALYZE
+== 1. Scope reads
+BEGIN
+SET
+ no_scope_rows 
+---------------
+             0
+(1 row)
+
+ project_1_rows | other_rows 
+----------------+------------
+          20000 |          0
+(1 row)
+
+ project_2_rows | other_rows 
+----------------+------------
+           1000 |          0
+(1 row)
+
+ crossed_scope_rows 
+--------------------
+                  0
+(1 row)
+
+COMMIT
+== 2. Nearest 10 rows of Project 1 to curve(10000.5)
+BEGIN
+SET
+SET
+SET
+ project_2_farthest_distance | project_1_nearest_distance 
+-----------------------------+----------------------------
+       0.0006291142845605835 |      0.0007331587239828297
+(1 row)
+
+exact scan: {4277,10001,10000,4276,4278,10002,9999,4275,4279,10003}
+                                                                                                       QUERY PLAN                                                                                                        
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=72.040..72.041 rows=10 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Result (actual time=0.172..0.172 rows=1 loops=1)
+   ->  Sort (actual time=72.039..72.039 rows=10 loops=1)
+         Sort Key: ((passage_vectors.embedding OPERATOR(extensions.<=>) $0))
+         Sort Method: top-N heapsort  Memory: 25kB
+         ->  Seq Scan on passage_vectors (actual time=0.184..70.372 rows=20000 loops=1)
+               Filter: ((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))
+               Rows Removed by Filter: 1000
+ Planning Time: 0.106 ms
+ Execution Time: 72.055 ms
+(11 rows)
+
+SET
+SET
+-- HNSW with the default settings (hnsw.iterative_scan = off, hnsw.ef_search = 40)
+default index scan: {} rows 0
+ default_equals_exact 
+----------------------
+ f
+(1 row)
+
+-- HNSW with SET LOCAL hnsw.iterative_scan = strict_order
+SET
+strict index scan: {4277,10001,10000,4276,4278,10002,9999,4275,4279,10003}
+ strict_equals_exact 
+---------------------
+ t
+(1 row)
+
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=2.829..2.855 rows=10 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Result (actual time=0.146..0.146 rows=1 loops=1)
+   ->  Index Scan using passage_vectors_embedding on passage_vectors (actual time=2.829..2.853 rows=10 loops=1)
+         Order By: (embedding OPERATOR(extensions.<=>) $0)
+         Filter: ((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))
+         Rows Removed by Filter: 1000
+ Planning Time: 0.167 ms
+ Execution Time: 2.871 ms
+(9 rows)
+
+-- The same read with hnsw.max_scan_tuples = 500, below the 1,000 nearer rows of Project 2
+SET
+ bounded_count 
+---------------
+             0
+(1 row)
+
+COMMIT
+== 3. The read with no vector index and the default settings
+DROP INDEX
+BEGIN
+SET
+ plain_equals_exact 
+--------------------
+ t
+(1 row)
+
+                                                                                                       QUERY PLAN                                                                                                        
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=61.275..61.276 rows=10 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Result (actual time=0.401..0.401 rows=1 loops=1)
+   ->  Sort (actual time=61.274..61.274 rows=10 loops=1)
+         Sort Key: ((passage_vectors.embedding OPERATOR(extensions.<=>) $0))
+         Sort Method: top-N heapsort  Memory: 25kB
+         ->  Seq Scan on passage_vectors (actual time=0.436..59.937 rows=20000 loops=1)
+               Filter: ((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))
+               Rows Removed by Filter: 1000
+ Planning Time: 0.137 ms
+ Execution Time: 61.376 ms
+(11 rows)
+
+COMMIT
+== 4. Versions
+ pgvector_version | extension_schema 
+------------------+------------------
+ 0.8.7            | extensions
+(1 row)
+
+         server_version          
+---------------------------------
+ 16.16 (Debian 16.16-1.pgdg12+1)
+(1 row)
+

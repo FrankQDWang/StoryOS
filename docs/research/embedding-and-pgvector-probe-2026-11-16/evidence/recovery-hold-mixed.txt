@@ -1,0 +1,127 @@
+Isolated Recovery Copy drill: mixed
+STORYOS_STORAGE_ACTIVATION=Active
+Created two empty Projects through public createProject before backup
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:26:57
+   Duration  1.37s (transform 60ms, setup 0ms, import 77ms, tests 1.21s, environment 0ms)
+
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+Port 63315 is in use, trying another one...
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  16:26:59
+   Duration  48.61s (transform 0ms, setup 0ms, import 34ms, tests 47.24s, environment 0ms)
+
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+
+ Test Files  3 passed (3)
+      Tests  5 passed | 44 skipped (49)
+   Start at  16:27:49
+   Duration  11.54s (transform 114ms, setup 0ms, import 175ms, tests 11.12s, environment 0ms)
+
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+Port 63315 is in use, trying another one...
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:28:01
+   Duration  6.53s (transform 0ms, setup 0ms, import 9ms, tests 5.65s, environment 0ms)
+
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+Port 63315 is in use, trying another one...
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:28:08
+   Duration  3.94s (transform 0ms, setup 0ms, import 14ms, tests 3.21s, environment 0ms)
+
+2026-11-16 08:28:24.281 UTC [1] LOG:  database system is ready to accept connections
+{
+  "archive_mode": "on",
+  "chain_member_count": 1471,
+  "chain_sha256": "e0ae24c81c1e03b5d772cf8a9e4c34149ff145235781081bb77492c1bf484d73",
+  "destination_kind": "verification_volumes",
+  "failure_domain": {
+    "archive_volume": "storyos-recovery-archive-90649",
+    "backup_volume": "storyos-recovery-backup-90649",
+    "primary_data_volume": "433aab7d806bf66674e735e2bac5709e0e0c912220bc8c2ff401e2e4f8a590e9"
+  },
+  "family_id": "admin-recovery-copy",
+  "fsync": "on",
+  "full_page_writes": "on",
+  "method": "pg_basebackup",
+  "ordinary_read_execution": "disabled",
+  "required_wal_member": "000000010000000000000004",
+  "role_identities": "storyos_backup:login=true,super=false,bypass=false,repl=true; storyos_restore:login=true,super=false,bypass=false,repl=false; storyos_runtime:login=false,super=false,bypass=false,repl=false",
+  "state": "recovery_hold",
+  "synchronous_commit": "on",
+  "visibility_proof": "absent",
+  "wal_level": "replica"
+}
+sha256:612a53be087922ac723e02447094e8c2b87ae49a28cfb7e86bd0fcd98cb59122
+Isolated Recovery Copy restore remains in hold
+Isolated restore passed Recovery Visibility Proof
+Running exact-dist continued writing after restore
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+Port 63315 is in use, trying another one...
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:28:28
+   Duration  1.70s (transform 0ms, setup 0ms, import 14ms, tests 768ms, environment 0ms)
+
+{
+  "continued_writing": {
+    "isolation": "foreign_project_absent",
+    "non_revival": "stale_unattached_chapter_absent",
+    "reload": "settled",
+    "text": "chinese_and_english",
+    "title": "WAL after base backup"
+  },
+  "environment": {
+    "hold_host_port": "34604"
+  },
+  "evidence_class": "EV-PRD",
+  "hold_to_visible": {
+    "restore_state": "visible",
+    "runtime_login": true,
+    "writes_after_enable": "accepted",
+    "writes_after_visibility_before_enable": "refused"
+  },
+  "physical_input": {
+    "catalog_identity": "storyos.persistence.release-1",
+    "chain_sha256": "e0ae24c81c1e03b5d772cf8a9e4c34149ff145235781081bb77492c1bf484d73",
+    "destination_kind": "verification_volumes",
+    "isolated_target_identity": "storyos-recovery-hold-90649",
+    "method": "pg_basebackup",
+    "recovery_copy_id": "018f0000-0000-7001-8000-0000000000c1",
+    "restore_proof_id": "018f0000-0000-7001-8000-0000000000c2",
+    "visibility_proof_id": "018f0000-0000-7001-8000-0000000000c3"
+  },
+  "rpo": {
+    "bound_seconds": 900,
+    "observed_seconds": 0
+  },
+  "rto": {
+    "bound_seconds": 7200,
+    "observed_seconds": 7
+  }
+}
+sha256:165763a3aa39aa384ac095cc073a349f78283ec5cd6b3d0d1aaeba5656be787e
+Isolated restore continued writing after Recovery Visibility Proof

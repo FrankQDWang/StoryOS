@@ -1,0 +1,15 @@
+== pgvector/pgvector:0.8.7-pg16-bookworm
+activation=PASS
+migration=PASS
+table=storyos.passage_vectors extension=0.8.7 owner=storyos_owner forced_rls=true
+== postgres:16-alpine
+activation=PASS
+migration=PASS
+table=none extension=none owner=none forced_rls=none
+BEGIN
+SET
+INSERT 0 1
+SET
+runtime_scoped_rows=1
+runtime_nearest=018f0000-0000-7001-8000-0000000c3001
+COMMIT
