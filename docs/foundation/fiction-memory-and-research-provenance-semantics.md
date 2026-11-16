@@ -8,14 +8,17 @@
 - Authority decision: [ADR 0001](../adr/0001-separate-authoritative-state-artifacts-and-operational-records.md)
 - Ownership decision: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 - Memory decision: [ADR 0035](../adr/0035-use-background-generated-project-memory.md)
+- Memory form decision: [ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)
 
 ## 1. Scope and authority
 
 Agent Memory supports continuity across Project Conversations and AgentRuns.
-StoryOS uses the Codex CLI mechanism: extract useful context from eligible prior
-conversation records in background work, consolidate readable memory documents,
-supply a bounded navigation summary, and let the Agent search and read details
-when relevant. Grok Build is a supporting reference, not the deciding contract.
+StoryOS keeps Memory as short, readable Memory Entries ([ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)).
+Background work captures typed observations from settled Project Conversations
+and from Chapters. A consolidation pass makes and prunes the entries. A bounded
+Memory Index is in the context of a Run, and the Agent searches and reads the
+entries when relevant. Codex CLI, Claude Code, and Grok Build are design
+references, and none of them is the deciding contract.
 
 Memory is separate from active model-context compaction, durable conversation
 history, and Provider continuation. It is an aid to recall, not a second source
@@ -24,7 +27,7 @@ General model prompts guide extraction, consolidation, and retrieval. StoryOS
 does not classify ordinary creative requests into a special exclusion registry,
 per-claim admission lifecycle, or deterministic semantic removal graph.
 
-All memory inputs, documents, notes, jobs, indexes, tool reads, and disclosures
+All memory inputs, entries, observations, jobs, indexes, tool reads, and disclosures
 bind one trusted `ProjectScope { owner_user_id, project_id }`. Background work
 cannot pool content across Projects or Users. A content hash, similar wording,
 or shared Provider account grants no access. The PostgreSQL and isolation
@@ -34,38 +37,42 @@ store or permission to copy the Codex runtime.
 This is a semantic contract. It does not implement Memory, choose physical
 paths or database tables, calibrate budgets, or release a product stage.
 
-## 2. Durable information spaces and generated documents
+## 2. Durable information spaces and Memory Entries
 
 StoryOS retains three durable information spaces:
 
 | Space | Role in Memory |
 |---|---|
-| Authoritative State | current author-owned prose, fiction facts, and explicit constraints that the Agent can read through their domain tools |
-| Artifacts | conversation Messages, inspectable source material, generated Memory Documents, and author-requested Memory Notes |
-| Operational Records | exact maintenance inputs, execution outcomes, publication and usage observations, and historical context evidence |
+| Authoritative State | current author-owned prose and explicit constraints that the Agent can read through their domain tools |
+| Artifacts | conversation Messages, inspectable source material, and the Memory Entries with their versions |
+| Operational Records | exact maintenance inputs, Memory Observations, execution outcomes, usage observations, and historical context evidence |
 
-A `Memory Document` is generated, non-authoritative text with a stable document
-identity and revision. The set includes per-conversation summaries, consolidated
-notes, and a short navigation summary. Markdown supports bounded search and
-read; no vector database, graph, or embedding call is required for ordinary
-Memory. Storage owns durable revisions and the current published document set.
-Memory Documents and Memory Notes use the existing Tool Artifact family, with
-their content role defined by this contract. They add no top-level Artifact
-family or Creator: model work binds an AgentRunStep, and a memory tool write
-binds its ToolCall. Background Workers schedule that existing bounded work.
+A `Memory Entry` is non-authoritative text with a stable identity and versions.
+It has a title, a one-line description, a type, an origin, and source
+references. The types are writing preference, foreshadowing, character,
+relationship, major event, and other. The origins are the request of the
+author, a Project Conversation, and a Chapter. An entry holds a synthesis or an
+intent and does not copy a passage. Markdown supports bounded search and read;
+Memory uses no vector database, graph, or embedding call. A Memory Entry is an
+Artifact. Its records are their own PostgreSQL tables in the Project Scope, as
+the records of the Research Artifact are, and they are not a part of the Tool
+Artifact family. A `Memory Observation` is the typed output of one capture. It
+is an Operational Record, it waits for the consolidation pass, and it is not
+an entry.
 
-The consolidation Agent can replace a document's current content and remove
-obsolete generated documents. Publication retains the revision identity needed
-by already recorded uses, subject to retention. It does not overwrite an older
-Run's input evidence or alter the source conversation. Document versioning is
-not a separate immutable domain object and decision for each inferred sentence.
+A change of an entry keeps the earlier version until the Project is deleted,
+so that the record of an earlier Run stays complete. It does not overwrite an older
+Run's input evidence or alter the source conversation. An entry version is not
+a separate immutable domain object and decision for each inferred sentence.
 
-Generated Memory may record preferences, working context, useful outcomes,
-failed approaches, and unresolved uncertainty. It does not turn an assistant
+Memory may record the writing habits of the author, a foreshadowing or a hidden
+plot line, the personality of a character, a relationship, a major event, a
+decision about the story that the manuscript does not hold yet, and unresolved
+uncertainty. It does not turn an assistant
 suggestion, tentative fiction, or remembered statement into Authoritative State.
 Existing source objects remain independently readable and inspectable.
 
-## 3. Background extraction
+## 3. Background capture
 
 Conversation Memory Settings independently control Agent use and contribution
 for each exact Project Conversation. They change only when all associated
@@ -74,19 +81,24 @@ work does not block adjustment. The [protocol owner](versioned-command-query-art
 defines the atomic idle gate and exact routes. Changing a setting neither
 deletes Memory nor rewrites recorded context. The release owner fixes defaults.
 
-An eligible input is a durable snapshot of a prior, sufficiently idle Project
-Conversation that permits generation and whose records the job may read. Skip
-active conversations and provisional streams. A conversation need not be closed
-forever: a later settled snapshot can replace its earlier extraction input.
-Memory does not read an unsettled editor buffer, promote pending work, or use a
-previous memory summary as independent proof of what happened.
+A capture has one of two inputs. The first is the settled messages of a quiet
+Project Conversation that permits contribution and that no earlier capture
+read. The second is the authoritative text of a Chapter that changed and is
+quiet. For a manuscript that exists before Memory, background work captures
+each Chapter one time, in Chapter order, at a limited rate. Skip active
+conversations and provisional streams. Memory does not read an unsettled editor
+buffer, promote pending work, or use an earlier entry as independent proof of
+what happened.
 
-Phase 1 supplies bounded conversation records to the model and requests a
-conversation summary, reusable memory notes, and source references. It may
-return no useful memory. General instructions ask it to retain useful context,
-keep uncertainty, and distinguish author decisions from proposals and guesses;
-there is no fixed taxonomy or minimum incident count for every memory claim.
-Secret handling applies before model submission and before publication.
+A capture is one bounded tool loop. The model gets its input, the Memory Index,
+and read-only Host Tools: the manuscript keyword search, the manuscript read,
+and the Memory read. Thus the capture of a Chapter can read an earlier Chapter.
+The loop ends with a typed list of Memory Observations and may return none.
+General instructions ask it to keep only what a later Chapter needs and a
+search cannot find, to keep uncertainty, and to distinguish author decisions
+from proposals and guesses. The Host limits the number of observations of one
+capture and refuses an observation above a limit. Secret handling applies
+before model submission and before storage.
 
 The job records the exact input version, model and prompt versions, output,
 and outcome. Bounded selection, leases, idempotency, concurrency limits, and
@@ -97,28 +109,37 @@ per-item memory confirmation requests.
 
 ## 4. Consolidation and selective recall
 
-Phase 2 consolidates a bounded set of extraction outputs and pending Memory
-Notes within one Project Scope. It updates per-conversation summaries,
-consolidated memory, source links, and the navigation summary. Only one
-publication for that Project may advance the current set at a time; a stale or
-failed job cannot publish over a newer set or expose a partial document set.
-Unchanged input may produce a no-op. Failed work can resume under the existing
-Worker and execution contracts without blocking the editor.
+When a Project has observations that wait, a consolidation pass sends one model
+request with no tools. Its input is the current entries, the observations, and
+the marks of the entries that the author deleted. Its reply is a list of typed
+operations: create, update, delete, merge, and a conflict flag. The Host
+validates each operation and applies the list in one transaction. A pass whose
+input is older than the current entries applies nothing, and a failed pass
+exposes no partial result. Unchanged input may produce a no-op. Failed work can
+resume under the existing Worker and execution contracts without blocking the
+editor.
 
-The consolidation Agent can merge, rewrite, or remove generated notes using
-general instructions and available sources. New author feedback, changed
-inputs, age, and observed use can guide this work. Retention and input budgets
-bound the set; an index and a successful model output do not certify semantic
-correctness. Any use counter records an observed read or reported citation,
-not proof that the model attended to the material.
+Pruning is a named duty of the pass. It removes an entry that later material
+contradicts, joins duplicates, removes first the background entries that no Run
+read for a long time, and keeps the Memory Index in its bound. A Project has
+one entry for each character and one entry for each pair of characters.
+Input budgets and the Host limits bound the set; a successful model output
+does not certify semantic correctness. Any use counter records an observed read, not
+proof that the model attended to the material.
 
-At the start of a relevant conversation, Context Assembly may supply a small
-memory navigation summary and general read guidance. It does not inject the
-entire memory collection into every model call. The Agent decides whether to
-search the notes, read a relevant document, or consult current domain sources.
+Background work cannot change or delete an entry whose origin is the request of
+the author. When a capture or a pass finds that such an entry conflicts with
+the manuscript or a Conversation, the Host records a conflict flag on the entry
+and keeps its text. The Agent asks the author about a flagged entry in a later
+Run.
+
+Context Assembly supplies the Memory Index and general read guidance to a Run
+when the Conversation Memory Settings permit use. It does not inject the entire
+memory collection into every model call. The Agent decides whether to search
+the entries, read an entry, or consult current domain sources.
 Tools enforce Project Scope, access, actual lifecycle restrictions, and bounds
 before returning content. Source text stays reference material and gains no
-instruction authority merely by entering a memory document.
+instruction authority merely by entering a Memory Entry.
 
 Memory is fallible context. The Agent follows current author instructions and
 checks current sources when the task depends on their present value. Ranking
@@ -217,26 +238,30 @@ may remain recorded or already supplied to the Provider while later instructions
 express the author's current intent. Do not interrupt ordinary assistance to
 compile that intent into a formal memory or context control.
 
-When the author requests a lasting Memory change, the Agent can append a
-`Memory Note`: plain-language guidance for the next consolidation pass, with
-its author-message source. The Agent interprets the request through its normal
-loop and tool use; no deterministic natural-language classifier is required.
-Background extraction can learn automatically from eligible conversations,
-while a direct memory-update tool requires an author request. A note is neither
-an Author Preference nor a source-access prohibition.
+When the author requests a lasting Memory change, the Agent creates, changes,
+or deletes a Memory Entry with a Host Tool, and the origin of that entry is the
+request of the author. The change applies at once. The Agent interprets the
+request through its normal loop and tool use; no deterministic natural-language
+classifier is required. Background capture can learn automatically from
+eligible conversations and Chapters, while the direct write requires an author
+request. An entry is neither an Author Preference nor a source-access
+prohibition.
 
-A note can ask to add, correct, or forget remembered information. Consolidation
-uses it to revise generated documents. Report a recorded note separately from
-a published update. Do not promise immediate recall removal, prevention of all
+When the Agent finds in a Run that an entry of the author conflicts with the
+manuscript or with the present words of the author, it does not change the
+entry. It asks the author in its reply, and it changes the entry only after the
+answer. A delete by the author on the settings page removes the entry from the
+Memory Index, the tools, and the page. It leaves a mark, so that background
+work does not create that entry again. Do not promise prevention of all
 equivalent future inferences, precise semantic erasure, or erasure of content
 already sent to a model. General context compaction may summarize current task
-state; a memory note does not require a continuation-chain reset.
+state; a Memory change does not require a continuation-chain reset.
 
 An ordinary source edit or deletion changes later source reads. It does not
 rewrite conversation records or automatically erase every generated paraphrase.
-The Agent can read current sources, and later consolidation can revise old notes.
-Known source unavailability and document age remain inspectable. History records
-which document revisions StoryOS supplied, not what the model actually used.
+The Agent can read current sources, and later consolidation can revise old
+entries. Known source unavailability and entry age remain inspectable. History
+records which entry versions StoryOS supplied, not what the model actually used.
 
 ## 9. Actual access, archive, and deletion controls
 
@@ -249,10 +274,11 @@ forgetting guarantee.
 
 A real deletion or access restriction must cover generated copies that the
 owning policy includes. If the affected content cannot be isolated safely, the
-storage and retention owners must define a conservative document-set boundary,
+storage and retention owners must define a conservative entry-set boundary,
 unavailability, and rebuild from allowed inputs. They must not infer a complete
-semantic dependency graph from model-generated citations. Memory Notes alone
-do not constitute physical deletion or satisfy that policy.
+semantic dependency graph from model-generated citations. A delete of a
+Memory Entry by the author alone does not constitute physical deletion or
+satisfy that policy.
 
 Provider retention and already disclosed data remain separate external facts.
 No generated memory revision rewrites an immutable disclosure record. The
@@ -261,34 +287,37 @@ the boundary they actually control.
 
 ## 10. Source references and rebuildable retrieval
 
-Memory Documents keep references to their extraction inputs and to relevant
-source records. These help inspection and fresh lookup. A missing reference is
+Memory Entries keep references to their capture inputs and to relevant source
+records. These help inspection and fresh lookup. A missing reference is
 reported as unavailable; a link alone does not prove support for every sentence
 or provide a complete transitive influence closure.
 
-Text search is sufficient for the initial Memory mechanism. Optional full-text,
-vector, or graph indexes are disposable access projections over published
-Memory Document revisions and other permitted source objects. Their IDs are
+Text search is sufficient for Memory, which has no vector index ([ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)).
+The manuscript has a vector index for the hybrid search of [ADR 0095](../adr/0095-give-the-agent-the-whole-manuscript-through-host-tools-and-add-a-hybrid-search-with-pgvector-and-a-volcengine-embedding-model.md).
+Each full-text, vector, or graph index is a disposable access projection over
+current entries, Chapters, and other permitted source objects. Their IDs are
 not durable domain identities. Reads recheck actual Project Scope, current
-access and lifecycle, and publication identity before returning content.
+access and lifecycle, and the current version before returning content.
 An external embedding call remains an authorized disclosure operation.
 
-Index loss does not lose the published memory documents, Memory Notes, or
-conversation records. A new index can be built from available documents.
-Regenerating memory from retained inputs is a separate model operation and need
-not produce identical wording. Unavailable retained inputs limit what can be
-regenerated; do not invent their contents or silently treat them as evidence.
+Index loss does not lose the Memory Entries, the Chapters, or conversation
+records. A new index can be built from them. Regenerating memory from retained
+inputs is a separate model operation and need not produce identical wording.
+Unavailable retained inputs limit what can be regenerated; do not invent their
+contents or silently treat them as evidence.
 
 ## 11. Author interaction
 
-The author can inspect the current memory summary and documents, their update
-status, and available source links. Ordinary conversation can express a memory
-correction. Explicit settings control reading existing memory and contributing
-to future memory; source editing and real deletion use their domain paths.
+The author can inspect the current Memory Entries on the settings page of the
+Project: the text, the type, the origin, the source link, and the conflict flag
+of each entry. The author can delete an entry there. Ordinary conversation can
+express a memory correction. The Conversation Memory Settings keep their Host
+defaults and have no control ([ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)); source editing and real deletion
+use their domain paths.
 
 No memory review queue, Candidate confirmation card, scope form, or separate
 maintenance conversation is a prerequisite to writing or Agent assistance.
-Generated memory can be corrected without treating the document as fictional
+Generated memory can be corrected without treating the entry as fictional
 truth. Current prose, author-confirmed settings, and source evidence remain
 independently inspectable.
 
@@ -298,9 +327,9 @@ independently inspectable.
 |---|---|
 | [Context](context-assembly-retrieval-and-outbound-disclosure-semantics.md) | bounded summary and tool-read intake, ordinary user steering, known source references, historical context, and truthful disclosure evidence |
 | [Model](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md) | general context compaction and continuation without ordinary-correction chain invalidation |
-| [Protocol](versioned-command-query-artifact-event-protocol.md) | memory document inspection, plain-language notes, separate use/generation settings, publication status, and source references |
-| [Storage](postgresql-project-storage-isolation-and-migration-contract.md) | document revisions and publication, job recovery, exact Project Scope, current reads, index rebuild, export/restore, and physical families |
-| [Retention](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | document, note, and job retention, real copy deletion, unavailable evidence, and operational-history compaction |
+| [Protocol](versioned-command-query-artifact-event-protocol.md) | Memory Entry inspection and delete, separate use/generation settings, and source references |
+| [Storage](postgresql-project-storage-isolation-and-migration-contract.md) | entry versions, job recovery, exact Project Scope, current reads, index rebuild, export/restore, and physical families |
+| [Retention](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | entry, observation, and job retention, real copy deletion, unavailable evidence, and operational-history compaction |
 | [Release](ai-independent-editor-first-release-baseline-and-handoff-criteria.md) and [proof](deterministic-verification-and-failure-recovery-gates.md) | Stage 7 background memory and observable verification; no semantic correctness or exact-forgetting oracle |
 
 These original owners remain responsible for their pending revisions. This
@@ -311,17 +340,18 @@ runtime and schema changes remain with the later approved implementation work.
 ## 13. Normative invariants
 
 1. Generated Memory is inspectable, Project-scoped, and non-authoritative.
-2. Background extraction, consolidation, active context compaction, and Provider
+2. Background capture, consolidation, active context compaction, and Provider
    continuation are distinct operations.
 3. Ordinary author corrections use the general Agent loop; no semantic
    exclusion or per-claim admission mechanism is required.
-4. Memory Notes request document changes; settings and business commands own
-   access, generation eligibility, and real deletion.
-5. Failed or stale maintenance cannot publish a partial or superseded set.
-6. A summary navigates to memory; it does not load the whole collection.
+4. A request of the author changes a Memory Entry at once, and background work
+   cannot change an entry of the author. Settings and business commands own
+   access, capture eligibility, and real deletion.
+5. A failed or stale consolidation pass applies no operation.
+6. The Memory Index navigates to memory; it does not load the whole collection.
 7. Current source facts and author authority are independent from remembered
    interpretations. Research evidence retains its exact-source contract.
 8. Source references and reported usage do not prove model influence or truth.
-9. Document updates preserve historical input identities subject to retention.
+9. Entry changes keep each earlier version until the Project is deleted.
 10. Memory maintenance does not interrupt active writing or bypass a real
     permission, disclosure, Proposal, or Acceptance boundary.

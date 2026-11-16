@@ -37,3 +37,15 @@ The [official Memory guide](https://learn.chatgpt.com/docs/customization/memorie
 also describes background generation and separate per-chat use and contribution
 controls. This is design provenance, not copied runtime code, an upstream
 dependency, or proof of a Volcengine model capability.
+
+## Amendment 2026-11-16: Memory Entries replace the published document set
+
+[ADR 0094](0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)
+changes the mechanism of this ADR. Agent Memory is a set of typed Memory
+Entries. The Agent writes an entry at once on the request of the author, and
+background captures of Project Conversations and Chapters give typed
+observations that a consolidation pass applies as validated operations. The
+Memory Note and the complete published document set of the first form are
+withdrawn. The direction of this ADR stays: background generation, readable
+text, a bounded summary in the context, a read on demand, and no authority for
+generated Memory.
