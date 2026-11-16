@@ -93,6 +93,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             },
             timeout: TOOL_EXCHANGE_TIMEOUT,
         },
+        // No product code sends an embedding request yet. S7-C2a2 adds the Agent Plan adapter.
+        embeddings: storyos_adapter_fake_destination::FakeEmbeddings,
     };
     if arguments.iter().any(|argument| argument == "--once") {
         or_exit(

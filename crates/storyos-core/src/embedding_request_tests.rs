@@ -1,3 +1,5 @@
+use serde_json::json;
+
 use super::*;
 
 fn passage(text: &str) -> EmbeddingInput {
@@ -170,4 +172,30 @@ fn each_cause_has_its_source_class_and_its_own_instructions() {
         ]
     );
     assert_ne!(causes[0].instructions(), causes[1].instructions());
+}
+
+#[test]
+fn the_snapshot_names_the_cause_and_the_references_and_no_text() {
+    let question = EmbeddingInput::Question {
+        tool_call_id: "call-1".to_owned(),
+        text: "Where is the lantern?".to_owned(),
+    };
+
+    assert_eq!(
+        [passage("The tide turned.").snapshot(), question.snapshot()],
+        [
+            json!({
+                "cause": "passage_index", "purpose": "manuscript_embedding",
+                "source_class": "chapter_passage",
+                "texts": [{"chapter_id": "ch-1", "revision_id": "rev-1",
+                           "passage_digest": "sha256:p"}],
+                "working_target": "not_applicable", "workspace_context": "not_applicable",
+            }),
+            json!({
+                "cause": "search_question", "purpose": "manuscript_embedding",
+                "source_class": "search_question", "texts": [{"tool_call_id": "call-1"}],
+                "working_target": "not_applicable", "workspace_context": "not_applicable",
+            }),
+        ]
+    );
 }

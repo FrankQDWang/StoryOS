@@ -36,6 +36,7 @@ mod agent_run_control;
 mod agent_run_work;
 mod author_edit;
 mod author_edit_wire;
+mod embedding_gateway;
 mod model_gateway;
 mod model_gateway_ports;
 mod model_lease_renewal;
@@ -130,6 +131,11 @@ pub use create_project::{
 pub use create_project_challenge::{
     CreateProjectChallenge, CreateProjectChallengeBinding, CreateProjectChallengeStore,
     IssueCreateProjectChallenge, issue_create_project_challenge,
+};
+pub use embedding_gateway::{
+    CredentialUnavailable, EmbeddingClaim, EmbeddingDispatchStore, EmbeddingObservation,
+    EmbeddingProjection, EmbeddingProviderAdapter, EmbeddingRecord, EmbeddingResult,
+    EmbeddingUsage, NoEmbeddingDestination, PreparedEmbeddingRequest, dispatch_embedding,
 };
 pub use export_work::{ClaimedExportWork, ExportWorkStore, claim_next_export_work};
 pub use get_proposal::{
