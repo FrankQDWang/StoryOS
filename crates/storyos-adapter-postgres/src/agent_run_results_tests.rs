@@ -63,7 +63,7 @@ async fn each_settled_write_is_a_result_at_the_position_of_its_call() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, first) = queued(&store, "d31").await;
+    let (scope, chapter_id, first) = queued(&store, "fc1").await;
     complete(&store, &admin, &scope, &first).await;
     // Background work wrote the entry 1. Its version names no ToolCall.
     write_versions(
@@ -84,9 +84,9 @@ async fn each_settled_write_is_a_result_at_the_position_of_its_call() {
     ]
     .join("\n");
     let new = ConversationSelection::New;
-    let run_id = admitted(&store, &scope, &chapter_id, "d32", &message, new.clone()).await;
+    let run_id = admitted(&store, &scope, &chapter_id, "fc2", &message, new.clone()).await;
     complete(&store, &admin, &scope, &run_id).await;
-    let plain = admitted(&store, &scope, &chapter_id, "d33", "Help.", new).await;
+    let plain = admitted(&store, &scope, &chapter_id, "fc3", "Help.", new).await;
     complete(&store, &admin, &scope, &plain).await;
     let run = store
         .read_agent_run(&scope, &run_id, &AgentRunReadSelection::Current)
@@ -138,14 +138,14 @@ async fn a_run_cancelled_after_a_settled_write_gives_the_write() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, first) = queued(&store, "d34").await;
+    let (scope, chapter_id, first) = queued(&store, "fc4").await;
     complete(&store, &admin, &scope, &first).await;
     let create = json!({"type": "character", "title": "林舟", "description": "船夫。",
                         "text": "他不说话。"});
     let new = ConversationSelection::New;
     let message = script("create", &create);
-    let run_id = admitted(&store, &scope, &chapter_id, "d35", &message, new).await;
-    let cancel = cancellation(&store, &scope, 0xd3a0, &run_id).await;
+    let run_id = admitted(&store, &scope, &chapter_id, "fc5", &message, new).await;
+    let cancel = cancellation(&store, &scope, 0xfca0, &run_id).await;
     let author = AuthorAt::new(
         &store,
         Moment::DuringRequest(2),
