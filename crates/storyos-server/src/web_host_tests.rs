@@ -246,7 +246,11 @@ async fn html_document_get_issues_the_configured_session_cookie() {
         assets,
     );
 
-    for uri in ["/", &format!("/projects/{PROJECT_ID}")] {
+    for uri in [
+        "/",
+        &format!("/projects/{PROJECT_ID}"),
+        &format!("/projects/{PROJECT_ID}/settings"),
+    ] {
         let response = send(
             router.clone(),
             uri,
@@ -465,4 +469,87 @@ async fn mismatched_cookie_is_not_overwritten_and_does_not_authorize() {
         .await
         .expect("API GET with two Cookie fields should complete");
     assert_eq!(api.status(), StatusCode::UNAUTHORIZED);
+}
+
+/// The headers, the status, and the session cookie of a response to `method` at `uri`.
+async fn page_rules(router: Router, method: &str, uri: &str) -> Vec<Option<String>> {
+    let request = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("host", HOST)
+        .body(Body::empty())
+        .expect("test request should be valid");
+    let response = router
+        .oneshot(request)
+        .await
+        .expect("test request should complete");
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .map(|value| value.to_str().unwrap().to_owned())
+    };
+    vec![
+        Some(response.status().as_str().to_owned()),
+        header("content-type"),
+        header("cache-control"),
+        header("content-security-policy"),
+        header("x-content-type-options"),
+        header("referrer-policy"),
+        header("cross-origin-resource-policy"),
+        header("allow"),
+        header("set-cookie"),
+    ]
+}
+
+/// ADR 0094 section 9: the settings page of a Project has the rules of the writing workspace.
+#[tokio::test]
+async fn the_settings_page_has_the_rules_of_the_project_page() {
+    let fixture = Fixture::new();
+    let router = router_with_web(
+        config(
+            TrustedLocalSessionBootstrap::IssueTheSingleConfiguredHandle,
+            now_secs() + CLIENT_SESSION_BINDING_LIFETIME_SECS,
+        ),
+        WebAssetSet::load_bound(&fixture.root, &fixture.digest).unwrap(),
+    );
+    let project = format!("/projects/{PROJECT_ID}");
+    let settings = [
+        format!("{project}/settings"),
+        format!("{project}/settings/"),
+        format!("/PROJECTS/{}/settings", PROJECT_ID.to_uppercase()),
+    ];
+    let missing = [
+        "/projects/not-a-uuid/settings".to_owned(),
+        format!("/projects/{}/settings", &PROJECT_ID[1..]),
+        format!("{project}/settings/extra"),
+        format!("{project}/settings//"),
+        format!("{project}//settings"),
+        format!("{project}/Settings"),
+        format!("{project}/settingsx"),
+    ];
+
+    for method in ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"] {
+        let expected = page_rules(router.clone(), method, &project).await;
+        for uri in &settings {
+            assert_eq!(
+                page_rules(router.clone(), method, uri).await,
+                expected,
+                "{method} {uri}"
+            );
+        }
+    }
+    for uri in &missing {
+        let rules = page_rules(router.clone(), "GET", uri).await;
+        assert_eq!(
+            [&rules[..3], &rules[8..]].concat(),
+            [
+                Some("404".to_owned()),
+                None,
+                Some("no-store".to_owned()),
+                None
+            ],
+            "{uri}"
+        );
+    }
 }

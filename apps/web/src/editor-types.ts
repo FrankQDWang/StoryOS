@@ -428,9 +428,17 @@ export interface ProjectReadyState {
   editor: EditorState;
 }
 
+/** The settings page of a Project (ADR 0094 section 9). It opens no Editor Session. */
+export interface ProjectSettingsReadyState {
+  kind: "project-settings-ready";
+  profile: Release1ProtocolProfile;
+  project: GetProjectResponse;
+}
+
 export type ControlledProjectState =
   | ProtocolBlockedState
   | ProtectedReadyState
   | ProjectBlockedState
   | EmptyProjectReadyState
-  | ProjectReadyState;
+  | ProjectReadyState
+  | ProjectSettingsReadyState;

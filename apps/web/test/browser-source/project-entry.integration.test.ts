@@ -102,6 +102,8 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     expect(root.firstElementChild?.tagName).toBe("SECTION");
     expect(root.textContent).toContain("Project A");
     expect(root.textContent).toContain("Chapter A");
+    await expect.poll(() => root.querySelector('.tree-panel .tree-footer a[aria-label="项目设置"]')
+      ?.getAttribute("href")).toBe(`/projects/${PROJECT}/settings`);
     expect(root.textContent).toContain("Base");
     expect(
       root.querySelector("[data-authoritative-revision-id]")?.getAttribute(
