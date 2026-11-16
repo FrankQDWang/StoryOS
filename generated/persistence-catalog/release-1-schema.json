@@ -4016,6 +4016,80 @@
       },
       "triggers": {}
     },
+    "passage_vectors": {
+      "columns": {
+        "chapter_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "created_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "cut_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "embedding": {
+          "default": null,
+          "nullable": false,
+          "type": "extensions.vector(1024)"
+        },
+        "embedding_registration_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "passage_digest": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        }
+      },
+      "constraints": {
+        "passage_vectors_chapter_fkey": "FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id) MATCH FULL",
+        "passage_vectors_cut_revision_check": "CHECK (((length(cut_revision) >= 1) AND (length(cut_revision) <= 128)))",
+        "passage_vectors_passage_digest_check": "CHECK ((passage_digest ~ '^sha256:[0-9a-f]{64}$'::text))",
+        "passage_vectors_pkey": "PRIMARY KEY (owner_user_id, project_id, chapter_id, embedding_registration_revision, cut_revision, passage_digest)"
+      },
+      "indexes": {
+        "passage_vectors_pkey": "CREATE UNIQUE INDEX passage_vectors_pkey ON storyos.passage_vectors USING btree (owner_user_id, project_id, chapter_id, embedding_registration_revision, cut_revision, passage_digest)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "passage_vectors_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))",
+          "with_check": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ard/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "pinned_export_sources": {
       "columns": {
         "completeness_profile": {
