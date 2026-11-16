@@ -158,6 +158,7 @@ mod delete_chapter;
 mod delete_volume;
 mod editor_session;
 mod editor_session_acknowledgement;
+mod embedding_attempt;
 mod export_work;
 mod get_proposal;
 mod list_projects;

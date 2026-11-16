@@ -112,8 +112,8 @@ pub use assemble_context::{
     CONTEXT_ITEM_TOKEN_LIMIT, ContextBlockReason, ContextCause, ContextSourceClass,
     ContextSufficiency, CurrentPassageAssembly, CurrentPassageAssemblyRecord, DestinationIo,
     InstructionBindingInput, PassageContextTarget, ProjectionMode, RejectionReason,
-    assemble_current_passage_context, assemble_passage_collection, decode_assembly_record,
-    encode_assembly_record,
+    assemble_current_passage_context, assemble_passage_collection, count_context_item_tokens,
+    decode_assembly_record, encode_assembly_record,
 };
 pub use chapter_list::{ChapterListEntry, assemble_chapter_list};
 pub use compact_active_context::{
@@ -173,7 +173,7 @@ pub use embedding_request::{
     AGENT_PLAN_EMBEDDING_REGISTRATION, EMBEDDING_DIMENSIONS, EMBEDDING_REQUEST_BOUNDS,
     EMBEDDING_REQUEST_TIMEOUT, EMBEDDING_TEXT_TOKEN_LIMIT, EmbeddingAdapter,
     EmbeddingAdmissionFacts, EmbeddingBindingFacts, EmbeddingCause, EmbeddingInput,
-    EmbeddingRefusal, EmbeddingRegistration, HOST_FAKE_EMBEDDING_REGISTRATION,
+    EmbeddingRefusal, EmbeddingRegistration, EmbeddingSettlement, HOST_FAKE_EMBEDDING_REGISTRATION,
     MANUSCRIPT_EMBEDDING_PURPOSE, admit_embedding, embedding_binding_to_make,
 };
 pub use finish_rule::{
