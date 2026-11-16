@@ -872,6 +872,12 @@ pub struct GetAgentRunResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub skill_uses: Option<Vec<crate::SkillUseInspect>>,
+    // Only the Run read has it: one entry for each Chapter that a settled `read_chapter` call
+    // gave and one for each query of a settled `search_manuscript` call, in the order of the first
+    // use. No field when the Run has no entry (ADR 0095 section 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub manuscript_uses: Option<Vec<crate::ManuscriptUseInspect>>,
     pub model_attempt: OptionalModelAttemptInspect,
     // The last compaction record of the Run.
     pub active_compaction: OptionalActiveCompactionInspect,

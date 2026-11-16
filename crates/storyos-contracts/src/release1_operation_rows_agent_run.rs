@@ -27,6 +27,7 @@ use crate::release1_agent_run::{
     TokenCountingProfileInspect, ToolCallInspect, ToolCallOutcomeInspect,
     UnknownCreateSuccessorDisposition,
 };
+use crate::release1_manuscript_use::ManuscriptUseInspect;
 use crate::release1_operation_registry::{ClientOverride, RegisteredOperation};
 use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_route_catalog::{
@@ -182,6 +183,7 @@ pub(super) const GET_AGENT_RUN_ROW: OperationRow = OperationRow {
         OptionalDecisionInspect::decl,
         AgentRunResultInspect::decl,
         SkillUseInspect::decl,
+        ManuscriptUseInspect::decl,
         ContinuationInputMappingInspect::decl,
         ContinuationAdmissionInspect::decl,
         OptionalModelAttemptInspect::decl,
@@ -502,6 +504,18 @@ const GET_AGENT_RUN_RESPONSE: &[Patch] = &[
     Patch(
         Edit::MaxLength(512),
         &["/$defs/SkillUseInspect/oneOf/1/properties/reason"],
+    ),
+    Patch(
+        UUID,
+        &["/$defs/ManuscriptUseInspect/oneOf/0/properties/chapter_id"],
+    ),
+    Patch(
+        Edit::MinLength(1),
+        &["/$defs/ManuscriptUseInspect/oneOf/1/properties/query"],
+    ),
+    Patch(
+        Edit::MaxLength(512),
+        &["/$defs/ManuscriptUseInspect/oneOf/1/properties/query"],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
 ];

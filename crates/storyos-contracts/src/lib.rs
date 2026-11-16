@@ -20,6 +20,7 @@ mod release1_list_skills;
 mod release1_manuscript_search;
 mod release1_manuscript_statistics;
 mod release1_manuscript_tree;
+mod release1_manuscript_use;
 mod release1_open_proposal_list;
 mod release1_operation_registry;
 mod release1_operation_table;
@@ -183,6 +184,7 @@ pub use release1_manuscript_tree::{
     GET_MANUSCRIPT_TREE_METHOD, GET_MANUSCRIPT_TREE_PATH, GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID,
     GetManuscriptTreeResponse, ManuscriptChapterNode, ManuscriptVolumeNode,
 };
+pub use release1_manuscript_use::ManuscriptUseInspect;
 pub use release1_open_proposal_list::{
     LIST_CHAPTER_OPEN_PROPOSALS_METHOD, LIST_CHAPTER_OPEN_PROPOSALS_PATH,
     LIST_CHAPTER_OPEN_PROPOSALS_RESPONSE_SCHEMA_ID, ListChapterOpenProposalsResponse,
