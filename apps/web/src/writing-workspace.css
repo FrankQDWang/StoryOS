@@ -296,6 +296,37 @@ input:focus-visible {
 
 .agent-header button:disabled { opacity: .45; }
 
+.agent-header button + button { margin-left: 4px; }
+
+.assistant-conversation-list {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  font: 13px/1.6 "PingFang SC", sans-serif;
+}
+
+.assistant-conversation-list ul { margin: 0; padding: 0; list-style: none; }
+
+.assistant-conversation-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  padding: 6px 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.assistant-conversation-list button[aria-current="true"] { background: var(--line); }
+
+.assistant-conversation-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.assistant-conversation-list time,
+.assistant-conversation-current { color: var(--muted); font-size: 12px; }
+
+.assistant-conversation-list .assistant-status { padding: 6px 8px; }
+
 .assistant-conversation-boundary {
   color: var(--muted);
   font-size: 12px;
