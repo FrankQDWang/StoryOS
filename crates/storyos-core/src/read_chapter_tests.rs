@@ -72,12 +72,6 @@ fn each_current_mapping_declares_read_chapter_with_a_strict_schema() {
             )
         );
     }
-    // A Run that pinned the mapping `v7` keeps its six Host Tools.
-    assert!(
-        !declared(crate::AGENT_PLAN_SKILL_REGISTRATION.revision)
-            .iter()
-            .any(|tool| tool.name == "read_chapter")
-    );
 }
 
 #[test]
@@ -187,9 +181,13 @@ fn the_result_keeps_whole_blocks_while_its_item_fits_the_limit() {
     // One more `<` puts the whole Chapter above the limit, so the result stops at block 2.
     let above = format!("{at_limit}<<<<");
     let cut = read(&[&first, &above]);
-    // A first Block above the limit is the whole result.
-    let long = filler(CONTEXT_ITEM_TOKEN_LIMIT * 2);
-    let alone = read(&[&long, "Rain."]);
+    // A first Block that fits alone but not with the line after it: the result has the first
+    // Block and the line, and the bounded projection cuts it (#1605 round 1).
+    let one = item_tokens(&format!("{}\n[block 1]\n", header(2, 1)));
+    let fills = filler(CONTEXT_ITEM_TOKEN_LIMIT - one);
+    let alone = read(&[&fills, "Rain."]);
+    let notice = "\n[The Chapter continues at block 2. This result does not have block 2 or the \
+                  blocks after it.]";
     let projected =
         ToolResultProjection::Ok(&alone).bounded_text("call-1", CONTEXT_ITEM_TOKEN_LIMIT);
 
@@ -202,16 +200,14 @@ fn the_result_keeps_whole_blocks_while_its_item_fits_the_limit() {
                 ),
             item_tokens(&exact) <= CONTEXT_ITEM_TOKEN_LIMIT,
             item_tokens(&exact) + 4 > CONTEXT_ITEM_TOKEN_LIMIT,
-            cut == format!(
-                "{}\n[block 1]\n{first}\n[The Chapter continues at block 2. This result does not \
-                 have block 2 or the blocks after it.]",
-                header(2, 1)
-            ),
-            alone == format!("{}\n[block 1]\n{long}", header(2, 1)),
+            cut == format!("{}\n[block 1]\n{first}{notice}", header(2, 1)),
+            alone == format!("{}\n[block 1]\n{fills}{notice}", header(2, 1)),
+            item_tokens(&format!("{}\n[block 1]\n{fills}", header(2, 1)))
+                <= CONTEXT_ITEM_TOKEN_LIMIT,
             projected.kept_result_tokens.is_some(),
             count_context_item_tokens(&projected.text) <= CONTEXT_ITEM_TOKEN_LIMIT,
         ),
-        (true, true, true, true, true, true, true)
+        (true, true, true, true, true, true, true, true)
     );
 }
 

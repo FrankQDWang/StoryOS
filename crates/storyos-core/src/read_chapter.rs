@@ -99,8 +99,8 @@ pub struct ReadableChapter {
 /// call `call_id`. The result has one header line and then whole Blocks from the first Block
 /// while the `tool_result` item of the call, with its boundary and its escape, fits in the item
 /// limit. The first Block that does not fit ends the result with one line that says where the
-/// Chapter continues. When the first Block alone does not fit, the result has only that Block,
-/// and the bounded projection cuts it with its mark (ADR 0085 section 2).
+/// Chapter continues. When the first Block does not fit with that line, the result has only the
+/// first Block and the line, and the bounded projection cuts it with its mark (ADR 0085 section 2).
 pub fn admit_chapter_read(
     chapters: &[ReadableChapter],
     chapter: i64,
@@ -153,18 +153,15 @@ pub fn admit_chapter_read(
             kept
         }
     };
-    let text = match kept {
-        // The first Block alone does not fit: the projection cuts it.
-        0 if count > 0 => format!("{}{}", header(1), block(0)),
-        _ => {
-            let blocks: String = (0..kept).map(block).collect();
-            let tail = match kept < count {
-                true => continues(kept + 1),
-                false => String::new(),
-            };
-            format!("{}{blocks}{tail}", header(kept))
-        }
+    // When the first Block does not fit with the line after it, the result still has the first
+    // Block and the line, and the bounded projection cuts the text with its mark.
+    let kept = kept.max(count.min(1));
+    let blocks: String = (0..kept).map(block).collect();
+    let tail = match kept < count {
+        true => continues(kept + 1),
+        false => String::new(),
     };
+    let text = format!("{}{blocks}{tail}", header(kept));
     Ok(crate::host_tool_result(&text))
 }
 

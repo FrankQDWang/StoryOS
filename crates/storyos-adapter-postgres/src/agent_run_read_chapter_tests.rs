@@ -5,8 +5,8 @@
 use serde_json::{Value, json};
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ApplyAuthorEditCommand,
-    ChallengeRateClass, ChapterId, ConversationSelection, CreateChapterInput, EditorSessionStore,
-    ProjectScope, UpdateChapterInput,
+    ChallengeRateClass, ChapterId, ConversationSelection, CreateChapterInput, DeleteChapterInput,
+    EditorSessionStore, ProjectScope, UpdateChapterInput,
 };
 use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, CallValidationRefusal, ChapterReadRefusal,
@@ -21,7 +21,7 @@ use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_load_skill::tests::calls;
 use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle};
 use crate::command_sequence::tests::{
-    CREATE_CHAPTER, UPDATE_CHAPTER, create_chapter, issued, update_chapter,
+    CREATE_CHAPTER, DELETE_CHAPTER, UPDATE_CHAPTER, create_chapter, issued, update_chapter,
 };
 use crate::create_agent_run::context::chapter_list_tests::{admitted, head, rename};
 use crate::create_volume_authority_tests::{NamedEdit, adjusted_edit_command};
@@ -235,14 +235,24 @@ async fn reads_settle_with_the_head_text_and_the_next_request_sends_each_as_a_ma
     let (scope, chapter_a, fog, _) = project(&store, &admin, "171", 0x1810, &sentences).await;
     let new = ConversationSelection::New;
     // Three reads in one response, the second of the same Chapter, and then one read of each
-    // refused kind: 0, a number above the count, and a value that is not an integer.
-    let message = "SCRIPT:read_chapter 1,2,1;0,3,\"2\"";
+    // refused kind: Fog, which the author removes during the second request, 0, a number above
+    // the count, and a value that is not an integer.
+    let message = "SCRIPT:read_chapter 1,2,1;2,0,3,\"2\"";
     let run_id = admitted(&store, &scope, &chapter_a, "172", message, new).await;
-    complete(&store, &admin, &scope, &run_id).await;
+    let fog_head = head(&admin, &fog).await.0;
+    let input = DeleteChapterInput {
+        chapter_id: ChapterId::new(fog.as_str()),
+        expected_tree_revision: 4,
+    };
+    let removed = issued(&store, &scope, 0x1813, &DELETE_CHAPTER, input).await;
+    let removed = AuthorAction::DeleteChapter(Box::new(removed));
+    let author = AuthorAt::new(&store, Moment::DuringRequest(2), removed);
+    settle(&store, &admin, &scope, &run_id, &author)
+        .await
+        .unwrap();
 
     let a_head = head(&admin, &chapter_a).await.0;
     let a_text = read_text(1, ("Chapter A", &chapter_a, &a_head), &sentences);
-    let fog_head = head(&admin, &fog).await.0;
     let fog_text = read_text(2, ("Fog", &fog, &fog_head), &[""]);
     let not_found = ChapterReadRefusal::NotFound;
     let malformed = CallValidationRefusal::Intake(IntakeRefusal::Malformed);
@@ -265,6 +275,7 @@ async fn reads_settle_with_the_head_text_and_the_next_request_sends_each_as_a_ma
                 settled(&a_text),
                 refused,
                 refused,
+                refused,
                 [
                     "read_chapter",
                     "refused",
@@ -285,25 +296,20 @@ async fn reads_settle_with_the_head_text_and_the_next_request_sends_each_as_a_ma
     };
     let reads = [(0, &a_text), (1, &fog_text), (2, &a_text)].map(|(i, t)| output(i, "ok", t));
     assert_eq!(outputs[1], json!(["decision", 1, reads, false]));
-    let rejected = output(5, "rejected", &malformed.result_text());
-    assert_eq!(outputs[2][2][5], rejected);
+    let rejected = output(6, "rejected", &malformed.result_text());
+    assert_eq!(outputs[2][2][6], rejected);
     // The settled reads are `manuscript_read_result` items with the ToolCall identity, and the
     // refused reads stay `tool_result` items. Each has the trust `data_only`.
     let ids = read_ids(&admin, &run_id).await;
-    let (sources, items): (Vec<Value>, Vec<Value>) = ids
-        .iter()
-        .enumerate()
-        .map(|(index, id)| match index < 3 {
-            true => (
-                json!(["data_only", "ok"]),
-                json!(["manuscript_read_result", id]),
-            ),
-            false => (json!(["data_only", "rejected"]), json!(["tool_result", id])),
+    let settled_at = |index: usize| index < 3;
+    let sources: Vec<Value> = (0..ids.len())
+        .map(|i| json!(["data_only", if settled_at(i) { "ok" } else { "rejected" }]))
+        .collect();
+    let items: Vec<Value> = (ids.iter().enumerate())
+        .map(|(i, id)| match settled_at(i) {
+            true => json!(["manuscript_read_result", id, "exact_required"]),
+            false => json!(["tool_result", id, "exact_required"]),
         })
-        .unzip();
-    let items: Vec<Value> = items
-        .into_iter()
-        .map(|item| json!([item[0], item[1], "exact_required"]))
         .collect();
     assert_eq!(
         outputs_record(&admin, &run_id, 2).await,
