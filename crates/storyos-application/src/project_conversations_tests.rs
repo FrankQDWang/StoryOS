@@ -7,7 +7,7 @@ use storyos_contracts::{
 use storyos_core::{AGENT_PLAN_STORED_RESPONSE_RETENTION as RETENTION, AgentRunStatus};
 
 use super::{
-    ProjectConversationReader, ProjectConversationRunItem, StoredProjectConversation,
+    ProjectConversationListItem, ProjectConversationReader, ProjectConversationRunItem,
     StoredProjectConversationRuns, list_project_conversations, project_conversation_label,
     read_project_conversation,
 };
@@ -39,11 +39,11 @@ impl ProjectConversationReader for FixtureReader {
         &self,
         _scope: &ProjectScope,
         limit: usize,
-    ) -> Result<Option<Vec<StoredProjectConversation>>, ProjectReadError> {
+    ) -> Result<Option<Vec<ProjectConversationListItem>>, ProjectReadError> {
         assert_eq!(limit, PROJECT_CONVERSATION_LIST_MAX_ENTRIES + 1);
-        let entry = |index| StoredProjectConversation {
+        let entry = |index| ProjectConversationListItem {
             conversation_id: format!("conversation-{index}"),
-            first_author_message: format!("message {index}"),
+            label: format!("message {index}"),
             first_run_created_at: "2026-11-16T09:30:00.000Z".to_owned(),
             newest_run_created_at: "2026-11-16T10:15:00.000Z".to_owned(),
             newest_run_status: AgentRunStatus::Completed,

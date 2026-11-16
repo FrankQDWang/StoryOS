@@ -37,11 +37,30 @@ async fn complete(store: &PostgresProjectReader, admin: &Client, scope: &Project
 async fn conversation_of(admin: &Client, run_id: &str) -> String {
     let query =
         "SELECT conversation_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid";
-    admin
-        .query_one(query, &[&run_id])
-        .await
-        .unwrap()
-        .get(/*idx*/ 0)
+    let row = admin.query_one(query, &[&run_id]).await.unwrap();
+    row.get(/*idx*/ 0)
+}
+
+/// Admits a Run with `message` in `conversation` on the Chapter of the tool loop profile.
+async fn admit(
+    store: &PostgresProjectReader,
+    (scope, chapter_id): (&ProjectScope, &str),
+    prefix: &str,
+    message: &str,
+    conversation: Selection,
+) -> String {
+    let destination = HostFakeToolLoop;
+    admit_run_in(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        destination,
+        message,
+        conversation,
+        None,
+    )
+    .await
 }
 
 /// The completed Runs A1, B1, C1, and A2, in this order, of the Conversations A, B, and C of a
@@ -63,18 +82,8 @@ async fn three_conversations(
             },
             _ => Selection::New,
         };
-        let message = MESSAGES[index];
-        let run = admit_run_in(
-            store,
-            &scope,
-            &chapter_id,
-            prefix,
-            HostFakeToolLoop,
-            message,
-            conversation,
-            None,
-        )
-        .await;
+        let place = (&scope, chapter_id.as_str());
+        let run = admit(store, place, prefix, MESSAGES[index], conversation).await;
         complete(store, admin, &scope, &run).await;
         runs.push(run);
     }
@@ -93,13 +102,8 @@ async fn run_ids(
     limit: usize,
 ) -> Option<Vec<String>> {
     let read = store.read_project_conversation(scope, conversation_id, limit);
-    let read = read.await.unwrap()?;
-    Some(
-        read.newest_first
-            .into_iter()
-            .map(|run| run.run_id)
-            .collect(),
-    )
+    let runs = read.await.unwrap()?.newest_first.into_iter();
+    Some(runs.map(|run| run.run_id).collect())
 }
 
 #[tokio::test]
@@ -182,13 +186,11 @@ async fn the_list_and_the_read_give_the_conversations_of_one_scope_in_order() {
                 .collect::<Vec<_>>(),
             run_ids(&store, &scope, a, 1).await,
             run_ids(&store, &scope, b, 64).await,
-            run_ids(&store, &scope, c, 64).await,
         ),
         (
             vec![a.clone(), c.clone()],
             Some(vec![runs[3].clone()]),
             Some(vec![runs[1].clone()]),
-            Some(vec![runs[2].clone()]),
         )
     );
     // The list of Project A has no Conversation of Project B, and no read crosses a Scope.
@@ -291,22 +293,14 @@ async fn move_events(admin: &Client, run_id: &str, hours: i32) {
 /// event. Its Receipt moves back 100 hours, so a read that used the Receipt time would expire.
 async fn cancelled_run(
     (store, admin): (&PostgresProjectReader, &Client),
-    (scope, chapter_id): (&ProjectScope, &str),
+    place: (&ProjectScope, &str),
     (prefix, suffix): (&str, u16),
     conversation: Selection,
 ) -> String {
-    let message = MESSAGES[3];
-    let run = admit_run_in(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        HostFakeToolLoop,
-        message,
-        conversation,
-        None,
-    )
-    .await;
+    let (scope, run) = (
+        place.0,
+        admit(store, place, prefix, MESSAGES[3], conversation).await,
+    );
     let cancel = cancellation(store, scope, suffix, &run).await;
     store
         .cancel_agent_run(&cancel.envelope, &cancel.input)

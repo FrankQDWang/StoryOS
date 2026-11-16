@@ -12,17 +12,6 @@ use storyos_core::{AgentRunStatus, earlier_turns_expired};
 
 use crate::{ProjectReadError, ProjectScope};
 
-/// One stored Project Conversation. The first Run and the newest Run are the first and the last
-/// Run in Run identity order. The times are the Receipt times of their `createAgentRun` commands.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StoredProjectConversation {
-    pub conversation_id: String,
-    pub first_author_message: String,
-    pub first_run_created_at: String,
-    pub newest_run_created_at: String,
-    pub newest_run_status: AgentRunStatus,
-}
-
 /// One Run of a Project Conversation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectConversationRunItem {
@@ -52,7 +41,7 @@ pub trait ProjectConversationReader: Sync {
         &self,
         scope: &ProjectScope,
         limit: usize,
-    ) -> impl Future<Output = Result<Option<Vec<StoredProjectConversation>>, ProjectReadError>> + Send;
+    ) -> impl Future<Output = Result<Option<Vec<ProjectConversationListItem>>, ProjectReadError>> + Send;
 
     /// Gives at most `limit` Runs of the Conversation, the newest first in Run identity order.
     /// Gives `None` when the Conversation is not visible in the Project Scope.
@@ -64,7 +53,9 @@ pub trait ProjectConversationReader: Sync {
     ) -> impl Future<Output = Result<Option<StoredProjectConversationRuns>, ProjectReadError>> + Send;
 }
 
-/// One entry of the Conversation list.
+/// One entry of the Conversation list. The first Run and the newest Run are the first and the last
+/// Run in Run identity order. The times are the Receipt times of their `createAgentRun` commands.
+/// The reader gives the whole first author message as `label`; the list cuts it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectConversationListItem {
     pub conversation_id: String,
@@ -117,21 +108,15 @@ pub async fn list_project_conversations(
     else {
         return Ok(None);
     };
-    let (stored, completeness) = bounded(stored, PROJECT_CONVERSATION_LIST_MAX_ENTRIES);
-    let items = stored
-        .into_iter()
-        .map(|conversation| ProjectConversationListItem {
-            label: project_conversation_label(&conversation.first_author_message),
-            conversation_id: conversation.conversation_id,
-            first_run_created_at: conversation.first_run_created_at,
-            newest_run_created_at: conversation.newest_run_created_at,
-            newest_run_status: conversation.newest_run_status,
-        })
-        .collect();
-    Ok(Some(ProjectConversationList {
+    let (mut items, completeness) = bounded(stored, PROJECT_CONVERSATION_LIST_MAX_ENTRIES);
+    for item in &mut items {
+        item.label = project_conversation_label(&item.label);
+    }
+    let list = ProjectConversationList {
         items,
         completeness,
-    }))
+    };
+    Ok(Some(list))
 }
 
 pub async fn read_project_conversation(

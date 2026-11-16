@@ -185,9 +185,8 @@ pub use project_command::{
 };
 pub use project_conversations::{
     ProjectConversationList, ProjectConversationListItem, ProjectConversationRead,
-    ProjectConversationReader, ProjectConversationRunItem, StoredProjectConversation,
-    StoredProjectConversationRuns, list_project_conversations, project_conversation_label,
-    read_project_conversation,
+    ProjectConversationReader, ProjectConversationRunItem, StoredProjectConversationRuns,
+    list_project_conversations, project_conversation_label, read_project_conversation,
 };
 pub use project_export::{
     ArchiveExportOperation, ArchiveExportRefusal, ExportOperationPage, ExportOperationProgress,

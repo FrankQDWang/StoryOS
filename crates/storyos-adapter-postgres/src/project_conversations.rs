@@ -4,8 +4,8 @@
 use std::time::{Duration, SystemTime};
 
 use storyos_application::{
-    ProjectConversationReader, ProjectConversationRunItem, ProjectReadError, ProjectScope,
-    StoredProjectConversation, StoredProjectConversationRuns,
+    ProjectConversationListItem, ProjectConversationReader, ProjectConversationRunItem,
+    ProjectReadError, ProjectScope, StoredProjectConversationRuns,
 };
 use storyos_core::AgentRunStatus;
 
@@ -27,7 +27,7 @@ impl ProjectConversationReader for PostgresProjectReader {
         &self,
         scope: &ProjectScope,
         limit: usize,
-    ) -> Result<Option<Vec<StoredProjectConversation>>, ProjectReadError> {
+    ) -> Result<Option<Vec<ProjectConversationListItem>>, ProjectReadError> {
         let limit = i64::try_from(limit).map_err(ProjectReadError::unavailable)?;
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
@@ -78,9 +78,9 @@ impl ProjectConversationReader for PostgresProjectReader {
         transaction.commit().await.map_err(read_error)?;
         rows.iter()
             .map(|row| {
-                Ok(StoredProjectConversation {
+                Ok(ProjectConversationListItem {
                     conversation_id: row.get("conversation_id"),
-                    first_author_message: row.get("first_author_message"),
+                    label: row.get("first_author_message"),
                     first_run_created_at: row.get("first_run_created_at"),
                     newest_run_created_at: row.get("newest_run_created_at"),
                     newest_run_status: status(row.get("status"))?,

@@ -22,26 +22,28 @@ pub const PROJECT_CONVERSATION_LABEL_MAX_CHARACTERS: usize = 80;
 /// The Host bound of the Runs of one Conversation read. It is an initial value.
 pub const PROJECT_CONVERSATION_RUNS_MAX_ENTRIES: usize = 64;
 
+const RESPONSES: &[(u16, &str)] = &[
+    (200, "Project Conversations of one Project"),
+    (400, "Invalid request"),
+    (401, "Authentication required"),
+    (403, "Request origin refused"),
+    (404, "Resource unavailable"),
+    (405, "Method not allowed"),
+    (409, "Active release conflict"),
+    (413, "Request too large"),
+    (415, "Unsupported content type"),
+    (422, "Request refused"),
+    (429, "Rate limited"),
+    (503, "Service unavailable"),
+];
+
 pub(super) const LIST_PROJECT_CONVERSATIONS: QueryOperation = QueryOperation {
     operation_id: "listProjectConversations",
     method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/conversations",
     request_schema: LIST_PROJECT_CONVERSATIONS_REQUEST_SCHEMA_ID,
     response_schema: LIST_PROJECT_CONVERSATIONS_RESPONSE_SCHEMA_ID,
-    responses: &[
-        (200, "Project Conversations of one Project"),
-        (400, "Invalid request"),
-        (401, "Authentication required"),
-        (403, "Request origin refused"),
-        (404, "Resource unavailable"),
-        (405, "Method not allowed"),
-        (409, "Active release conflict"),
-        (413, "Request too large"),
-        (415, "Unsupported content type"),
-        (422, "Request refused"),
-        (429, "Rate limited"),
-        (503, "Service unavailable"),
-    ],
+    responses: RESPONSES,
     fixture: "storyos.golden.listProjectConversations.positive.v1",
 };
 
@@ -51,20 +53,7 @@ pub(super) const GET_PROJECT_CONVERSATION: QueryOperation = QueryOperation {
     path: "/api/v1/projects/{project_id}/conversations/{conversation_id}",
     request_schema: GET_PROJECT_CONVERSATION_REQUEST_SCHEMA_ID,
     response_schema: GET_PROJECT_CONVERSATION_RESPONSE_SCHEMA_ID,
-    responses: &[
-        (200, "Runs of one Project Conversation"),
-        (400, "Invalid request"),
-        (401, "Authentication required"),
-        (403, "Request origin refused"),
-        (404, "Resource unavailable"),
-        (405, "Method not allowed"),
-        (409, "Active release conflict"),
-        (413, "Request too large"),
-        (415, "Unsupported content type"),
-        (422, "Request refused"),
-        (429, "Rate limited"),
-        (503, "Service unavailable"),
-    ],
+    responses: RESPONSES,
     fixture: "storyos.golden.getProjectConversation.positive.v1",
 };
 

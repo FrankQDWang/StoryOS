@@ -2064,7 +2064,7 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Runs of one Project Conversation
+          description: Project Conversations of one Project
           content:
             application/json:
               schema:
