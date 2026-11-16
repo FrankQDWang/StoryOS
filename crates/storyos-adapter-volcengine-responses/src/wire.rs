@@ -112,7 +112,8 @@ pub(crate) fn create_body(
     let mapping = request.route.mapping_revision.as_str();
     let tool_loop = match mapping {
         storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION
-        | storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION => {
+        | storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION
+        | storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION => {
             format!(
                 "{TOOL_LOOP_INSTRUCTIONS}\n\n{READ_TOOL_RESULT_INSTRUCTION}\n\n\
                  {TOOL_RESULT_STUB_INSTRUCTION}"
@@ -140,7 +141,12 @@ pub(crate) fn create_body(
         .iter()
         .any(|item| item.source_class == ContextSourceClass::SkillCatalog);
     let instructions = match (
-        skill && mapping == storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION,
+        skill
+            && [
+                storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION,
+                storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION,
+            ]
+            .contains(&mapping),
         catalog,
     ) {
         (true, true) => format!(
@@ -289,7 +295,8 @@ pub(crate) fn summary_body(
         .collect();
     let summary = match mapping_revision {
         storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION
-        | storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION => {
+        | storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION
+        | storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION => {
             format!("{SUMMARY_INSTRUCTIONS}\n\n{SUMMARY_TOPICS_INSTRUCTION}")
         }
         _ => SUMMARY_INSTRUCTIONS.to_owned(),
@@ -327,7 +334,17 @@ fn request_text(request: &CreateRequest) -> String {
             | ContextSourceClass::InstructionBinding
             | ContextSourceClass::ConversationSummary
             | ContextSourceClass::ToolResult
-            | ContextSourceClass::SkillResource => return None,
+            | ContextSourceClass::SkillResource
+            | ContextSourceClass::ChapterList
+            | ContextSourceClass::ManuscriptReadResult
+            | ContextSourceClass::ManuscriptSearchResult
+            | ContextSourceClass::MemoryIndex
+            | ContextSourceClass::MemoryReadResult
+            | ContextSourceClass::MemorySearchResult
+            | ContextSourceClass::MemoryCaptureInput
+            | ContextSourceClass::MemoryDeleteMarks
+            | ContextSourceClass::MemoryEntries
+            | ContextSourceClass::MemoryObservations => return None,
         };
         Some(format!("{heading}:\n{}", item.content))
     }));
@@ -352,6 +369,18 @@ fn request_text(request: &CreateRequest) -> String {
             | ContextSourceClass::SkillResource
             | ContextSourceClass::SkillCatalog
             | ContextSourceClass::SkillInstruction => continue,
+            // No item of a Stage 7 class is selected yet. The ticket that selects one adds its
+            // section to the mapping `v8` (ADR 0093 section 3).
+            ContextSourceClass::ChapterList
+            | ContextSourceClass::ManuscriptReadResult
+            | ContextSourceClass::ManuscriptSearchResult
+            | ContextSourceClass::MemoryIndex
+            | ContextSourceClass::MemoryReadResult
+            | ContextSourceClass::MemorySearchResult
+            | ContextSourceClass::MemoryCaptureInput
+            | ContextSourceClass::MemoryDeleteMarks
+            | ContextSourceClass::MemoryEntries
+            | ContextSourceClass::MemoryObservations => continue,
             ContextSourceClass::AuthorInstruction => "Author request",
             ContextSourceClass::WorkingTarget => {
                 sections.extend(skills.take().into_iter().flatten());

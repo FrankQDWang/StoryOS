@@ -290,12 +290,12 @@ async fn a_binding_with_earlier_bounds_or_an_earlier_registration_gets_new_recor
         .unwrap();
 }
 
-/// ADR 0089 section 3 and ADR 0053: an AgentRun that pinned `fa20` refuses with Registration
-/// drift after the deployment offers `fa21`, and its Project gets new binding records with `fa21`
-/// at its next `createAgentRun`.
+/// ADR 0094, ADR 0095, and ADR 0053: an AgentRun that pinned `fa21` refuses with Registration
+/// drift after the deployment offers `fa22`, and with `model_use_binding_stale` after its own
+/// Project binds `fa22` at its next `createAgentRun`.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_run_that_pinned_fa20_refuses_with_drift_after_the_deployment_offers_fa21() {
+async fn a_run_that_pinned_fa21_refuses_with_drift_after_the_deployment_offers_fa22() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -310,8 +310,8 @@ async fn a_run_that_pinned_fa20_refuses_with_drift_after_the_deployment_offers_f
         "Help with this passage.",
     )
     .await;
-    let pinned = storyos_core::AGENT_PLAN_READ_RESULT_REGISTRATION.revision;
-    // The Project bound `fa20` before the deployment offered `fa21`.
+    let pinned = storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision;
+    // The Project bound `fa21` before the deployment offered `fa22`.
     admin
         .batch_execute(&format!(
             "INSERT INTO storyos.model_registration_revisions
@@ -342,7 +342,7 @@ async fn a_run_that_pinned_fa20_refuses_with_drift_after_the_deployment_offers_f
         .unwrap()
         .unwrap();
 
-    // The first createAgentRun of another Project on `fa21` makes `fa21` the head.
+    // The first createAgentRun of another Project on `fa22` makes `fa22` the head.
     let (other_scope, _, _) = queued_run(&store, "b05", agent_plan()).await;
     let drifted = refusal(&store, &admin, &scope, &drifted_run).await;
     admit_run(

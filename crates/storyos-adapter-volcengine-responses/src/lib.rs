@@ -83,6 +83,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
             storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
             storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION,
         ]
         .contains(&route.mapping_revision.as_str());
         if !probe && !tool_loop {

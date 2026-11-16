@@ -23,7 +23,7 @@ use crate::research_source::tests::calls_stream;
 use crate::set_current_chapter_authority_tests::open_session_request;
 
 const MODEL_POST: &str = "POST /api/plan/v3/responses HTTP/1.1";
-const V4: &str = "project_writing_assistance_v4";
+const V5: &str = "project_writing_assistance_v5";
 const EDITED: &str = "The tide came in at dawn.";
 const SECOND_SEARCH: &str = r#"{"query":"moon phases of 1890","result_count":null}"#;
 const SECOND_RESULT: &str = "The moon was full on the third night of 1890.";
@@ -323,14 +323,14 @@ async fn ok_sources(admin: &Client, run_id: &str) -> Vec<Value> {
 fn request_step() -> Value {
     json!({"position": 0, "role": "decision", "decision": "tool_request",
            "previous_response_id": null, "input": [{"role": "user"}],
-           "cause": null, "tool_results": null, "grant_scope": V4})
+           "cause": null, "tool_results": null, "grant_scope": V5})
 }
 
 /// The continuation RunStep that answers `resp_{prefix}` with `outputs`.
 fn continuation_step(prefix: &str, decision: &str, outputs: Value, source: &Value) -> Value {
     json!({"position": 1, "role": "decision", "decision": decision,
            "previous_response_id": format!("resp_{prefix}"), "input": outputs,
-           "cause": "tool_result_continuation", "tool_results": [source], "grant_scope": V4})
+           "cause": "tool_result_continuation", "tool_results": [source], "grant_scope": V5})
 }
 
 /// The closing RunStep at `position` that answers the `finish` call of `reference`. Its
@@ -362,7 +362,7 @@ async fn closing_step(
            "call_id": call_id, "output": format!(
                r#"<tool_result source="{call_id}" state="empty">The tool answered with no entry.</tool_result>"#
            )}],
-           "cause": "tool_result_continuation", "tool_results": sources, "grant_scope": V4})
+           "cause": "tool_result_continuation", "tool_results": sources, "grant_scope": V5})
 }
 
 /// A completed Run whose active RunStep is its last step.
@@ -675,9 +675,9 @@ async fn a_grant_scope_without_tool_results_refuses_the_continuation_and_the_nex
                    "position": 1, "steps": [request_step()]}),
             vec![MODEL_POST.to_owned()],
             false,
-            Some(V4.to_owned()),
+            Some(V5.to_owned()),
             json!("completed"),
-            json!(V4),
+            json!(V5),
             vec![MODEL_POST.to_owned(); 2],
         )
     );
@@ -782,7 +782,7 @@ async fn calls_of_two_run_steps_reenter_in_item_order_in_incremental_and_full_re
                "previous_response_id": previous, "input": input,
                "cause": "tool_result_continuation",
                "tool_results": sources[..usize::try_from(position).unwrap()],
-               "grant_scope": V4})
+               "grant_scope": V5})
     };
 
     assert_eq!(

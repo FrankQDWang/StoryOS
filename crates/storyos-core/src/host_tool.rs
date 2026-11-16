@@ -43,10 +43,9 @@ pub const READ_RESULT_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolReg
     ..FIRST_HOST_TOOL_REGISTRATION
 };
 
-/// The current Host Tools: the four Host Tools of the mapping `v6`, `load_skill`, and
-/// `read_skill_resource` (ADR 0089 section 3). The Tool Exposure has the two Skill Tools only for
-/// a Run whose pinned catalog has a Skill.
-pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
+/// The four Host Tools of the mapping `v6`, `load_skill`, and `read_skill_resource` (ADR 0089
+/// section 3). The mapping `v7` keeps them.
+pub const SKILL_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     revision: "018f0000-0000-7001-8000-0000000e0103",
     tools: &[
         &PROPOSE_EDIT_TOOL_SPEC,
@@ -59,14 +58,23 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     ..FIRST_HOST_TOOL_REGISTRATION
 };
 
+/// The current Host Tools: the six Host Tools of the mapping `v7`, to which the Stage 7 tickets
+/// add their Tools (ADR 0094, ADR 0095). `ExposureFacts::has_host_tool` decides which of them a
+/// RunStep declares.
+pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
+    revision: "018f0000-0000-7001-8000-0000000e0104",
+    ..SKILL_HOST_TOOL_REGISTRATION
+};
+
 impl ModelRegistration {
-    /// The Host Tools that the request mapping declares. The Agent Plan mapping `v7` and the fake
-    /// tool loop mapping declare the current Host Tools, the mapping `v6` keeps four, and each
-    /// earlier mapping keeps the first three (ADR 0053).
+    /// The Host Tools that the request mapping declares. The Agent Plan mapping `v8` and the fake
+    /// tool loop mapping declare the current Host Tools, the mapping `v7` keeps six, the mapping
+    /// `v6` keeps four, and each earlier mapping keeps the first three (ADR 0053).
     pub fn host_tools(&self) -> &'static HostToolRegistration {
         match self.mapping_revision {
-            crate::AGENT_PLAN_SKILL_MAPPING_REVISION
+            crate::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
             | crate::HOST_FAKE_TOOL_LOOP_MAPPING_REVISION => &HOST_TOOL_REGISTRATION,
+            crate::AGENT_PLAN_SKILL_MAPPING_REVISION => &SKILL_HOST_TOOL_REGISTRATION,
             crate::AGENT_PLAN_READ_RESULT_MAPPING_REVISION => &READ_RESULT_HOST_TOOL_REGISTRATION,
             _ => &FIRST_HOST_TOOL_REGISTRATION,
         }
@@ -74,9 +82,10 @@ impl ModelRegistration {
 }
 
 /// Each Host Tool Registration revision of this build.
-pub const HOST_TOOL_REGISTRATIONS: [&HostToolRegistration; 3] = [
+pub const HOST_TOOL_REGISTRATIONS: [&HostToolRegistration; 4] = [
     &FIRST_HOST_TOOL_REGISTRATION,
     &READ_RESULT_HOST_TOOL_REGISTRATION,
+    &SKILL_HOST_TOOL_REGISTRATION,
     &HOST_TOOL_REGISTRATION,
 ];
 

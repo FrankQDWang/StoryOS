@@ -134,21 +134,32 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             skill_catalog: true,
         })
     };
-    // The mapping `v7` and the fake tool loop mapping declare `load_skill` and
+    let without_skill = |registration| {
+        let mut exposure = host(registration);
+        exposure.tools.retain(|tool| {
+            !matches!(
+                tool.spec.operation,
+                crate::ToolOperation::LoadSkill | crate::ToolOperation::ReadSkillResource
+            )
+        });
+        exposure
+    };
+    // The mapping `v8` and the fake tool loop mapping declare `…0e0104`, and a Run that pinned
+    // the Registration of the mapping `v7` keeps `…0e0103`. Each declares `load_skill` and
     // `read_skill_resource` only for a Run whose pinned catalog has a Skill (ADR 0089 section 3).
-    let mut without_skill = host(&HOST_TOOL_REGISTRATION);
-    without_skill.tools.retain(|tool| {
-        !matches!(
-            tool.spec.operation,
-            crate::ToolOperation::LoadSkill | crate::ToolOperation::ReadSkillResource
-        )
-    });
-    for revision in [
-        HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
-        AGENT_PLAN_REGISTRATION.revision,
+    for (revision, registration) in [
+        (
+            HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
+            &HOST_TOOL_REGISTRATION,
+        ),
+        (AGENT_PLAN_REGISTRATION.revision, &HOST_TOOL_REGISTRATION),
+        (
+            crate::AGENT_PLAN_SKILL_REGISTRATION.revision,
+            &crate::SKILL_HOST_TOOL_REGISTRATION,
+        ),
     ] {
-        assert_eq!(with_catalog(revision), host(&HOST_TOOL_REGISTRATION));
-        assert_eq!(exposure(&[], revision), without_skill);
+        assert_eq!(with_catalog(revision), host(registration));
+        assert_eq!(exposure(&[], revision), without_skill(registration));
     }
     // A Run that pinned the Registration of the mapping `v6` keeps four Host Tools, and a Run
     // that pinned the Registration of the mapping `v5` keeps three (ADR 0093).
@@ -188,11 +199,15 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
     assert_eq!(
         (
             HOST_TOOL_REGISTRATION.revision,
-            crate::READ_RESULT_HOST_TOOL_REGISTRATION.revision
+            crate::SKILL_HOST_TOOL_REGISTRATION.revision,
+            crate::READ_RESULT_HOST_TOOL_REGISTRATION.revision,
+            HOST_TOOL_REGISTRATION.tools,
         ),
         (
+            "018f0000-0000-7001-8000-0000000e0104",
             "018f0000-0000-7001-8000-0000000e0103",
-            "018f0000-0000-7001-8000-0000000e0102"
+            "018f0000-0000-7001-8000-0000000e0102",
+            crate::SKILL_HOST_TOOL_REGISTRATION.tools,
         )
     );
     let declared = host(&HOST_TOOL_REGISTRATION);
