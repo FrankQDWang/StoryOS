@@ -51,13 +51,13 @@ async fn a_search_finds_the_current_entries_and_the_request_sends_its_result() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, first) = queued(&store, "d41").await;
+    let (scope, chapter_id, first) = queued(&store, "7f1").await;
     complete(&store, &admin, &scope, &first).await;
     let versions = [(1, 1, 1, "current", "character", "林雪", "渡口船工。")];
     write_versions(&admin, &scope, &versions).await;
     let message = "SCRIPT:search_memory 七结";
     let new = ConversationSelection::New;
-    let run_id = admitted(&store, &scope, &chapter_id, "d42", message, new).await;
+    let run_id = admitted(&store, &scope, &chapter_id, "7f2", message, new).await;
     let added = [(
         2,
         1,
@@ -126,9 +126,9 @@ async fn each_run_searches_its_own_project_and_no_match_and_a_refused_query_have
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, first) = queued(&store, "d43").await;
+    let (scope, chapter_id, first) = queued(&store, "7f3").await;
     complete(&store, &admin, &scope, &first).await;
-    let (other, other_chapter, other_first) = queued(&store, "d45").await;
+    let (other, other_chapter, other_first) = queued(&store, "7f5").await;
     complete(&store, &admin, &other, &other_first).await;
     let versions = [(1, 1, 1, "current", "foreshadowing", "铜铃", "铃在渡口响。")];
     write_versions(&admin, &scope, &versions).await;
@@ -137,13 +137,13 @@ async fn each_run_searches_its_own_project_and_no_match_and_a_refused_query_have
     let new = || ConversationSelection::New;
     let mut runs = Vec::new();
     for (scope, chapter, prefix, message) in [
-        (&scope, &chapter_id, "d44", "SCRIPT:search_memory 铜铃"),
-        (&other, &other_chapter, "d46", "SCRIPT:search_memory 铜铃"),
-        (&scope, &chapter_id, "d47", "SCRIPT:search_memory 灯塔"),
+        (&scope, &chapter_id, "7f4", "SCRIPT:search_memory 铜铃"),
+        (&other, &other_chapter, "7f6", "SCRIPT:search_memory 铜铃"),
+        (&scope, &chapter_id, "7f7", "SCRIPT:search_memory 灯塔"),
         (
             &other,
             &other_chapter,
-            "d48",
+            "7f8",
             r#"SCRIPT:refuse search_memory {"query":""}"#,
         ),
     ] {
@@ -227,7 +227,7 @@ async fn a_compaction_after_a_large_search_keeps_the_exact_bounded_result() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, first) = queued(&store, "d49").await;
+    let (scope, chapter_id, first) = queued(&store, "7f9").await;
     complete(&store, &admin, &scope, &first).await;
     let fields: Vec<(String, String)> = (1..=200)
         .map(|number| {
@@ -256,7 +256,7 @@ async fn a_compaction_after_a_large_search_keeps_the_exact_bounded_result() {
          SCRIPT:search_memory 铜铃"
     );
     let new = ConversationSelection::New;
-    let run_id = admitted(&store, &scope, &chapter_id, "d4a", &message, new).await;
+    let run_id = admitted(&store, &scope, &chapter_id, "7fa", &message, new).await;
     complete(&store, &admin, &scope, &run_id).await;
 
     let (search, text): (String, String) = {
