@@ -12,13 +12,15 @@ use storyos_application::{
 };
 use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, EmbeddingInput, EmbeddingRegistration,
-    EmbeddingSettlement, PassageBlock, SelectionSnapshot, UTF16_COORDINATE_PROFILE, cut_passages,
+    EmbeddingSettlement, PassageBlock, SelectionSnapshot, TransitionOutcome,
+    UTF16_COORDINATE_PROFILE, cut_passages,
 };
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::stores;
 use crate::agent_run_finish_rule::tests::complete;
+use crate::command_sequence::tests::titled_chapter;
 use crate::create_volume_authority_tests::{NamedEdit, adjusted_edit_command};
 use crate::delete_structure_tests::settle_delete_chapter;
 use crate::project_embedding_binding::tests::{FAKE, embedding_project};
@@ -466,15 +468,26 @@ async fn a_read_in_one_project_scope_gets_only_its_rows_and_cannot_name_another_
         Vec::<String>::new()
     );
 
-    // A Chapter that is not live keeps no row.
-    settle_delete_chapter(
+    // A Chapter that is not live keeps no row. A second Chapter lets the first go.
+    let volume: String = admin
+        .query_one(
+            "SELECT parent_volume_id::text FROM storyos.manuscript_objects
+              WHERE manuscript_object_id = $1::text::uuid",
+            &[&own.chapter_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    titled_chapter(&store, &own.scope, "28e2", &volume, "Chapter B", 3).await;
+    let deleted = settle_delete_chapter(
         &store,
         &own.scope,
-        "28e2",
+        "28e3",
         &own.chapter_id,
-        /*expected_tree_revision*/ 2,
+        /*expected_tree_revision*/ 4,
     )
     .await;
+    assert!(matches!(deleted.outcome, TransitionOutcome::Applied(_)));
     assert_eq!(
         index(&store, &FakeEmbeddings, &own).await,
         PassageIndexResult::ChapterNotLive { removed: 3 }
