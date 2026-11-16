@@ -75,6 +75,22 @@ export type UpdateProjectAssistanceEffect = { "kind": "initialized", availabilit
 
 export type UpdateProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, assistance: ProjectAssistanceBinding, effect: UpdateProjectAssistanceEffect, };
 
+export type ProjectInstruction = { instruction_revision_id: string, revision: string, text: string, };
+
+export type GetProjectInstructionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, instruction: ProjectInstruction | null, };
+
+export type UpdateProjectInstructionInput = { text: string, expected_instruction_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type UpdateProjectInstructionRequest = { command_schema: string, update_project_instruction_input: UpdateProjectInstructionInput, };
+
+export type UpdateProjectInstructionNoEffectReason = "text_unchanged";
+
+export type UpdateProjectInstructionConflictReason = "stale_instruction_revision";
+
+export type UpdateProjectInstructionEffect = { "kind": "authoritative_applied", instruction_revision_id: string, revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: UpdateProjectInstructionNoEffectReason, } | { "kind": "conflicted", reason: UpdateProjectInstructionConflictReason, };
+
+export type UpdateProjectInstructionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UpdateProjectInstructionEffect, };
+
 export type CreateEditorSessionRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type EditorReadOnlyReason = "secondary_session" | "superseded_by_takeover" | "binding_invalid";
@@ -203,7 +219,7 @@ export type AuthorEditProposalTarget = { proposal_id: string, operation_id: stri
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, proposal_target?: AuthorEditProposalTarget | null, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "updateProjectInstruction" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -690,6 +706,9 @@ export declare function updateProject(options: StoryOSQueryOptions & { projectId
 export declare function getProjectAssistance(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectAssistanceResponse>;
 export declare function digestUpdateProjectAssistance(request: UpdateProjectAssistanceRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function updateProjectAssistance(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectAssistanceRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectAssistanceResponse>;
+export declare function getProjectInstruction(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectInstructionResponse>;
+export declare function digestUpdateProjectInstruction(request: UpdateProjectInstructionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function updateProjectInstruction(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectInstructionRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectInstructionResponse>;
 export declare function digestCreateEditorSession(request: CreateEditorSessionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;

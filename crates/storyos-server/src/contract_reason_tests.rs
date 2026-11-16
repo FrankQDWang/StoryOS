@@ -13,9 +13,10 @@ use storyos_core::{
     ReplanProposalRefusal, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
     SetCurrentChapterRefusal, SteerAgentRunConflict, SteerAgentRunNoEffect, UpdateChapterConflict,
     UpdateChapterNoEffect, UpdateChapterRefusal, UpdateProjectAssistanceConflict,
-    UpdateProjectAssistanceNoEffect, UpdateProjectConflict, UpdateProjectNoEffect,
-    UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal, WithdrawProposalConflict,
-    WithdrawProposalNoEffect, WithdrawProposalRefusal,
+    UpdateProjectAssistanceNoEffect, UpdateProjectConflict, UpdateProjectInstructionConflict,
+    UpdateProjectInstructionNoEffect, UpdateProjectNoEffect, UpdateVolumeConflict,
+    UpdateVolumeNoEffect, UpdateVolumeRefusal, WithdrawProposalConflict, WithdrawProposalNoEffect,
+    WithdrawProposalRefusal,
 };
 
 use storyos_core::{UndoLatestAuthorActionConflict, UndoLatestAuthorActionUnavailable};
@@ -158,6 +159,14 @@ fn every_project_setting_reason_maps_to_its_public_reason() {
     assert_maps(vec![(
         UpdateProjectAssistanceConflict::StaleAssistanceRevision,
         contracts::UpdateProjectAssistanceConflictReason::StaleAssistanceRevision,
+    )]);
+    assert_maps(vec![(
+        UpdateProjectInstructionNoEffect::TextUnchanged,
+        contracts::UpdateProjectInstructionNoEffectReason::TextUnchanged,
+    )]);
+    assert_maps(vec![(
+        UpdateProjectInstructionConflict::StaleInstructionRevision,
+        contracts::UpdateProjectInstructionConflictReason::StaleInstructionRevision,
     )]);
 }
 

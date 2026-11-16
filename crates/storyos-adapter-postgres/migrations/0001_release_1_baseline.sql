@@ -35,6 +35,7 @@ CREATE DOMAIN storyos.command_kind AS text CHECK (VALUE IN (
     'updateChapter',
     'updateProject',
     'updateProjectAssistance',
+    'updateProjectInstruction',
     'updateVolume',
     'withdrawProposal'
 ));
@@ -53,6 +54,7 @@ CREATE DOMAIN storyos.event_kind AS text CHECK (VALUE IN (
     'project_assistance_updated',
     'project_created',
     'project_export_settled',
+    'project_instruction_updated',
     'project_updated',
     'volume_created',
     'volume_deleted',
@@ -611,7 +613,7 @@ CREATE TABLE storyos.author_command_admissions (
             AND local_intent_sequence IS NULL
             AND challenge_consumed_at IS NOT NULL
             AND challenge_expires_at IS NOT NULL)
-        OR (command_kind = ANY (ARRAY['deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text])
+        OR (command_kind = ANY (ARRAY['deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text])
             AND action_class = 'explicit_project_command'::text
             AND editor_session_id IS NULL
             AND writer_generation IS NULL
@@ -853,7 +855,7 @@ BEGIN
 END
 $$;
 
-CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN (((new.action_class <> 'agent_run_control'::text) AND (new.command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission();
+CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN (((new.action_class <> 'agent_run_control'::text) AND (new.command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission();
 
 CREATE TABLE storyos.scope_counters (
     owner_user_id uuid NOT NULL,
@@ -974,7 +976,7 @@ CREATE TABLE storyos.domain_receipts (
             AND array_position(draft_artifact_refs, NULL::text) IS NULL
             AND array_position(artifact_lifecycle_event_refs, NULL::text) IS NULL
             AND array_position(condition_refs, NULL::text) IS NULL
-            AND (((command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR ((command_kind = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0))))
+            AND (((command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR ((command_kind = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0))))
         OR (command_kind = 'replanProposal'::text
             AND cardinality(expected_heads) = 1
             AND cardinality(prior_heads) <= 1
@@ -1362,6 +1364,25 @@ CREATE TABLE storyos.domain_receipts (
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
             AND (result_payload ->> 'reason'::text) = 'stale_assistance_revision'::text
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'updateProjectInstruction'::text
+            AND result_kind = 'authoritative_applied'::text
+            AND result_payload = '{}'::jsonb
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'updateProjectInstruction'::text
+            AND result_kind = 'no_effect'::text
+            AND result_payload ? 'reason'::text
+            AND (result_payload - 'reason'::text) = '{}'::jsonb
+            AND (result_payload ->> 'reason'::text) = 'text_unchanged'::text
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'updateProjectInstruction'::text
+            AND result_kind = 'conflicted'::text
+            AND result_payload ? 'reason'::text
+            AND (result_payload - 'reason'::text) = '{}'::jsonb
+            AND (result_payload ->> 'reason'::text) = 'stale_instruction_revision'::text
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'createAgentRun'::text
@@ -1940,6 +1961,13 @@ CREATE TABLE storyos.project_activity_event_payloads (
             AND (payload ->> 'availability'::text) = ANY (ARRAY['available'::text, 'unavailable'::text])
             AND jsonb_typeof((payload -> 'revision'::text)) = 'string'::text
             AND (((payload - 'kind'::text) - 'availability'::text) - 'revision'::text) = '{}'::jsonb)
+        OR (jsonb_typeof(payload) = 'object'::text
+            AND event_kind = 'project_instruction_updated'::text
+            AND receipt_result_kind = 'authoritative_applied'::text
+            AND (payload ->> 'kind'::text) = 'project_instruction_updated'::text
+            AND jsonb_typeof((payload -> 'instruction_revision_id'::text)) = 'string'::text
+            AND jsonb_typeof((payload -> 'revision'::text)) = 'string'::text
+            AND (((payload - 'kind'::text) - 'instruction_revision_id'::text) - 'revision'::text) = '{}'::jsonb)
         OR (jsonb_typeof(payload) = 'object'::text
             AND event_kind = 'agent_run_created'::text
             AND receipt_result_kind = 'authoritative_applied'::text
@@ -2522,6 +2550,30 @@ BEGIN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'updateProjectAssistance with zero availability effect cannot have an authority or Activity relation';
+    END IF;
+
+  ELSIF scoped_command_kind = 'updateProjectInstruction' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF (activity_count, action_count, commit_count, revision_envelope_count,
+          payload_count)
+           <> (0, 0, 0, 0, 1)
+         OR payload_event_kind IS DISTINCT FROM 'project_instruction_updated' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'updateProjectInstruction applied requires one instruction Activity and zero manuscript authority';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'updateProjectInstruction with zero text effect cannot have an authority or Activity relation';
     END IF;
 
   ELSIF scoped_command_kind = 'createAgentRun' THEN
@@ -3792,6 +3844,29 @@ ALTER TABLE storyos.project_policy_revisions FORCE ROW LEVEL SECURITY;
 CREATE POLICY project_policy_revisions_exact_scope ON storyos.project_policy_revisions USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
 
 GRANT SELECT,INSERT ON TABLE storyos.project_policy_revisions TO storyos_runtime;
+
+CREATE TABLE storyos.project_instruction_revisions (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    instruction_revision_id uuid NOT NULL,
+    revision numeric(20,0) NOT NULL,
+    text text NOT NULL,
+    receipt_id uuid NOT NULL,
+    CONSTRAINT project_instruction_revisions_revision_check CHECK (((revision >= (1)::numeric) AND (revision <= '18446744073709551615'::numeric))),
+    CONSTRAINT project_instruction_revisions_pkey PRIMARY KEY (owner_user_id, project_id, revision),
+    CONSTRAINT project_instruction_revisions_identity_key UNIQUE (owner_user_id, project_id, instruction_revision_id),
+    CONSTRAINT project_instruction_revisions_receipt_key UNIQUE (owner_user_id, project_id, receipt_id),
+    CONSTRAINT project_instruction_revisions_project_fkey FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL,
+    CONSTRAINT project_instruction_revisions_receipt_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL
+);
+
+ALTER TABLE storyos.project_instruction_revisions ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.project_instruction_revisions FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY project_instruction_revisions_exact_scope ON storyos.project_instruction_revisions USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.project_instruction_revisions TO storyos_runtime;
 
 -- Agents, Conversations, and Agent Runs
 

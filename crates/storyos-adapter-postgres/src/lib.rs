@@ -41,6 +41,10 @@ mod recovery_visibility_proof_tests;
 mod project_settings_tests;
 
 #[cfg(test)]
+#[path = "project_instruction_tests.rs"]
+mod project_instruction_tests;
+
+#[cfg(test)]
 #[path = "create_agent_run_tests.rs"]
 mod create_agent_run_tests;
 
@@ -191,6 +195,7 @@ mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
 mod update_project_assistance;
+mod update_project_instruction;
 mod update_volume;
 mod validation_history;
 mod volume_storage_order;
@@ -831,6 +836,20 @@ impl ProjectReader for PostgresProjectReader {
                 .await?;
         transaction.commit().await.map_err(read_error)?;
         Ok(assistance)
+    }
+
+    async fn read_project_instruction(
+        &self,
+        scope: &ProjectScope,
+    ) -> Result<Option<storyos_application::ProjectInstructionRevision>, ProjectReadError> {
+        let mut client = self.connect().await?;
+        let transaction = client.transaction().await.map_err(read_error)?;
+        set_scope(&transaction, scope).await?;
+        let instruction =
+            crate::update_project_instruction::read_current_revision(transaction.client(), scope)
+                .await?;
+        transaction.commit().await.map_err(read_error)?;
+        Ok(instruction)
     }
 }
 

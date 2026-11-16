@@ -72,6 +72,7 @@ mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
 mod update_project_assistance;
+mod update_project_instruction;
 mod update_volume;
 mod withdraw_proposal;
 
@@ -380,6 +381,11 @@ pub use update_project_assistance::{
     AssistanceAvailability, AssistanceBindingPresence, UpdateProjectAssistance,
     UpdateProjectAssistanceApplied, UpdateProjectAssistanceConflict,
     UpdateProjectAssistanceNoEffect, UpdateProjectAssistanceResult, update_project_assistance,
+};
+pub use update_project_instruction::{
+    UpdateProjectInstruction, UpdateProjectInstructionApplied, UpdateProjectInstructionConflict,
+    UpdateProjectInstructionNoEffect, UpdateProjectInstructionRefusal,
+    UpdateProjectInstructionResult, update_project_instruction,
 };
 pub use update_volume::{
     UpdateVolume, UpdateVolumeApplied, UpdateVolumeConflict, UpdateVolumeNoEffect,

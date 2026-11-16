@@ -21,6 +21,8 @@ mod editor_session_rows;
 mod export_rows;
 #[path = "release1_operation_rows_generation.rs"]
 mod generation_rows;
+#[path = "release1_operation_rows_project_instruction.rs"]
+mod project_instruction_rows;
 #[path = "release1_operation_rows_project.rs"]
 mod project_rows;
 #[path = "release1_operation_rows_project_settings.rs"]
@@ -338,6 +340,8 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &project_settings_rows::UPDATE_PROJECT_ROW,
     &project_settings_rows::GET_PROJECT_ASSISTANCE_ROW,
     &project_settings_rows::UPDATE_PROJECT_ASSISTANCE_ROW,
+    &project_instruction_rows::GET_PROJECT_INSTRUCTION_ROW,
+    &project_instruction_rows::UPDATE_PROJECT_INSTRUCTION_ROW,
     &editor_session_rows::CREATE_EDITOR_SESSION_ROW,
     &editor_session_rows::GET_EDITOR_SESSION_ROW,
     &editor_session_rows::TAKE_OVER_PROJECT_WRITER_ROW,

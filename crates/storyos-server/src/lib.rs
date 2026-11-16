@@ -68,6 +68,7 @@ mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
 mod update_project_assistance;
+mod update_project_instruction;
 mod update_volume;
 mod web_assets;
 mod web_host;
@@ -131,6 +132,7 @@ use undo_latest_author_action::undo_latest_author_action;
 use update_chapter::update_chapter;
 use update_project::update_project;
 use update_project_assistance::{get_project_assistance, update_project_assistance};
+use update_project_instruction::{get_project_instruction, update_project_instruction};
 use update_volume::update_volume;
 use withdraw_proposal::withdraw_proposal;
 
@@ -332,6 +334,17 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             .on(
                 method_filter(contracts::UPDATE_PROJECT_ASSISTANCE_METHOD),
                 update_project_assistance,
+            ),
+        )
+        .route(
+            contracts::GET_PROJECT_INSTRUCTION_PATH,
+            routing::on(
+                method_filter(contracts::GET_PROJECT_INSTRUCTION_METHOD),
+                get_project_instruction,
+            )
+            .on(
+                method_filter(contracts::UPDATE_PROJECT_INSTRUCTION_METHOD),
+                update_project_instruction,
             ),
         )
         .route(

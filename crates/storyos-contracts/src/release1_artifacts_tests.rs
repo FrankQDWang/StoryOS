@@ -730,6 +730,7 @@ fn assert_receipt_sequence_documents(generated: &GeneratedFiles) {
             "update-chapter",
             // The sort order of the fixture paths puts this file before `update-project.json`.
             "update-project-assistance",
+            "update-project-instruction",
             "update-project",
             "update-volume",
         ]

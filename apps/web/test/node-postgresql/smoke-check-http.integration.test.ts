@@ -221,6 +221,17 @@ const COMMANDS: CommandRows = {
       } } };
     },
     expected: { effect: { kind: "initialized", availability: "available", revision: "1" } },  },
+  updateProjectInstruction: {
+    arrange: async () => {
+      const project = await createProject(server, { title: "Smoke Instruction Novel" });
+      return { project, input: { request: {
+        command_schema: "storyos.command.update-project-instruction.request.v1",
+        update_project_instruction_input: { text: "Smoke instruction.", expected_instruction_revision: "0",
+          ...project.binding() },
+      } } };
+    },
+    expected: { effect: { kind: "authoritative_applied", revision: "1" } },
+  },
   createEditorSession: {
     arrange: async () => {
       const project = await createStory(server, { title: "Smoke Session Novel" });
@@ -538,6 +549,9 @@ const READS: Record<string, ReadRow> = {
   getProject: { call: ({ story }, fetchImpl) => client.getProject({ ...scope(story), fetchImpl }) },
   getProjectAssistance: {
     call: ({ story }, fetchImpl) => client.getProjectAssistance({ ...scope(story), fetchImpl }),
+  },
+  getProjectInstruction: {
+    call: ({ story }, fetchImpl) => client.getProjectInstruction({ ...scope(story), fetchImpl }),
   },
   listSkills: { call: ({ story }, fetchImpl) => client.listSkills({ ...scope(story), fetchImpl }) },
   getEditorSession: {
