@@ -65,6 +65,8 @@ One ticket answers the open points before a ticket builds the hybrid search:
 
 The probe sends its live requests on a path that the ticket names before its dispatch, in the rules of the live model requests of [Delivery](../agents/delivery.md). When the probe fails for the Volcengine model, an amendment of this ADR selects a local model. The study names `Qwen3-Embedding-0.6B` and `bge-m3` as candidates.
 
+The probe of 2026-11-16 answered these points ([record](../research/embedding-and-pgvector-probe-2026-11-16.md)). The Volcengine model works on the route of the plan, so no local model is selected.
+
 ## Considered options
 
 - One search that always uses the vector side was rejected by the author. The keyword search is cheaper and answers most questions.

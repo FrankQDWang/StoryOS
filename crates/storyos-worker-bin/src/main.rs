@@ -1,10 +1,12 @@
 //! The StoryOS Worker binary: the Worker loop with the PostgreSQL store, the fake and Agent Plan
 //! adapters, and the credential resolver of the Worker settings. `--discover-exa` runs one
-//! `Discover` exchange of the MCP client adapter.
+//! `Discover` exchange of the MCP client adapter. `--probe-embedding <case>` sends one embedding
+//! request of the probe of ADR 0095 section 5.
 
 mod contract_fault_holds;
 mod credential;
 mod discover_tools;
+mod probe_embedding;
 mod registered_adapters;
 mod settings;
 
@@ -40,6 +42,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             exa_api_key: settings.exa_api_key,
         };
         std::process::exit(discover_tools::discover_exa(resolver).await);
+    }
+    if let Some(position) = arguments
+        .iter()
+        .position(|argument| argument == "--probe-embedding")
+    {
+        let resolver = credential::SettingsCredentials {
+            agent_plan_api_key: settings.agent_plan_api_key,
+            exa_api_key: None,
+        };
+        let case = arguments.get(position + 1).map(String::as_str);
+        std::process::exit(probe_embedding::probe_embedding(resolver, case).await);
     }
     let database_url = settings
         .database_url
