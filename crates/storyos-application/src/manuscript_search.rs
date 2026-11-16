@@ -41,6 +41,10 @@ pub struct ManuscriptSearchChapterFact {
     pub chapter_id: ChapterId,
     pub volume_order: u64,
     pub chapter_order: u64,
+    pub volume_title: String,
+    pub title: String,
+    /// The authoritative revision that the head of the Chapter names.
+    pub head_revision_id: String,
     pub blocks: Vec<ManuscriptSearchBlockFact>,
 }
 

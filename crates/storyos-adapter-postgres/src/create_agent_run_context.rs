@@ -151,6 +151,29 @@ pub(crate) async fn persist_current_passage_assembly(
     .await
     .map_err(agent_run_database_error)?;
     storyos_core::assemble_skill_catalog(&mut record, &catalog);
+    let chapters = crate::manuscript_search::read_live_chapter_blocks(
+        client,
+        command.project_scope,
+        crate::manuscript_search::LiveChapterReadExtent::AllChapters,
+    )
+    .await
+    .map_err(|error| CreateAgentRunError::Unavailable(Box::new(error)))?;
+    storyos_core::assemble_chapter_list(
+        &mut record,
+        &chapters
+            .into_iter()
+            .map(|chapter| storyos_core::ChapterListEntry {
+                volume_order: chapter.volume_order,
+                volume_title: chapter.volume_title,
+                chapter_id: chapter.chapter_id.as_ref().to_owned(),
+                title: chapter.title,
+                length: storyos_core::count_stored_texts(
+                    chapter.blocks.iter().map(|block| block.text.as_str()),
+                )
+                .character_count,
+            })
+            .collect::<Vec<_>>(),
+    );
     if let Some(candidates) = command.tool_results {
         storyos_core::assemble_tool_result_continuation(&mut record, candidates);
     }
@@ -409,3 +432,7 @@ pub(crate) async fn current_chapter_payload(
 #[cfg(test)]
 #[path = "create_agent_run_context_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "chapter_list_context_tests.rs"]
+mod chapter_list_tests;

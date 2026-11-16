@@ -414,7 +414,8 @@ async fn the_summary_request_of_a_compaction_at_the_step_of_the_load_sends_the_l
             "conversation_summary",
             "author_instruction",
             "working_target",
-            "skill_catalog"
+            "skill_catalog",
+            "chapter_list"
         ]
     );
     let summary = record(&admin, &run_id, "compaction", 1).await;

@@ -6,6 +6,7 @@ mod append_proposal_generation_batch;
 mod archive_path;
 mod archive_zip;
 mod assemble_context;
+mod chapter_list;
 mod compact_active_context;
 mod continuation_input;
 mod conversation_retention;
@@ -104,6 +105,7 @@ pub use assemble_context::{
     assemble_current_passage_context, assemble_passage_collection, decode_assembly_record,
     encode_assembly_record,
 };
+pub use chapter_list::{ChapterListEntry, assemble_chapter_list};
 pub use compact_active_context::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX,
     AGENT_PLAN_COMPACTION_PRODUCER, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,

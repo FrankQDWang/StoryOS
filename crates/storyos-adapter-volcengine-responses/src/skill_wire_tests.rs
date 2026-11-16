@@ -13,7 +13,7 @@ const V7: &str = storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION;
 const V8: &str = storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION;
 
 /// The body that `prepare` commits for `request`.
-async fn body(request: CreateRequest) -> serde_json::Value {
+pub(crate) async fn body(request: CreateRequest) -> serde_json::Value {
     let adapter = AgentPlanResponses {
         resolver: CanaryResolver::default(),
     };
@@ -27,7 +27,7 @@ async fn body(request: CreateRequest) -> serde_json::Value {
 
 /// The first request of a Run on `mapping`, with the Host Tools of the Registration
 /// `registration`.
-fn first(mapping: &str, registration: &str) -> CreateRequest {
+pub(crate) fn first(mapping: &str, registration: &str) -> CreateRequest {
     let route = RequestRoute {
         mapping_revision: mapping.to_owned(),
         ..route("http://127.0.0.1:9")
@@ -62,7 +62,7 @@ fn v7(context: Vec<RequestContextItem>) -> CreateRequest {
     }
 }
 
-fn item(source_class: ContextSourceClass, content: &str) -> RequestContextItem {
+pub(crate) fn item(source_class: ContextSourceClass, content: &str) -> RequestContextItem {
     RequestContextItem {
         source_class,
         content: content.to_owned(),
@@ -70,7 +70,7 @@ fn item(source_class: ContextSourceClass, content: &str) -> RequestContextItem {
     }
 }
 
-fn closing(request: CreateRequest) -> CreateRequest {
+pub(crate) fn closing(request: CreateRequest) -> CreateRequest {
     CreateRequest {
         tool_choice: ToolChoice::None,
         previous_response_reference: Some("resp_1".to_owned()),
@@ -85,7 +85,7 @@ fn closing(request: CreateRequest) -> CreateRequest {
     }
 }
 
-fn summary(request: CreateRequest) -> CreateRequest {
+pub(crate) fn summary(request: CreateRequest) -> CreateRequest {
     CreateRequest {
         purpose: CreatePurpose::CompactionSummary,
         previous_response_reference: Some("resp_24".to_owned()),
