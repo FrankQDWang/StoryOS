@@ -1,11 +1,14 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/derived-decision-kinds-http.integration.test.ts"]}
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import { stopStoryOSServer as stopRealServer, queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
 import { PROSE, TestServer, admitRun, createStory, drainLeftoverWork, freshNamespace, id, inspectRun, postRun,
-  prepare, runRequest, settleOnce, settleRun, startServer } from "../support/http-harness.ts";
+  prepare, runRequest, settleHeld, settleOnce, settleRun, startServer, waitFor } from "../support/http-harness.ts";
 import { fakeExaMcp } from "../support/research-journey-fakes.ts";
 
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
@@ -62,20 +65,23 @@ test("the Run read gives each result in the order in which the model made them",
 });
 
 // ADR 0094 section 5: each settled `write_memory` call is a result of its own Run, in the Scope of its Project.
-test("the Run read of a Project gives only the Memory writes of its own Run", async () => {
+test("the Run read of a Project gives only the Memory writes of its own Run, also after a cancel", async () => {
   await drainLeftoverWork();
   const started = await startServer();
   try {
     const server = TestServer.at(started.baseUrl);
-    /** Creates one Project, and admits and settles one Run that writes the entry `title`. */
-    const written = async (title: string) => {
-      const story = await createStory(server, { title: `${title} Novel`, assistance: true, chapters: ["Chapter A"] });
+    /** Admits one Run in `story` that writes the entry `title`, and gives its identity. */
+    const admitted = async (story: Awaited<ReturnType<typeof createStory>>, title: string) => {
       const create = { type: "other", title, description: "一条记忆。", text: `${title}会再出现。` };
       const request = runRequest(story.chapterIds[0] ?? "", story.key(), `SCRIPT:write_memory create ${JSON.stringify(create)}`);
       const created = await postRun(started.baseUrl, story.fetchImpl, story.projectId, story.key(), request);
       assert.equal(created.effect.kind, "admitted");
-      const runId = created.effect.kind === "admitted" ? created.effect.run_id : "";
-      return { story, run: await settleRun(started.baseUrl, story, runId) };
+      return created.effect.kind === "admitted" ? created.effect.run_id : "";
+    };
+    /** Creates one Project, and admits and settles one Run that writes the entry `title`. */
+    const written = async (title: string) => {
+      const story = await createStory(server, { title: `${title} Novel`, assistance: true, chapters: ["Chapter A"] });
+      return { story, run: await settleRun(started.baseUrl, story, await admitted(story, title)) };
     };
     const bell = await written("铜铃");
     const boat = await written("林舟");
@@ -91,6 +97,37 @@ test("the Run read of a Project gives only the Memory writes of its own Run", as
     }
     // The other Project has no such Run.
     await assert.rejects(inspectRun(started.baseUrl, boat.story, bell.run.run_id));
+
+    // The author cancels a Run after its write settled. The hold files are in a folder of this test only (#1619).
+    const holds = mkdtempSync(join(tmpdir(), "storyos-1577-"));
+    const [dispatchHold, streamHold] = [join(holds, "dispatch.hold"), join(holds, "stream.hold")];
+    try {
+      const runId = await admitted(bell.story, "海雾");
+      const cancel = await bell.story.challenge("cancelAgentRun", { path: { runId }, request: {
+        command_schema: "storyos.command.cancel-agent-run.request.v1", cancel_agent_run_input: bell.story.binding() } });
+      writeFileSync(dispatchHold, "hold");
+      writeFileSync(streamHold, "hold");
+      const worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold,
+        STORYOS_TEST_FAKE_STREAM_HOLD_PATH: streamHold });
+      const read = () => inspectRun(started.baseUrl, bell.story, runId);
+      // The Worker waits at the first request, then at the end of its stream.
+      await waitFor(read, (run) => run.status === "claimed" && run.model_attempt.kind === "present");
+      unlinkSync(dispatchHold);
+      await waitFor(read, (run) => run.items.length > 0);
+      // The next request waits, and the first response runs its write.
+      writeFileSync(dispatchHold, "hold");
+      unlinkSync(streamHold);
+      await waitFor(read, (run) => run.results?.some((result) => result.kind === "memory_write") === true);
+      assert.equal((await cancel.send()).response.effect.kind, "applied");
+      unlinkSync(dispatchHold);
+      await worker;
+      const cancelled = await settleRun(started.baseUrl, bell.story, runId);
+      assert.equal(cancelled.status, "cancelled");
+      assert.deepEqual(cancelled.results?.map((result) => result.kind === "memory_write"
+        ? [result.action, result.title] : result.kind), [["create", "海雾"]]);
+    } finally {
+      rmSync(holds, { recursive: true, force: true });
+    }
   } finally {
     await stopRealServer(started.server);
   }
