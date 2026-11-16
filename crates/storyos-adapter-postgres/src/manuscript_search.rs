@@ -95,7 +95,10 @@ const LIVE_CHAPTER_BLOCKS_SELECT_FROM_WHERE: &str = "SELECT volume.manuscript_ob
                            AND member.revision_id = revision.revision_id
                       ),
                       ARRAY[]::text[]
-                    )
+                    ),
+                    volume.title,
+                    chapter.title,
+                    revision.revision_id::text
                FROM storyos.manuscript_objects AS chapter
                JOIN storyos.manuscript_objects AS volume
                  ON (volume.owner_user_id, volume.project_id, volume.manuscript_object_id) =
@@ -186,6 +189,9 @@ pub(crate) async fn read_live_chapter_blocks(
             chapter_id: ChapterId::new(chapter_id),
             volume_order,
             chapter_order,
+            volume_title: row.get(4),
+            title: row.get(5),
+            head_revision_id: row.get(6),
             blocks: blocks
                 .into_iter()
                 .map(|block| ManuscriptSearchBlockFact {

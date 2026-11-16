@@ -241,7 +241,7 @@ test("createAgentRun admits a Working Target at the item limit and blocks one ab
   assert.equal(queried.context.outbound_disclosure_manifest.kind, "absent");
   assert.deepEqual(
     queried.context.selected.map((item) => item.source_class),
-    ["author_instruction"],
+    ["author_instruction", "chapter_list"],
   );
   assert.deepEqual(
     queried.context.rejected.map((item) => [item.source_class, item.reason.kind, item.token_count]),
@@ -266,7 +266,8 @@ test("createAgentRun admits a Working Target at the item limit and blocks one ab
   assert.equal(admitted.context.sufficiency.kind, "complete");
   assert.deepEqual(
     admitted.context.selected.map((item) => [item.source_class, item.token_count]),
-    [["author_instruction", "23"], ["working_target", "32000"]],
+    // ADR 0095: the Chapter list line of the Chapter gives its length, so the item has 53 counted tokens.
+    [["author_instruction", "23"], ["working_target", "32000"], ["chapter_list", "53"]],
   );
 });
 
