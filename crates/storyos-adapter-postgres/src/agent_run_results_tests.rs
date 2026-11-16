@@ -3,18 +3,19 @@
 //! a settled write.
 
 use serde_json::{Value, json};
+use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-    ProjectScope,
+    NoContractFaults, ProjectScope, complete_agent_run,
 };
 use storyos_contracts::AgentRunResultInspect;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::stores;
+use crate::agent_run_dispatch::tests::{RuntimeClock, stores};
 use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_steering::tests::{
-    AuthorAction, AuthorAt, Moment, cancellation, queued, settle,
+    AuthorAction, AuthorAt, Moment, cancellation, claim_duties, queued, settle,
 };
 use crate::create_agent_run::context::chapter_list_tests::admitted;
 use crate::memory_entries::tests::write_versions;
@@ -152,9 +153,22 @@ async fn a_run_cancelled_after_a_settled_write_gives_the_write() {
         AuthorAction::Cancel(Box::new(cancel)),
     );
     let _cancelled = settle(&store, &admin, &scope, &run_id, &author).await;
+    // A new claim does the cancellation duties of the request that was out, so the Run leaves no
+    // work for the Worker of a later test.
+    let claim = claim_duties(&admin, &scope, &run_id).await.unwrap();
+    complete_agent_run(
+        &store,
+        &FakeDestination,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    )
+    .await
+    .unwrap();
     let status: String = admin
         .query_one(
-            "SELECT status FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+            "SELECT status || ' ' || wakeup_pending FROM storyos.agent_runs
+              WHERE run_id = $1::text::uuid",
             &[&run_id],
         )
         .await
@@ -163,6 +177,6 @@ async fn a_run_cancelled_after_a_settled_write_gives_the_write() {
 
     assert_eq!(
         (status.as_str(), results(&store, &scope, &run_id).await),
-        ("cancelled", json!([["create", "林舟"]]))
+        ("cancelled false", json!([["create", "林舟"]]))
     );
 }
