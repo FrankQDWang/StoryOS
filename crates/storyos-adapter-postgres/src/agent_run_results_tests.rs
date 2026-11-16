@@ -145,7 +145,7 @@ async fn a_run_cancelled_after_a_settled_write_gives_the_write() {
     let new = ConversationSelection::New;
     let message = script("create", &create);
     let run_id = admitted(&store, &scope, &chapter_id, "d35", &message, new).await;
-    let cancel = cancellation(&store, &scope, 0xd310, &run_id).await;
+    let cancel = cancellation(&store, &scope, 0xd3a0, &run_id).await;
     let author = AuthorAt::new(
         &store,
         Moment::DuringRequest(2),
