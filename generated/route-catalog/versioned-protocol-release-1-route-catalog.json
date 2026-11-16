@@ -2557,6 +2557,123 @@
       "wire_owner": "protocol"
     },
     {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "positive": "storyos.golden.listProjectConversations.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "listProjectConversations",
+      "path": "/api/v1/projects/{project_id}/conversations",
+      "preconditions": [
+        "server_derived_project_scope",
+        "bounded_project_conversation_list"
+      ],
+      "schemas": {
+        "request": "storyos.query.project-conversations.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.project-conversations.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "conversation:list",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "positive": "storyos.golden.getProjectConversation.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getProjectConversation",
+      "path": "/api/v1/projects/{project_id}/conversations/{conversation_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "conversation_scope_join",
+        "bounded_project_conversation_runs"
+      ],
+      "schemas": {
+        "request": "storyos.query.project-conversation.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.project-conversation.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "conversation:read",
+      "wire_owner": "protocol"
+    },
+    {
       "action_class": "agent_run_control",
       "activity": {
         "no_effect": [],

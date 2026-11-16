@@ -44,6 +44,7 @@ mod manuscript_tree;
 mod passage_targets;
 mod pause_agent_run;
 mod project_command_challenge;
+mod project_conversations;
 mod project_export;
 mod public_origin;
 mod readable_export;
@@ -111,6 +112,7 @@ use manuscript_statistics::get_statistics;
 use manuscript_tree::get_manuscript_tree;
 use pause_agent_run::pause_agent_run;
 use project_command_challenge::create_project_command_challenge;
+use project_conversations::{get_project_conversation, list_project_conversations};
 use project_export::{export_project_archive, get_export_operation_query};
 use readable_export::{
     export_human_readable_manuscript, get_human_readable_manuscript_export_query,
@@ -362,6 +364,20 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::GET_AGENT_RUN_METHOD),
                 get_agent_run,
+            ),
+        )
+        .route(
+            contracts::LIST_PROJECT_CONVERSATIONS_PATH,
+            routing::on(
+                method_filter(contracts::LIST_PROJECT_CONVERSATIONS_METHOD),
+                list_project_conversations,
+            ),
+        )
+        .route(
+            contracts::GET_PROJECT_CONVERSATION_PATH,
+            routing::on(
+                method_filter(contracts::GET_PROJECT_CONVERSATION_METHOD),
+                get_project_conversation,
             ),
         )
         .route(

@@ -66,6 +66,7 @@ mod open_proposal_list;
 mod pinned_export_source;
 mod project_activity;
 mod project_command;
+mod project_conversations;
 mod project_export;
 mod project_export_work;
 mod project_settings;
@@ -181,6 +182,12 @@ pub use project_command::{
     ChapterSelectionApplied, ChapterSelectionAuthority, ProjectCommandEnvelope,
     ProjectCommandError, ProjectCommandSettlement, RefusableCommandError, RevisionApplied,
     StructureApplied, StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
+};
+pub use project_conversations::{
+    ProjectConversationList, ProjectConversationListItem, ProjectConversationRead,
+    ProjectConversationReader, ProjectConversationRunItem, StoredProjectConversation,
+    StoredProjectConversationRuns, list_project_conversations, project_conversation_label,
+    read_project_conversation,
 };
 pub use project_export::{
     ArchiveExportOperation, ArchiveExportRefusal, ExportOperationPage, ExportOperationProgress,

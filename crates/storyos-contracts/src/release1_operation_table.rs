@@ -13,6 +13,8 @@ mod agent_run_rows;
 mod author_edit_rows;
 #[path = "release1_operation_rows_chapter.rs"]
 mod chapter_rows;
+#[path = "release1_operation_rows_conversation.rs"]
+mod conversation_rows;
 #[path = "release1_operation_rows_editor_session.rs"]
 mod editor_session_rows;
 #[path = "release1_operation_rows_export.rs"]
@@ -356,6 +358,8 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &author_edit_rows::UNDO_LATEST_AUTHOR_ACTION_ROW,
     &agent_run_rows::CREATE_AGENT_RUN_ROW,
     &agent_run_rows::GET_AGENT_RUN_ROW,
+    &conversation_rows::LIST_PROJECT_CONVERSATIONS_ROW,
+    &conversation_rows::GET_PROJECT_CONVERSATION_ROW,
     &run_control_rows::STEER_AGENT_RUN_ROW,
     &run_control_rows::PAUSE_AGENT_RUN_ROW,
     &run_control_rows::CANCEL_AGENT_RUN_ROW,

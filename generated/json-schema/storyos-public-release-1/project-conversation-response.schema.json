@@ -1,0 +1,121 @@
+{
+  "$defs": {
+    "AgentRunStatus": {
+      "enum": [
+        "queued",
+        "claimed",
+        "waiting",
+        "paused",
+        "completed",
+        "refused",
+        "cancelled"
+      ],
+      "type": "string"
+    },
+    "ProjectConversationCompleteness": {
+      "description": "`truncated` when the Host bound removed the oldest entries or Runs.",
+      "enum": [
+        "complete",
+        "truncated"
+      ],
+      "type": "string"
+    },
+    "ProjectConversationRun": {
+      "additionalProperties": false,
+      "description": "One Run of a Project Conversation. `created_at` is the Receipt time of its `createAgentRun`.",
+      "properties": {
+        "author_message": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "type": "string"
+        },
+        "chapter_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/AgentRunStatus"
+        }
+      },
+      "required": [
+        "run_id",
+        "author_message",
+        "chapter_id",
+        "status",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.query.project-conversation.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "completeness": {
+      "$ref": "#/$defs/ProjectConversationCompleteness"
+    },
+    "conversation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "earlier_turns_expired": {
+      "description": "True when the newest Run ended more than the Provider retention before the read.",
+      "type": "boolean"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "runs": {
+      "items": {
+        "$ref": "#/$defs/ProjectConversationRun"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "schema_id": {
+      "const": "storyos.query.project-conversation.response.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "conversation_id",
+    "completeness",
+    "earlier_turns_expired",
+    "runs"
+  ],
+  "title": "StoryOS Project Conversation Response",
+  "type": "object"
+}

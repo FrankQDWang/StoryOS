@@ -489,6 +489,20 @@ export type UnknownCreateSuccessorDisposition = "fenced" | "dispatched" | "pause
 
 export type OptionalUnknownCreateSuccessorInspect = { "kind": "absent" } | { "kind": "present", recovery_id: string, disposition: UnknownCreateSuccessorDisposition, pause_reason?: string | null, lookup_unavailable_reason?: string | null, predecessor_model_attempt_id: string, successor_model_attempt_id?: string | null, model_invocation_id: string, predecessor_fenced: boolean, allowance_consumed: boolean, predecessor_usage_kind: string, predecessor_reservation_released: boolean, successor_settles_predecessor: boolean, supplies_tool_call: boolean, advances_predecessor_continuation: boolean, reuses_changed_context: boolean, };
 
+export type ProjectConversationCompleteness = "complete" | "truncated";
+
+export type ProjectConversationEntry = { conversation_id: string, label: string, first_run_created_at: string, newest_run_created_at: string, newest_run_status: AgentRunStatus, };
+
+export type ListProjectConversationsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, completeness: ProjectConversationCompleteness, conversations: Array<ProjectConversationEntry>, };
+
+export type ProjectConversationRun = { run_id: string, author_message: string, chapter_id: string, status: AgentRunStatus, created_at: string, };
+
+export type GetProjectConversationResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, conversation_id: string, completeness: ProjectConversationCompleteness, 
+/**
+ * True when the newest Run ended more than the Provider retention before the read.
+ */
+earlier_turns_expired: boolean, runs: Array<ProjectConversationRun>, };
+
 export type SteerAgentRunInput = { conversation_id: string, author_message: AuthorMessage, selection_references?: Array<SelectionReference>, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type SteerAgentRunRequest = { command_schema: string, steer_agent_run_input: SteerAgentRunInput, };
@@ -718,6 +732,8 @@ export declare function undoLatestAuthorAction(options: StoryOSQueryOptions & { 
 export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createAgentRun(options: StoryOSQueryOptions & { projectId: string; request: CreateAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateAgentRunResponse>;
 export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; modelAttemptId?: string | null }): Promise<GetAgentRunResponse>;
+export declare function listProjectConversations(options: StoryOSQueryOptions & { projectId: string }): Promise<ListProjectConversationsResponse>;
+export declare function getProjectConversation(options: StoryOSQueryOptions & { projectId: string; conversationId: string }): Promise<GetProjectConversationResponse>;
 export declare function digestSteerAgentRun(request: SteerAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function steerAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: SteerAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<SteerAgentRunResponse>;
 export declare function digestPauseAgentRun(request: PauseAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

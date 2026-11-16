@@ -25,6 +25,7 @@ mod release1_operation_registry;
 mod release1_operation_table;
 mod release1_project_activity;
 mod release1_project_assistance;
+mod release1_project_conversation;
 mod release1_project_export;
 mod release1_project_export_query;
 mod release1_proposal;
@@ -197,6 +198,15 @@ pub use release1_project_assistance::{
     UpdateProjectAssistanceConflictReason, UpdateProjectAssistanceEffect,
     UpdateProjectAssistanceNoEffectReason, UpdateProjectAssistanceRequest,
     UpdateProjectAssistanceResponse,
+};
+pub use release1_project_conversation::{
+    GET_PROJECT_CONVERSATION_METHOD, GET_PROJECT_CONVERSATION_PATH,
+    GET_PROJECT_CONVERSATION_RESPONSE_SCHEMA_ID, GetProjectConversationResponse,
+    LIST_PROJECT_CONVERSATIONS_METHOD, LIST_PROJECT_CONVERSATIONS_PATH,
+    LIST_PROJECT_CONVERSATIONS_RESPONSE_SCHEMA_ID, ListProjectConversationsResponse,
+    PROJECT_CONVERSATION_LABEL_MAX_CHARACTERS, PROJECT_CONVERSATION_LIST_MAX_ENTRIES,
+    PROJECT_CONVERSATION_RUNS_MAX_ENTRIES, ProjectConversationCompleteness,
+    ProjectConversationEntry, ProjectConversationRun,
 };
 pub use release1_project_export::{
     EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE, EXPORT_PROJECT_ARCHIVE_METHOD,
