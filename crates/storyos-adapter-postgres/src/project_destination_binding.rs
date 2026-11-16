@@ -1,26 +1,26 @@
 use storyos_application::{ProjectCommandEnvelope, ProjectScope};
 use storyos_core::{
     AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_ELIGIBILITY_EVIDENCE, AGENT_PLAN_ENDPOINT,
-    DeploymentDestination, GrantScope,
+    DeploymentDestination, DestinationKind, GrantScope,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
 
-/// The kind and evidence columns of the binding records of one deployment destination.
-struct BindingShape {
-    control_classification: &'static str,
-    evidence_kind: &'static str,
-    endpoint: Option<&'static str>,
-    account_boundary: Option<&'static str>,
-    eligibility_evidence: Option<&'static str>,
+/// The kind and evidence columns of the binding records of one destination.
+pub(crate) struct BindingShape {
+    pub(crate) control_classification: &'static str,
+    pub(crate) evidence_kind: &'static str,
+    pub(crate) endpoint: Option<&'static str>,
+    pub(crate) account_boundary: Option<&'static str>,
+    pub(crate) eligibility_evidence: Option<&'static str>,
     grant_kind: &'static str,
-    credential_source: &'static str,
+    pub(crate) credential_source: &'static str,
     decision_kind: &'static str,
 }
 
-fn binding_shape(destination: &DeploymentDestination) -> BindingShape {
+pub(crate) fn binding_shape(destination: DestinationKind) -> BindingShape {
     match destination {
-        DeploymentDestination::HostFakeToolLoop => BindingShape {
+        DestinationKind::HostFake => BindingShape {
             control_classification: "host_internal",
             evidence_kind: "host_fake_boundary",
             endpoint: None,
@@ -30,7 +30,7 @@ fn binding_shape(destination: &DeploymentDestination) -> BindingShape {
             credential_source: "none",
             decision_kind: "host_fake_compatible",
         },
-        DeploymentDestination::VolcengineAgentPlan { .. } => BindingShape {
+        DestinationKind::VolcengineAgentPlan => BindingShape {
             control_classification: "external",
             evidence_kind: "volcengine_agent_plan_boundary",
             endpoint: Some(AGENT_PLAN_ENDPOINT),
@@ -53,7 +53,7 @@ pub(crate) async fn insert_destination_binding(
 ) -> Result<String, tokio_postgres::Error> {
     let registration = destination.registration();
     crate::model_registration::insert_model_registration(client, registration).await?;
-    let shape = binding_shape(destination);
+    let shape = binding_shape(destination.kind());
     let [identity, grant, binding, decision] = [(); 4].map(|()| Uuid::now_v7().to_string());
     client
         .execute(

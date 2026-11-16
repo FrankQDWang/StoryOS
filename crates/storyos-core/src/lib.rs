@@ -20,6 +20,7 @@ mod delete_chapter;
 mod delete_volume;
 mod deployment_destination;
 mod earlier_author_messages;
+mod embedding_request;
 mod finish_rule;
 mod function_calling;
 mod grant_scope;
@@ -165,6 +166,13 @@ pub use deployment_destination::{
 pub use earlier_author_messages::{
     EARLIER_AUTHOR_MESSAGES_TOKEN_LIMIT, EarlierAuthorMessage, EarlierAuthorMessageSource,
     is_earlier_author_message, keep_earlier_author_messages,
+};
+pub use embedding_request::{
+    AGENT_PLAN_EMBEDDING_REGISTRATION, EMBEDDING_DIMENSIONS, EMBEDDING_REQUEST_BOUNDS,
+    EMBEDDING_REQUEST_TIMEOUT, EMBEDDING_TEXT_TOKEN_LIMIT, EmbeddingAdapter,
+    EmbeddingAdmissionFacts, EmbeddingBindingFacts, EmbeddingCause, EmbeddingInput,
+    EmbeddingRefusal, EmbeddingRegistration, HOST_FAKE_EMBEDDING_REGISTRATION,
+    MANUSCRIPT_EMBEDDING_PURPOSE, admit_embedding, embedding_binding_to_make,
 };
 pub use finish_rule::{
     FinishRuleOutcome, MAX_RUN_STEPS, PriorStepCall, RunStepLimit, ToolChoice,

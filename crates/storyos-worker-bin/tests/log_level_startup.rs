@@ -64,3 +64,39 @@ fn an_unknown_destination_or_a_malformed_database_url_names_its_variable_and_no_
         ]
     );
 }
+
+#[test]
+fn an_unknown_embedding_destination_or_one_without_its_model_destination_refuses() {
+    let canary = "storyos-settings-canary-worker-5e1a";
+    let refusal = |embedding: String, model: &str| {
+        let output = Command::new(env!("CARGO_BIN_EXE_storyos-worker"))
+            .arg("--check")
+            .env("STORYOS_EMBEDDING_DESTINATION", embedding)
+            .env("STORYOS_MODEL_DESTINATION", model)
+            .env("STORYOS_AGENT_PLAN_API_KEY", canary)
+            .env_remove("STORYOS_ENV_FILE")
+            .output()
+            .expect("packaged storyos-worker should execute");
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        (
+            output.status.success(),
+            stderr.contains("STORYOS_EMBEDDING_DESTINATION"),
+            stderr.contains(canary),
+        )
+    };
+
+    assert_eq!(
+        [
+            refusal(format!("openai-{canary}"), "host_fake"),
+            refusal("volcengine_agent_plan".to_owned(), "host_fake"),
+            refusal("volcengine_agent_plan".to_owned(), "volcengine_agent_plan"),
+            refusal("host_fake".to_owned(), "host_fake"),
+        ],
+        [
+            (false, true, false),
+            (false, true, false),
+            (true, false, false),
+            (true, false, false)
+        ]
+    );
+}

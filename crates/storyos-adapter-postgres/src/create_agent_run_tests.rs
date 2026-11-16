@@ -84,6 +84,7 @@ fn run_command(
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{ids_suffix}"),
             destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
             research: None,
+            embedding: None,
             skills: Default::default(),
             skill_selections: Vec::new(),
         },

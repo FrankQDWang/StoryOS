@@ -28,6 +28,10 @@ pub struct CreateAgentRunInput {
     /// The research destination of the deployment, from Host configuration. The Project gets
     /// its current research records before the Run is admitted (ADR 0090). `None` offers none.
     pub research: Option<&'static storyos_core::ResearchToolOffer>,
+    /// The embedding Registration of the deployment, from Host configuration. The Project gets
+    /// its current embedding grant and use binding before the Run is admitted (ADR 0095 section
+    /// 3). `None` offers none.
+    pub embedding: Option<&'static storyos_core::EmbeddingRegistration>,
     /// The Skill set of the deployment, from Host configuration. The Project gets the Snapshot of
     /// each Skill, and the Run pins its catalog (ADR 0089). An empty set offers nothing.
     pub skills: std::sync::Arc<storyos_core::SkillSet>,
