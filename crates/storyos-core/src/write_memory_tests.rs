@@ -107,6 +107,7 @@ fn each_refusal_of_the_table_has_its_cause_and_its_label() {
                 create("other", "  ", "x"),
                 create("other", "标题", " \n "),
                 create("other", "标题", "铃\u{7}声"),
+                create("other", "标题", "铃\r声"),
                 other(json!({"title": title, "description": "\n", "text": "x"})),
             ],
         ),
@@ -151,7 +152,8 @@ fn each_refusal_of_the_table_has_its_cause_and_its_label() {
 }
 
 /// A text at each limit is admitted, and the title and the description at their limits too. The
-/// type `character` has the longer text limit, and a change of the type checks the kept text.
+/// type `character` has the longer text limit, and a change of the type checks the kept text. A
+/// text is Markdown, so it can have a line feed and a tab.
 #[test]
 fn a_value_at_its_limit_is_admitted() {
     let title = "长".repeat(MEMORY_TITLE_MAX_CHARS);
@@ -174,9 +176,10 @@ fn a_value_at_its_limit_is_admitted() {
         (
             decide(&at_limit).is_ok(),
             decide(&character).is_ok(),
+            decide(&create("other", "标题", "第一行\n\t第二行")).is_ok(),
             decide_memory_write(&retyped, &entries, 2),
         ),
-        (true, true, Err(MemoryWriteRefusal::TooLong))
+        (true, true, true, Err(MemoryWriteRefusal::TooLong))
     );
 }
 
