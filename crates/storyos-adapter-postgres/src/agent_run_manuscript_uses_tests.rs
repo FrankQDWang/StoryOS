@@ -46,13 +46,13 @@ async fn the_run_read_names_each_chapter_and_each_query_once_in_the_order_of_the
         .await;
     let (store, admin) = stores().await;
     let blocks = ["Lin ran.", "The bell."];
-    let (scope, chapter_a, fog, _) = project(&store, &admin, "8d1", 0xbd10, &blocks).await;
+    let (scope, chapter_a, fog, _) = project(&store, &admin, "ac1", 0xbd10, &blocks).await;
     // One search, two reads of Chapter A, one read of Fog, and one read of a number that no
     // Chapter has, in one response.
     let message = "SCRIPT:search_manuscript Lin\nSCRIPT:read_chapter 1\n\
                    SCRIPT:read_chapter 1:2-null\nSCRIPT:read_chapter 2\nSCRIPT:read_chapter 3";
     let new = ConversationSelection::New;
-    let run_id = admitted(&store, &scope, &chapter_a, "8d2", message, new).await;
+    let run_id = admitted(&store, &scope, &chapter_a, "ac2", message, new).await;
     complete(&store, &admin, &scope, &run_id).await;
     let run = store
         .read_agent_run(&scope, &run_id, &AgentRunReadSelection::Current)
@@ -114,7 +114,7 @@ async fn each_run_read_names_only_the_uses_of_its_own_run() {
     let (store, admin) = stores().await;
     let mut runs = Vec::new();
     for (lead, suffix, prefix, query) in
-        [("8d3", 0xbd20, "8d4", "Lin"), ("8d5", 0xbd30, "8d6", "Mei")]
+        [("ac3", 0xbd20, "ac4", "Lin"), ("ac5", 0xbd30, "ac6", "Mei")]
     {
         let (scope, chapter_a, fog, _) =
             project(&store, &admin, lead, suffix, &["Lin met Mei."]).await;
