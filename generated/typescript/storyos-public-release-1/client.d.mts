@@ -91,6 +91,18 @@ export type UpdateProjectInstructionEffect = { "kind": "authoritative_applied", 
 
 export type UpdateProjectInstructionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UpdateProjectInstructionEffect, };
 
+export type MemoryEntryTypeInspect = "writing_preference" | "foreshadowing" | "character" | "relationship" | "major_event" | "other";
+
+export type MemoryEntryOriginInspect = "author_request" | "conversation" | "chapter";
+
+export type MemorySourceAvailability = "available" | "unavailable";
+
+export type MemoryEntrySourceInspect = { "kind": "conversation", conversation_id: string, availability: MemorySourceAvailability, } | { "kind": "chapter", chapter_id: string, title: string | null, availability: MemorySourceAvailability, };
+
+export type MemoryEntryInspect = { memory_entry_id: string, entry_number: string, version: string, entry_type: MemoryEntryTypeInspect, title: string, description: string, text: string, origin: MemoryEntryOriginInspect, source: MemoryEntrySourceInspect | null, changed_at: string, };
+
+export type ListMemoryEntriesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, entries: Array<MemoryEntryInspect>, };
+
 export type CreateEditorSessionRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type EditorReadOnlyReason = "secondary_session" | "superseded_by_takeover" | "binding_invalid";
@@ -711,6 +723,7 @@ export declare function updateProjectAssistance(options: StoryOSQueryOptions & {
 export declare function getProjectInstruction(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectInstructionResponse>;
 export declare function digestUpdateProjectInstruction(request: UpdateProjectInstructionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function updateProjectInstruction(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectInstructionRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectInstructionResponse>;
+export declare function listMemoryEntries(options: StoryOSQueryOptions & { projectId: string }): Promise<ListMemoryEntriesResponse>;
 export declare function digestCreateEditorSession(request: CreateEditorSessionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;

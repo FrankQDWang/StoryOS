@@ -116,6 +116,8 @@ A model records too many small details when only its instructions limit it. The 
 - Each Project has one settings page. The control at the bottom left of the writing workspace opens it. It has two sections: the Project Instruction and Memory.
 - The Memory section lists the current entries in groups by type. Each entry shows its title, its text, its origin with a link to the source Conversation or Chapter, the time of its last change, and its conflict flag when it has one. Each entry has a delete control.
 - The page has no review queue and no approval step for a background entry. The control of the author is to see each entry, to delete it, and to correct it in a Conversation.
+- The query of the Memory section is `listMemoryEntries` (`GET /api/v1/projects/{project_id}/memory-entries`). It gives each current entry in Memory Index order with its first source reference, and it writes no row. A source record that is not available gives `unavailable` and does not fail the read. The query does not read the Conversation Memory Settings. The response has no pages.
+- The group names are "写作偏好", "伏笔", "人物", "关系", "重大事件", and "其他". The origin lines are "你让助手记住的" (`author_request`), "来自对话" (`conversation`), and "来自章节《<title>》" (`chapter`). A source that is not available shows "来源已不可用". An empty section shows "助手还没有记住任何内容。". The author approved these words on 2026-11-16.
 
 ### 10. The Conversation list
 

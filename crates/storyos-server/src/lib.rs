@@ -41,6 +41,7 @@ mod list_skills;
 mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_tree;
+mod memory_entries;
 mod passage_targets;
 mod pause_agent_run;
 mod project_command_challenge;
@@ -111,6 +112,7 @@ use list_skills::list_skills;
 use manuscript_search::search_manuscript_query;
 use manuscript_statistics::get_statistics;
 use manuscript_tree::get_manuscript_tree;
+use memory_entries::list_memory_entries;
 use pause_agent_run::pause_agent_run;
 use project_command_challenge::create_project_command_challenge;
 use project_conversations::{get_project_conversation, list_project_conversations};
@@ -347,6 +349,13 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             .on(
                 method_filter(contracts::UPDATE_PROJECT_INSTRUCTION_METHOD),
                 update_project_instruction,
+            ),
+        )
+        .route(
+            contracts::LIST_MEMORY_ENTRIES_PATH,
+            routing::on(
+                method_filter(contracts::LIST_MEMORY_ENTRIES_METHOD),
+                list_memory_entries,
             ),
         )
         .route(

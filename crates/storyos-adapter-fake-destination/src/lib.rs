@@ -1,6 +1,7 @@
 //! The Model Provider Adapter of the Contract-Faithful Fake Destination.
 
 mod create_plan;
+mod embedding;
 mod load_plan;
 mod propose_edit_plan;
 mod prose_changes;
@@ -15,6 +16,10 @@ mod skill_resource_plan;
 mod tool_loop_plan;
 mod write_memory_plan;
 
+pub use embedding::{
+    EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER, EMBEDDING_UNKNOWN_MARKER,
+    FakeEmbeddings, fake_vector,
+};
 pub use load_plan::LOAD_REASON;
 pub use tool_loop_plan::LIMIT_ANSWER;
 

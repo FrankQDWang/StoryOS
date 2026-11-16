@@ -36,6 +36,7 @@ mod agent_run_control;
 mod agent_run_work;
 mod author_edit;
 mod author_edit_wire;
+mod embedding_gateway;
 mod model_gateway;
 mod model_gateway_ports;
 mod model_lease_renewal;
@@ -62,6 +63,7 @@ mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_structure;
 mod manuscript_tree;
+mod memory_entries;
 mod open_proposal_list;
 mod pinned_export_source;
 mod project_activity;
@@ -130,6 +132,11 @@ pub use create_project_challenge::{
     CreateProjectChallenge, CreateProjectChallengeBinding, CreateProjectChallengeStore,
     IssueCreateProjectChallenge, issue_create_project_challenge,
 };
+pub use embedding_gateway::{
+    CredentialUnavailable, EmbeddingClaim, EmbeddingDispatchStore, EmbeddingObservation,
+    EmbeddingProjection, EmbeddingProviderAdapter, EmbeddingRecord, EmbeddingResult,
+    EmbeddingUsage, NoEmbeddingDestination, PreparedEmbeddingRequest, dispatch_embedding,
+};
 pub use export_work::{ClaimedExportWork, ExportWorkStore, claim_next_export_work};
 pub use get_proposal::{
     BlockProposalRecord, ProposalOperationRecord, ProposalReader, open_proposal,
@@ -157,6 +164,9 @@ pub use manuscript_structure::{
 pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterNode,
     GetManuscriptTree, ManuscriptTreeReader, VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
+};
+pub use memory_entries::{
+    MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem, list_memory_entries,
 };
 pub use model_gateway::{complete_agent_run, complete_agent_run_with_tools};
 pub use model_gateway_ports::{

@@ -2840,6 +2840,82 @@
       },
       "triggers": {}
     },
+    "embedding_attempts": {
+      "columns": {
+        "attempt": {
+          "default": null,
+          "nullable": false,
+          "type": "jsonb"
+        },
+        "cause": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "embedding_attempt_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "grant_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_model_use_binding_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "settlement": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "embedding_attempts_attempt_check": "CHECK ((jsonb_typeof(attempt) = 'object'::text))",
+        "embedding_attempts_binding_fkey": "FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision) MATCH FULL",
+        "embedding_attempts_cause_check": "CHECK ((cause = ANY (ARRAY['passage_index'::text, 'search_question'::text])))",
+        "embedding_attempts_grant_fkey": "FOREIGN KEY (owner_user_id, project_id, grant_id) REFERENCES storyos.project_destination_grants(owner_user_id, project_id, grant_id) MATCH FULL",
+        "embedding_attempts_pkey": "PRIMARY KEY (owner_user_id, project_id, embedding_attempt_id)",
+        "embedding_attempts_settlement_check": "CHECK ((settlement = ANY (ARRAY['vector'::text, 'invalid_result'::text, 'rejected'::text, 'not_submitted'::text, 'outcome_unknown'::text])))"
+      },
+      "indexes": {
+        "embedding_attempts_pkey": "CREATE UNIQUE INDEX embedding_attempts_pkey ON storyos.embedding_attempts USING btree (owner_user_id, project_id, embedding_attempt_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "embedding_attempts_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "external_contract_compatibility_decisions": {
       "columns": {
         "decision_kind": {

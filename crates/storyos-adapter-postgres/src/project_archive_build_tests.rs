@@ -131,6 +131,13 @@ async fn each_project_export_table_is_a_live_table() {
     for global in ["tool_registration_revisions", "tool_registration_tools"] {
         assert!(live.contains(global) && !PROJECT_EXPORT_TABLES.contains(&global));
     }
+    // The archive does not hold the Embedding Attempts of the Project (ADR 0095 section 3).
+    assert!(
+        live.contains("embedding_attempts")
+            && !super::EXPORT_TABLES
+                .iter()
+                .any(|(table, _)| *table == "embedding_attempts")
+    );
 }
 
 #[tokio::test]

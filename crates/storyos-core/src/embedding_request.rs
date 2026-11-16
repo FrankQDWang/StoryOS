@@ -4,6 +4,8 @@
 
 use std::time::Duration;
 
+use serde_json::{Value, json};
+
 use crate::assemble_context::count_context_item_tokens;
 use crate::{DestinationKind, GrantScope};
 
@@ -24,6 +26,15 @@ pub const MANUSCRIPT_EMBEDDING_PURPOSE: &str = "manuscript_embedding";
 pub enum EmbeddingAdapter {
     HostFake,
     VolcengineAgentPlanEmbeddings,
+}
+
+impl EmbeddingAdapter {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::HostFake => "host_fake",
+            Self::VolcengineAgentPlanEmbeddings => "volcengine_agent_plan_embeddings",
+        }
+    }
 }
 
 /// The one global Embedding Registration of a destination. It holds no Project data and no
@@ -142,6 +153,34 @@ impl EmbeddingInput {
             Self::Passage { text, .. } | Self::Question { text, .. } => text,
         }
     }
+
+    /// The Operation Input Snapshot: the cause and the references of the text, with no copy of
+    /// the text. A scheduled request has no Working Target and no Workspace Context (Context
+    /// contract scenario 23).
+    pub fn snapshot(&self) -> Value {
+        let source = match self {
+            Self::Passage {
+                chapter_id,
+                revision_id,
+                passage_digest,
+                ..
+            } => json!({
+                "chapter_id": chapter_id,
+                "revision_id": revision_id,
+                "passage_digest": passage_digest,
+            }),
+            Self::Question { tool_call_id, .. } => json!({"tool_call_id": tool_call_id}),
+        };
+        let cause = self.cause();
+        json!({
+            "cause": cause.as_str(),
+            "purpose": MANUSCRIPT_EMBEDDING_PURPOSE,
+            "source_class": cause.source_class(),
+            "texts": [source],
+            "working_target": "not_applicable",
+            "workspace_context": "not_applicable",
+        })
+    }
 }
 
 /// A typed refusal of an embedding request. A refusal writes no Destination Attempt and no
@@ -224,6 +263,38 @@ pub fn admit_embedding(facts: &EmbeddingAdmissionFacts<'_>) -> Result<(), Embedd
         return Err(EmbeddingRefusal::InputOutOfBounds);
     }
     Ok(())
+}
+
+/// The settlement of one Embedding Attempt.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EmbeddingSettlement {
+    Vector,
+    /// A vector arrived with a length other than the dimension of the Registration.
+    InvalidResult,
+    Rejected,
+    NotSubmitted,
+    OutcomeUnknown,
+}
+
+impl EmbeddingSettlement {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Vector => "vector",
+            Self::InvalidResult => "invalid_result",
+            Self::Rejected => "rejected",
+            Self::NotSubmitted => "not_submitted",
+            Self::OutcomeUnknown => "outcome_unknown",
+        }
+    }
+
+    /// The state of the Outbound Disclosure Event that the exchange proved.
+    pub fn disclosure(self) -> &'static str {
+        match self {
+            Self::Vector | Self::InvalidResult | Self::Rejected => "confirmed",
+            Self::NotSubmitted => "not_disclosed",
+            Self::OutcomeUnknown => "outcome_unknown",
+        }
+    }
 }
 
 #[cfg(test)]
