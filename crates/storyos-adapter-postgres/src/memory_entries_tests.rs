@@ -18,79 +18,56 @@ use crate::project_archive_build::tests::{export_command, zip_store_files};
 pub(crate) type Version<'a> = (u64, u64, u64, &'a str, &'a str, &'a str, &'a str);
 
 /// Writes each version of `versions` in the Project of `scope` with SQL, and moves the head of
-/// the Project to the highest revision and the next number.
+/// the Project to the highest revision and the next number. The values are test constants.
 pub(crate) async fn write_versions(admin: &Client, scope: &ProjectScope, versions: &[Version<'_>]) {
-    for &(number, version, revision, state, entry_type, title, description) in versions {
-        let (number, version, revision) = (
-            number.to_string(),
-            version.to_string(),
-            revision.to_string(),
-        );
+    let (owner, project) = (scope.owner_user_id.as_ref(), scope.project_id.as_ref());
+    for &(number, version, revision, state, kind, title, description) in versions {
         admin
-            .execute(
+            .batch_execute(&format!(
                 "INSERT INTO storyos.memory_entry_versions
                      (owner_user_id, project_id, memory_entry_id, entry_number, version,
                       memory_revision, state, entry_type, origin, title, description, text, cause,
                       source_references)
-                 VALUES ($1::text::uuid, $2::text::uuid, md5($2 || ':' || $3)::uuid,
-                         $3::text::numeric, $4::text::numeric, $5::text::numeric, $6, $7,
-                         'author_request', $8, $9, $9, '{}'::jsonb, '[]'::jsonb)",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &number,
-                    &version,
-                    &revision,
-                    &state,
-                    &entry_type,
-                    &title,
-                    &description,
-                ],
-            )
-            .await
-            .unwrap();
-        admin
-            .execute(
-                "INSERT INTO storyos.project_memory_heads AS head
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::numeric + 1)
+                 VALUES ('{owner}', '{project}', md5('{project}:{number}')::uuid, {number},
+                         {version}, {revision}, '{state}', '{kind}', 'author_request', '{title}',
+                         '{description}', '{description}', '{{}}', '[]');
+                 INSERT INTO storyos.project_memory_heads AS head
+                 VALUES ('{owner}', '{project}', {revision}, {number} + 1)
                  ON CONFLICT (owner_user_id, project_id) DO UPDATE
                     SET memory_revision = GREATEST(head.memory_revision, EXCLUDED.memory_revision),
-                        next_entry_number = GREATEST(head.next_entry_number,
-                                                     EXCLUDED.next_entry_number)",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &revision,
-                    &number,
-                ],
-            )
+                        next_entry_number =
+                          GREATEST(head.next_entry_number, EXCLUDED.next_entry_number)"
+            ))
             .await
             .unwrap();
     }
 }
 
-/// The result of `statement` for the runtime role in the Scope of `scope`: the count of the rows
-/// or the SQL state of the refusal.
-async fn as_runtime(
-    runtime: &mut Client,
-    scope: &ProjectScope,
-    statement: &str,
-) -> Result<u64, String> {
-    let transaction = runtime.transaction().await.unwrap();
-    transaction
-        .execute(
-            "SELECT set_config('storyos.owner_user_id', $1, true),
-                    set_config('storyos.project_id', $2, true)",
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    transaction.execute(statement, &[]).await.map_err(|error| {
-        error
-            .code()
-            .map(|code| code.code().to_owned())
-            .unwrap_or_default()
-    })
+/// The result of each statement of `statements` for the runtime role in the Scope of `scope`:
+/// the count of the rows or the SQL state of the refusal.
+async fn as_runtime(scope: &ProjectScope, statements: &[&str]) -> Vec<Result<u64, String>> {
+    let url = std::env::var("STORYOS_TEST_DATABASE_URL").expect("run through the script");
+    let (mut runtime, connection) = tokio_postgres::connect(&url, NoTls).await.unwrap();
+    tokio::spawn(connection);
+    let mut results = Vec::new();
+    for statement in statements {
+        let transaction = runtime.transaction().await.unwrap();
+        let scoped = "SELECT set_config('storyos.owner_user_id', $1, true), \
+                      set_config('storyos.project_id', $2, true)";
+        let values = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
+        transaction
+            .execute(scoped, &[&values[0], &values[1]])
+            .await
+            .unwrap();
+        let result = transaction.execute(*statement, &[]).await;
+        results.push(result.map_err(|error| {
+            error
+                .code()
+                .map(|code| code.code().to_owned())
+                .unwrap_or_default()
+        }));
+    }
+    results
 }
 
 /// The grants of ADR 0094 section 3, and the Scope of a read: two Projects of one User each read
@@ -101,85 +78,43 @@ async fn the_runtime_role_cannot_change_a_version_and_each_project_reads_only_it
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let (_, admin) = stores().await;
-    let (mut runtime, connection) = tokio_postgres::connect(
-        &std::env::var("STORYOS_TEST_DATABASE_URL")
-            .expect("run through scripts/verify-project-scope.sh"),
-        NoTls,
-    )
-    .await
-    .unwrap();
-    tokio::spawn(connection);
-    let (store, _) = stores().await;
+    let (store, admin) = stores().await;
     let (first, _, _) = queued(&store, "dd1").await;
     let (second, _, _) = queued(&store, "dd2").await;
-    write_versions(
-        &admin,
-        &first,
-        &[(1, 1, 1, "current", "character", "林舟", "船夫。")],
-    )
-    .await;
-    write_versions(
-        &admin,
-        &second,
-        &[(1, 1, 1, "current", "other", "渡口", "旧渡口。")],
-    )
-    .await;
-    let index = |scope: ProjectScope| {
-        let admin = &admin;
-        async move {
-            crate::memory_entries::read_memory_index(admin, &scope, 1)
-                .await
-                .unwrap()
-        }
+    let versions = [(1, 1, 1, "current", "character", "林舟", "船夫。")];
+    write_versions(&admin, &first, &versions).await;
+    let versions = [(1, 1, 1, "current", "other", "渡口", "旧渡口。")];
+    write_versions(&admin, &second, &versions).await;
+    let index = async |scope: &ProjectScope| {
+        let entries = crate::memory_entries::read_memory_index(&admin, scope, 1).await;
+        entries.unwrap()
     };
-    let rows = "SELECT 1 FROM storyos.memory_entry_versions WHERE project_id <> \
-                current_setting('storyos.project_id')::uuid";
     let entry = |entry_type, title: &str, description: &str| MemoryIndexEntry {
         number: 1,
         entry_type,
         title: title.to_owned(),
         description: description.to_owned(),
     };
+    let statements = [
+        "SELECT 1 FROM storyos.memory_entry_versions
+          WHERE project_id <> current_setting('storyos.project_id')::uuid",
+        "SELECT 1 FROM storyos.memory_entry_versions",
+        "UPDATE storyos.memory_entry_versions SET title = 'x'",
+        "DELETE FROM storyos.memory_entry_versions",
+        "DELETE FROM storyos.project_memory_heads",
+    ];
+    let refused = || Err("42501".to_owned());
 
     assert_eq!(
         (
-            index(first.clone()).await,
-            index(second.clone()).await,
-            as_runtime(&mut runtime, &first, rows).await,
-            as_runtime(
-                &mut runtime,
-                &first,
-                "SELECT 1 FROM storyos.memory_entry_versions"
-            )
-            .await,
-            as_runtime(
-                &mut runtime,
-                &first,
-                "UPDATE storyos.memory_entry_versions SET title = 'x'"
-            )
-            .await,
-            as_runtime(
-                &mut runtime,
-                &first,
-                "DELETE FROM storyos.memory_entry_versions"
-            )
-            .await,
-            as_runtime(
-                &mut runtime,
-                &first,
-                "DELETE FROM storyos.project_memory_heads"
-            )
-            .await,
+            index(&first).await,
+            index(&second).await,
+            as_runtime(&first, &statements).await
         ),
         (
             vec![entry(MemoryEntryType::Character, "林舟", "船夫。")],
             vec![entry(MemoryEntryType::Other, "渡口", "旧渡口。")],
-            Ok(0),
-            Ok(1),
-            Err("42501".to_owned()),
-            Err("42501".to_owned()),
-            Err("42501".to_owned()),
+            vec![Ok(0), Ok(1), refused(), refused(), refused()],
         )
     );
 }
@@ -194,32 +129,12 @@ async fn the_archive_of_a_project_has_each_version_and_its_memory_head() {
         .await;
     let (store, admin) = stores().await;
     let (scope, _, _) = queued(&store, "dd3").await;
-    write_versions(
-        &admin,
-        &scope,
-        &[
-            (
-                1,
-                1,
-                1,
-                "current",
-                "foreshadowing",
-                "铜铃",
-                "铃声预示船沉。",
-            ),
-            (2, 1, 2, "current", "character", "阿青", "林舟的妹妹。"),
-            (
-                1,
-                2,
-                3,
-                "deleted",
-                "foreshadowing",
-                "铜铃",
-                "铃声预示船沉。",
-            ),
-        ],
-    )
-    .await;
+    let versions = [
+        (1, 1, 1, "current", "foreshadowing", "铃", "铃声。"),
+        (2, 1, 2, "current", "character", "阿青", "妹妹。"),
+        (1, 2, 3, "deleted", "foreshadowing", "铃", "铃声。"),
+    ];
+    write_versions(&admin, &scope, &versions).await;
     let (export, input) = export_command(&scope, "dd");
     issue_project_command_challenge(
         &store,

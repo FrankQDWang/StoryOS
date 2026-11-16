@@ -18,7 +18,7 @@ use crate::memory_entries::tests::write_versions;
 
 /// The Index of the two entries that `seeded` writes at the Memory revision 2.
 const INDEX: &str = "{\"type\":\"foreshadowing\"}\n\
-    {\"description\":\"铃声预示船沉。\",\"id\":2,\"title\":\"铜铃\"}\n{\"type\":\"character\"}\n\
+    {\"description\":\"铃声。\",\"id\":2,\"title\":\"铃\"}\n{\"type\":\"character\"}\n\
     {\"description\":\"沉默的船夫。\",\"id\":1,\"title\":\"林舟\"}";
 
 /// A Project of `prefix` whose first Run is complete, with two current entries at the Memory
@@ -32,15 +32,7 @@ async fn seeded(
     complete(store, admin, &scope, &first).await;
     let versions = [
         (1, 1, 1, "current", "character", "林舟", "沉默的船夫。"),
-        (
-            2,
-            1,
-            2,
-            "current",
-            "foreshadowing",
-            "铜铃",
-            "铃声预示船沉。",
-        ),
+        (2, 1, 2, "current", "foreshadowing", "铃", "铃声。"),
     ];
     write_versions(admin, &scope, &versions).await;
     (scope, chapter_id)
@@ -141,15 +133,7 @@ async fn a_run_keeps_its_pinned_index_and_a_later_run_gets_the_new_index() {
     let pinned = admitted(&store, &project, "dd5", "Help.", conversation_of("dd4")).await;
     // A later transaction deletes the entry 2 and writes the entry 3 before the second RunStep.
     let changes = [
-        (
-            2,
-            2,
-            3,
-            "deleted",
-            "foreshadowing",
-            "铜铃",
-            "铃声预示船沉。",
-        ),
+        (2, 2, 3, "deleted", "foreshadowing", "铃", "铃声。"),
         (3, 1, 4, "current", "character", "阿青", "林舟的妹妹。"),
     ];
     write_versions(&admin, &project.0, &changes).await;
