@@ -1,13 +1,12 @@
 //! The StoryOS Worker binary: the Worker loop with the PostgreSQL store, the fake and Agent Plan
 //! adapters, and the credential resolver of the Worker settings. `--discover-exa` runs one
-//! `Discover` exchange of the MCP client adapter. `--probe-embedding <case>` sends one embedding
-//! request of the probe of ADR 0095 section 5.
+//! `Discover` exchange of the MCP client adapter.
 
 mod contract_fault_holds;
 mod credential;
 mod discover_tools;
-mod probe_embedding;
 mod registered_adapters;
+mod registered_embeddings;
 mod settings;
 
 use std::env;
@@ -16,7 +15,7 @@ use secrecy::ExposeSecret as _;
 use storyos_adapter_diagnostics::or_exit;
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_adapter_postgres::{PostgresProjectReader, require_release1_storage_activation_proof};
-use storyos_adapter_volcengine_responses::AgentPlanResponses;
+use storyos_adapter_volcengine_responses::{AgentPlanEmbeddings, AgentPlanResponses};
 use storyos_worker::ModelDestination;
 
 /// The bound of one complete Tool exchange: the session, the drift check, and the call.
@@ -42,17 +41,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             exa_api_key: settings.exa_api_key,
         };
         std::process::exit(discover_tools::discover_exa(resolver).await);
-    }
-    if let Some(position) = arguments
-        .iter()
-        .position(|argument| argument == "--probe-embedding")
-    {
-        let resolver = credential::SettingsCredentials {
-            agent_plan_api_key: settings.agent_plan_api_key,
-            exa_api_key: None,
-        };
-        let case = arguments.get(position + 1).map(String::as_str);
-        std::process::exit(probe_embedding::probe_embedding(resolver, case).await);
     }
     let database_url = settings
         .database_url
@@ -80,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             fake: FakeDestination,
             agent_plan: AgentPlanResponses {
                 resolver: credential::SettingsCredentials {
-                    agent_plan_api_key: settings.agent_plan_api_key,
+                    agent_plan_api_key: settings.agent_plan_api_key.clone(),
                     exa_api_key: None,
                 },
             },
@@ -93,8 +81,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             },
             timeout: TOOL_EXCHANGE_TIMEOUT,
         },
-        // No product code sends an embedding request yet. S7-C2a2 adds the Agent Plan adapter.
-        embeddings: storyos_adapter_fake_destination::FakeEmbeddings,
+        embeddings: registered_embeddings::RegisteredEmbeddings {
+            fake: storyos_adapter_fake_destination::FakeEmbeddings,
+            agent_plan: AgentPlanEmbeddings {
+                resolver: credential::SettingsCredentials {
+                    agent_plan_api_key: settings.agent_plan_api_key,
+                    exa_api_key: None,
+                },
+            },
+        },
     };
     if arguments.iter().any(|argument| argument == "--once") {
         or_exit(

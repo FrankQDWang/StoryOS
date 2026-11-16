@@ -1,7 +1,16 @@
-use storyos_application::{EmbeddingObservation, EmbeddingProviderAdapter, EmbeddingUsage};
+use storyos_application::{
+    EmbeddingObservation, EmbeddingProviderAdapter, EmbeddingRoute, EmbeddingUsage,
+};
 use storyos_core::{EmbeddingInput, EmbeddingRegistration, HOST_FAKE_EMBEDDING_REGISTRATION};
 
 use super::*;
+
+/// The fake binding has no endpoint and no Credential Reference.
+const ROUTE: EmbeddingRoute = EmbeddingRoute {
+    registration_revision: String::new(),
+    endpoint: None,
+    credential_reference: None,
+};
 
 fn question(text: &str) -> EmbeddingInput {
     EmbeddingInput::Question {
@@ -12,7 +21,7 @@ fn question(text: &str) -> EmbeddingInput {
 
 async fn observe(registration: &'static EmbeddingRegistration, text: &str) -> EmbeddingObservation {
     let prepared = FakeEmbeddings
-        .prepare(registration, &question(text))
+        .prepare(registration, &ROUTE, &question(text))
         .await
         .unwrap();
     FakeEmbeddings.exchange(prepared.prepared).await
@@ -64,11 +73,11 @@ async fn the_projection_holds_the_mapping_and_a_digest_and_no_text() {
     let registration = &HOST_FAKE_EMBEDDING_REGISTRATION;
 
     let passage = FakeEmbeddings
-        .prepare(registration, &passage)
+        .prepare(registration, &ROUTE, &passage)
         .await
         .unwrap();
     let question = FakeEmbeddings
-        .prepare(registration, &question("The tide turned."))
+        .prepare(registration, &ROUTE, &question("The tide turned."))
         .await
         .unwrap();
 
@@ -104,7 +113,7 @@ async fn the_fake_refuses_bad_input_and_a_marker_selects_the_observation() {
         ],
         [
             rejected("empty_text"),
-            rejected("text_above_limit"),
+            rejected(EMBEDDING_INPUT_TOO_LONG),
             rejected("dimensions_not_offered"),
             rejected("fake_rejection"),
             EmbeddingObservation::NotSubmitted,
@@ -114,5 +123,19 @@ async fn the_fake_refuses_bad_input_and_a_marker_selects_the_observation() {
     assert_eq!(
         vector(observe(registration, &"潮".repeat(8_192)).await).len(),
         1_024
+    );
+}
+
+#[tokio::test]
+async fn the_text_of_the_probe_above_the_limit_gets_the_native_reason_of_the_route() {
+    // The text of request E7 of the record of S7-C1. The Agent Plan adapter test of this text
+    // keeps the same reason from the reply of the route.
+    let text = "The probe repeats one constant sentence. ".repeat(25_000);
+
+    assert_eq!(
+        observe(&HOST_FAKE_EMBEDDING_REGISTRATION, &text).await,
+        EmbeddingObservation::Rejected {
+            reason: "input_too_long:http_400:InvalidParameter".to_owned(),
+        }
     );
 }

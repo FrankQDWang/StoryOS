@@ -1,64 +1,300 @@
 use std::time::Duration;
 
 use serde_json::json;
-use storyos_application::CredentialReference;
+use storyos_application::{
+    CredentialReference, CredentialResolver, EmbeddingObservation, EmbeddingProviderAdapter,
+    EmbeddingRoute, EmbeddingUsage, PreDispatchRefusal, ResolvedCredential,
+};
+use storyos_core::{AGENT_PLAN_EMBEDDING_REGISTRATION, EmbeddingInput, EmbeddingRegistration};
 
-use super::{AgentPlanEmbeddings, EmbeddingObservation, EmbeddingRequest};
+use super::AgentPlanEmbeddings;
 use crate::tests::{CanaryResolver, Reply, destination};
 
-#[tokio::test]
-async fn one_embedding_request_sends_the_text_items_once_with_the_resolved_credential() {
-    let reply = json!({
+fn route(endpoint: &str) -> EmbeddingRoute {
+    EmbeddingRoute {
+        registration_revision: AGENT_PLAN_EMBEDDING_REGISTRATION.revision.to_owned(),
+        endpoint: Some(endpoint.to_owned()),
+        credential_reference: Some(CredentialReference(
+            "settings:STORYOS_AGENT_PLAN_API_KEY".to_owned(),
+        )),
+    }
+}
+
+fn passage(text: &str) -> EmbeddingInput {
+    EmbeddingInput::Passage {
+        chapter_id: "ch-1".to_owned(),
+        revision_id: "rev-1".to_owned(),
+        passage_digest: "sha256:p".to_owned(),
+        text: text.to_owned(),
+    }
+}
+
+fn adapter() -> AgentPlanEmbeddings<CanaryResolver> {
+    AgentPlanEmbeddings {
+        resolver: CanaryResolver::default(),
+    }
+}
+
+/// The reply form of the record of S7-C1, with a vector of `dimensions` values.
+fn vector_reply(dimensions: usize) -> String {
+    json!({
         "id": "021700000000000",
         "object": "list",
-        "data": {"object": "embedding", "embedding": [0.25, -0.5]},
+        "data": {"object": "embedding", "embedding": vec![0.25; dimensions]},
         "usage": {"prompt_tokens": 9, "total_tokens": 9},
-    });
-    let (base, served) = destination(Reply::Http(200, reply.to_string())).await;
+    })
+    .to_string()
+}
+
+/// Sends `input` to a destination that answers with `reply`, and returns the observation and
+/// the task that gives the received request.
+async fn exchange(
+    reply: Reply,
+    input: &EmbeddingInput,
+    timeout: Duration,
+) -> (
+    EmbeddingObservation,
+    tokio::task::JoinHandle<crate::tests::Received>,
+) {
+    let (base, served) = destination(reply).await;
+    let embeddings = adapter();
+    let mut prepared = embeddings
+        .prepare(&AGENT_PLAN_EMBEDDING_REGISTRATION, &route(&base), input)
+        .await
+        .unwrap();
+    prepared.prepared.timeout = timeout;
+    (embeddings.exchange(prepared.prepared).await, served)
+}
+
+#[tokio::test]
+async fn each_cause_sends_one_text_in_the_recorded_form_with_the_resolved_credential() {
+    let question = EmbeddingInput::Question {
+        tool_call_id: "call-1".to_owned(),
+        text: "Where is the lantern?".to_owned(),
+    };
+    for input in [passage("The tide turned."), question] {
+        let (observation, served) = exchange(
+            Reply::Http(200, vector_reply(/*dimensions*/ 1_024)),
+            &input,
+            Duration::from_secs(/*secs*/ 5),
+        )
+        .await;
+        let (request_line, authorization, body) = served.await.unwrap();
+
+        assert_eq!(
+            request_line,
+            "POST /api/plan/v3/embeddings/multimodal HTTP/1.1"
+        );
+        assert_eq!(
+            authorization.as_deref(),
+            Some("Bearer storyos-credential-canary-5e21")
+        );
+        assert_eq!(
+            body,
+            storyos_core::canonical_json(&json!({
+                "model": "doubao-embedding-vision-251215",
+                "instructions": input.cause().instructions(),
+                "input": [{"type": "text", "text": input.text()}],
+                "encoding_format": "float",
+                "dimensions": 1_024,
+            }))
+        );
+        assert_eq!(
+            observation,
+            EmbeddingObservation::Vector {
+                values: vec![0.25; 1_024],
+                usage: EmbeddingUsage::Reported { input_tokens: 9 },
+            }
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_projection_names_the_mapping_and_the_digest_of_the_body_and_no_text() {
+    let embeddings = adapter();
+    let input = passage("The tide turned.");
+
+    let prepared = embeddings
+        .prepare(
+            &AGENT_PLAN_EMBEDDING_REGISTRATION,
+            &route("http://127.0.0.1:1/api/plan/v3/"),
+            &input,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        prepared.projection.mapping_revision,
+        AGENT_PLAN_EMBEDDING_REGISTRATION.mapping_revision
+    );
+    assert_eq!(
+        prepared.projection.digest,
+        format!(
+            "sha256:{}",
+            storyos_core::hex_sha256(prepared.prepared.body.as_bytes())
+        )
+    );
+    assert_eq!(
+        prepared.prepared.url,
+        "http://127.0.0.1:1/api/plan/v3/embeddings/multimodal"
+    );
+    assert_eq!(
+        prepared.prepared.timeout,
+        storyos_core::EMBEDDING_REQUEST_TIMEOUT
+    );
+}
+
+/// A resolver that has no value for each reference.
+struct EmptyResolver;
+
+impl CredentialResolver for EmptyResolver {
+    async fn resolve(&self, _reference: &CredentialReference) -> Option<ResolvedCredential> {
+        None
+    }
+}
+
+/// A resolver that a refusal before the resolution never calls.
+struct UncalledResolver;
+
+impl CredentialResolver for UncalledResolver {
+    async fn resolve(&self, _reference: &CredentialReference) -> Option<ResolvedCredential> {
+        panic!("the adapter resolved a credential for a refused request")
+    }
+}
+
+static OTHER_BOUNDS: EmbeddingRegistration = EmbeddingRegistration {
+    request_bounds: "embedding_request_v0",
+    ..AGENT_PLAN_EMBEDDING_REGISTRATION
+};
+static OTHER_MAPPING: EmbeddingRegistration = EmbeddingRegistration {
+    mapping_revision: "storyos.volcengine-agent-plan.embedding.v0",
+    ..AGENT_PLAN_EMBEDDING_REGISTRATION
+};
+
+#[tokio::test]
+async fn the_adapter_refuses_before_the_claim_without_the_mapping_the_endpoint_or_a_credential() {
+    let input = passage("The tide turned.");
+    let base = "http://127.0.0.1:1/api/plan/v3";
+    let no_endpoint = EmbeddingRoute {
+        endpoint: None,
+        ..route(base)
+    };
+    let no_reference = EmbeddingRoute {
+        credential_reference: None,
+        ..route(base)
+    };
     let embeddings = AgentPlanEmbeddings {
-        resolver: CanaryResolver::default(),
+        resolver: UncalledResolver,
     };
-    let request = EmbeddingRequest {
-        endpoint: base.clone(),
-        model: "doubao-embedding-vision-251215".to_owned(),
-        instructions: "Instruction:Compress the text into one word.\nQuery:".to_owned(),
-        texts: vec!["first".to_owned(), "second".to_owned()],
-        dimensions: Some(1024),
-        timeout: Duration::from_secs(/*secs*/ 5),
-    };
-    let reference = CredentialReference("settings:STORYOS_AGENT_PLAN_API_KEY".to_owned());
+    let rows: [(
+        &'static EmbeddingRegistration,
+        EmbeddingRoute,
+        PreDispatchRefusal,
+    ); 4] = [
+        (
+            &OTHER_BOUNDS,
+            route(base),
+            PreDispatchRefusal::UnsupportedRequest,
+        ),
+        (
+            &OTHER_MAPPING,
+            route(base),
+            PreDispatchRefusal::UnsupportedRequest,
+        ),
+        (
+            &AGENT_PLAN_EMBEDDING_REGISTRATION,
+            no_endpoint,
+            PreDispatchRefusal::UnsupportedRequest,
+        ),
+        (
+            &AGENT_PLAN_EMBEDDING_REGISTRATION,
+            no_reference,
+            PreDispatchRefusal::CredentialUnavailable,
+        ),
+    ];
 
-    let prepared = embeddings.prepare(&request, &reference).await.unwrap();
-    let observation = embeddings.exchange(prepared).await;
+    for (registration, route, expected) in rows {
+        let refusal = embeddings
+            .prepare(registration, &route, &input)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(refusal, expected);
+    }
+    let unresolved = AgentPlanEmbeddings {
+        resolver: EmptyResolver,
+    }
+    .prepare(&AGENT_PLAN_EMBEDDING_REGISTRATION, &route(base), &input)
+    .await
+    .err()
+    .unwrap();
+    assert_eq!(unresolved, PreDispatchRefusal::CredentialUnavailable);
+}
 
-    let (request_line, authorization, body) = served.await.unwrap();
+#[tokio::test]
+async fn each_reply_form_gives_one_observation_and_a_refusal_keeps_no_provider_text() {
+    let input = passage("The tide turned.");
+    let over_limit = json!({"error": {
+        "code": "InvalidParameter",
+        "message": "Total tokens of image and text exceed max message tokens. Request id: 0217",
+        "param": "",
+        "type": "BadRequest",
+    }})
+    .to_string();
+    let short = Duration::from_millis(/*millis*/ 300);
+    let rows = [
+        (
+            Reply::Http(400, over_limit),
+            EmbeddingObservation::Rejected {
+                reason: "input_too_long:http_400:InvalidParameter".to_owned(),
+            },
+        ),
+        (
+            Reply::Http(200, json!({"data": [{"embedding": [0.25]}]}).to_string()),
+            EmbeddingObservation::InvalidResult,
+        ),
+        (
+            Reply::Http(200, "not json".to_owned()),
+            EmbeddingObservation::InvalidResult,
+        ),
+        (
+            Reply::Http(200, json!({"data": {"embedding": [0.25, "x"]}}).to_string()),
+            EmbeddingObservation::InvalidResult,
+        ),
+        (
+            Reply::Http(200, json!({"data": {"embedding": [0.5]}}).to_string()),
+            EmbeddingObservation::Vector {
+                values: vec![0.5],
+                usage: EmbeddingUsage::Unknown,
+            },
+        ),
+        (Reply::Drop, EmbeddingObservation::OutcomeUnknown),
+        (Reply::Hold, EmbeddingObservation::OutcomeUnknown),
+    ];
+
+    for (reply, expected) in rows {
+        let (observation, _) = exchange(reply, &input, short).await;
+        assert_eq!(observation, expected);
+    }
+}
+
+#[tokio::test]
+async fn a_closed_port_is_not_submitted() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}/api/plan/v3", listener.local_addr().unwrap());
+    drop(listener);
+    let embeddings = adapter();
+    let prepared = embeddings
+        .prepare(
+            &AGENT_PLAN_EMBEDDING_REGISTRATION,
+            &route(&base),
+            &passage("The tide turned."),
+        )
+        .await
+        .unwrap();
+
     assert_eq!(
-        request_line,
-        "POST /api/plan/v3/embeddings/multimodal HTTP/1.1"
-    );
-    assert_eq!(
-        authorization.as_deref(),
-        Some("Bearer storyos-credential-canary-5e21")
-    );
-    assert_eq!(
-        body,
-        storyos_core::canonical_json(&json!({
-            "model": "doubao-embedding-vision-251215",
-            "instructions": "Instruction:Compress the text into one word.\nQuery:",
-            "input": [
-                {"type": "text", "text": "first"},
-                {"type": "text", "text": "second"},
-            ],
-            "encoding_format": "float",
-            "dimensions": 1024,
-        }))
-    );
-    assert_eq!(
-        observation,
-        EmbeddingObservation::Answered {
-            status: 200,
-            request_id: None,
-            body: reply,
-        }
+        embeddings.exchange(prepared.prepared).await,
+        EmbeddingObservation::NotSubmitted
     );
 }

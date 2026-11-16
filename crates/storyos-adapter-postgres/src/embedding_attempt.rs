@@ -4,8 +4,8 @@
 
 use serde_json::json;
 use storyos_application::{
-    EmbeddingClaim, EmbeddingDispatchStore, EmbeddingProjection, EmbeddingRecord, EmbeddingUsage,
-    ProjectReadError, ProjectScope,
+    CredentialReference, EmbeddingClaim, EmbeddingDispatchStore, EmbeddingProjection,
+    EmbeddingRecord, EmbeddingRoute, EmbeddingUsage, ProjectReadError, ProjectScope,
 };
 use storyos_core::{
     EmbeddingAdmissionFacts, EmbeddingInput, EmbeddingRefusal, EmbeddingRegistration,
@@ -69,6 +69,34 @@ fn read_error(error: impl std::error::Error + Send + Sync + 'static) -> ProjectR
 }
 
 impl EmbeddingDispatchStore for PostgresProjectReader {
+    #[tracing::instrument(skip_all, level = "debug")]
+    async fn embedding_route(
+        &self,
+        scope: &ProjectScope,
+    ) -> Result<Option<EmbeddingRoute>, ProjectReadError> {
+        let transaction = self
+            .begin_serializable_project_command_transaction(scope)
+            .await
+            .map_err(read_error)?;
+        let binding = transaction
+            .client
+            .query_opt(
+                CURRENT_EMBEDDING_BINDING,
+                &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+            )
+            .await
+            .map_err(read_error)?;
+        let route = binding.map(|row| EmbeddingRoute {
+            registration_revision: row.get(/*idx*/ 1),
+            endpoint: row.get(/*idx*/ 8),
+            credential_reference: row
+                .get::<_, Option<String>>(/*idx*/ 7)
+                .map(CredentialReference),
+        });
+        transaction.commit().await.map_err(read_error)?;
+        Ok(route)
+    }
+
     #[tracing::instrument(skip_all, level = "debug")]
     async fn commit_embedding_claim(
         &self,

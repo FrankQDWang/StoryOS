@@ -7,7 +7,9 @@ use std::future::Future;
 
 use storyos_core::{EmbeddingInput, EmbeddingRefusal, EmbeddingRegistration, EmbeddingSettlement};
 
-use crate::{DiagnosticField, ProjectReadError, ProjectScope};
+use crate::{
+    CredentialReference, DiagnosticField, PreDispatchRefusal, ProjectReadError, ProjectScope,
+};
 
 /// The non-secret Wire Payload Projection of one embedding request. It holds no copy of the text.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -22,9 +24,15 @@ pub struct PreparedEmbeddingRequest<P> {
     pub prepared: P,
 }
 
-/// The one refusal of a preparation: the adapter cannot resolve the Credential Reference.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CredentialUnavailable;
+/// The route of the current embedding use binding of the Project: its Embedding Registration,
+/// the endpoint of its destination identity evidence, and its Credential Reference. The fake
+/// destination has no endpoint and no reference.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EmbeddingRoute {
+    pub registration_revision: String,
+    pub endpoint: Option<String>,
+    pub credential_reference: Option<CredentialReference>,
+}
 
 /// The usage of one exchange. Unknown usage is never zero usage.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,6 +51,8 @@ pub enum EmbeddingObservation {
     Rejected {
         reason: String,
     },
+    /// A reply that does not have the form of the mapping.
+    InvalidResult,
     NotSubmitted,
     OutcomeUnknown,
 }
@@ -72,6 +82,13 @@ pub enum EmbeddingResult {
 
 /// Persistence of the embedding sequence. Each operation is one committed transaction.
 pub trait EmbeddingDispatchStore: Sync {
+    /// The route of the current embedding use binding of the Project, or `None`. The dispatch
+    /// claim decides the admission again in its own transaction.
+    fn embedding_route(
+        &self,
+        scope: &ProjectScope,
+    ) -> impl Future<Output = Result<Option<EmbeddingRoute>, ProjectReadError>> + Send;
+
     /// Loads the admission facts, decides the admission with the Core function, and commits the
     /// Embedding Attempt with the Outbound Disclosure Event in OutcomeUnknown, before I/O. A
     /// refusal writes nothing.
@@ -97,15 +114,14 @@ pub trait EmbeddingProviderAdapter: Sync {
     /// The single-use value of one preparation. It may hold a resolved credential.
     type Prepared: Send;
 
-    /// Maps the one text to its wire form and resolves the credential, or refuses before the
-    /// dispatch claim.
+    /// Maps the one text to its wire form and resolves the credential of `route`, or refuses
+    /// before the dispatch claim.
     fn prepare(
         &self,
         registration: &'static EmbeddingRegistration,
+        route: &EmbeddingRoute,
         input: &EmbeddingInput,
-    ) -> impl Future<
-        Output = Result<PreparedEmbeddingRequest<Self::Prepared>, CredentialUnavailable>,
-    > + Send;
+    ) -> impl Future<Output = Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal>> + Send;
 
     /// Consumes the prepared value and reports one observation.
     fn exchange(
@@ -124,9 +140,10 @@ impl EmbeddingProviderAdapter for NoEmbeddingDestination {
     async fn prepare(
         &self,
         _registration: &'static EmbeddingRegistration,
+        _route: &EmbeddingRoute,
         _input: &EmbeddingInput,
-    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, CredentialUnavailable> {
-        Err(CredentialUnavailable)
+    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
+        Err(PreDispatchRefusal::CredentialUnavailable)
     }
 
     async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
@@ -160,9 +177,18 @@ pub async fn dispatch_embedding(
     let Some(configured) = registration else {
         return refused(EmbeddingRefusal::NotConfigured);
     };
-    let prepared = match adapter.prepare(configured, input).await {
+    let route = match store.embedding_route(scope).await? {
+        Some(route) if route.registration_revision == configured.revision => route,
+        _ => return refused(EmbeddingRefusal::BindingAbsent),
+    };
+    let prepared = match adapter.prepare(configured, &route, input).await {
         Ok(prepared) => prepared,
-        Err(CredentialUnavailable) => return refused(EmbeddingRefusal::CredentialUnavailable),
+        Err(PreDispatchRefusal::CredentialUnavailable) => {
+            return refused(EmbeddingRefusal::CredentialUnavailable);
+        }
+        Err(PreDispatchRefusal::UnsupportedRequest) => {
+            return refused(EmbeddingRefusal::UnsupportedRequest);
+        }
     };
     let claim = match store
         .commit_embedding_claim(scope, registration, input, &prepared.projection)
@@ -219,6 +245,14 @@ fn settle<'a>(
                 EmbeddingSettlement::Rejected,
                 EmbeddingUsage::Unknown,
                 Some(reason.as_str()),
+            ),
+            None,
+        ),
+        EmbeddingObservation::InvalidResult => (
+            record(
+                EmbeddingSettlement::InvalidResult,
+                EmbeddingUsage::Unknown,
+                None,
             ),
             None,
         ),
