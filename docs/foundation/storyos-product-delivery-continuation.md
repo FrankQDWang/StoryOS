@@ -256,7 +256,7 @@ proof owner maps these obligations to exact executable evidence.
 | [Bound the General Agent to the Novel Project Domain](https://github.com/FrankQDWang/StoryOS/issues/4) | Project Agent and Scope invariant; S3 onward. | `S3-REQ-001`; `REL-003` |
 | [Give Each Project One Persistent Main Agent](https://github.com/FrankQDWang/StoryOS/issues/5) | Project Agent identity; S3 foundation and S7 continuity. | `S3-REQ-001`; `S7-REQ-001` |
 | [Use Natural Language as the Default Task Entry](https://github.com/FrankQDWang/StoryOS/issues/6) | Discovery-writing entry; S3 onward. | `S3-REQ-002` |
-| [Protect All Authoritative Creative State](https://github.com/FrankQDWang/StoryOS/issues/7) | Authority invariant in all stages; structured truth in S7. | `REL-002`; `S7-REQ-002` |
+| [Protect All Authoritative Creative State](https://github.com/FrankQDWang/StoryOS/issues/7) | Authority invariant in all stages; structured truth deferred by ADR 0094. | `REL-002`; `S7-REQ-002` |
 | [Support Controlled Proactive Runs](https://github.com/FrankQDWang/StoryOS/issues/8) | AgentRun; S9. | `S9-REQ-004` |
 | [Expose a Layered Interruptible Run Timeline](https://github.com/FrankQDWang/StoryOS/issues/9) | AgentRun; S3 foundation, S5 activity, S9 complete control. | `S3-REQ-003`; `S5-REQ-005`; `S9-REQ-001` |
 | [Use Adaptive Plan-and-Act Execution](https://github.com/FrankQDWang/StoryOS/issues/10) | AgentRun; S3 foundation and S9 long work. | `S3-REQ-003`; `S9-REQ-001` |

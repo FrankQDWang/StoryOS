@@ -29,7 +29,7 @@ Project Scope-bound, inspectable reference material that helps the Agent carry u
 _Avoid_: Authoritative State, Provider continuation, active context compaction, hidden persistent memory
 
 **Memory Index**:
-The bounded Context item of a Run that lists the type, the title, the description, and the conflict flag of each current Memory Entry, in groups by type. It navigates to Agent Memory and never holds the text of an entry; the Agent reads an entry with a Host Tool ([ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)).
+The bounded Context item of a Run that lists each current Memory Entry. A line has the type, the title, the description, and the conflict flag of one entry, and the lines are in groups by type. The item navigates to Agent Memory and never holds the text of an entry. The Agent reads an entry with a Host Tool ([ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)).
 _Avoid_: Memory navigation summary, whole Memory collection, loaded Memory
 
 **Conversation Memory Settings**:

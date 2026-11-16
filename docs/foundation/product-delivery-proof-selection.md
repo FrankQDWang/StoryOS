@@ -103,8 +103,8 @@ outcomes; it does not prescribe generated prose or claim model understanding.
 | Expiry, unknown create, and cancellation | `S3-REQ-006`, `S3-EVD-005`, `S4-REQ-004`, `S4-EVD-003`. | `DVG-05`, `DVG-07`, `DVG-08`, `DVG-11`; `ORC-OUTCOME-UNKNOWN`, `ORC-RECOVERY-ATOMICITY`. | `CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO`, `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION`, `CFP-RECONCILIATION-BEFORE-SETTLEMENT`, `CFP-MODEL-AFTER-SUCCESSOR-FENCE`, `CFP-LATE-RESULT`; `SCH-UNKNOWN/CRASH/FENCE/REORDER`. | `B-FAKE`, `B-CONTEXT`, `B-RECOVERY`. |
 | Exact real-route qualification | `S4-REQ-001`, `S4-EVD-001`. | `DVG-01`, `DVG-05`, `DVG-11`; `ORC-CONTRACT`, `ORC-DISPATCH-DISCLOSURE`. | `CFP-CONTRACT-DRIFT`, `CFP-DISPATCH-BEFORE-CLAIM`; `SCH-DRIFT/NORMAL/SCOPE`. | `B-CONTRACT`, `B-CONTEXT`, `B-REAL-ADVISORY`. |
 | Business ToolCall | `S5-REQ-001`, `S5-REQ-003`, `S5-REQ-005`, `S5-EVD-001`, `S5-EVD-002`, `S5-EVD-003`. | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-07`, `DVG-08`, `DVG-11`; `ORC-PRODUCT-5`. | `CFP-MODEL-BEFORE-DECISION`, `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION`, `CFP-LATE-RESULT`; `SCH-NORMAL/SCOPE/DRIFT/UNKNOWN/FENCE`. | `B-CONTEXT`, `B-FAKE`, `B-RECOVERY`, `B-REAL-ADVISORY`. |
-| Memory maintenance and publication | `S7-REQ-005`, `S7-REQ-006`, `S7-EVD-002`. | `DVG-02`, `DVG-04`, `DVG-07`, `DVG-11`; `ORC-PRODUCT-7`, `ORC-RECOVERY-ATOMICITY`. | `CFP-MEMORY-BEFORE-PUBLICATION`, `CFP-MEMORY-AFTER-PUBLICATION`, `CFP-FENCE-AFTER-TAKEOVER`, `CFP-SCOPE-BEFORE-QUERY`; `SCH-NORMAL/CRASH/FENCE/REORDER/SCOPE`. | `B-CONTEXT`, `B-RECOVERY`, `B-REPLAY`, `B-SCOPE`. |
-| Memory restriction, cleanup, and portability | `S7-REQ-007`, `S7-EVD-003`. | `DVG-02`, `DVG-04`, `DVG-07`, `DVG-09`, `DVG-10`, `DVG-11`; `ORC-PRODUCT-7`, `ORC-RESTORE-LIFECYCLE`. | `CFP-MEMORY-BEFORE-BYTE-ACQUISITION`, `CFP-LIFECYCLE-AFTER-INVALIDATION-BEFORE-CLEANUP`, `CFP-RESTORE-STAGING`, `CFP-RESTORE-BEFORE-VISIBILITY`, `CFP-RESTORE-AFTER-VISIBILITY`; `SCH-LIFECYCLE/CRASH/REORDER/RESTORE/SCOPE`. | `B-CONTEXT`, `B-RECOVERY`, `B-REPLAY`, `B-RESTORE`. |
+| Memory capture and consolidation (the publication fault points apply to the commit of a consolidation pass) | `S7-REQ-005`, `S7-REQ-006`, `S7-EVD-002`. | `DVG-02`, `DVG-04`, `DVG-07`, `DVG-11`; `ORC-PRODUCT-7`, `ORC-RECOVERY-ATOMICITY`. | `CFP-MEMORY-BEFORE-PUBLICATION`, `CFP-MEMORY-AFTER-PUBLICATION`, `CFP-FENCE-AFTER-TAKEOVER`, `CFP-SCOPE-BEFORE-QUERY`; `SCH-NORMAL/CRASH/FENCE/REORDER/SCOPE`. | `B-CONTEXT`, `B-RECOVERY`, `B-REPLAY`, `B-SCOPE`. |
+| Manuscript retrieval and Memory portability (ADR 0094 withdrew the restriction and cleanup cases, and their byte-acquisition and cleanup fault points have no subject) | `S7-REQ-007`, `S7-EVD-003`. | `DVG-02`, `DVG-04`, `DVG-07`, `DVG-09`, `DVG-10`, `DVG-11`; `ORC-PRODUCT-7`, `ORC-RESTORE-LIFECYCLE`. | `CFP-MEMORY-BEFORE-BYTE-ACQUISITION`, `CFP-LIFECYCLE-AFTER-INVALIDATION-BEFORE-CLEANUP`, `CFP-RESTORE-STAGING`, `CFP-RESTORE-BEFORE-VISIBILITY`, `CFP-RESTORE-AFTER-VISIBILITY`; `SCH-LIFECYCLE/CRASH/REORDER/RESTORE/SCOPE`. | `B-CONTEXT`, `B-RECOVERY`, `B-REPLAY`, `B-RESTORE`. |
 
 Each refined row adds its case group's exact selection to its existing cells;
 none replaces the original row or removes an earlier obligation. A shared
@@ -212,72 +212,68 @@ an effect outside the Project grant.
 
 ### 2.4 Memory cases
 
-`ORC-PRODUCT-7` retains fiction, preference, and Project Instruction proof and
-adds the following records/effects cases from the Memory, protocol, storage,
-retention, and AP-22 owners:
+`ORC-PRODUCT-7` retains the Project Instruction proof and adds the following
+records/effects cases of ADR 0094 and ADR 0095. ADR 0094 withdrew these cases
+of the earlier form: the fiction and preference proof, a change of the settings
+by the author, the Memory Note, the published document set, the covered-copy
+restriction, and the payload cleanup.
 
-1. Change both independent settings atomically against an expected revision
-   only when every foreground root Run is terminal/absent. Race update with Run
-   admission; queued, waiting, paused, blocked, cancelling, recovering, and
-   finalizing work remains busy. An independent background job does not block
-   settings. Exact successful retry replays even after a Run starts; a conflict
-   does not queue a later change. The Run tree retains its captured revision.
-   Stages 3 through 6 record settings but perform no Memory execution.
-2. With Agent use disabled, reject new navigation/search/document intake but
-   allow authorized author inspection. Disable contribution before extraction
-   read/dispatch to prevent new work. Disable it after dispatch and prove that
-   this alone does not revoke publication permission. Real access/copy
-   restrictions still apply. Neither switch deletes published Memory or history.
-3. Extract from bounded eligible idle conversation snapshots, then consolidate
-   captured extraction outputs, pending Notes, and the exact publication under
-   current grants/bounds. Pin inputs, model/prompt versions, producer, lease,
-   generation, and availability fence. No live-buffer read or default whole
-   transcript/Memory dump is allowed. Staged output is not a published set.
-4. Compete two publishers; crash before and after commit. Check exact members,
-   summary, Heads, pointer generation, processed inputs/Notes, outcome, Activity,
-   and invalidation as one settlement. Readers never mix old membership with
-   a new summary. A stale worker cannot overwrite the winner or relabel old
-   generated output; retry rereads the current publication and inputs.
-5. A Note needs its exact requesting author Message and validated Decision/
-   ToolCall, and commits with pending intent and Activity. Duplicate delivery
-   returns the same Note. Distinguish `note_recorded`, `published`, `no_op`,
-   `failed`, and `source_unavailable`; only `published` carries a publication
-   reference in its outcome Event. A verified no-op can process captured Notes
-   without a new set; uncaptured Notes stay pending. Failure preserves the
-   prior pointer. Consideration does not prove that a semantic request succeeded.
-6. Inspect no-publication-yet, valid empty, and unavailable states separately.
-   Recall pins the exact permitted publication and document revisions; an index
-   hit or latest alias cannot replace them. Rebuild indexes without model use.
-   Regeneration is separate admitted work and need not reproduce identical text.
-   Ordinary corrections/Notes/source edits do not reset Provider continuation
-   or delete generated paraphrases. Retired semantic controls have no aliases.
-7. Commit a real covered-copy restriction before cleanup. Reliably isolated
-   restrictions fence only the required scope; otherwise use conservative
-   set-wide unavailability. Test older/staged Documents, jobs, cached/indexed
-   reads, captured export inputs, downloads, and restore. Rebuild only from
-   allowed inputs; insufficient input stays unavailable. A new publication
-   cannot lift old payload fences or prove erasure of past model influence.
-8. Race cleanup with publication and byte-dependent inspection/export/work
-   acquisition. Permit only due, superseded generated revisions under an adopted
-   Profile, never a current member or Artifact Head, author-edited revision,
-   Message/Note, Research, Proposal/Draft, or required active/recovery payload.
-   Missing profile/lifecycle evidence blocks cleanup. Persist Decision, identity,
-   digest, use/publication references, and gap; fence/invalidate before idempotent
-   physical removal. Shared bytes survive another retained reference, while
-   the fenced logical revision stays unreadable. No new Tombstone is fabricated.
-9. Export/restore permitted exact Documents, Notes, publications, settings,
-   pending work, outcomes, and lifecycle/use evidence. Missing lifecycle proof
-   holds visibility; discarded indexes rebuild, restricted bytes never revive.
+1. A save of the Project Instruction makes one immutable Revision. A Run binds
+   the current Revision at its creation and keeps it. A save above the Context
+   item limit is refused. The absence of a Project Instruction does not block
+   assistance.
+2. The Host writes the default Conversation Memory Settings, and no author
+   control changes them. A Run gets the Memory Index and the Memory tools only
+   when the settings permit use. A capture reads a Project Conversation only
+   when the settings permit contribution. Stages 3 through 6 record settings
+   but perform no Memory execution.
+3. On the request of the author, the Agent creates, changes, or deletes one
+   Memory Entry with a Host Tool. The change commits with its ToolCall, and the
+   earlier version stays. A duplicate delivery makes no second entry. A wrong
+   Scope is refused.
+4. A capture reads the settled messages of a quiet Project Conversation or the
+   authoritative text of a quiet changed Chapter. It is one bounded tool loop
+   with read-only tools. Pin its input and the model and prompt versions. No
+   live-buffer read and no default whole transcript or Memory dump is allowed.
+   The Host limits the observations. A capture writes no entry, starts no web
+   search, and changes no manuscript. A duplicate delivery makes no duplicate
+   observation.
+5. Compete two consolidation passes; crash before and after the commit. The
+   operations of one pass apply as one settlement, and a reader never sees a
+   part of a pass. A pass whose input is older than the current entries
+   applies nothing; a retry reads the current entries again. The Host refuses
+   each background operation on an entry of the author and records only a
+   conflict flag. The pruning obeys the Host limits.
+6. A delete by the author removes the entry from the Memory Index, the tools,
+   and the page, and leaves a mark. A later pass does not create that entry
+   again. The versions stay.
+7. Inspect an empty Memory and an unavailable Memory separately. The Memory
+   Index is bounded and holds no entry text. A read returns the current
+   version of an entry in the Project Scope and records the time of the read.
+   Ordinary corrections and source edits do not reset Provider continuation.
+   Retired semantic controls have no aliases.
+8. The keyword search and the read return the current authoritative text in
+   the bounds of a Tool result. The hybrid search returns no vector hit whose
+   text changed after its vector was made. Without an embedding configuration
+   or the vector extension, the hybrid search is not exposed and the other
+   tools work. An embedding request records its grant scope and its
+   disclosure; a request outside the scope is refused. The vector index builds
+   again from the Chapters with no model request of a Run and no loss of
+   author content.
+9. Export/restore the Project Instruction Revisions, the Memory Entries with
+   their versions, the delete marks, the conflict flags, the observations that
+   wait, the settings, and the outcomes. Discarded vector indexes rebuild.
    Include new families in their owning migration and physical recovery proof;
    current activation mismatch requires a separate authorized upgrade path.
-10. Inject hostile text/false citations, wrong Scope, forged Note origin,
-    forbidden writes, secrets, oversized output, disabled generation, unavailable
-    inputs, and duplicate/stale/partial publications. Inspect actual Host reads,
-    requests, records, and effects. Maintenance can write only its admitted
-    generated set, not Skills, ToolSpecs, policy, credentials, Author Preferences,
-    or Authoritative State. Do not assert semantic truth, precise forgetting,
-    or inevitable model obedience. The full editor remains usable with failed
-    or unavailable Memory; background work does not block manual writing.
+10. Inject hostile text, wrong Scope, a forged origin, forbidden writes,
+    secrets, oversized output, disabled contribution, unavailable inputs, and
+    duplicate/stale/partial passes. Inspect actual Host reads, requests,
+    records, and effects. Background work can write only observations, conflict
+    flags, and the Memory Entries that the author did not ask for, not Skills,
+    ToolSpecs, policy, credentials, the Project Instruction, or Authoritative
+    State. Do not assert semantic truth, precise forgetting, or inevitable
+    model obedience. The full editor remains usable with failed or unavailable
+    Memory; background work does not block manual writing.
 
 ## 3. Additional first-four-stage coverage
 
