@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { EditorWriterProjection } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { WritingAssistantPanel, type AssistantContext } from "./writing-assistant-panel.tsx";
@@ -10,6 +10,11 @@ function writerGeneration(writer: EditorWriterProjection | undefined): string | 
   return writer.kind === "current_writer"
     ? writer.writer_generation
     : writer.observed_writer_generation;
+}
+
+/** The Conversation identity of the address `/projects/{project_id}?conversation={conversation_id}`. */
+function addressConversation(): string | undefined {
+  return new URLSearchParams(globalThis.location?.search ?? "").get("conversation") ?? undefined;
 }
 
 export function WritingWorkspace({
@@ -27,6 +32,15 @@ export function WritingWorkspace({
   onOpenedProposal?: (locator: ProposalLocator) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [requestedConversation] = useState(addressConversation);
+  // The panel opens the Conversation of the address one time. A reload then shows the Conversation that the panel
+  // records, and not the Conversation of the address again.
+  useEffect(() => {
+    if (requestedConversation === undefined) return;
+    const address = new URL(globalThis.location.href);
+    address.searchParams.delete("conversation");
+    globalThis.history.replaceState(globalThis.history.state, "", address);
+  }, []);
   return (
     <section
       className={collapsed ? "workspace agent-is-collapsed" : "workspace"}
@@ -40,6 +54,7 @@ export function WritingWorkspace({
         key={assistant === undefined ? "unbound" : `${assistant.scope.owner_user_id}:${assistant.scope.project_id}`}
         collapsed={collapsed}
         context={assistant}
+        requestedConversationId={requestedConversation}
         onOpenedProposal={onOpenedProposal}
         onNavigateProposal={onNavigateProposal}
       />
