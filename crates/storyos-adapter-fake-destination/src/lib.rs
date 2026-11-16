@@ -10,6 +10,7 @@ mod recovery_plan;
 mod research_plan;
 mod skill_resource_plan;
 mod tool_loop_plan;
+mod write_memory_plan;
 
 pub use load_plan::LOAD_REASON;
 pub use tool_loop_plan::LIMIT_ANSWER;

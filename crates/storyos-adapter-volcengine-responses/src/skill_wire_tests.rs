@@ -133,7 +133,8 @@ async fn a_v7_request_with_no_skill_item_has_the_bytes_of_the_v6_request() {
 
 /// ADR 0094 and ADR 0095: the mapping `v8` keeps each section, each instruction paragraph, and
 /// the summary instruction of `v7`, so a request of `v8` has the bytes of the `v7` request of the
-/// same input, also with each Skill item, and only adds the declaration of `read_chapter`.
+/// same input, also with each Skill item, and only adds the declarations of `read_chapter` and
+/// `write_memory` and the paragraph of `write_memory` (ADR 0094 section 5).
 #[tokio::test]
 async fn a_v8_request_has_the_bytes_of_the_v7_request_of_the_same_input() {
     let on = |mapping: &str, registration: &str, request: &CreateRequest| CreateRequest {
@@ -172,8 +173,13 @@ async fn a_v8_request_has_the_bytes_of_the_v7_request_of_the_same_input() {
             .and_then(|tools| tools.as_array_mut())
         {
             let before = tools.len();
-            tools.retain(|tool| tool["name"] != "read_chapter");
-            assert_eq!(before, tools.len() + 1);
+            tools.retain(|tool| {
+                !["read_chapter", "write_memory"].contains(&tool["name"].as_str().unwrap())
+            });
+            assert_eq!(before, tools.len() + 2);
+            let instructions = v8_body["instructions"].as_str().unwrap().to_owned();
+            let paragraph = format!("\n\n{}", crate::wire::WRITE_MEMORY_INSTRUCTION);
+            v8_body["instructions"] = json!(instructions.replacen(&paragraph, "", 1));
         }
         v8_bodies.push(v8_body);
     }

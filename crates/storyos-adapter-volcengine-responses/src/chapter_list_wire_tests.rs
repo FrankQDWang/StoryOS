@@ -126,13 +126,13 @@ async fn the_read_chapter_paragraph_follows_the_chapter_list_paragraph() {
         .collect();
 
     assert_eq!(
-        (instructions(&declared), names[names.len() - 2..].to_vec(),),
+        (instructions(&declared), names[names.len() - 3..].to_vec(),),
         (
             format!(
                 "{}\n\n{READ_CHAPTER}",
                 instructions(&body(without_tool).await)
             ),
-            vec!["read_chapter", "finish"],
+            vec!["read_chapter", "write_memory", "finish"],
         )
     );
 }

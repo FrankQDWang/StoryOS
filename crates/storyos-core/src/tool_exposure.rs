@@ -71,6 +71,9 @@ impl ExposureFacts<'_> {
             | ToolOperation::ReadToolResult
             | ToolOperation::ReadChapter
             | ToolOperation::Finish => true,
+            // A request of the author is not a read and not a capture of Memory, so the Tool does
+            // not depend on the Conversation Memory Settings (ADR 0094 section 5).
+            ToolOperation::WriteMemory => true,
             // The web research Tools are Tools of the research binding, not Host Tools.
             ToolOperation::WebSearch | ToolOperation::WebFetch => false,
         }
@@ -115,6 +118,7 @@ impl ToolOperation {
             Self::LoadSkill => "load_skill",
             Self::ReadSkillResource => "read_skill_resource",
             Self::ReadChapter => "read_chapter",
+            Self::WriteMemory => "write_memory",
         }
     }
 
@@ -139,6 +143,7 @@ impl ToolOperation {
             Self::LoadSkill => crate::load_skill::DESCRIPTION,
             Self::ReadSkillResource => crate::read_skill_resource::DESCRIPTION,
             Self::ReadChapter => crate::read_chapter::DESCRIPTION,
+            Self::WriteMemory => crate::write_memory::DESCRIPTION,
         }
     }
 }
@@ -188,6 +193,7 @@ impl ExposedTool {
             ToolOperation::LoadSkill => crate::load_skill::parameters(),
             ToolOperation::ReadSkillResource => crate::read_skill_resource::parameters(),
             ToolOperation::ReadChapter => crate::read_chapter::parameters(),
+            ToolOperation::WriteMemory => crate::write_memory::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,

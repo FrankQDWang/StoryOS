@@ -17,6 +17,7 @@
 //! - `SCRIPT:load_skill ...` gets the load script of `load_plan`.
 //! - `SCRIPT:read_skill_resource ...` gets the resource script of `skill_resource_plan`.
 //! - `SCRIPT:read_chapter ...` gets the Chapter read script of `read_chapter_plan`.
+//! - `SCRIPT:write_memory ...` gets the Memory write script of `write_memory_plan`.
 //! - `SCRIPT:partial`, `SCRIPT:incomplete`, `SCRIPT:failed`, `SCRIPT:cancelled`,
 //!   `SCRIPT:unknown`, `SCRIPT:tool_partial`, and `SCRIPT:refusal` get the response outcome of
 //!   `create_plan::response_outcome` in the first request.
@@ -51,6 +52,9 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
         return planned;
     }
     if let Some(planned) = crate::read_chapter_plan::plan(request) {
+        return planned;
+    }
+    if let Some(planned) = crate::write_memory_plan::plan(request) {
         return planned;
     }
     let message = request.author_message.as_str();
@@ -127,26 +131,7 @@ fn calls(request: &CreateRequest, finished: usize) -> FakeCreate {
             "host_fake_function_call",
         )
     };
-    // The script can follow the compaction prefix, or be the line of a steering input.
-    let search = request
-        .author_message
-        .split_once("Search the web: ")
-        .map(|(_, query)| query)
-        .filter(|_| {
-            !request
-                .tool_outputs
-                .iter()
-                .any(|output| output.name == ToolOperation::WebSearch.function_name())
-                && request
-                    .tool_exposure
-                    .tools
-                    .iter()
-                    .any(|tool| tool.spec.operation == ToolOperation::WebSearch)
-        })
-        .map(|query| {
-            let arguments = serde_json::json!({"query": query, "result_count": null});
-            call("web_search", String::new(), arguments.to_string())
-        });
+    let search = search_call(request);
     // Each `finish` call of a Run has its own call identifier.
     let suffix = match finished {
         0 => String::new(),
@@ -173,4 +158,20 @@ fn calls(request: &CreateRequest, finished: usize) -> FakeCreate {
             .chain(finish.then(|| call("finish", suffix, "{}".to_owned())))
             .collect(),
     }
+}
+
+/// One `web_search` call when the author message holds `Search the web: <query>`, the Run
+/// exposes the Tool, and the request has no `web_search` output. The script can follow the
+/// compaction prefix, or be the line of a steering input.
+pub(crate) fn search_call(request: &CreateRequest) -> Option<NativeStreamItem> {
+    let (_, query) = request.author_message.split_once("Search the web: ")?;
+    let searched = request
+        .tool_outputs
+        .iter()
+        .any(|output| output.name == ToolOperation::WebSearch.function_name());
+    let exposed = (request.tool_exposure.tools.iter())
+        .any(|tool| tool.spec.operation == ToolOperation::WebSearch);
+    let arguments = serde_json::json!({"query": query, "result_count": null}).to_string();
+    (!searched && exposed)
+        .then(|| crate::research_plan::function_call(ToolOperation::WebSearch, "", &arguments))
 }

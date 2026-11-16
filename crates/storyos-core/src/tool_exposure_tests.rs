@@ -193,6 +193,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
                 "load_skill",
                 "read_skill_resource",
                 "read_chapter",
+                "write_memory",
                 "finish"
             ]
         )
