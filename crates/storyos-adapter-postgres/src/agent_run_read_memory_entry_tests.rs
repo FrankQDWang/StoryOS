@@ -24,6 +24,7 @@ use crate::agent_run_retrieval::tests::destination;
 use crate::agent_run_steering::tests::{cancellation, queued};
 use crate::agent_run_tool_dispatch::tests::{client, exa_tools, mcp_replies, point_mcp};
 use crate::agent_run_tool_recovery::tests::{Fault, FaultAt};
+use crate::agent_run_write_memory::tests::first_index;
 use crate::create_agent_run::context::chapter_list_tests::admitted;
 use crate::memory_entries::tests::{archived_rows, as_runtime, write_versions};
 
@@ -174,9 +175,10 @@ async fn a_read_after_a_write_of_the_same_run_gives_the_current_version_and_the_
     );
 }
 
-/// A read of an entry that the author deleted and a read of a number of no entry are refused with
-/// one sentence, write no row, and the Run continues; their outputs stay `tool_result` items. Two
-/// Projects each have an entry 1, and each Run reads the entry of its own Project.
+/// The author deletes the entry 2 after the Run pinned an Index with it. A read of that entry and
+/// a read of a number of no entry are refused with one sentence, write no row, and the Run
+/// continues; their outputs stay `tool_result` items. Two Projects each have an entry 1, and each
+/// Run reads the entry of its own Project.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_of_a_deleted_or_missing_entry_is_refused_and_each_run_reads_its_own_project() {
@@ -191,7 +193,6 @@ async fn a_read_of_a_deleted_or_missing_entry_is_refused_and_each_run_reads_its_
     let versions = [
         (1, 1, 1, "current", "character", "林舟", "船夫。"),
         (2, 1, 2, "current", "other", "渡口", "旧渡口。"),
-        (2, 2, 3, "deleted", "other", "渡口", "旧渡口。"),
     ];
     write_versions(&admin, &scope, &versions).await;
     let versions = [(1, 1, 1, "current", "foreshadowing", "铜铃", "铃声。")];
@@ -199,6 +200,8 @@ async fn a_read_of_a_deleted_or_missing_entry_is_refused_and_each_run_reads_its_
     let new = ConversationSelection::New;
     let message = "SCRIPT:read_memory_entry 2,3,1";
     let run_id = admitted(&store, &scope, &chapter_id, "c24", message, new.clone()).await;
+    let deleted = [(2, 2, 3, "deleted", "other", "渡口", "旧渡口。")];
+    write_versions(&admin, &scope, &deleted).await;
     complete(&store, &admin, &scope, &run_id).await;
     let message = "SCRIPT:read_memory_entry 1";
     let other_run = admitted(&store, &other, &other_chapter, "c26", message, new).await;
@@ -212,8 +215,13 @@ async fn a_read_of_a_deleted_or_missing_entry_is_refused_and_each_run_reads_its_
         .iter()
         .map(|item| item[0].clone())
         .collect();
+    let pinned = first_index(&admin, &run_id).await[0]
+        .as_str()
+        .unwrap()
+        .to_owned();
     assert_eq!(
         (
+            pinned.contains(r#""id":2,"title":"渡口""#),
             calls(&admin, &run_id).await,
             reads(&admin, &run_id).await,
             classes,
@@ -221,6 +229,7 @@ async fn a_read_of_a_deleted_or_missing_entry_is_refused_and_each_run_reads_its_
             reads(&admin, &other_run).await,
         ),
         (
+            true,
             json!(["completed", [refused(), refused(), settled(&lin), finish()]]),
             vec![json!("t 1 1")],
             vec![
