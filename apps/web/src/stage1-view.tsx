@@ -54,6 +54,7 @@ import { renameOwnedProject } from "./rename-project.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
 import { navigateProposal, type ProposalFocus, type ProposalNavigation } from "./proposal-navigation.ts";
+import { ProjectSettingsLink, ProjectSettingsView } from "./project-settings.tsx";
 import { WritingWorkspace } from "./writing-workspace.tsx";
 
 interface Stage1ViewProps {
@@ -449,6 +450,7 @@ function ProjectReadyView({
             />
           )}
           <div className="tree-footer">
+          <ProjectSettingsLink projectId={state.project.project.project_id} />
           <ManuscriptReadableExportPanel
             projectId={state.project.project.project_id}
             baseUrl={baseUrl}
@@ -786,6 +788,9 @@ function EmptyProjectReadyView({
               });
             }}
           />
+          <div className="tree-footer">
+            <ProjectSettingsLink projectId={project.project.project_id} />
+          </div>
         </>
       )}
       editor={<p>空工作区</p>}
@@ -987,6 +992,9 @@ function Stage1View({
         }}
       />
     );
+  }
+  if (current.kind === "project-settings-ready") {
+    return <ProjectSettingsView state={current} baseUrl={baseUrl} fetchImpl={fetchImpl} cryptoImpl={cryptoImpl} />;
   }
   if (current.kind === "protected-ready") {
     return (

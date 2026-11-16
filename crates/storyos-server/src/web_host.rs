@@ -42,13 +42,7 @@ async fn web_response(
     headers: HeaderMap,
 ) -> Response {
     let path = uri.path();
-    let project_path = path.strip_suffix('/').unwrap_or(path);
-    let is_project = project_path
-        .get(..10)
-        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("/projects/"))
-        && project_path
-            .get(10..)
-            .is_some_and(|id| id.len() == 36 && Uuid::try_parse(id).is_ok());
+    let is_project = is_project_page(path);
     let resource = if path == "/" || is_project {
         "index.html"
     } else {
@@ -100,6 +94,21 @@ async fn web_response(
         .status(status)
         .body(Body::from(bytes))
         .expect("validated Web response headers")
+}
+
+/// The pages of a Project: the writing workspace `/projects/{project_id}` and the settings page
+/// `/projects/{project_id}/settings` (ADR 0094 section 9). Each path can have one last `/`.
+fn is_project_page(path: &str) -> bool {
+    let page = path.strip_suffix('/').unwrap_or(path);
+    let Some(rest) = page
+        .get(..10)
+        .filter(|prefix| prefix.eq_ignore_ascii_case("/projects/"))
+        .and_then(|_| page.get(10..))
+    else {
+        return false;
+    };
+    let (id, sub_page) = rest.split_at_checked(36).unwrap_or((rest, "invalid"));
+    Uuid::try_parse(id).is_ok() && (sub_page.is_empty() || sub_page == "/settings")
 }
 
 fn trusted_local_session_cookie(
