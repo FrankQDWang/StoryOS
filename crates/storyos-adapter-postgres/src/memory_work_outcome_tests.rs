@@ -437,9 +437,9 @@ async fn a_stopped_worker_leaves_the_row_due_and_the_next_claim_starts_one_captu
                 None => admin
                     .query_opt(
                         "SELECT waiting.pid
-                           FROM (SELECT pid FROM pg_stat_activity
-                                  WHERE pid <> pg_backend_pid() AND wait_event_type = 'Lock'
-                                    AND query LIKE '%INSERT INTO storyos.memory_captures%'
+                           FROM (SELECT pid FROM pg_locks
+                                  WHERE NOT granted
+                                    AND relation = 'storyos.memory_captures'::regclass
                                  OFFSET 0) AS waiting
                           WHERE pg_terminate_backend(waiting.pid)",
                         &[],
