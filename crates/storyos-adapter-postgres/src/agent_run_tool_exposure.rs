@@ -94,11 +94,13 @@ pub(crate) async fn tool_exposure(
         .await
         .map_err(complete_database_error)?
         .get(/*idx*/ 0);
+    let hybrid_search = crate::agent_run_hybrid_search::possible(client, claim).await?;
     Ok(ToolExposure::compute(&ExposureFacts {
         bound: &bound,
         model_registration_revision: &run.model_registration_revision,
         skill_catalog,
         memory_use,
+        hybrid_search,
         run_kind: run.kind,
     }))
 }
