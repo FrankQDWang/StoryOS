@@ -36,7 +36,9 @@ pub(crate) fn record(observations: Value) -> (&'static str, Value) {
         let mut item = item.clone();
         if item.get("kind").is_none() {
             let fact = json!({ "kind": "observation", "entry": null, "reason": null });
-            item.as_object_mut().unwrap().extend(fact.as_object().unwrap().clone());
+            item.as_object_mut()
+                .unwrap()
+                .extend(fact.as_object().unwrap().clone());
         }
         item
     });
