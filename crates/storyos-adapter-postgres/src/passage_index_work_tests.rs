@@ -15,7 +15,7 @@ use storyos_application::{
     ClaimedPassageIndex, EmbeddingObservation, EmbeddingProviderAdapter, EmbeddingRoute,
     NoEmbeddingDestination, PassageIndexStep, PassageIndexWorkStore, PassageVectorKey,
     PassageVectorRow, PreDispatchRefusal, PreparedEmbeddingRequest, ProjectId, ProjectScope,
-    claim_next_passage_index_work, rebuild_passage_index, step_passage_index_work,
+    claim_next_passage_index_work, step_passage_index_work,
 };
 use storyos_core::{
     AGENT_PLAN_EMBEDDING_REGISTRATION, EmbeddingInput, EmbeddingRegistration,
@@ -795,7 +795,8 @@ async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
         )
         .await
         .unwrap();
-    assert!(rebuild_passage_index(&store).await.unwrap() >= 1);
+    // The flag `--rebuild-passage-index` of the Worker binary runs this mark.
+    assert!(store.mark_each_passage_index_work().await.unwrap() >= 1);
     assert_eq!(settlements(&admin, &scope).await.len(), 3);
     assert_eq!(
         work(&admin, &scope).await,

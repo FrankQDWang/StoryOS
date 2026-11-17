@@ -17,7 +17,7 @@ use storyos_adapter_diagnostics::or_exit;
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_adapter_postgres::{PostgresProjectReader, require_release1_storage_activation_proof};
 use storyos_adapter_volcengine_responses::{AgentPlanEmbeddings, AgentPlanResponses};
-use storyos_worker::ModelDestination;
+use storyos_worker::{ModelDestination, WorkerStore};
 
 /// The bound of one complete Tool exchange: the session, the drift check, and the call.
 const TOOL_EXCHANGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(/*secs*/ 60);
@@ -61,21 +61,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             settings.export_lease_ttl_secs,
         ))
         .with_embedding_registration(settings.embedding_registration());
-    if arguments.iter().any(|argument| argument == "--claim-only") {
-        or_exit(
-            storyos_worker::claim_only::<WorkerAdapters, WorkerEmbeddings>(&store).await,
-            "claim_only",
-        );
-        std::process::exit(0);
-    }
-    if arguments
-        .iter()
-        .any(|argument| argument == "--rebuild-passage-index")
-    {
-        or_exit(
-            storyos_application::rebuild_passage_index(&store).await,
-            "rebuild_passage_index",
-        );
+    if let Some((result, stage)) = one_shot(&arguments, &store).await {
+        or_exit(result, stage);
         std::process::exit(0);
     }
     let destination = ModelDestination {
@@ -116,3 +103,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     storyos_worker::run(store, destination).await;
     Ok(())
 }
+
+/// The result of a one-shot command, and the stage name of its failure.
+type OneShot = (
+    Result<(), Box<dyn std::error::Error + Send + Sync>>,
+    &'static str,
+);
+
+/// Runs the one-shot command of `arguments` with `store`, or gives `None` for the loop.
+/// `--claim-only` claims one unit of work with the adapters of the binary.
+/// `--rebuild-passage-index` marks the passage index work of each Chapter with a work row, and it
+/// sends no request.
+async fn one_shot(arguments: &[String], store: &impl WorkerStore) -> Option<OneShot> {
+    if arguments.iter().any(|argument| argument == "--claim-only") {
+        let claimed = storyos_worker::claim_only::<WorkerAdapters, WorkerEmbeddings>(store).await;
+        return Some((claimed, "claim_only"));
+    }
+    if arguments
+        .iter()
+        .any(|argument| argument == "--rebuild-passage-index")
+    {
+        let marked = store.mark_each_passage_index_work().await;
+        return Some((
+            marked.map(|_| ()).map_err(Into::into),
+            "rebuild_passage_index",
+        ));
+    }
+    None
+}
+
+#[cfg(test)]
+#[path = "main_tests.rs"]
+mod tests;

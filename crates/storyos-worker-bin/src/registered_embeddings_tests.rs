@@ -121,19 +121,3 @@ async fn each_embedding_request_uses_the_adapter_of_its_registration_and_its_ref
         ]
     );
 }
-
-#[test]
-fn the_worker_binary_claims_the_index_work_of_each_adapter_that_it_composes() {
-    let registrations =
-        <RegisteredEmbeddings<RecordingResolver> as EmbeddingProviderAdapter>::REGISTRATIONS;
-    assert_eq!(
-        registrations
-            .iter()
-            .map(|registration| registration.revision)
-            .collect::<Vec<_>>(),
-        [
-            HOST_FAKE_EMBEDDING_REGISTRATION.revision,
-            AGENT_PLAN_EMBEDDING_REGISTRATION.revision
-        ]
-    );
-}
