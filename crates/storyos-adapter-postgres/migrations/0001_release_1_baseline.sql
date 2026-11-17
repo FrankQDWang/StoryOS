@@ -4367,6 +4367,38 @@ CREATE POLICY passage_index_work_worker_update ON storyos.passage_index_work FOR
 
 GRANT SELECT,INSERT,UPDATE ON TABLE storyos.passage_index_work TO storyos_runtime;
 
+-- Memory work schedules (ADR 0094 section 5). One row for each source of background Memory work: its
+-- kind, its source, and its due time, which can be empty. The source of the kind `conversation_capture`
+-- is a Project Conversation. The completion of a Run of the author in the Conversation sets the due time
+-- in the transaction of the settlement. A Worker claims a due row with a row lock in the Worker scope,
+-- and the transaction of its decision makes the due time empty. The runtime role can read, insert, and
+-- update a row, and it cannot delete a row.
+
+CREATE TABLE storyos.memory_work_schedules (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    work_kind text NOT NULL,
+    conversation_id uuid NOT NULL,
+    due_at timestamp with time zone,
+    CONSTRAINT memory_work_schedules_pkey PRIMARY KEY (owner_user_id, project_id, work_kind, conversation_id),
+    CONSTRAINT memory_work_schedules_kind_check CHECK ((work_kind = 'conversation_capture'::text)),
+    CONSTRAINT memory_work_schedules_conversation_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id) MATCH FULL
+);
+
+CREATE INDEX memory_work_schedules_due_idx ON storyos.memory_work_schedules USING btree (due_at) WHERE (due_at IS NOT NULL);
+
+ALTER TABLE storyos.memory_work_schedules ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_work_schedules FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_work_schedules_exact_scope ON storyos.memory_work_schedules USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
+
+CREATE POLICY memory_work_schedules_worker_select ON storyos.memory_work_schedules FOR SELECT USING (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL)));
+
+CREATE POLICY memory_work_schedules_worker_update ON storyos.memory_work_schedules FOR UPDATE USING (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))) WITH CHECK (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL)));
+
+GRANT SELECT,INSERT,UPDATE ON TABLE storyos.memory_work_schedules TO storyos_runtime;
+
 -- Activity Run Events. An append-only record of the AgentRun: one `tool_call_settled` event for each
 -- resolved ToolCall, one `tool_call_late_result` event when a result arrived after the fence of a
 -- ToolCall, and one `tool_registration_quarantined` event when a dispatch found Tool Contract Drift.
@@ -4428,9 +4460,10 @@ GRANT SELECT,INSERT ON TABLE storyos.memory_entry_reads TO storyos_runtime;
 
 -- Memory captures (ADR 0094 sections 5 and 8). One row for each capture: its source, its background
 -- Run, its start time, its state, and its outcome. The source is a Project Conversation with the first
--- and the last Run whose messages the capture read, or a Chapter with its Revision. The Run pins the
--- Model Registration, and thus the mapping revision that gives the instruction text. The settled call
--- of `record_memory_observations` settles the capture in its transaction. The runtime role can read and
+-- and the last Run whose messages the capture read and the Conversation Memory Settings revision that
+-- permitted it, or a Chapter with its Revision. The Run pins the Model Registration, and thus the
+-- mapping revision that gives the instruction text. The settled call of `record_memory_observations`
+-- settles the capture in its transaction. The runtime role can read and
 -- insert a row, it can change only the state and the outcome, and it cannot delete a row.
 
 CREATE TABLE storyos.memory_captures (
@@ -4444,17 +4477,19 @@ CREATE TABLE storyos.memory_captures (
     last_run_id uuid,
     chapter_id uuid,
     chapter_revision_id uuid,
+    memory_settings_revision uuid,
     started_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
     state text DEFAULT 'running'::text NOT NULL,
     outcome text,
     failure_reason text,
     CONSTRAINT memory_captures_pkey PRIMARY KEY (owner_user_id, project_id, capture_id),
     CONSTRAINT memory_captures_run_key UNIQUE (owner_user_id, project_id, run_id),
-    CONSTRAINT memory_captures_source_check CHECK (((((source_kind = 'conversation'::text) AND (conversation_id IS NOT NULL) AND (first_run_id IS NOT NULL) AND (last_run_id IS NOT NULL) AND (chapter_id IS NULL) AND (chapter_revision_id IS NULL)) OR ((source_kind = 'chapter'::text) AND (chapter_id IS NOT NULL) AND (chapter_revision_id IS NOT NULL) AND (conversation_id IS NULL) AND (first_run_id IS NULL) AND (last_run_id IS NULL))) IS TRUE)),
+    CONSTRAINT memory_captures_source_check CHECK (((((source_kind = 'conversation'::text) AND (conversation_id IS NOT NULL) AND (first_run_id IS NOT NULL) AND (last_run_id IS NOT NULL) AND (memory_settings_revision IS NOT NULL) AND (chapter_id IS NULL) AND (chapter_revision_id IS NULL)) OR ((source_kind = 'chapter'::text) AND (chapter_id IS NOT NULL) AND (chapter_revision_id IS NOT NULL) AND (conversation_id IS NULL) AND (first_run_id IS NULL) AND (last_run_id IS NULL) AND (memory_settings_revision IS NULL))) IS TRUE)),
     CONSTRAINT memory_captures_state_check CHECK (((((state = 'running'::text) AND (outcome IS NULL)) OR ((state = 'settled'::text) AND (outcome = ANY (ARRAY['observations_recorded'::text, 'no_observation'::text, 'step_limit'::text, 'failed'::text])))) IS TRUE)),
     CONSTRAINT memory_captures_failure_reason_check CHECK ((((COALESCE((outcome = 'failed'::text), false) = (failure_reason IS NOT NULL)) AND ((failure_reason IS NULL) OR ((char_length(failure_reason) >= 1) AND (char_length(failure_reason) <= 64)))) IS TRUE)),
     CONSTRAINT memory_captures_run_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
     CONSTRAINT memory_captures_conversation_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id),
+    CONSTRAINT memory_captures_settings_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision),
     CONSTRAINT memory_captures_first_run_fkey FOREIGN KEY (owner_user_id, project_id, first_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id),
     CONSTRAINT memory_captures_last_run_fkey FOREIGN KEY (owner_user_id, project_id, last_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id),
     CONSTRAINT memory_captures_chapter_revision_fkey FOREIGN KEY (owner_user_id, project_id, chapter_id, chapter_revision_id) REFERENCES storyos.authoritative_revisions(owner_user_id, project_id, manuscript_object_id, revision_id)
