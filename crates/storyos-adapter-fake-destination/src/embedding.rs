@@ -3,8 +3,8 @@
 
 use serde_json::json;
 use storyos_application::{
-    CredentialUnavailable, EmbeddingObservation, EmbeddingProjection, EmbeddingProviderAdapter,
-    EmbeddingUsage, PreparedEmbeddingRequest,
+    EmbeddingObservation, EmbeddingProjection, EmbeddingProviderAdapter, EmbeddingRoute,
+    EmbeddingUsage, PreDispatchRefusal, PreparedEmbeddingRequest,
 };
 use storyos_core::{
     EMBEDDING_DIMENSIONS, EMBEDDING_TEXT_TOKEN_LIMIT, EmbeddingInput, EmbeddingRegistration,
@@ -15,7 +15,12 @@ pub const EMBEDDING_REJECTION_MARKER: &str = "SCRIPT:embedding-rejected";
 pub const EMBEDDING_NOT_SUBMITTED_MARKER: &str = "SCRIPT:embedding-not-submitted";
 pub const EMBEDDING_UNKNOWN_MARKER: &str = "SCRIPT:embedding-unknown";
 
-/// The fake embedding destination. It needs no credential.
+/// The rejection of a text above the input limit. It is the native reason that the Agent Plan
+/// adapter keeps for the reply of the record of S7-C1: HTTP 400 `InvalidParameter` with the
+/// message of an input above the model window.
+pub const EMBEDDING_INPUT_TOO_LONG: &str = "input_too_long:http_400:InvalidParameter";
+
+/// The fake embedding destination. It needs no credential and no endpoint.
 pub struct FakeEmbeddings;
 
 /// The single-use prepared exchange of one fake embedding request.
@@ -31,8 +36,9 @@ impl EmbeddingProviderAdapter for FakeEmbeddings {
     async fn prepare(
         &self,
         registration: &'static EmbeddingRegistration,
+        _route: &EmbeddingRoute,
         input: &EmbeddingInput,
-    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, CredentialUnavailable> {
+    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
         let body = json!({
             "model": registration.provider_model_id,
             "instructions": input.cause().instructions(),
@@ -69,7 +75,7 @@ impl EmbeddingProviderAdapter for FakeEmbeddings {
         } else if text.is_empty() {
             rejected("empty_text")
         } else if storyos_core::count_context_item_tokens(&text) > EMBEDDING_TEXT_TOKEN_LIMIT {
-            rejected("text_above_limit")
+            rejected(EMBEDDING_INPUT_TOO_LONG)
         } else if dimensions != EMBEDDING_DIMENSIONS {
             rejected("dimensions_not_offered")
         } else {

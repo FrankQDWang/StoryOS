@@ -17,8 +17,8 @@ mod tool_loop_plan;
 mod write_memory_plan;
 
 pub use embedding::{
-    EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER, EMBEDDING_UNKNOWN_MARKER,
-    FakeEmbeddings, fake_vector,
+    EMBEDDING_INPUT_TOO_LONG, EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER,
+    EMBEDDING_UNKNOWN_MARKER, FakeEmbeddingExchange, FakeEmbeddings, fake_vector,
 };
 pub use load_plan::LOAD_REASON;
 pub use tool_loop_plan::LIMIT_ANSWER;
