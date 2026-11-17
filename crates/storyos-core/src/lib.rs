@@ -4,6 +4,7 @@ mod accept_proposal;
 mod agent_run_control;
 mod agent_run_kind;
 mod append_proposal_generation_batch;
+mod apply_memory_operations;
 mod archive_path;
 mod archive_zip;
 mod assemble_context;
@@ -33,6 +34,7 @@ mod load_skill;
 mod manuscript_payload;
 mod manuscript_use;
 mod memory_capture;
+mod memory_consolidation;
 mod memory_delete_marks;
 mod memory_entry;
 mod memory_index;
@@ -65,6 +67,12 @@ mod tool_result_context;
 mod tool_result_stub;
 mod tool_spec;
 mod unknown_create_successor;
+pub use apply_memory_operations::{
+    AdmittedOperation, MemoryOperationAction, MemoryOperationCandidate, MemoryOperationRefusal,
+    PassFacts, PassMemoryEntry, PassSettlement, decide_memory_operations,
+    intake as apply_memory_operations_intake, parameters as apply_memory_operations_parameters,
+    settle_operations_call,
+};
 pub use ordinary_passage_request::{
     HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
     OrdinaryPassageResolution, PASSAGE_REFERENCE_QUESTION, parse_ordinary_passage_request,
@@ -233,6 +241,10 @@ pub use memory_capture::{
     CaptureAdmissionFacts, CaptureEnd, CaptureReferences, CaptureRefusal, CaptureRunEnd,
     MemoryCaptureAssembly, admit_memory_capture, assemble_capture_references,
     assemble_memory_capture_context, capture_end, keep_capture_references,
+};
+pub use memory_consolidation::{
+    ConsolidationOutcome, MemoryConsolidationAssembly, PassObservation,
+    assemble_memory_consolidation_context, consolidation_failure,
 };
 pub use memory_delete_marks::{
     MEMORY_DELETE_MARK_CAUSES, MemoryDeleteMark, assemble_memory_delete_marks,
