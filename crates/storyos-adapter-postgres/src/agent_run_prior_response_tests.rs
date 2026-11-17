@@ -92,7 +92,9 @@ impl<A: ModelProviderAdapter + Sync> ModelProviderAdapter for RealWire<A> {
                 .collect();
             let purpose = match create.purpose {
                 CreatePurpose::CompactionSummary => "summary",
-                CreatePurpose::Decision | CreatePurpose::ToolQualification(_) => "decision",
+                CreatePurpose::Decision
+                | CreatePurpose::ToolQualification(_)
+                | CreatePurpose::MemoryCapture => "decision",
             };
             self.bodies.lock().unwrap().push(json!([
                 purpose,
