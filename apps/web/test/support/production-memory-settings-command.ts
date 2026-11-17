@@ -127,7 +127,7 @@ export async function verifyProductionMemorySettings(context: BrowserContext): P
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await page.locator('[data-assistant-availability="available"]').waitFor();
     await page.locator('textarea[name="assistant-message"]').fill("继续写。");
-    await expect(page.locator(".composer .send-button")).toBeEnabled();
+    // The click waits until the panel has read the earlier Run and the send button is enabled.
     const next = page.waitForResponse((reply) =>
       reply.request().method() === "POST" && new URL(reply.url()).pathname.endsWith("/agent-runs"));
     await page.locator(".composer .send-button").click();
