@@ -37,6 +37,7 @@ fn each_row_of_the_outcome_table_classifies_in_order() {
         title: "阿青".to_owned(),
         description: "渡口的船夫。".to_owned(),
         text: String::new(),
+        flag: None,
     };
     let cases = [
         (

@@ -34,10 +34,12 @@ mod load_skill;
 mod manuscript_payload;
 mod manuscript_use;
 mod memory_capture;
+mod memory_conflict_flag;
 mod memory_consolidation;
 mod memory_delete_marks;
 mod memory_entry;
 mod memory_index;
+mod memory_operation_decision;
 mod memory_prune;
 mod memory_work_schedule;
 mod model_output;
@@ -71,8 +73,8 @@ mod unknown_create_successor;
 pub use apply_memory_operations::{
     APPLY_MEMORY_OPERATIONS_TOOL_SPEC, AdmittedOperation, MemoryOperationAction,
     MemoryOperationCandidate, MemoryOperationRefusal, PassFacts, PassMemoryEntry, PassSettlement,
-    decide_memory_operations, intake as apply_memory_operations_intake,
-    parameters as apply_memory_operations_parameters, settle_operations_call,
+    intake as apply_memory_operations_intake, parameters as apply_memory_operations_parameters,
+    settle_operations_call,
 };
 pub use ordinary_passage_request::{
     HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
@@ -243,6 +245,7 @@ pub use memory_capture::{
     CaptureRunEnd, MemoryCaptureAssembly, admit_memory_capture, assemble_capture_references,
     assemble_memory_capture_context, capture_end, keep_capture_references,
 };
+pub use memory_conflict_flag::MemoryConflictFlag;
 pub use memory_consolidation::{
     ConsolidationOutcome, MEMORY_CONSOLIDATION_MAX_RUN_STEPS, MemoryConsolidationAssembly,
     PassObservation, admit_memory_consolidation, assemble_memory_consolidation_context,
@@ -260,6 +263,7 @@ pub use memory_index::{
     MEMORY_INDEX_MAX_ENTRIES, MEMORY_INDEX_TOKEN_LIMIT, MemoryIndexEntry, assemble_memory_index,
     memory_index_text,
 };
+pub use memory_operation_decision::decide_memory_operations;
 pub use memory_prune::{MEMORY_UNUSED_AFTER_DAYS, memory_entry_unused};
 pub use memory_work_schedule::{
     CONSOLIDATION_INTERVAL, CONVERSATION_QUIET_TIME, ConsolidationFacts, ConsolidationSkip,

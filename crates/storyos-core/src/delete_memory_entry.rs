@@ -74,6 +74,7 @@ pub fn delete_memory_entry(command: &DeleteMemoryEntry) -> DeleteMemoryEntryResu
         title: last.title.clone(),
         description: last.description.clone(),
         text: String::new(),
+        flag: None,
     })
 }
 

@@ -9,8 +9,8 @@ use serde_json::{Value, json};
 
 use crate::{
     ConsolidationOutcome, CurrentMemoryEntry, IntakeRefusal, MemoryDeleteMark, MemoryEntryOrigin,
-    MemoryEntryType, MemorySourceReference, MemoryVersionWrite, MemoryWrite, MemoryWriteAction,
-    MemoryWriteRefusal, PassObservation, ToolIntake, ToolOperation, ToolResultText, ToolSpec,
+    MemoryEntryType, MemorySourceReference, MemoryVersionWrite, MemoryWriteRefusal,
+    PassObservation, ToolIntake, ToolOperation, ToolResultText, ToolSpec, decide_memory_operations,
 };
 
 pub const APPLY_MEMORY_OPERATIONS_TOOL_SPEC: ToolSpec = ToolSpec {
@@ -24,8 +24,9 @@ pub const APPLY_MEMORY_OPERATIONS_TOOL_SPEC: ToolSpec = ToolSpec {
 pub(crate) const DESCRIPTION: &str = "Applies the operations of this consolidation pass to the \
 Memory of the Project. Call it one time. Create an entry from one or more observations. Update an \
 entry with what the observations add. Merge two or more entries of one type into the first of \
-them. Delete an entry that is not true now. Each entry and each observation has its number in \
-the input. Give an empty list when the Memory needs no change.";
+them. Delete an entry that is not true now. Flag an entry of the author that conflicts with the \
+observations, and do not change it. Each entry and each observation has its number in the input. \
+Give an empty list when the Memory needs no change.";
 
 /// The keys of an operation. The strict schema requires each one, also when its value is null.
 const KEYS: [&str; 9] = [
@@ -61,12 +62,12 @@ pub fn parameters() -> Value {
                     "properties": {
                         "action": {
                             "type": "string",
-                            "enum": ["create", "update", "merge", "delete"]
+                            "enum": ["create", "update", "merge", "delete", "flag_conflict"]
                         },
                         "entry": {
                             "type": ["integer", "null"],
-                            "description": "The number of the entry to update or delete. Null \
-                                            for create and merge."
+                            "description": "The number of the entry to update, delete, or \
+                                            flag. Null for create and merge."
                         },
                         "entries": {
                             "type": ["array", "null"],
@@ -76,19 +77,26 @@ pub fn parameters() -> Value {
                                             actions."
                         },
                         "type": value(&types),
-                        "title": value("One line, at most 30 characters. Null for delete."),
-                        "description": value("One line, at most 100 characters. Null for delete."),
+                        "title": value(
+                            "One line, at most 30 characters. Null for delete and flag_conflict."
+                        ),
+                        "description": value(
+                            "One line, at most 100 characters. Null for delete and flag_conflict."
+                        ),
                         "text": value(
                             "Markdown, at most 600 characters, or 1500 for a character. Null for \
-                             delete."
+                             delete and flag_conflict."
                         ),
                         "observations": {
                             "type": "array",
                             "items": { "type": "integer" },
                             "description": "The numbers of the observations that the operation \
-                                            uses. Create needs one or more."
+                                            uses. Create and flag_conflict need one or more."
                         },
-                        "reason": value("Why the entry is deleted, in one line. Null otherwise.")
+                        "reason": value(
+                            "Why the entry is deleted, or the conflict of a flag, in one line of \
+                             at most 100 characters. Null otherwise."
+                        )
                     },
                     "required": KEYS,
                     "additionalProperties": false
@@ -108,6 +116,7 @@ pub enum MemoryOperationAction {
     Update,
     Merge,
     Delete,
+    FlagConflict,
 }
 
 /// One operation as the model gave it. The type is the given text: the validation refuses a type
@@ -219,6 +228,8 @@ pub enum MemoryOperationRefusal {
     /// A create, an update, or a merge gives an entry the type and the title of an entry that the
     /// author deleted.
     DeletedByAuthor,
+    /// A conflict flag names an entry whose origin is not the request of the author.
+    FlagNeedsAuthorEntry,
     /// The write rule of S7-D1a2.
     Write(MemoryWriteRefusal),
 }
@@ -233,6 +244,7 @@ impl MemoryOperationRefusal {
             Self::CreateWithoutSource => "create_without_source",
             Self::MergeTypeMismatch => "merge_type_mismatch",
             Self::DeletedByAuthor => "deleted_by_author",
+            Self::FlagNeedsAuthorEntry => "flag_needs_author_entry",
             Self::Write(refusal) => refusal.label(),
         }
     }
@@ -241,266 +253,14 @@ impl MemoryOperationRefusal {
 /// One operation that Core admitted: the version to write, the origin of the entry, and the
 /// sources of the observations that it uses, each one time. The store adds these sources to the
 /// sources of the earlier version. A merge also gives the `deleted` version of each other entry
-/// that it merged, and the store adds the sources of these entries to the result.
+/// that it merged, and the store adds the sources of these entries to the result. A conflict flag
+/// adds no source: the source of the flag is in its version.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AdmittedOperation {
     pub version: MemoryVersionWrite,
     pub origin: MemoryEntryOrigin,
     pub sources: Vec<MemorySourceReference>,
     pub merged: Vec<MemoryVersionWrite>,
-}
-
-/// The write of `candidate`, or the refusal of its shape. Create needs a type, update and merge
-/// need no type, and delete needs a reason and no values. Only a merge has entries, and the write
-/// of a merge is the change of its first entry.
-fn memory_write(candidate: &MemoryOperationCandidate) -> Result<MemoryWrite, MemoryWriteRefusal> {
-    let action = match candidate.action {
-        MemoryOperationAction::Create => MemoryWriteAction::Create,
-        MemoryOperationAction::Update | MemoryOperationAction::Merge => MemoryWriteAction::Change,
-        MemoryOperationAction::Delete => MemoryWriteAction::Delete,
-    };
-    let given = [&candidate.title, &candidate.description, &candidate.text];
-    let merge = candidate.action == MemoryOperationAction::Merge;
-    let shape = candidate.entries.is_some() == merge
-        && match candidate.action {
-            MemoryOperationAction::Create => true,
-            MemoryOperationAction::Update => {
-                candidate.entry_type.is_none() && given.iter().all(|value| value.is_some())
-            }
-            MemoryOperationAction::Merge => {
-                candidate.entry.is_none()
-                    && candidate.entry_type.is_none()
-                    && candidate.reason.is_none()
-                    && given.iter().all(|value| value.is_some())
-            }
-            MemoryOperationAction::Delete => {
-                candidate.entry_type.is_none()
-                    && candidate.reason.as_deref().is_some_and(|reason| {
-                        !reason.trim().is_empty() && !reason.chars().any(char::is_control)
-                    })
-            }
-        };
-    let entry_type = match candidate.entry_type.as_deref() {
-        Some(token) => Some(MemoryEntryType::parse(token).ok_or(MemoryWriteRefusal::Invalid)?),
-        None => None,
-    };
-    match shape {
-        true => Ok(MemoryWrite {
-            action,
-            entry: match merge {
-                true => candidate
-                    .entries
-                    .as_ref()
-                    .and_then(|entries| entries.first().copied()),
-                false => candidate.entry,
-            },
-            entry_type,
-            title: candidate.title.clone(),
-            description: candidate.description.clone(),
-            text: candidate.text.clone(),
-        }),
-        false => Err(MemoryWriteRefusal::Invalid),
-    }
-}
-
-/// The numbers of the entries that `candidate` names: the entry of an update or a delete, and
-/// each entry of a merge. A create names no entry.
-fn named_entries(candidate: &MemoryOperationCandidate) -> Vec<u64> {
-    let numbers = match candidate.action {
-        MemoryOperationAction::Create => &[][..],
-        MemoryOperationAction::Update | MemoryOperationAction::Delete => candidate.entry.as_slice(),
-        MemoryOperationAction::Merge => candidate.entries.as_deref().unwrap_or_default(),
-    };
-    numbers
-        .iter()
-        .filter_map(|number| u64::try_from(*number).ok())
-        .collect()
-}
-
-/// Validates each operation of one call in list order (ADR 0039, ADR 0094 sections 6 and 8).
-/// `entries` are the current entries at the pinned Memory revision, `observations` are the
-/// observations of the input, from number 1, and `marks` are the delete marks of the author. Each
-/// admitted operation counts for the operations after it, and a refused operation does not stop
-/// them.
-pub fn decide_memory_operations(
-    candidates: &[MemoryOperationCandidate],
-    entries: &[PassMemoryEntry],
-    next_entry_number: u64,
-    observations: &[PassObservation],
-    marks: &[MemoryDeleteMark],
-) -> Vec<Result<AdmittedOperation, MemoryOperationRefusal>> {
-    let mut current = entries.to_vec();
-    let mut next_entry_number = next_entry_number;
-    let mut named = Vec::new();
-    let mut decisions = Vec::new();
-    for candidate in candidates {
-        let facts = (current.as_slice(), next_entry_number, observations, marks);
-        let decision = decide_one(candidate, facts, &named);
-        // An update, a merge, or a delete names its entries also when the Host refuses it.
-        match (&decision, candidate.action) {
-            (Ok(admitted), MemoryOperationAction::Create) => named.push(admitted.version.number),
-            (Err(_), MemoryOperationAction::Create) => {}
-            (_, _) => named.extend(named_entries(candidate)),
-        }
-        if let Ok(admitted) = &decision {
-            let number = admitted.version.number;
-            current.retain(|entry| {
-                entry.entry.number != number
-                    && !admitted
-                        .merged
-                        .iter()
-                        .any(|m| m.number == entry.entry.number)
-            });
-            if admitted.version.action == MemoryWriteAction::Create {
-                next_entry_number += 1;
-            }
-            if admitted.version.action != MemoryWriteAction::Delete {
-                current.push(PassMemoryEntry {
-                    entry: CurrentMemoryEntry {
-                        memory_entry_id: admitted
-                            .version
-                            .memory_entry_id
-                            .clone()
-                            .unwrap_or_default(),
-                        number,
-                        version: admitted.version.version,
-                        entry_type: admitted.version.entry_type,
-                        title: admitted.version.title.clone(),
-                        description: admitted.version.description.clone(),
-                        text: admitted.version.text.clone(),
-                    },
-                    origin: admitted.origin,
-                });
-            }
-        }
-        decisions.push(decision);
-    }
-    decisions
-}
-
-/// The facts of one decision: the current entries, the next entry number, the observations of
-/// the input, and the delete marks.
-type DecisionFacts<'a> = (
-    &'a [PassMemoryEntry],
-    u64,
-    &'a [PassObservation],
-    &'a [MemoryDeleteMark],
-);
-
-/// The checks of one operation. The checks of the list come before the write rule of S7-D1a2, and
-/// the check of the delete marks comes after it.
-fn decide_one(
-    candidate: &MemoryOperationCandidate,
-    (current, next_entry_number, observations, marks): DecisionFacts<'_>,
-    named: &[u64],
-) -> Result<AdmittedOperation, MemoryOperationRefusal> {
-    let create = candidate.action == MemoryOperationAction::Create;
-    let origin_of = |number: &i64| {
-        usize::try_from(*number)
-            .ok()
-            .and_then(|number| number.checked_sub(1))
-            .and_then(|index| observations.get(index))
-    };
-    let first_origin = candidate
-        .observations
-        .first()
-        .and_then(origin_of)
-        .map(PassObservation::origin);
-    if !candidate
-        .observations
-        .iter()
-        .all(|number| origin_of(number).is_some())
-    {
-        return Err(MemoryOperationRefusal::ObservationUnavailable);
-    }
-    let targets = named_entries(candidate);
-    if targets.iter().any(|number| named.contains(number)) {
-        return Err(MemoryOperationRefusal::EntryNamedTwice);
-    }
-    // A merge has two or more entries, each one time and each a number of an entry.
-    let merge = candidate.action == MemoryOperationAction::Merge;
-    let given = candidate.entries.as_ref().map_or(0, Vec::len);
-    let distinct = targets
-        .iter()
-        .enumerate()
-        .all(|(index, number)| !targets[..index].contains(number));
-    if merge && (targets.len() < 2 || targets.len() != given || !distinct) {
-        return Err(MemoryOperationRefusal::Write(MemoryWriteRefusal::Invalid));
-    }
-    let found: Vec<&PassMemoryEntry> = targets
-        .iter()
-        .filter_map(|number| current.iter().find(|e| e.entry.number == *number))
-        .collect();
-    let origin = match (create, found.first()) {
-        (true, _) => first_origin.ok_or(MemoryOperationRefusal::CreateWithoutSource)?,
-        (false, None) => {
-            return Err(MemoryOperationRefusal::Write(MemoryWriteRefusal::NotFound));
-        }
-        (false, Some(_)) if found.len() < targets.len() => {
-            return Err(MemoryOperationRefusal::Write(MemoryWriteRefusal::NotFound));
-        }
-        (false, Some(_))
-            if found
-                .iter()
-                .any(|entry| entry.origin == MemoryEntryOrigin::AuthorRequest) =>
-        {
-            return Err(MemoryOperationRefusal::AuthorEntry);
-        }
-        (false, Some(entry)) => entry.origin,
-    };
-    if found
-        .iter()
-        .any(|entry| entry.entry.entry_type != found[0].entry.entry_type)
-    {
-        return Err(MemoryOperationRefusal::MergeTypeMismatch);
-    }
-    let write = memory_write(candidate).map_err(MemoryOperationRefusal::Write)?;
-    // The other entries of a merge are not in the checks of the result, so a merge makes room.
-    let others = match merge {
-        true => &targets[1..],
-        false => &[][..],
-    };
-    let entries: Vec<CurrentMemoryEntry> = current
-        .iter()
-        .filter(|e| !others.contains(&e.entry.number))
-        .map(|e| e.entry.clone())
-        .collect();
-    let version = crate::decide_memory_write(&write, &entries, next_entry_number)
-        .map_err(MemoryOperationRefusal::Write)?;
-    let marked = marks.iter().any(|mark| {
-        mark.entry_type == version.entry_type && mark.title.trim() == version.title.trim()
-    });
-    if marked && version.action != MemoryWriteAction::Delete {
-        return Err(MemoryOperationRefusal::DeletedByAuthor);
-    }
-    let mut merged = Vec::new();
-    for entry in found.iter().filter(|e| others.contains(&e.entry.number)) {
-        let delete = MemoryWrite {
-            action: MemoryWriteAction::Delete,
-            entry: i64::try_from(entry.entry.number).ok(),
-            entry_type: None,
-            title: None,
-            description: None,
-            text: None,
-        };
-        let entries = [entry.entry.clone()];
-        merged.push(
-            crate::decide_memory_write(&delete, &entries, next_entry_number)
-                .map_err(MemoryOperationRefusal::Write)?,
-        );
-    }
-    let mut sources = Vec::new();
-    for source in candidate.observations.iter().filter_map(origin_of) {
-        if !sources.contains(&source.source) {
-            sources.push(source.source.clone());
-        }
-    }
-    Ok(AdmittedOperation {
-        version,
-        origin,
-        sources,
-        merged,
-    })
 }
 
 /// The facts of the settlement of one pass, which the store loads after the lock of the Memory
