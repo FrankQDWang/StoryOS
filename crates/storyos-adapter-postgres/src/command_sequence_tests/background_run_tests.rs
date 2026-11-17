@@ -437,7 +437,10 @@ async fn a_background_run_is_not_a_run_that_the_author_can_see_or_control() {
 
 /// Claims as another Worker. An admin transaction locks each AgentRun outside the Project, so
 /// that the claim can take only a Run of this Project and changes no other test data.
-async fn claim_in_project(store: &PostgresProjectReader, scope: &ProjectScope) -> Option<String> {
+pub(crate) async fn claim_in_project(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+) -> Option<storyos_application::ClaimedAgentRun> {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL").unwrap();
     let (others, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(connection);
@@ -457,12 +460,13 @@ async fn claim_in_project(store: &PostgresProjectReader, scope: &ProjectScope) -
         .await
         .unwrap();
     others.batch_execute("ROLLBACK").await.unwrap();
-    claimed.map(|claim| claim.run_id)
+    claimed
 }
 
+/// The Worker claims a Run of a dispatched kind only: a queued consolidation stays queued.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn the_worker_claims_only_a_run_of_the_author() {
+async fn the_worker_claims_no_consolidation_run() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -477,10 +481,15 @@ async fn the_worker_claims_only_a_run_of_the_author() {
     // The background Run has the Model Registration of the Run of the author.
     let background = "ffffffff-ffff-7fff-bfff-000000007730";
     background_run(&admin, &author, background, "queued").await;
-    let claims = [
-        claim_in_project(&store, &scope).await,
-        claim_in_project(&store, &scope).await,
-    ];
+    let consolidation = "UPDATE storyos.agent_runs SET run_kind = 'memory_consolidation'
+                          WHERE run_id = $1::text::uuid";
+    admin.execute(consolidation, &[&background]).await.unwrap();
+    let claim = async || {
+        claim_in_project(&store, &scope)
+            .await
+            .map(|claim| claim.run_id)
+    };
+    let claims = [claim().await, claim().await];
     let status = admin
         .query_one(
             "SELECT status::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",

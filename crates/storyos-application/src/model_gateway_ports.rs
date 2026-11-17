@@ -88,6 +88,21 @@ pub enum CreatePurpose {
     /// sends the constant author message or a constant function output, and no project content.
     /// Its response makes no Agent Decision.
     ToolQualification(ToolProbeRequest),
+    /// One RunStep of a capture (ADR 0094 section 5). The request sends the input of the
+    /// capture and the Tool outputs of the Run, and it has no author message and no Chapter.
+    MemoryCapture,
+}
+
+impl CreatePurpose {
+    /// The purpose of a decision request of a Run of `kind`. The Worker dispatches no
+    /// consolidation yet, so it has none.
+    pub fn of_run(kind: storyos_core::AgentRunKind) -> Option<Self> {
+        match kind {
+            storyos_core::AgentRunKind::Author => Some(Self::Decision),
+            storyos_core::AgentRunKind::MemoryCapture => Some(Self::MemoryCapture),
+            storyos_core::AgentRunKind::MemoryConsolidation => None,
+        }
+    }
 }
 
 /// The probe of one Tool qualification request.
@@ -117,7 +132,9 @@ pub struct CreateRequest {
     pub attempt: RequestAttempt,
     pub purpose: CreatePurpose,
     pub route: RequestRoute,
+    /// The author message of a Run of the author. A capture has none, so it is empty.
     pub author_message: String,
+    /// The Chapter of a Run of the author. A capture has none, so it is empty.
     pub chapter_id: String,
     pub passage_resolution: Option<OrdinaryPassageResolution>,
     pub passage_input: Option<serde_json::Value>,

@@ -1,18 +1,21 @@
-//! The start of a capture in the store (ADR 0094 sections 5 and 8), in one transaction. A capture
-//! is a Run of the kind `memory_capture` with no Conversation, no Chapter, no author message, and
-//! no Receipt. No diagnostic records the input or an observation (ADR 0047).
+//! A capture in the store (ADR 0094 sections 5 and 8): the start in one transaction, the Context
+//! Assembly of each RunStep, and the records of the settled output call. A capture is a Run of
+//! the kind `memory_capture` with no Conversation, no Chapter, no author message, and no Receipt. No diagnostic records the input or an observation (ADR 0047).
 
 use storyos_application::{
-    MemoryCaptureSource, MemoryCaptureStartRefusal, MemoryCaptureStore, ProjectReadError,
-    ProjectScope, StartedMemoryCapture,
+    ClaimedAgentRun, CompleteAgentRunError, MemoryCaptureSource, MemoryCaptureStartRefusal,
+    MemoryCaptureStore, ProjectReadError, ProjectScope, StartedMemoryCapture,
 };
 use storyos_core::{
     AgentRunKind, AssistanceAvailability, CaptureAdmissionFacts, CaptureRefusal,
-    MemoryCaptureAssembly,
+    ContextSourceClass, CurrentPassageAssemblyRecord, MemoryCaptureAssembly, MemoryObservation,
+    ToolResultCandidate,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
 
+use crate::agent_run_tool_authority::damaged;
+use crate::agent_run_work::complete_database_error;
 use crate::update_project_assistance::read_assistance_record;
 use crate::{PostgresProjectReader, read_error};
 
@@ -183,6 +186,107 @@ async fn start(
     Ok(Ok(StartedMemoryCapture { capture_id, run_id }))
 }
 
+/// The Context Assembly of the next RunStep of a capture: the input item of the RunStep before,
+/// and one `tool_result` item for each resolved ToolCall of the Run (ADR 0085).
+pub(crate) async fn persist_next_step(
+    client: &Client,
+    claim: &ClaimedAgentRun,
+    retained: &CurrentPassageAssemblyRecord,
+    next_position: &str,
+    candidates: &[ToolResultCandidate<'_>],
+) -> Result<(), CompleteAgentRunError> {
+    let input = retained
+        .selected
+        .iter()
+        .find(|item| item.source_class == ContextSourceClass::MemoryCaptureInput)
+        .ok_or_else(|| damaged("The input of the capture is missing"))?;
+    let scope = &claim.project_scope;
+    let mut record = storyos_core::assemble_memory_capture_context(&MemoryCaptureAssembly {
+        operation_requirement_id: Uuid::now_v7().to_string(),
+        input_snapshot_id: Uuid::now_v7().to_string(),
+        run_id: claim.run_id.clone(),
+        owner_user_id: scope.owner_user_id.as_ref().to_owned(),
+        project_id: scope.project_id.as_ref().to_owned(),
+        input: input.content.clone(),
+        destination_identity: retained.operation_requirement.destination_identity.clone(),
+    });
+    storyos_core::assemble_tool_result_continuation(&mut record, candidates);
+    crate::create_agent_run::context::insert_assembly(
+        client,
+        scope,
+        &claim.run_id,
+        /*receipt_id*/ None,
+        next_position,
+        &record,
+    )
+    .await
+    .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    Ok(())
+}
+
+/// Settles the capture of the Run with the `outcome` that Core decided and stores each of
+/// `observations` as a waiting Memory Observation in list order, in the Tool Gateway transaction
+/// of the call.
+pub(crate) async fn record_observations(
+    client: &Client,
+    claim: &ClaimedAgentRun,
+    outcome: storyos_core::CaptureOutcome,
+    observations: &[MemoryObservation],
+) -> Result<(), CompleteAgentRunError> {
+    let scope = &claim.project_scope;
+    let outcome = outcome.label();
+    let capture_id: String = client
+        .query_opt(
+            "UPDATE storyos.memory_captures SET state = 'settled', outcome = $4
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid AND state = 'running'
+          RETURNING capture_id::text",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &claim.run_id,
+                &outcome,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?
+        .ok_or_else(|| damaged("The running capture of the Run is missing"))?
+        .get(/*idx*/ 0);
+    let types: Vec<&str> = observations
+        .iter()
+        .map(|item| item.entry_type.as_str())
+        .collect();
+    let titles: Vec<&str> = observations
+        .iter()
+        .map(|item| item.title.as_str())
+        .collect();
+    let texts: Vec<&str> = observations.iter().map(|item| item.text.as_str()).collect();
+    client
+        .execute(
+            "INSERT INTO storyos.memory_observations
+               (owner_user_id, project_id, capture_id, position, entry_type, title, text)
+             SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, item.position::numeric,
+                    item.entry_type, item.title, item.text
+               FROM unnest($4::text[], $5::text[], $6::text[]) WITH ORDINALITY
+                    AS item(entry_type, title, text, position)",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &capture_id,
+                &types,
+                &titles,
+                &texts,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "memory_capture_tests.rs"]
-mod tests;
+pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "memory_capture_loop_tests.rs"]
+mod loop_tests;

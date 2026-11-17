@@ -122,3 +122,65 @@ fn a_valid_list_keeps_its_order_and_a_character_has_the_longer_text() {
         5
     );
 }
+
+/// A valid list settles the capture with its outcome and completes the Run. A refused list
+/// records no observation and does not complete the Run.
+#[test]
+fn a_settled_call_decides_the_outcome_of_the_capture_and_completes_the_run() {
+    let one = item("foreshadowing", "铜铃", "铜铃会再响。");
+    let facts = |list: &[ObservationCandidate]| {
+        let settlement = settle_observation_call(list);
+        let outcome = match &settlement {
+            ObservationCallSettlement::Settled {
+                outcome,
+                observations,
+                result,
+            } => Ok((*outcome, observations.len(), result.text.clone())),
+            ObservationCallSettlement::Refused { refusal, result } => {
+                Err((*refusal, result.text.clone()))
+            }
+        };
+        (settlement.call_state(), settlement.completes_run(), outcome)
+    };
+
+    assert_eq!(
+        [
+            facts(&[]),
+            facts(std::slice::from_ref(&one)),
+            facts(&vec![one; 6])
+        ],
+        [
+            (
+                ToolCallState::Settled,
+                true,
+                Ok((
+                    CaptureOutcome::NoObservation,
+                    0,
+                    observations_result(0).text
+                ))
+            ),
+            (
+                ToolCallState::Settled,
+                true,
+                Ok((
+                    CaptureOutcome::ObservationsRecorded,
+                    1,
+                    observations_result(1).text
+                ))
+            ),
+            (
+                ToolCallState::Refused,
+                false,
+                Err((TooMany, TooMany.result().text))
+            ),
+        ]
+    );
+    assert_eq!(
+        [
+            CaptureOutcome::ObservationsRecorded,
+            CaptureOutcome::NoObservation
+        ]
+        .map(CaptureOutcome::label),
+        ["observations_recorded", "no_observation"]
+    );
+}

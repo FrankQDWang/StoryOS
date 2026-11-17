@@ -68,6 +68,7 @@ pub use ordinary_passage_request::{
 };
 mod open_block_proposal;
 mod passage_cut;
+mod passage_ranking;
 mod project_archive;
 mod project_export;
 mod readable_export;
@@ -266,6 +267,12 @@ pub use passage_cut::{
     PASSAGE_CHARACTER_LIMIT, PASSAGE_CUT_REVISION, Passage, PassageBlock, cut_passages,
     passage_embedding_text,
 };
+pub use passage_ranking::{
+    ChapterPassages, LocatedPassage, NearestPassage, PASSAGE_FUSION_CONSTANT, PASSAGE_LIST_LIMIT,
+    PASSAGE_RESULT_LIMIT, PASSAGE_TERM_LIMIT, PASSAGE_TERM_MAX_CHARS, PassagePlace, PassageTerms,
+    PassageTermsRefusal, RankingBlock, RankingChapter, admit_passage_ranking, current_passages,
+    exact_term_list, fuse_passage_lists, vector_list,
+};
 pub use project_archive::{
     ARCHIVE_ENTRY_DIGEST_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
     ArchiveEntryDescriptor, ArchiveEntrySource, BuiltProjectArchive,
@@ -304,8 +311,9 @@ pub use rebuild_expired_reference::{
     ExpiryRebuildDisposition, ExpiryRebuildFacts, decide_confirmed_expiry_rebuild,
 };
 pub use record_memory_observations::{
-    CAPTURE_OBSERVATIONS_MAX, MemoryObservation, ObservationCandidate, ObservationRefusal,
-    RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC, validate_observations,
+    CAPTURE_OBSERVATIONS_MAX, CaptureOutcome, MemoryObservation, ObservationCallSettlement,
+    ObservationCandidate, ObservationRefusal, RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
+    observations_result, settle_observation_call, validate_observations,
 };
 pub use reject_proposal_operations::{
     RejectProposalOperations, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
