@@ -146,6 +146,7 @@ mod author_edit_admission_recovery;
 mod author_edit_outcome;
 mod author_edit_proposal;
 mod cancel_agent_run;
+mod chapter_capture_schedule;
 mod chapter_query;
 mod command_replay;
 mod command_response_assistance;

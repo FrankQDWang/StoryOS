@@ -4372,9 +4372,12 @@ GRANT SELECT,INSERT,UPDATE ON TABLE storyos.passage_index_work TO storyos_runtim
 -- The source of the kind `conversation_capture` is a Project Conversation, and `conversation_id` names it
 -- too. The completion of a Run of the author in the Conversation sets the due time in the transaction of
 -- the settlement. The source of the kind `consolidation` is the Project. The settlement of a capture that
--- stored observations and the settlement of a pass set its due time. A Worker claims a due row with a row
--- lock in the Worker scope, and the transaction of its decision makes the due time empty. The runtime role
--- can read, insert, and update a row, and it cannot delete a row.
+-- stored observations and the settlement of a pass set its due time. The source of the kind `chapter_capture`
+-- is a Chapter, and `chapter_id` names it too. Each Authoritative Commit that changes the text of the Chapter
+-- sets its due time in the transaction of the commit. A `held` row waits for a Project that cannot do
+-- background work, and it has no due time. A Worker claims a due row with a row lock in the Worker scope,
+-- and the transaction of its decision makes the due time empty. The runtime role can read, insert, and
+-- update a row, and it cannot delete a row.
 
 CREATE TABLE storyos.memory_work_schedules (
     owner_user_id uuid NOT NULL,
@@ -4382,10 +4385,14 @@ CREATE TABLE storyos.memory_work_schedules (
     work_kind text NOT NULL,
     source_id uuid NOT NULL,
     conversation_id uuid,
+    chapter_id uuid,
     due_at timestamp with time zone,
+    held boolean DEFAULT false NOT NULL,
     CONSTRAINT memory_work_schedules_pkey PRIMARY KEY (owner_user_id, project_id, work_kind, source_id),
-    CONSTRAINT memory_work_schedules_source_check CHECK (((((work_kind = 'conversation_capture'::text) AND (conversation_id = source_id)) OR ((work_kind = 'consolidation'::text) AND (conversation_id IS NULL) AND (source_id = project_id))) IS TRUE)),
-    CONSTRAINT memory_work_schedules_conversation_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id)
+    CONSTRAINT memory_work_schedules_source_check CHECK (((((work_kind = 'conversation_capture'::text) AND (conversation_id = source_id) AND (chapter_id IS NULL)) OR ((work_kind = 'consolidation'::text) AND (conversation_id IS NULL) AND (chapter_id IS NULL) AND (source_id = project_id)) OR ((work_kind = 'chapter_capture'::text) AND (conversation_id IS NULL) AND (chapter_id = source_id))) IS TRUE)),
+    CONSTRAINT memory_work_schedules_held_check CHECK (((NOT held) OR ((work_kind = 'chapter_capture'::text) AND (due_at IS NULL)))),
+    CONSTRAINT memory_work_schedules_conversation_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id),
+    CONSTRAINT memory_work_schedules_chapter_fkey FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id)
 );
 
 CREATE INDEX memory_work_schedules_due_idx ON storyos.memory_work_schedules USING btree (due_at) WHERE (due_at IS NOT NULL);

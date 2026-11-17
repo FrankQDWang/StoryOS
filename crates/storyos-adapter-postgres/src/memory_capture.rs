@@ -332,6 +332,7 @@ pub(crate) async fn record_observations(
         .get(/*idx*/ 0);
     crate::memory_work_schedule::mark_due_after_capture(client, claim, &capture_id, outcome)
         .await?;
+    crate::chapter_capture_schedule::mark_due_after_capture(client, claim, &capture_id).await?;
     let types: Vec<&str> = observations
         .iter()
         .map(|item| item.entry_type.as_str())
