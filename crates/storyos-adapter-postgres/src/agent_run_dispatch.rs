@@ -20,7 +20,7 @@ impl ModelDispatchStore for PostgresProjectReader {
         claim: &ClaimedAgentRun,
     ) -> Result<NextDispatchWork, CompleteAgentRunError> {
         let lease_seconds = self.agent_run_lease_seconds()?;
-        let mut may_give_way = true;
+        let mut checked_step = None;
         loop {
             let transaction = self
                 .begin_serializable_project_command_transaction(&claim.project_scope)
@@ -28,7 +28,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                 .map_err(complete_challenge_error)?;
             let phase = async {
                 let phase =
-                    settle_one_phase(&transaction.client, claim, lease_seconds, may_give_way)
+                    settle_one_phase(&transaction.client, claim, lease_seconds, checked_step)
                         .await?;
                 advance_steering(&transaction.client, claim, lease_seconds, phase).await
             }
@@ -53,7 +53,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                 }
                 WorkPhase::ToolCalls => return Ok(NextDispatchWork::ToolCalls),
                 WorkPhase::BetweenSteps(position) => {
-                    may_give_way = false;
+                    checked_step = Some(position);
                     let queued = self.author_run_queued(claim).await?;
                     if storyos_core::yields_to_author(position, queued) {
                         self.give_back(claim).await?;

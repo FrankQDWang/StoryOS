@@ -45,6 +45,31 @@ pub(crate) async fn project(
     (scope, chapter_id, source)
 }
 
+/// Completes the capture Run `run_id`. A capture that gave its claim back to a queued Run of the
+/// author in another Project gets a new claim, until its Run is not queued.
+pub(crate) async fn run_capture(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    run_id: &str,
+) {
+    for _ in 0..=storyos_core::MEMORY_CAPTURE_MAX_RUN_STEPS {
+        complete(store, admin, scope, run_id).await;
+        let status: String = admin
+            .query_one(
+                "SELECT status FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+                &[&run_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        if status != "queued" {
+            return;
+        }
+    }
+    panic!("the capture {run_id} did not end");
+}
+
 pub(crate) async fn start(
     store: &PostgresProjectReader,
     scope: &ProjectScope,

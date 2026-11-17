@@ -320,3 +320,7 @@ pub(crate) mod tests;
 #[cfg(test)]
 #[path = "memory_capture_loop_tests.rs"]
 mod loop_tests;
+
+#[cfg(test)]
+#[path = "memory_capture_order_tests.rs"]
+mod order_tests;

@@ -472,13 +472,13 @@ pub(crate) async fn admit_create(
     Ok(CreateAdmission::Settled)
 }
 
-/// Settles one work phase of the claimed Run. `may_give_way`: the claim has not yet checked the
-/// queue of the author at the active RunStep.
+/// Settles one work phase of the claimed Run. `checked_step`: the RunStep position at which the
+/// claim already checked the queue of the author.
 pub(crate) async fn settle_one_phase(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     lease_seconds: i64,
-    may_give_way: bool,
+    checked_step: Option<u64>,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let run = load_run_phase(client, claim).await?;
     if run.status == "cancelled" {
@@ -487,12 +487,14 @@ pub(crate) async fn settle_one_phase(
     if run.settled() {
         return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
     }
-    if may_give_way && run.attempt_id.is_none() && run.kind.gives_way_to_author() {
+    if run.attempt_id.is_none() && run.kind.gives_way_to_author() {
         let position = run
             .decision_position
             .parse::<u64>()
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-        return Ok(WorkPhase::BetweenSteps(position));
+        if checked_step != Some(position) {
+            return Ok(WorkPhase::BetweenSteps(position));
+        }
     }
     if run.attempt_id.is_none()
         && crate::agent_run_steering::advance_before_request(

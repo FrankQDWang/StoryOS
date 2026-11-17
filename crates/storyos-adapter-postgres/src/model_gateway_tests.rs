@@ -458,6 +458,62 @@ async fn admit_with(
     prefix: &str,
     destination: DeploymentDestination,
     author_message: &str,
+    conversation: (
+        ConversationSelection,
+        Option<&'static ResearchToolOffer>,
+        Option<Vec<SelectionReference>>,
+        Option<&'static storyos_core::EmbeddingRegistration>,
+    ),
+    skills: (std::sync::Arc<SkillSet>, Vec<SkillPackageReference>),
+) -> String {
+    let run_id = format!("018f0000-0000-7001-8000-00000004{prefix}6");
+    let inputs = (destination, author_message, run_id);
+    admit_with_run_id(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        inputs,
+        conversation,
+        skills,
+    )
+    .await
+}
+
+/// Admits one queued AgentRun of a new Conversation of the tool loop profile with the identity
+/// `run_id`, as `admit_run` does.
+pub(crate) async fn admit_run_with_id(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    author_message: &str,
+    run_id: String,
+) -> String {
+    let inputs = (
+        DeploymentDestination::HostFakeToolLoop,
+        author_message,
+        run_id,
+    );
+    let conversation = (ConversationSelection::New, None, None, None);
+    admit_with_run_id(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        inputs,
+        conversation,
+        Default::default(),
+    )
+    .await
+}
+
+async fn admit_with_run_id(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    (destination, author_message, run_id): (DeploymentDestination, &str, String),
     (conversation, research, selection_references, embedding): (
         ConversationSelection,
         Option<&'static ResearchToolOffer>,
@@ -484,7 +540,7 @@ async fn admit_with(
             conversation,
             author_message: author_message.to_owned(),
             chapter_id: chapter_id.to_owned(),
-            run_id: format!("018f0000-0000-7001-8000-00000004{prefix}6"),
+            run_id,
             conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
             destination: Some(destination),
