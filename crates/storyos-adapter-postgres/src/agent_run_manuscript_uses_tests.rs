@@ -1,6 +1,7 @@
 //! The manuscript Tool uses of a Run, in the Run read (ADR 0095 section 1). Test prefix leads
 //! `ac`, and `feb` to `fef`.
 
+use storyos_adapter_fake_destination::EMBEDDING_REJECTION_MARKER;
 use storyos_application::{
     AgentRunReadSelection, AgentRunReadStore, ConversationSelection, ProjectScope,
 };
@@ -152,8 +153,8 @@ async fn each_run_read_names_only_the_uses_of_its_own_run() {
 }
 
 /// ADR 0095 section 1: each question of a settled `hybrid_search_manuscript` call is one entry.
-/// A call that settled with the exact-term list only, because no vector was available, gives the
-/// entry. A refused call gives no entry. A Run of another Project has only its own entries: its
+/// A call that settled with the exact-term list only, because the embedding request of its
+/// question gave no vector, gives the entry. A refused call gives no entry. A Run of another Project has only its own entries: its
 /// call is refused because the Project has no embedding use binding.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -166,12 +167,15 @@ async fn the_run_read_names_each_question_of_a_hybrid_search_only_in_its_own_run
     let (bound, chapter_id, first) = embedding_project(&store, &admin, ["feb", "fec"], FAKE).await;
     complete(&store, &admin, &bound, &first).await;
     // A hybrid search, a keyword search, the same question again with no term, an empty
-    // question, and a second question.
-    let message = "SCRIPT:hybrid_search_manuscript 谁在渡口等船？|Lin\nSCRIPT:search_manuscript Lin\n\
-                   SCRIPT:hybrid_search_manuscript 谁在渡口等船？\n\
-                   SCRIPT:hybrid_search_manuscript |Lin\nSCRIPT:hybrid_search_manuscript 钟声从哪里来？";
+    // question, and a second question whose embedding request is rejected.
+    let rejected = format!("{EMBEDDING_REJECTION_MARKER} 钟声从哪里来？");
+    let message = format!(
+        "SCRIPT:hybrid_search_manuscript 谁在渡口等船？|Lin\nSCRIPT:search_manuscript Lin\n\
+         SCRIPT:hybrid_search_manuscript 谁在渡口等船？\n\
+         SCRIPT:hybrid_search_manuscript |Lin\nSCRIPT:hybrid_search_manuscript {rejected}"
+    );
     let new = ConversationSelection::New;
-    let used = admitted(&store, &bound, &chapter_id, "fed", message, new).await;
+    let used = admitted(&store, &bound, &chapter_id, "fed", &message, new).await;
     complete(&store, &admin, &bound, &used).await;
     let (other, other_chapter, _, _) = project(&plain, &admin, "fee", 0xfef8, &["Lin ran."]).await;
     let message =
@@ -197,8 +201,8 @@ async fn the_run_read_names_each_question_of_a_hybrid_search_only_in_its_own_run
         .map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1), row.get(/*idx*/ 2)))
         .collect();
 
-    // Each settled call has the exact-term list only, and the Run of the other Project gets no
-    // entry for its refused call.
+    // Only the call of the rejected request has the exact-term list only. The Run of the other
+    // Project gets no entry for its refused call.
     assert_eq!(
         (
             states,
@@ -209,8 +213,8 @@ async fn the_run_read_names_each_question_of_a_hybrid_search_only_in_its_own_run
         ),
         (
             [
-                (true, "settled", true),
-                (true, "settled", true),
+                (true, "settled", false),
+                (true, "settled", false),
                 (true, "refused", false),
                 (true, "settled", true),
                 (false, "refused", false),
@@ -220,7 +224,7 @@ async fn the_run_read_names_each_question_of_a_hybrid_search_only_in_its_own_run
             Some(Some(vec![
                 hybrid_search("谁在渡口等船？"),
                 keyword_search("Lin"),
-                hybrid_search("钟声从哪里来？"),
+                hybrid_search(&rejected),
             ])),
             Some(Some(Vec::new())),
             Some(Some(vec![keyword_search("谁在渡口等船？")])),
