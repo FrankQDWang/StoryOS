@@ -64,6 +64,7 @@ pub use ordinary_passage_request::{
     OrdinaryPassageResolution, PASSAGE_REFERENCE_QUESTION, parse_ordinary_passage_request,
 };
 mod open_block_proposal;
+mod passage_cut;
 mod project_archive;
 mod project_export;
 mod readable_export;
@@ -249,6 +250,10 @@ pub use model_registration::{
 pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,
     OpenBlockProposalResult, open_block_proposal,
+};
+pub use passage_cut::{
+    PASSAGE_CHARACTER_LIMIT, PASSAGE_CUT_REVISION, Passage, PassageBlock, cut_passages,
+    passage_embedding_text,
 };
 pub use project_archive::{
     ARCHIVE_ENTRY_DIGEST_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
