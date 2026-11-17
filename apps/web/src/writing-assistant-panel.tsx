@@ -14,6 +14,8 @@ import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
 import { AssistantComposer } from "./assistant-composer.tsx";
+import { createChallengeAdmissionWait, type ChallengeAdmissionTimers, type ChallengeAdmissionWait }
+  from "./challenge-admission-wait.ts";
 import {
   CONVERSATION_TOO_LONG_SENTENCE, DESTINATION_REFUSED_SENTENCE, NO_RESULT_SENTENCE,
   PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, RESEARCH_SYNTHESIS_SENTENCE, RESEARCH_TOOL_UNAVAILABLE_SENTENCE,
@@ -282,8 +284,10 @@ const runLabels: Record<GetAgentRunResponse["status"], string> = {
 
 export function WritingAssistantPanel({
   collapsed, context, onOpenedProposal, onNavigateProposal, scheduleRefresh = scheduleRunRefresh,
-  requestedConversationId,
+  requestedConversationId, challengeTimers,
 }: {
+  /** The timers of the Retry-After wait of a Command Challenge rate limit. Tests inject their own clock. */
+  challengeTimers?: ChallengeAdmissionTimers | undefined;
   /** The Conversation that the workspace address names. The panel opens it one time, when it first gets it. */
   requestedConversationId?: string | undefined;
   /** Schedules the next read of a Run that has not settled. Tests inject their own clock. */
@@ -311,6 +315,13 @@ export function WritingAssistantPanel({
   // The address opens its Conversation only after the panel read the stored request, so that it knows its state.
   const [storedReadDone, setStoredReadDone] = useState(reference === undefined);
   const requestedOpened = useRef(false);
+  // A send waits for the Retry-After of a Command Challenge rate limit. Leaving the Project ends the wait (#1679).
+  const admission = useRef<ChallengeAdmissionWait | undefined>(undefined);
+  useEffect(() => {
+    const wait = createChallengeAdmissionWait(challengeTimers);
+    admission.current = wait;
+    return () => { wait.cancel(); };
+  }, [context?.scope.owner_user_id, context?.scope.project_id]);
 
   useEffect(() => {
     if (context === undefined) {
@@ -514,6 +525,8 @@ export function WritingAssistantPanel({
       || !context.canSubmit || availability !== "available" || sending
       || unresolved) return;
     if (message.length === 0) return;
+    const admissionWait = admission.current;
+    if (admissionWait === undefined) return;
     const previous = reference;
     const previousRun = run;
     let storedNew = false;
@@ -599,17 +612,20 @@ export function WritingAssistantPanel({
           correlation_id: current.correlationId,
         },
       };
-      const challenge = await createProjectCommandChallenge({
+      const commandDigest = await digestCreateAgentRun(request, context.cryptoImpl);
+      const challenge = await admissionWait.retry(() => createProjectCommandChallenge({
         baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
         projectId: context.scope.project_id,
         request: {
           method: "POST",
           route_template: "/api/v1/projects/{project_id}/agent-runs",
           command_schema: request.command_schema,
-          canonical_command_digest: await digestCreateAgentRun(request, context.cryptoImpl),
+          canonical_command_digest: commandDigest,
           idempotency_key: current.idempotencyKey,
         },
-      });
+      }));
+      // The author left the Project during the wait, so no request goes.
+      if (challenge === undefined) return;
       saveReference(current);
       onRecorded?.();
       storedNew = true;

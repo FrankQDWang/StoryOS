@@ -30,7 +30,8 @@ import type {
   PendingEditProjection,
   ProjectReadyState,
 } from "./editor-types.ts";
-import type { ChallengeAdmissionTimers } from "./challenge-admission-wait.ts";
+import { createChallengeAdmissionWait, type ChallengeAdmissionTimers, type ChallengeAdmissionWait }
+  from "./challenge-admission-wait.ts";
 import { AuthorUndoUnavailableError, InputBoundStopError, createEditorSessionWritingController }
   from "./editor-session-writing.ts";
 import {
@@ -140,6 +141,10 @@ function ProjectReadyView({
   const [tree, setTree] = useState<GetManuscriptTreeResponse>();
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
+  // The Chapter whose switch waits for the Retry-After of a Command Challenge rate limit (#1679).
+  const [switchWaiting, setSwitchWaiting] = useState<string>();
+  const waitingSwitchRef = useRef<ChallengeAdmissionWait | undefined>(undefined);
+  useEffect(() => () => { waitingSwitchRef.current?.cancel(); }, []);
   // A locator of the current AgentRun or of a navigation stays in memory and only causes an earlier list read.
   // A Chapter change remounts this view, so the store of the Project keeps the locators for the next view.
   const projectId = state.project.project.project_id;
@@ -242,7 +247,15 @@ function ProjectReadyView({
   // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026). The result is true
   // when the command changed the Current Chapter and the workspace opens again at the Chapter.
   const selectChapter = (chapterId: string): Promise<boolean> => {
-    if (structureInFlightRef.current) return Promise.resolve(false);
+    // The latest click of the author wins: a click ends the wait of an earlier switch (#1679).
+    const waiting = waitingSwitchRef.current;
+    if (structureInFlightRef.current && waiting === undefined) return Promise.resolve(false);
+    if (waiting !== undefined) {
+      waiting.cancel();
+      waitingSwitchRef.current = undefined;
+      setSwitchWaiting(undefined);
+      structureInFlightRef.current = false;
+    }
     if (chapterId === selectedChapterIdRef.current) return Promise.resolve(false);
     if (state.editor.kind !== "editor-ready" || writing === undefined) {
       browseChapter(chapterId);
@@ -252,47 +265,59 @@ function ProjectReadyView({
     const editorSessionId = state.editor.session.editor_session.editor_session_id;
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
+    const wait = createChallengeAdmissionWait(writingTimers);
     return (async () => {
       let reopened = false;
+      let cancelled = false;
       try {
-        const quiet = await writing.runAfterQuiesce("settled", async () => {
-          if (generation !== switchGenerationRef.current) return;
-          const opened = await openSelectedChapter({
-            baseUrl,
-            projectId: state.project.project.project_id,
-            chapterId,
-            expectedScope: state.project.project_scope,
-            fetchImpl,
+        const quiet = await wait.retry(() => {
+          waitingSwitchRef.current = undefined;
+          setSwitchWaiting(undefined);
+          return writing.runAfterQuiesce("settled", async () => {
+            if (generation !== switchGenerationRef.current) return;
+            const opened = await openSelectedChapter({
+              baseUrl,
+              projectId: state.project.project.project_id,
+              chapterId,
+              expectedScope: state.project.project_scope,
+              fetchImpl,
+            });
+            if (generation !== switchGenerationRef.current) return;
+            if (opened.kind !== "opened") {
+              setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
+              return;
+            }
+            // A Challenge rate limit propagates to the wait. The repeat uses the same idempotency key.
+            const switched = await setOwnedCurrentChapter({
+              baseUrl,
+              fetchImpl,
+              cryptoImpl,
+              projectId: state.project.project.project_id,
+              chapterId,
+              expectedCurrentChapterId: currentChapterId,
+              expectedTargetRevisionId: opened.chapter.chapter.current_revision.revision_id,
+              editorSessionId,
+            });
+            if (switched.effect.kind !== "authoritative_applied"
+              && switched.effect.kind !== "no_effect") {
+              setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
+              return;
+            }
+            reopened = switched.effect.kind === "authoritative_applied";
+            onReopened(await openControlledProject({
+              baseUrl,
+              projectId: state.project.project.project_id,
+              fetchImpl,
+              cryptoImpl,
+            }));
           });
-          if (generation !== switchGenerationRef.current) return;
-          if (opened.kind !== "opened") {
-            setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
-            return;
-          }
-          const switched = await setOwnedCurrentChapter({
-            baseUrl,
-            fetchImpl,
-            cryptoImpl,
-            projectId: state.project.project.project_id,
-            chapterId,
-            expectedCurrentChapterId: currentChapterId,
-            expectedTargetRevisionId: opened.chapter.chapter.current_revision.revision_id,
-            editorSessionId,
-          });
-          if (switched.effect.kind !== "authoritative_applied"
-            && switched.effect.kind !== "no_effect") {
-            setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
-            return;
-          }
-          reopened = switched.effect.kind === "authoritative_applied";
-          onReopened(await openControlledProject({
-            baseUrl,
-            projectId: state.project.project.project_id,
-            fetchImpl,
-            cryptoImpl,
-          }));
+        }, () => {
+          waitingSwitchRef.current = wait;
+          setSwitchWaiting(chapterId);
         });
-        if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
+        if (quiet === undefined) {
+          cancelled = true;
+        } else if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
           setSwitchRecovery(chapterSwitchRecoveryMessage(quiet.reason));
         }
       } catch (error: unknown) {
@@ -302,7 +327,8 @@ function ProjectReadyView({
             : chapterSwitchRecoveryMessage("unavailable"),
         );
       } finally {
-        structureInFlightRef.current = false;
+        // A cancelled wait belongs to an earlier click or to a view that closed.
+        if (!cancelled) structureInFlightRef.current = false;
       }
       return reopened;
     })();
@@ -555,6 +581,7 @@ function ProjectReadyView({
                 ?? selectedChapter.chapter.current_revision.revision_id
             }
             data-author-undo-frontier={pending?.author_undo_frontier_sequence ?? ""}
+            data-chapter-switch-waiting={switchWaiting ?? ""}
           >
             {saveState === "saved" ? "已保存"
               : saveState === "saving" ? "保存中"
