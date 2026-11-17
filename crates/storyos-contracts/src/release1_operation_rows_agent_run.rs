@@ -520,6 +520,14 @@ const GET_AGENT_RUN_RESPONSE: &[Patch] = &[
     ),
     Patch(
         Edit::MinLength(1),
+        &["/$defs/ManuscriptUseInspect/oneOf/2/properties/question"],
+    ),
+    Patch(
+        Edit::MaxLength(512),
+        &["/$defs/ManuscriptUseInspect/oneOf/2/properties/question"],
+    ),
+    Patch(
+        Edit::MinLength(1),
         &["/$defs/AgentRunResultInspect/oneOf/2/properties/title"],
     ),
     Patch(

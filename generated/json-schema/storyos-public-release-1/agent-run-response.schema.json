@@ -1059,6 +1059,26 @@
             "query"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The Agent searched the manuscript by meaning for the question `question` with a settled\n`hybrid_search_manuscript` call. The entry has no passage text, no vector, and no score.",
+          "properties": {
+            "kind": {
+              "const": "hybrid_search",
+              "type": "string"
+            },
+            "question": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "question"
+          ],
+          "type": "object"
         }
       ]
     },

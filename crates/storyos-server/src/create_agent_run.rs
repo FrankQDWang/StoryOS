@@ -239,6 +239,9 @@ pub(super) async fn get_agent_run(
                         storyos_core::ManuscriptUse::KeywordSearch { query } => {
                             contracts::ManuscriptUseInspect::KeywordSearch { query }
                         }
+                        storyos_core::ManuscriptUse::HybridSearch { question } => {
+                            contracts::ManuscriptUseInspect::HybridSearch { question }
+                        }
                     })
                     .collect()
             }),
