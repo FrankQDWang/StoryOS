@@ -224,18 +224,17 @@ pub(crate) async fn persist_next_step(
     Ok(())
 }
 
-/// Settles the capture of the Run with `observations` and stores each one as a waiting Memory
-/// Observation in list order, in the Tool Gateway transaction of the call.
+/// Settles the capture of the Run with the `outcome` that Core decided and stores each of
+/// `observations` as a waiting Memory Observation in list order, in the Tool Gateway transaction
+/// of the call.
 pub(crate) async fn record_observations(
     client: &Client,
     claim: &ClaimedAgentRun,
+    outcome: storyos_core::CaptureOutcome,
     observations: &[MemoryObservation],
 ) -> Result<(), CompleteAgentRunError> {
     let scope = &claim.project_scope;
-    let outcome = match observations.is_empty() {
-        true => "no_observation",
-        false => "observations_recorded",
-    };
+    let outcome = outcome.label();
     let capture_id: String = client
         .query_opt(
             "UPDATE storyos.memory_captures SET state = 'settled', outcome = $4

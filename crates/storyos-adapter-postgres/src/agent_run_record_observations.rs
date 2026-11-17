@@ -1,11 +1,10 @@
 //! The in-process execution of a `record_memory_observations` call (ADR 0094 sections 5 and 8).
-//! Core validates the list. A refused list settles the call as refused with its result, and the
-//! model can call again in the next RunStep. A valid list stores the observations, settles the
-//! capture, settles the call, and completes the Run in the Tool Gateway transaction that checked
-//! the Run Lease fence, so no request follows it.
+//! Core settles the call: it validates the list, decides the outcome of the capture, and decides
+//! whether the call completes the Run. The store writes that settlement in the Tool Gateway
+//! transaction that checked the Run Lease fence, so no request follows a settled call.
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::{ObservationCandidate, ToolCallState};
+use storyos_core::{ObservationCallSettlement, ObservationCandidate};
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
 
@@ -15,32 +14,33 @@ pub(crate) async fn execute(
     row: &ToolCallRow,
     candidates: &[ObservationCandidate],
 ) -> Result<(), CompleteAgentRunError> {
-    let (state, refusal, result) = match storyos_core::validate_observations(candidates) {
-        Ok(observations) => {
-            crate::memory_capture::record_observations(client, claim, &observations).await?;
-            let result = storyos_core::observations_result(observations.len());
-            (ToolCallState::Settled, None, result)
+    let settlement = storyos_core::settle_observation_call(candidates);
+    let (refusal, result) = match &settlement {
+        ObservationCallSettlement::Settled {
+            outcome,
+            observations,
+            result,
+        } => {
+            crate::memory_capture::record_observations(client, claim, *outcome, observations)
+                .await?;
+            (None, result)
         }
-        Err(refusal) => (
-            ToolCallState::Refused,
-            Some(refusal.label()),
-            refusal.result(),
-        ),
+        ObservationCallSettlement::Refused { refusal, result } => (Some(refusal.label()), result),
     };
     resolve(
         client,
         claim,
         row,
         Resolution {
-            state,
+            state: settlement.call_state(),
             refusal,
             attempt: None,
             outcome: None,
-            result: Some(&result),
+            result: Some(result),
         },
     )
     .await?;
-    if state == ToolCallState::Settled {
+    if settlement.completes_run() {
         crate::agent_run_work::complete(client, claim).await?;
     }
     Ok(())

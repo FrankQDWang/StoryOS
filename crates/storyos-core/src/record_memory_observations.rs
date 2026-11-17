@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::{
     IntakeRefusal, MEMORY_CHARACTER_TEXT_MAX_CHARS, MEMORY_TEXT_MAX_CHARS, MEMORY_TITLE_MAX_CHARS,
-    MemoryEntryType, ToolIntake, ToolOperation, ToolResultText, ToolSpec,
+    MemoryEntryType, ToolCallState, ToolIntake, ToolOperation, ToolResultText, ToolSpec,
 };
 
 pub const RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC: ToolSpec = ToolSpec {
@@ -147,8 +147,8 @@ impl ObservationRefusal {
             ),
         };
         crate::host_tool_result(&format!(
-            "The Host refused this call because {reason}, so it recorded no observation. \
-             Correct the list and call record_memory_observations again."
+            "The Host refused this call because {reason}. It recorded no observation. Correct \
+             the list and call record_memory_observations again."
         ))
     }
 }
@@ -201,6 +201,78 @@ pub fn observations_result(count: usize) -> ToolResultText {
         0 => "The Host recorded no observation, and the capture is complete.".to_owned(),
         count => format!("The Host recorded {count} observations, and the capture is complete."),
     })
+}
+
+/// The outcome of a settled capture (ADR 0094 section 5).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CaptureOutcome {
+    ObservationsRecorded,
+    /// The settled list is empty. An empty list is a correct result.
+    NoObservation,
+}
+
+impl CaptureOutcome {
+    /// The persisted name of the outcome, for `memory_captures.outcome`.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::ObservationsRecorded => "observations_recorded",
+            Self::NoObservation => "no_observation",
+        }
+    }
+}
+
+/// The settlement of one `record_memory_observations` call.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ObservationCallSettlement {
+    /// The valid list settles the capture with `outcome` and stores each observation in list
+    /// order. The settled call completes the Run, so no request follows it.
+    Settled {
+        outcome: CaptureOutcome,
+        observations: Vec<MemoryObservation>,
+        result: ToolResultText,
+    },
+    /// The refused list records no observation. The model can correct the list in the next
+    /// RunStep.
+    Refused {
+        refusal: ObservationRefusal,
+        result: ToolResultText,
+    },
+}
+
+impl ObservationCallSettlement {
+    /// The state of the ToolCall row of the call.
+    pub fn call_state(&self) -> ToolCallState {
+        match self {
+            Self::Settled { .. } => ToolCallState::Settled,
+            Self::Refused { .. } => ToolCallState::Refused,
+        }
+    }
+
+    /// Whether the call completes the Run of the capture.
+    pub fn completes_run(&self) -> bool {
+        match self {
+            Self::Settled { .. } => true,
+            Self::Refused { .. } => false,
+        }
+    }
+}
+
+/// Settles one call: Core validates the list and decides the outcome of the capture.
+pub fn settle_observation_call(candidates: &[ObservationCandidate]) -> ObservationCallSettlement {
+    match validate_observations(candidates) {
+        Ok(observations) => ObservationCallSettlement::Settled {
+            outcome: match observations.is_empty() {
+                true => CaptureOutcome::NoObservation,
+                false => CaptureOutcome::ObservationsRecorded,
+            },
+            result: observations_result(observations.len()),
+            observations,
+        },
+        Err(refusal) => ObservationCallSettlement::Refused {
+            refusal,
+            result: refusal.result(),
+        },
+    }
 }
 
 #[cfg(test)]
