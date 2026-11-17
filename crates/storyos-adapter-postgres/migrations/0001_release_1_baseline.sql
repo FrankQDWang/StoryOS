@@ -4428,7 +4428,7 @@ CREATE POLICY memory_captures_exact_scope ON storyos.memory_captures USING (((ow
 
 GRANT SELECT,INSERT ON TABLE storyos.memory_captures TO storyos_runtime;
 
-GRANT UPDATE(state, outcome) ON TABLE storyos.memory_captures TO storyos_runtime;
+GRANT UPDATE(state, outcome, failure_reason) ON TABLE storyos.memory_captures TO storyos_runtime;
 
 -- Memory Observations (ADR 0094 sections 5 and 8). One row for each item of the settled list of a
 -- capture, in list order from position 1: its type, its title, its text, and its state. An observation
