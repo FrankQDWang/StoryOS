@@ -116,6 +116,10 @@ impl AgentRunWorkStore for RaceStore {
 }
 
 impl MemoryWorkScheduleStore for RaceStore {
+    async fn memory_work_due(&self) -> Result<bool, ProjectReadError> {
+        Ok(true)
+    }
+
     async fn claim_due_memory_work(
         &self,
     ) -> Result<Option<storyos_application::ClaimedMemoryWork>, ProjectReadError> {

@@ -60,6 +60,23 @@ pub(crate) async fn mark_conversation_due(
 }
 
 impl MemoryWorkScheduleStore for PostgresProjectReader {
+    async fn memory_work_due(&self) -> Result<bool, ProjectReadError> {
+        let client = self.connect().await?;
+        client.batch_execute("BEGIN").await.map_err(read_error)?;
+        set_worker_scope(&client).await?;
+        let due = client
+            .query_one(
+                "SELECT EXISTS (SELECT 1 FROM storyos.memory_work_schedules
+                                 WHERE due_at <= clock_timestamp())",
+                &[],
+            )
+            .await
+            .map_err(read_error)?
+            .get(/*idx*/ 0);
+        client.batch_execute("COMMIT").await.map_err(read_error)?;
+        Ok(due)
+    }
+
     async fn claim_due_memory_work(&self) -> Result<Option<ClaimedMemoryWork>, ProjectReadError> {
         self.require_release1_storage_activation_proof()
             .await
@@ -81,11 +98,8 @@ impl MemoryWorkScheduleStore for PostgresProjectReader {
     }
 }
 
-/// Claims one due row in the Worker scope and makes its due time empty, then decides and starts
-/// in the Project Scope of the row.
-async fn claim_and_decide(
-    client: &PooledClient,
-) -> Result<Option<ClaimedMemoryWork>, ProjectReadError> {
+/// Sets the Worker scope in the open transaction of `client`.
+async fn set_worker_scope(client: &PooledClient) -> Result<(), ProjectReadError> {
     client
         .execute(
             "SELECT set_config('storyos.scope_mode', 'worker', true),
@@ -95,7 +109,16 @@ async fn claim_and_decide(
             &[],
         )
         .await
-        .map_err(read_error)?;
+        .map(|_| ())
+        .map_err(read_error)
+}
+
+/// Claims one due row in the Worker scope and makes its due time empty, then decides and starts
+/// in the Project Scope of the row.
+async fn claim_and_decide(
+    client: &PooledClient,
+) -> Result<Option<ClaimedMemoryWork>, ProjectReadError> {
+    set_worker_scope(client).await?;
     let Some(row) = client
         .query_opt(
             "WITH next_work AS (

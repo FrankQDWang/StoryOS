@@ -146,23 +146,40 @@ async fn step<
 }
 
 /// Claims one due schedule row of background Memory work after the AgentRun claim found no Run
-/// (ADR 0094 section 5). The store decides and starts the capture in the transaction of the
-/// claim, so the claim span has no completion attempt and no fence token (ADR 0047). `true`: a
-/// row was claimed.
+/// (ADR 0094 section 5). The step asks for a due row first, so that an idle step makes no claim
+/// span. `true`: a row was claimed.
 async fn memory_work_claim(store: &impl WorkerStore) -> Result<bool, ProjectReadError> {
-    let Some(claimed) = store.claim_due_memory_work().await? else {
+    if !store.memory_work_due().await? {
         return Ok(false);
+    }
+    memory_work_claim_span(store).await
+}
+
+/// The claim span of one schedule row (ADR 0047). The store decides and starts the capture in the
+/// transaction of the claim, so the span has no completion attempt and no fence token.
+#[tracing::instrument(skip_all, fields(
+    project_id = tracing::field::Empty,
+    run_id = tracing::field::Empty,
+    outcome = tracing::field::Empty,
+))]
+async fn memory_work_claim_span(store: &impl WorkerStore) -> Result<bool, ProjectReadError> {
+    let span = tracing::Span::current();
+    let claimed = match store.claim_due_memory_work().await {
+        Ok(Some(claimed)) => claimed,
+        Ok(None) => {
+            span.record("outcome", "no_due_row");
+            return Ok(false);
+        }
+        Err(error) => {
+            span.record("outcome", error.diagnostic());
+            return Err(error);
+        }
     };
-    let span = tracing::info_span!(
-        "memory_work_claim",
-        project_id = claimed.project_scope.project_id.diagnostic(),
-        run_id = tracing::field::Empty,
-        outcome = claimed.outcome.diagnostic(),
-    );
+    span.record("project_id", claimed.project_scope.project_id.diagnostic());
     if let MemoryWorkOutcome::Started(started) = &claimed.outcome {
         span.record("run_id", DiagnosticId(&started.run_id).diagnostic());
     }
-    span.in_scope(|| {});
+    span.record("outcome", claimed.outcome.diagnostic());
     Ok(true)
 }
 

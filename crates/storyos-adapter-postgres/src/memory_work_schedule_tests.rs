@@ -156,7 +156,8 @@ async fn only_the_completion_of_a_run_of_the_author_sets_the_due_time() {
 }
 
 /// A due row starts one capture. A claim skips a row that another claim locked, and the next
-/// claim after the decision finds no due row, so two Workers do not take the same row.
+/// claim after the decision finds no due row, so two Workers do not take the same row. The due
+/// check of the Worker sees the row before the claim and no row after it.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_due_row_starts_one_capture_and_a_locked_row_is_not_claimed() {
@@ -176,10 +177,12 @@ async fn a_due_row_starts_one_capture_and_a_locked_row_is_not_claimed() {
         )
         .await
         .unwrap();
+    let due = store.memory_work_due().await.unwrap();
     let locked = store.claim_due_memory_work().await.unwrap();
     admin.batch_execute("ROLLBACK").await.unwrap();
     let first = store.claim_due_memory_work().await.unwrap();
     let second = store.claim_due_memory_work().await.unwrap();
+    let due_after = store.memory_work_due().await.unwrap();
     let Some(ClaimedMemoryWork {
         outcome: MemoryWorkOutcome::Started(started),
         ..
@@ -214,12 +217,12 @@ async fn a_due_row_starts_one_capture_and_a_locked_row_is_not_claimed() {
 
     assert_eq!(
         (
-            locked,
+            (due, locked),
             serde_json::from_str::<serde_json::Value>(&capture).unwrap(),
-            second
+            (second, due_after)
         ),
         (
-            None,
+            (true, None),
             serde_json::json!([
                 "conversation",
                 conversation_id,
@@ -227,7 +230,7 @@ async fn a_due_row_starts_one_capture_and_a_locked_row_is_not_claimed() {
                 last_run_id,
                 true
             ]),
-            None
+            (None, false)
         )
     );
 }
