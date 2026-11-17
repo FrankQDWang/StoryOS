@@ -299,11 +299,8 @@ pub(crate) async fn read_current_entry(
 
 /// For each current entry of the Project, in number order: its identity, its number, and the time
 /// of its last read, or `None` when no Run read it. Only a read of a Run of the author counts
-/// (ADR 0094 section 8), and the Memory Index is not a read. The consolidation pass uses it.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the pruning of S7-D4b #1586 calls it")
-)]
+/// (ADR 0094 section 8), and the Memory Index is not a read. The start of a consolidation pass
+/// uses it for the mark `unused`.
 pub(crate) async fn last_memory_reads(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
