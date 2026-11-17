@@ -124,8 +124,13 @@ pub(crate) async fn decide_and_start(
     let live = live_chapter_positions(client, scope).await?;
     let position = |chapter_id: &str| live.iter().position(|live| live == chapter_id);
     if position(claimed).is_none() {
-        let skip = ChapterCaptureSkip::NotLive;
-        return Ok((claimed.to_owned(), MemoryWorkOutcome::ChapterSkipped(skip)));
+        let not_live = ChapterCaptureFacts {
+            live: false,
+            ..ChapterCaptureFacts::default()
+        };
+        let skipped = skip(client, scope, claimed, &not_live).await?;
+        let outcome = skipped.ok_or_else(|| missing("the claimed Chapter is not live"))?;
+        return Ok((claimed.to_owned(), outcome));
     }
     let row = client
         .query_one(
@@ -141,6 +146,9 @@ pub(crate) async fn decide_and_start(
         .await
         .map_err(read_error)?;
     let now: SystemTime = row.get(/*idx*/ 0);
+    // The read takes each due row, also a row that a concurrent claim locked. The claim is
+    // Serializable, so of two concurrent claims of one Project, one fails with a serialization
+    // failure, and an earlier Chapter in order stays a barrier for a later Chapter.
     let mut due: Vec<String> = vec![claimed.to_owned()];
     due.extend(
         client
@@ -149,8 +157,7 @@ pub(crate) async fn decide_and_start(
                   WHERE (owner_user_id, project_id, work_kind) =
                         ($1::text::uuid, $2::text::uuid, $3)
                     AND due_at <= $4
-                  ORDER BY source_id
-                    FOR UPDATE SKIP LOCKED",
+                  ORDER BY source_id",
                 &[&keys[0], &keys[1], &CHAPTER_CAPTURE, &now],
             )
             .await
@@ -204,9 +211,8 @@ pub(crate) async fn decide_and_start(
         rate_permits_at: turn.rate_permits_at,
         author_run_completed: row.get(/*idx*/ 2),
     };
-    if let Err(skip) = storyos_core::decide_chapter_capture(&facts) {
-        apply(client, scope, &chapter_id, skip).await?;
-        return Ok((chapter_id, MemoryWorkOutcome::ChapterSkipped(skip)));
+    if let Some(outcome) = skip(client, scope, &chapter_id, &facts).await? {
+        return Ok((chapter_id, outcome));
     }
     let blocks: Vec<String> = chapter.blocks.into_iter().map(|block| block.text).collect();
     let number = position(&chapter_id).map_or(0, |index| index + 1);
@@ -271,6 +277,21 @@ async fn live_chapter_positions(
         .iter()
         .map(|row| row.get(/*idx*/ 0))
         .collect())
+}
+
+/// Decides with Core for the row of `chapter_id`. A skip writes its change of the row and gives
+/// its outcome. `None`: one capture starts.
+async fn skip(
+    client: &Client,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    facts: &ChapterCaptureFacts,
+) -> Result<Option<MemoryWorkOutcome>, ProjectReadError> {
+    let Err(skip) = storyos_core::decide_chapter_capture(facts) else {
+        return Ok(None);
+    };
+    apply(client, scope, chapter_id, skip).await?;
+    Ok(Some(MemoryWorkOutcome::ChapterSkipped(skip)))
 }
 
 /// Writes the change of the row of `chapter_id` that `skip` gives.

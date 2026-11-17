@@ -62,7 +62,7 @@ pub fn chapter_capture_turn(
 }
 
 /// The facts of one claimed row of a Chapter.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ChapterCaptureFacts {
     /// The Chapter is a live Chapter of the manuscript.
     pub live: bool,

@@ -1,6 +1,6 @@
 //! The schedule of a Chapter in the store (ADR 0094 section 5, writer 3): one test for the rows
-//! of the decision table, the order and the rate of three due Chapters, and the input and its
-//! excerpt. The tests move the stored due times and capture starts with the test administrator
+//! of the decision table, the order and the rate of three due Chapters, the order under a
+//! concurrent lock, and the input and its excerpt. The tests move the stored due times and capture starts with the test administrator
 //! connection, and each test completes or parks each Run that it queued.
 
 use serde_json::{Value, json};
@@ -171,8 +171,8 @@ async fn fixture(lead: &str, suffix: u16, sentences: &[&str]) -> (Fixture, Strin
 }
 
 /// Each row of the decision table of S7-D5 for one claimed row, in the order of the table. The
-/// settlement of a capture that read an earlier Revision sets the due time again, and a `held`
-/// row stays `held` after a commit. The test moves the capture starts back before the rows that
+/// settlement of a completed or a failed capture that read an earlier Revision sets the due time
+/// again, and a `held` row stays `held` after a commit. The test moves the capture starts back before the rows that
 /// come after the rate.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -182,26 +182,41 @@ async fn a_claimed_chapter_row_follows_the_rows_of_the_decision_table() {
         .await;
     let (f, chapter_a, fog) = fixture("832", 0x8390, &["雨夜。"]).await;
     let mut decisions = vec![f.decide(&fog).await];
+    let project_id = f.scope.project_id.as_ref();
+    // A grant that does not name the Purpose fails the next request of a capture, and refuses a
+    // start.
+    let grant = async |version: &str| {
+        let grant = "UPDATE storyos.project_destination_grants
+                        SET grant_scope = 'project_writing_assistance_' || $2
+                      WHERE project_id = $1::text::uuid";
+        f.admin
+            .execute(grant, &[&project_id, &version])
+            .await
+            .unwrap();
+    };
 
-    let first = f.start_capture(&chapter_a).await;
-    f.edit((2, 0x8393), &chapter_a, &["风。"]).await;
-    decisions.push(f.decide(&chapter_a).await);
-    f.run_capture(&first).await;
-    let after_settlement = row(&f.admin, &chapter_a).await;
+    // A completed capture and a failed capture.
+    let mut settled = Vec::new();
+    for (version, sequence, suffix) in [("v5", 2, 0x8393), ("v4", 3, 0x8397)] {
+        let capture = f.start_capture(&chapter_a).await;
+        f.edit((sequence, suffix), &chapter_a, &["风。"]).await;
+        decisions.push(f.decide(&chapter_a).await);
+        grant(version).await;
+        f.run_capture(&capture).await;
+        grant("v5").await;
+        settled.push(row(&f.admin, &chapter_a).await);
+    }
 
     let second = f.start_capture(&chapter_a).await;
     f.run_capture(&second).await;
     decisions.push(f.decide(&chapter_a).await);
-    f.edit((3, 0x8394), &chapter_a, &["霜。"]).await;
+    f.edit((4, 0x8394), &chapter_a, &["霜。"]).await;
     decisions.push(f.decide(&chapter_a).await);
 
     f.move_starts_back().await;
-    let grant = "UPDATE storyos.project_destination_grants
-                    SET grant_scope = 'project_writing_assistance_v4' WHERE project_id = $1::text::uuid";
-    let project_id = f.scope.project_id.as_ref();
-    f.admin.execute(grant, &[&project_id]).await.unwrap();
+    grant("v4").await;
     decisions.push(f.decide(&chapter_a).await);
-    f.edit((4, 0x8395), &chapter_a, &["雪。"]).await;
+    f.edit((5, 0x8395), &chapter_a, &["雪。"]).await;
     let held_after_commit = row(&f.admin, &chapter_a).await;
 
     let input = DeleteChapterInput {
@@ -220,19 +235,20 @@ async fn a_claimed_chapter_row_follows_the_rows_of_the_decision_table() {
         .get(/*idx*/ 0);
 
     assert_eq!(
-        (decisions, after_settlement, held_after_commit, captures),
+        (decisions, Value::from(settled), held_after_commit, captures),
         (
             vec![
                 ("text_empty", json!([false, null])),
+                ("capture_in_progress", json!([false, null])),
                 ("capture_in_progress", json!([false, null])),
                 ("revision_read", json!([false, null])),
                 ("rate_wait", json!([false, 120])),
                 ("start_refused", json!([true, null])),
                 ("chapter_not_live", json!([false, null])),
             ],
-            json!([false, 21_600]),
+            json!([[false, 21_600], [false, 21_600]]),
             json!([true, null]),
-            2
+            3
         )
     );
 }
@@ -358,6 +374,62 @@ async fn three_due_chapters_start_in_chapter_order_at_the_rate_of_the_project() 
                 Some("rate_wait"),
                 json!([["Chapter A"], [null, "later", "due"]])
             ))
+        )
+    );
+}
+
+/// A row of an earlier Chapter that a concurrent transaction locked stays first in Chapter order:
+/// the claim takes the row of the later Chapter, waits for the lock, and starts the capture of
+/// the earlier Chapter. The row of the later Chapter stays due.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_locked_row_of_an_earlier_chapter_stays_first_in_order() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (mut f, chapter_a, fog) = fixture("835", 0x83c0, &["雨。"]).await;
+    f.select(0x83c4, &fog, &chapter_a).await;
+    f.edit((2, 0x83c3), &fog, &["雾。"]).await;
+    make_chapter_due(&f.admin, &f.scope, &chapter_a, /*seconds*/ 2).await;
+    make_chapter_due(&f.admin, &f.scope, &fog, /*seconds*/ 1).await;
+    let lock = f.admin.transaction().await.unwrap();
+    let locked = "SELECT 1 FROM storyos.memory_work_schedules
+                   WHERE source_id = $1::text::uuid FOR UPDATE";
+    lock.execute(locked, &[&chapter_a]).await.unwrap();
+    let release = async move {
+        let waiting = "SELECT EXISTS (SELECT 1 FROM pg_locks AS waiting JOIN pg_locks AS held
+                                        ON held.transactionid = waiting.transactionid
+                                     WHERE NOT waiting.granted AND held.pid = pg_backend_pid())";
+        let wait = async {
+            while !lock
+                .query_one(waiting, &[])
+                .await
+                .unwrap()
+                .get::<_, bool>(/*idx*/ 0)
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        };
+        let timeout = std::time::Duration::from_secs(10);
+        tokio::time::timeout(timeout, wait)
+            .await
+            .expect("the claim must wait");
+        lock.rollback().await.unwrap();
+    };
+    let (claimed, ()) = tokio::join!(f.store.claim_due_memory_work(), release);
+    let claimed = claimed.unwrap().unwrap();
+    park_queued_runs(&f.admin, &f.scope).await;
+    let fog_state = due_state(&f.admin, &fog).await;
+    let cleared = "UPDATE storyos.memory_work_schedules SET due_at = NULL
+                    WHERE source_id = $1::text::uuid";
+    f.admin.execute(cleared, &[&fog]).await.unwrap();
+
+    assert_eq!(
+        (claimed.source, claimed.outcome.diagnostic(), fog_state),
+        (
+            MemoryWorkSource::Chapter(chapter_a),
+            "capture_started",
+            json!("due")
         )
     );
 }
