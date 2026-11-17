@@ -261,8 +261,8 @@ pub use memory_index::{
 };
 pub use memory_work_schedule::{
     CONVERSATION_QUIET_TIME, ConversationCaptureFacts, ConversationCaptureInput,
-    ConversationCaptureSkip, ConversationRole, ConversationRunMessages, conversation_capture_due,
-    conversation_capture_input, decide_conversation_capture,
+    ConversationCaptureSkip, ConversationRole, ConversationRunMessages, capture_settlement_due,
+    conversation_capture_due, conversation_capture_input, decide_conversation_capture,
 };
 pub use model_output::{
     AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, StreamItemRole, StreamItemState,

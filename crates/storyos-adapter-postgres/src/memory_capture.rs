@@ -9,7 +9,7 @@ use storyos_application::{
 use storyos_core::{
     AgentRunKind, AssistanceAvailability, CaptureAdmissionFacts, CaptureRefusal,
     ContextSourceClass, CurrentPassageAssemblyRecord, MemoryCaptureAssembly, MemoryObservation,
-    ToolResultCandidate,
+    ProjectionMode, ToolResultCandidate,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -30,7 +30,14 @@ impl MemoryCaptureStore for PostgresProjectReader {
             .begin_serializable_project_command_transaction(scope)
             .await
             .map_err(ProjectReadError::unavailable)?;
-        let started = start(&transaction.client, scope, source, input).await;
+        let started = start(
+            &transaction.client,
+            scope,
+            source,
+            input,
+            ProjectionMode::ExactRequired,
+        )
+        .await;
         match &started {
             Ok(Ok(_)) => transaction
                 .commit()
@@ -46,12 +53,14 @@ impl MemoryCaptureStore for PostgresProjectReader {
 
 /// Pins the current Model Use Binding, its grant, and its Model Registration, and writes the
 /// queued Run, the capture, and the first RunStep. A refused start writes no row. The capture of a
-/// Conversation records its current Conversation Memory Settings revision.
+/// Conversation records its current Conversation Memory Settings revision. The input item has
+/// `projection_mode`.
 pub(crate) async fn start(
     client: &Client,
     scope: &ProjectScope,
     source: &MemoryCaptureSource,
     input: &str,
+    projection_mode: ProjectionMode,
 ) -> Result<Result<StartedMemoryCapture, MemoryCaptureStartRefusal>, ProjectReadError> {
     let assistance = read_assistance_record(client, scope).await?;
     let grant_scope: Option<String> = match &assistance {
@@ -183,6 +192,7 @@ pub(crate) async fn start(
         owner_user_id: scope.owner_user_id.as_ref().to_owned(),
         project_id: scope.project_id.as_ref().to_owned(),
         input: input.to_owned(),
+        projection_mode,
         destination_identity: assistance.processing_destination_identity,
     });
     add_references(client, scope, &mut record).await?;
@@ -247,6 +257,7 @@ pub(crate) async fn persist_next_step(
         owner_user_id: scope.owner_user_id.as_ref().to_owned(),
         project_id: scope.project_id.as_ref().to_owned(),
         input: input.content.clone(),
+        projection_mode: input.projection_mode,
         destination_identity: retained.operation_requirement.destination_identity.clone(),
     });
     storyos_core::keep_capture_references(&mut record, retained);
@@ -266,7 +277,7 @@ pub(crate) async fn persist_next_step(
 
 /// Settles the capture of the Run with the `outcome` that Core decided and stores each of
 /// `observations` as a waiting Memory Observation in list order, in the Tool Gateway transaction
-/// of the call.
+/// of the call. The settlement of a Conversation capture can make its schedule row due.
 pub(crate) async fn record_observations(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -274,7 +285,7 @@ pub(crate) async fn record_observations(
     observations: &[MemoryObservation],
 ) -> Result<(), CompleteAgentRunError> {
     let scope = &claim.project_scope;
-    let outcome = outcome.label();
+    let label = outcome.label();
     let capture_id: String = client
         .query_opt(
             "UPDATE storyos.memory_captures SET state = 'settled', outcome = $4
@@ -285,13 +296,15 @@ pub(crate) async fn record_observations(
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &claim.run_id,
-                &outcome,
+                &label,
             ],
         )
         .await
         .map_err(complete_database_error)?
         .ok_or_else(|| damaged("The running capture of the Run is missing"))?
         .get(/*idx*/ 0);
+    crate::memory_work_schedule::mark_due_after_capture(client, claim, &capture_id, outcome)
+        .await?;
     let types: Vec<&str> = observations
         .iter()
         .map(|item| item.entry_type.as_str())
