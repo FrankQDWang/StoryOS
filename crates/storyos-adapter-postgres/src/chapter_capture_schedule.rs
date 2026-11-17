@@ -338,3 +338,7 @@ async fn set_due(
         .map_err(read_error)
 }
 
+
+#[cfg(test)]
+#[path = "chapter_capture_schedule_tests.rs"]
+mod tests;
