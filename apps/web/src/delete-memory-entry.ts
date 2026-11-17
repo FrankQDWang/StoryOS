@@ -15,8 +15,8 @@ const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 export type MemoryDeleteOutcome = "deleted" | "changed" | "failed";
 
 /**
- * One delete intent of an entry at a version. A delete that has no known outcome keeps its flight, and the next
- * confirm of the same entry at the same version sends the same idempotency key, so the Host applies it one time.
+ * One delete intent of an entry at a version. A delete that has no known outcome keeps its flight. The next confirm
+ * of the same entry at the same version then sends the same idempotency key. Thus the Host applies the delete one time.
  */
 export type MemoryDeleteFlight = {
   identity: string;

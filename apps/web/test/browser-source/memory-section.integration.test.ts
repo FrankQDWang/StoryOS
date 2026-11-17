@@ -43,13 +43,20 @@ const ENTRIES: MemoryEntryInspect[] = [
 
 type Answer = Response | Error;
 
+/** An answer that the test gives later with `give`. */
+function held() {
+  let give: (answer: Answer) => void = () => {};
+  const answer = new Promise<Answer>((resolve) => { give = resolve; });
+  return { answer, give };
+}
+
 type Sent = { method: string; path: string; key: string | null; body: unknown };
 
 /**
  * A fake Server whose answer to each read of the Memory Entries is the next item of `reads`, and whose answer to each
  * delete is the next item of `deletes`.
  */
-function fakeServer(reads: Answer[], deletes: Answer[] = []) {
+function fakeServer(reads: (Answer | Promise<Answer>)[], deletes: (Answer | Promise<Answer>)[] = []) {
   const paths: string[] = [];
   const sent: Sent[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -65,7 +72,7 @@ function fakeServer(reads: Answer[], deletes: Answer[] = []) {
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
     if (path.startsWith(`${MEMORY}/`) && method === "DELETE") {
-      const answer = deletes.shift();
+      const answer = await deletes.shift();
       if (answer === undefined) throw new Error("no delete answer");
       if (answer instanceof Error) throw answer;
       return answer;
@@ -75,7 +82,7 @@ function fakeServer(reads: Answer[], deletes: Answer[] = []) {
         correlation_id: "018f0000-0000-7001-8000-0000000d2011", project_scope: SCOPE, instruction: null });
     }
     if (path === MEMORY) {
-      const answer = reads.shift();
+      const answer = await reads.shift();
       if (answer === undefined) throw new Error("no read answer");
       if (answer instanceof Error) throw answer;
       return answer;
@@ -226,6 +233,54 @@ it("keeps the entry after a failed delete with one sentence, and the next confir
   const sent = server.sent.map((item) => [item.method, item.key]);
   const key = sent[1]?.[1];
   expect([typeof key, sent]).toEqual(["string", [["POST", null], ["DELETE", key], ["DELETE", key]]]);
+});
+
+it("keeps the step and the key of each entry apart when the author deletes two entries", async () => {
+  const [first, second] = [ENTRIES[0]!.memory_entry_id, ENTRIES[1]!.memory_entry_id];
+  const failure = held();
+  const server = fakeServer([listed(ENTRIES)], [failure.answer, applied(second), applied(first)]);
+  await settingsPage(server.fetchImpl);
+  await expect.poll(() => actions(4)).toEqual(["删除"]);
+  await confirmDelete(4);
+  await expect.poll(() => server.sent.filter((item) => item.method === "DELETE").length).toBe(1);
+  // While the delete of entry 4 is sent, "删除" of entry 2 does not change the step of entry 4.
+  press(2, "delete");
+  await expect.poll(() => actions(2)).toEqual(["确认删除", "取消"]);
+  expect(actions(4)).toEqual(["确认删除", "取消"]);
+  expect(document.querySelector<HTMLButtonElement>('[data-memory-entry="4"] [data-memory-delete-confirm]')?.disabled)
+    .toBe(true);
+  failure.give(new TypeError("Failed to fetch"));
+  await expect.poll(() => actions(4)).toEqual(["删除", "无法删除这条记忆，请稍后再试。"]);
+  expect(actions(2)).toEqual(["确认删除", "取消"]);
+  // The applied delete of entry 2 does not remove the delete intent of entry 4.
+  press(2, "delete-confirm");
+  await expect.poll(titles).toEqual(["语气", "阿青", "旧事"]);
+  expect(actions(4)).toEqual(["删除", "无法删除这条记忆，请稍后再试。"]);
+  await confirmDelete(4);
+  await expect.poll(titles).toEqual(["阿青", "旧事"]);
+  const deletes = server.sent.filter((item) => item.method === "DELETE").map((item) => [item.path, item.key]);
+  const [firstKey, secondKey] = [deletes[0]?.[1], deletes[1]?.[1]];
+  expect([typeof firstKey, firstKey === secondKey, deletes]).toEqual(["string", false,
+    [[`${MEMORY}/${first}`, firstKey], [`${MEMORY}/${second}`, secondKey], [`${MEMORY}/${first}`, firstKey]]]);
+});
+
+it("does not show again a deleted entry when an earlier read gives it later", async () => {
+  const second = ENTRIES[1]!.memory_entry_id;
+  const reread = held();
+  const changed = [{ ...ENTRIES[0]!, version: "2", text: "克制。" }, ...ENTRIES.slice(1)];
+  const server = fakeServer([listed(ENTRIES), reread.answer],
+    [deleted({ kind: "conflicted", reason: "entry_changed" }), applied(second)]);
+  await settingsPage(server.fetchImpl);
+  await expect.poll(() => actions(4)).toEqual(["删除"]);
+  await confirmDelete(4);
+  await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(2);
+  // The read after the changed entry is open, and the author deletes entry 2.
+  await confirmDelete(2);
+  await expect.poll(titles).toEqual(["语气", "阿青", "旧事"]);
+  reread.give(listed(changed));
+  await expect.poll(() => document.querySelector('[data-memory-entry="4"] .memory-entry-text')?.textContent)
+    .toBe("克制。");
+  expect([titles(), actions(4)]).toEqual([["语气", "阿青", "旧事"], ["删除", "这条记忆已经改变，没有删除。"]]);
 });
 
 it("shows the name of each of the six types in the order of the query", async () => {

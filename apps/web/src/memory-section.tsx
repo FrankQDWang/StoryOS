@@ -21,7 +21,7 @@ const ORIGIN_LINES = { author_request: "你让助手记住的", conversation: "�
 const EMPTY_SENTENCE = "助手还没有记住任何内容。";
 const SOURCE_UNAVAILABLE = "来源已不可用";
 const READ_FAILED_SENTENCE = "无法读取记忆，请稍后再试。";
-// The ticket #1579 gives the three control words. The two sentences wait for the words of the author.
+// The ticket #1629 gives the three control words and the two sentences. The author approved them on 2026-11-17.
 const CHANGED_SENTENCE = "这条记忆已经改变，没有删除。";
 const DELETE_FAILED_SENTENCE = "无法删除这条记忆，请稍后再试。";
 
@@ -39,7 +39,7 @@ function groups(entries: readonly MemoryEntryInspect[]): Group[] {
 }
 
 /** The step of the delete control of one entry, and the sentence under the entry after a delete. */
-type DeleteStep = { memoryEntryId: string; step: "confirm" | "sending" | "changed" | "failed" };
+type DeleteStep = "confirm" | "sending" | "changed" | "failed";
 
 /**
  * The Memory section of the settings page (ADR 0094 section 9). It shows each current Memory Entry at the time of the
@@ -48,30 +48,45 @@ type DeleteStep = { memoryEntryId: string; step: "confirm" | "sending" | "change
 export function MemorySection({ scope, baseUrl, fetchImpl, cryptoImpl }: SettingsSectionProps) {
   const [entries, setEntries] = useState<readonly MemoryEntryInspect[] | "failed">();
   const [reads, setReads] = useState(0);
-  const [deleting, setDeleting] = useState<DeleteStep>();
-  const flight = useRef<MemoryDeleteFlight>(undefined);
+  // Each entry has its own step and its own delete intent, so a delete of one entry does not change another entry.
+  const [steps, setSteps] = useState<ReadonlyMap<string, DeleteStep>>(new Map());
+  const flights = useRef(new Map<string, MemoryDeleteFlight>());
+  // The entries that a delete removed. A read that started before the delete must not show them again.
+  const removed = useRef(new Set<string>());
   const { owner_user_id: ownerUserId, project_id: projectId } = scope;
   useEffect(() => {
     let current = true;
     listMemoryEntries({ baseUrl, fetchImpl, projectId })
       .then((read) => sameScope(read.project_scope, { owner_user_id: ownerUserId, project_id: projectId })
         ? read.entries : "failed" as const, () => "failed" as const)
-      .then((read) => { if (current) setEntries(read); });
+      .then((read) => {
+        if (current) {
+          setEntries(read === "failed" ? read : read.filter((item) => !removed.current.has(item.memory_entry_id)));
+        }
+      });
     return () => { current = false; };
   }, [baseUrl, fetchImpl, ownerUserId, projectId, reads]);
   const time = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" });
+  const setStep = (memoryEntryId: string, step: DeleteStep | undefined) => setSteps((shown) => {
+    const next = new Map(shown);
+    if (step === undefined) next.delete(memoryEntryId);
+    else next.set(memoryEntryId, step);
+    return next;
+  });
   const confirmDelete = async (entry: MemoryEntryInspect) => {
     const memoryEntryId = entry.memory_entry_id;
-    setDeleting({ memoryEntryId, step: "sending" });
+    setStep(memoryEntryId, "sending");
     const result = await deleteMemoryEntryOnce({ baseUrl, fetchImpl, cryptoImpl, scope, memoryEntryId,
-      version: entry.version, flight: flight.current });
-    flight.current = result.flight;
+      version: entry.version, flight: flights.current.get(memoryEntryId) });
+    if (result.flight === undefined) flights.current.delete(memoryEntryId);
+    else flights.current.set(memoryEntryId, result.flight);
     if (result.outcome === "deleted") {
-      setDeleting(undefined);
+      removed.current.add(memoryEntryId);
+      setStep(memoryEntryId, undefined);
       setEntries((shown) => shown === "failed" || shown === undefined
         ? shown : shown.filter((item) => item.memory_entry_id !== memoryEntryId));
     } else {
-      setDeleting({ memoryEntryId, step: result.outcome });
+      setStep(memoryEntryId, result.outcome);
       if (result.outcome === "changed") setReads((count) => count + 1);
     }
   };
@@ -104,10 +119,10 @@ export function MemorySection({ scope, baseUrl, fetchImpl, cryptoImpl }: Setting
                 </p>
                 <div className="memory-entry-actions" data-memory-entry-actions="">
                   <DeleteControl
-                    step={deleting?.memoryEntryId === entry.memory_entry_id ? deleting.step : undefined}
-                    onDelete={() => setDeleting({ memoryEntryId: entry.memory_entry_id, step: "confirm" })}
+                    step={steps.get(entry.memory_entry_id)}
+                    onDelete={() => setStep(entry.memory_entry_id, "confirm")}
                     onConfirm={() => void confirmDelete(entry)}
-                    onCancel={() => setDeleting(undefined)}
+                    onCancel={() => setStep(entry.memory_entry_id, undefined)}
                   />
                 </div>
               </li>
@@ -124,7 +139,7 @@ export function MemorySection({ scope, baseUrl, fetchImpl, cryptoImpl }: Setting
  * that did not apply, the entry shows one sentence under the control.
  */
 function DeleteControl({ step, onDelete, onConfirm, onCancel }: {
-  step: DeleteStep["step"] | undefined;
+  step: DeleteStep | undefined;
   onDelete: () => void;
   onConfirm: () => void;
   onCancel: () => void;
