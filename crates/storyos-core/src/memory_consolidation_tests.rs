@@ -187,7 +187,9 @@ fn a_pass_takes_the_oldest_observations_that_fit_the_request() {
         destination_identity: "destination".to_owned(),
         memory_revision: 1,
         entries: &[],
+        unused: &[],
         observations,
+        marks: &[],
     };
     let agent_plan = crate::AGENT_PLAN_REGISTRATION.revision;
     let bounds = crate::BudgetBounds::AgentPlanRequestV2.as_str();
