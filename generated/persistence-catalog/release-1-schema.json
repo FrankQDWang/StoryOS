@@ -3720,6 +3720,16 @@
           "nullable": false,
           "type": "text"
         },
+        "flag_reason": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "flag_source": {
+          "default": null,
+          "nullable": true,
+          "type": "jsonb"
+        },
         "memory_entry_id": {
           "default": null,
           "nullable": false,
@@ -3778,6 +3788,7 @@
       },
       "constraints": {
         "memory_entry_versions_bounds": "CHECK (((entry_number >= (1)::numeric) AND (entry_number <= '18446744073709551615'::numeric) AND (version >= (1)::numeric) AND (version <= '18446744073709551615'::numeric) AND (memory_revision >= (1)::numeric) AND (memory_revision <= '18446744073709551615'::numeric)))",
+        "memory_entry_versions_flag": "CHECK ((((COALESCE((cause ->> 'kind'::text), ''::text) = 'conflict_flag'::text) = (flag_reason IS NOT NULL)) AND ((flag_reason IS NULL) = (flag_source IS NULL)) AND ((flag_reason IS NULL) OR ((char_length(flag_reason) >= 1) AND (state = 'current'::text) AND (jsonb_typeof(flag_source) = 'object'::text)))))",
         "memory_entry_versions_number_key": "UNIQUE (owner_user_id, project_id, entry_number, version)",
         "memory_entry_versions_origin_check": "CHECK ((origin = ANY (ARRAY['author_request'::text, 'conversation'::text, 'chapter'::text])))",
         "memory_entry_versions_pkey": "PRIMARY KEY (owner_user_id, project_id, memory_entry_id, version)",
