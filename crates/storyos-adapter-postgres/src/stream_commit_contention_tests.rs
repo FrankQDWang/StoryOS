@@ -14,7 +14,11 @@ pub(crate) async fn dispatched(
     store: &PostgresProjectReader,
     claim: &ClaimedAgentRun,
 ) -> DispatchClaim {
-    let NextDispatchWork::Request(request) = store.next_dispatch_work(claim).await.unwrap() else {
+    let NextDispatchWork::Request(request) = store
+        .next_dispatch_work(claim, FakeDestination::ADAPTERS)
+        .await
+        .unwrap()
+    else {
         panic!("The claimed AgentRun has no request");
     };
     let prepared = FakeDestination.prepare(&request).await.unwrap();

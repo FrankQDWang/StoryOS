@@ -47,7 +47,13 @@ impl RunStepLimit {
     /// The limit of the RunStep at `decision_position`, from 0. A steering input opens no new
     /// count, so each RunStep at or after the limit is the last.
     pub fn at(decision_position: u64) -> Self {
-        if decision_position.saturating_add(1) >= MAX_RUN_STEPS {
+        Self::within(MAX_RUN_STEPS, decision_position)
+    }
+
+    /// The limit of the RunStep at `decision_position` of a Run with at most `max_run_steps`
+    /// RunSteps. `AgentRunKind::run_step_limit` gives the limit of a Run of each kind.
+    pub fn within(max_run_steps: u64, decision_position: u64) -> Self {
+        if decision_position.saturating_add(1) >= max_run_steps {
             Self::Last
         } else {
             Self::Open

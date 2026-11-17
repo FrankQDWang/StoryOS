@@ -137,8 +137,8 @@ impl ObservationRefusal {
                 format!("the list has more than {CAPTURE_OBSERVATIONS_MAX} observations")
             }
             Self::Invalid { position } => format!(
-                "the observation {position} is not valid. Its type is not one of the six types, \
-                 its title or its text is empty, or its title is not one line"
+                "the observation {position} is not valid. Its type must be one of the six types. \
+                 Its title and its text must not be empty, and its title must be one line"
             ),
             Self::TooLong { position } => format!(
                 "the observation {position} is too long. A title has at most \
@@ -209,6 +209,10 @@ pub enum CaptureOutcome {
     ObservationsRecorded,
     /// The settled list is empty. An empty list is a correct result.
     NoObservation,
+    /// The last RunStep gave no output call that settled.
+    StepLimit,
+    /// The Run ended with no settled output call, for the reason of the Run.
+    Failed,
 }
 
 impl CaptureOutcome {
@@ -217,6 +221,8 @@ impl CaptureOutcome {
         match self {
             Self::ObservationsRecorded => "observations_recorded",
             Self::NoObservation => "no_observation",
+            Self::StepLimit => "step_limit",
+            Self::Failed => "failed",
         }
     }
 }

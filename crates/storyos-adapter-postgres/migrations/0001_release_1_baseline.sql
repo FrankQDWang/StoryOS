@@ -4447,10 +4447,12 @@ CREATE TABLE storyos.memory_captures (
     started_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
     state text DEFAULT 'running'::text NOT NULL,
     outcome text,
+    failure_reason text,
     CONSTRAINT memory_captures_pkey PRIMARY KEY (owner_user_id, project_id, capture_id),
     CONSTRAINT memory_captures_run_key UNIQUE (owner_user_id, project_id, run_id),
     CONSTRAINT memory_captures_source_check CHECK (((((source_kind = 'conversation'::text) AND (conversation_id IS NOT NULL) AND (first_run_id IS NOT NULL) AND (last_run_id IS NOT NULL) AND (chapter_id IS NULL) AND (chapter_revision_id IS NULL)) OR ((source_kind = 'chapter'::text) AND (chapter_id IS NOT NULL) AND (chapter_revision_id IS NOT NULL) AND (conversation_id IS NULL) AND (first_run_id IS NULL) AND (last_run_id IS NULL))) IS TRUE)),
-    CONSTRAINT memory_captures_state_check CHECK (((((state = 'running'::text) AND (outcome IS NULL)) OR ((state = 'settled'::text) AND (outcome = ANY (ARRAY['observations_recorded'::text, 'no_observation'::text])))) IS TRUE)),
+    CONSTRAINT memory_captures_state_check CHECK (((((state = 'running'::text) AND (outcome IS NULL)) OR ((state = 'settled'::text) AND (outcome = ANY (ARRAY['observations_recorded'::text, 'no_observation'::text, 'step_limit'::text, 'failed'::text])))) IS TRUE)),
+    CONSTRAINT memory_captures_failure_reason_check CHECK ((((COALESCE((outcome = 'failed'::text), false) = (failure_reason IS NOT NULL)) AND ((failure_reason IS NULL) OR ((char_length(failure_reason) >= 1) AND (char_length(failure_reason) <= 64)))) IS TRUE)),
     CONSTRAINT memory_captures_run_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
     CONSTRAINT memory_captures_conversation_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id),
     CONSTRAINT memory_captures_first_run_fkey FOREIGN KEY (owner_user_id, project_id, first_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id),
@@ -4466,7 +4468,7 @@ CREATE POLICY memory_captures_exact_scope ON storyos.memory_captures USING (((ow
 
 GRANT SELECT,INSERT ON TABLE storyos.memory_captures TO storyos_runtime;
 
-GRANT UPDATE(state, outcome) ON TABLE storyos.memory_captures TO storyos_runtime;
+GRANT UPDATE(state, outcome, failure_reason) ON TABLE storyos.memory_captures TO storyos_runtime;
 
 -- Memory Observations (ADR 0094 sections 5 and 8). One row for each item of the settled list of a
 -- capture, in list order from position 1: its type, its title, its text, and its state. An observation

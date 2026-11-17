@@ -548,9 +548,12 @@ pub enum DispatchRecord<'a> {
 /// with a check of the Run Lease fence.
 pub trait ModelDispatchStore: Sync {
     /// Settles the phases that need no destination I/O, then returns the next request.
+    /// `adapters` are the adapters of this Worker: background work gives way only to a queued
+    /// Run of the author that this Worker can claim.
     fn next_dispatch_work(
         &self,
         claim: &ClaimedAgentRun,
+        adapters: &'static [storyos_core::ModelAdapter],
     ) -> impl Future<Output = Result<NextDispatchWork, CompleteAgentRunError>> + Send;
 
     /// Commits the Destination Attempt, its Wire Payload Projection, and its Outbound
@@ -657,6 +660,9 @@ pub enum ContractFaultPoint {
     StreamCommitted,
     /// The store recorded the result of a compaction summary request.
     CompactionStaged,
+    /// The durable Decision committed its ToolCalls, before the Tool Gateway resolves them. The
+    /// store executes an in-process Host Tool call in that resolution.
+    ToolCallsCommitted,
     /// The store committed the Context Assembly of one ToolCall, before its dispatch claim.
     ToolContextCommitted,
     /// The dispatch claim of one ToolCall committed, before its exchange.

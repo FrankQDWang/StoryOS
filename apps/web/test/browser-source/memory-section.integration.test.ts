@@ -43,26 +43,62 @@ const ENTRIES: MemoryEntryInspect[] = [
 
 type Answer = Response | Error;
 
-/** A fake Server whose answer to each read of the Memory Entries is the next item of `reads`. */
-function fakeServer(reads: Answer[]) {
+/** An answer that the test gives later with `give`. */
+function held() {
+  let give: (answer: Answer) => void = () => {};
+  const answer = new Promise<Answer>((resolve) => { give = resolve; });
+  return { answer, give };
+}
+
+type Sent = { method: string; path: string; key: string | null; body: unknown };
+
+/**
+ * A fake Server whose answer to each read of the Memory Entries is the next item of `reads`, and whose answer to each
+ * delete is the next item of `deletes`.
+ */
+function fakeServer(reads: (Answer | Promise<Answer>)[], deletes: (Answer | Promise<Answer>)[] = []) {
   const paths: string[] = [];
-  const fetchImpl: typeof fetch = async (input) => {
+  const sent: Sent[] = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
+    const method = init?.method ?? "GET";
     paths.push(path);
+    if (method !== "GET") {
+      sent.push({ method, path, key: new Headers(init?.headers).get("idempotency-key"),
+        body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
+    }
+    if (path.endsWith("/anti-forgery-challenges")) {
+      return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-11-17T12:05:00.000Z",
+        limit_profile_revision: "storyos.foundation.absolute.v1" });
+    }
+    if (path.startsWith(`${MEMORY}/`) && method === "DELETE") {
+      const answer = await deletes.shift();
+      if (answer === undefined) throw new Error("no delete answer");
+      if (answer instanceof Error) throw answer;
+      return answer;
+    }
     if (path === `/api/v1/projects/${PROJECT}/instruction`) {
       return jsonResponse({ schema_id: "storyos.query.project-instruction.response.v1",
         correlation_id: "018f0000-0000-7001-8000-0000000d2011", project_scope: SCOPE, instruction: null });
     }
     if (path === MEMORY) {
-      const answer = reads.shift();
+      const answer = await reads.shift();
       if (answer === undefined) throw new Error("no read answer");
       if (answer instanceof Error) throw answer;
       return answer;
     }
     return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
   };
-  return { paths, fetchImpl };
+  return { paths, sent, fetchImpl };
 }
+
+function deleted(effect: Record<string, unknown>): Response {
+  return jsonResponse({ schema_id: "storyos.command.delete-memory-entry.response.v1",
+    correlation_id: "018f0000-0000-7001-8000-0000000d2013", project_scope: SCOPE, effect });
+}
+
+const applied = (memoryEntryId: string) => deleted({ kind: "authoritative_applied", memory_entry_id: memoryEntryId,
+  version: "2", memory_revision: "9", project_activity_position: "7" });
 
 const listed = (entries: MemoryEntryInspect[], scope = SCOPE) => jsonResponse({
   schema_id: "storyos.query.memory-entries.response.v1", correlation_id: "018f0000-0000-7001-8000-0000000d2012",
@@ -82,6 +118,18 @@ async function settingsPage(fetchImpl: typeof fetch) {
 }
 
 const section = () => document.querySelector<HTMLElement>("[data-memory-section]");
+const titles = () => [...document.querySelectorAll("[data-memory-entry] h4")].map((title) => title.textContent);
+/** The controls and the sentence of the entry `number`. */
+const actions = (number: number) => [...document.querySelectorAll(
+  `[data-memory-entry="${number}"] [data-memory-entry-actions] > *`)].map((element) => element.textContent);
+const press = (number: number, control: string) => document.querySelector<HTMLButtonElement>(
+  `[data-memory-entry="${number}"] [data-memory-${control}]`)!.click();
+/** Presses "删除" of the entry `number`, waits for the confirm step, and presses "确认删除". */
+async function confirmDelete(number: number) {
+  press(number, "delete");
+  await expect.poll(() => actions(number).slice(0, 2)).toEqual(["确认删除", "取消"]);
+  press(number, "delete-confirm");
+}
 const sectionText = () => [...section()?.querySelectorAll("p, button") ?? []].map((element) => element.textContent);
 
 afterEach(() => {
@@ -121,12 +169,118 @@ it("shows each entry in the group of its type with its text, its origin line, an
   ]);
   // The text is data: the markup is text, and the address in it is not a link.
   expect(section()!.querySelector("b")).toBeNull();
-  // Each entry has no control, and its two places for later controls are empty.
+  // Each entry has only its delete control, and the place of the conflict flag is empty.
   for (const item of document.querySelectorAll("[data-memory-entry]")) {
-    expect(item.querySelectorAll("input, textarea, select, button").length).toBe(0);
-    expect([...item.querySelectorAll("[data-memory-entry-flag], [data-memory-entry-actions]")]
-      .map((place) => place.childNodes.length)).toEqual([0, 0]);
+    expect([...item.querySelectorAll("input, textarea, select, button")].map((control) => control.textContent))
+      .toEqual(["删除"]);
+    expect(item.querySelector("[data-memory-entry-flag]")?.childNodes.length).toBe(0);
   }
+});
+
+it("asks one time before a delete, and 取消 restores the control and sends nothing", async () => {
+  const server = fakeServer([listed(ENTRIES)]);
+  await settingsPage(server.fetchImpl);
+  await expect.poll(() => actions(4)).toEqual(["删除"]);
+  press(4, "delete");
+  await expect.poll(() => actions(4)).toEqual(["确认删除", "取消"]);
+  expect(actions(2)).toEqual(["删除"]);
+  press(4, "delete-cancel");
+  await expect.poll(() => actions(4)).toEqual(["删除"]);
+  expect([server.sent, titles()]).toEqual([[], ["语气", "林舟", "阿青", "旧事"]]);
+});
+
+it("removes a deleted entry and an entry that was deleted before, with no sentence", async () => {
+  const [first, second] = [ENTRIES[0]!.memory_entry_id, ENTRIES[1]!.memory_entry_id];
+  const server = fakeServer([listed(ENTRIES)],
+    [applied(first), deleted({ kind: "no_effect", reason: "already_deleted" })]);
+  await settingsPage(server.fetchImpl);
+  await expect.poll(() => actions(4)).toEqual(["删除"]);
+  await confirmDelete(4);
+  await expect.poll(titles).toEqual(["林舟", "阿青", "旧事"]);
+  await confirmDelete(2);
+  await expect.poll(titles).toEqual(["阿青", "旧事"]);
+  expect(section()!.querySelector("[role=alert]")).toBeNull();
+  const deletes = server.sent.filter((item) => item.method === "DELETE");
+  expect(deletes.map((item) => [item.path, (item.body as { delete_memory_entry_input: { expected_version: string } })
+    .delete_memory_entry_input.expected_version])).toEqual([[`${MEMORY}/${first}`, "1"], [`${MEMORY}/${second}`, "1"]]);
+  expect(new Set(deletes.map((item) => item.key)).size).toBe(2);
+  expect(server.paths.filter((path) => path === MEMORY).length).toBe(1);
+});
+
+it("reads the list again after a changed entry, and shows the changed entry with one sentence", async () => {
+  const changed = [{ ...ENTRIES[0]!, version: "2", text: "克制。" }, ...ENTRIES.slice(1)];
+  const server = fakeServer([listed(ENTRIES), listed(changed)], [deleted({ kind: "conflicted", reason: "entry_changed" })]);
+  await settingsPage(server.fetchImpl);
+  await expect.poll(() => actions(4)).toEqual(["删除"]);
+  await confirmDelete(4);
+  await expect.poll(() => actions(4)).toEqual(["删除", "这条记忆已经改变，没有删除。"]);
+  await expect.poll(() => document.querySelector('[data-memory-entry="4"] .memory-entry-text')?.textContent)
+    .toBe("克制。");
+  expect([server.paths.filter((path) => path === MEMORY).length, titles().length]).toEqual([2, 4]);
+});
+
+it("keeps the entry after a failed delete with one sentence, and the next confirm sends the same key", async () => {
+  const first = ENTRIES[0]!.memory_entry_id;
+  const server = fakeServer([listed(ENTRIES)], [new TypeError("Failed to fetch"), applied(first)]);
+  await settingsPage(server.fetchImpl);
+  await expect.poll(() => actions(4)).toEqual(["删除"]);
+  await confirmDelete(4);
+  await expect.poll(() => actions(4)).toEqual(["删除", "无法删除这条记忆，请稍后再试。"]);
+  expect(titles()).toEqual(["语气", "林舟", "阿青", "旧事"]);
+  await confirmDelete(4);
+  await expect.poll(titles).toEqual(["林舟", "阿青", "旧事"]);
+  // One Command Challenge, and one idempotency key for the delete intent.
+  const sent = server.sent.map((item) => [item.method, item.key]);
+  const key = sent[1]?.[1];
+  expect([typeof key, sent]).toEqual(["string", [["POST", null], ["DELETE", key], ["DELETE", key]]]);
+});
+
+it("keeps the step and the key of each entry apart when the author deletes two entries", async () => {
+  const [first, second] = [ENTRIES[0]!.memory_entry_id, ENTRIES[1]!.memory_entry_id];
+  const failure = held();
+  const server = fakeServer([listed(ENTRIES)], [failure.answer, applied(second), applied(first)]);
+  await settingsPage(server.fetchImpl);
+  await expect.poll(() => actions(4)).toEqual(["删除"]);
+  await confirmDelete(4);
+  await expect.poll(() => server.sent.filter((item) => item.method === "DELETE").length).toBe(1);
+  // While the delete of entry 4 is sent, "删除" of entry 2 does not change the step of entry 4.
+  press(2, "delete");
+  await expect.poll(() => actions(2)).toEqual(["确认删除", "取消"]);
+  expect(actions(4)).toEqual(["确认删除", "取消"]);
+  expect(document.querySelector<HTMLButtonElement>('[data-memory-entry="4"] [data-memory-delete-confirm]')?.disabled)
+    .toBe(true);
+  failure.give(new TypeError("Failed to fetch"));
+  await expect.poll(() => actions(4)).toEqual(["删除", "无法删除这条记忆，请稍后再试。"]);
+  expect(actions(2)).toEqual(["确认删除", "取消"]);
+  // The applied delete of entry 2 does not remove the delete intent of entry 4.
+  press(2, "delete-confirm");
+  await expect.poll(titles).toEqual(["语气", "阿青", "旧事"]);
+  expect(actions(4)).toEqual(["删除", "无法删除这条记忆，请稍后再试。"]);
+  await confirmDelete(4);
+  await expect.poll(titles).toEqual(["阿青", "旧事"]);
+  const deletes = server.sent.filter((item) => item.method === "DELETE").map((item) => [item.path, item.key]);
+  const [firstKey, secondKey] = [deletes[0]?.[1], deletes[1]?.[1]];
+  expect([typeof firstKey, firstKey === secondKey, deletes]).toEqual(["string", false,
+    [[`${MEMORY}/${first}`, firstKey], [`${MEMORY}/${second}`, secondKey], [`${MEMORY}/${first}`, firstKey]]]);
+});
+
+it("does not show again a deleted entry when an earlier read gives it later", async () => {
+  const second = ENTRIES[1]!.memory_entry_id;
+  const reread = held();
+  const changed = [{ ...ENTRIES[0]!, version: "2", text: "克制。" }, ...ENTRIES.slice(1)];
+  const server = fakeServer([listed(ENTRIES), reread.answer],
+    [deleted({ kind: "conflicted", reason: "entry_changed" }), applied(second)]);
+  await settingsPage(server.fetchImpl);
+  await expect.poll(() => actions(4)).toEqual(["删除"]);
+  await confirmDelete(4);
+  await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(2);
+  // The read after the changed entry is open, and the author deletes entry 2.
+  await confirmDelete(2);
+  await expect.poll(titles).toEqual(["语气", "阿青", "旧事"]);
+  reread.give(listed(changed));
+  await expect.poll(() => document.querySelector('[data-memory-entry="4"] .memory-entry-text')?.textContent)
+    .toBe("克制。");
+  expect([titles(), actions(4)]).toEqual([["语气", "阿青", "旧事"], ["删除", "这条记忆已经改变，没有删除。"]]);
 });
 
 it("shows the name of each of the six types in the order of the query", async () => {

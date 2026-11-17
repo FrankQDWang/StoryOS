@@ -88,12 +88,14 @@ fn each_run_step_at_or_after_the_limit_is_the_last_and_sends_none() {
     assert_eq!(
         (
             [22, 23, 24].map(RunStepLimit::at),
+            [6, 7].map(|position| RunStepLimit::within(8, position)),
             [RunStepLimit::Last, RunStepLimit::Open].map(RunStepLimit::executes_calls),
             step_tool_choice(RunStepLimit::Last, &[]),
             step_tool_choice(RunStepLimit::Last, &[finish]),
         ),
         (
             [RunStepLimit::Open, RunStepLimit::Last, RunStepLimit::Last],
+            [RunStepLimit::Open, RunStepLimit::Last],
             [false, true],
             ToolChoice::None,
             ToolChoice::None,

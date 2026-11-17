@@ -94,3 +94,52 @@ fn the_assembly_of_a_capture_has_one_exact_input_item_and_no_chapter() {
     );
     assert_eq!(decode_assembly_record(&encoded), Some(record));
 }
+
+/// The outcome of a capture from the facts of its Run: the last RunStep with no settled output
+/// call gives `step_limit`, a Run that ends in another way fails the capture with its reason, and
+/// a Run that continues keeps the capture running.
+#[test]
+fn the_outcome_of_a_capture_comes_from_the_facts_of_its_run() {
+    let status = |status, reason| capture_end(CaptureRunEnd::Status { status, reason });
+    let failed = |reason| {
+        Some(CaptureEnd {
+            outcome: crate::CaptureOutcome::Failed,
+            failure_reason: Some(reason),
+        })
+    };
+    assert_eq!(
+        [
+            capture_end(CaptureRunEnd::LastRunStepEnded),
+            status("queued", None),
+            status("claimed", None),
+            status("refused", Some("disclosure_outside_grant")),
+            status("refused", Some("destination_refused")),
+            status("waiting", Some("unknown_result")),
+            status("paused", Some("request_changed")),
+            status("completed", None),
+            status("cancelled", None),
+        ],
+        [
+            Some(CaptureEnd {
+                outcome: crate::CaptureOutcome::StepLimit,
+                failure_reason: None
+            }),
+            None,
+            None,
+            failed("disclosure_outside_grant"),
+            failed("destination_refused"),
+            failed("unknown_result"),
+            failed("request_changed"),
+            failed("no_agent_decision"),
+            failed("cancelled"),
+        ]
+    );
+    assert_eq!(
+        [
+            crate::CaptureOutcome::StepLimit,
+            crate::CaptureOutcome::Failed
+        ]
+        .map(crate::CaptureOutcome::label),
+        ["step_limit", "failed"]
+    );
+}

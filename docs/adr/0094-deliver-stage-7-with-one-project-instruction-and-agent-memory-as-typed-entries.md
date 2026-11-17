@@ -119,6 +119,7 @@ A model records too many small details when only its instructions limit it. The 
 - The page has no review queue and no approval step for a background entry. The control of the author is to see each entry, to delete it, and to correct it in a Conversation.
 - The query of the Memory section is `listMemoryEntries` (`GET /api/v1/projects/{project_id}/memory-entries`). It gives each current entry in Memory Index order with its first source reference, and it writes no row. A source record that is not available gives `unavailable` and does not fail the read. The query does not read the Conversation Memory Settings. The response has no pages.
 - The group names are "写作偏好", "伏笔", "人物", "关系", "重大事件", and "其他". The origin lines are "你让助手记住的" (`author_request`), "来自对话" (`conversation`), and "来自章节《<title>》" (`chapter`). A source that is not available shows "来源已不可用". An empty section shows "助手还没有记住任何内容。". The author approved these words on 2026-11-16.
+- The delete control of an entry shows "删除". Its first use shows "确认删除" and "取消". Only "确认删除" sends the command, and "取消" restores the control. A delete has no undo, and the page has no restore control and no edit control. After an applied delete or `already_deleted`, the entry leaves the section. After `entry_changed`, the section reads the list again and shows "这条记忆已经改变，没有删除。" under the changed entry. After a failure, the entry stays and shows "无法删除这条记忆，请稍后再试。".
 
 ### 10. The Conversation list
 

@@ -26,6 +26,11 @@ pub async fn complete_agent_run(
     complete_agent_run_with_tools(store, adapter, &NoToolDestination, observer, clock, claim).await
 }
 
+/// The adapters of the Worker that `adapter` serves.
+fn adapters_of<A: ModelProviderAdapter>(_adapter: &A) -> &'static [storyos_core::ModelAdapter] {
+    A::ADAPTERS
+}
+
 /// `complete_agent_run` with the Tool destination `tools` for the ToolDispatch phase.
 pub async fn complete_agent_run_with_tools(
     store: &(impl ModelDispatchStore + ToolDispatchStore),
@@ -43,7 +48,10 @@ pub async fn complete_agent_run_with_tools(
         claim,
     };
     loop {
-        let request = match store.next_dispatch_work(claim).await? {
+        let request = match store
+            .next_dispatch_work(claim, adapters_of(adapter))
+            .await?
+        {
             NextDispatchWork::Settled(result) => return Ok(result),
             NextDispatchWork::Request(request) => *request,
             NextDispatchWork::Abort(cancellation) => cancellation.into_abort(),
