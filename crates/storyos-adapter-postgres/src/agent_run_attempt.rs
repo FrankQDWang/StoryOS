@@ -40,7 +40,7 @@ pub(crate) async fn persist_uncertain_attempt(
     let mut continuation = crate::agent_run_continuation::decide_continuation(
         client,
         claim,
-        conversation_id,
+        conversation_id.as_deref(),
         author_message,
         assistance,
         &request.tool_exposure.digest(),
@@ -64,7 +64,9 @@ pub(crate) async fn persist_uncertain_attempt(
             clear_prior(&mut continuation, ContinuationInputMapping::Full);
             Some(probe.probe())
         }
-        CreatePurpose::Decision | CreatePurpose::CompactionSummary => None,
+        CreatePurpose::Decision
+        | CreatePurpose::CompactionSummary
+        | CreatePurpose::MemoryCapture => None,
     };
     let decided_reference = match &continuation.prior_binding_id {
         Some(binding) => {

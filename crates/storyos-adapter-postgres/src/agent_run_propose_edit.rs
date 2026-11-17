@@ -109,7 +109,7 @@ pub(crate) async fn execute(
         .map_err(complete_database_error)?;
     let (attempt_id, decision_id): (String, String) = (owner.get(0), owner.get(1));
     let declared: Vec<DeclaredLocation> =
-        crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
+        crate::agent_run_create_dispatch::declared_targets(client, claim, run.chapter()?)
             .await?
             .iter()
             .map(DeclaredTarget::location)

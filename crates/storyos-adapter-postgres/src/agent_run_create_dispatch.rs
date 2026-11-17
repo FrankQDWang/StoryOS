@@ -6,8 +6,8 @@ use storyos_application::{
     RequestContextItem,
 };
 use storyos_core::{
-    AgentDecisionOutcome, FinishRuleOutcome, ResponseDisposition, ResponseFacts, apply_finish_rule,
-    response_disposition, validate_agent_decision,
+    AgentDecisionOutcome, AgentRunKind, FinishRuleOutcome, ResponseDisposition, ResponseFacts,
+    apply_finish_rule, response_disposition, validate_agent_decision,
 };
 
 use crate::agent_run_observation::{CreateResult, CreateSettlement, persist_create_result};
@@ -188,14 +188,24 @@ pub(crate) async fn create_request(
             "Invalid retained Context",
         )))
     })?;
-    let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
-    let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
+    // A capture has no Chapter, so it declares no Proposal target, and it is no probe.
+    let (declared_targets, probe) = match run.chapter_id.as_deref() {
+        Some(chapter_id) => (
+            declared_targets(client, claim, chapter_id).await?,
+            crate::agent_run_tool_probe::probe_request(client, claim, run).await?,
+        ),
+        None => (Vec::new(), None),
+    };
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
     // A Tool qualification probe settles after its one response, so the finish rule does not
-    // apply to it, and its probe body sends no `tool_choice` (ADR 0049).
-    let tool_choice = match probe {
-        Some(_) => storyos_core::ToolChoice::None,
-        None => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
+    // apply to it, and its probe body sends no `tool_choice` (ADR 0049). A capture has no
+    // `finish` call: each of its requests requires a call (ADR 0094 section 5).
+    let tool_choice = match (&probe, run.kind) {
+        (Some(_), _) => storyos_core::ToolChoice::None,
+        (None, AgentRunKind::MemoryCapture) => storyos_core::ToolChoice::Required,
+        (None, AgentRunKind::Author | AgentRunKind::MemoryConsolidation) => {
+            crate::agent_run_finish_rule::tool_choice(client, claim, run).await?
+        }
     };
     let (prior_binding, previous_response_reference, prior_input) = match &probe {
         Some(probe) => (
@@ -235,12 +245,16 @@ pub(crate) async fn create_request(
     let context = RequestContextItem::sent(input.context, previous_response_reference.as_deref());
     Ok(CreateRequest {
         attempt,
-        purpose: probe.map_or(CreatePurpose::Decision, |probe| {
-            CreatePurpose::ToolQualification(probe.request)
-        }),
+        purpose: match (probe, run.kind) {
+            (Some(probe), _) => CreatePurpose::ToolQualification(probe.request),
+            (None, AgentRunKind::MemoryCapture) => CreatePurpose::MemoryCapture,
+            (None, AgentRunKind::Author | AgentRunKind::MemoryConsolidation) => {
+                CreatePurpose::Decision
+            }
+        },
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
-        chapter_id: run.chapter_id.clone(),
+        chapter_id: run.chapter_id.clone().unwrap_or_default(),
         passage_resolution: input.passage_resolution,
         passage_input: input.passage_input,
         context,
@@ -358,7 +372,7 @@ async fn previous_response_reference(
                     let wire = crate::agent_run_continuation::decide_continuation(
                         client,
                         claim,
-                        &run.conversation_id,
+                        run.conversation_id.as_deref(),
                         &run.author_message,
                         &assistance,
                         tool_exposure_digest,

@@ -27,6 +27,11 @@ impl AgentRunKind {
             Self::MemoryConsolidation => "memory_consolidation",
         }
     }
+
+    /// The kind of the persisted name `name`.
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.name() == name)
+    }
 }
 
 #[cfg(test)]

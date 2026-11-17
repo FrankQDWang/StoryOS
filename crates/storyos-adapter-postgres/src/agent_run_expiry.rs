@@ -50,6 +50,10 @@ pub(crate) async fn plan_expiry_rebuild(
         assembly_manifest_id,
         ..
     } = run;
+    // A background Run has no Conversation, so it has no prior response to rebuild.
+    let Some(conversation_id) = conversation_id.as_deref() else {
+        return Ok(ExpiryAdmission::Dispatch(None));
+    };
     // A later RunStep continues from a Model Attempt of this Run, not from the prior Run (ADR 0091).
     if run_has_decision_attempt(client, claim).await? {
         return Ok(ExpiryAdmission::Dispatch(None));

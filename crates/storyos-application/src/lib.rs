@@ -63,6 +63,7 @@ mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_structure;
 mod manuscript_tree;
+mod memory_capture;
 mod memory_entries;
 mod open_proposal_list;
 mod pinned_export_source;
@@ -164,6 +165,9 @@ pub use manuscript_structure::{
 pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterNode,
     GetManuscriptTree, ManuscriptTreeReader, VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
+};
+pub use memory_capture::{
+    MemoryCaptureSource, MemoryCaptureStartRefusal, MemoryCaptureStore, StartedMemoryCapture,
 };
 pub use memory_entries::{
     MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem, list_memory_entries,

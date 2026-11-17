@@ -111,9 +111,13 @@ async fn claim_agent_run_row(
 
 pub(crate) struct RunPhaseRow {
     pub status: String,
+    pub kind: AgentRunKind,
+    /// The current author message. A background Run has none, so it is empty.
     pub author_message: String,
-    pub chapter_id: String,
-    pub conversation_id: String,
+    /// The Chapter and the Project Conversation of a Run of the author. A background Run has
+    /// neither (ADR 0094 section 5).
+    pub chapter_id: Option<String>,
+    pub conversation_id: Option<String>,
     pub sufficiency: String,
     pub assembly_manifest_id: String,
     pub destination_manifest_id: Option<String>,
@@ -140,6 +144,20 @@ pub(crate) struct RunPhaseRow {
 }
 
 impl RunPhaseRow {
+    /// The Chapter of a Run of the author. No step of background work reads it.
+    pub(crate) fn chapter(&self) -> Result<&str, CompleteAgentRunError> {
+        self.chapter_id
+            .as_deref()
+            .ok_or_else(|| author_only("The Chapter"))
+    }
+
+    /// The Project Conversation of a Run of the author. No step of background work reads it.
+    pub(crate) fn conversation(&self) -> Result<&str, CompleteAgentRunError> {
+        self.conversation_id
+            .as_deref()
+            .ok_or_else(|| author_only("The Project Conversation"))
+    }
+
     /// A requeued Run has given back this claim, like a settled Run.
     pub(crate) fn settled(&self) -> bool {
         matches!(
@@ -160,7 +178,8 @@ pub(crate) async fn load_run_phase(
             // The current author message is the one `author_instruction` item that is not an
             // earlier author message of a later request (ADR 0093 section 6).
             "SELECT run.status, COALESCE((SELECT item->>'content' FROM jsonb_array_elements(assembly.payload->'selected') AS item WHERE item->>'source_class'='author_instruction'
-                      AND NOT COALESCE(assembly.payload #> '{operation_requirement,earlier_author_messages}', '[]') @> jsonb_build_array(jsonb_build_object('message_id', item->'source_version'))),run.author_message) AS author_message,
+                      AND NOT COALESCE(assembly.payload #> '{operation_requirement,earlier_author_messages}', '[]') @> jsonb_build_array(jsonb_build_object('message_id', item->'source_version'))),run.author_message,'') AS author_message,
+                    run.run_kind,
                     run.chapter_id::text AS chapter_id, run.conversation_id::text AS conversation_id,
                     assembly.sufficiency, assembly.context_assembly_manifest_id::text AS assembly_manifest_id,
                     assembly.destination_context_manifest_id::text AS destination_manifest_id,
@@ -235,6 +254,11 @@ pub(crate) async fn load_run_phase(
     let assembly_payload: String = row.get("assembly_payload");
     Ok(RunPhaseRow {
         status: row.get("status"),
+        kind: AgentRunKind::parse(row.get("run_kind")).ok_or_else(|| {
+            CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
+                "The Run kind is unknown",
+            )))
+        })?,
         author_message: row.get("author_message"),
         chapter_id: row.get("chapter_id"),
         conversation_id: row.get("conversation_id"),
@@ -390,8 +414,10 @@ pub(crate) async fn settle_one_phase(
     let Some(attempt_id) = run.attempt_id.clone() else {
         // Compaction occurs before the decision request of each RunStep of the AgentRun, when
         // the mapping of the pinned Registration compacts (ADR 0055, ADR 0093).
-        let compacted = if storyos_core::model_registration(&run.model_registration_revision)
-            .is_some_and(storyos_core::ModelRegistration::compacts)
+        // A background Run has no Conversation to compact.
+        let compacted = if run.kind == AgentRunKind::Author
+            && storyos_core::model_registration(&run.model_registration_revision)
+                .is_some_and(storyos_core::ModelRegistration::compacts)
         {
             match crate::agent_run_compaction::advance_active_compaction(client, claim, &run)
                 .await?
@@ -593,6 +619,13 @@ pub(crate) fn complete_challenge_error(
     error: storyos_application::ProjectCommandChallengeError,
 ) -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(error))
+}
+
+/// The error of a read that only a Run of the author has.
+fn author_only(fact: &str) -> CompleteAgentRunError {
+    CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(format!(
+        "{fact} is a fact of a Run of the author"
+    ))))
 }
 
 pub(crate) fn complete_database_error(error: tokio_postgres::Error) -> CompleteAgentRunError {
