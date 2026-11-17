@@ -120,6 +120,56 @@ async fn hold_fence(
     Ok(held == 1)
 }
 
+/// Claims the next pending work row in the worker scope of `client`, after its quiet time.
+pub(crate) async fn claim_passage_index_row(
+    client: &impl tokio_postgres::GenericClient,
+    registration_revisions: &[&str],
+    cut_revision: &str,
+    lease: Duration,
+) -> Result<Option<ClaimedPassageIndex>, ProjectReadError> {
+    let claimed = client
+        .query_opt(
+            "WITH next_work AS (
+                   SELECT owner_user_id, project_id, chapter_id
+                     FROM storyos.passage_index_work AS work
+                    WHERE to_regclass('storyos.passage_vectors') IS NOT NULL
+                      AND work.embedding_registration_revision::text = ANY($1::text[])
+                      AND (work.mark_generation > work.completed_generation
+                           OR work.indexed_cut_revision IS DISTINCT FROM $2)
+                      AND work.not_before <= clock_timestamp()
+                      AND (work.lease_expires_at IS NULL
+                           OR work.lease_expires_at <= clock_timestamp())
+                    ORDER BY work.not_before, work.chapter_order, work.chapter_id
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT 1
+                 )
+                 UPDATE storyos.passage_index_work AS work
+                    SET claim_generation = work.claim_generation + 1,
+                        fence_token = work.claim_generation + 1,
+                        lease_expires_at = clock_timestamp() + ($3::bigint * interval '1 second')
+                   FROM next_work
+                  WHERE (work.owner_user_id, work.project_id, work.chapter_id) =
+                        (next_work.owner_user_id, next_work.project_id, next_work.chapter_id)
+              RETURNING work.owner_user_id::text, work.project_id::text, work.chapter_id::text,
+                        work.embedding_registration_revision::text, work.mark_generation,
+                        work.fence_token",
+            &[&registration_revisions, &cut_revision, &seconds(lease)],
+        )
+        .await
+        .map_err(read_error)?;
+    Ok(claimed.map(|row| ClaimedPassageIndex {
+        project_scope: ProjectScope::new(
+            UserId::new(row.get::<_, String>(/*idx*/ 0)),
+            ProjectId::new(row.get::<_, String>(/*idx*/ 1)),
+        ),
+        chapter_id: row.get(/*idx*/ 2),
+        embedding_registration_revision: row.get(/*idx*/ 3),
+        mark_generation: row.get(/*idx*/ 4),
+        fence_token: row.get(/*idx*/ 5),
+        lease,
+    }))
+}
+
 /// One write of a claim after its fence check.
 enum FencedWrite<'a> {
     Vector(&'a PassageVectorRow<'a>),
@@ -207,48 +257,11 @@ impl PassageIndexWorkStore for PostgresProjectReader {
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
         set_worker_scope(&transaction).await?;
-        let claimed = transaction
-            .query_opt(
-                "WITH next_work AS (
-                   SELECT owner_user_id, project_id, chapter_id
-                     FROM storyos.passage_index_work AS work
-                    WHERE to_regclass('storyos.passage_vectors') IS NOT NULL
-                      AND work.embedding_registration_revision::text = ANY($1::text[])
-                      AND (work.mark_generation > work.completed_generation
-                           OR work.indexed_cut_revision IS DISTINCT FROM $2)
-                      AND work.not_before <= clock_timestamp()
-                      AND (work.lease_expires_at IS NULL
-                           OR work.lease_expires_at <= clock_timestamp())
-                    ORDER BY work.not_before, work.chapter_order, work.chapter_id
-                    FOR UPDATE SKIP LOCKED
-                    LIMIT 1
-                 )
-                 UPDATE storyos.passage_index_work AS work
-                    SET claim_generation = work.claim_generation + 1,
-                        fence_token = work.claim_generation + 1,
-                        lease_expires_at = clock_timestamp() + ($3::bigint * interval '1 second')
-                   FROM next_work
-                  WHERE (work.owner_user_id, work.project_id, work.chapter_id) =
-                        (next_work.owner_user_id, next_work.project_id, next_work.chapter_id)
-              RETURNING work.owner_user_id::text, work.project_id::text, work.chapter_id::text,
-                        work.embedding_registration_revision::text, work.mark_generation,
-                        work.fence_token",
-                &[&registration_revisions, &cut_revision, &seconds(lease)],
-            )
-            .await
-            .map_err(read_error)?;
+        let claimed =
+            claim_passage_index_row(&transaction, registration_revisions, cut_revision, lease)
+                .await?;
         transaction.commit().await.map_err(read_error)?;
-        Ok(claimed.map(|row| ClaimedPassageIndex {
-            project_scope: ProjectScope::new(
-                UserId::new(row.get::<_, String>(/*idx*/ 0)),
-                ProjectId::new(row.get::<_, String>(/*idx*/ 1)),
-            ),
-            chapter_id: row.get(/*idx*/ 2),
-            embedding_registration_revision: row.get(/*idx*/ 3),
-            mark_generation: row.get(/*idx*/ 4),
-            fence_token: row.get(/*idx*/ 5),
-            lease,
-        }))
+        Ok(claimed)
     }
 
     async fn write_fenced_passage_vector(

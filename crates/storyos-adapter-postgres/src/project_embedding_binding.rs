@@ -3,7 +3,7 @@
 //! its evidence, the Project Destination Grant `manuscript_embedding_v1`, and the use binding of
 //! the Embedding Registration. The configuration by the operator is the consent.
 
-use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectScope};
+use storyos_application::{ProjectCommandError, ProjectScope};
 use storyos_core::{
     EmbeddingBindingFacts, EmbeddingRegistration, GrantScope, embedding_binding_to_make,
 };
@@ -78,7 +78,7 @@ pub(crate) fn embedding_binding_facts(row: &tokio_postgres::Row) -> EmbeddingBin
 /// history.
 pub(crate) async fn insert_embedding_binding(
     client: &Client,
-    envelope: &ProjectCommandEnvelope,
+    scope: &ProjectScope,
     registration: &EmbeddingRegistration,
 ) -> Result<(), tokio_postgres::Error> {
     let shape = binding_shape(registration.destination);
@@ -110,8 +110,8 @@ pub(crate) async fn insert_embedding_binding(
              VALUES ($1::text::uuid, $2::text::uuid, $5::text::uuid, $3::text::uuid, 1,
                      $4::text::uuid, $13::text::uuid, $14, $15, $16)",
             &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
                 &identity,
                 &grant,
                 &binding,
@@ -132,7 +132,7 @@ pub(crate) async fn insert_embedding_binding(
     // Each live Chapter gets index work for the new binding (ADR 0095 section 4).
     crate::passage_index_work::mark_passage_index_work(
         client,
-        &envelope.project_scope,
+        scope,
         crate::passage_index_work::MarkedChapters::Live,
     )
     .await
