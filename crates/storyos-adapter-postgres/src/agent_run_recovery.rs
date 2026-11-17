@@ -264,10 +264,11 @@ async fn write_subject(
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
         .map(|record| record.processing_destination_identity)
         .unwrap_or_default();
+    // A background Run has no Conversation, so its subject binds no Conversation.
     payload["original_result_retrieval"] = crate::agent_run_retrieval::subject(
         reference,
         claim,
-        run.conversation()?,
+        run.conversation_id.as_deref().unwrap_or_default(),
         &identity,
         RetrievalAdvance::of(run).mapping_revision,
     );

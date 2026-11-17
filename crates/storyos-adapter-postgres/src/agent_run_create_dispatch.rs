@@ -310,6 +310,19 @@ pub(crate) fn record_input(
     }
 }
 
+/// The admitted Proposal targets of the Chapter of `run`. A background Run has no Chapter, so
+/// its requests declare no target (ADR 0094 section 5).
+pub(crate) async fn run_declared_targets(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+) -> Result<Vec<DeclaredTarget>, CompleteAgentRunError> {
+    match run.kind.reads_chapter_work() {
+        true => declared_targets(client, claim, run.chapter()?).await,
+        false => Ok(Vec::new()),
+    }
+}
+
 /// The admitted Proposal targets that a request of the active decision declares.
 pub(crate) async fn declared_targets(
     client: &tokio_postgres::Client,
