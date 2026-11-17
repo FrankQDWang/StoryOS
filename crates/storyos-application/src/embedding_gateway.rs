@@ -111,6 +111,10 @@ pub trait EmbeddingDispatchStore: Sync {
 
 /// The protocol projection of one embedding destination. It cannot decide retry or authority.
 pub trait EmbeddingProviderAdapter: Sync {
+    /// The Embedding Registrations that the adapter serves. A Worker claims only the index work of
+    /// these Registrations (ADR 0039).
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration];
+
     /// The single-use value of one preparation. It may hold a resolved credential.
     type Prepared: Send;
 
@@ -135,6 +139,7 @@ pub trait EmbeddingProviderAdapter: Sync {
 pub struct NoEmbeddingDestination;
 
 impl EmbeddingProviderAdapter for NoEmbeddingDestination {
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = &[];
     type Prepared = std::convert::Infallible;
 
     async fn prepare(

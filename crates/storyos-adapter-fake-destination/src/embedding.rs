@@ -30,6 +30,8 @@ pub struct FakeEmbeddingExchange {
 }
 
 impl EmbeddingProviderAdapter for FakeEmbeddings {
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] =
+        &[&storyos_core::HOST_FAKE_EMBEDDING_REGISTRATION];
     type Prepared = FakeEmbeddingExchange;
 
     #[tracing::instrument(skip_all, level = "debug")]

@@ -73,6 +73,14 @@ pub trait PassageIndexWorkStore: PassageVectorStore + EmbeddingDispatchStore {
         claim: &ClaimedPassageIndex,
         wait: Duration,
     ) -> impl Future<Output = Result<bool, ProjectReadError>> + Send;
+
+    /// Marks the work of each live Chapter of each Project with the embedding use binding, with no
+    /// wait, as a new binding does, so that the work makes each vector row again
+    /// (`storyos-worker --rebuild-passage-index`). It makes the work row of a Chapter that has
+    /// none, and it sends no request. Returns the number of Projects that it read.
+    fn mark_each_passage_index_work(
+        &self,
+    ) -> impl Future<Output = Result<u64, ProjectReadError>> + Send;
 }
 
 /// The result of one step of a claim.

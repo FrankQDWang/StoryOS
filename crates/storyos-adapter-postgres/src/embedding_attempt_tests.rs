@@ -34,6 +34,7 @@ struct Held<'a> {
 }
 
 impl EmbeddingProviderAdapter for Held<'_> {
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
     type Prepared = <FakeEmbeddings as EmbeddingProviderAdapter>::Prepared;
 
     async fn prepare(

@@ -34,6 +34,8 @@ pub struct AgentPlanEmbeddingExchange {
 }
 
 impl<R: CredentialResolver> EmbeddingProviderAdapter for AgentPlanEmbeddings<R> {
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] =
+        &[&storyos_core::AGENT_PLAN_EMBEDDING_REGISTRATION];
     type Prepared = AgentPlanEmbeddingExchange;
 
     /// Refuses a Registration with another mapping revision or other request bounds, and a route
