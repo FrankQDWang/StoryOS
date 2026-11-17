@@ -129,7 +129,13 @@ pub(crate) async fn insert_embedding_binding(
             ],
         )
         .await?;
-    Ok(())
+    // Each live Chapter gets index work for the new binding (ADR 0095 section 4).
+    crate::passage_index_work::mark_passage_index_work(
+        client,
+        &envelope.project_scope,
+        crate::passage_index_work::MarkedChapters::Live,
+    )
+    .await
 }
 
 #[cfg(test)]

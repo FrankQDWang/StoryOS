@@ -4327,6 +4327,46 @@ GRANT SELECT,INSERT ON TABLE storyos.embedding_attempts TO storyos_runtime;
 
 GRANT UPDATE(attempt, settlement) ON TABLE storyos.embedding_attempts TO storyos_runtime;
 
+-- The passage index work of one Chapter (ADR 0095 section 4). A change of the Chapter marks the row
+-- in the transaction of the change: the mark generation increases and the quiet time starts again.
+-- The work is not a Run. The Worker claims a row with a lease and a fence token, in the form of the
+-- export work, and the completion records the mark generation that it covered. The row is pending
+-- while its mark generation is higher than its completed generation, or while it has another cut
+-- revision. The Project Export Archive does not hold these rows.
+
+CREATE TABLE storyos.passage_index_work (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    chapter_id uuid NOT NULL,
+    embedding_registration_revision uuid NOT NULL,
+    chapter_order bigint NOT NULL,
+    mark_generation bigint DEFAULT 1 NOT NULL,
+    completed_generation bigint DEFAULT 0 NOT NULL,
+    indexed_cut_revision text,
+    not_before timestamp with time zone NOT NULL,
+    claim_generation bigint DEFAULT 0 NOT NULL,
+    fence_token bigint DEFAULT 0 NOT NULL,
+    lease_expires_at timestamp with time zone,
+    CONSTRAINT passage_index_work_chapter_order_check CHECK ((chapter_order >= 1)),
+    CONSTRAINT passage_index_work_generation_check CHECK (((mark_generation >= 1) AND (completed_generation >= 0) AND (completed_generation <= mark_generation))),
+    CONSTRAINT passage_index_work_indexed_cut_revision_check CHECK (((indexed_cut_revision IS NULL) OR (length(indexed_cut_revision) BETWEEN 1 AND 128))),
+    CONSTRAINT passage_index_work_claim_check CHECK (((claim_generation >= 0) AND (fence_token = claim_generation))),
+    CONSTRAINT passage_index_work_pkey PRIMARY KEY (owner_user_id, project_id, chapter_id),
+    CONSTRAINT passage_index_work_chapter_fkey FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id) MATCH FULL
+);
+
+ALTER TABLE storyos.passage_index_work ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.passage_index_work FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY passage_index_work_exact_scope ON storyos.passage_index_work USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
+
+CREATE POLICY passage_index_work_worker_select ON storyos.passage_index_work FOR SELECT USING (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL)));
+
+CREATE POLICY passage_index_work_worker_update ON storyos.passage_index_work FOR UPDATE USING (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))) WITH CHECK (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL)));
+
+GRANT SELECT,INSERT,UPDATE ON TABLE storyos.passage_index_work TO storyos_runtime;
+
 -- Activity Run Events. An append-only record of the AgentRun: one `tool_call_settled` event for each
 -- resolved ToolCall, one `tool_call_late_result` event when a result arrived after the fence of a
 -- ToolCall, and one `tool_registration_quarantined` event when a dispatch found Tool Contract Drift.
