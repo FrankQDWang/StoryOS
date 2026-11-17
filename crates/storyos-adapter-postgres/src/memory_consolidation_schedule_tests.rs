@@ -25,7 +25,7 @@ use crate::memory_work_schedule::tests::make_due;
 /// The consolidation row of the Project: whether it names no Conversation and the Project as its
 /// source, and its due time. The due time is `null` when it is empty, `"now"` when it is in the
 /// past, and else its distance from the start of the last pass. `None`: the Project has no row.
-async fn pass_due(admin: &Client, scope: &ProjectScope) -> Option<Value> {
+pub(super) async fn pass_due(admin: &Client, scope: &ProjectScope) -> Option<Value> {
     let row = admin
         .query_opt(
             "SELECT jsonb_build_array(work.conversation_id IS NULL,
@@ -62,7 +62,7 @@ async fn make_pass_due(admin: &Client, scope: &ProjectScope) {
 
 /// Claims the due consolidation row of the Project, and returns its outcome. The due time is then
 /// empty.
-async fn claim_pass(
+pub(super) async fn claim_pass(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,

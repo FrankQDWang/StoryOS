@@ -166,9 +166,29 @@ async fn a_pass_request_with_no_entry_and_no_mark_has_only_the_observations() {
     );
 }
 
+/// A pass with only conflict items (ADR 0094 section 7): the user message has the entries and the
+/// marks, and no section `Memory observations`.
+#[tokio::test]
+async fn a_pass_request_with_entries_and_no_observation_has_no_observations_section() {
+    let request = pass(
+        vec![
+            item(ContextSourceClass::MemoryEntries, ENTRY_1),
+            item(ContextSourceClass::MemoryDeleteMarks, MARKS),
+        ],
+        V8,
+        storyos_core::AGENT_PLAN_REGISTRATION.revision,
+    );
+    assert_eq!(
+        body(request).await["input"],
+        message(&format!(
+            "Memory entries:\n{ENTRY_1}\n\nDeleted Memory entries:\n{MARKS}"
+        ))
+    );
+}
+
 /// ADR 0093 section 3: only the mapping `v8` has the pass form, so the adapter refuses a pass of
-/// an earlier mapping before dispatch. It also refuses a pass with no observations item, with no
-/// output Tool, or with a prior response reference.
+/// an earlier mapping before dispatch. It also refuses a pass with no entries item and no
+/// observations item, with no output Tool, or with a prior response reference.
 #[tokio::test]
 async fn the_adapter_refuses_a_pass_of_an_earlier_mapping_or_of_another_form() {
     let v7 = pass(
@@ -176,9 +196,9 @@ async fn the_adapter_refuses_a_pass_of_an_earlier_mapping_or_of_another_form() {
         V7,
         storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision,
     );
-    let no_observation = CreateRequest {
+    let marks_only = CreateRequest {
         context: (full().context.into_iter())
-            .filter(|item| item.source_class != ContextSourceClass::MemoryObservations)
+            .filter(|item| item.source_class == ContextSourceClass::MemoryDeleteMarks)
             .collect(),
         ..full()
     };
@@ -194,7 +214,7 @@ async fn the_adapter_refuses_a_pass_of_an_earlier_mapping_or_of_another_form() {
         resolver: CanaryResolver::default(),
     };
     let mut refusals = Vec::new();
-    for request in [v7, no_observation, no_output, continued, full()] {
+    for request in [v7, marks_only, no_output, continued, full()] {
         let prepared = adapter.prepare(&DestinationRequest::Create(request)).await;
         refusals.push(prepared.err());
     }
