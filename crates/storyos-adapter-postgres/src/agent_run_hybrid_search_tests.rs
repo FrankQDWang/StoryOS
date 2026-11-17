@@ -510,6 +510,7 @@ impl<'a> Held<'a> {
 }
 
 impl EmbeddingProviderAdapter for Held<'_> {
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
     type Prepared = FakeEmbeddingExchange;
 
     async fn prepare(

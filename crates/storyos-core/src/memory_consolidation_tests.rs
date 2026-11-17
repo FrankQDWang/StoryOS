@@ -1,0 +1,141 @@
+use serde_json::{Value, json};
+
+use super::{
+    MemoryConsolidationAssembly, PassObservation, assemble_memory_consolidation_context,
+    consolidation_failure,
+};
+use crate::assemble_context::{CONTEXT_ITEM_TOKEN_LIMIT, ContextPurpose};
+use crate::{
+    CaptureRunEnd, ContextSourceClass, CurrentMemoryEntry, MemoryEntryOrigin, MemoryEntryType,
+    MemorySourceReference, PassMemoryEntry, ProjectionMode,
+};
+
+/// The Context Assembly of a pass has the current entries and the observations as lines, the
+/// oldest observation first. A set above the Context item limit is more than one item, and each
+/// item fits the limit.
+#[test]
+fn the_input_of_a_pass_has_one_line_for_each_entry_and_each_observation() {
+    let entry = PassMemoryEntry {
+        entry: CurrentMemoryEntry {
+            memory_entry_id: "entry".to_owned(),
+            number: 3,
+            version: 2,
+            entry_type: MemoryEntryType::Character,
+            title: "林舟".to_owned(),
+            description: "船夫。".to_owned(),
+            text: "沉默的船夫。".to_owned(),
+        },
+        origin: MemoryEntryOrigin::Chapter,
+    };
+    let observation = |text: String| PassObservation {
+        entry_type: MemoryEntryType::Other,
+        title: "渡口".to_owned(),
+        text,
+        source: MemorySourceReference::Chapter {
+            chapter_id: "chapter".to_owned(),
+        },
+    };
+    let entries = [(entry, "2026-11-17T08:00:00.000Z".to_owned())];
+    let observations = [
+        observation("渡口在河边。".to_owned()),
+        observation("长".repeat(1500)),
+    ];
+    let assemble = |observations: &[PassObservation]| {
+        assemble_memory_consolidation_context(&MemoryConsolidationAssembly {
+            operation_requirement_id: "requirement".to_owned(),
+            run_id: "run".to_owned(),
+            owner_user_id: "owner".to_owned(),
+            project_id: "project".to_owned(),
+            destination_identity: "destination".to_owned(),
+            memory_revision: 4,
+            entries: &entries,
+            observations,
+        })
+    };
+    let record = assemble(&observations[..1]);
+    let lines: Vec<(ContextSourceClass, Vec<Value>)> = record
+        .selected
+        .iter()
+        .map(|item| {
+            let lines = item.content.lines();
+            (
+                item.source_class,
+                lines
+                    .map(|line| serde_json::from_str(line).unwrap())
+                    .collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        (
+            record.operation_requirement.purpose,
+            record.operation_requirement.memory_revision,
+            lines
+        ),
+        (
+            ContextPurpose::MemoryConsolidation,
+            Some(4),
+            vec![
+                (
+                    ContextSourceClass::MemoryEntries,
+                    vec![json!({
+                        "id": 3, "type": "character", "title": "林舟", "description": "船夫。",
+                        "text": "沉默的船夫。", "origin": "chapter",
+                        "changed_at": "2026-11-17T08:00:00.000Z"
+                    })]
+                ),
+                (
+                    ContextSourceClass::MemoryObservations,
+                    vec![json!({
+                        "observation": 1, "type": "other", "title": "渡口", "text": "渡口在河边。",
+                        "source": { "kind": "chapter", "chapter_id": "chapter" }
+                    })]
+                ),
+            ]
+        )
+    );
+    let many: Vec<PassObservation> = (0..40).map(|_| observations[1].clone()).collect();
+    let large = assemble(&many);
+    let items: Vec<_> = large
+        .selected
+        .iter()
+        .filter(|item| item.source_class == ContextSourceClass::MemoryObservations)
+        .collect();
+    assert!(items.len() > 1);
+    assert!(
+        items
+            .iter()
+            .all(|item| item.token_count <= CONTEXT_ITEM_TOKEN_LIMIT
+                && item.projection_mode == ProjectionMode::ExactRequired)
+    );
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item.content.lines().count())
+            .sum::<usize>(),
+        40
+    );
+}
+
+/// A pass whose one RunStep ends with no settled call fails, and a queued or claimed Run continues.
+#[test]
+fn a_pass_with_no_settled_call_fails() {
+    let status = |status, reason| CaptureRunEnd::Status { status, reason };
+    assert_eq!(
+        [
+            CaptureRunEnd::LastRunStepEnded,
+            status("completed", None),
+            status("claimed", None),
+            status("failed", Some("destination_rejected")),
+            status("cancelled", None),
+        ]
+        .map(consolidation_failure),
+        [
+            Some("no_operation_call"),
+            Some("no_operation_call"),
+            None,
+            Some("destination_rejected"),
+            Some("cancelled")
+        ]
+    );
+}

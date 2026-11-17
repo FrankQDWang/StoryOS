@@ -44,7 +44,7 @@ pub(crate) fn texts() -> Vec<String> {
 }
 
 /// The sorted digests of the passages of `texts`.
-fn digests(texts: &[String]) -> Vec<String> {
+pub(crate) fn digests(texts: &[String]) -> Vec<String> {
     let blocks: Vec<PassageBlock<'_>> = texts
         .iter()
         .map(|text| PassageBlock {
@@ -216,7 +216,7 @@ async fn attempts(admin: &Client, scope: &ProjectScope) -> i64 {
 }
 
 /// The sorted digests of the rows of the Project.
-async fn rows(admin: &Client, scope: &ProjectScope) -> Vec<String> {
+pub(crate) async fn rows(admin: &Client, scope: &ProjectScope) -> Vec<String> {
     admin
         .query(
             "SELECT passage_digest FROM storyos.passage_vectors
@@ -314,6 +314,7 @@ struct Held<'a> {
 }
 
 impl EmbeddingProviderAdapter for Held<'_> {
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
     type Prepared = <FakeEmbeddings as EmbeddingProviderAdapter>::Prepared;
 
     async fn prepare(
