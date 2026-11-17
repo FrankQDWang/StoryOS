@@ -63,10 +63,9 @@ async fn read_runs(admin: &Client, run_id: &str) -> Value {
         .split("\n\n{\"role\"")
         .enumerate()
         .map(|(index, block)| {
-            let block = if index == 0 {
-                block.to_owned()
-            } else {
-                format!("{{\"role\"{block}")
+            let block = match index {
+                0 => block.to_owned(),
+                _ => format!("{{\"role\"{block}"),
             };
             let (header, text) = block.split_once('\n').unwrap();
             let header: Value = serde_json::from_str(header).unwrap();
@@ -94,6 +93,7 @@ fn started(outcome: MemoryWorkOutcome) -> StartedMemoryCapture {
     }
 }
 
+/// The Conversation and the first Run of a source of a capture.
 fn source_runs(source: &MemoryCaptureSource) -> (String, String) {
     match source {
         MemoryCaptureSource::Conversation {
@@ -111,28 +111,27 @@ fn existing(conversation_id: &str) -> ConversationSelection {
     }
 }
 
-/// The input has the messages of each completed Run after the last Run that a capture read, also
-/// a steering input that a RunStep read. A cancelled Run gives no message. A capture with no
-/// later Run settles with `no_observation`, and the due time stays empty.
+/// The Run status, the capture outcome, and the first and the last Run of the capture Run.
+async fn ends(admin: &Client, run_id: &str) -> Value {
+    let read = read_runs(admin, run_id).await;
+    let settled = settlement(admin, run_id).await;
+    json!([settled[0], settled[2], read[2], read[3]])
+}
+
+/// The input has the messages of each completed Run of its Conversation after the last Run that
+/// a capture read, also a steering input that a RunStep read. A cancelled Run gives no message. A
+/// capture reads only the Conversation of its row in its Project Scope. A capture with no later
+/// Run settles with `no_observation`, and the due time stays empty.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn the_input_reads_each_completed_run_with_its_steering_input_and_no_cancelled_run() {
+async fn each_capture_reads_the_completed_runs_of_its_conversation_and_no_cancelled_run() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    // A capture gives way to each queued Run of the author, as in `project`.
-    admin
-        .execute(
-            "UPDATE storyos.agent_runs
-                SET status = 'paused', lease_expires_at = NULL, wakeup_pending = false
-              WHERE run_kind = 'author' AND status = 'queued'",
-            &[],
-        )
-        .await
-        .unwrap();
+    let (other_scope, _, other) = project(&store, &admin, "583").await;
     let (scope, chapter_id, first) = queued(&store, "580").await;
-    let input = steering(&store, &scope, 0x5800, &first, "Keep the voice.", None).await;
+    let input = steering(&store, &scope, 0x58fa, &first, "Keep the voice.", None).await;
     let author = AuthorAt::new(
         &store,
         Moment::DuringRequest(1),
@@ -149,16 +148,9 @@ async fn the_input_reads_each_completed_run_with_its_steering_input_and_no_cance
         .await
         .unwrap()
         .get(/*idx*/ 0);
-    let cancelled = admitted(
-        &store,
-        &scope,
-        &chapter_id,
-        "581",
-        "取消这一条。",
-        existing(&conversation_id),
-    )
-    .await;
-    let cancel = cancellation(&store, &scope, 0x5801, &cancelled).await;
+    let conversation = existing(&conversation_id);
+    let cancelled = admitted(&store, &scope, &chapter_id, "581", "取消。", conversation).await;
+    let cancel = cancellation(&store, &scope, 0x58fb, &cancelled).await;
     store
         .cancel_agent_run(&cancel.envelope, &cancel.input)
         .await
@@ -173,38 +165,49 @@ async fn the_input_reads_each_completed_run_with_its_steering_input_and_no_cance
         );
         duties.await.unwrap();
     }
-    let last = admitted(
-        &store,
-        &scope,
-        &chapter_id,
-        "582",
-        "继续写。",
-        existing(&conversation_id),
-    )
-    .await;
+    let conversation = existing(&conversation_id);
+    let last = admitted(&store, &scope, &chapter_id, "582", "继续写。", conversation).await;
     complete(&store, &admin, &scope, &last).await;
-    let capture = started(claim_due(&store, &admin, &scope, &conversation_id).await);
-    let read = read_runs(&admin, &capture.run_id).await;
-    run_capture(&store, &admin, &scope, &capture.run_id).await;
+    let (other_conversation, other_first) = source_runs(&other);
+    let mut reads = Vec::new();
+    for (scope, conversation_id) in [
+        (&scope, &conversation_id),
+        (&other_scope, &other_conversation),
+    ] {
+        let capture = started(claim_due(&store, &admin, scope, conversation_id).await);
+        run_capture(&store, &admin, scope, &capture.run_id).await;
+        reads.push(read_runs(&admin, &capture.run_id).await);
+        reads.push(settlement(&admin, &capture.run_id).await[2].clone());
+    }
 
     assert_eq!(
+        (reads, due(&admin, &conversation_id).await),
         (
-            read,
-            settlement(&admin, &capture.run_id).await[2].clone(),
-            due(&admin, &conversation_id).await
-        ),
-        (
-            json!([
-                "exact_required",
-                [
-                    ["author", first, "Help with this passage."],
-                    ["author", first, "Keep the voice."],
-                    ["author", last, "继续写。"]
-                ],
-                first,
-                last
-            ]),
-            json!("no_observation"),
+            vec![
+                json!([
+                    "exact_required",
+                    [
+                        ["author", first, "Help with this passage."],
+                        ["author", first, "Keep the voice."],
+                        ["assistant", first, 76],
+                        ["author", last, "继续写。"],
+                        ["assistant", last, 76]
+                    ],
+                    first,
+                    last
+                ]),
+                json!("no_observation"),
+                json!([
+                    "exact_required",
+                    [
+                        ["author", other_first, "Help with this passage."],
+                        ["assistant", other_first, 76]
+                    ],
+                    other_first,
+                    other_first
+                ]),
+                json!("no_observation"),
+            ],
             "empty".to_owned()
         )
     );
@@ -220,50 +223,44 @@ async fn a_bounded_input_reads_the_oldest_runs_that_fit_and_its_settlement_makes
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, source) = project(&store, &admin, "583").await;
+    let (scope, chapter_id, source) = project(&store, &admin, "584").await;
     let (conversation_id, first) = source_runs(&source);
+    // An author message has at most 8,000 characters, so the fourth long Run is above the limit.
     let mut later = Vec::new();
-    for (prefix, character) in [("584", "林"), ("585", "舟")] {
-        let message = character.repeat(/*n*/ 20_000);
-        let run_id = admitted(
-            &store,
-            &scope,
-            &chapter_id,
-            prefix,
-            &message,
-            existing(&conversation_id),
-        )
-        .await;
+    for (prefix, character) in [("585", "林"), ("586", "舟"), ("587", "渡"), ("588", "口")] {
+        let message = character.repeat(/*n*/ 8_000);
+        let conversation = existing(&conversation_id);
+        let run_id = admitted(&store, &scope, &chapter_id, prefix, &message, conversation).await;
         complete(&store, &admin, &scope, &run_id).await;
         later.push(run_id);
     }
     let bounded = started(claim_due(&store, &admin, &scope, &conversation_id).await);
-    let read = read_runs(&admin, &bounded.run_id).await;
     run_capture(&store, &admin, &scope, &bounded.run_id).await;
     let after = due(&admin, &conversation_id).await;
     let next = started(claim_due(&store, &admin, &scope, &conversation_id).await);
-    let read_next = read_runs(&admin, &next.run_id).await;
     run_capture(&store, &admin, &scope, &next.run_id).await;
+    let long = |run_id: &String| json!([["author", run_id, 8_000], ["assistant", run_id, 76]]);
+    let mut bounded_messages = vec![
+        json!(["author", first, "Help with this passage."]),
+        json!(["assistant", first, 76]),
+    ];
+    for run_id in &later[..3] {
+        bounded_messages.extend(long(run_id).as_array().unwrap().iter().cloned());
+    }
 
     assert_eq!(
-        (read, after, read_next, due(&admin, &conversation_id).await),
         (
-            json!([
-                "exact_required",
-                [
-                    ["author", first, "Help with this passage."],
-                    ["author", later[0], 20_000]
-                ],
-                first,
-                later[0]
-            ]),
+            read_runs(&admin, &bounded.run_id).await,
+            settlement(&admin, &bounded.run_id).await[2].clone(),
+            after,
+            read_runs(&admin, &next.run_id).await,
+            due(&admin, &conversation_id).await
+        ),
+        (
+            json!(["exact_required", bounded_messages, first, later[2]]),
+            json!("no_observation"),
             "now".to_owned(),
-            json!([
-                "exact_required",
-                [["author", later[1], 20_000]],
-                later[1],
-                later[1]
-            ]),
+            json!(["exact_required", long(&later[3]), later[3], later[3]]),
             "empty".to_owned()
         )
     );
@@ -281,36 +278,24 @@ async fn a_new_message_during_a_capture_does_not_wait_and_the_settlement_makes_t
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, source) = project(&store, &admin, "586").await;
+    let (scope, chapter_id, source) = project(&store, &admin, "589").await;
     let (conversation_id, first) = source_runs(&source);
     let observation = |title: &str| {
         script(&[record(
             json!([{"type": "character", "title": title, "text": "船夫。"}]),
         )])
     };
-    let second = admitted(
-        &store,
-        &scope,
-        &chapter_id,
-        "587",
-        &observation("林舟"),
-        existing(&conversation_id),
-    )
-    .await;
+    let conversation = existing(&conversation_id);
+    let message = observation("林舟");
+    let second = admitted(&store, &scope, &chapter_id, "58a", &message, conversation).await;
     complete(&store, &admin, &scope, &second).await;
     let capture = started(claim_due(&store, &admin, &scope, &conversation_id).await);
-    let third = admitted(
-        &store,
-        &scope,
-        &chapter_id,
-        "588",
-        &observation("渡口"),
-        existing(&conversation_id),
-    )
-    .await;
+    let conversation = existing(&conversation_id);
+    let message = observation("渡口");
+    let third = admitted(&store, &scope, &chapter_id, "58b", &message, conversation).await;
     complete(&store, &admin, &scope, &third).await;
     let during = due(&admin, &conversation_id).await;
-    let edit = rename(&store, &scope, 0x5802, &chapter_id, "雨夜").await;
+    let edit = rename(&store, &scope, 0x58fc, &chapter_id, "雨夜").await;
     let author = AuthorAt::new(
         &store,
         Moment::DuringRequest(1),
@@ -319,41 +304,42 @@ async fn a_new_message_during_a_capture_does_not_wait_and_the_settlement_makes_t
     settle(&store, &admin, &scope, &capture.run_id, &author)
         .await
         .unwrap();
-    run_capture(&store, &admin, &scope, &capture.run_id).await;
-    let read = read_runs(&admin, &capture.run_id).await;
+    let title: String = admin
+        .query_one(
+            "SELECT title FROM storyos.manuscript_objects
+              WHERE manuscript_object_id = $1::text::uuid",
+            &[&chapter_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
     let after = due(&admin, &conversation_id).await;
     let next = started(claim_due(&store, &admin, &scope, &conversation_id).await);
     run_capture(&store, &admin, &scope, &next.run_id).await;
-    let outcome = |run_id: String| {
-        let admin = &admin;
-        async move { settlement(admin, &run_id).await[2].clone() }
-    };
 
     assert_eq!(
         (
             during,
-            [read[2].clone(), read[3].clone()],
-            outcome(capture.run_id).await,
+            title,
+            ends(&admin, &capture.run_id).await,
             after,
-            read_runs(&admin, &next.run_id).await[3].clone(),
-            outcome(next.run_id).await,
+            ends(&admin, &next.run_id).await,
             due(&admin, &conversation_id).await
         ),
         (
             "quiet".to_owned(),
-            [json!(first), json!(second)],
-            json!("observations_recorded"),
+            "雨夜".to_owned(),
+            json!(["completed", "observations_recorded", first, second]),
             "now".to_owned(),
-            json!(third),
-            json!("observations_recorded"),
+            json!(["completed", "observations_recorded", third, third]),
             "empty".to_owned()
         )
     );
 }
 
-/// The settlement of a `step_limit` or a `failed` capture does not set the due time. The next
-/// completed Run makes the row due again, and the next capture reads also the messages that the
-/// capture before it did not complete.
+/// The settlement of a `step_limit` or a `failed` capture does not set the due time, so the Host
+/// starts no capture for the same messages by itself. The next capture reads also the messages
+/// that the capture before it did not complete. The next completed Run makes the row due again.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_failed_or_step_limit_capture_sets_no_due_time_and_the_next_capture_reads_its_runs() {
@@ -361,37 +347,19 @@ async fn a_failed_or_step_limit_capture_sets_no_due_time_and_the_next_capture_re
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, source) = project(&store, &admin, "589").await;
+    let (scope, chapter_id, source) = project(&store, &admin, "58c").await;
     let (conversation_id, first) = source_runs(&source);
     let max = usize::try_from(storyos_core::MEMORY_CAPTURE_MAX_RUN_STEPS).unwrap();
     let edits = script(&vec![
         ("propose_edit", json!({"reason": "改写"}));
         max + 2
     ]);
-    let second = admitted(
-        &store,
-        &scope,
-        &chapter_id,
-        "58a",
-        &edits,
-        existing(&conversation_id),
-    )
-    .await;
+    let conversation = existing(&conversation_id);
+    let second = admitted(&store, &scope, &chapter_id, "58d", &edits, conversation).await;
     complete(&store, &admin, &scope, &second).await;
     let limited = started(claim_due(&store, &admin, &scope, &conversation_id).await);
-    let third = admitted(
-        &store,
-        &scope,
-        &chapter_id,
-        "58b",
-        "继续写。",
-        existing(&conversation_id),
-    )
-    .await;
-    complete(&store, &admin, &scope, &third).await;
     run_capture(&store, &admin, &scope, &limited.run_id).await;
     let after_limit = due(&admin, &conversation_id).await;
-
     let failed = started(claim_due(&store, &admin, &scope, &conversation_id).await);
     let grant = |version: &'static str| {
         let admin = &admin;
@@ -414,65 +382,31 @@ async fn a_failed_or_step_limit_capture_sets_no_due_time_and_the_next_capture_re
     run_capture(&store, &admin, &scope, &failed.run_id).await;
     grant("v5").await;
     let after_failed = due(&admin, &conversation_id).await;
-    let fourth = admitted(
-        &store,
-        &scope,
-        &chapter_id,
-        "58c",
-        "再写一章。",
-        existing(&conversation_id),
-    )
-    .await;
-    complete(&store, &admin, &scope, &fourth).await;
+    let conversation = existing(&conversation_id);
+    let third = admitted(&store, &scope, &chapter_id, "58e", "继续写。", conversation).await;
+    complete(&store, &admin, &scope, &third).await;
+    let after_third = due(&admin, &conversation_id).await;
     let next = started(claim_due(&store, &admin, &scope, &conversation_id).await);
     run_capture(&store, &admin, &scope, &next.run_id).await;
-    let ends = |run_id: String| {
-        let admin = &admin;
-        async move {
-            let read = read_runs(admin, &run_id).await;
-            let settled = settlement(admin, &run_id).await;
-            json!([read[2], read[3], settled[2]])
-        }
-    };
 
     assert_eq!(
         (
-            ends(limited.run_id).await,
+            ends(&admin, &limited.run_id).await,
             after_limit,
-            ends(failed.run_id).await,
+            ends(&admin, &failed.run_id).await,
             after_failed,
-            ends(next.run_id).await
+            after_third,
+            ends(&admin, &next.run_id).await
         ),
         (
-            json!([first, second, "step_limit"]),
-            "quiet".to_owned(),
-            json!([first, third, "failed"]),
+            json!(["completed", "step_limit", first, second]),
             "empty".to_owned(),
-            json!([first, fourth, "step_limit"])
+            json!(["refused", "failed", first, second]),
+            "empty".to_owned(),
+            "quiet".to_owned(),
+            json!(["completed", "step_limit", first, third])
         )
     );
-}
-
-/// A capture reads only the Conversation of its row in the Project Scope of the row.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_capture_reads_only_the_conversation_of_its_row_in_its_project_scope() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let (scope_a, _, source_a) = project(&store, &admin, "58d").await;
-    let (scope_b, _, source_b) = project(&store, &admin, "58e").await;
-    let mut reads = Vec::new();
-    for (scope, source) in [(&scope_a, &source_a), (&scope_b, &source_b)] {
-        let (conversation_id, _) = source_runs(source);
-        let capture = started(claim_due(&store, &admin, scope, &conversation_id).await);
-        reads.push(read_runs(&admin, &capture.run_id).await[1].clone());
-        run_capture(&store, &admin, scope, &capture.run_id).await;
-    }
-    let message = |source| json!([["author", source_runs(source).1, "Help with this passage."]]);
-
-    assert_eq!(reads, [message(&source_a), message(&source_b)]);
 }
 
 /// A Worker that stops after the claim of a row and before the start of its capture leaves the
@@ -495,34 +429,41 @@ async fn a_stopped_worker_leaves_the_row_due_and_the_next_claim_starts_one_captu
         .await
         .unwrap();
     let stop = async {
-        // A blocked session gives no signal, so this is the one wait with a sleep.
-        for _ in 0..500 {
-            let waiting = admin
-                .query_opt(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
-                      WHERE pid <> pg_backend_pid() AND wait_event_type = 'Lock'
-                        AND query LIKE '%INSERT INTO storyos.memory_captures%'",
-                    &[],
-                )
-                .await
-                .unwrap();
-            if waiting.is_some() {
-                break;
+        // A blocked session gives no signal, so this is the one wait with a sleep. The lock goes
+        // only after the session of the claim ended.
+        let mut stopped: Option<i32> = None;
+        for _ in 0..1_000 {
+            let session: Option<i32> = match stopped {
+                None => admin
+                    .query_opt(
+                        "SELECT waiting.pid
+                           FROM (SELECT pid FROM pg_stat_activity
+                                  WHERE pid <> pg_backend_pid() AND wait_event_type = 'Lock'
+                                    AND query LIKE '%INSERT INTO storyos.memory_captures%'
+                                 OFFSET 0) AS waiting
+                          WHERE pg_terminate_backend(waiting.pid)",
+                        &[],
+                    )
+                    .await
+                    .unwrap(),
+                Some(pid) => admin
+                    .query_opt("SELECT pid FROM pg_stat_activity WHERE pid = $1", &[&pid])
+                    .await
+                    .unwrap(),
             }
-            tokio::time::sleep(std::time::Duration::from_millis(/*millis*/ 10)).await;
+            .map(|row| row.get(/*idx*/ 0));
+            match (stopped, session) {
+                (None, Some(pid)) => stopped = Some(pid),
+                (Some(_), None) => break,
+                _ => tokio::time::sleep(std::time::Duration::from_millis(/*millis*/ 10)).await,
+            }
         }
         admin.batch_execute("ROLLBACK").await.unwrap();
     };
     let (stopped, ()) = tokio::join!(store.claim_due_memory_work(), stop);
     let after_stop = due(&admin, &conversation_id).await;
-    let capture = started(
-        store
-            .claim_due_memory_work()
-            .await
-            .unwrap()
-            .unwrap()
-            .outcome,
-    );
+    let capture = store.claim_due_memory_work().await.unwrap().unwrap();
+    let capture = started(capture.outcome);
     let second = claim_due(&store, &admin, &scope, &conversation_id).await;
     run_capture(&store, &admin, &scope, &capture.run_id).await;
     let captures: i64 = admin
