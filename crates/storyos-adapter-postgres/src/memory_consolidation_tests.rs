@@ -29,7 +29,7 @@ pub(super) async fn capture(
 }
 
 /// One observation of the type `character` whose text is the script lines of `operations`.
-pub(crate) fn scripted(title: &str, operations: &[Value]) -> Value {
+pub(super) fn scripted(title: &str, operations: &[Value]) -> Value {
     let lines: Vec<String> = operations
         .iter()
         .map(|operation| format!("SCRIPT:operation {operation}"))
@@ -37,7 +37,7 @@ pub(crate) fn scripted(title: &str, operations: &[Value]) -> Value {
     json!({ "type": "character", "title": title, "text": format!("脚本。\n{}", lines.join("\n")) })
 }
 
-pub(crate) fn create(entry_type: &str, title: &str, observations: Value) -> Value {
+pub(super) fn create(entry_type: &str, title: &str, observations: Value) -> Value {
     json!({
         "action": "create", "entry": null, "entries": null, "type": entry_type, "title": title,
         "description": "述。", "text": "文。", "observations": observations, "reason": null

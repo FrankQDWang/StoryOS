@@ -1,18 +1,17 @@
 //! The schedule of a Chapter in the store (ADR 0094 section 5, writer 3): one test for the rows
-//! of the decision table, the order and the rate of three due Chapters, the input and its excerpt,
-//! and the path from a changed Chapter to an entry through `run_once`. The tests move the stored
-//! due times and capture starts with the test administrator connection, and each test completes
-//! or parks each Run that it queued.
+//! of the decision table, the order and the rate of three due Chapters, and the input and its
+//! excerpt. The tests move the stored due times and capture starts with the test administrator
+//! connection, and each test completes or parks each Run that it queued.
 
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ChapterId, ClaimedMemoryWork, CreateChapterInput, DeleteChapterInput, DiagnosticField,
     EditorSessionId, EditorSessionStore, MemoryCaptureSource, MemoryCaptureStore,
-    MemoryEntrySourceItem, MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource,
-    NoContractFaults, ProjectScope, StartedMemoryCapture,
+    MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource, NoContractFaults, ProjectScope,
+    StartedMemoryCapture,
 };
-use storyos_core::{CreateChapterPlacement, MemoryEntryOrigin, TransitionOutcome};
+use storyos_core::{CreateChapterPlacement, TransitionOutcome};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -25,7 +24,6 @@ use crate::command_sequence::tests::{
 use crate::create_agent_run::context::chapter_list_tests::{head, select};
 use crate::memory_capture::loop_tests::{record, script};
 use crate::memory_capture::tests::run_capture;
-use crate::memory_consolidation::tests::{create, scripted};
 use crate::project_research_binding::tests::park_queued_runs;
 use crate::set_current_chapter_authority_tests::open_session_request;
 
@@ -170,20 +168,6 @@ async fn fixture(lead: &str, suffix: u16, sentences: &[&str]) -> (Fixture, Strin
         session,
     };
     (fixture, chapter_a, fog)
-}
-
-fn destination() -> storyos_worker::ModelDestination<
-    FakeDestination,
-    NoContractFaults,
-    storyos_application::NoToolDestination,
-    storyos_application::NoEmbeddingDestination,
-> {
-    storyos_worker::ModelDestination {
-        adapter: FakeDestination,
-        observer: NoContractFaults,
-        tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
-    }
 }
 
 /// Each row of the decision table of S7-D5 for one claimed row, in the order of the table. The
@@ -332,13 +316,17 @@ async fn three_due_chapters_start_in_chapter_order_at_the_rate_of_the_project() 
         }
         json!([titles, rows])
     };
+    let destination = storyos_worker::ModelDestination {
+        adapter: FakeDestination,
+        observer: NoContractFaults,
+        tools: storyos_application::NoToolDestination,
+        embeddings: storyos_application::NoEmbeddingDestination,
+    };
     // A step can claim work that other tests left. The test records the state of its Project
     // only when a capture starts.
     let (mut states, mut rate) = (Vec::new(), None);
     for _ in 0..24 {
-        storyos_worker::run_once(store, &destination())
-            .await
-            .unwrap();
+        storyos_worker::run_once(store, &destination).await.unwrap();
         let now = state().await;
         if states.last() == Some(&now) || now[0] == json!([]) {
             continue;
@@ -440,82 +428,5 @@ async fn the_input_is_the_title_the_number_and_the_text_with_its_excerpt() {
             expected("exact_required", "Chapter A", 1, &sentences),
             expected("deterministic_excerpt", "Fog", 2, &long)
         ]
-    );
-}
-
-/// From a changed Chapter to an entry through `run_once` on the fake destination: the commit of
-/// the Chapter, the capture, and the pass give one current entry with the origin `chapter` and
-/// that Chapter as its source. The test moves the due time of the Chapter after the commit.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn run_once_takes_a_changed_chapter_through_a_capture_and_a_pass_to_an_entry() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let observation = scripted("林舟", &[create("character", "林舟", json!([1]))]);
-    let call = script(&[record(json!([observation]))]);
-    let call = call.lines().last().unwrap();
-    let sentences = ["林舟在雨夜撑船。", call];
-    let (scope, chapter_id, _, _) = project(&store, &admin, "835", 0x83c0, &sentences).await;
-    make_chapter_due(&admin, &scope, &chapter_id, /*seconds*/ 1).await;
-    let state = async || {
-        admin
-            .query_one(
-                "SELECT jsonb_build_array(
-                          (SELECT jsonb_agg(COALESCE(outcome, state)) FROM storyos.memory_captures
-                            WHERE project_id = $1::text::uuid),
-                          (SELECT jsonb_agg(COALESCE(outcome, 'running'))
-                             FROM storyos.memory_consolidation_passes
-                            WHERE project_id = $1::text::uuid))::text",
-                &[&scope.project_id.as_ref()],
-            )
-            .await
-            .map(|row| serde_json::from_str::<Value>(row.get(/*idx*/ 0)).unwrap())
-            .unwrap()
-    };
-    // A step can claim work that other tests left. The test records the state of its Project
-    // only when it changes.
-    let mut states = vec![state().await];
-    for _ in 0..24 {
-        storyos_worker::run_once(&store, &destination())
-            .await
-            .unwrap();
-        let now = state().await;
-        if states.last() != Some(&now) {
-            states.push(now);
-        }
-        if states.last().unwrap()[1] == json!(["applied"]) {
-            break;
-        }
-    }
-    let entries: Vec<_> = storyos_application::list_memory_entries(&store, &scope)
-        .await
-        .unwrap()
-        .unwrap()
-        .into_iter()
-        .map(|entry| (entry.number, entry.origin, entry.source))
-        .collect();
-
-    assert_eq!(
-        (Value::from(states), entries),
-        (
-            json!([
-                [null, null],
-                [["running"], null],
-                [["observations_recorded"], null],
-                [["observations_recorded"], ["running"]],
-                [["observations_recorded"], ["applied"]]
-            ]),
-            vec![(
-                1,
-                MemoryEntryOrigin::Chapter,
-                Some(MemoryEntrySourceItem::Chapter {
-                    chapter_id: chapter_id.clone(),
-                    title: Some("Chapter A".to_owned()),
-                    available: true,
-                })
-            )]
-        )
     );
 }

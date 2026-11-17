@@ -47,15 +47,9 @@ fn changed(
     after: &[(String, SystemTime, bool)],
     label: impl Fn(&str) -> &'static str,
 ) -> Vec<(&'static str, bool)> {
-    after
-        .iter()
-        .filter(|row| {
-            !before
-                .iter()
-                .any(|earlier| earlier.0 == row.0 && earlier.1 == row.1)
-        })
-        .map(|row| (label(&row.0), row.2))
-        .collect()
+    let moved = |row: &&(String, SystemTime, bool)| !before.iter().any(|earlier| earlier == *row);
+    let rows = after.iter().filter(moved);
+    rows.map(|row| (label(&row.0), row.2)).collect()
 }
 
 /// One Author Edit that inserts `text` at the start of the Chapter of the Editor Session.
