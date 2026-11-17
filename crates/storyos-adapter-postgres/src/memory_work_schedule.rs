@@ -209,9 +209,10 @@ async fn decide_and_start(
 }
 
 /// The settled messages of each completed Run of the author in the Conversation after the last
-/// Run that a capture with the outcome `observations_recorded` or `no_observation` read, the
-/// oldest first: the author message, each steering input that a RunStep read, and the final
-/// answer text. A Run that is refused, cancelled, or in progress gives no message.
+/// Run that a capture read, the oldest first. That Run is the last Run of the newest capture of the
+/// Conversation with the outcome `observations_recorded` or `no_observation`. The messages are
+/// the author message, each steering input that a RunStep read, and the final answer text. A Run
+/// that is refused, cancelled, or in progress gives no message.
 async fn unread_runs(
     client: &Client,
     keys: &[&(dyn tokio_postgres::types::ToSql + Sync); 3],
@@ -250,7 +251,7 @@ async fn unread_runs(
                         WHERE (capture.owner_user_id, capture.project_id, capture.conversation_id) =
                               (run.owner_user_id, run.project_id, run.conversation_id)
                           AND capture.outcome IN ('observations_recorded', 'no_observation')
-                        ORDER BY capture.last_run_id DESC
+                        ORDER BY capture.capture_id DESC
                         LIMIT 1),
                       '00000000-0000-0000-0000-000000000000'::uuid)
               ORDER BY run.run_id, message.position",
