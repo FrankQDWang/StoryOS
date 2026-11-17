@@ -150,10 +150,12 @@ async fn step<
     }
 }
 
-/// The index work comes after each other claim (ADR 0095 section 4). It does the next step of the
-/// held claim, or it claims the next work and does its first step. The claim stays held while its
-/// steps write rows, so each turn of the loop sends at most one embedding request, and the next
-/// turn claims the other work first. Returns whether it did a step.
+/// The index work comes after each other claim (ADR 0095 section 4). The schedule claim of
+/// background Memory work (S7-D3e) is not in the loop yet, and it goes before this step. The step
+/// does the next step of the held claim, or it claims the next work and does its first step. The
+/// claim stays held while its steps write rows, so each turn of the loop sends at most one
+/// embedding request, and the next turn claims the other work first. Returns whether it did a
+/// step.
 async fn passage_index_step<E: EmbeddingProviderAdapter>(
     store: &impl WorkerStore,
     embeddings: &E,

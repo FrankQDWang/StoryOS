@@ -786,8 +786,14 @@ async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
     wake(&admin, &scope).await;
     let claimed = claim(&store, FAKE_ONLY).await.unwrap();
     assert_eq!(steps(&store, &claimed).await.len(), 4);
+    // A Chapter that a deployment with no embedding configuration made has no work row.
+    let (volume, tree) = volume_and_tree(&admin, &scope, &id).await;
+    let unconfigured = store.clone().with_embedding_registration(None);
+    let two = titled_chapter(&unconfigured, &scope, "f3fc", &volume, "第二章", tree).await;
+    assert_eq!(work(&admin, &scope).await.len(), 1);
 
-    // A loss of the vector rows. The rebuild marks the work with no wait and sends no request.
+    // A loss of the vector rows. The rebuild marks the work with no wait, makes the missing row,
+    // and sends no request.
     admin
         .execute(
             "DELETE FROM storyos.passage_vectors WHERE project_id = $1::text::uuid",
@@ -800,7 +806,7 @@ async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
     assert_eq!(settlements(&admin, &scope).await.len(), 3);
     assert_eq!(
         work(&admin, &scope).await,
-        vec![(id.clone(), 1, 3, 2, false)]
+        vec![(id.clone(), 1, 3, 2, false), (two.clone(), 2, 1, 0, false)]
     );
 
     // The work then makes each row again.
@@ -810,5 +816,8 @@ async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
     }
     assert_eq!(digest_rows(&admin, &scope).await, digests(&texts()));
     assert_eq!(settlements(&admin, &scope).await.len(), 6);
-    assert_eq!(work(&admin, &scope).await, vec![(id, 1, 3, 3, false)]);
+    assert_eq!(
+        work(&admin, &scope).await,
+        vec![(id, 1, 3, 3, false), (two, 2, 1, 1, false)]
+    );
 }

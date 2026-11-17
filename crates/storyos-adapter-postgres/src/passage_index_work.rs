@@ -304,9 +304,11 @@ impl PassageIndexWorkStore for PostgresProjectReader {
         self.fenced(claim, FencedWrite::Release { wait }).await
     }
 
-    /// The runtime role runs the mark in the worker scope. The worker policies of the work table
-    /// give it each row of each Project, and the table has the Embedding Registration and the
-    /// Chapter order of each row, so the mark reads no Chapter.
+    /// The runtime role reads the Projects with an AgentRun in the worker scope: the policy
+    /// `agent_runs_worker_select` gives that scope each Run of each Project. Each Project with an
+    /// embedding use binding has a Run, because `createAgentRun` makes the binding. Then the mark
+    /// of a new binding runs in the Project Scope of each Project, with the Embedding Registration
+    /// of the deployment. So the mark also makes the row of a live Chapter that has none.
     async fn mark_each_passage_index_work(&self) -> Result<u64, ProjectReadError> {
         self.require_release1_storage_activation_proof()
             .await
@@ -314,17 +316,29 @@ impl PassageIndexWorkStore for PostgresProjectReader {
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
         set_worker_scope(&transaction).await?;
-        let marked = transaction
-            .execute(
-                "UPDATE storyos.passage_index_work
-                    SET mark_generation = mark_generation + 1, not_before = clock_timestamp()
-                  WHERE to_regclass('storyos.passage_vectors') IS NOT NULL",
+        let projects = transaction
+            .query(
+                "SELECT DISTINCT owner_user_id::text, project_id::text FROM storyos.agent_runs",
                 &[],
             )
             .await
             .map_err(read_error)?;
         transaction.commit().await.map_err(read_error)?;
-        Ok(marked)
+        for project in &projects {
+            let scope = ProjectScope::new(
+                UserId::new(project.get::<_, String>(/*idx*/ 0)),
+                ProjectId::new(project.get::<_, String>(/*idx*/ 1)),
+            );
+            let transaction = self
+                .begin_serializable_project_command_transaction(&scope)
+                .await
+                .map_err(read_error)?;
+            mark_passage_index_work(&transaction.client, &scope, MarkedChapters::Live)
+                .await
+                .map_err(read_error)?;
+            transaction.commit().await.map_err(read_error)?;
+        }
+        Ok(u64::try_from(projects.len()).unwrap_or(u64::MAX))
     }
 }
 
