@@ -1,5 +1,5 @@
 -- The Release 1 baseline (ADR 0079): one definition of each object of the squashed migration chain.
--- Until the first database that holds data exists, a change can edit this file. The next migration is 0002.
+-- Until the first database that holds data exists, a change can edit this file. The next migration is 0003.
 
 CREATE SCHEMA storyos AUTHORIZATION storyos_owner;
 SET LOCAL ROLE storyos_owner;

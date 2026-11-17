@@ -89,8 +89,8 @@ export function MemorySection({ scope, baseUrl, fetchImpl }: SettingsSectionProp
 }
 
 /**
- * The origin line of an entry. An available Project Conversation is a link to its workspace address with an ordinary
- * page load. A Chapter shows its title as text. An unavailable source has no link.
+ * The origin line of an entry. An available Project Conversation or Chapter is a link to its workspace address with an
+ * ordinary page load. An unavailable source has no link.
  */
 function Origin({ entry, projectId }: { entry: MemoryEntryInspect; projectId: string }) {
   const { source } = entry;
@@ -103,9 +103,8 @@ function Origin({ entry, projectId }: { entry: MemoryEntryInspect; projectId: st
       <span>{SOURCE_UNAVAILABLE}</span>
     </span>;
   }
-  if (source.kind === "conversation") {
-    return <a href={`/projects/${projectId}?conversation=${source.conversation_id}`}
-      data-memory-entry-origin="conversation">{line}</a>;
-  }
-  return <span data-memory-entry-origin="chapter">{line}</span>;
+  const address = source.kind === "conversation"
+    ? `/projects/${projectId}?conversation=${source.conversation_id}`
+    : `/projects/${projectId}?chapter=${source.chapter_id}`;
+  return <a href={address} data-memory-entry-origin={source.kind}>{line}</a>;
 }
