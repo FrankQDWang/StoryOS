@@ -91,7 +91,8 @@ fn each_current_mapping_declares_the_tool_only_when_the_search_by_meaning_is_pos
             )
         );
     }
-    // A background Run gets only the Tools of its kind.
+    // A background Run gets only the Tools of its kind, and a capture does not get the search by
+    // meaning.
     let capture = ToolExposure::compute(&ExposureFacts {
         bound: &[],
         model_registration_revision: AGENT_PLAN_REGISTRATION.revision,
@@ -102,7 +103,12 @@ fn each_current_mapping_declares_the_tool_only_when_the_search_by_meaning_is_pos
     });
     assert_eq!(
         (capture.tools.iter().map(|tool| tool.name)).collect::<Vec<_>>(),
-        ["record_memory_observations"]
+        [
+            "read_chapter",
+            "search_manuscript",
+            "read_memory_entry",
+            "record_memory_observations"
+        ]
     );
 }
 

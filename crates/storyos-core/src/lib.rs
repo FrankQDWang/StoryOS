@@ -33,6 +33,7 @@ mod load_skill;
 mod manuscript_payload;
 mod manuscript_use;
 mod memory_capture;
+mod memory_delete_marks;
 mod memory_entry;
 mod memory_index;
 mod model_output;
@@ -228,8 +229,13 @@ pub use manuscript_payload::{
 };
 pub use manuscript_use::{ManuscriptUse, StoredManuscriptCall, manuscript_uses};
 pub use memory_capture::{
-    CaptureAdmissionFacts, CaptureEnd, CaptureRefusal, CaptureRunEnd, MemoryCaptureAssembly,
-    admit_memory_capture, assemble_memory_capture_context, capture_end,
+    CaptureAdmissionFacts, CaptureEnd, CaptureReferences, CaptureRefusal, CaptureRunEnd,
+    MemoryCaptureAssembly, admit_memory_capture, assemble_capture_references,
+    assemble_memory_capture_context, capture_end, keep_capture_references,
+};
+pub use memory_delete_marks::{
+    MEMORY_DELETE_MARK_CAUSES, MemoryDeleteMark, assemble_memory_delete_marks,
+    memory_delete_marks_text,
 };
 pub use memory_entry::{
     MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference,

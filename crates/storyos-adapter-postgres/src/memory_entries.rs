@@ -5,8 +5,8 @@
 
 use storyos_application::ProjectScope;
 use storyos_core::{
-    CurrentMemoryEntry, LastMemoryVersion, MemoryEntryRead, MemoryEntryState, MemoryEntryType,
-    MemoryIndexEntry, MemoryVersionWrite,
+    CurrentMemoryEntry, LastMemoryVersion, MemoryDeleteMark, MemoryEntryRead, MemoryEntryState,
+    MemoryEntryType, MemoryIndexEntry, MemoryVersionWrite,
 };
 
 fn invalid(message: &'static str) -> Box<dyn std::error::Error + Send + Sync> {
@@ -86,6 +86,59 @@ pub(crate) async fn read_memory_index(
                     .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
                 title: row.get(2),
                 description: row.get(3),
+            })
+        })
+        .collect()
+}
+
+/// The Memory revision of the Project head, with no lock. A Project with no head has the revision
+/// 0.
+pub(crate) async fn memory_head(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    let row = client
+        .query_opt(
+            "SELECT memory_revision::text FROM storyos.project_memory_heads
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await?;
+    row.map_or(Ok(0), |row| numeric(row.get(0)))
+}
+
+/// The marks of the entries that the author deleted, newest first (ADR 0094 section 8): the last
+/// version of each entry, when its state is `deleted` and its cause is a delete by the author. A
+/// capture and the consolidation pass of S7-D4b read them. The read takes no lock.
+pub(crate) async fn read_delete_marks(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+) -> Result<Vec<MemoryDeleteMark>, Box<dyn std::error::Error + Send + Sync>> {
+    let causes = storyos_core::MEMORY_DELETE_MARK_CAUSES;
+    let rows = client
+        .query(
+            "SELECT entry_type, title, description
+               FROM (SELECT DISTINCT ON (memory_entry_id)
+                            memory_revision, state, entry_type, title, description, cause
+                       FROM storyos.memory_entry_versions
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                      ORDER BY memory_entry_id, memory_revision DESC) AS latest
+              WHERE state = 'deleted' AND cause->>'kind' = ANY($3::text[])
+              ORDER BY memory_revision DESC",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &causes.as_slice(),
+            ],
+        )
+        .await?;
+    rows.iter()
+        .map(|row| {
+            Ok(MemoryDeleteMark {
+                entry_type: MemoryEntryType::parse(row.get(0))
+                    .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
+                title: row.get(1),
+                description: row.get(2),
             })
         })
         .collect()
