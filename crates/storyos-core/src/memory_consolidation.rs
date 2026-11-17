@@ -17,8 +17,8 @@ use crate::{
 /// The most RunSteps of one pass: the pass sends one request (ADR 0094 section 6).
 pub const MEMORY_CONSOLIDATION_MAX_RUN_STEPS: u64 = 1;
 
-/// Decides the start of a pass with the admission rule of a capture (S7-D3b): the Project has a
-/// current Model Use Binding, its assistance is available, and the scope of the grant names the
+/// Decides the start of a pass with the admission rule of a capture (S7-D3b). The Project has a
+/// current Model Use Binding, and its assistance is available. The scope of the grant names the
 /// Purpose `memory_consolidation`.
 pub fn admit_memory_consolidation(
     binding: bool,
@@ -171,6 +171,34 @@ pub fn assemble_memory_consolidation_context(
     };
     crate::assemble_memory_delete_marks(&mut record, input.marks);
     record
+}
+
+/// The count of the oldest observations of `input` that the pass takes (ADR 0094 section 6). It is
+/// the largest count whose expected input (ADR 0056) stays below the window after the output
+/// bound of the binding. The other observations wait for the next pass. A binding with no known
+/// window or output bound gives no limit, so the pass takes each observation.
+pub fn pass_observation_count(
+    input: &MemoryConsolidationAssembly<'_>,
+    model_registration_revision: &str,
+    budget_bounds: &str,
+) -> usize {
+    let fits = |count: usize| {
+        let record = assemble_memory_consolidation_context(&MemoryConsolidationAssembly {
+            observations: &input.observations[..count],
+            ..input.clone()
+        });
+        !crate::later_request_too_long(model_registration_revision, budget_bounds, &record, &[])
+    };
+    // The expected input grows with the count, so a binary search finds the largest count.
+    let (mut low, mut high) = (0, input.observations.len());
+    while low < high {
+        let middle = low + (high - low).div_ceil(2);
+        match fits(middle) {
+            true => low = middle,
+            false => high = middle - 1,
+        }
+    }
+    low
 }
 
 /// The items of `lines` in order: each item holds the next lines while its text fits the Context
