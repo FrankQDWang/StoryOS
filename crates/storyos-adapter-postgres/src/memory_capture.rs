@@ -45,8 +45,9 @@ impl MemoryCaptureStore for PostgresProjectReader {
 }
 
 /// Pins the current Model Use Binding, its grant, and its Model Registration, and writes the
-/// queued Run, the capture, and the first RunStep. A refused start writes no row.
-async fn start(
+/// queued Run, the capture, and the first RunStep. A refused start writes no row. The capture of a
+/// Conversation records its current Conversation Memory Settings revision.
+pub(crate) async fn start(
     client: &Client,
     scope: &ProjectScope,
     source: &MemoryCaptureSource,
@@ -128,10 +129,16 @@ async fn start(
         .execute(
             "INSERT INTO storyos.memory_captures
                (owner_user_id, project_id, capture_id, run_id, source_kind, conversation_id,
-                first_run_id, last_run_id, chapter_id, chapter_revision_id)
+                first_run_id, last_run_id, chapter_id, chapter_revision_id,
+                memory_settings_revision)
              SELECT run.owner_user_id, run.project_id, $3::text::uuid, run.run_id,
                     CASE WHEN $5::text IS NULL THEN 'chapter' ELSE 'conversation' END,
-                    $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid, $9::text::uuid
+                    $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid, $9::text::uuid,
+                    (SELECT settings.memory_settings_revision
+                       FROM storyos.conversation_memory_settings AS settings
+                      WHERE (settings.owner_user_id, settings.project_id, settings.conversation_id) =
+                            (run.owner_user_id, run.project_id, $5::text::uuid)
+                        AND COALESCE(settings.is_current, true))
                FROM storyos.agent_runs AS run
               WHERE (run.owner_user_id, run.project_id, run.run_id) =
                     ($1::text::uuid, $2::text::uuid, $4::text::uuid)

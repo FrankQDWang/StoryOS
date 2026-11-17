@@ -66,6 +66,7 @@ mod manuscript_structure;
 mod manuscript_tree;
 mod memory_capture;
 mod memory_entries;
+mod memory_work_schedule;
 mod open_proposal_list;
 mod passage_index;
 mod passage_index_work;
@@ -179,6 +180,7 @@ pub use memory_capture::{
 pub use memory_entries::{
     MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem, list_memory_entries,
 };
+pub use memory_work_schedule::{ClaimedMemoryWork, MemoryWorkOutcome, MemoryWorkScheduleStore};
 pub use model_gateway::{complete_agent_run, complete_agent_run_with_tools};
 pub use model_gateway_ports::{
     AbortRequest, AbortTicket, CacheSetting, CacheUse, CommittedCancellation,
