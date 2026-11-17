@@ -26,7 +26,7 @@ mod admit;
 mod steer_agent_run;
 
 #[path = "command_sequence_tests/background_run_tests.rs"]
-mod background_run;
+pub(crate) mod background_run;
 
 #[path = "command_sequence_tests/replay_tests.rs"]
 mod replay;

@@ -5,9 +5,8 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AgentRunWorkStore, ClaimedAgentRun, ConversationSelection, MemoryCaptureSource,
-    MemoryCaptureStartRefusal, MemoryCaptureStore, ModelProviderAdapter, NoContractFaults,
-    ProjectScope, StartedMemoryCapture, complete_agent_run,
+    ConversationSelection, MemoryCaptureSource, MemoryCaptureStartRefusal, MemoryCaptureStore,
+    NoContractFaults, ProjectScope, StartedMemoryCapture, complete_agent_run,
 };
 use storyos_core::CaptureRefusal;
 use tokio_postgres::Client;
@@ -16,6 +15,7 @@ use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, stores};
 use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_steering::tests::queued;
+use crate::command_sequence::tests::background_run::claim_in_project;
 use crate::command_sequence::tests::seed_project;
 use crate::create_agent_run::context::chapter_list_tests::admitted;
 use crate::memory_entries::tests::{archived_rows, as_runtime};
@@ -87,46 +87,6 @@ async fn started_rows(admin: &Client, started: &StartedMemoryCapture) -> Value {
     serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
 }
 
-/// The next `count` claims of the Worker while the claimable work of each other Project is held.
-/// An earlier test can leave claimable work for the HTTP phase, so the claims do not see it: a
-/// queued Run is paused, and another Run gets a far lease. The helper restores each Run after
-/// the claims.
-pub(crate) async fn claim_beside_other_work(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    count: usize,
-) -> Vec<ClaimedAgentRun> {
-    let hide = "WITH old AS (SELECT run_id, status, lease_expires_at FROM storyos.agent_runs
-                   WHERE project_id <> $1::text::uuid
-                     AND status IN ('queued', 'claimed', 'cancelled'))
-                UPDATE storyos.agent_runs AS run
-                   SET status = CASE old.status WHEN 'queued' THEN 'paused' ELSE old.status END,
-                       lease_expires_at = CASE old.status WHEN 'queued' THEN NULL
-                                          ELSE 'infinity'::timestamptz END
-                  FROM old WHERE run.run_id = old.run_id
-             RETURNING old.run_id::text, old.status, old.lease_expires_at::text";
-    let hidden = admin.query(hide, &[&scope.project_id.as_ref()]).await;
-    let hidden = hidden.unwrap();
-    let mut claims = Vec::new();
-    for _ in 0..count {
-        claims.push(store.claim_next_agent_run(FakeDestination::ADAPTERS).await);
-    }
-    let restore = "UPDATE storyos.agent_runs AS run
-                      SET status = old.status, lease_expires_at = old.lease::timestamptz
-                     FROM unnest($1::text[], $2::text[], $3::text[]) AS old(run_id, status, lease)
-                    WHERE run.run_id = old.run_id::uuid";
-    let column = |idx| -> Vec<Option<String>> { hidden.iter().map(|row| row.get(idx)).collect() };
-    let values = [column(0), column(1), column(2)];
-    let params: [&(dyn tokio_postgres::types::ToSql + Sync); 3] =
-        [&values[0], &values[1], &values[2]];
-    admin.execute(restore, &params).await.unwrap();
-    claims
-        .into_iter()
-        .map(|claim| claim.unwrap().unwrap())
-        .collect()
-}
-
 /// A start writes the queued Run, the capture, and the first RunStep. The Worker claims the capture
 /// Run after the earlier Run of the author, and the empty list of the fake settles it.
 #[tokio::test]
@@ -143,9 +103,12 @@ async fn a_started_capture_has_its_rows_and_the_worker_claims_it_after_the_run_o
     let new = ConversationSelection::New;
     let author = admitted(&store, &scope, &chapter_id, "fd2", "Help.", new).await;
     let queued_rows = started_rows(&admin, &started).await;
-    let claims = claim_beside_other_work(&store, &admin, &scope, 2).await;
+    let claims = [
+        claim_in_project(&store, &scope).await,
+        claim_in_project(&store, &scope).await,
+    ];
     let mut claimed = Vec::new();
-    for claim in claims {
+    for claim in claims.map(Option::unwrap) {
         let adapter = FakeDestination;
         complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
             .await
