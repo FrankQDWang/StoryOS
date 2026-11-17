@@ -161,7 +161,8 @@ fn the_intake_takes_a_question_and_terms_at_their_bounds() {
 }
 
 /// The refusal table of ADR 0095 section 1: an intake refusal of the field, and
-/// `hybrid_search_unavailable` when the configuration or the vector store is not available.
+/// `hybrid_search_unavailable` when the configuration or the vector store is not available, or
+/// when the admission refuses the embedding request of the question.
 #[test]
 fn the_host_refuses_a_call_with_no_configuration_or_no_vector_store() {
     let refusal = |refused: IntakeRefusal| crate::CallValidationRefusal::Intake(refused).label();
@@ -173,6 +174,15 @@ fn the_host_refuses_a_call_with_no_configuration_or_no_vector_store() {
             admit_hybrid_search(true, true),
             admit_hybrid_search(false, true),
             admit_hybrid_search(true, false),
+            [
+                crate::EmbeddingRefusal::NotConfigured,
+                crate::EmbeddingRefusal::BindingAbsent,
+                crate::EmbeddingRefusal::DisclosureOutsideGrant,
+                crate::EmbeddingRefusal::InputOutOfBounds,
+                crate::EmbeddingRefusal::CredentialUnavailable,
+                crate::EmbeddingRefusal::UnsupportedRequest,
+            ]
+            .map(HybridSearchRefusal::of_embedding),
             unavailable.label(),
             unavailable.result().text,
         ),
@@ -182,6 +192,7 @@ fn the_host_refuses_a_call_with_no_configuration_or_no_vector_store() {
             Ok(()),
             Err(unavailable),
             Err(unavailable),
+            [unavailable; 6],
             "hybrid_search_unavailable",
             "The Host refused this call because the search by meaning is not available now: use \
              search_manuscript, so no result is available, and this is not an empty result."
@@ -191,10 +202,10 @@ fn the_host_refuses_a_call_with_no_configuration_or_no_vector_store() {
 }
 
 /// With no vector of the question, the result is the exact-term list, and its first line says
-/// that the search by meaning was not available. The result has the class of a manuscript
-/// search.
+/// that the search by meaning was not available. With the nearest rows, the result joins the two
+/// lists and has no such line. The result has the class of a manuscript search.
 #[test]
-fn the_result_with_no_question_vector_is_the_exact_term_list_after_one_line() {
+fn the_result_joins_the_vector_list_or_says_that_the_search_by_meaning_was_not_available() {
     let chapter = ChapterPassages {
         chapter_id: "chapter-1".to_owned(),
         title: "渡口".to_owned(),
@@ -209,14 +220,28 @@ fn the_result_with_no_question_vector_is_the_exact_term_list_after_one_line() {
     };
     let terms = PassageTerms::new(&["林雪".to_owned()]).unwrap();
     let none = PassageTerms::new(&[]).unwrap();
+    // The nearest row of the question is the first passage, which has no term. The two passages
+    // have equal scores, so they go in manuscript order.
+    let nearest = [crate::NearestPassage {
+        chapter_id: "chapter-1".to_owned(),
+        passage_digest: "sha256:0".to_owned(),
+    }];
+    let places = |text: String| {
+        let lines = (text.lines().filter(|line| line.starts_with("[block"))).map(str::to_owned);
+        (
+            lines.collect::<Vec<_>>(),
+            text.starts_with(NO_SEARCH_BY_MEANING),
+        )
+    };
 
     assert_eq!(
         (
-            hybrid_search_result(std::slice::from_ref(&chapter), &terms, "call-1").text,
-            (hybrid_search_result(&[chapter], &none, "call-1").text).starts_with(&format!(
+            hybrid_search_result(std::slice::from_ref(&chapter), None, &terms, "call-1").text,
+            (hybrid_search_result(std::slice::from_ref(&chapter), None, &none, "call-1").text).starts_with(&format!(
                 "{NO_SEARCH_BY_MEANING}\n{{\"passages\":0,\"passages_returned\":0,\"terms\":[]}}\n"
             )),
             crate::host_tool_result_class(&HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC),
+            places(hybrid_search_result(&[chapter], Some(&nearest), &terms, "call-1").text),
         ),
         (
             format!(
@@ -226,6 +251,7 @@ fn the_result_with_no_question_vector_is_the_exact_term_list_after_one_line() {
             ),
             true,
             ContextSourceClass::ManuscriptSearchResult,
+            (vec!["[block 1]".to_owned(), "[block 2]".to_owned()], false),
         )
     );
 }

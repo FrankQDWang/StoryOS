@@ -7,11 +7,11 @@ use storyos_application::{
     AgentRunWorkStore, ClaimedAgentRun, ClaimedArchiveExport, ClaimedExportWork,
     ClaimedReadableExport, CompleteAgentRun, CompleteAgentRunError, CompleteArchiveExport,
     CompleteArchiveExportError, CompleteReadableExport, CompleteReadableExportError,
-    ContractFaultObserver, DiagnosticField, DiagnosticId, EmbeddingProviderAdapter,
-    ExportWorkStore, GatewayClock, ModelDispatchStore, ModelProviderAdapter, ProjectReadError,
-    SqlState, ToolDestinationAdapter, ToolDispatchStore, claim_next_agent_run,
-    claim_next_export_work, complete_agent_run_with_tools, complete_archive_export,
-    complete_readable_export,
+    ContractFaultObserver, DiagnosticField, DiagnosticId, EmbeddingDispatchStore,
+    EmbeddingProviderAdapter, ExportWorkStore, GatewayClock, ModelDispatchStore,
+    ModelProviderAdapter, ProjectReadError, SqlState, ToolDestinationAdapter, ToolDispatchStore,
+    claim_next_agent_run, claim_next_export_work, complete_agent_run_with_destinations,
+    complete_archive_export, complete_readable_export,
 };
 
 const ATTEMPTS: u64 = 4;
@@ -19,12 +19,20 @@ const SERIALIZATION_FAILURE: &str = "40001";
 
 /// Combined persistence port for the packaged Worker loop.
 pub trait WorkerStore:
-    ExportWorkStore + AgentRunWorkStore + ModelDispatchStore + ToolDispatchStore
+    ExportWorkStore
+    + AgentRunWorkStore
+    + ModelDispatchStore
+    + ToolDispatchStore
+    + EmbeddingDispatchStore
 {
 }
 
 impl<T> WorkerStore for T where
-    T: ExportWorkStore + AgentRunWorkStore + ModelDispatchStore + ToolDispatchStore
+    T: ExportWorkStore
+        + AgentRunWorkStore
+        + ModelDispatchStore
+        + ToolDispatchStore
+        + EmbeddingDispatchStore
 {
 }
 
@@ -100,7 +108,12 @@ pub async fn claim_only<A: ModelProviderAdapter>(
     Ok(())
 }
 
-async fn step<A: ModelProviderAdapter, O: ContractFaultObserver, T: ToolDestinationAdapter, E>(
+async fn step<
+    A: ModelProviderAdapter,
+    O: ContractFaultObserver,
+    T: ToolDestinationAdapter,
+    E: EmbeddingProviderAdapter,
+>(
     store: &impl WorkerStore,
     destination: &ModelDestination<A, O, T, E>,
 ) -> bool {
@@ -207,7 +220,7 @@ async fn agent_run_claim<
     A: ModelProviderAdapter,
     O: ContractFaultObserver,
     T: ToolDestinationAdapter,
-    E,
+    E: EmbeddingProviderAdapter,
 >(
     store: &impl WorkerStore,
     destination: &ModelDestination<A, O, T, E>,
@@ -217,10 +230,11 @@ async fn agent_run_claim<
     retry(
         policy,
         || {
-            complete_agent_run_with_tools(
+            complete_agent_run_with_destinations(
                 store,
                 &destination.adapter,
                 &destination.tools,
+                &destination.embeddings,
                 &destination.observer,
                 &RuntimeClock,
                 claim,
