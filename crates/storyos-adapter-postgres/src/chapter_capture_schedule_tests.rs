@@ -9,7 +9,7 @@ use storyos_application::{
     ChapterId, ClaimedMemoryWork, CreateChapterInput, DeleteChapterInput, DiagnosticField,
     EditorSessionId, EditorSessionStore, MemoryCaptureSource, MemoryCaptureStore,
     MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource, NoContractFaults, ProjectScope,
-    StartedMemoryCapture,
+    StartedMemoryCapture, complete_agent_run,
 };
 use storyos_core::{CreateChapterPlacement, TransitionOutcome};
 use tokio_postgres::Client;
@@ -17,7 +17,7 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::stores;
 use crate::agent_run_read_chapter::tests::{project, write_blocks};
-use crate::agent_run_steering::tests::queued;
+use crate::agent_run_steering::tests::{cancellation, claim_duties, queued};
 use crate::command_sequence::tests::{
     CREATE_CHAPTER, DELETE_CHAPTER, create_chapter, delete_chapter, issued,
 };
@@ -253,31 +253,70 @@ async fn a_claimed_chapter_row_follows_the_rows_of_the_decision_table() {
     );
 }
 
-/// A Project whose Run of the author did not complete holds the row of a changed Chapter.
+/// A Project with no completed Run of the author gets no background work: a Project whose one Run
+/// is queued and a Project whose one Run was cancelled hold the row of a changed Chapter. Neither
+/// gets a capture, sends a request, or writes a grant.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_project_with_no_completed_run_holds_the_row() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let (store, admin) = stores().await;
-    let (scope, chapter_id, _) = queued(&store, "836").await;
-    park_queued_runs(&admin, &scope).await;
-    let request = open_session_request(&store, &scope, "83d0").await;
-    store.create_editor_session(&request).await.unwrap();
-    let session = request.editor_session_id.as_ref().to_owned();
-    let f = Fixture {
-        store,
-        admin,
-        scope,
-        session,
-    };
-    f.edit((1, 0x83d1), &chapter_id, &["雨。"]).await;
+    let mut projects = Vec::new();
+    for (lead, suffix, cancel) in [("836", 0x83d0, false), ("89a", 0x89e0, true)] {
+        let (store, admin) = stores().await;
+        let (scope, chapter_id, run_id) = queued(&store, lead).await;
+        if cancel {
+            let cancel = cancellation(&store, &scope, suffix + 2, &run_id).await;
+            let cancelled = store.cancel_agent_run(&cancel.envelope, &cancel.input);
+            cancelled.await.unwrap();
+            if let Some(claim) = claim_duties(&admin, &scope, &run_id).await {
+                let clock = &crate::agent_run_dispatch::tests::RuntimeClock;
+                let destination = (&FakeDestination, &NoContractFaults);
+                let duties =
+                    complete_agent_run(&store, destination.0, destination.1, clock, &claim);
+                duties.await.unwrap();
+            }
+        }
+        park_queued_runs(&admin, &scope).await;
+        let request = open_session_request(&store, &scope, &format!("{suffix:04x}")).await;
+        store.create_editor_session(&request).await.unwrap();
+        let session = request.editor_session_id.as_ref().to_owned();
+        let f = Fixture {
+            store,
+            admin,
+            scope,
+            session,
+        };
+        let counts = async || {
+            let counts = "SELECT jsonb_build_array(
+                                (SELECT count(*) FROM storyos.memory_captures WHERE project_id = $1::text::uuid),
+                                (SELECT count(*) FROM storyos.model_attempts WHERE project_id = $1::text::uuid),
+                                (SELECT count(*) FROM storyos.project_destination_grants
+                                  WHERE project_id = $1::text::uuid))::text";
+            let project_id = f.scope.project_id.as_ref();
+            let row = f.admin.query_one(counts, &[&project_id]).await.unwrap();
+            serde_json::from_str::<Value>(row.get(/*idx*/ 0)).unwrap()
+        };
+        let before = counts().await;
+        f.edit((1, suffix + 1), &chapter_id, &["雨。"]).await;
+        let decision = f.decide(&chapter_id).await;
+        let after = counts().await;
+        projects.push((
+            decision,
+            after[0].clone(),
+            after[1].clone(),
+            before[2] == after[2],
+        ));
+    }
 
-    assert_eq!(
-        f.decide(&chapter_id).await,
-        ("no_completed_run", json!([true, null]))
+    let held = (
+        ("no_completed_run", json!([true, null])),
+        json!(0),
+        json!(0),
+        true,
     );
+    assert_eq!(projects, [held.clone(), held]);
 }
 
 /// Three due Chapters start one capture each, the first in Chapter order first, and not in the
@@ -433,6 +472,9 @@ async fn a_locked_row_of_an_earlier_chapter_stays_first_in_order() {
         )
     );
 }
+
+#[path = "chapter_capture_release_tests.rs"]
+mod release_tests;
 
 /// The context item of the first RunStep of the capture Run `run_id`: its projection mode and its
 /// content. The capture row has the Chapter and the head Revision of the Chapter.

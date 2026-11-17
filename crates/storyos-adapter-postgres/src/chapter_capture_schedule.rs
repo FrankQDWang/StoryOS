@@ -88,6 +88,54 @@ pub(crate) async fn mark_due_after_capture(
         .map_err(complete_database_error)
 }
 
+/// Makes each `held` row of a Chapter of the Project due by the rule of Core, in the transaction of
+/// the settlement of the completed Run of the author `claim`. A completed Run shows that the
+/// Project has a binding, a grant, and an available assistance. A background Run releases no row.
+pub(crate) async fn release_held(
+    client: &Client,
+    claim: &ClaimedAgentRun,
+) -> Result<(), CompleteAgentRunError> {
+    let scope = &claim.project_scope;
+    let held = client
+        .query(
+            "SELECT work.source_id::text,
+                    (SELECT max(commit.committed_at) FROM storyos.authoritative_commits AS commit
+                      WHERE (commit.owner_user_id, commit.project_id,
+                             commit.manuscript_object_id) =
+                            (work.owner_user_id, work.project_id, work.source_id)),
+                    (SELECT max(capture.started_at) FROM storyos.memory_captures AS capture
+                      WHERE (capture.owner_user_id, capture.project_id, capture.chapter_id) =
+                            (work.owner_user_id, work.project_id, work.source_id))
+               FROM storyos.memory_work_schedules AS work
+               JOIN storyos.agent_runs AS run
+                 ON (run.owner_user_id, run.project_id) = (work.owner_user_id, work.project_id)
+              WHERE (run.owner_user_id, run.project_id, run.run_id) =
+                    ($1::text::uuid, $2::text::uuid, $3::text::uuid)
+                AND run.run_kind = 'author' AND work.work_kind = $4 AND work.held
+                FOR UPDATE OF work",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &claim.run_id,
+                &CHAPTER_CAPTURE,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    for row in held {
+        let chapter_id: String = row.get(/*idx*/ 0);
+        // A row has a commit of its Chapter, because a commit writes the row.
+        let Some(committed_at) = row.get::<_, Option<SystemTime>>(/*idx*/ 1) else {
+            continue;
+        };
+        let due_at = storyos_core::chapter_capture_due(committed_at, row.get(/*idx*/ 2));
+        set_row(client, scope, &chapter_id, (false, Some(due_at)))
+            .await
+            .map_err(complete_database_error)?;
+    }
+    Ok(())
+}
+
 /// Inserts the row of the Chapter with `due_at`, or moves the due time of a row that is not
 /// `held`.
 async fn write_due(
@@ -171,8 +219,10 @@ pub(crate) async fn decide_and_start(
         .ok_or_else(|| missing("the claimed Chapter row is missing"))?;
     let chapter_id = due[turn.first].clone();
     if chapter_id != claimed {
-        set_row(client, scope, claimed, (false, Some(claimed_due))).await?;
-        set_row(client, scope, &chapter_id, (false, None)).await?;
+        let claimed_row = set_row(client, scope, claimed, (false, Some(claimed_due))).await;
+        claimed_row.map_err(read_error)?;
+        let chosen_row = set_row(client, scope, &chapter_id, (false, None)).await;
+        chosen_row.map_err(read_error)?;
     }
     let read_id = ChapterId::new(chapter_id.clone());
     let extent = LiveChapterReadExtent::CurrentChapter {
@@ -301,13 +351,14 @@ async fn apply(
     chapter_id: &str,
     skip: ChapterCaptureSkip,
 ) -> Result<(), ProjectReadError> {
-    match skip.row_change() {
+    let changed = match skip.row_change() {
         ChapterRowChange::DueEmpty => Ok(()),
         ChapterRowChange::DueAt(permitted) => {
             set_row(client, scope, chapter_id, (false, Some(permitted))).await
         }
         ChapterRowChange::Held => set_row(client, scope, chapter_id, (true, None)).await,
-    }
+    };
+    changed.map_err(read_error)
 }
 
 fn missing(message: &'static str) -> ProjectReadError {
@@ -320,7 +371,7 @@ async fn set_row(
     scope: &ProjectScope,
     chapter_id: &str,
     (held, due_at): (bool, Option<SystemTime>),
-) -> Result<(), ProjectReadError> {
+) -> Result<(), tokio_postgres::Error> {
     let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
     client
         .execute(
@@ -338,7 +389,6 @@ async fn set_row(
         )
         .await
         .map(|_| ())
-        .map_err(read_error)
 }
 
 #[cfg(test)]
