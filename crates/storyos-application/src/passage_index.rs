@@ -135,7 +135,8 @@ pub async fn index_chapter_passages(
             .await?;
         return Ok(PassageIndexResult::ChapterNotLive { removed });
     };
-    let PassagePlan { current, stale } = plan_passages(&chapter, configured.revision, &facts.stored);
+    let PassagePlan { current, stale } =
+        plan_passages(&chapter, configured.revision, &facts.stored);
     let stored: BTreeSet<&PassageVectorKey> = facts.stored.iter().collect();
     let mut report = PassageIndexReport {
         passages: current.len(),

@@ -185,7 +185,11 @@ async fn step(
             None,
         ),
     };
-    if !plan.stale.is_empty() && !store.remove_fenced_passage_vectors(claim, &plan.stale).await? {
+    if !plan.stale.is_empty()
+        && !store
+            .remove_fenced_passage_vectors(claim, &plan.stale)
+            .await?
+    {
         return Ok(PassageIndexStep::StaleFence);
     }
     let next = plan
@@ -196,9 +200,11 @@ async fn step(
         let completed = store
             .complete_passage_index_work(claim, PASSAGE_CUT_REVISION)
             .await?;
-        return Ok(completed
-            .then_some(PassageIndexStep::Completed)
-            .unwrap_or(PassageIndexStep::StaleFence));
+        return Ok(if completed {
+            PassageIndexStep::Completed
+        } else {
+            PassageIndexStep::StaleFence
+        });
     };
     let registration = registrations
         .iter()

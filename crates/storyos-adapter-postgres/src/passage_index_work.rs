@@ -96,7 +96,10 @@ pub(crate) async fn mark_passage_index_work(
 }
 
 /// The fence check of a claim in the Project Scope of the claim. It starts the lease again.
-async fn hold_fence(client: &Client, claim: &ClaimedPassageIndex) -> Result<bool, ProjectReadError> {
+async fn hold_fence(
+    client: &Client,
+    claim: &ClaimedPassageIndex,
+) -> Result<bool, ProjectReadError> {
     let held = client
         .execute(
             "UPDATE storyos.passage_index_work
@@ -160,7 +163,13 @@ impl PostgresProjectReader {
                                 lease_expires_at = NULL
                           WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                             AND chapter_id = $3::text::uuid",
-                        &[work[0], work[1], work[2], &claim.mark_generation, &cut_revision],
+                        &[
+                            work[0],
+                            work[1],
+                            work[2],
+                            &claim.mark_generation,
+                            &cut_revision,
+                        ],
                     )
                     .await
                     .map_err(read_error)?;

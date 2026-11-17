@@ -132,9 +132,8 @@ pub(crate) async fn delete_passage_vectors(
     chapter_id: &str,
     keys: &[PassageVectorKey],
 ) -> Result<u64, ProjectReadError> {
-    let column = |value: fn(&PassageVectorKey) -> &str| -> Vec<&str> {
-        keys.iter().map(value).collect()
-    };
+    let column =
+        |value: fn(&PassageVectorKey) -> &str| -> Vec<&str> { keys.iter().map(value).collect() };
     client
         .execute(
             "DELETE FROM storyos.passage_vectors AS vector
