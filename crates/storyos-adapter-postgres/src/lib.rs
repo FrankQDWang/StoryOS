@@ -173,6 +173,7 @@ mod open_block_proposal;
 mod open_proposal_list;
 mod ordinary_passage_targets;
 mod passage_collection;
+mod passage_ranking;
 mod passage_vectors;
 mod pause_agent_run;
 mod pinned_export_source;

@@ -65,6 +65,7 @@ pub use ordinary_passage_request::{
 };
 mod open_block_proposal;
 mod passage_cut;
+mod passage_ranking;
 mod project_archive;
 mod project_export;
 mod readable_export;
@@ -254,6 +255,12 @@ pub use open_block_proposal::{
 pub use passage_cut::{
     PASSAGE_CHARACTER_LIMIT, PASSAGE_CUT_REVISION, Passage, PassageBlock, cut_passages,
     passage_embedding_text,
+};
+pub use passage_ranking::{
+    ChapterPassages, LocatedPassage, NearestPassage, PASSAGE_FUSION_CONSTANT, PASSAGE_LIST_LIMIT,
+    PASSAGE_RESULT_LIMIT, PASSAGE_TERM_LIMIT, PASSAGE_TERM_MAX_CHARS, PassagePlace, PassageTerms,
+    PassageTermsRefusal, RankingBlock, RankingChapter, admit_passage_ranking, current_passages,
+    exact_term_list, fuse_passage_lists, vector_list,
 };
 pub use project_archive::{
     ARCHIVE_ENTRY_DIGEST_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,

@@ -66,6 +66,7 @@ mod manuscript_tree;
 mod memory_entries;
 mod open_proposal_list;
 mod passage_index;
+mod passage_ranking;
 mod pinned_export_source;
 mod project_activity;
 mod project_command;
@@ -189,6 +190,9 @@ pub use passage_index::{
     ChapterPassageSource, PassageIndexFacts, PassageIndexFailure, PassageIndexReport,
     PassageIndexResult, PassageVectorKey, PassageVectorRow, PassageVectorStore,
     index_chapter_passages,
+};
+pub use passage_ranking::{
+    PassageRankingFacts, PassageRankingStore, QuestionVector, rank_manuscript_passages,
 };
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,
