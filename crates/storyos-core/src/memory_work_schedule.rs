@@ -117,7 +117,8 @@ pub fn consolidation_due(
 /// The facts of one claimed consolidation row of a Project.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConsolidationFacts {
-    /// A Memory Observation of the Project waits.
+    /// An observation of a request waits in the Project, or a conflict item waits and the Project
+    /// has a current entry.
     pub observation_waits: bool,
     /// A pass of the Project is in progress.
     pub pass_in_progress: bool,

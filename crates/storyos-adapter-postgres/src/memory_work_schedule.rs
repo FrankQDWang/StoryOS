@@ -278,7 +278,9 @@ async fn claim_and_decide(
 }
 
 /// Decides for the consolidation row of the Project and starts one pass or none. A refused start
-/// writes no row, and the empty due time stays.
+/// writes no row, and the empty due time stays. A pass needs an observation of the request, or a
+/// current entry for the conflicts that wait (ADR 0094 section 7). With neither, the request has
+/// no input, so no pass starts and the conflicts wait.
 async fn decide_and_start_pass(
     client: &PooledClient,
     scope: &ProjectScope,
@@ -287,7 +289,15 @@ async fn decide_and_start_pass(
         .query_one(
             "SELECT EXISTS (SELECT 1 FROM storyos.memory_observations
                              WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
-                               AND state = 'waiting'),
+                               AND state = 'waiting'
+                               AND (kind = 'observation' OR EXISTS (
+                                     SELECT 1 FROM (SELECT DISTINCT ON (memory_entry_id) state
+                                                      FROM storyos.memory_entry_versions
+                                                     WHERE (owner_user_id, project_id) =
+                                                           ($1::text::uuid, $2::text::uuid)
+                                                     ORDER BY memory_entry_id, memory_revision DESC)
+                                                AS latest
+                                      WHERE latest.state = 'current'))),
                     EXISTS (SELECT 1 FROM storyos.memory_consolidation_passes
                              WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
                                AND outcome IS NULL)",
