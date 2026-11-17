@@ -1,10 +1,12 @@
 //! The manuscript search script of the fake model (ADR 0095 section 1). An author message whose
 //! first line is `SCRIPT:search_manuscript <query>` gets one `search_manuscript` call with the
-//! rest of the line as its query in the first request. Each later line
-//! `SCRIPT:search_manuscript <query>` or `SCRIPT:read_chapter <number>` of the message adds one
-//! more call to the same response, in line order. The call identifiers are
-//! `call_search_manuscript_<n>` and `call_read_chapter_<n>`, where `<n>` is the position of the
-//! call in the response. Each other request gets the usual script of the fake model, so the next
+//! rest of the line as its query in the first request. A first line
+//! `SCRIPT:hybrid_search_manuscript <question>` gets one `hybrid_search_manuscript` call with the
+//! rest of the line as its question and with no term, and each part `|<term>` after the question
+//! adds a term. Each later line of these two kinds or `SCRIPT:read_chapter <number>` of the
+//! message adds one more call to the same response, in line order. The call identifiers are
+//! `call_search_manuscript_<n>`, `call_hybrid_search_manuscript_<n>`, and
+//! `call_read_chapter_<n>`, where `<n>` is the position of the call in the response. Each other request gets the usual script of the fake model, so the next
 //! request calls `finish`. The script can follow the compaction prefix of the Host fake (ADR
 //! 0093).
 
@@ -15,29 +17,39 @@ use crate::create_plan::FakeCreate;
 use crate::research_plan::function_call;
 
 const SEARCH: &str = "SCRIPT:search_manuscript ";
+const HYBRID: &str = "SCRIPT:hybrid_search_manuscript ";
 const READ: &str = "SCRIPT:read_chapter ";
 
 /// The scripted response of `request`, or `None` when the usual script applies.
 pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
     let message = crate::script_message(&request.author_message);
-    if !message.starts_with(SEARCH)
+    if !(message.starts_with(SEARCH) || message.starts_with(HYBRID))
         || !request.tool_outputs.is_empty()
         || request.tool_choice == ToolChoice::None
     {
         return None;
     }
     let calls = message.lines().filter_map(|line| {
-        match (line.strip_prefix(SEARCH), line.strip_prefix(READ)) {
-            (Some(query), _) => Some((
+        if let Some(query) = line.strip_prefix(SEARCH) {
+            return Some((
                 ToolOperation::SearchManuscript,
                 serde_json::json!({ "query": query }).to_string(),
-            )),
-            (_, Some(number)) => Some((
-                ToolOperation::ReadChapter,
-                crate::read_chapter_plan::arguments(number),
-            )),
-            (None, None) => None,
+            ));
         }
+        if let Some(rest) = line.strip_prefix(HYBRID) {
+            let mut parts = rest.split('|');
+            let question = parts.next().unwrap_or_default();
+            let terms: Vec<&str> = parts.collect();
+            return Some((
+                ToolOperation::HybridSearchManuscript,
+                serde_json::json!({ "question": question, "terms": terms }).to_string(),
+            ));
+        }
+        let number = line.strip_prefix(READ)?;
+        Some((
+            ToolOperation::ReadChapter,
+            crate::read_chapter_plan::arguments(number),
+        ))
     });
     let items = calls
         .enumerate()

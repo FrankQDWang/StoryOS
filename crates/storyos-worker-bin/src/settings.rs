@@ -74,4 +74,13 @@ impl WorkerSettings {
         }
         Ok(loaded)
     }
+    /// The Embedding Registration of the deployment, or `None` when the deployment has no
+    /// embedding configuration. `load` refused each other value.
+    pub(crate) fn embedding_registration(
+        &self,
+    ) -> Option<&'static storyos_core::EmbeddingRegistration> {
+        let destination =
+            storyos_core::DestinationKind::parse(self.embedding_destination.as_deref()?)?;
+        Some(storyos_core::EmbeddingRegistration::of(destination))
+    }
 }

@@ -59,6 +59,10 @@ pub struct ExposureFacts<'a> {
     /// Whether the Conversation Memory Settings that the Run captured have `use_enabled`. A Run
     /// with no settings, as a background Run, has no use (ADR 0094 section 4).
     pub memory_use: bool,
+    /// Whether the search by meaning is possible for the Run: the deployment has an embedding
+    /// configuration, the vector store is available, and the Project of the Run has the
+    /// embedding use binding of that configuration (ADR 0095 section 4).
+    pub hybrid_search: bool,
     /// The kind of the Run. A background Run gets only the Tools of its kind (ADR 0094 section 5).
     pub run_kind: AgentRunKind,
 }
@@ -90,6 +94,7 @@ impl ExposureFacts<'_> {
             // not depend on the Conversation Memory Settings (ADR 0094 section 5).
             ToolOperation::WriteMemory => true,
             ToolOperation::ReadMemoryEntry | ToolOperation::SearchMemory => self.memory_use,
+            ToolOperation::HybridSearchManuscript => self.hybrid_search,
             // Only a capture records observations.
             ToolOperation::RecordMemoryObservations => false,
             // The web research Tools are Tools of the research binding, not Host Tools.
@@ -137,6 +142,7 @@ impl ToolOperation {
             Self::ReadSkillResource => "read_skill_resource",
             Self::ReadChapter => "read_chapter",
             Self::SearchManuscript => "search_manuscript",
+            Self::HybridSearchManuscript => "hybrid_search_manuscript",
             Self::WriteMemory => "write_memory",
             Self::ReadMemoryEntry => "read_memory_entry",
             Self::SearchMemory => "search_memory",
@@ -166,6 +172,7 @@ impl ToolOperation {
             Self::ReadSkillResource => crate::read_skill_resource::DESCRIPTION,
             Self::ReadChapter => crate::read_chapter::DESCRIPTION,
             Self::SearchManuscript => crate::search_manuscript::DESCRIPTION,
+            Self::HybridSearchManuscript => crate::hybrid_search_manuscript::DESCRIPTION,
             Self::WriteMemory => crate::write_memory::DESCRIPTION,
             Self::ReadMemoryEntry => crate::read_memory_entry::DESCRIPTION,
             Self::SearchMemory => crate::search_memory::DESCRIPTION,
@@ -220,6 +227,7 @@ impl ExposedTool {
             ToolOperation::ReadSkillResource => crate::read_skill_resource::parameters(),
             ToolOperation::ReadChapter => crate::read_chapter::parameters(),
             ToolOperation::SearchManuscript => crate::search_manuscript::parameters(),
+            ToolOperation::HybridSearchManuscript => crate::hybrid_search_manuscript::parameters(),
             ToolOperation::WriteMemory => crate::write_memory::parameters(),
             ToolOperation::ReadMemoryEntry => crate::read_memory_entry::parameters(),
             ToolOperation::SearchMemory => crate::search_memory::parameters(),

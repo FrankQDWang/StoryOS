@@ -53,9 +53,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         require_release1_storage_activation_proof(database_url).await,
         "storage_activation",
     );
-    let store = PostgresProjectReader::new(database_url).with_readable_export_lease_ttl(
-        storyos_worker::readable_export_lease_ttl(settings.export_lease_ttl_secs),
-    );
+    let store = PostgresProjectReader::new(database_url)
+        .with_readable_export_lease_ttl(storyos_worker::readable_export_lease_ttl(
+            settings.export_lease_ttl_secs,
+        ))
+        .with_embedding_registration(settings.embedding_registration());
     if arguments.iter().any(|argument| argument == "--claim-only") {
         or_exit(
             storyos_worker::claim_only::<WorkerAdapters>(&store).await,
