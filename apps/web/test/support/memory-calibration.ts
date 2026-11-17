@@ -121,14 +121,14 @@ async function captureThenPass(projectId: string, label: string, source: Source,
 }
 const snapshots: Record<string, unknown> = {};
 
-type Story = TestProject & { chapterIds: string[]; editorSessionId: string; intent: number };
+type Story = TestProject & { chapterIds: string[]; editorSessionId: string; intent: number; current: string };
 
 // One Run of the author, to its settlement.
 async function authorRun(story: Story, text: string, conversationId?: string): Promise<string> {
   const conversation = conversationId === undefined ? { kind: "new" as const }
     : { kind: "existing" as const, conversation_id: conversationId };
   const created = await paced("createAgentRun", () => story.send("createAgentRun", {
-    request: runRequest(story.chapterIds[0] ?? "", story.key(), text, conversation) }));
+    request: runRequest(story.current, story.key(), text, conversation) }));
   const effect = created.response.effect;
   if (effect.kind !== "admitted") throw new Error(`STOP: the Run was not admitted: ${created.body}`);
   await until(`Run ${effect.run_id}`, async () => ["completed", "failed", "cancelled"].includes((await client.getAgentRun({
@@ -167,6 +167,7 @@ async function writeChapter(story: Story, index: number, file: string): Promise<
         expected_target_revision_id: target.current_revision.revision_id, editor_session_id: story.editorSessionId,
         ...story.binding() } } }));
   }
+  story.current = chapterId;
   const texts = paragraphs(file);
   const blocks = target.current_revision.blocks.filter((block) => block.text.length > 0);
   if (blocks.length > 0) {
@@ -219,7 +220,7 @@ async function measures(projectId: string): Promise<void> {
         (a.payload #>> '{usage,output_tokens}')::int AS output_tokens, a.payload #>> '{decision,kind}' AS decision
       FROM storyos.model_attempts AS a JOIN storyos.agent_runs AS r USING (owner_user_id, project_id, run_id)
      WHERE a.${project} ORDER BY a.run_id, a.decision_position`),
-    context_items: await rows(`SELECT m.run_id, m.decision_position, item ->> 'source_class' AS source_class,
+    context_items: await rows(`SELECT DISTINCT m.run_id, m.decision_position, item ->> 'source_class' AS source_class,
         (item ->> 'token_count')::int AS token_count
       FROM storyos.context_assembly_manifests AS m,
         jsonb_path_query(m.payload, '$.** ? (@.source_class == "memory_index" || @.source_class == "chapter_list")')
@@ -263,7 +264,7 @@ for (const file of files) {
 }
 const opened = await paced("createEditorSession", () => project.openEditorSession());
 const story: Story = Object.assign(project, { chapterIds, editorSessionId: opened.editor_session.editor_session_id,
-  intent: 0 });
+  intent: 0, current: opened.base_snapshot.chapter_id });
 for (const [index, file] of files.entries()) await writeChapter(story, index, file);
 
 // Step 1: one Run of the author in Conversation A, its capture first (statement C), then the Chapters in order.
