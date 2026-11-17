@@ -33,12 +33,12 @@ fn with_fact(conflicts: &[(u64, &str)]) -> Value {
 }
 
 /// The fake script line of one `write_memory` call.
-fn write(action: &str, arguments: Value) -> String {
+pub(super) fn write(action: &str, arguments: Value) -> String {
     format!("SCRIPT:write_memory {action} {arguments}")
 }
 
 /// Admits a Run of the author with `message` in a new Conversation and completes it.
-async fn run(
+pub(super) async fn run(
     store: &PostgresProjectReader,
     admin: &tokio_postgres::Client,
     (scope, chapter_id): (&ProjectScope, &str),
@@ -52,7 +52,7 @@ async fn run(
 }
 
 /// The flag of each entry in the list of the settings page, in the order of the list.
-async fn listed_flags(
+pub(super) async fn listed_flags(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
 ) -> Vec<Option<(String, MemoryEntrySourceItem)>> {

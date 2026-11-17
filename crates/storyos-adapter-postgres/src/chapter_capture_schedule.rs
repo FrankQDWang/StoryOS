@@ -343,4 +343,4 @@ async fn set_row(
 
 #[cfg(test)]
 #[path = "chapter_capture_schedule_tests.rs"]
-mod tests;
+pub(crate) mod tests;
