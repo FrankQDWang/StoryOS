@@ -332,6 +332,7 @@ pub(crate) async fn record_observations(
         .get(/*idx*/ 0);
     crate::memory_work_schedule::mark_due_after_capture(client, claim, &capture_id, outcome)
         .await?;
+    crate::chapter_capture_schedule::mark_due_after_capture(client, claim, &capture_id).await?;
     // Each item as its kind, its type, title, and text, or its entry number and reason.
     let rows: Vec<serde_json::Value> = observations
         .iter()
@@ -371,7 +372,8 @@ pub(crate) async fn record_observations(
 }
 
 /// Settles the running capture of the Run, when the Run has one, with the outcome that Core
-/// gives from `end`. It stores no observation. A Run with no running capture is not changed.
+/// gives from `end`. It stores no observation. A Run with no running capture is not changed. The
+/// settlement of a Chapter capture can make its schedule row due.
 pub(crate) async fn settle_end(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -381,12 +383,13 @@ pub(crate) async fn settle_end(
         return Ok(());
     };
     let scope = &claim.project_scope;
-    client
-        .execute(
+    let settled = client
+        .query_opt(
             "UPDATE storyos.memory_captures
                 SET state = 'settled', outcome = $4, failure_reason = $5
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND state = 'running'",
+                AND run_id = $3::text::uuid AND state = 'running'
+          RETURNING capture_id::text",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -397,6 +400,10 @@ pub(crate) async fn settle_end(
         )
         .await
         .map_err(complete_database_error)?;
+    if let Some(settled) = settled {
+        let capture_id: String = settled.get(/*idx*/ 0);
+        crate::chapter_capture_schedule::mark_due_after_capture(client, claim, &capture_id).await?;
+    }
     Ok(())
 }
 
