@@ -64,8 +64,9 @@ async function sent(runId: string, sourceClass: string): Promise<string[]> {
  * ADR 0094, ADR 0095, and the author journey S7-JRN-001: one Project does each step in order, in the production
  * client, with the fake destination. The journey writes no product row directly. Each SQL statement of the test
  * administrator connection makes a row of the background work due, ends the quiet time of the index work, moves the
- * start time of the last Chapter capture back by the rate interval, or parks the rows of the Project at the end.
- * The store tests of S7-D5 prove the rate, so the journey has no wait for a time of the product.
+ * start time of the last Chapter capture back by the rate interval, resets the Command Challenge rate windows of the
+ * Project, or parks the rows of the Project at the end. The store tests of S7-D5 prove the Chapter rate, so the
+ * journey has no wait for a time of the product.
  */
 export async function verifyProductionStage7Journey(context: BrowserContext): Promise<void> {
   const started: (() => Promise<unknown>)[] = [];
@@ -100,19 +101,9 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     const current = page.locator("[data-assistant-current-run]");
     const typeInChapter = async (chapterId: string, lines: string[]) => {
       const button = page.locator(`button[data-chapter-id="${chapterId}"]`);
-      // A click while the panel renders a Run can be lost, so the click repeats until the Chapter is current. The
-      // editor shows the Chapter before the caret goes into its text.
-      await expect(async () => {
-        await button.click();
-        await expect(button).toHaveAttribute("aria-current", "true", { timeout: 2_000 });
-      }).toPass({ timeout: 20_000 }).catch(async (error: unknown) => {
-        throw new Error(`the Chapter did not open: ${JSON.stringify({
-          alerts: await page.locator('[role="alert"]').allTextContents(),
-          title: await page.locator(".editor-panel h2").allTextContents(),
-          save: await page.locator("[data-save-state]").evaluateAll((items) => items.map((item) =>
-            `${item.getAttribute("data-save-state")}/${item.getAttribute("data-unsettled-intent-count")}`)),
-        })}`, { cause: error });
-      });
+      // The editor shows the Chapter before the caret goes into its text.
+      await button.click();
+      await expect(button).toHaveAttribute("aria-current", "true");
       await expect(page.locator(".editor-panel h2")).toHaveText(await button.innerText());
       await page.locator(SAVED).waitFor();
       // The caret can be at the start of the text after the Chapter opens. An Enter before and after each line puts
@@ -140,6 +131,10 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     { timeout: 10_000 }).toContain(marker);
     const settled = (table: string, where: string) => value(`SELECT count(*)::text FROM storyos.${table}
       WHERE project_id = '${project}'::uuid AND outcome IS NOT NULL AND ${where}`);
+    // ADR 0038 permits 10 Challenges of the shared class in each minute for each Project. The journey asks for 16 in
+    // less than one minute: 8 in steps 1 to 4 and 8 in steps 5 to 7. So it resets the windows at the start of step 5.
+    const resetChallenges = () => value(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+      WHERE project_id = '${project}'::uuid`);
     const openSettings = async () => {
       await page.goto(`${workspace}/settings`);
       await page.locator("[data-memory-section] [data-memory-group], [data-memory-empty]").first().waitFor();
@@ -217,14 +212,21 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     await page.locator(`[data-assistant-conversation-entry="${first.conversationId}"]`).click();
     await turn(talk.runId).waitFor();
 
-    // 5. Run 1 of the step reads entry 2. Its request has the Chapter list and the Memory Index, and the panel shows
-    // no line for the read. Statement 2 ends the quiet time of the index work. Run 2 searches with a keyword, reads
+    await resetChallenges();
+    // 5. Statement 2 resets the Challenge rate windows. Run 1 of the step reads entry 2. Its request has the Chapter
+    // list and the Memory Index, and the panel shows no line for the read. Run 2 searches Memory, and the panel shows
+    // no line for the search. Statement 3 ends the quiet time of the index work. Run 3 searches with a keyword, reads
     // Chapter B, and searches by meaning, and the panel shows one line for each use.
     const read = await message("回到第一段对话。\nSCRIPT:read_memory_entry 2");
     assert.equal(read.request.create_agent_run_input.conversation.kind, "existing");
     assert.equal(read.conversationId, first.conversationId);
     assert.deepEqual([(await sent(read.runId, "chapter_list")).length, (await sent(read.runId, "memory_index")).length],
       [1, 1]);
+    await expect(current.locator("[data-assistant-manuscript-uses]")).toHaveCount(0);
+    const recalled = await message("铜铃是谁留下的？\nSCRIPT:search_memory 铜铃");
+    assert.equal(await value(`SELECT string_agg(function_name || ' ' || state, ', ' ORDER BY call_id)
+      FROM storyos.tool_calls WHERE run_id = '${recalled.runId}'::uuid AND function_name <> 'finish'`),
+    "search_memory settled");
     await expect(current.locator("[data-assistant-manuscript-uses]")).toHaveCount(0);
     await value(`UPDATE storyos.passage_index_work SET not_before = clock_timestamp() - interval '1 second'
       WHERE project_id = '${project}'::uuid`);
@@ -242,12 +244,10 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     assert.equal(await value(`SELECT bool_and(result_text LIKE '%阿禾在渡口卖鱼%')::text FROM storyos.tool_calls
       WHERE run_id = '${searched.runId}'::uuid AND function_name LIKE '%search_manuscript'`), "true");
 
-    // 6. The Chapter rate lets the next Chapter capture start 2 minutes after the last start. Statement 3 moves that
+    // 6. The Chapter rate lets the next Chapter capture start 2 minutes after the last start. Statement 4 moves that
     // start back by the rate interval, and the time stays before its settlement. The author writes a conflict in
-    // Chapter A. Statement 4 makes its row due, and statement 5 makes the pass due before its rate. Chapter A has no
+    // Chapter A. Statement 5 makes its row due, and statement 6 makes the pass due before its rate. Chapter A has no
     // script line before it: the fake model calls the script lines of a capture input in order.
-    await page.goto(workspace);
-    await page.locator('[data-assistant-availability="available"]').waitFor();
     assert.equal(await value(`WITH moved AS (UPDATE storyos.memory_captures SET started_at = started_at - interval '2 minutes'
       WHERE capture_id = (SELECT capture_id FROM storyos.memory_captures WHERE project_id = '${project}'::uuid
                             AND source_kind = 'chapter' ORDER BY started_at DESC LIMIT 1)
@@ -284,8 +284,8 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     await expect(bell.locator('[data-memory-entry-flag="flagged"]')).toHaveCount(0);
     assert.equal(await bell.locator(".memory-entry-text").textContent(), CHANGED_BELL);
 
-    // 7. The author deletes entry 2. A later capture asks for it again, statement 6 makes the Conversation row due,
-    // and statement 7 makes the pass due. The pass refuses the create, and entry 2 stays deleted.
+    // 7. The author deletes entry 2. A later capture asks for it again, statement 7 makes the Conversation row due,
+    // and statement 8 makes the pass due. The pass refuses the create, and entry 2 stays deleted.
     await pair.locator("[data-memory-delete]").click();
     await pair.locator("[data-memory-delete-confirm]").click();
     await expect(page.locator('[data-memory-group="relationship"]')).toHaveCount(0);
@@ -307,7 +307,7 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     await expect(page.locator('[data-memory-group="relationship"]')).toHaveCount(0);
     assert.deepEqual(errors, []);
 
-    // Statement 8 parks each row of the background work of the Project, so that no later file starts its work.
+    // Statement 9 parks each row of the background work of the Project, so that no later file starts its work.
     await value(`UPDATE storyos.memory_work_schedules SET due_at = NULL WHERE project_id = '${project}'::uuid`);
     assert.equal(await value(`SELECT ((SELECT count(*) FROM storyos.memory_work_schedules
         WHERE project_id = '${project}'::uuid AND due_at IS NOT NULL)
@@ -315,7 +315,7 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
           AND status IN ('queued', 'claimed', 'waiting', 'paused')))::text`), "0");
     // The editor can send the typed lines in one or more Author Edits, so the count leaves out that kind.
     await assertProjectReceipts([project], { projects: 1, kinds: "listed", receipts: { createProject: 1,
-      updateProjectAssistance: 1, createVolume: 1, createChapter: 2, updateProjectInstruction: 1, createAgentRun: 9,
+      updateProjectAssistance: 1, createVolume: 1, createChapter: 2, updateProjectInstruction: 1, createAgentRun: 10,
       deleteMemoryEntry: 1 } });
   } finally {
     for (const close of started.reverse()) await close();
