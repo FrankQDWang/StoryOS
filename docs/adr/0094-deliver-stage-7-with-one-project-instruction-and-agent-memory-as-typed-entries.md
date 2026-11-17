@@ -85,6 +85,8 @@ A Memory Observation is not a Memory Entry. It is an Operational Record of backg
 
 The capture and the consolidation pass run as AgentRuns of a background kind, with no Project Conversation, no author message, and no surface in the panel.
 
+The names of the capture request (S7-D3f): on the Agent Plan mapping `v8` of the Registration `fa22`, a capture request has the Host instructions of a capture and no author message. Its one user message has the sections `Conversation messages` or `Chapter text`, then `Memory index`, `Chapter list`, and `Deleted Memory entries`, with the exact item texts. The kind of the input is the `source_kind` of the capture row. The request declares `read_chapter`, `search_manuscript`, `read_memory_entry`, and `record_memory_observations` as strict functions, with `tool_choice: "required"`. A later request sends the Tool outputs as a Run of the author does (ADR 0085). An adapter refuses a capture request of an earlier mapping, or with no input item or no output Tool, before dispatch.
+
 ### 6. Consolidation and pruning
 
 - When a Project has observations that wait, a consolidation pass sends one model request. The request has one strict function, `apply_memory_operations`, with `tool_choice: "required"`, and no Tool that reads, searches, or writes: the arguments of its one call are the reply of the pass (the author approved this form on 2026-11-16). Its input is the current entries and the observations. Its reply is a list of typed operations: create, update, delete, merge, and the conflict flag of section 7.

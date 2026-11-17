@@ -275,6 +275,32 @@ pub(crate) async fn persist_next_step(
     Ok(())
 }
 
+/// The kind of the input of the capture of the Run. A capture Run with no capture row is damaged.
+pub(crate) async fn input_kind(
+    client: &Client,
+    claim: &ClaimedAgentRun,
+) -> Result<storyos_core::CaptureInputKind, CompleteAgentRunError> {
+    let scope = &claim.project_scope;
+    let source_kind: Option<String> = client
+        .query_opt(
+            "SELECT source_kind FROM storyos.memory_captures
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?
+        .map(|row| row.get(/*idx*/ 0));
+    source_kind
+        .as_deref()
+        .and_then(storyos_core::CaptureInputKind::parse)
+        .ok_or_else(|| damaged("The capture of the Run"))
+}
+
 /// Settles the capture of the Run with the `outcome` that Core decided and stores each of
 /// `observations` as a waiting Memory Observation in list order, in the Tool Gateway transaction
 /// of the call. The settlement of a Conversation capture can make its schedule row due.

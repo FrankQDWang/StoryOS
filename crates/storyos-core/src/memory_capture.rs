@@ -111,6 +111,26 @@ pub fn admit_memory_capture(facts: &CaptureAdmissionFacts<'_>) -> Result<(), Cap
     Ok(())
 }
 
+/// The source of the input of one capture (ADR 0094 section 5): the messages of a Project
+/// Conversation or the text of one Chapter. Each request of the capture gives the input the
+/// section of its kind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CaptureInputKind {
+    Conversation,
+    Chapter,
+}
+
+impl CaptureInputKind {
+    /// The kind of the persisted `source_kind` of a capture.
+    pub fn parse(source_kind: &str) -> Option<Self> {
+        match source_kind {
+            "conversation" => Some(Self::Conversation),
+            "chapter" => Some(Self::Chapter),
+            _ => None,
+        }
+    }
+}
+
 /// The identities and the input of the first RunStep of one capture.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryCaptureAssembly {
