@@ -127,17 +127,19 @@ export async function verifyProductionMemorySettings(context: BrowserContext): P
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await page.locator('[data-assistant-availability="available"]').waitFor();
     await page.locator('textarea[name="assistant-message"]').fill("继续写。");
+    await expect(page.locator(".composer .send-button")).toBeEnabled();
     const next = page.waitForResponse((reply) =>
       reply.request().method() === "POST" && new URL(reply.url()).pathname.endsWith("/agent-runs"));
     await page.locator(".composer .send-button").click();
     const nextBody = await (await next).json() as CreateAgentRunResponse;
     assert.ok(nextBody.effect.kind === "admitted");
     await settleRun(server.baseUrl, setup, nextBody.effect.run_id);
+    // The fake destination keeps no request bytes, so the check reads the Context items that the request sends.
     const items = await queryStoryOSPostgres(`SELECT count(*) FILTER (WHERE item ->> 'source_class' = 'memory_index')
         || ' ' || (count(*) > 0)::text
-      FROM storyos.model_attempts AS attempt,
-           jsonb_array_elements((attempt.payload #>> '{wire,serialized_payload}')::jsonb -> 'selected') AS item
-     WHERE attempt.run_id = '${nextBody.effect.run_id}'::uuid AND attempt.attempt_role = 'decision'`);
+      FROM storyos.context_assembly_manifests AS manifest, jsonb_array_elements(manifest.payload -> 'selected') AS item
+     WHERE manifest.run_id = '${nextBody.effect.run_id}'::uuid AND manifest.manifest_role = 'decision'
+       AND manifest.decision_position = 0`);
     assert.equal(items, "0 true");
     assert.deepEqual(errors, []);
 
