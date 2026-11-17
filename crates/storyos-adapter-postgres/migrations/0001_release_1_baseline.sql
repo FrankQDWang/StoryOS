@@ -4511,9 +4511,10 @@ GRANT SELECT,INSERT ON TABLE storyos.memory_captures TO storyos_runtime;
 
 GRANT UPDATE(state, outcome, failure_reason) ON TABLE storyos.memory_captures TO storyos_runtime;
 
--- Memory Observations (ADR 0094 sections 5 and 8). One row for each item of the settled list of a
--- capture, in list order from position 1: its type, its title, its text, and its state. An observation
--- waits until a consolidation pass consumes it, and it stays as the record of its capture. The runtime
+-- Memory Observations (ADR 0094 sections 5, 7, and 8). One row for each item of the settled list of a
+-- capture, in list order from position 1: its kind, its state, and its type, title, and text, or for a
+-- conflict its entry number and reason. An observation waits until a consolidation pass consumes it,
+-- and it stays as the record of its capture. The runtime
 -- role can read and insert a row, it can change only the state, and it cannot delete a row.
 
 CREATE TABLE storyos.memory_observations (
@@ -4521,10 +4522,14 @@ CREATE TABLE storyos.memory_observations (
     project_id uuid NOT NULL,
     capture_id uuid NOT NULL,
     "position" numeric(20,0) NOT NULL,
-    entry_type text NOT NULL,
-    title text NOT NULL,
-    text text NOT NULL,
+    entry_type text,
+    title text,
+    text text,
     state text DEFAULT 'waiting'::text NOT NULL,
+    kind text DEFAULT 'observation'::text NOT NULL,
+    entry_number numeric(20,0),
+    reason text,
+    CONSTRAINT memory_observations_kind_shape CHECK ((((kind = 'observation'::text) AND (entry_type IS NOT NULL) AND (title IS NOT NULL) AND (text IS NOT NULL) AND (entry_number IS NULL) AND (reason IS NULL)) OR ((kind = 'conflict'::text) AND (entry_type IS NULL) AND (title IS NULL) AND (text IS NULL) AND (entry_number >= (1)::numeric) AND (char_length(reason) >= 1)))),
     CONSTRAINT memory_observations_pkey PRIMARY KEY (owner_user_id, project_id, capture_id, "position"),
     CONSTRAINT memory_observations_position_check CHECK ((("position" >= (1)::numeric) AND ("position" <= '18446744073709551615'::numeric))),
     CONSTRAINT memory_observations_type_check CHECK ((entry_type = ANY (ARRAY['writing_preference'::text, 'foreshadowing'::text, 'character'::text, 'relationship'::text, 'major_event'::text, 'other'::text]))),

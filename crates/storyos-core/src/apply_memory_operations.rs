@@ -9,8 +9,8 @@ use serde_json::{Value, json};
 
 use crate::{
     ConsolidationOutcome, CurrentMemoryEntry, IntakeRefusal, MemoryDeleteMark, MemoryEntryOrigin,
-    MemoryEntryType, MemorySourceReference, MemoryVersionWrite, MemoryWriteRefusal,
-    PassObservation, ToolIntake, ToolOperation, ToolResultText, ToolSpec, decide_memory_operations,
+    MemoryEntryType, MemorySourceReference, MemoryVersionWrite, MemoryWriteRefusal, PassConflict,
+    PassObservation, ToolIntake, ToolOperation, ToolResultText, ToolSpec,
 };
 
 pub const APPLY_MEMORY_OPERATIONS_TOOL_SPEC: ToolSpec = ToolSpec {
@@ -278,6 +278,8 @@ pub struct PassFacts<'a> {
     pub observations: &'a [PassObservation],
     /// The delete marks of the author now.
     pub marks: &'a [MemoryDeleteMark],
+    /// The conflict observations of the input, which are not in the request.
+    pub conflicts: &'a [PassConflict],
 }
 
 /// The settlement of the one `apply_memory_operations` call of a pass.
@@ -286,13 +288,16 @@ pub struct PassSettlement {
     pub outcome: ConsolidationOutcome,
     /// The decision of each operation in list order. A stale pass decides no operation.
     pub decisions: Vec<Result<AdmittedOperation, MemoryOperationRefusal>>,
+    /// The flags that the Host writes after the operations, from the conflicts of the input.
+    pub flags: Vec<AdmittedOperation>,
     /// The result of the call. The pass ends with it, so no request reads it.
     pub result: ToolResultText,
 }
 
 /// Settles the call of a pass (ADR 0039, ADR 0094 section 6). A pass whose pinned Memory revision
 /// is not the revision now is stale, and it applies nothing. Otherwise Core decides each
-/// operation. The outcome is `applied` when one or more operations applied.
+/// operation, and then the Host flags of the conflicts. The outcome is `applied` when one or more
+/// operations or flags applied.
 pub fn settle_operations_call(
     candidates: &[MemoryOperationCandidate],
     facts: &PassFacts<'_>,
@@ -301,27 +306,30 @@ pub fn settle_operations_call(
         return PassSettlement {
             outcome: ConsolidationOutcome::Stale,
             decisions: Vec::new(),
+            flags: Vec::new(),
             result: crate::host_tool_result(
                 "The Memory changed after the start of this pass, so the Host applied no \
                  operation, and the pass is complete.",
             ),
         };
     }
-    let decisions = decide_memory_operations(
+    let (decisions, current) = crate::memory_operation_decision::decide_with_entries(
         candidates,
         facts.entries,
         facts.next_entry_number,
         facts.observations,
         facts.marks,
     );
+    let flags = crate::memory_conflict_flag::host_flags(facts.conflicts, &current);
     let applied = decisions.iter().filter(|decision| decision.is_ok()).count();
     let refused = decisions.len() - applied;
     PassSettlement {
-        outcome: match applied {
+        outcome: match applied + flags.len() {
             0 => ConsolidationOutcome::NoOperation,
             _ => ConsolidationOutcome::Applied,
         },
         decisions,
+        flags,
         result: crate::host_tool_result(&format!(
             "The Host applied {applied} operations and refused {refused}, and the pass is \
              complete."

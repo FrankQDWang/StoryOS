@@ -10,15 +10,17 @@ use storyos_application::{
 };
 use storyos_core::{
     AgentRunKind, AssistanceAvailability, CaptureRefusal, CaptureRunEnd,
-    MemoryConsolidationAssembly, MemoryEntryType, MemoryOperationCandidate, MemorySourceReference,
-    PassMemoryEntry, PassObservation, ToolCallState,
+    MemoryConsolidationAssembly, MemoryOperationCandidate, PassConflict, PassMemoryEntry,
+    ToolCallState,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
 use crate::agent_run_work::complete_database_error;
-use crate::memory_consolidation_versions::{pass_entries, unused_entries, write_admitted};
+use crate::memory_consolidation_versions::{
+    PassItem, pass_entries, pass_item, split_items, unused_entries, write_admitted,
+};
 use crate::memory_entries::lock_memory_head;
 use crate::update_project_assistance::read_assistance_record;
 use crate::{PostgresProjectReader, read_error};
@@ -94,12 +96,11 @@ pub(crate) async fn start(
         .into_iter()
         .map(|entry| (entry.entry, entry.changed_at))
         .collect();
-    let (keys_of, observations): (Vec<[String; 2]>, Vec<PassObservation>) =
+    let (keys_of, observations, conflicts) = split_items(
         waiting_observations(client, scope)
             .await
-            .map_err(unavailable)?
-            .into_iter()
-            .unzip();
+            .map_err(unavailable)?,
+    );
     let budget_bounds: String = client
         .query_one(
             "SELECT budget_bounds FROM storyos.project_external_use_binding_revisions
@@ -161,7 +162,11 @@ pub(crate) async fn start(
         )
         .await
         .map_err(read_error)?;
-    let input: Vec<Value> = keys_of[..taken].iter().map(|key| json!(key)).collect();
+    // Each conflict that waits is in the input after the observations of the request.
+    let input: Vec<Value> = (keys_of[..taken].iter())
+        .chain(conflicts.iter().map(|(key, _)| key))
+        .map(|key| json!(key))
+        .collect();
     client
         .execute(
             "INSERT INTO storyos.memory_consolidation_passes
@@ -194,11 +199,12 @@ pub(crate) async fn start(
 async fn waiting_observations(
     client: &Client,
     scope: &ProjectScope,
-) -> Result<Vec<([String; 2], PassObservation)>, BoxError> {
+) -> Result<Vec<([String; 2], PassItem)>, BoxError> {
     let rows = client
         .query(
             "SELECT item.capture_id::text, item.position::text, item.entry_type, item.title,
-                    item.text, capture.conversation_id::text, capture.chapter_id::text
+                    item.text, capture.conversation_id::text, capture.chapter_id::text,
+                    item.entry_number::text, item.reason
                FROM storyos.memory_observations AS item
                JOIN storyos.memory_captures AS capture
                  USING (owner_user_id, project_id, capture_id)
@@ -208,29 +214,7 @@ async fn waiting_observations(
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )
         .await?;
-    rows.iter().map(observation).collect()
-}
-
-fn observation(row: &tokio_postgres::Row) -> Result<([String; 2], PassObservation), BoxError> {
-    let source = match (row.get(5), row.get(6)) {
-        (Some(conversation_id), _) => MemorySourceReference::Conversation {
-            conversation_id,
-            run_id: None,
-            tool_call_id: None,
-        },
-        (None, Some(chapter_id)) => MemorySourceReference::Chapter { chapter_id },
-        (None, None) => return Err("A capture has no source".into()),
-    };
-    Ok((
-        [row.get(0), row.get(1)],
-        PassObservation {
-            entry_type: MemoryEntryType::parse(row.get(2))
-                .ok_or("A Memory Observation type is invalid")?,
-            title: row.get(3),
-            text: row.get(4),
-            source,
-        },
-    ))
+    rows.iter().map(pass_item).collect()
 }
 
 /// The running pass of the Run: its identity, its pinned Memory revision, and the observations of
@@ -238,7 +222,7 @@ fn observation(row: &tokio_postgres::Row) -> Result<([String; 2], PassObservatio
 async fn running_pass(
     client: &Client,
     claim: &ClaimedAgentRun,
-) -> Result<(String, u64, Vec<([String; 2], PassObservation)>), BoxError> {
+) -> Result<(String, u64, Vec<([String; 2], PassItem)>), BoxError> {
     let scope = &claim.project_scope;
     let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
     let row = client
@@ -253,7 +237,8 @@ async fn running_pass(
     let rows = client
         .query(
             "SELECT item.capture_id::text, item.position::text, item.entry_type, item.title,
-                    item.text, capture.conversation_id::text, capture.chapter_id::text
+                    item.text, capture.conversation_id::text, capture.chapter_id::text,
+                    item.entry_number::text, item.reason
                FROM storyos.memory_consolidation_passes AS pass,
                     jsonb_array_elements(pass.observations) WITH ORDINALITY AS input(key, number)
                JOIN storyos.memory_observations AS item
@@ -268,7 +253,7 @@ async fn running_pass(
             &[&keys[0], &keys[1], &row.get::<_, &str>(0)],
         )
         .await?;
-    let observations = rows.iter().map(observation).collect::<Result<_, _>>()?;
+    let observations = rows.iter().map(pass_item).collect::<Result<_, _>>()?;
     Ok((row.get(0), row.get::<_, &str>(1).parse()?, observations))
 }
 
@@ -297,7 +282,8 @@ pub(crate) async fn execute(
         .await
         .map_err(unavailable)?;
     let entries: Vec<PassMemoryEntry> = stored.iter().map(|item| item.entry.clone()).collect();
-    let input: Vec<PassObservation> = observations.iter().map(|(_, o)| o.clone()).collect();
+    let (_, input, conflicts) = split_items(observations.clone());
+    let conflicts: Vec<PassConflict> = conflicts.into_iter().map(|(_, item)| item).collect();
     let settlement = storyos_core::settle_operations_call(
         candidates,
         &storyos_core::PassFacts {
@@ -307,6 +293,7 @@ pub(crate) async fn execute(
             next_entry_number,
             observations: &input,
             marks: &marks,
+            conflicts: &conflicts,
         },
     );
     let cause = json!({ "kind": "consolidation", "run_id": claim.run_id, "pass_id": pass_id });
@@ -328,6 +315,9 @@ pub(crate) async fn execute(
             "refusal": refusal,
             "entry": entry,
         }));
+    }
+    for flag in &settlement.flags {
+        written = write_admitted(client, scope, written, flag, &stored, &cause).await?;
     }
     let consumed = match settlement.outcome {
         storyos_core::ConsolidationOutcome::Applied

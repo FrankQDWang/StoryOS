@@ -1,14 +1,16 @@
-//! The Host Tool `record_memory_observations` (ADR 0094 sections 5 and 8): the output Tool of a
-//! capture. Its one call gives the typed list of the Memory Observations of the capture, and the
-//! settled call ends the capture. An empty list is a correct result. One Core function validates
-//! the list, and the store writes the observations in the transaction that settles the call.
+//! The Host Tool `record_memory_observations` (ADR 0094 sections 5, 7, and 8): the output Tool of
+//! a capture. Its one call gives the typed list of the Memory Observations of the capture, and the
+//! settled call ends the capture. An empty list is a correct result. An item is an observation of
+//! a fact or a conflict with an entry of the author. One Core function validates the list, and the
+//! store writes the items in the transaction that settles the call.
 
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
-    IntakeRefusal, MEMORY_CHARACTER_TEXT_MAX_CHARS, MEMORY_TEXT_MAX_CHARS, MEMORY_TITLE_MAX_CHARS,
-    MemoryEntryType, ToolCallState, ToolIntake, ToolOperation, ToolResultText, ToolSpec,
+    IntakeRefusal, MEMORY_CHARACTER_TEXT_MAX_CHARS, MEMORY_DESCRIPTION_MAX_CHARS,
+    MEMORY_TEXT_MAX_CHARS, MEMORY_TITLE_MAX_CHARS, MemoryEntryType, ToolCallState, ToolIntake,
+    ToolOperation, ToolResultText, ToolSpec,
 };
 
 pub const RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC: ToolSpec = ToolSpec {
@@ -29,9 +31,16 @@ later Chapter needs and that a search of the manuscript cannot find. It is a wri
 of the author, a foreshadowing, a character, a relationship, a major event, or another fact. Give \
 at most 5 observations. Give an empty list when the input has no such fact.";
 
-/// The strict JSON Schema of the arguments.
+/// The keys of an item. The strict schema requires each one, also when its value is null.
+const KEYS: [&str; 6] = ["kind", "type", "title", "text", "entry", "reason"];
+
+/// The strict JSON Schema of the arguments. A value that the kind of an item does not use is null.
 pub(crate) fn parameters() -> Value {
-    let types: Vec<&str> = MemoryEntryType::ALL.iter().map(|t| t.as_str()).collect();
+    let mut types: Vec<Value> = MemoryEntryType::ALL
+        .iter()
+        .map(|t| json!(t.as_str()))
+        .collect();
+    types.push(Value::Null);
     json!({
         "type": "object",
         "properties": {
@@ -41,18 +50,39 @@ pub(crate) fn parameters() -> Value {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "type": { "type": "string", "enum": types },
-                        "title": {
+                        "kind": {
                             "type": "string",
-                            "description": "The subject in one line, at most 30 characters."
+                            "enum": ["observation", "conflict"],
+                            "description": "observation for a fact. conflict when the input \
+                                            conflicts with an entry of the author."
+                        },
+                        "type": {
+                            "type": ["string", "null"],
+                            "enum": types,
+                            "description": "Null for a conflict."
+                        },
+                        "title": {
+                            "type": ["string", "null"],
+                            "description": "The subject in one line, at most 30 characters. \
+                                            Null for a conflict."
                         },
                         "text": {
-                            "type": "string",
+                            "type": ["string", "null"],
                             "description": "Markdown, at most 600 characters, or 1500 for a \
-                                            character."
+                                            character. Null for a conflict."
+                        },
+                        "entry": {
+                            "type": ["integer", "null"],
+                            "description": "The id of the entry of the author in the section \
+                                            Memory index. Null for an observation."
+                        },
+                        "reason": {
+                            "type": ["string", "null"],
+                            "description": "How the input conflicts with the entry, in one line \
+                                            of at most 100 characters. Null for an observation."
                         }
                     },
-                    "required": ["type", "title", "text"],
+                    "required": KEYS,
                     "additionalProperties": false
                 }
             }
@@ -62,23 +92,41 @@ pub(crate) fn parameters() -> Value {
     })
 }
 
+/// The kind of one item of the list.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservationKind {
+    Observation,
+    Conflict,
+}
+
 /// One item of the list as the model gave it. The type is the given text: the validation refuses
 /// a type that is not one of the six types.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationCandidate {
+    pub kind: ObservationKind,
     #[serde(rename = "type")]
-    pub entry_type: String,
-    pub title: String,
-    pub text: String,
+    pub entry_type: Option<String>,
+    pub title: Option<String>,
+    pub text: Option<String>,
+    pub entry: Option<i64>,
+    pub reason: Option<String>,
 }
 
-/// One validated Memory Observation.
+/// One validated item: a Memory Observation of a fact, or a conflict with the current entry of
+/// the author with the number `entry` (ADR 0094 section 7).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MemoryObservation {
-    pub entry_type: MemoryEntryType,
-    pub title: String,
-    pub text: String,
+pub enum MemoryObservation {
+    Fact {
+        entry_type: MemoryEntryType,
+        title: String,
+        text: String,
+    },
+    Conflict {
+        entry: u64,
+        reason: String,
+    },
 }
 
 #[derive(Deserialize)]
@@ -89,12 +137,21 @@ struct Arguments {
 
 /// The typed intake. The ToolCall record cannot hold U+0000, so a value with it does not fit.
 pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
+    let complete = arguments["observations"].as_array().is_some_and(|items| {
+        items.iter().all(|item| {
+            item.as_object()
+                .is_some_and(|item| KEYS.iter().all(|key| item.contains_key(*key)))
+        })
+    });
+    if !complete {
+        return Err(IntakeRefusal::Malformed);
+    }
     let Arguments { observations } =
         Arguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
     let unstorable = observations.iter().any(|item| {
-        [&item.entry_type, &item.title, &item.text]
+        [&item.entry_type, &item.title, &item.text, &item.reason]
             .iter()
-            .any(|value| value.contains('\0'))
+            .any(|value| value.as_ref().is_some_and(|value| value.contains('\0')))
     });
     match unstorable {
         true => Err(IntakeRefusal::UnstorableText),
@@ -106,7 +163,16 @@ pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
 pub(crate) fn arguments(observations: &[ObservationCandidate]) -> Value {
     let items: Vec<Value> = observations
         .iter()
-        .map(|item| json!({ "type": item.entry_type, "title": item.title, "text": item.text }))
+        .map(|item| {
+            json!({
+                "kind": item.kind,
+                "type": item.entry_type,
+                "title": item.title,
+                "text": item.text,
+                "entry": item.entry,
+                "reason": item.reason,
+            })
+        })
         .collect();
     json!({ "observations": items })
 }
@@ -116,8 +182,20 @@ pub(crate) fn arguments(observations: &[ObservationCandidate]) -> Value {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ObservationRefusal {
     TooMany,
-    Invalid { position: usize },
-    TooLong { position: usize },
+    Invalid {
+        position: usize,
+    },
+    TooLong {
+        position: usize,
+    },
+    /// A conflict names a number that is not a current entry of the author.
+    ConflictEntryUnavailable {
+        position: usize,
+    },
+    /// The reason of a conflict is longer than the limit of a description.
+    ReasonTooLong {
+        position: usize,
+    },
 }
 
 impl ObservationRefusal {
@@ -127,6 +205,8 @@ impl ObservationRefusal {
             Self::TooMany => "too_many_observations",
             Self::Invalid { .. } => "observation_invalid",
             Self::TooLong { .. } => "observation_too_long",
+            Self::ConflictEntryUnavailable { .. } => "conflict_entry_unavailable",
+            Self::ReasonTooLong { .. } => "memory_entry_too_long",
         }
     }
 
@@ -138,7 +218,16 @@ impl ObservationRefusal {
             }
             Self::Invalid { position } => format!(
                 "the observation {position} is not valid. Its type must be one of the six types. \
-                 Its title and its text must not be empty, and its title must be one line"
+                 Its title and its text must not be empty, and its title must be one line. A \
+                 conflict has only an entry and a reason of one line"
+            ),
+            Self::ConflictEntryUnavailable { position } => format!(
+                "the conflict {position} names no current entry of the author. Use the id of an \
+                 entry with the origin author_request of the section Memory index"
+            ),
+            Self::ReasonTooLong { position } => format!(
+                "the reason of the conflict {position} is too long. A reason has at most \
+                 {MEMORY_DESCRIPTION_MAX_CHARS} characters"
             ),
             Self::TooLong { position } => format!(
                 "the observation {position} is too long. A title has at most \
@@ -153,24 +242,42 @@ impl ObservationRefusal {
     }
 }
 
-/// Validates the list of one call with the Host limits (ADR 0094 section 8). The count comes
-/// first, and then each item in list order. One refused item refuses the call.
+/// Validates the list of one call with the Host limits (ADR 0094 sections 7 and 8). The count
+/// comes first, and then each item in list order. A conflict counts as one observation, and it
+/// must name one of `author_entries`, the numbers of the current entries of the author. One
+/// refused item refuses the call.
 pub fn validate_observations(
     candidates: &[ObservationCandidate],
+    author_entries: &[u64],
 ) -> Result<Vec<MemoryObservation>, ObservationRefusal> {
     if candidates.len() > CAPTURE_OBSERVATIONS_MAX {
         return Err(ObservationRefusal::TooMany);
     }
     let mut observations = Vec::new();
     for (position, item) in (1..).zip(candidates) {
-        let title = item.title.trim();
+        let fact = [&item.entry_type, &item.title, &item.text];
+        let observation = item.kind == ObservationKind::Observation
+            && fact.iter().all(|value| value.is_some())
+            && item.entry.is_none()
+            && item.reason.is_none();
+        if item.kind == ObservationKind::Conflict {
+            observations.push(crate::memory_conflict_flag::capture_conflict(
+                item,
+                position,
+                author_entries,
+            )?);
+            continue;
+        }
+        let given = |value: &Option<String>| value.clone().unwrap_or_default();
+        let (title, text) = (given(&item.title), given(&item.text));
+        let title = title.trim();
         let line = !title.is_empty() && !title.chars().any(char::is_control);
-        let text = !item.text.trim().is_empty()
-            && !item
-                .text
+        let text_valid = !text.trim().is_empty()
+            && !text
                 .chars()
                 .any(|c| c.is_control() && c != '\n' && c != '\t');
-        let Some(entry_type) = MemoryEntryType::parse(&item.entry_type).filter(|_| line && text)
+        let Some(entry_type) = MemoryEntryType::parse(&given(&item.entry_type))
+            .filter(|_| observation && line && text_valid)
         else {
             return Err(ObservationRefusal::Invalid { position });
         };
@@ -182,14 +289,13 @@ pub fn validate_observations(
             | MemoryEntryType::MajorEvent
             | MemoryEntryType::Other => MEMORY_TEXT_MAX_CHARS,
         };
-        if title.chars().count() > MEMORY_TITLE_MAX_CHARS || item.text.chars().count() > text_limit
-        {
+        if title.chars().count() > MEMORY_TITLE_MAX_CHARS || text.chars().count() > text_limit {
             return Err(ObservationRefusal::TooLong { position });
         }
-        observations.push(MemoryObservation {
+        observations.push(MemoryObservation::Fact {
             entry_type,
             title: title.to_owned(),
-            text: item.text.clone(),
+            text,
         });
     }
     Ok(observations)
@@ -263,9 +369,13 @@ impl ObservationCallSettlement {
     }
 }
 
-/// Settles one call: Core validates the list and decides the outcome of the capture.
-pub fn settle_observation_call(candidates: &[ObservationCandidate]) -> ObservationCallSettlement {
-    match validate_observations(candidates) {
+/// Settles one call: Core validates the list against the numbers of the current entries of the
+/// author, and decides the outcome of the capture.
+pub fn settle_observation_call(
+    candidates: &[ObservationCandidate],
+    author_entries: &[u64],
+) -> ObservationCallSettlement {
+    match validate_observations(candidates, author_entries) {
         Ok(observations) => ObservationCallSettlement::Settled {
             outcome: match observations.is_empty() {
                 true => CaptureOutcome::NoObservation,

@@ -332,30 +332,34 @@ pub(crate) async fn record_observations(
         .get(/*idx*/ 0);
     crate::memory_work_schedule::mark_due_after_capture(client, claim, &capture_id, outcome)
         .await?;
-    let types: Vec<&str> = observations
+    // Each item as its kind, its type, title, and text, or its entry number and reason.
+    let rows: Vec<serde_json::Value> = observations
         .iter()
-        .map(|item| item.entry_type.as_str())
+        .map(|item| match item {
+            MemoryObservation::Fact {
+                entry_type,
+                title,
+                text,
+            } => serde_json::json!(["observation", entry_type.as_str(), title, text, null, null]),
+            MemoryObservation::Conflict { entry, reason } => {
+                serde_json::json!(["conflict", null, null, null, entry.to_string(), reason])
+            }
+        })
         .collect();
-    let titles: Vec<&str> = observations
-        .iter()
-        .map(|item| item.title.as_str())
-        .collect();
-    let texts: Vec<&str> = observations.iter().map(|item| item.text.as_str()).collect();
     client
         .execute(
             "INSERT INTO storyos.memory_observations
-               (owner_user_id, project_id, capture_id, position, entry_type, title, text)
+               (owner_user_id, project_id, capture_id, position, kind, entry_type, title, text,
+                entry_number, reason)
              SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, item.position::numeric,
-                    item.entry_type, item.title, item.text
-               FROM unnest($4::text[], $5::text[], $6::text[]) WITH ORDINALITY
-                    AS item(entry_type, title, text, position)",
+                    item.row ->> 0, item.row ->> 1, item.row ->> 2, item.row ->> 3,
+                    (item.row ->> 4)::numeric, item.row ->> 5
+               FROM jsonb_array_elements($4::text::jsonb) WITH ORDINALITY AS item(row, position)",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &capture_id,
-                &types,
-                &titles,
-                &texts,
+                &serde_json::Value::from(rows).to_string(),
             ],
         )
         .await
