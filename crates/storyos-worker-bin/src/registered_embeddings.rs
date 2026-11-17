@@ -19,6 +19,10 @@ pub(crate) enum RegisteredEmbeddingExchange {
 }
 
 impl<R: CredentialResolver> EmbeddingProviderAdapter for RegisteredEmbeddings<R> {
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = &[
+        FakeEmbeddings::REGISTRATIONS[0],
+        AgentPlanEmbeddings::<R>::REGISTRATIONS[0],
+    ];
     type Prepared = RegisteredEmbeddingExchange;
 
     async fn prepare(

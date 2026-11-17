@@ -1,15 +1,18 @@
 use std::sync::Mutex;
 use std::time::Duration;
 
+use storyos_adapter_fake_destination::FakeEmbeddings;
 use storyos_application::{
-    ArchiveExportWorkStore, ClaimedAgentRun, ClaimedArchiveExport, ClaimedReadableExport,
-    CompleteAgentRun, CompleteAgentRunError, CompleteArchiveExport, CompleteArchiveExportError,
-    CompleteReadableExport, CompleteReadableExportError, DestinationRequest, DispatchClaim,
-    DispatchRecord, ModelStreamSink, NextDispatchWork, NoContractFaults, Observation,
-    PreDispatchRefusal, PreparedRequest, ProjectId, ProjectScope, ReadableExportWorkStore,
-    ResponseReference, StreamStop, UserId, WirePayloadProjection,
+    ArchiveExportWorkStore, ChapterPassageSource, ClaimedAgentRun, ClaimedArchiveExport,
+    ClaimedReadableExport, CompleteAgentRun, CompleteAgentRunError, CompleteArchiveExport,
+    CompleteArchiveExportError, CompleteReadableExport, CompleteReadableExportError,
+    DestinationRequest, DispatchClaim, DispatchRecord, ManuscriptSearchBlockFact, ModelStreamSink,
+    NextDispatchWork, NoContractFaults, Observation, PassageIndexFacts, PassageVectorKey,
+    PassageVectorRow, PassageVectorStore, PreDispatchRefusal, PreparedRequest, ProjectId,
+    ProjectScope, ReadableExportWorkStore, ResponseReference, StreamStop, UserId,
+    WirePayloadProjection,
 };
-use storyos_core::{ModelAdapter, NativeStreamItem};
+use storyos_core::{HOST_FAKE_EMBEDDING_REGISTRATION, ModelAdapter, NativeStreamItem};
 
 use super::*;
 
@@ -49,13 +52,67 @@ fn connection_lost() -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(ConnectionLost))
 }
 
-/// A store with one queued AgentRun. The first claims fail with a serialization failure, and the
-/// first completions fail with `completion_failure`.
+/// A store with the queued AgentRuns and the index work of `work`. The first claims fail with a
+/// serialization failure, and the first completions fail with `completion_failure`.
 struct RaceStore {
     claim_failures: Mutex<u64>,
     completion_failures: Mutex<u64>,
     completion_failure: fn() -> CompleteAgentRunError,
     settled: Mutex<Vec<ClaimedAgentRun>>,
+    work: Mutex<Work>,
+}
+
+/// The queued work of the store and the order of what the Worker did. The first embedding request
+/// is the barrier: an AgentRun becomes ready during it.
+struct Work {
+    queued_runs: u64,
+    /// The text of the one Chapter with index work, and the passages with a row.
+    index: Option<(ChapterPassageSource, Vec<PassageVectorKey>)>,
+    index_claimed: bool,
+    /// The Embedding Registrations of each index claim.
+    claimed_registrations: Vec<Vec<String>>,
+    events: Vec<&'static str>,
+}
+
+impl Default for Work {
+    fn default() -> Self {
+        Self {
+            queued_runs: 1,
+            index: None,
+            index_claimed: false,
+            claimed_registrations: Vec::new(),
+            events: Vec::new(),
+        }
+    }
+}
+
+/// A store with no queued AgentRun and the index work of one Chapter with two passages.
+fn index_store() -> RaceStore {
+    let block = |id: &str, text: String| ManuscriptSearchBlockFact {
+        manuscript_block_id: id.to_owned(),
+        text,
+    };
+    let chapter = ChapterPassageSource {
+        head_revision_id: "revision".to_owned(),
+        volume_title: "第一卷".to_owned(),
+        title: "第一章".to_owned(),
+        blocks: vec![
+            block("block-1", "潮水退去，灯塔亮了。".repeat(30)),
+            block("block-2", "＊＊＊".to_owned()),
+            block("block-3", "风从海上吹来，带着盐。".repeat(30)),
+        ],
+    };
+    RaceStore {
+        claim_failures: Mutex::new(0),
+        completion_failures: Mutex::new(0),
+        completion_failure: connection_lost,
+        settled: Mutex::new(Vec::new()),
+        work: Mutex::new(Work {
+            queued_runs: 0,
+            index: Some((chapter, Vec::new())),
+            ..Work::default()
+        }),
+    }
 }
 
 impl ExportWorkStore for RaceStore {
@@ -104,6 +161,12 @@ impl AgentRunWorkStore for RaceStore {
             *failures -= 1;
             return Err(ProjectReadError::unavailable(SerializationFailure));
         }
+        let mut work = self.work.lock().unwrap();
+        if work.queued_runs == 0 {
+            return Ok(None);
+        }
+        work.queued_runs -= 1;
+        work.events.push("agent_run");
         Ok(Some(claim()))
     }
 }
@@ -148,7 +211,11 @@ impl storyos_application::EmbeddingDispatchStore for RaceStore {
         &self,
         _scope: &ProjectScope,
     ) -> Result<Option<storyos_application::EmbeddingRoute>, ProjectReadError> {
-        unreachable!("the AgentRun settles without an embedding request")
+        Ok(Some(storyos_application::EmbeddingRoute {
+            registration_revision: HOST_FAKE_EMBEDDING_REGISTRATION.revision.to_owned(),
+            endpoint: None,
+            credential_reference: None,
+        }))
     }
 
     async fn commit_embedding_claim(
@@ -161,7 +228,14 @@ impl storyos_application::EmbeddingDispatchStore for RaceStore {
         Result<storyos_application::EmbeddingClaim, storyos_core::EmbeddingRefusal>,
         ProjectReadError,
     > {
-        unreachable!("the AgentRun settles without an embedding request")
+        let mut work = self.work.lock().unwrap();
+        if !work.events.contains(&"request") {
+            work.queued_runs += 1;
+        }
+        work.events.push("request");
+        Ok(Ok(storyos_application::EmbeddingClaim {
+            embedding_attempt_id: "attempt".to_owned(),
+        }))
     }
 
     async fn record_embedding(
@@ -170,7 +244,113 @@ impl storyos_application::EmbeddingDispatchStore for RaceStore {
         _claim: &storyos_application::EmbeddingClaim,
         _record: &storyos_application::EmbeddingRecord<'_>,
     ) -> Result<(), ProjectReadError> {
-        unreachable!("the AgentRun settles without an embedding request")
+        Ok(())
+    }
+}
+
+impl PassageVectorStore for RaceStore {
+    async fn vector_store_available(
+        &self,
+        _scope: &ProjectScope,
+    ) -> Result<bool, ProjectReadError> {
+        Ok(true)
+    }
+
+    async fn read_passage_index_facts(
+        &self,
+        _scope: &ProjectScope,
+        _chapter_id: &str,
+    ) -> Result<PassageIndexFacts, ProjectReadError> {
+        let work = self.work.lock().unwrap();
+        let (chapter, stored) = work.index.clone().expect("the store has index work");
+        Ok(PassageIndexFacts {
+            chapter: Some(chapter),
+            stored,
+        })
+    }
+
+    async fn remove_passage_vectors(
+        &self,
+        _scope: &ProjectScope,
+        _chapter_id: &str,
+        _keys: &[PassageVectorKey],
+    ) -> Result<u64, ProjectReadError> {
+        unreachable!("the Worker writes only fenced rows")
+    }
+
+    async fn write_passage_vector(
+        &self,
+        _scope: &ProjectScope,
+        _row: &PassageVectorRow<'_>,
+    ) -> Result<(), ProjectReadError> {
+        unreachable!("the Worker writes only fenced rows")
+    }
+}
+
+impl PassageIndexWorkStore for RaceStore {
+    async fn claim_next_passage_index_work(
+        &self,
+        registration_revisions: &[&str],
+        _cut_revision: &str,
+        lease: Duration,
+    ) -> Result<Option<ClaimedPassageIndex>, ProjectReadError> {
+        let mut work = self.work.lock().unwrap();
+        if work.index.is_none() || work.index_claimed {
+            return Ok(None);
+        }
+        work.index_claimed = true;
+        let registrations = registration_revisions
+            .iter()
+            .map(|&revision| revision.to_owned());
+        work.claimed_registrations.push(registrations.collect());
+        work.events.push("index_claim");
+        Ok(Some(ClaimedPassageIndex {
+            project_scope: claim().project_scope,
+            chapter_id: "chapter".to_owned(),
+            embedding_registration_revision: HOST_FAKE_EMBEDDING_REGISTRATION.revision.to_owned(),
+            mark_generation: 1,
+            fence_token: 1,
+            lease,
+        }))
+    }
+
+    async fn write_fenced_passage_vector(
+        &self,
+        _claim: &ClaimedPassageIndex,
+        row: &PassageVectorRow<'_>,
+    ) -> Result<bool, ProjectReadError> {
+        let mut work = self.work.lock().unwrap();
+        work.index.as_mut().unwrap().1.push(row.key.clone());
+        Ok(true)
+    }
+
+    async fn remove_fenced_passage_vectors(
+        &self,
+        _claim: &ClaimedPassageIndex,
+        _keys: &[PassageVectorKey],
+    ) -> Result<bool, ProjectReadError> {
+        unreachable!("the Chapter does not change")
+    }
+
+    async fn complete_passage_index_work(
+        &self,
+        _claim: &ClaimedPassageIndex,
+        _cut_revision: &str,
+    ) -> Result<bool, ProjectReadError> {
+        self.work.lock().unwrap().events.push("completed");
+        Ok(true)
+    }
+
+    async fn release_passage_index_work(
+        &self,
+        _claim: &ClaimedPassageIndex,
+        _wait: Duration,
+    ) -> Result<bool, ProjectReadError> {
+        unreachable!("each request gives a vector")
+    }
+
+    async fn mark_each_passage_index_work(&self) -> Result<u64, ProjectReadError> {
+        unreachable!("the Worker loop does not rebuild")
     }
 }
 
@@ -258,6 +438,7 @@ async fn run_once_claims_again_after_a_serialization_failure() {
         completion_failures: Mutex::new(0),
         completion_failure: serialization_failure,
         settled: Mutex::new(Vec::new()),
+        work: Mutex::default(),
     };
     let destination = ModelDestination {
         adapter: NoDestination,
@@ -281,6 +462,7 @@ async fn run_once_completes_again_after_a_serialization_failure() {
         completion_failures: Mutex::new(1),
         completion_failure: serialization_failure,
         settled: Mutex::new(Vec::new()),
+        work: Mutex::default(),
     };
     let destination = ModelDestination {
         adapter: NoDestination,
@@ -304,6 +486,7 @@ async fn run_once_stops_after_one_failure_that_is_not_a_serialization_failure() 
         completion_failures: Mutex::new(2),
         completion_failure: connection_lost,
         settled: Mutex::new(Vec::new()),
+        work: Mutex::default(),
     };
     let destination = ModelDestination {
         adapter: NoDestination,
@@ -325,5 +508,69 @@ async fn run_once_stops_after_one_failure_that_is_not_a_serialization_failure() 
             1,
             Vec::new()
         )
+    );
+}
+
+fn fake_destination() -> ModelDestination<
+    NoDestination,
+    NoContractFaults,
+    storyos_application::NoToolDestination,
+    FakeEmbeddings,
+> {
+    ModelDestination {
+        adapter: NoDestination,
+        observer: NoContractFaults,
+        tools: storyos_application::NoToolDestination,
+        embeddings: FakeEmbeddings,
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_loop_claims_an_agent_run_that_becomes_ready_before_the_next_embedding_request() {
+    let store = index_store();
+    // The destination of the Worker inside the Server process.
+    let destination = fake_destination();
+    let mut index = None;
+    let mut turns = Vec::new();
+    for _ in 0..5 {
+        turns.push(step(&store, &destination, &mut index).await);
+    }
+
+    let work = store.work.lock().unwrap();
+    assert_eq!(
+        (
+            turns,
+            work.events.clone(),
+            store.settled.lock().unwrap().len()
+        ),
+        (
+            vec![true, true, true, true, false],
+            vec![
+                "index_claim",
+                "request",
+                "agent_run",
+                "request",
+                "completed"
+            ],
+            1
+        )
+    );
+    // The Worker inside the Server process claims only the work of the fake adapter.
+    assert_eq!(
+        work.claimed_registrations,
+        [[HOST_FAKE_EMBEDDING_REGISTRATION.revision]]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn run_once_claims_the_index_work_after_the_other_work_and_completes_the_claim() {
+    let store = index_store();
+    run_once(&store, &fake_destination())
+        .await
+        .expect("the index work completes");
+
+    assert_eq!(
+        store.work.lock().unwrap().events,
+        ["index_claim", "request", "request", "completed"]
     );
 }

@@ -1,6 +1,7 @@
 //! The StoryOS Worker binary: the Worker loop with the PostgreSQL store, the fake and Agent Plan
 //! adapters, and the credential resolver of the Worker settings. `--discover-exa` runs one
-//! `Discover` exchange of the MCP client adapter.
+//! `Discover` exchange of the MCP client adapter. `--rebuild-passage-index` marks the passage index
+//! work of each Chapter with a work row, and sends no request (ADR 0095 section 4).
 
 mod contract_fault_holds;
 mod credential;
@@ -22,6 +23,8 @@ use storyos_worker::ModelDestination;
 const TOOL_EXCHANGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(/*secs*/ 60);
 
 type WorkerAdapters = registered_adapters::RegisteredAdapters<credential::SettingsCredentials>;
+type WorkerEmbeddings =
+    registered_embeddings::RegisteredEmbeddings<credential::SettingsCredentials>;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -60,8 +63,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .with_embedding_registration(settings.embedding_registration());
     if arguments.iter().any(|argument| argument == "--claim-only") {
         or_exit(
-            storyos_worker::claim_only::<WorkerAdapters>(&store).await,
+            storyos_worker::claim_only::<WorkerAdapters, WorkerEmbeddings>(&store).await,
             "claim_only",
+        );
+        std::process::exit(0);
+    }
+    if arguments
+        .iter()
+        .any(|argument| argument == "--rebuild-passage-index")
+    {
+        or_exit(
+            storyos_application::rebuild_passage_index(&store).await,
+            "rebuild_passage_index",
         );
         std::process::exit(0);
     }
@@ -83,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             },
             timeout: TOOL_EXCHANGE_TIMEOUT,
         },
-        embeddings: registered_embeddings::RegisteredEmbeddings {
+        embeddings: WorkerEmbeddings {
             fake: storyos_adapter_fake_destination::FakeEmbeddings,
             agent_plan: AgentPlanEmbeddings {
                 resolver: credential::SettingsCredentials {

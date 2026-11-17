@@ -5,25 +5,23 @@ use std::time::Duration;
 
 use storyos_application::{
     AgentRunWorkStore, ClaimedAgentRun, ClaimedArchiveExport, ClaimedExportWork,
-    ClaimedReadableExport, CompleteAgentRun, CompleteAgentRunError, CompleteArchiveExport,
-    CompleteArchiveExportError, CompleteReadableExport, CompleteReadableExportError,
-    ContractFaultObserver, DiagnosticField, DiagnosticId, EmbeddingDispatchStore,
+    ClaimedPassageIndex, ClaimedReadableExport, CompleteAgentRun, CompleteAgentRunError,
+    CompleteArchiveExport, CompleteArchiveExportError, CompleteReadableExport,
+    CompleteReadableExportError, ContractFaultObserver, DiagnosticField, DiagnosticId,
     EmbeddingProviderAdapter, ExportWorkStore, GatewayClock, ModelDispatchStore,
-    ModelProviderAdapter, ProjectReadError, SqlState, ToolDestinationAdapter, ToolDispatchStore,
-    claim_next_agent_run, claim_next_export_work, complete_agent_run_with_destinations,
-    complete_archive_export, complete_readable_export,
+    ModelProviderAdapter, PassageIndexStep, PassageIndexWorkStore, ProjectReadError, SqlState,
+    ToolDestinationAdapter, ToolDispatchStore, claim_next_agent_run, claim_next_export_work,
+    claim_next_passage_index_work, complete_agent_run_with_destinations, complete_archive_export,
+    complete_readable_export, step_passage_index_work,
 };
 
 const ATTEMPTS: u64 = 4;
 const SERIALIZATION_FAILURE: &str = "40001";
 
-/// Combined persistence port for the packaged Worker loop.
+/// Combined persistence port for the packaged Worker loop. The index work store has the embedding
+/// dispatch store.
 pub trait WorkerStore:
-    ExportWorkStore
-    + AgentRunWorkStore
-    + ModelDispatchStore
-    + ToolDispatchStore
-    + EmbeddingDispatchStore
+    ExportWorkStore + AgentRunWorkStore + ModelDispatchStore + ToolDispatchStore + PassageIndexWorkStore
 {
 }
 
@@ -32,7 +30,7 @@ impl<T> WorkerStore for T where
         + AgentRunWorkStore
         + ModelDispatchStore
         + ToolDispatchStore
-        + EmbeddingDispatchStore
+        + PassageIndexWorkStore
 {
 }
 
@@ -60,8 +58,9 @@ pub async fn run<
     store: impl WorkerStore,
     destination: ModelDestination<A, O, T, E>,
 ) {
+    let mut index = None;
     loop {
-        if !step(&store, &destination).await {
+        if !step(&store, &destination, &mut index).await {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
@@ -93,18 +92,27 @@ pub async fn run_once<
                     Err(error) => Err(error.into()),
                 }
             }
-            None => Ok(()),
+            None => {
+                let mut index = None;
+                passage_index_step(store, &destination.embeddings, &mut index).await?;
+                while index.is_some() {
+                    passage_index_step(store, &destination.embeddings, &mut index).await?;
+                }
+                Ok(())
+            }
         },
     }
 }
 
-pub async fn claim_only<A: ModelProviderAdapter>(
+pub async fn claim_only<A: ModelProviderAdapter, E: EmbeddingProviderAdapter>(
     store: &impl WorkerStore,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if claim_next_export_work(store).await?.is_some() {
+    if claim_next_export_work(store).await?.is_some()
+        || claim_next_agent_run(store, A::ADAPTERS).await?.is_some()
+    {
         return Ok(());
     }
-    claim_next_agent_run(store, A::ADAPTERS).await?;
+    claim_next_passage_index_work(store, E::REGISTRATIONS).await?;
     Ok(())
 }
 
@@ -116,6 +124,7 @@ async fn step<
 >(
     store: &impl WorkerStore,
     destination: &ModelDestination<A, O, T, E>,
+    index: &mut Option<ClaimedPassageIndex>,
 ) -> bool {
     match claim_next_export_work(store).await {
         Ok(Some(ClaimedExportWork::Readable(claim))) => matches!(
@@ -131,11 +140,37 @@ async fn step<
                 agent_run_claim(store, destination, &claim, Retry::EachFailure).await,
                 Ok(_) | Err(CompleteAgentRunError::StaleFence)
             ),
-            Ok(None) => false,
+            Ok(None) => match passage_index_step(store, &destination.embeddings, index).await {
+                Ok(worked) => worked,
+                Err(error) => claim_failed(&error),
+            },
             Err(error) => claim_failed(&error),
         },
         Err(error) => claim_failed(&error),
     }
+}
+
+/// The index work comes after each other claim (ADR 0095 section 4). It does the next step of the
+/// held claim, or it claims the next work and does its first step. The claim stays held while its
+/// steps write rows, so each turn of the loop sends at most one embedding request, and the next
+/// turn claims the other work first. Returns whether it did a step.
+async fn passage_index_step<E: EmbeddingProviderAdapter>(
+    store: &impl WorkerStore,
+    embeddings: &E,
+    held: &mut Option<ClaimedPassageIndex>,
+) -> Result<bool, ProjectReadError> {
+    let claim = match held.take() {
+        Some(claim) => claim,
+        None => match claim_next_passage_index_work(store, E::REGISTRATIONS).await? {
+            Some(claim) => claim,
+            None => return Ok(false),
+        },
+    };
+    let step = step_passage_index_work(store, embeddings, E::REGISTRATIONS, &claim).await?;
+    if step == PassageIndexStep::Written {
+        *held = Some(claim);
+    }
+    Ok(true)
 }
 
 /// Runs one claim again after a serialization failure, as the loop does, for at most `ATTEMPTS`

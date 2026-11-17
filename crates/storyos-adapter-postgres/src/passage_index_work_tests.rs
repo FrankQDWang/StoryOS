@@ -182,6 +182,7 @@ impl<'a> During<'a> {
 }
 
 impl EmbeddingProviderAdapter for During<'_> {
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
     type Prepared = <FakeEmbeddings as EmbeddingProviderAdapter>::Prepared;
 
     async fn prepare(

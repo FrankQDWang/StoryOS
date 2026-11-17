@@ -2008,6 +2008,7 @@ dependencies = [
 name = "storyos-worker"
 version = "0.1.0"
 dependencies = [
+ "storyos-adapter-fake-destination",
  "storyos-application",
  "storyos-core",
  "tokio",
