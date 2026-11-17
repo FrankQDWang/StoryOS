@@ -15,7 +15,7 @@ fn read_error(error: impl std::error::Error + Send + Sync + 'static) -> ProjectR
 }
 
 /// The text form of a pgvector value.
-fn vector_text(embedding: &[f32]) -> String {
+pub(crate) fn vector_text(embedding: &[f32]) -> String {
     let values: Vec<String> = embedding.iter().map(f32::to_string).collect();
     format!("[{}]", values.join(","))
 }
@@ -173,4 +173,4 @@ impl PassageVectorStore for PostgresProjectReader {
 
 #[cfg(test)]
 #[path = "passage_vectors_tests.rs"]
-mod tests;
+pub(crate) mod tests;

@@ -453,6 +453,13 @@ for vector_container in "$activation_container" "$legacy_activation_container"; 
     cargo test --locked -p storyos-adapter-postgres --all-features --lib -- --ignored --exact \
       passage_vectors::tests::the_vector_store_is_available_exactly_when_the_database_offers_the_extension
 done
+# The ranked passages need no vector store: on the database without pgvector the result is the
+# exact-term list.
+load_controlled_fixture "$legacy_activation_container"
+STORYOS_TEST_DATABASE_URL=$(postgres_runtime_url "$legacy_activation_container") \
+STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$legacy_activation_container") \
+  cargo test --locked -p storyos-adapter-postgres --all-features --lib -- --ignored --exact \
+    passage_ranking::tests::the_result_with_no_vector_store_is_the_exact_term_list
 docker rm -fv "$legacy_activation_container" >/dev/null
 activation_runtime=$(postgres_runtime_url "$activation_container")
 assert_offline_storage_activation_checks

@@ -26,14 +26,14 @@ use crate::delete_structure_tests::settle_delete_chapter;
 use crate::project_embedding_binding::tests::{FAKE, embedding_project};
 use crate::set_current_chapter_authority_tests::open_session_request;
 
-const TIDE: &str = "潮水退去，灯塔亮了。";
-const SHORE: &str = "她沿着堤岸慢慢走。";
-const WIND: &str = "风从海上吹来，带着盐。";
-const BOATS: &str = "第二天早上，渔船回港。";
+pub(crate) const TIDE: &str = "潮水退去，灯塔亮了。";
+pub(crate) const SHORE: &str = "她沿着堤岸慢慢走。";
+pub(crate) const WIND: &str = "风从海上吹来，带着盐。";
+pub(crate) const BOATS: &str = "第二天早上，渔船回港。";
 
 /// The blocks of each test Chapter: two blocks of 300 and 270 characters, a scene separator, and
 /// two blocks of 220 and 660 characters. They give three passages.
-fn texts() -> Vec<String> {
+pub(crate) fn texts() -> Vec<String> {
     vec![
         TIDE.repeat(30),
         SHORE.repeat(30),
@@ -61,12 +61,12 @@ fn digests(texts: &[String]) -> Vec<String> {
 }
 
 /// One Chapter with its Editor Session, its head, and its blocks.
-struct Chapter {
-    scope: ProjectScope,
-    chapter_id: String,
+pub(crate) struct Chapter {
+    pub(crate) scope: ProjectScope,
+    pub(crate) chapter_id: String,
     editor_session_id: String,
-    head: String,
-    blocks: Vec<String>,
+    pub(crate) head: String,
+    pub(crate) blocks: Vec<String>,
 }
 
 async fn block_ids(admin: &Client, revision_id: &str) -> Vec<String> {
@@ -83,7 +83,7 @@ async fn block_ids(admin: &Client, revision_id: &str) -> Vec<String> {
         .collect()
 }
 
-async fn head(admin: &Client, chapter_id: &str) -> String {
+pub(crate) async fn head(admin: &Client, chapter_id: &str) -> String {
     admin
         .query_one(
             "SELECT current_revision_id::text FROM storyos.authoritative_heads
@@ -99,8 +99,20 @@ async fn head(admin: &Client, chapter_id: &str) -> String {
 async fn edit(
     store: &PostgresProjectReader,
     chapter: &Chapter,
+    named: (&str, u64),
+    primitives: Vec<AuthorEditPrimitive>,
+) -> ApplyAuthorEditCommand {
+    edit_at(store, chapter, named, primitives, /*selection*/ 0).await
+}
+
+/// The Author Edit of `chapter` with the one unit of `primitives` and an empty selection at the
+/// UTF-16 offset `selection`. A join has its selection at the end of its left block.
+pub(crate) async fn edit_at(
+    store: &PostgresProjectReader,
+    chapter: &Chapter,
     (suffix, sequence): (&str, u64),
     primitives: Vec<AuthorEditPrimitive>,
+    selection: u32,
 ) -> ApplyAuthorEditCommand {
     let edit = NamedEdit {
         editor_session_id: &chapter.editor_session_id,
@@ -119,8 +131,8 @@ async fn edit(
             normalized_primitives: primitives,
             selection_snapshot: SelectionSnapshot {
                 coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
-                from: 0,
-                to: 0,
+                from: selection,
+                to: selection,
             },
         }];
     })
@@ -130,7 +142,7 @@ async fn edit(
 /// A Project with the fake embedding binding whose Chapter has one block for each of `texts`.
 /// `prefixes` give the identities of the Project, and `session` the four hex digits of the Editor
 /// Session and of its first Author Edit (`session` with its last digit 1).
-async fn chapter(
+pub(crate) async fn chapter(
     store: &PostgresProjectReader,
     admin: &Client,
     prefixes: [&str; 2],
@@ -175,7 +187,7 @@ async fn chapter(
 }
 
 /// The Author Edit that puts `text` before the text of block `index`.
-async fn prepend(
+pub(crate) async fn prepend(
     store: &PostgresProjectReader,
     chapter: &Chapter,
     (suffix, sequence): (&str, u64),
@@ -218,7 +230,7 @@ async fn rows(admin: &Client, scope: &ProjectScope) -> Vec<String> {
         .collect()
 }
 
-async fn index(
+pub(crate) async fn index(
     store: &PostgresProjectReader,
     adapter: &impl EmbeddingProviderAdapter,
     chapter: &Chapter,
