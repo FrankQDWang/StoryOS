@@ -15,7 +15,7 @@ use storyos_core::{CreateChapterPlacement, TransitionOutcome};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::stores;
+use crate::agent_run_dispatch::tests::{assisted_chapter, stores};
 use crate::agent_run_read_chapter::tests::{project, write_blocks};
 use crate::agent_run_steering::tests::{cancellation, claim_duties, queued};
 use crate::command_sequence::tests::{
@@ -258,9 +258,11 @@ async fn a_claimed_chapter_row_follows_the_rows_of_the_decision_table() {
     );
 }
 
-/// A Project with no completed Run of the author gets no background work: a Project whose one Run
-/// is queued and a Project whose one Run was cancelled hold the row of a changed Chapter. Neither
-/// gets a capture, sends a request, or writes a grant.
+/// A Project with no completed Run of the author gets no background work: a Project with no Run, a
+/// Project whose one Run is queued, and a Project whose one Run was cancelled hold the row of a
+/// changed Chapter. None gets a capture, sends a request, or writes a grant. The request log of the
+/// fake destination is the stored requests of the Project: the store writes each request to a
+/// destination before it sends it.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_project_with_no_completed_run_holds_the_row() {
@@ -268,10 +270,21 @@ async fn a_project_with_no_completed_run_holds_the_row() {
         .lock()
         .await;
     let mut projects = Vec::new();
-    for (lead, suffix, cancel) in [("836", 0x83d0, false), ("89a", 0x89e0, true)] {
+    let cases = [
+        ("89f", 0x89e4, Runs::None),
+        ("836", 0x83d0, Runs::Queued),
+        ("89a", 0x89e0, Runs::Cancelled),
+    ];
+    for (lead, suffix, runs) in cases {
         let (store, admin) = stores().await;
-        let (scope, chapter_id, run_id) = queued(&store, lead).await;
-        if cancel {
+        let (scope, chapter_id, run_id) = match runs {
+            Runs::None => {
+                let (scope, chapter_id) = assisted_chapter(&store, lead).await;
+                (scope, chapter_id, String::new())
+            }
+            Runs::Queued | Runs::Cancelled => queued(&store, lead).await,
+        };
+        if runs == Runs::Cancelled {
             let cancel = cancellation(&store, &scope, suffix + 2, &run_id).await;
             let cancelled = store.cancel_agent_run(&cancel.envelope, &cancel.input);
             cancelled.await.unwrap();
@@ -296,7 +309,10 @@ async fn a_project_with_no_completed_run_holds_the_row() {
         let counts = async || {
             let counts = "SELECT jsonb_build_array(
                                 (SELECT count(*) FROM storyos.memory_captures WHERE project_id = $1::text::uuid),
-                                (SELECT count(*) FROM storyos.model_attempts WHERE project_id = $1::text::uuid),
+                                (SELECT coalesce(jsonb_agg(payload #> '{wire,serialized_payload}'), '[]')
+                                   FROM storyos.model_attempts WHERE project_id = $1::text::uuid)
+                                || (SELECT coalesce(jsonb_agg(cause), '[]')
+                                      FROM storyos.embedding_attempts WHERE project_id = $1::text::uuid),
                                 (SELECT count(*) FROM storyos.project_destination_grants
                                   WHERE project_id = $1::text::uuid))::text";
             let project_id = f.scope.project_id.as_ref();
@@ -318,10 +334,18 @@ async fn a_project_with_no_completed_run_holds_the_row() {
     let held = (
         ("no_completed_run", json!([true, null])),
         json!(0),
-        json!(0),
+        json!([]),
         true,
     );
-    assert_eq!(projects, [held.clone(), held]);
+    assert_eq!(projects, [held.clone(), held.clone(), held]);
+}
+
+/// The Runs of a Project before its Chapter changes.
+#[derive(Clone, Copy, PartialEq)]
+enum Runs {
+    None,
+    Queued,
+    Cancelled,
 }
 
 /// Three due Chapters start one capture each, the first in Chapter order first, and not in the
