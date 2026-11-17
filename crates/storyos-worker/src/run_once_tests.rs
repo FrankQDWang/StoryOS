@@ -178,6 +178,7 @@ impl ModelDispatchStore for RaceStore {
     async fn next_dispatch_work(
         &self,
         claim: &ClaimedAgentRun,
+        _adapters: &'static [ModelAdapter],
     ) -> Result<NextDispatchWork, CompleteAgentRunError> {
         let mut failures = self.completion_failures.lock().unwrap();
         if *failures > 0 {

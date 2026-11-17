@@ -479,10 +479,8 @@ pub(crate) async fn finish_dispatched(
             purpose: RetrievePurpose::LateResult,
             original_model_attempt_id: row.attempt_id.clone(),
             response_reference,
-            declared_targets: crate::agent_run_create_dispatch::declared_targets(
-                client,
-                claim,
-                run.chapter()?,
+            declared_targets: crate::agent_run_create_dispatch::run_declared_targets(
+                client, claim, run,
             )
             .await?,
         }));

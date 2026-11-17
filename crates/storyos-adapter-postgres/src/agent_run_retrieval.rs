@@ -483,7 +483,9 @@ fn facts(
         scope_permitted: text(subject, "owner_user_id")
             == Some(claim.project_scope.owner_user_id.as_ref())
             && text(subject, "project_id") == Some(claim.project_scope.project_id.as_ref()),
-        conversation_permitted: text(subject, "conversation_id") == Some(advance.conversation_id),
+        // A background Run and its subject have no Conversation (ADR 0094 section 5).
+        conversation_permitted: text(subject, "conversation_id").unwrap_or_default()
+            == advance.conversation_id,
         destination_permitted: advance.grant_admitted
             && route_admitted
             && text(subject, "destination_identity") == Some(destination_identity),

@@ -68,9 +68,22 @@ pub(crate) fn conditions(
             ))
         }
         Some(ModelAdapter::HostFake) | None => {
-            scripted_successor_conditions(unknown_create_script(&run.author_message))
+            scripted_successor_conditions(unknown_create_script(fake_script(run)))
         }
     }
+}
+
+/// The fake profile scripts a successor by the author message. A capture has no author message,
+/// so a `SCRIPT:successor-` line of its input scripts it, as `SCRIPT:capture` lines script its
+/// calls.
+fn fake_script(run: &RunPhaseRow) -> &str {
+    run.disclosure_request
+        .iter()
+        .flat_map(|record| &record.selected)
+        .filter(|item| item.source_class == storyos_core::ContextSourceClass::MemoryCaptureInput)
+        .flat_map(|item| item.content.lines())
+        .find(|line| line.starts_with("SCRIPT:successor-"))
+        .unwrap_or(&run.author_message)
 }
 
 /// The successor marker of one unknown create, with the lookup its reference allows.
@@ -367,7 +380,8 @@ pub(crate) struct DecisionRow {
     status: String,
     pub attempt_id: String,
     pub invocation_id: String,
-    pub conversation_id: String,
+    /// The Project Conversation of the attempt. An attempt of background work has none.
+    pub conversation_id: Option<String>,
     pub payload: serde_json::Value,
 }
 

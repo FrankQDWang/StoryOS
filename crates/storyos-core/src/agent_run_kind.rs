@@ -1,5 +1,11 @@
 //! The kind of an AgentRun (ADR 0094 section 5).
 
+use crate::{RunStepLimit, ToolChoice, ToolOperation};
+
+/// The most RunSteps of one capture. It is an initial value, and S7-D7 can change it. A Run of
+/// the author keeps `MAX_RUN_STEPS` (ADR 0091 section 5).
+pub const MEMORY_CAPTURE_MAX_RUN_STEPS: u64 = 8;
+
 /// The kind of one AgentRun. A Run of the author has its Project Conversation, its Conversation
 /// Memory Settings revision, its Chapter, its author message, and the Receipt of `createAgentRun`.
 /// A background Run has none of them, and no read or command of the author gets it.
@@ -68,18 +74,83 @@ impl AgentRunKind {
         self.has_conversation()
     }
 
-    /// The `tool_choice` of the request of a RunStep at `limit`, when the kind decides it. A
-    /// background Run has no `finish` call, so each request before the last RunStep requires a
-    /// call, and its output call ends it. The last RunStep sends `none`, and the Host executes no
-    /// call of it (ADR 0091). The finish rule decides the `tool_choice` of a Run of the author.
-    pub fn fixed_tool_choice(self, limit: crate::RunStepLimit) -> Option<crate::ToolChoice> {
+    /// The `tool_choice` of each request of a Run of the kind, when the kind decides it. A
+    /// background Run has no `finish` call and no closing request, so each request requires a
+    /// call, and its output call ends it. The finish rule decides the `tool_choice` of a Run of
+    /// the author (ADR 0091 section 4).
+    pub fn fixed_tool_choice(self) -> Option<ToolChoice> {
         match self {
             Self::Author => None,
-            Self::MemoryCapture | Self::MemoryConsolidation => {
-                Some(crate::step_tool_choice(limit, &[]))
-            }
+            Self::MemoryCapture | Self::MemoryConsolidation => Some(ToolChoice::Required),
         }
     }
+
+    /// The most RunSteps of a Run of the kind. A consolidation pass keeps the limit of ADR 0091
+    /// until its ticket sets one.
+    pub fn max_run_steps(self) -> u64 {
+        match self {
+            Self::Author | Self::MemoryConsolidation => crate::MAX_RUN_STEPS,
+            Self::MemoryCapture => MEMORY_CAPTURE_MAX_RUN_STEPS,
+        }
+    }
+
+    /// The limit of the RunStep at `decision_position` of a Run of the kind.
+    pub fn run_step_limit(self, decision_position: u64) -> RunStepLimit {
+        RunStepLimit::within(self.max_run_steps(), decision_position)
+    }
+
+    /// The one operation that the Host executes in the last RunStep of a Run of the kind. A
+    /// capture can still record its observations there. The Host executes no call of the last
+    /// RunStep of another kind (ADR 0091 section 5).
+    fn last_step_operation(self) -> Option<ToolOperation> {
+        match self {
+            Self::MemoryCapture => Some(ToolOperation::RecordMemoryObservations),
+            Self::Author | Self::MemoryConsolidation => None,
+        }
+    }
+
+    /// Whether the Host executes a call of `operation` in a RunStep at `limit`. Each other call
+    /// of the last RunStep gets no execution.
+    pub fn executes_call(self, limit: RunStepLimit, operation: ToolOperation) -> bool {
+        limit.executes_calls() || self.last_step_operation() == Some(operation)
+    }
+
+    /// Whether a response of a RunStep at `limit` keeps its calls for the Tool Gateway.
+    pub fn keeps_calls(self, limit: RunStepLimit) -> bool {
+        limit.executes_calls() || self.last_step_operation().is_some()
+    }
+
+    /// Whether a Run of the kind gives its claim back between two RunSteps when a Run of the
+    /// author is queued. Only background work gives way (ADR 0094 section 5).
+    pub fn gives_way_to_author(self) -> bool {
+        !self.has_conversation()
+    }
+
+    /// Whether the decision request with `record` is too long for a Run of the kind. A
+    /// background Run does not compact, and each of its requests sends its full input with the
+    /// Tool results of the Run, so the check of ADR 0056 counts each text of the request. The
+    /// compaction phase checks a request of a Run of the author (ADR 0093).
+    pub fn full_request_too_long(
+        self,
+        model_registration_revision: &str,
+        budget_bounds: &str,
+        record: &crate::CurrentPassageAssemblyRecord,
+    ) -> bool {
+        !self.has_conversation()
+            && crate::later_request_too_long(
+                model_registration_revision,
+                budget_bounds,
+                record,
+                &[],
+            )
+    }
+}
+
+/// Whether a background Run between two RunSteps at `decision_position` gives its claim back. A
+/// queued Run of the author goes first, so it waits for at most one request of background work.
+/// The first RunStep follows the claim, and the claim order already puts the author first.
+pub fn yields_to_author(decision_position: u64, author_run_queued: bool) -> bool {
+    decision_position > 0 && author_run_queued
 }
 
 #[cfg(test)]

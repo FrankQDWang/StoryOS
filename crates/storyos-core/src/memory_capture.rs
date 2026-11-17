@@ -23,6 +23,51 @@ pub struct CaptureAdmissionFacts<'a> {
     pub input: &'a str,
 }
 
+/// What ended the Run of a running capture before an output call settled.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CaptureRunEnd<'a> {
+    /// Each call of the last RunStep resolved, or its response had no call.
+    LastRunStepEnded,
+    /// The Run got the status `status`, with the reason of its settlement.
+    Status {
+        status: &'a str,
+        reason: Option<&'a str>,
+    },
+}
+
+/// The outcome of a capture that ended with no settled output call, and the reason of a failure.
+/// It stores no observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CaptureEnd<'a> {
+    pub outcome: crate::CaptureOutcome,
+    pub failure_reason: Option<&'a str>,
+}
+
+/// The outcome of a running capture from the facts of its Run (ADR 0039, ADR 0094 section 5).
+/// `None`: the capture continues. A Run that ends in another way fails the capture. The Host
+/// starts no second capture for the same input by itself.
+pub fn capture_end(end: CaptureRunEnd<'_>) -> Option<CaptureEnd<'_>> {
+    let (status, reason) = match end {
+        CaptureRunEnd::LastRunStepEnded => {
+            return Some(CaptureEnd {
+                outcome: crate::CaptureOutcome::StepLimit,
+                failure_reason: None,
+            });
+        }
+        CaptureRunEnd::Status { status, reason } => (status, reason),
+    };
+    let default_reason = match status {
+        "queued" | "claimed" => return None,
+        // A Run that completes before an output call settled made no Agent Decision.
+        "completed" => "no_agent_decision",
+        other => other,
+    };
+    Some(CaptureEnd {
+        outcome: crate::CaptureOutcome::Failed,
+        failure_reason: Some(reason.unwrap_or(default_reason)),
+    })
+}
+
 /// Why the Host refused to start a capture. A refused start writes no row.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CaptureRefusal {

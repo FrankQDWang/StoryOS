@@ -44,10 +44,14 @@ pub(crate) enum WorkPhase {
     Abort(CommittedCancellation),
     /// The durable Decision has unresolved ToolCalls for the Tool Gateway.
     ToolCalls,
+    /// A background Run is between two RunSteps at this position, before the request of the
+    /// next RunStep. It gives its claim back when a Run of the author is queued.
+    BetweenSteps(u64),
 }
 
 /// Claims the next AgentRun whose Model Registration binds one of `model_kinds`. The Worker claims
-/// only a Run of a dispatched kind, so a queued background Run stays queued (ADR 0094 section 5).
+/// only a Run of a dispatched kind, and a Run of the author before background work, so ordinary
+/// writing does not wait for a capture (ADR 0094 section 5).
 async fn claim_agent_run_row(
     transaction: &tokio_postgres::Transaction<'_>,
     lease_seconds: i64,
@@ -76,7 +80,7 @@ async fn claim_agent_run_row(
                      AND (run.lease_expires_at IS NULL
                           OR run.lease_expires_at <= clock_timestamp())
                    ))
-                ORDER BY run.status = 'cancelled', run.run_id
+                ORDER BY run.status = 'cancelled', run.run_kind <> $4, run.run_id
                 FOR UPDATE OF run SKIP LOCKED
                 LIMIT 1
              )
@@ -95,7 +99,12 @@ async fn claim_agent_run_row(
                     run.project_id::text,
                     run.run_id::text,
                     run.fence_token",
-            &[&lease_seconds, &model_kinds, &run_kinds.as_slice()],
+            &[
+                &lease_seconds,
+                &model_kinds,
+                &run_kinds.as_slice(),
+                &AgentRunKind::Author.name(),
+            ],
         )
         .await
         .map_err(read_error)?;
@@ -385,10 +394,13 @@ pub(crate) async fn admit_create(
     Ok(CreateAdmission::Settled)
 }
 
+/// Settles one work phase of the claimed Run. `checked_step`: the RunStep position at which the
+/// claim already checked the queue of the author.
 pub(crate) async fn settle_one_phase(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     lease_seconds: i64,
+    checked_step: Option<u64>,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let run = load_run_phase(client, claim).await?;
     if run.status == "cancelled" {
@@ -396,6 +408,15 @@ pub(crate) async fn settle_one_phase(
     }
     if run.settled() {
         return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
+    }
+    if run.attempt_id.is_none() && run.kind.gives_way_to_author() {
+        let position = run
+            .decision_position
+            .parse::<u64>()
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+        if checked_step != Some(position) {
+            return Ok(WorkPhase::BetweenSteps(position));
+        }
     }
     if run.attempt_id.is_none()
         && crate::agent_run_steering::advance_before_request(
@@ -448,6 +469,28 @@ pub(crate) async fn settle_one_phase(
         } else {
             run
         };
+        // A background Run does not compact, so its full request must fit (ADR 0056).
+        if run.disclosure_request.as_ref().is_some_and(|record| {
+            run.kind.full_request_too_long(
+                &run.model_registration_revision,
+                &run.budget_bounds,
+                record,
+            )
+        }) {
+            let refusal = serde_json::json!({
+                "kind": "execution_refused",
+                "capability": "conversation_too_long"
+            });
+            update_run(
+                client,
+                claim,
+                "refused",
+                Some(&refusal),
+                /*clear_lease*/ true,
+            )
+            .await?;
+            return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
+        }
         let record: serde_json::Value = serde_json::from_str(&run.assembly_payload)
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
         return Ok(
@@ -568,8 +611,13 @@ pub(crate) async fn update_run(
     settlement: Option<&serde_json::Value>,
     clear_lease: bool,
 ) -> Result<(), CompleteAgentRunError> {
-    let settlement = settlement.map(ToString::to_string);
-    client
+    let reason = settlement.and_then(|value| {
+        ["capability", "reason"]
+            .into_iter()
+            .find_map(|key| value.get(key).and_then(serde_json::Value::as_str))
+    });
+    let text = settlement.map(ToString::to_string);
+    let updated = client
         .execute(
             "UPDATE storyos.agent_runs
                 SET status = $4::text,
@@ -585,13 +633,19 @@ pub(crate) async fn update_run(
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
                 &status,
-                &settlement,
+                &text,
                 &clear_lease,
                 &claim.fence_token,
             ],
         )
         .await
         .map_err(complete_database_error)?;
+    // A capture that the Run ends before an output call settled gets its outcome in the same
+    // transaction (ADR 0094 section 5). A stale fence changes nothing.
+    if updated == 1 {
+        let end = storyos_core::CaptureRunEnd::Status { status, reason };
+        crate::memory_capture::settle_end(client, claim, end).await?;
+    }
     Ok(())
 }
 

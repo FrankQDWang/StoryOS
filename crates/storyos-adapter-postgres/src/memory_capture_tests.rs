@@ -27,6 +27,17 @@ pub(crate) async fn project(
     admin: &Client,
     prefix: &str,
 ) -> (ProjectScope, String, MemoryCaptureSource) {
+    // A capture gives way to each queued Run of the author, and earlier tests leave queued Runs
+    // in the shared database. Park them, so that only the Runs of this test are queued.
+    admin
+        .execute(
+            "UPDATE storyos.agent_runs
+                SET status = 'paused', lease_expires_at = NULL, wakeup_pending = false
+              WHERE run_kind = 'author' AND status = 'queued'",
+            &[],
+        )
+        .await
+        .unwrap();
     let (scope, chapter_id, run_id) = queued(store, prefix).await;
     complete(store, admin, &scope, &run_id).await;
     let conversation_id: String = admin
@@ -43,6 +54,31 @@ pub(crate) async fn project(
         last_run_id: run_id,
     };
     (scope, chapter_id, source)
+}
+
+/// Completes the capture Run `run_id`. A capture that gave its claim back to a queued Run of the
+/// author in another Project gets a new claim, until its Run is not queued.
+pub(crate) async fn run_capture(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    run_id: &str,
+) {
+    for _ in 0..=storyos_core::MEMORY_CAPTURE_MAX_RUN_STEPS {
+        complete(store, admin, scope, run_id).await;
+        let status: String = admin
+            .query_one(
+                "SELECT status FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+                &[&run_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        if status != "queued" {
+            return;
+        }
+    }
+    panic!("the capture {run_id} did not end");
 }
 
 pub(crate) async fn start(

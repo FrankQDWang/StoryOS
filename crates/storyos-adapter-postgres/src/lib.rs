@@ -106,6 +106,7 @@ mod agent_run_current_chapter;
 mod agent_run_dispatch;
 mod agent_run_expiry;
 mod agent_run_finish_rule;
+mod agent_run_give_way;
 mod agent_run_host_tool;
 mod agent_run_hybrid_search;
 mod agent_run_lease;

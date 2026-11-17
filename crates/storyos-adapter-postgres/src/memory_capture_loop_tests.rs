@@ -7,13 +7,13 @@ use storyos_application::{ConversationSelection, MemoryCaptureSource, ProjectSco
 use storyos_core::{DeploymentDestination, ObservationRefusal, RESEARCH_TOOL_OFFER};
 use tokio_postgres::Client;
 
-use super::tests::{project, start};
+use super::tests::{project, run_capture, start};
 use crate::agent_run_dispatch::tests::{admit_selected_run, queued_run_offering, stores};
 use crate::agent_run_finish_rule::tests::{calls, complete};
 use crate::create_agent_run_tests::skill_tests::{fixture, set};
 
 /// The input of a capture: one script line for each call, in RunStep order.
-fn script(calls: &[(&str, Value)]) -> String {
+pub(crate) fn script(calls: &[(&str, Value)]) -> String {
     let lines: Vec<String> = calls
         .iter()
         .map(|(name, arguments)| format!("SCRIPT:capture {name} {arguments}"))
@@ -21,7 +21,7 @@ fn script(calls: &[(&str, Value)]) -> String {
     format!("林舟在雨夜撑船。\n{}", lines.join("\n"))
 }
 
-fn record(observations: Value) -> (&'static str, Value) {
+pub(crate) fn record(observations: Value) -> (&'static str, Value) {
     let arguments = json!({ "observations": observations });
     ("record_memory_observations", arguments)
 }
@@ -37,11 +37,13 @@ fn refused(position: u64, refusal: ObservationRefusal) -> Value {
     ])
 }
 
-/// The Run status, the capture state and outcome, and each observation of the Run `run_id`.
-async fn settlement(admin: &Client, run_id: &str) -> Value {
+/// The Run status, the capture state, outcome, and failure reason, and each observation of the
+/// Run `run_id`.
+pub(crate) async fn settlement(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
             "SELECT jsonb_build_array(run.status, capture.state, capture.outcome,
+                      capture.failure_reason,
                       COALESCE((SELECT jsonb_agg(jsonb_build_array(item.position, item.entry_type,
                                   item.title, item.text, item.state) ORDER BY item.position)
                                   FROM storyos.memory_observations AS item
@@ -58,7 +60,7 @@ async fn settlement(admin: &Client, run_id: &str) -> Value {
 
 /// The count of the Memory entry versions, the Proposals, the Research Artifacts, and the
 /// Authoritative Revisions of the Project of `scope`.
-async fn other_records(admin: &Client, scope: &ProjectScope) -> Value {
+pub(crate) async fn other_records(admin: &Client, scope: &ProjectScope) -> Value {
     let tables = [
         "memory_entry_versions",
         "proposals",
@@ -79,7 +81,7 @@ async fn other_records(admin: &Client, scope: &ProjectScope) -> Value {
 }
 
 /// For each decision request of the Run: its purpose, its `tool_choice`, and its Tools.
-async fn requests(admin: &Client, run_id: &str) -> Value {
+pub(crate) async fn requests(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
             "SELECT jsonb_agg(jsonb_build_array(wire ->> 'purpose', wire ->> 'tool_choice',
@@ -149,7 +151,7 @@ async fn a_capture_records_its_observations_after_refused_calls_and_writes_no_ot
         record(json!(five)),
     ]);
     let started = start(&store, &scope, &source, &input).await.unwrap();
-    complete(&store, &admin, &scope, &started.run_id).await;
+    run_capture(&store, &admin, &scope, &started.run_id).await;
 
     let calls = calls(&admin, &started.run_id).await;
     assert_eq!(
@@ -173,6 +175,7 @@ async fn a_capture_records_its_observations_after_refused_calls_and_writes_no_ot
             "completed",
             "settled",
             "observations_recorded",
+            null,
             observations
         ])
     );
@@ -201,7 +204,7 @@ async fn an_empty_list_settles_the_capture_with_no_observation_after_each_refusa
         record(json!([{"type": "other", "title": "雨", "text": long}])),
     ]);
     let started = start(&store, &scope, &source, &input).await.unwrap();
-    complete(&store, &admin, &scope, &started.run_id).await;
+    run_capture(&store, &admin, &scope, &started.run_id).await;
 
     let labels: Vec<Value> = calls(&admin, &started.run_id)
         .await
@@ -219,42 +222,74 @@ async fn an_empty_list_settles_the_capture_with_no_observation_after_each_refusa
     );
     assert_eq!(
         settlement(&admin, &started.run_id).await,
-        json!(["completed", "settled", "no_observation", []])
+        json!(["completed", "settled", "no_observation", null, []])
     );
 }
 
-/// The RunStep limit of ADR 0091 bounds the loop of a capture: after 23 refused calls, the request
-/// of the last RunStep sends `none`, the Host executes no call of it, and the Run ends with 24
-/// decision requests. S7-D3c gives the capture its failure outcome.
+/// The step limit of a capture bounds its loop: a script that never calls the output Tool gets
+/// one request for each RunStep, each request requires a call, and after the last RunStep the
+/// capture settles with `step_limit`, it stores no observation, and the Run completes.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn the_last_run_step_of_a_capture_sends_none_and_executes_no_call() {
+async fn a_capture_that_never_records_settles_with_the_step_limit() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "fdb").await;
-    let refused_calls = vec![("propose_edit", json!({"reason": "改写"})); 23];
-    let started = start(&store, &scope, &source, &script(&refused_calls))
+    let max = usize::try_from(storyos_core::MEMORY_CAPTURE_MAX_RUN_STEPS).unwrap();
+    let edits = vec![("propose_edit", json!({"reason": "改写"})); max + 2];
+    let started = start(&store, &scope, &source, &script(&edits))
         .await
         .unwrap();
-    complete(&store, &admin, &scope, &started.run_id).await;
+    run_capture(&store, &admin, &scope, &started.run_id).await;
 
-    let calls = calls(&admin, &started.run_id).await;
-    let states: Vec<Value> = calls.iter().map(|call| call[2].clone()).collect();
-    assert_eq!(states, vec![json!("refused"); 23]);
-    let requests = requests(&admin, &started.run_id).await;
-    let choices: Vec<Value> = requests
-        .as_array()
-        .unwrap()
+    let states: Vec<Value> = calls(&admin, &started.run_id)
+        .await
         .iter()
-        .map(|r| r[1].clone())
+        .map(|call| json!([call[1], call[2]]))
         .collect();
-    let mut expected = vec![json!("required"); 23];
-    expected.push(json!("none"));
-    assert_eq!(choices, expected);
+    assert_eq!(states, vec![json!(["propose_edit", "refused"]); max]);
+    let request = json!(["memory_capture", "required", ["record_memory_observations"]]);
+    assert_eq!(
+        requests(&admin, &started.run_id).await,
+        json!(vec![request; max])
+    );
     assert_eq!(
         settlement(&admin, &started.run_id).await,
-        json!(["completed", "running", null, []])
+        json!(["completed", "settled", "step_limit", null, []])
+    );
+}
+
+/// The Host executes the output call of the last RunStep. When that call is refused, the capture
+/// settles with `step_limit` and stores no observation.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_refused_output_call_in_the_last_run_step_settles_with_the_step_limit() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, _, source) = project(&store, &admin, "fdc").await;
+    let max = usize::try_from(storyos_core::MEMORY_CAPTURE_MAX_RUN_STEPS).unwrap();
+    let mut lines = vec![("propose_edit", json!({"reason": "改写"})); max - 1];
+    let item = json!({"type": "other", "title": "雨", "text": "雨。"});
+    lines.push(record(json!(vec![item; 6])));
+    let started = start(&store, &scope, &source, &script(&lines))
+        .await
+        .unwrap();
+    run_capture(&store, &admin, &scope, &started.run_id).await;
+
+    let calls = calls(&admin, &started.run_id).await;
+    assert_eq!(
+        (calls.len(), calls[max - 1].clone()),
+        (
+            max,
+            refused(u64::try_from(max - 1).unwrap(), ObservationRefusal::TooMany)
+        )
+    );
+    assert_eq!(
+        settlement(&admin, &started.run_id).await,
+        json!(["completed", "settled", "step_limit", null, []])
     );
 }

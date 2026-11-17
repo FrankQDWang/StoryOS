@@ -57,7 +57,7 @@ An unknown or partial ToolCall has no automatic retry, because nothing can recon
 
 ### 7. Contract Fault Points
 
-The Tool Gateway reports `ToolContextCommitted` after the store committed the Context Assembly of a ToolCall, and `ToolDispatchClaimed` after its dispatch claim committed.
+The Tool Gateway reports `ToolContextCommitted` after the store committed the Context Assembly of a ToolCall, and `ToolDispatchClaimed` after its dispatch claim committed. It reports `ToolCallsCommitted` before it resolves the ToolCalls of a durable Decision. The store executes an in-process Host Tool call in that resolution, so this point is the one Tool Gateway point before such a call (S7-D3c).
 
 ## Considered options
 
