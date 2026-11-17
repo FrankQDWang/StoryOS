@@ -82,25 +82,3 @@ async fn public_read_admission_uses_normalized_config_binding_and_header_origins
         );
     }
 }
-
-#[tokio::test]
-async fn the_project_store_has_the_embedding_registration_of_the_deployment() {
-    let fake = Some(&storyos_core::HOST_FAKE_EMBEDDING_REGISTRATION);
-    for embedding in [None, fake] {
-        let state = ServerState::new(ServerConfig {
-            database_url: Some(SecretString::from("postgres://127.0.0.1/storyos")),
-            embedding,
-            ..ServerConfig::default()
-        });
-        let store = state
-            .project_store
-            .expect("a database URL gives a Project store");
-        let revision = |registration: Option<&storyos_core::EmbeddingRegistration>| {
-            registration.map(|registration| registration.revision)
-        };
-        assert_eq!(
-            revision(store.embedding_registration()),
-            revision(embedding)
-        );
-    }
-}

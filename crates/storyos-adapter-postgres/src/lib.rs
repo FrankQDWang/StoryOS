@@ -740,11 +740,6 @@ impl PostgresProjectReader {
         self
     }
 
-    /// The Embedding Registration of the deployment, or `None`.
-    pub fn embedding_registration(&self) -> Option<&'static storyos_core::EmbeddingRegistration> {
-        self.embedding_registration
-    }
-
     /// Sets the transaction setting of the deployment Embedding Registration. With no
     /// Registration, the setting stays empty.
     async fn set_embedding_registration(
