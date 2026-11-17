@@ -201,10 +201,11 @@ async fn memory_work_claim(store: &impl WorkerStore) -> Result<bool, ProjectRead
     memory_work_claim_span(store).await
 }
 
-/// The claim span of one schedule row (ADR 0047). The store decides and starts the capture in the
-/// transaction of the claim, so the span has no completion attempt and no fence token.
+/// The claim span of one schedule row (ADR 0047). The store decides and starts the capture or the
+/// pass in the transaction of the claim, so the span has no completion attempt and no fence token.
 #[tracing::instrument(skip_all, fields(
     project_id = tracing::field::Empty,
+    kind = tracing::field::Empty,
     run_id = tracing::field::Empty,
     outcome = tracing::field::Empty,
 ))]
@@ -222,8 +223,14 @@ async fn memory_work_claim_span(store: &impl WorkerStore) -> Result<bool, Projec
         }
     };
     span.record("project_id", claimed.project_scope.project_id.diagnostic());
-    if let MemoryWorkOutcome::Started(started) = &claimed.outcome {
-        span.record("run_id", DiagnosticId(&started.run_id).diagnostic());
+    span.record("kind", claimed.source.kind());
+    let run_id = match &claimed.outcome {
+        MemoryWorkOutcome::Started(started) => Some(&started.run_id),
+        MemoryWorkOutcome::PassStarted(started) => Some(&started.run_id),
+        MemoryWorkOutcome::Skipped(_) | MemoryWorkOutcome::PassSkipped(_) => None,
+    };
+    if let Some(run_id) = run_id {
+        span.record("run_id", DiagnosticId(run_id).diagnostic());
     }
     span.record("outcome", claimed.outcome.diagnostic());
     Ok(true)

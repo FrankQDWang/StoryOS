@@ -182,7 +182,9 @@ pub use memory_consolidation::{MemoryConsolidationStore, StartedMemoryConsolidat
 pub use memory_entries::{
     MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem, list_memory_entries,
 };
-pub use memory_work_schedule::{ClaimedMemoryWork, MemoryWorkOutcome, MemoryWorkScheduleStore};
+pub use memory_work_schedule::{
+    ClaimedMemoryWork, MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource,
+};
 pub use model_gateway::{
     complete_agent_run, complete_agent_run_with_destinations, complete_agent_run_with_tools,
 };
