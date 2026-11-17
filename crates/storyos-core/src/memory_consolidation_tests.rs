@@ -71,7 +71,9 @@ fn the_input_of_a_pass_has_one_line_for_each_entry_and_each_observation() {
             destination_identity: "destination".to_owned(),
             memory_revision: 4,
             entries: &entries,
+            unused: &[],
             observations,
+            marks: &[],
         })
     };
     let record = assemble(&observations[..1]);

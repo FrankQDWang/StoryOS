@@ -38,6 +38,7 @@ mod memory_consolidation;
 mod memory_delete_marks;
 mod memory_entry;
 mod memory_index;
+mod memory_prune;
 mod memory_work_schedule;
 mod model_output;
 mod model_registration;
@@ -259,6 +260,7 @@ pub use memory_index::{
     MEMORY_INDEX_MAX_ENTRIES, MEMORY_INDEX_TOKEN_LIMIT, MemoryIndexEntry, assemble_memory_index,
     memory_index_text,
 };
+pub use memory_prune::{MEMORY_UNUSED_AFTER_DAYS, memory_entry_unused};
 pub use memory_work_schedule::{
     CONVERSATION_QUIET_TIME, ConversationCaptureFacts, ConversationCaptureInput,
     ConversationCaptureSkip, ConversationRole, ConversationRunMessages, capture_settlement_due,
