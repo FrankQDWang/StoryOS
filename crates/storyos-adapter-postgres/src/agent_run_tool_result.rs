@@ -75,8 +75,14 @@ pub(crate) async fn open_next_step(
         .disclosure_request
         .as_ref()
         .ok_or_else(|| damaged("The Context Assembly of the function request is damaged"))?;
-    // A background Run has no steering input, no Chapter, and no Receipt.
+    // A background Run has no steering input, no Chapter, and no Receipt. After its last
+    // RunStep, the Run completes, and Core gives the outcome of its capture.
     if !run.kind.reads_steering() {
+        if crate::agent_run_finish_rule::run_step_limit(run)? == storyos_core::RunStepLimit::Last {
+            let end = storyos_core::CaptureRunEnd::LastRunStepEnded;
+            crate::memory_capture::settle_end(client, claim, end).await?;
+            return crate::agent_run_work::complete(client, claim).await;
+        }
         let results = RunToolResults::load(client, claim).await?;
         let next_position = crate::agent_run_steering::next_position(&run.decision_position)?;
         crate::memory_capture::persist_next_step(

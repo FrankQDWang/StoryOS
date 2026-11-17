@@ -81,6 +81,7 @@ impl ModelDispatchStore for LeaseStore<'_> {
     async fn next_dispatch_work(
         &self,
         _claim: &ClaimedAgentRun,
+        _adapters: &'static [storyos_core::ModelAdapter],
     ) -> Result<NextDispatchWork, CompleteAgentRunError> {
         Ok(self
             .work

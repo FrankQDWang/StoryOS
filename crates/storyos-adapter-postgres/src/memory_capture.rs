@@ -283,6 +283,36 @@ pub(crate) async fn record_observations(
     Ok(())
 }
 
+/// Settles the running capture of the Run, when the Run has one, with the outcome that Core
+/// gives from `end`. It stores no observation. A Run with no running capture is not changed.
+pub(crate) async fn settle_end(
+    client: &Client,
+    claim: &ClaimedAgentRun,
+    end: storyos_core::CaptureRunEnd<'_>,
+) -> Result<(), CompleteAgentRunError> {
+    let Some(end) = storyos_core::capture_end(end) else {
+        return Ok(());
+    };
+    let scope = &claim.project_scope;
+    client
+        .execute(
+            "UPDATE storyos.memory_captures
+                SET state = 'settled', outcome = $4, failure_reason = $5
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid AND state = 'running'",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &claim.run_id,
+                &end.outcome.label(),
+                &end.failure_reason,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "memory_capture_tests.rs"]
 pub(crate) mod tests;
@@ -290,3 +320,15 @@ pub(crate) mod tests;
 #[cfg(test)]
 #[path = "memory_capture_loop_tests.rs"]
 mod loop_tests;
+
+#[cfg(test)]
+#[path = "memory_capture_order_tests.rs"]
+mod order_tests;
+
+#[cfg(test)]
+#[path = "memory_capture_failure_tests.rs"]
+mod failure_tests;
+
+#[cfg(test)]
+#[path = "memory_capture_recovery_tests.rs"]
+mod recovery_tests;

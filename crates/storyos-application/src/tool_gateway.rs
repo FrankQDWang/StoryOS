@@ -19,6 +19,9 @@ pub(crate) async fn dispatch_tool_calls(
     clock: &impl GatewayClock,
     claim: &ClaimedAgentRun,
 ) -> Result<(), CompleteAgentRunError> {
+    observer
+        .reached(ContractFaultPoint::ToolCallsCommitted)
+        .await;
     while let Some(request) = store.next_tool_call(claim).await? {
         observer
             .reached(ContractFaultPoint::ToolContextCommitted)

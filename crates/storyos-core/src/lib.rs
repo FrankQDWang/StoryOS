@@ -106,7 +106,7 @@ pub use agent_run_control::{
     PauseAgentRunNoEffect, SteerAgentRunConflict, SteerAgentRunNoEffect, SteeringReader,
     classify_cancel_agent_run, classify_pause_agent_run, classify_steer_agent_run,
 };
-pub use agent_run_kind::AgentRunKind;
+pub use agent_run_kind::{AgentRunKind, MEMORY_CAPTURE_MAX_RUN_STEPS, yields_to_author};
 pub use append_proposal_generation_batch::{
     AppendProposalGenerationBatch, AppendProposalGenerationBatchConflict,
     AppendProposalGenerationBatchRefusal, AppendProposalGenerationBatchResult,
@@ -228,8 +228,8 @@ pub use manuscript_payload::{
 };
 pub use manuscript_use::{ManuscriptUse, StoredManuscriptCall, manuscript_uses};
 pub use memory_capture::{
-    CaptureAdmissionFacts, CaptureRefusal, MemoryCaptureAssembly, admit_memory_capture,
-    assemble_memory_capture_context,
+    CaptureAdmissionFacts, CaptureEnd, CaptureRefusal, CaptureRunEnd, MemoryCaptureAssembly,
+    admit_memory_capture, assemble_memory_capture_context, capture_end,
 };
 pub use memory_entry::{
     MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference,

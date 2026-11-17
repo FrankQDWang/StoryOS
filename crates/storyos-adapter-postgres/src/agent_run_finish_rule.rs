@@ -8,12 +8,16 @@ use storyos_core::{PriorStepCall, ToolCallState, ToolChoice};
 use crate::agent_run_tool_authority::damaged;
 use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_database_error};
 
-/// The `tool_choice` of the request of the active RunStep of `run`.
+/// The `tool_choice` of the request of the active RunStep of `run`. A capture has no `finish`
+/// call, so its kind decides: each of its requests requires a call (ADR 0094 section 5).
 pub(crate) async fn tool_choice(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<ToolChoice, CompleteAgentRunError> {
+    if let Some(fixed) = run.kind.fixed_tool_choice() {
+        return Ok(fixed);
+    }
     // A RunStep that reads a steering input is an ordinary RunStep: no `finish` call before it
     // counts.
     if crate::agent_run_steering::reads_input(client, claim, &run.decision_position).await? {
@@ -54,13 +58,13 @@ pub(crate) async fn tool_choice(
     ))
 }
 
-/// The RunStep limit of the active RunStep of `run`.
+/// The RunStep limit of the active RunStep of `run`, from the limit of its kind.
 pub(crate) fn run_step_limit(
     run: &RunPhaseRow,
 ) -> Result<storyos_core::RunStepLimit, CompleteAgentRunError> {
     run.decision_position
         .parse::<u64>()
-        .map(storyos_core::RunStepLimit::at)
+        .map(|position| run.kind.run_step_limit(position))
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))
 }
 
@@ -94,7 +98,7 @@ pub(crate) async fn recovered_outcome(
                 }
             )
     );
-    if !limit.executes_calls() && !advances {
+    if !run.kind.keeps_calls(limit) && !advances {
         response
             .items
             .retain(|item| item.role != storyos_core::StreamItemRole::Tool);
