@@ -64,9 +64,9 @@ impl MemoryWorkScheduleStore for PostgresProjectReader {
         self.require_release1_storage_activation_proof()
             .await
             .map_err(ProjectReadError::unavailable)?;
-        let client = self.connect().await?;
         // The start reads the Memory head and its reference items in one snapshot, as
         // `start_memory_capture` does. A contended claim fails with a serialization failure.
+        let client = self.connect().await?;
         client
             .batch_execute("BEGIN ISOLATION LEVEL SERIALIZABLE")
             .await
