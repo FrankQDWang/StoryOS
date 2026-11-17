@@ -1,11 +1,12 @@
-//! The claim port of the schedule of background Memory work (ADR 0094 sections 5 and 6, writer 2).
+//! The claim port of the schedule of background Memory work (ADR 0094 sections 5 and 6, writers 2
+//! and 3).
 //! The Worker claims one due schedule row when it has no export work and no Run to claim. The
 //! store decides and starts the capture or the pass in the transaction of the claim, so that a
 //! second delivery starts no second capture for the same messages and no second pass.
 
 use std::future::Future;
 
-use storyos_core::{ConsolidationSkip, ConversationCaptureSkip};
+use storyos_core::{ChapterCaptureSkip, ConsolidationSkip, ConversationCaptureSkip};
 
 use crate::{
     DiagnosticField, ProjectReadError, ProjectScope, StartedMemoryCapture,
@@ -19,14 +20,17 @@ pub enum MemoryWorkOutcome {
     Skipped(ConversationCaptureSkip),
     PassStarted(StartedMemoryConsolidation),
     PassSkipped(ConsolidationSkip),
+    /// A claimed row of a Chapter started no capture. A Chapter capture that starts is `Started`.
+    ChapterSkipped(ChapterCaptureSkip),
 }
 
-/// The source of one schedule row: a Project Conversation for a capture, or the Project for a
-/// consolidation pass.
+/// The source of one schedule row: a Project Conversation or a Chapter for a capture, or the
+/// Project for a consolidation pass.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MemoryWorkSource {
     Conversation(String),
     Project,
+    Chapter(String),
 }
 
 impl MemoryWorkSource {
@@ -35,6 +39,7 @@ impl MemoryWorkSource {
         match self {
             Self::Conversation(_) => "conversation_capture",
             Self::Project => "consolidation",
+            Self::Chapter(_) => "chapter_capture",
         }
     }
 }
@@ -56,6 +61,7 @@ impl DiagnosticField for MemoryWorkOutcome {
             Self::Skipped(skip) => skip.label(),
             Self::PassStarted(_) => "pass_started",
             Self::PassSkipped(skip) => skip.label(),
+            Self::ChapterSkipped(skip) => skip.label(),
         }
     }
 }

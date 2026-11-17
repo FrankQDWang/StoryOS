@@ -76,6 +76,9 @@ mod secondary_operation;
 #[path = "command_sequence_tests/memory_entry_tests.rs"]
 mod memory_entry;
 
+#[path = "command_sequence_tests/chapter_capture_due_tests.rs"]
+mod chapter_capture_due;
+
 pub(crate) use acceptance::ACCEPT_PROPOSAL;
 pub(crate) use agent_run::{CANCEL_AGENT_RUN, CREATE_AGENT_RUN, PAUSE_AGENT_RUN};
 pub(crate) use memory_entry::DELETE_MEMORY_ENTRY;

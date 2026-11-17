@@ -280,6 +280,9 @@ pub(crate) async fn write_revision<E>(
     )
     .await
     .map_err(unavailable)?;
+    crate::chapter_capture_schedule::mark_chapter_due(client, scope, &write.chapter_id)
+        .await
+        .map_err(unavailable)?;
     client
         .execute(
             "INSERT INTO storyos.authoritative_commits
