@@ -235,14 +235,22 @@ impl PassageVectorStore for RecordingStore {
 }
 
 impl PassageIndexWorkStore for RecordingStore {
-    async fn claim_next_passage_index_work(
+    async fn passage_index_work_waits(
         &self,
         registration_revisions: &[&str],
         _cut_revision: &str,
+    ) -> Result<bool, ProjectReadError> {
+        self.record(format!("index {registration_revisions:?}"));
+        Ok(false)
+    }
+
+    async fn claim_next_passage_index_work(
+        &self,
+        _registration_revisions: &[&str],
+        _cut_revision: &str,
         _lease: Duration,
     ) -> Result<Option<ClaimedPassageIndex>, ProjectReadError> {
-        self.record(format!("index {registration_revisions:?}"));
-        Ok(None)
+        unreachable!("no index work waits")
     }
 
     async fn write_fenced_passage_vector(

@@ -72,6 +72,9 @@ struct Work {
     /// The text of the one Chapter with index work, and the passages with a row.
     index: Option<(ChapterPassageSource, Vec<PassageVectorKey>)>,
     index_claimed: bool,
+    /// The reads of waiting index work and the calls of the index claim.
+    index_reads: u64,
+    index_claim_calls: u64,
     /// The Embedding Registrations of each index claim.
     claimed_registrations: Vec<Vec<String>>,
     events: Vec<&'static str>,
@@ -83,6 +86,8 @@ impl Default for Work {
             schedule_rows: 1,
             index: None,
             index_claimed: false,
+            index_reads: 0,
+            index_claim_calls: 0,
             claimed_registrations: Vec::new(),
             events: Vec::new(),
         }
@@ -316,6 +321,16 @@ impl PassageVectorStore for RaceStore {
 }
 
 impl PassageIndexWorkStore for RaceStore {
+    async fn passage_index_work_waits(
+        &self,
+        _registration_revisions: &[&str],
+        _cut_revision: &str,
+    ) -> Result<bool, ProjectReadError> {
+        let mut work = self.work.lock().unwrap();
+        work.index_reads += 1;
+        Ok(work.index.is_some() && !work.index_claimed)
+    }
+
     async fn claim_next_passage_index_work(
         &self,
         registration_revisions: &[&str],
@@ -323,6 +338,7 @@ impl PassageIndexWorkStore for RaceStore {
         lease: Duration,
     ) -> Result<Option<ClaimedPassageIndex>, ProjectReadError> {
         let mut work = self.work.lock().unwrap();
+        work.index_claim_calls += 1;
         if work.index.is_none() || work.index_claimed {
             return Ok(None);
         }
@@ -652,5 +668,46 @@ async fn run_once_claims_a_schedule_row_only_after_the_agent_run_claim_finds_no_
             store.settled.lock().unwrap().clone()
         ),
         (0, 1, vec![claim()])
+    );
+}
+
+/// ADR 0047: an idle turn of the loop reads one time whether index work waits, and it makes no
+/// claim, so it opens no claim span. A Worker with no Embedding Registration makes no store call
+/// for index work. A turn with waiting index work claims it, as before.
+#[tokio::test(start_paused = true)]
+async fn an_idle_turn_reads_once_and_makes_no_claim_of_the_index_work() {
+    let idle = RaceStore {
+        work: Mutex::new(Work {
+            schedule_rows: 0,
+            ..Work::default()
+        }),
+        ..index_store(0)
+    };
+    let no_embeddings = ModelDestination {
+        adapter: NoDestination,
+        observer: NoContractFaults,
+        tools: storyos_application::NoToolDestination,
+        embeddings: storyos_application::NoEmbeddingDestination,
+    };
+    let mut index = None;
+    let reads_and_claims = |store: &RaceStore| {
+        let work = store.work.lock().unwrap();
+        (work.index_reads, work.index_claim_calls)
+    };
+
+    let fake_turn = step(&idle, &fake_destination(), &mut index).await;
+    let after_fake = reads_and_claims(&idle);
+    let no_embeddings_turn = step(&idle, &no_embeddings, &mut index).await;
+    let after_no_embeddings = reads_and_claims(&idle);
+    let work = index_store(0);
+    let claim_turn = step(&work, &fake_destination(), &mut index).await;
+
+    assert_eq!(
+        (
+            (fake_turn, after_fake),
+            (no_embeddings_turn, after_no_embeddings),
+            (claim_turn, reads_and_claims(&work)),
+        ),
+        ((false, (1, 0)), (false, (1, 0)), (true, (1, 1)))
     );
 }

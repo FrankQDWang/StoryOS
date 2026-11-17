@@ -38,6 +38,14 @@ pub struct ClaimedPassageIndex {
 /// operation returns `false` and changes nothing when a later claim holds the work or the lease
 /// ended, and it starts the lease again when it succeeds.
 pub trait PassageIndexWorkStore: PassageVectorStore + EmbeddingDispatchStore {
+    /// Whether work that the claim can take waits now, with no lock and no write. The claim asks
+    /// it first, so that an idle turn of the Worker makes no claim span.
+    fn passage_index_work_waits(
+        &self,
+        registration_revisions: &[&str],
+        cut_revision: &str,
+    ) -> impl Future<Output = Result<bool, ProjectReadError>> + Send;
+
     /// Claims the next pending work after its quiet time, in mark order and then in Chapter
     /// order. Claims only work whose Embedding Registration is one of `registration_revisions`.
     fn claim_next_passage_index_work(
@@ -109,13 +117,9 @@ impl DiagnosticField for PassageIndexStep {
     }
 }
 
-/// Claims the next index work for the Embedding Registrations that the caller composes.
-#[tracing::instrument(skip_all, fields(
-    project_id = tracing::field::Empty,
-    chapter_id = tracing::field::Empty,
-    fence_token = tracing::field::Empty,
-    outcome = tracing::field::Empty,
-))]
+/// Claims the next index work for the Embedding Registrations that the caller composes. It asks
+/// first whether work waits, so that an idle turn of the Worker makes no claim span (ADR 0047). A
+/// caller with no Embedding Registration makes no store call.
 pub async fn claim_next_passage_index_work(
     store: &impl PassageIndexWorkStore,
     registrations: &[&'static EmbeddingRegistration],
@@ -124,13 +128,31 @@ pub async fn claim_next_passage_index_work(
         .iter()
         .map(|registration| registration.revision)
         .collect();
-    let claimed = if revisions.is_empty() {
-        None
-    } else {
-        store
-            .claim_next_passage_index_work(&revisions, PASSAGE_CUT_REVISION, PASSAGE_INDEX_LEASE)
+    if revisions.is_empty()
+        || !store
+            .passage_index_work_waits(&revisions, PASSAGE_CUT_REVISION)
             .await?
-    };
+    {
+        return Ok(None);
+    }
+    claim_span(store, &revisions).await
+}
+
+/// The claim span of index work that waits. Another Worker can claim the work first, so the
+/// outcome can still be `none`.
+#[tracing::instrument(name = "claim_next_passage_index_work", skip_all, fields(
+    project_id = tracing::field::Empty,
+    chapter_id = tracing::field::Empty,
+    fence_token = tracing::field::Empty,
+    outcome = tracing::field::Empty,
+))]
+async fn claim_span(
+    store: &impl PassageIndexWorkStore,
+    revisions: &[&str],
+) -> Result<Option<ClaimedPassageIndex>, ProjectReadError> {
+    let claimed = store
+        .claim_next_passage_index_work(revisions, PASSAGE_CUT_REVISION, PASSAGE_INDEX_LEASE)
+        .await?;
     let span = tracing::Span::current();
     match &claimed {
         Some(claim) => {
