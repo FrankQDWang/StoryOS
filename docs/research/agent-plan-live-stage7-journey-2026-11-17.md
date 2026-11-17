@@ -44,7 +44,7 @@ The plan was posted on the ticket before the first request ([plan comment](https
 - **Planned:** 25 model requests, at most 45. About 270,000 reported input tokens, at most 600,000. About 40 embedding requests, at most 70. No Exa exchange.
 - **Request guard:** the `live_guard` triggers of the [record of S7-D6b](agent-plan-live-memory-conflict-2026-11-17.md), counted at the claim: model 45, Exa 0, embedding 70.
 
-One change to the plan: the plan said that the text of the Chapters goes in "through the editor". The script sent the same public commands that the editor sends (`createChapter`, `setCurrentChapter`, `applyAuthorEdit` with `replace_selection`, `split_block`, and `replace_block_selection`) through the generated client, as the S7-D7 run did. No browser was used.
+The run did not use the browser. The plan comment said that the text of the Chapters goes in "through the editor". At the start of the run, the coordinator changed that criterion of the ticket: the journey of S7-E1 proves the panel and the editor in the browser on the fake destination, and the records of S7-D5b and S7-D6b show the browser with the real model. So the script sent the same public commands that the editor sends (`createChapter`, `setCurrentChapter`, `applyAuthorEdit` with `replace_selection`, `split_block`, and `replace_block_selection`) through the generated client, as the S7-D7 run did.
 
 Final count: **19 model requests, 141,474 reported input tokens, and 34,016 output tokens**, inside each limit. There were 13 embedding requests and no Exa exchange. Each Model Attempt is `settled`, and each Run is `completed`. One ToolCall was refused (finding O2).
 
@@ -164,9 +164,18 @@ P3 did not change the text of entry 1. It wrote version 2 of entry 1 with the sa
 Run `01a1ebe1-38de-73b0-a73d-f4164089c7a5` in Conversation B, with the message "知遥第一次看到那只上锁的箱子时是什么情形？钥匙后面会在谁手里？请引用正文里的原句回答，不要修改正文。"
 
 - Before the Run, the index work of Chapters 1 and 2 was complete: 5 and 4 passage vectors. The index of the changed Chapter 3 was not made again, because its quiet time of 10 minutes ended at 23:46:45, after the run.
-- The Memory Index of M17 had the line `{"conflict_flag":true,"description":"上锁樟木箱在柜台下，钥匙一直在赵德明手里，第八章才打开。","id":1,"title":"柜台下的樟木箱"}`.
+- The one user message of M17 had the sections `Author request`, `Chapter list`, and `Memory index`. The Chapter list was:
+
+  ```text
+  {"volume":"第一卷"}
+  [1,3085,"第一章 归"]
+  [2,2718,"第二章 箱"]
+  [3,2886,"第三章 账","current"]
+  ```
+
+  The Memory Index had the 14 entries in groups of type. The line of entry 1 was `{"conflict_flag":true,"description":"上锁樟木箱在柜台下，钥匙一直在赵德明手里，第八章才打开。","id":1,"title":"柜台下的樟木箱"}`.
 - The model read Chapter 2 and Chapter 1 with `read_chapter`. It did not call `search_manuscript`, `hybrid_search_manuscript`, or `read_memory_entry` (finding O3).
-- The answer quoted the paragraphs of Chapter 2 in which 知遥 finds the box. For the key, it said that Chapters 1 to 3 do not tell who has it. It said that the memory of the Project puts the key with 赵德明 in Chapter 8, that Chapter 8 is not written, and that this entry has a conflict flag. The answer did not change the text, and the Project has no Proposal.
+- The answer quoted the paragraphs of Chapter 2 in which 知遥 finds the box. It used the entry from the Memory Index, and it did not read it with `read_memory_entry`. For the key, it said that Chapters 1 to 3 do not tell who has it. It said that the memory of the Project puts the key with 赵德明 in Chapter 8, that Chapter 8 is not written, and that this entry has a conflict flag. The answer did not change the text, and the Project has no Proposal.
 
 ## How the model used null after #1685
 
@@ -195,5 +204,5 @@ The Server log (89 lines), the Worker log (72 lines), the 19 wire payloads, and 
 | --- | --- | --- | --- |
 | O1 | The entry that `write_memory` made in step 1 has a detail that the author did not say: the offer of 八十万 from Chapter 3. When the author changed Chapter 3, this detail made the entry of the author wrong. P3 flagged it and did not change it, as ADR 0094 requires for an entry of the author. | The author must change or confirm entry 1. | Observation for the coordinator. |
 | O2 | The first call of K5 had conflict items for entries 8 and 10, which have the origin `chapter`. The Host refused the whole call as `conflict_entry_unavailable`. A conflict item can name only an entry of the author. The refusal sentence said this, and the model then sent the facts as observations, which P3 applied. | 2 more capture requests (M14, M15), about 13,200 input tokens. | Observation. |
-| O3 | Step 3 used `read_chapter` for Chapters 1 and 2, and no search Tool. So the run has no embedding request for a query. | Hybrid search was not used in this run. | Observation. |
+| O3 | Step 3 (M17) used `read_chapter` for Chapters 1 and 2, and no search Tool and no `read_memory_entry`. The description in the Memory Index was enough for the key. So the run has no embedding request for a query. The ticket permits one more send of an author message with clearer words. It was not sent: the answer had each part of the question, and the planned stop of the run was the end of step 3. | Hybrid search and `read_memory_entry` were not used in step 3. | Observation. |
 | O4 | P2 had 10,802 output tokens for 10 operations. | Output tokens only. | Observation. |
