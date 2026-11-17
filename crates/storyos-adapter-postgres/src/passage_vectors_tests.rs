@@ -5,10 +5,10 @@ use std::sync::Mutex;
 
 use storyos_adapter_fake_destination::{EMBEDDING_REJECTION_MARKER, FakeEmbeddings};
 use storyos_application::{
-    ApplyAuthorEditCommand, ChallengeRateClass, CredentialUnavailable, EditorSessionStore,
-    EmbeddingObservation, EmbeddingProviderAdapter, EmbeddingResult, PassageIndexFailure,
-    PassageIndexReport, PassageIndexResult, PassageVectorStore, PreparedEmbeddingRequest,
-    ProjectId, ProjectScope, UserId, index_chapter_passages,
+    ApplyAuthorEditCommand, ChallengeRateClass, EditorSessionStore, EmbeddingObservation,
+    EmbeddingProviderAdapter, EmbeddingResult, EmbeddingRoute, PassageIndexFailure,
+    PassageIndexReport, PassageIndexResult, PassageVectorStore, PreDispatchRefusal,
+    PreparedEmbeddingRequest, ProjectId, ProjectScope, UserId, index_chapter_passages,
 };
 use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, EmbeddingInput, EmbeddingRegistration,
@@ -307,9 +307,10 @@ impl EmbeddingProviderAdapter for Held<'_> {
     async fn prepare(
         &self,
         registration: &'static EmbeddingRegistration,
+        route: &EmbeddingRoute,
         input: &EmbeddingInput,
-    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, CredentialUnavailable> {
-        FakeEmbeddings.prepare(registration, input).await
+    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
+        FakeEmbeddings.prepare(registration, route, input).await
     }
 
     async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
