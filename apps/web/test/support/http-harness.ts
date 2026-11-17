@@ -181,12 +181,15 @@ export class TestProject {
   readonly projectId: string;
   readonly session: string;
   private readonly keys: Keys;
+  /** False keeps the challenge rate window of the Project as the Server wrote it (a live run). */
+  readonly resetChallengeBudget: boolean;
 
-  constructor(server: TestServer, projectId: string, session: string, keys = new Keys()) {
+  constructor(server: TestServer, projectId: string, session: string, keys = new Keys(), resetChallengeBudget = true) {
     this.server = server;
     this.projectId = projectId;
     this.session = session;
     this.keys = keys;
+    this.resetChallengeBudget = resetChallengeBudget;
   }
 
   get baseUrl(): string {
@@ -209,7 +212,7 @@ export class TestProject {
 
   /** The same Project as another session sees it. */
   as(session: string): TestProject {
-    return new TestProject(this.server, this.projectId, session);
+    return new TestProject(this.server, this.projectId, session, undefined, this.resetChallengeBudget);
   }
 
   async challenge<Op extends ProjectCommandId>(operation: Op, input: CommandInput<Op>): Promise<Challenged<Op>> {
@@ -220,7 +223,7 @@ export class TestProject {
     const { request } = input;
     const key = input.key ?? this.key();
     const digested = await digest(request);
-    const challenge = await withChallengeBudget(this.projectId, () => client.createProjectCommandChallenge({
+    const issue = () => client.createProjectCommandChallenge({
       baseUrl: this.baseUrl,
       projectId: this.projectId,
       fetchImpl: this.fetchImpl,
@@ -231,7 +234,8 @@ export class TestProject {
         canonical_command_digest: digested,
         idempotency_key: key,
       },
-    }));
+    });
+    const challenge = this.resetChallengeBudget ? await withChallengeBudget(this.projectId, issue) : await issue();
     const send = clientFunction<(options: object) => Promise<CommandResponse<Op>>>(operation);
     return {
       key,
@@ -306,7 +310,8 @@ export async function createEmpty(baseUrl: string, session: string, idempotencyK
   return { fetchImpl, projectId };
 }
 
-export async function createProject(server: TestServer, options: { title: string; session?: string }): Promise<TestProject> {
+export async function createProject(server: TestServer,
+  options: { title: string; session?: string; resetChallengeBudget?: boolean }): Promise<TestProject> {
   const session = options.session ?? "session-a";
   const keys = new Keys();
   const projectId = await createEmptyProject({
@@ -316,7 +321,7 @@ export async function createProject(server: TestServer, options: { title: string
     correlationId: keys.next(),
     title: options.title,
   });
-  return new TestProject(server, projectId, session, keys);
+  return new TestProject(server, projectId, session, keys, options.resetChallengeBudget ?? true);
 }
 
 /** Creates a Project with one Volume and one Chapter for each title. The first Chapter is the Current Chapter. */

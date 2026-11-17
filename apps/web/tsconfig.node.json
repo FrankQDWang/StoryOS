@@ -14,6 +14,7 @@
     "test/support/browser-command-contract.ts",
     "test/support/browser-commands.ts",
     "test/support/exact-dist-plugin.ts",
+    "test/support/memory-calibration.ts",
     "test/support/node-integration.ts",
     "test/support/script-order-sequencer.ts"
   ]
