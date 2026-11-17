@@ -35,7 +35,7 @@ fn settled(text: &str) -> Value {
     json!(["read_memory_entry", "settled", null, text, true])
 }
 
-fn refused() -> Value {
+pub(crate) fn refused() -> Value {
     json!([
         "read_memory_entry",
         "refused",

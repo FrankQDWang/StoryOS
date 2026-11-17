@@ -285,7 +285,7 @@ it("does not treat an unrecoverable expired cursor as an empty successful replay
   }
 });
 
-it("ingests assistance and Run Activity without disabling manual writing or skipping unknown Events", async () => {
+it("ingests assistance, Run, and Memory Activity without disabling manual writing or skipping unknown Events", async () => {
   const scenario = createBrowserScenario();
   const assistancePayload = { kind: "project_assistance_updated", availability: "available", revision: "1" };
   const runPayload = {
@@ -332,14 +332,33 @@ it("ingests assistance and Run Activity without disabling manual writing or skip
     payload: runPayload,
     payload_digest: await digest(runPayload),
   };
+  // The workspace accepts the delete of a Memory Entry on the settings page and shows nothing for it.
+  const memoryPayload = {
+    kind: "memory_entry_deleted",
+    memory_entry_id: "018f0000-0000-7001-8000-000000000462",
+    version: "2",
+    memory_revision: "3",
+  };
+  const memory = {
+    ...run,
+    event_id: "018f0000-0000-7001-8000-000000000463",
+    application_wire_record_ref: "018f0000-0000-7001-8000-000000000463",
+    event_schema: "storyos.event.memory-entry-deleted.v1",
+    event_kind: "memory_entry_deleted",
+    project_sequence: "3",
+    stream_sequence: "3",
+    aggregate_ref: { kind: "memory_entry", id: memoryPayload.memory_entry_id },
+    payload: memoryPayload,
+    payload_digest: await digest(memoryPayload),
+  };
   const unknown = {
     ...run,
     event_id: "018f0000-0000-7001-8000-000000000461",
     application_wire_record_ref: "018f0000-0000-7001-8000-000000000461",
     event_kind: "future_activity",
     event_schema: "storyos.event.future-activity.v1",
-    project_sequence: "3",
-    stream_sequence: "3",
+    project_sequence: "4",
+    stream_sequence: "4",
   };
   const cursors: Array<string | null> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -354,7 +373,7 @@ it("ingests assistance and Run Activity without disabling manual writing or skip
     });
     if (path.endsWith("/activity")) {
       cursors.push(new Headers(init?.headers).get("last-event-id"));
-      const frame = [assistance, run, unknown, unknown][cursors.length - 1];
+      const frame = [assistance, run, memory, unknown, unknown][cursors.length - 1];
       if (frame === undefined) throw new Error("unexpected Activity request");
       return activitySse(`cursor-${cursors.length}`, frame);
     }
@@ -371,17 +390,17 @@ it("ingests assistance and Run Activity without disabling manual writing or skip
     trackDatabase(workspace.database, openDatabases);
     const first = await consumeOwnedProjectActivity(workspace, { baseUrl: location.origin, fetchImpl });
     const second = await consumeOwnedProjectActivity(workspace, { baseUrl: location.origin, fetchImpl });
-    expect(first.kind).toBe("replayed");
-    expect(second.kind).toBe("replayed");
-    expect((await readProjectActivityIngest(workspace)).events).toEqual([assistance, run]);
+    const third = await consumeOwnedProjectActivity(workspace, { baseUrl: location.origin, fetchImpl });
+    expect([first.kind, second.kind, third.kind]).toEqual(["replayed", "replayed", "replayed"]);
+    expect((await readProjectActivityIngest(workspace)).events).toEqual([assistance, run, memory]);
     await expect(consumeOwnedProjectActivity(workspace, {
       baseUrl: location.origin, fetchImpl,
     })).rejects.toThrow("Project Activity Event is invalid");
     await expect(consumeOwnedProjectActivity(workspace, {
       baseUrl: location.origin, fetchImpl,
     })).rejects.toThrow("Project Activity Event is invalid");
-    expect(cursors).toEqual([null, "cursor-1", "cursor-2", "cursor-2"]);
-    expect((await readProjectActivityIngest(workspace)).events).toEqual([assistance, run]);
+    expect(cursors).toEqual([null, "cursor-1", "cursor-2", "cursor-3", "cursor-3"]);
+    expect((await readProjectActivityIngest(workspace)).events).toEqual([assistance, run, memory]);
     const before = await readJournalSnapshot(workspace);
     const projected = await appendAuthorEdit(workspace, {
       from: 4, to: 4, text: "!", resultingBody: "Base!",

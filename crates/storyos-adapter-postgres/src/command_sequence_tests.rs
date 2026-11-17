@@ -73,8 +73,12 @@ mod author_edit;
 #[path = "command_sequence_tests/secondary_operation_tests.rs"]
 mod secondary_operation;
 
+#[path = "command_sequence_tests/memory_entry_tests.rs"]
+mod memory_entry;
+
 pub(crate) use acceptance::ACCEPT_PROPOSAL;
 pub(crate) use agent_run::{CANCEL_AGENT_RUN, CREATE_AGENT_RUN, PAUSE_AGENT_RUN};
+pub(crate) use memory_entry::DELETE_MEMORY_ENTRY;
 pub(crate) use project_session::{
     UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE, UPDATE_PROJECT_INSTRUCTION,
 };

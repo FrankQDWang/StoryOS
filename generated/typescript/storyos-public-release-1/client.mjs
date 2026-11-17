@@ -154,6 +154,22 @@ export async function listMemoryEntries({ projectId, ...options } = {}) {
   return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/memory-entries` });
 }
 
+export async function digestDeleteMemoryEntry(request, cryptoImpl = globalThis.crypto) {
+  if (!request || typeof request !== "object") throw new TypeError("digestDeleteMemoryEntry requires request");
+  const canonical = canonicalJson(request);
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+  return { algorithm: "sha256", profile: "storyos.command.deleteMemoryEntry.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
+}
+
+export async function deleteMemoryEntry({ projectId, memoryEntryId, request, idempotencyKey, antiForgery, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("deleteMemoryEntry requires projectId");
+  if (typeof memoryEntryId !== "string" || memoryEntryId.length === 0) throw new TypeError("deleteMemoryEntry requires memoryEntryId");
+  if (!request || typeof request !== "object") throw new TypeError("deleteMemoryEntry requires request");
+  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("deleteMemoryEntry requires security bindings");
+  return commandJson({ ...options, method: "DELETE", path: `/api/v1/projects/${encodeURIComponent(projectId)}/memory-entries/${encodeURIComponent(memoryEntryId)}`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+}
+
 export async function digestCreateEditorSession(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestCreateEditorSession requires request");
   const canonical = { client_contract_revision: request.client_contract_revision, command_schema: request.command_schema, correlation_id: request.correlation_id, security_policy_revision: request.security_policy_revision };

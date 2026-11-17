@@ -8,7 +8,9 @@ use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{MemoryWrite, ToolCallState};
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
-use crate::memory_entries::{VersionSource, current_memory, write_memory_version};
+use crate::memory_entries::{
+    VersionSource, current_memory, lock_memory_head, write_memory_version,
+};
 
 /// Decides and writes the Memory change of the pending call `row`, and settles or refuses `row`.
 pub(crate) async fn execute(
@@ -18,6 +20,9 @@ pub(crate) async fn execute(
     write: &MemoryWrite,
 ) -> Result<(), CompleteAgentRunError> {
     let scope = &claim.project_scope;
+    lock_memory_head(client, scope)
+        .await
+        .map_err(CompleteAgentRunError::Unavailable)?;
     let (revision, next, entries) = current_memory(client, scope)
         .await
         .map_err(CompleteAgentRunError::Unavailable)?;
