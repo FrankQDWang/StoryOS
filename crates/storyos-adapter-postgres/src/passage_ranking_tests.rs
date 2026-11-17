@@ -1,11 +1,11 @@
 //! The ranked passages of the manuscript (ADR 0095 sections 1 and 2) with real PostgreSQL and the
-//! vectors of the fake embedding destination. Test prefix lead `95`.
+//! vectors of the fake embedding destination. Test prefix leads `95` and `69`.
 
 use std::time::Duration;
 
 use storyos_adapter_fake_destination::FakeEmbeddings;
 use storyos_application::{
-    ProjectId, ProjectScope, QuestionVector, UserId, rank_manuscript_passages,
+    PassageVectorStore, ProjectId, ProjectScope, QuestionVector, UserId, rank_manuscript_passages,
 };
 use storyos_core::{
     AuthorEditPrimitive, HOST_FAKE_EMBEDDING_REGISTRATION, PASSAGE_CUT_REVISION, PassageBlock,
@@ -372,5 +372,40 @@ async fn a_read_in_one_project_scope_returns_nothing_of_another_project() {
             unscoped,
         ),
         (3, true, false, false, None, 0)
+    );
+}
+
+/// With no vector store, the read sends no vector query, and the result with a question vector is
+/// the exact-term list. `scripts/verify-project-scope.sh` also runs this test on a database
+/// without pgvector. Test prefix lead `69`.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_result_with_no_vector_store_is_the_exact_term_list() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let chapter = chapter(&store, &admin, ["691", "692"], "693", &texts()).await;
+    let offered: bool = admin
+        .query_one(
+            "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_available_extensions
+                             WHERE name = 'vector')",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let question = vec![0.25; 1_024];
+
+    let with_question = rank(&store, &chapter.scope, &["渔船"], Some(&question)).await;
+    let without = rank(&store, &chapter.scope, &["渔船"], None).await;
+
+    assert_eq!(
+        (
+            store.vector_store_available(&chapter.scope).await.unwrap(),
+            places(with_question.as_deref().unwrap()),
+            &with_question,
+        ),
+        (offered, vec!["[block 5]"], &without)
     );
 }
