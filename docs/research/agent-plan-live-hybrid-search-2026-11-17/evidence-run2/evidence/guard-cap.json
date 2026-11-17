@@ -1,0 +1,17 @@
+[
+    {
+        "cap": 0,
+        "kind": "exa",
+        "used": 0
+    },
+    {
+        "cap": 10,
+        "kind": "model",
+        "used": 4
+    },
+    {
+        "cap": 129,
+        "kind": "embedding",
+        "used": 124
+    }
+]

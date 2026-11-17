@@ -1,0 +1,44 @@
+[
+    {
+        "chapter_id": "01a1e903-6edf-7af1-91bb-24f7838e045b",
+        "not_before": "2026-11-17T10:20:08.05636+00:00",
+        "project_id": "01a1e902-d6f6-71d0-a91a-764f4f9a0e51",
+        "fence_token": 1,
+        "chapter_order": 1,
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "mark_generation": 1,
+        "claim_generation": 1,
+        "lease_expires_at": null,
+        "completed_generation": 1,
+        "indexed_cut_revision": "storyos.passage-cut.v1",
+        "embedding_registration_revision": "018f0000-0000-7001-8000-0000000eb002"
+    },
+    {
+        "chapter_id": "01a1e904-1a92-7b41-900f-7314145988ec",
+        "not_before": "2026-11-17T10:20:08.05636+00:00",
+        "project_id": "01a1e902-d6f6-71d0-a91a-764f4f9a0e51",
+        "fence_token": 1,
+        "chapter_order": 2,
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "mark_generation": 1,
+        "claim_generation": 1,
+        "lease_expires_at": null,
+        "completed_generation": 1,
+        "indexed_cut_revision": "storyos.passage-cut.v1",
+        "embedding_registration_revision": "018f0000-0000-7001-8000-0000000eb002"
+    },
+    {
+        "chapter_id": "01a1e904-c629-7541-a569-d274ce0357c5",
+        "not_before": "2026-11-17T10:20:08.05636+00:00",
+        "project_id": "01a1e902-d6f6-71d0-a91a-764f4f9a0e51",
+        "fence_token": 1,
+        "chapter_order": 3,
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "mark_generation": 1,
+        "claim_generation": 1,
+        "lease_expires_at": null,
+        "completed_generation": 1,
+        "indexed_cut_revision": "storyos.passage-cut.v1",
+        "embedding_registration_revision": "018f0000-0000-7001-8000-0000000eb002"
+    }
+]

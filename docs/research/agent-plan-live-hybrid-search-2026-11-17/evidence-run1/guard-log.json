@@ -1,0 +1,86 @@
+[
+    {
+        "at": "2026-11-17T10:20:34.588838+00:00",
+        "ref": "01a1e905-cf9b-7ed1-b2b1-f869d50722a4",
+        "kind": "embedding",
+        "role": "passage_index",
+        "position": null
+    },
+    {
+        "at": "2026-11-17T10:20:34.989903+00:00",
+        "ref": "01a1e905-d12d-72d0-aa3b-3f1a0afe677a",
+        "kind": "embedding",
+        "role": "passage_index",
+        "position": null
+    },
+    {
+        "at": "2026-11-17T10:20:35.266472+00:00",
+        "ref": "01a1e905-d242-7e52-b947-b53567860930",
+        "kind": "embedding",
+        "role": "passage_index",
+        "position": null
+    },
+    {
+        "at": "2026-11-17T10:20:35.61762+00:00",
+        "ref": "01a1e905-d3a1-7091-a25f-6665bf8b1ea1",
+        "kind": "embedding",
+        "role": "passage_index",
+        "position": null
+    },
+    {
+        "at": "2026-11-17T10:20:38.664413+00:00",
+        "ref": "01a1e905-df88-7541-a37d-abe7a05ec77e",
+        "kind": "embedding",
+        "role": "passage_index",
+        "position": null
+    },
+    {
+        "at": "2026-11-17T10:20:39.346801+00:00",
+        "ref": "01a1e905-e232-7fa3-a77e-81ec2b9fe4d0",
+        "kind": "embedding",
+        "role": "passage_index",
+        "position": null
+    },
+    {
+        "at": "2026-11-17T10:21:12.556985+00:00",
+        "ref": "01a1e906-63e8-7791-8c9f-409c15522410",
+        "kind": "model",
+        "role": "decision",
+        "position": 0
+    },
+    {
+        "at": "2026-11-17T10:21:19.315498+00:00",
+        "ref": "01a1e906-7e4e-7c43-8a3d-c2d41cb1934e",
+        "kind": "model",
+        "role": "decision",
+        "position": 1
+    },
+    {
+        "at": "2026-11-17T10:21:25.025027+00:00",
+        "ref": "01a1e906-949b-7892-9229-ec6344bb152e",
+        "kind": "model",
+        "role": "decision",
+        "position": 2
+    },
+    {
+        "at": "2026-11-17T10:21:55.505539+00:00",
+        "ref": "01a1e907-0bac-72f1-a7b0-496f6ea92452",
+        "kind": "model",
+        "role": "decision",
+        "position": 0
+    },
+    {
+        "at": "2026-11-17T10:22:01.079969+00:00",
+        "ref": "01a1e907-2168-79b1-8314-c4d07107536b",
+        "kind": "model",
+        "role": "decision",
+        "position": 1
+    },
+    {
+        "at": "2026-11-17T10:22:09.869473+00:00",
+        "ref": "01a1e907-43c0-7962-a4ac-cae084b8b862",
+        "kind": "model",
+        "role": "decision",
+        "position": 2
+    }
+]

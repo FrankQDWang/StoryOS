@@ -1,0 +1,5 @@
+10:51:12 9 model=0 exa=0 embedding=11
+10:51:22 41 model=0 exa=0 embedding=42
+10:51:32 74 model=0 exa=0 embedding=75
+10:51:42 106 model=0 exa=0 embedding=107
+10:51:52 123 model=0 exa=0 embedding=123

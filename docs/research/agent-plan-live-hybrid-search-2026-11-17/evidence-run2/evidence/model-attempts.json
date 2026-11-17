@@ -1,0 +1,102 @@
+[
+    {
+        "usage": {
+            "kind": "reported",
+            "input_tokens": 8115,
+            "output_tokens": 287
+        },
+        "run_id": "01a1e922-b907-7b33-a4f5-30f7e7b2e16d",
+        "project_id": "01a1e910-dd9d-79d1-9221-e9d0cf47615d",
+        "decision_id": "01a1e922-d44e-7b12-982d-54031eadb1c2",
+        "wire_digest": "sha256:491feddceff19e131b093eac27b5b300e394649c61710b1ead8d4b6361a585fe",
+        "attempt_role": "decision",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "dispatch_state": "settled",
+        "conversation_id": "01a1e922-b907-7b33-a4f5-30ecfc5a7efe",
+        "model_attempt_id": "01a1e922-b96d-7080-8ed4-f70648b8ad04",
+        "decision_position": 0,
+        "response_reference": "resp_021794912729605ab257ece25bd0fea81c82ca5c15ec8fdf3e9f7",
+        "model_invocation_id": "01a1e922-b96d-7080-8ed4-f7600b94016b",
+        "destination_attempt_id": "01a1e922-b96d-7080-8ed4-f718956b34a3",
+        "continuation_binding_id": "01a1e922-d6a2-71a1-bf2c-56be938540ae",
+        "wire_payload_projection_id": "01a1e922-b96d-7080-8ed4-f75f6fa128b4",
+        "outbound_disclosure_event_id": "01a1e922-b96d-7080-8ed4-f72d2576584a",
+        "destination_context_manifest_id": "01a1e922-b96d-7080-8ed4-f7317d7eea49",
+        "outbound_disclosure_manifest_id": "01a1e922-b96d-7080-8ed4-f74a560218c5"
+    },
+    {
+        "usage": {
+            "kind": "reported",
+            "input_tokens": 12022,
+            "output_tokens": 617
+        },
+        "run_id": "01a1e922-b907-7b33-a4f5-30f7e7b2e16d",
+        "project_id": "01a1e910-dd9d-79d1-9221-e9d0cf47615d",
+        "decision_id": "01a1e923-04ea-70f0-a1b3-600d96614aab",
+        "wire_digest": "sha256:f569199a5468edb67657a2e740dd58e2b46e2d333980906d1f27793b88b5958a",
+        "attempt_role": "decision",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "dispatch_state": "settled",
+        "conversation_id": "01a1e922-b907-7b33-a4f5-30ecfc5a7efe",
+        "model_attempt_id": "01a1e922-d6da-7d52-82ec-c6499ac5a7d3",
+        "decision_position": 1,
+        "response_reference": "resp_0217949127371354f170dda172df2cc79a65077ac74d404f0ed7b",
+        "model_invocation_id": "01a1e922-d6dd-7e11-a4f0-8d068767e4fa",
+        "destination_attempt_id": "01a1e922-d6da-7d52-82ec-c6565b340993",
+        "continuation_binding_id": "01a1e923-0500-7ec1-b73a-e6a47ba2fab4",
+        "wire_payload_projection_id": "01a1e922-d6da-7d52-82ec-c69c73de7622",
+        "outbound_disclosure_event_id": "01a1e922-d6da-7d52-82ec-c66a1194de15",
+        "destination_context_manifest_id": "01a1e922-d6da-7d52-82ec-c67e52802df2",
+        "outbound_disclosure_manifest_id": "01a1e922-d6da-7d52-82ec-c68c0a81eb2a"
+    },
+    {
+        "usage": {
+            "kind": "reported",
+            "input_tokens": 13835,
+            "output_tokens": 130
+        },
+        "run_id": "01a1e922-b907-7b33-a4f5-30f7e7b2e16d",
+        "project_id": "01a1e910-dd9d-79d1-9221-e9d0cf47615d",
+        "decision_id": "01a1e923-1b9a-7313-be25-c840d7a97d70",
+        "wire_digest": "sha256:fd3e4cce709a990b5dfe3102181a729c36be605979b0ed88694b4d40cce47cdf",
+        "attempt_role": "decision",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "dispatch_state": "settled",
+        "conversation_id": "01a1e922-b907-7b33-a4f5-30ecfc5a7efe",
+        "model_attempt_id": "01a1e923-0530-73c3-b9f6-632efc8e9462",
+        "decision_position": 2,
+        "response_reference": "resp_021794912748989e0d15f89dc5eb44ad1ad600579228b792e236a",
+        "model_invocation_id": "01a1e923-0535-77b3-b12f-455441d20cfa",
+        "destination_attempt_id": "01a1e923-0530-73c3-b9f6-633688ed8f94",
+        "continuation_binding_id": "01a1e923-1bb5-78c2-9363-c7b176877fe5",
+        "wire_payload_projection_id": "01a1e923-0530-73c3-b9f6-6376d7b30407",
+        "outbound_disclosure_event_id": "01a1e923-0530-73c3-b9f6-634dd3b7f274",
+        "destination_context_manifest_id": "01a1e923-0530-73c3-b9f6-63569955c82b",
+        "outbound_disclosure_manifest_id": "01a1e923-0530-73c3-b9f6-6367092074e7"
+    },
+    {
+        "usage": {
+            "kind": "reported",
+            "input_tokens": 14015,
+            "output_tokens": 221
+        },
+        "run_id": "01a1e922-b907-7b33-a4f5-30f7e7b2e16d",
+        "project_id": "01a1e910-dd9d-79d1-9221-e9d0cf47615d",
+        "decision_id": "01a1e923-3266-7703-a7e1-156c25c60876",
+        "wire_digest": "sha256:a933bf1ff3161388be88d971e27a561692097c266e96b1a440b680028bcb7366",
+        "attempt_role": "decision",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "dispatch_state": "settled",
+        "conversation_id": "01a1e922-b907-7b33-a4f5-30ecfc5a7efe",
+        "model_attempt_id": "01a1e923-1c3c-77f1-af12-4f49bcc11236",
+        "decision_position": 3,
+        "response_reference": "resp_0217949127548914c9833b195a1cac5bbbd18e9e4e5ff83731b8a",
+        "model_invocation_id": "01a1e923-1c42-75f3-9b45-33c2cbc68387",
+        "destination_attempt_id": "01a1e923-1c3c-77f1-af12-4f5cd3da583e",
+        "continuation_binding_id": "01a1e923-326d-7742-92ca-fed6656e411c",
+        "wire_payload_projection_id": "01a1e923-1c3c-77f1-af12-4f9598e42ff9",
+        "outbound_disclosure_event_id": "01a1e923-1c3c-77f1-af12-4f616b64f4f1",
+        "destination_context_manifest_id": "01a1e923-1c3c-77f1-af12-4f78d1641f59",
+        "outbound_disclosure_manifest_id": "01a1e923-1c3c-77f1-af12-4f82bd9b7c9a"
+    }
+]

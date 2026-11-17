@@ -1,0 +1,44 @@
+[
+    {
+        "chapter_id": "01a1e903-6edf-7af1-91bb-24f7838e045b",
+        "created_at": "2026-11-17T10:20:34.964274+00:00",
+        "cut_revision": "storyos.passage-cut.v1",
+        "passage_digest": "sha256:eb1bd877d8cbb0ebb1452123faf2b3b0922a140bf20ea8fbcec945c1a2d8591d",
+        "embedding_registration_revision": "018f0000-0000-7001-8000-0000000eb002"
+    },
+    {
+        "chapter_id": "01a1e903-6edf-7af1-91bb-24f7838e045b",
+        "created_at": "2026-11-17T10:20:35.229144+00:00",
+        "cut_revision": "storyos.passage-cut.v1",
+        "passage_digest": "sha256:b2054d682decc7b4969409779494baf99af9df87c0b49ceb9ad21a89c4bd2419",
+        "embedding_registration_revision": "018f0000-0000-7001-8000-0000000eb002"
+    },
+    {
+        "chapter_id": "01a1e904-1a92-7b41-900f-7314145988ec",
+        "created_at": "2026-11-17T10:20:35.575298+00:00",
+        "cut_revision": "storyos.passage-cut.v1",
+        "passage_digest": "sha256:b86f2768ce1ff44c6da839d3606539a51c980f18dbff40ccdda5186a88227a98",
+        "embedding_registration_revision": "018f0000-0000-7001-8000-0000000eb002"
+    },
+    {
+        "chapter_id": "01a1e904-1a92-7b41-900f-7314145988ec",
+        "created_at": "2026-11-17T10:20:38.56079+00:00",
+        "cut_revision": "storyos.passage-cut.v1",
+        "passage_digest": "sha256:bca6495545b5b8f6cc8ae772f57b233f3979f2651f89379e4941e6d51c636331",
+        "embedding_registration_revision": "018f0000-0000-7001-8000-0000000eb002"
+    },
+    {
+        "chapter_id": "01a1e904-c629-7541-a569-d274ce0357c5",
+        "created_at": "2026-11-17T10:20:39.198878+00:00",
+        "cut_revision": "storyos.passage-cut.v1",
+        "passage_digest": "sha256:d0bb8434c96949660ca1374aff098c3b374a4c4b9f220607b6aa7f37486e73d1",
+        "embedding_registration_revision": "018f0000-0000-7001-8000-0000000eb002"
+    },
+    {
+        "chapter_id": "01a1e904-c629-7541-a569-d274ce0357c5",
+        "created_at": "2026-11-17T10:20:39.882384+00:00",
+        "cut_revision": "storyos.passage-cut.v1",
+        "passage_digest": "sha256:b77edfcdd7f5602e4e4728eba8c38e9eedf97c85c93410e8f2f57886a439c2c6",
+        "embedding_registration_revision": "018f0000-0000-7001-8000-0000000eb002"
+    }
+]

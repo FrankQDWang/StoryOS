@@ -1,0 +1,16 @@
+[
+    {
+        "due_at": "2026-11-17T10:51:28.442226+00:00",
+        "work_kind": "conversation_capture",
+        "project_id": "01a1e902-d6f6-71d0-a91a-764f4f9a0e51",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "conversation_id": "01a1e906-634a-7c30-83a9-8f9308da3bee"
+    },
+    {
+        "due_at": "2026-11-17T10:52:14.284095+00:00",
+        "work_kind": "conversation_capture",
+        "project_id": "01a1e902-d6f6-71d0-a91a-764f4f9a0e51",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "conversation_id": "01a1e907-0b48-7d83-ad61-33182d203426"
+    }
+]

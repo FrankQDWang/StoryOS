@@ -1,0 +1,350 @@
+[
+    {
+        "cause": "passage_index",
+        "attempt": {
+            "usage": {
+                "kind": "reported",
+                "input_tokens": 69
+            },
+            "rejection": null,
+            "admission_decision": {
+                "decision": "admitted",
+                "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+                "grant_scope": "manuscript_embedding_v1",
+                "request_bounds": "embedding_request_v1",
+                "evidence_revision": "1",
+                "destination_identity": "01a1e905-6804-7ef0-92d0-1396ff9bd442",
+                "use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576",
+                "embedding_registration": "018f0000-0000-7001-8000-0000000eb002"
+            },
+            "destination_attempt": {
+                "settlement": "vector",
+                "destination_attempt_id": "01a1e905-cf9b-7ed1-b2b1-f87c04ed43c9"
+            },
+            "disclosure_confirmation": {
+                "state": "confirmed",
+                "event_id": "01a1e905-cf9b-7ed1-b2b1-f8870f5e66cb"
+            },
+            "wire_payload_projection": {
+                "digest": "sha256:9b608ba91d0dcd701e83977c8725edc9745c93589a65f792c109ec52a64b49c3",
+                "mapping_revision": "storyos.volcengine-agent-plan.embeddings.multimodal.v1"
+            },
+            "operation_input_snapshot": {
+                "cause": "passage_index",
+                "texts": [
+                    {
+                        "chapter_id": "01a1e903-6edf-7af1-91bb-24f7838e045b",
+                        "revision_id": "01a1e903-9adf-76b0-afa8-d34c21b13843",
+                        "passage_digest": "sha256:eb1bd877d8cbb0ebb1452123faf2b3b0922a140bf20ea8fbcec945c1a2d8591d"
+                    }
+                ],
+                "purpose": "manuscript_embedding",
+                "source_class": "chapter_passage",
+                "working_target": "not_applicable",
+                "workspace_context": "not_applicable"
+            },
+            "outbound_disclosure_event": {
+                "state": "outcome_unknown",
+                "purpose": "manuscript_embedding",
+                "event_id": "01a1e905-cf9b-7ed1-b2b1-f8870f5e66cb",
+                "source_class": "chapter_passage"
+            }
+        },
+        "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+        "project_id": "01a1e902-d6f6-71d0-a91a-764f4f9a0e51",
+        "settlement": "vector",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "embedding_attempt_id": "01a1e905-cf9b-7ed1-b2b1-f869d50722a4",
+        "project_model_use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576"
+    },
+    {
+        "cause": "passage_index",
+        "attempt": {
+            "usage": {
+                "kind": "reported",
+                "input_tokens": 64
+            },
+            "rejection": null,
+            "admission_decision": {
+                "decision": "admitted",
+                "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+                "grant_scope": "manuscript_embedding_v1",
+                "request_bounds": "embedding_request_v1",
+                "evidence_revision": "1",
+                "destination_identity": "01a1e905-6804-7ef0-92d0-1396ff9bd442",
+                "use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576",
+                "embedding_registration": "018f0000-0000-7001-8000-0000000eb002"
+            },
+            "destination_attempt": {
+                "settlement": "vector",
+                "destination_attempt_id": "01a1e905-d12d-72d0-aa3b-3f2cb4ae61a1"
+            },
+            "disclosure_confirmation": {
+                "state": "confirmed",
+                "event_id": "01a1e905-d12d-72d0-aa3b-3f3e0f77eb7f"
+            },
+            "wire_payload_projection": {
+                "digest": "sha256:3f57b4caa534c922016172b4ebf9f1e7b6baa7e0aed4e1dff98b854db9fd8e34",
+                "mapping_revision": "storyos.volcengine-agent-plan.embeddings.multimodal.v1"
+            },
+            "operation_input_snapshot": {
+                "cause": "passage_index",
+                "texts": [
+                    {
+                        "chapter_id": "01a1e903-6edf-7af1-91bb-24f7838e045b",
+                        "revision_id": "01a1e903-9adf-76b0-afa8-d34c21b13843",
+                        "passage_digest": "sha256:b2054d682decc7b4969409779494baf99af9df87c0b49ceb9ad21a89c4bd2419"
+                    }
+                ],
+                "purpose": "manuscript_embedding",
+                "source_class": "chapter_passage",
+                "working_target": "not_applicable",
+                "workspace_context": "not_applicable"
+            },
+            "outbound_disclosure_event": {
+                "state": "outcome_unknown",
+                "purpose": "manuscript_embedding",
+                "event_id": "01a1e905-d12d-72d0-aa3b-3f3e0f77eb7f",
+                "source_class": "chapter_passage"
+            }
+        },
+        "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+        "project_id": "01a1e902-d6f6-71d0-a91a-764f4f9a0e51",
+        "settlement": "vector",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "embedding_attempt_id": "01a1e905-d12d-72d0-aa3b-3f1a0afe677a",
+        "project_model_use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576"
+    },
+    {
+        "cause": "passage_index",
+        "attempt": {
+            "usage": {
+                "kind": "reported",
+                "input_tokens": 71
+            },
+            "rejection": null,
+            "admission_decision": {
+                "decision": "admitted",
+                "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+                "grant_scope": "manuscript_embedding_v1",
+                "request_bounds": "embedding_request_v1",
+                "evidence_revision": "1",
+                "destination_identity": "01a1e905-6804-7ef0-92d0-1396ff9bd442",
+                "use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576",
+                "embedding_registration": "018f0000-0000-7001-8000-0000000eb002"
+            },
+            "destination_attempt": {
+                "settlement": "vector",
+                "destination_attempt_id": "01a1e905-d242-7e52-b947-b54121a26836"
+            },
+            "disclosure_confirmation": {
+                "state": "confirmed",
+                "event_id": "01a1e905-d242-7e52-b947-b55d3bd05667"
+            },
+            "wire_payload_projection": {
+                "digest": "sha256:6062cf03f4d249676373c98880c671c055931fe3737bc02792d6e6353359f6db",
+                "mapping_revision": "storyos.volcengine-agent-plan.embeddings.multimodal.v1"
+            },
+            "operation_input_snapshot": {
+                "cause": "passage_index",
+                "texts": [
+                    {
+                        "chapter_id": "01a1e904-1a92-7b41-900f-7314145988ec",
+                        "revision_id": "01a1e904-5efa-74e0-ab70-75959111f6c9",
+                        "passage_digest": "sha256:b86f2768ce1ff44c6da839d3606539a51c980f18dbff40ccdda5186a88227a98"
+                    }
+                ],
+                "purpose": "manuscript_embedding",
+                "source_class": "chapter_passage",
+                "working_target": "not_applicable",
+                "workspace_context": "not_applicable"
+            },
+            "outbound_disclosure_event": {
+                "state": "outcome_unknown",
+                "purpose": "manuscript_embedding",
+                "event_id": "01a1e905-d242-7e52-b947-b55d3bd05667",
+                "source_class": "chapter_passage"
+            }
+        },
+        "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+        "project_id": "01a1e902-d6f6-71d0-a91a-764f4f9a0e51",
+        "settlement": "vector",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "embedding_attempt_id": "01a1e905-d242-7e52-b947-b53567860930",
+        "project_model_use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576"
+    },
+    {
+        "cause": "passage_index",
+        "attempt": {
+            "usage": {
+                "kind": "reported",
+                "input_tokens": 67
+            },
+            "rejection": null,
+            "admission_decision": {
+                "decision": "admitted",
+                "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+                "grant_scope": "manuscript_embedding_v1",
+                "request_bounds": "embedding_request_v1",
+                "evidence_revision": "1",
+                "destination_identity": "01a1e905-6804-7ef0-92d0-1396ff9bd442",
+                "use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576",
+                "embedding_registration": "018f0000-0000-7001-8000-0000000eb002"
+            },
+            "destination_attempt": {
+                "settlement": "vector",
+                "destination_attempt_id": "01a1e905-d3a1-7091-a25f-66703e2c6cbf"
+            },
+            "disclosure_confirmation": {
+                "state": "confirmed",
+                "event_id": "01a1e905-d3a1-7091-a25f-66871c567f7e"
+            },
+            "wire_payload_projection": {
+                "digest": "sha256:4404d7e2a6b6bd50015266133dd7fbc0d82e3e7203a1ba8dd3f953e845a12df3",
+                "mapping_revision": "storyos.volcengine-agent-plan.embeddings.multimodal.v1"
+            },
+            "operation_input_snapshot": {
+                "cause": "passage_index",
+                "texts": [
+                    {
+                        "chapter_id": "01a1e904-1a92-7b41-900f-7314145988ec",
+                        "revision_id": "01a1e904-5efa-74e0-ab70-75959111f6c9",
+                        "passage_digest": "sha256:bca6495545b5b8f6cc8ae772f57b233f3979f2651f89379e4941e6d51c636331"
+                    }
+                ],
+                "purpose": "manuscript_embedding",
+                "source_class": "chapter_passage",
+                "working_target": "not_applicable",
+                "workspace_context": "not_applicable"
+            },
+            "outbound_disclosure_event": {
+                "state": "outcome_unknown",
+                "purpose": "manuscript_embedding",
+                "event_id": "01a1e905-d3a1-7091-a25f-66871c567f7e",
+                "source_class": "chapter_passage"
+            }
+        },
+        "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+        "project_id": "01a1e902-d6f6-71d0-a91a-764f4f9a0e51",
+        "settlement": "vector",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "embedding_attempt_id": "01a1e905-d3a1-7091-a25f-6665bf8b1ea1",
+        "project_model_use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576"
+    },
+    {
+        "cause": "passage_index",
+        "attempt": {
+            "usage": {
+                "kind": "reported",
+                "input_tokens": 54
+            },
+            "rejection": null,
+            "admission_decision": {
+                "decision": "admitted",
+                "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+                "grant_scope": "manuscript_embedding_v1",
+                "request_bounds": "embedding_request_v1",
+                "evidence_revision": "1",
+                "destination_identity": "01a1e905-6804-7ef0-92d0-1396ff9bd442",
+                "use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576",
+                "embedding_registration": "018f0000-0000-7001-8000-0000000eb002"
+            },
+            "destination_attempt": {
+                "settlement": "vector",
+                "destination_attempt_id": "01a1e905-df88-7541-a37d-abf6e3e544ae"
+            },
+            "disclosure_confirmation": {
+                "state": "confirmed",
+                "event_id": "01a1e905-df88-7541-a37d-ac08d2c76863"
+            },
+            "wire_payload_projection": {
+                "digest": "sha256:7ff67fe465c461323fcd08e9795adc4c1830fb38ae359985d5c075ca056cb0ff",
+                "mapping_revision": "storyos.volcengine-agent-plan.embeddings.multimodal.v1"
+            },
+            "operation_input_snapshot": {
+                "cause": "passage_index",
+                "texts": [
+                    {
+                        "chapter_id": "01a1e904-c629-7541-a569-d274ce0357c5",
+                        "revision_id": "01a1e905-0efe-7553-951c-0ab57e06daa4",
+                        "passage_digest": "sha256:d0bb8434c96949660ca1374aff098c3b374a4c4b9f220607b6aa7f37486e73d1"
+                    }
+                ],
+                "purpose": "manuscript_embedding",
+                "source_class": "chapter_passage",
+                "working_target": "not_applicable",
+                "workspace_context": "not_applicable"
+            },
+            "outbound_disclosure_event": {
+                "state": "outcome_unknown",
+                "purpose": "manuscript_embedding",
+                "event_id": "01a1e905-df88-7541-a37d-ac08d2c76863",
+                "source_class": "chapter_passage"
+            }
+        },
+        "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+        "project_id": "01a1e902-d6f6-71d0-a91a-764f4f9a0e51",
+        "settlement": "vector",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "embedding_attempt_id": "01a1e905-df88-7541-a37d-abe7a05ec77e",
+        "project_model_use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576"
+    },
+    {
+        "cause": "passage_index",
+        "attempt": {
+            "usage": {
+                "kind": "reported",
+                "input_tokens": 78
+            },
+            "rejection": null,
+            "admission_decision": {
+                "decision": "admitted",
+                "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+                "grant_scope": "manuscript_embedding_v1",
+                "request_bounds": "embedding_request_v1",
+                "evidence_revision": "1",
+                "destination_identity": "01a1e905-6804-7ef0-92d0-1396ff9bd442",
+                "use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576",
+                "embedding_registration": "018f0000-0000-7001-8000-0000000eb002"
+            },
+            "destination_attempt": {
+                "settlement": "vector",
+                "destination_attempt_id": "01a1e905-e232-7fa3-a77e-81fa59f4799d"
+            },
+            "disclosure_confirmation": {
+                "state": "confirmed",
+                "event_id": "01a1e905-e232-7fa3-a77e-82086249d7f1"
+            },
+            "wire_payload_projection": {
+                "digest": "sha256:7f2f21eec3a9793172bd891b350a3fe0517c05cceccc88f418eac4639198de33",
+                "mapping_revision": "storyos.volcengine-agent-plan.embeddings.multimodal.v1"
+            },
+            "operation_input_snapshot": {
+                "cause": "passage_index",
+                "texts": [
+                    {
+                        "chapter_id": "01a1e904-c629-7541-a569-d274ce0357c5",
+                        "revision_id": "01a1e905-0efe-7553-951c-0ab57e06daa4",
+                        "passage_digest": "sha256:b77edfcdd7f5602e4e4728eba8c38e9eedf97c85c93410e8f2f57886a439c2c6"
+                    }
+                ],
+                "purpose": "manuscript_embedding",
+                "source_class": "chapter_passage",
+                "working_target": "not_applicable",
+                "workspace_context": "not_applicable"
+            },
+            "outbound_disclosure_event": {
+                "state": "outcome_unknown",
+                "purpose": "manuscript_embedding",
+                "event_id": "01a1e905-e232-7fa3-a77e-82086249d7f1",
+                "source_class": "chapter_passage"
+            }
+        },
+        "grant_id": "01a1e905-6804-7ef0-92d0-13ad7babe91d",
+        "project_id": "01a1e902-d6f6-71d0-a91a-764f4f9a0e51",
+        "settlement": "vector",
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "embedding_attempt_id": "01a1e905-e232-7fa3-a77e-81ec2b9fe4d0",
+        "project_model_use_binding_revision": "01a1e905-6804-7ef0-92d0-13be64a41576"
+    }
+]

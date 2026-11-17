@@ -1,0 +1,7 @@
+  project_model_use_binding_revision  |   processing_destination_identity    |               grant_id               |     model_registration_revision      |      tool_registration_revision      |   embedding_registration_revision    | credential_source |        credential_reference         
+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------+-------------------+-------------------------------------
+ 01a1e905-6803-7782-853e-ecf22e60c30c | 01a1e905-6803-7782-853e-ecdc7746c08f | 01a1e905-6803-7782-853e-ece17efdbc1e |                                      | 018f0000-0000-7001-8000-0000000e0001 |                                      | operator_quota    | settings:STORYOS_EXA_API_KEY
+ 01a1e905-6804-7ef0-92d0-13be64a41576 | 01a1e905-6804-7ef0-92d0-1396ff9bd442 | 01a1e905-6804-7ef0-92d0-13ad7babe91d |                                      |                                      | 018f0000-0000-7001-8000-0000000eb002 | operator_quota    | settings:STORYOS_AGENT_PLAN_API_KEY
+ 01a1e905-6807-7e91-bb43-343b4e5e8ca2 | 01a1e905-6807-7e91-bb43-3414830410e7 | 01a1e905-6807-7e91-bb43-3428ccd01b20 | 018f0000-0000-7001-8000-00000000fa22 |                                      |                                      | operator_quota    | settings:STORYOS_AGENT_PLAN_API_KEY
+(3 rows)
+
