@@ -13,7 +13,6 @@ tracing.workspace = true
 storyos-adapter-fake-destination = { path = "../storyos-adapter-fake-destination" }
 storyos-core = { path = "../storyos-core" }
 tokio = { workspace = true, features = ["test-util"] }
-tracing-subscriber.workspace = true
 
 [lints]
 workspace = true

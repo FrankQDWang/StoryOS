@@ -288,12 +288,11 @@ impl PassageIndexWorkStore for PostgresProjectReader {
         registration_revisions: &[&str],
         cut_revision: &str,
     ) -> Result<bool, ProjectReadError> {
-        let mut client = self.connect().await?;
-        let transaction = client.transaction().await.map_err(read_error)?;
-        set_worker_scope(&transaction).await?;
-        let waits =
-            passage_index_row_waits(&transaction, registration_revisions, cut_revision).await?;
-        transaction.commit().await.map_err(read_error)?;
+        let client = self.connect().await?;
+        client.batch_execute("BEGIN").await.map_err(read_error)?;
+        set_worker_scope(&*client).await?;
+        let waits = passage_index_row_waits(&*client, registration_revisions, cut_revision).await?;
+        client.batch_execute("COMMIT").await.map_err(read_error)?;
         Ok(waits)
     }
 

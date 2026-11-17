@@ -2014,7 +2014,6 @@ dependencies = [
  "storyos-core",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

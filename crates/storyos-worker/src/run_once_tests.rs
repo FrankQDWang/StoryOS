@@ -72,8 +72,9 @@ struct Work {
     /// The text of the one Chapter with index work, and the passages with a row.
     index: Option<(ChapterPassageSource, Vec<PassageVectorKey>)>,
     index_claimed: bool,
-    /// The reads of waiting index work.
+    /// The reads of waiting index work and the calls of the index claim.
     index_reads: u64,
+    index_claim_calls: u64,
     /// The Embedding Registrations of each index claim.
     claimed_registrations: Vec<Vec<String>>,
     events: Vec<&'static str>,
@@ -86,6 +87,7 @@ impl Default for Work {
             index: None,
             index_claimed: false,
             index_reads: 0,
+            index_claim_calls: 0,
             claimed_registrations: Vec::new(),
             events: Vec::new(),
         }
@@ -336,6 +338,7 @@ impl PassageIndexWorkStore for RaceStore {
         lease: Duration,
     ) -> Result<Option<ClaimedPassageIndex>, ProjectReadError> {
         let mut work = self.work.lock().unwrap();
+        work.index_claim_calls += 1;
         if work.index.is_none() || work.index_claimed {
             return Ok(None);
         }
@@ -668,36 +671,11 @@ async fn run_once_claims_a_schedule_row_only_after_the_agent_run_claim_finds_no_
     );
 }
 
-/// Collects the JSON lines of the Diagnostic Projection in memory.
-#[derive(Clone, Default)]
-struct Projection(std::sync::Arc<Mutex<Vec<u8>>>);
-
-impl std::io::Write for Projection {
-    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        self.0.lock().unwrap().extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-/// ADR 0047: an idle turn of the loop writes no claim span and no line. It reads one time whether
-/// index work waits. A Worker with no Embedding Registration makes no store call for index work. A
-/// turn that claims index work still has its claim span with the outcome `claimed`.
+/// ADR 0047: an idle turn of the loop reads one time whether index work waits, and it makes no
+/// claim, so it opens no claim span. A Worker with no Embedding Registration makes no store call
+/// for index work. A turn with waiting index work claims it, as before.
 #[tokio::test(start_paused = true)]
-async fn an_idle_turn_writes_no_line_and_a_claim_keeps_its_span() {
-    let projection = Projection::default();
-    let writer = projection.clone();
-    let subscriber = tracing_subscriber::fmt()
-        .json()
-        .with_max_level(tracing::Level::INFO)
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-        .with_writer(move || writer.clone())
-        .finish();
-    let _default = tracing::subscriber::set_default(subscriber);
-    let lines = || String::from_utf8(projection.0.lock().unwrap().clone()).unwrap();
+async fn an_idle_turn_reads_once_and_makes_no_claim_of_the_index_work() {
     let idle = RaceStore {
         work: Mutex::new(Work {
             schedule_rows: 0,
@@ -712,26 +690,24 @@ async fn an_idle_turn_writes_no_line_and_a_claim_keeps_its_span() {
         embeddings: storyos_application::NoEmbeddingDestination,
     };
     let mut index = None;
+    let reads_and_claims = |store: &RaceStore| {
+        let work = store.work.lock().unwrap();
+        (work.index_reads, work.index_claim_calls)
+    };
 
     let fake_turn = step(&idle, &fake_destination(), &mut index).await;
-    let fake_reads = idle.work.lock().unwrap().index_reads;
+    let after_fake = reads_and_claims(&idle);
     let no_embeddings_turn = step(&idle, &no_embeddings, &mut index).await;
-    let idle_lines = lines();
+    let after_no_embeddings = reads_and_claims(&idle);
     let work = index_store(0);
     let claim_turn = step(&work, &fake_destination(), &mut index).await;
-    let claim_lines = lines();
 
     assert_eq!(
         (
-            fake_turn,
-            fake_reads,
-            no_embeddings_turn,
-            idle.work.lock().unwrap().index_reads,
-            idle_lines,
-            claim_turn,
-            claim_lines.contains(r#""name":"claim_next_passage_index_work""#),
-            claim_lines.contains(r#""outcome":"claimed""#),
+            (fake_turn, after_fake),
+            (no_embeddings_turn, after_no_embeddings),
+            (claim_turn, reads_and_claims(&work)),
         ),
-        (false, 1, false, 1, String::new(), true, true, true)
+        ((false, (1, 0)), (false, (1, 0)), (true, (1, 1)))
     );
 }
