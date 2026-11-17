@@ -20,7 +20,7 @@ pub fn conversation_capture_due(settled_at: SystemTime) -> SystemTime {
 /// The due time that the settlement of a Conversation capture with `outcome` at `settled_at`
 /// writes. Only `observations_recorded` and `no_observation` move the last Run that a capture
 /// read. When a completed Run is after that Run (`later_run`), the row is due at once. After
-/// `failed` or `step_limit`, the Host starts no capture for the same messages by itself, and the
+/// `failed` or `step_limit`, the Host starts no capture for the same messages by itself. Then the
 /// next completed Run of the author sets the due time. `None`: the settlement writes no due time.
 pub fn capture_settlement_due(
     outcome: crate::CaptureOutcome,
@@ -135,20 +135,21 @@ pub struct ConversationCaptureInput {
 /// its Run, then its text. The input has the oldest Runs that fit, and the last Run that it reads
 /// is the last of them. The next capture reads the other Runs.
 ///
-/// When the oldest Run alone is above the limit, the input has only that Run, and its final
-/// answer is a `deterministic_excerpt`: a prefix of the answer and an explicit mark with the kept
-/// and the total character counts. When the author messages of that Run are above the limit
-/// also with no answer text, the input stays above the limit, and the start of the capture
-/// refuses it. `None`: no Run is unread.
+/// When the oldest Run alone is above the limit, the input has only that Run as a
+/// `deterministic_excerpt`. It has the whole messages of the Run in their order while they fit.
+/// The first message that does not fit keeps its longest prefix that fits, and an explicit mark
+/// gives the kept and the total character counts and the count of the later messages that it
+/// omits. When the author messages of the Run fit, the cut is in the final answer. `None`: no Run
+/// is unread.
 pub fn conversation_capture_input(
     runs: &[ConversationRunMessages],
     item_token_limit: u64,
 ) -> Option<ConversationCaptureInput> {
     let first = runs.first()?;
-    let mut text = run_text(first, None);
+    let mut text = run_text(first, first.messages.len(), None);
     if count_context_item_tokens(&text) > item_token_limit {
         return Some(ConversationCaptureInput {
-            text: answer_excerpt(first, item_token_limit),
+            text: run_excerpt(first, item_token_limit),
             first_run_id: first.run_id.clone(),
             last_run_id: first.run_id.clone(),
             projection_mode: ProjectionMode::DeterministicExcerpt,
@@ -156,7 +157,7 @@ pub fn conversation_capture_input(
     }
     let mut last = first;
     for run in &runs[1..] {
-        let longer = format!("{text}\n\n{}", run_text(run, None));
+        let longer = format!("{text}\n\n{}", run_text(run, run.messages.len(), None));
         if count_context_item_tokens(&longer) > item_token_limit {
             break;
         }
@@ -170,48 +171,52 @@ pub fn conversation_capture_input(
     })
 }
 
-/// The messages of one Run. With `answer_characters`, the final answer keeps only that many
-/// characters and ends with the mark of the cut.
-fn run_text(run: &ConversationRunMessages, answer_characters: Option<usize>) -> String {
-    run.messages
-        .iter()
-        .map(|(role, text)| {
-            let header = serde_json::json!({"role": role.name(), "run_id": run.run_id});
-            match (role, answer_characters) {
-                (ConversationRole::Assistant, Some(kept)) => {
-                    let prefix: String = text.chars().take(kept).collect();
-                    let total = text.chars().count();
-                    format!(
-                        "{header}\n{prefix} [The Host cut this answer here. It keeps {kept} of its \
-                         {total} characters.]"
-                    )
-                }
-                _ => format!("{header}\n{text}"),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n")
+/// The first `whole` messages of one Run. With `Some(kept)`, the next message follows with only
+/// its first `kept` characters and the mark of the cut, and the later messages are omitted.
+fn run_text(run: &ConversationRunMessages, whole: usize, kept: Option<usize>) -> String {
+    let mut parts = Vec::new();
+    for (index, (role, text)) in run.messages.iter().enumerate() {
+        let header = serde_json::json!({"role": role.name(), "run_id": run.run_id});
+        if index < whole {
+            parts.push(format!("{header}\n{text}"));
+            continue;
+        }
+        if let Some(kept) = kept {
+            let prefix: String = text.chars().take(kept).collect();
+            let total = text.chars().count();
+            let omitted = run.messages.len() - index - 1;
+            parts.push(format!(
+                "{header}\n{prefix} [The Host cut this message here. It keeps {kept} of its {total} \
+                 characters. Later messages of the Run that the Host omits: {omitted}.]"
+            ));
+        }
+        break;
+    }
+    parts.join("\n\n")
 }
 
-/// The text of one Run whose final answer keeps the longest prefix that fits the limit. The count
-/// grows with the kept characters, so a binary search finds that prefix.
-fn answer_excerpt(run: &ConversationRunMessages, item_token_limit: u64) -> String {
-    let answer = run
-        .messages
-        .iter()
-        .rfind(|(role, _)| *role == ConversationRole::Assistant)
-        .map_or(0, |(_, text)| text.chars().count());
-    let fits = |kept| count_context_item_tokens(&run_text(run, Some(kept))) <= item_token_limit;
-    let (mut low, mut high) = (0, answer);
+/// The excerpt of one Run above the limit. The count of the text grows with each whole message
+/// and with each kept character, so the excerpt takes the most whole messages that leave room
+/// for the mark, and then a binary search finds the longest prefix of the next message.
+fn run_excerpt(run: &ConversationRunMessages, item_token_limit: u64) -> String {
+    let fits = |whole, kept| {
+        count_context_item_tokens(&run_text(run, whole, Some(kept))) <= item_token_limit
+    };
+    let mut whole = 0;
+    while whole + 1 < run.messages.len() && fits(whole + 1, 0) {
+        whole += 1;
+    }
+    let total = run.messages[whole].1.chars().count();
+    let (mut low, mut high) = (0, total);
     while low < high {
         let middle = (low + high).div_ceil(2);
-        if fits(middle) {
+        if fits(whole, middle) {
             low = middle;
         } else {
             high = middle - 1;
         }
     }
-    run_text(run, Some(low))
+    run_text(run, whole, Some(low))
 }
 
 #[cfg(test)]

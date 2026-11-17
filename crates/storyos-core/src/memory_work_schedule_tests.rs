@@ -181,7 +181,7 @@ fn the_input_has_the_oldest_runs_that_fit_the_limit() {
 /// answer is the longest prefix that fits, with the mark of the cut.
 #[test]
 fn one_run_above_the_limit_gives_an_excerpt_of_its_final_answer() {
-    let answer = "一二三四五六七八九十".repeat(10);
+    let answer = "一二三四五六七八九十".repeat(30);
     let runs = [
         run(
             "run-1",
@@ -195,8 +195,9 @@ fn one_run_above_the_limit_gives_an_excerpt_of_its_final_answer() {
     let excerpt = |kept: &str, count: usize| {
         format!(
             "{{\"role\":\"author\",\"run_id\":\"run-1\"}}\n继续写。\n\n\
-             {{\"role\":\"assistant\",\"run_id\":\"run-1\"}}\n{kept} [The Host cut this answer \
-             here. It keeps {count} of its 100 characters.]"
+             {{\"role\":\"assistant\",\"run_id\":\"run-1\"}}\n{kept} [The Host cut this message \
+             here. It keeps {count} of its 300 characters. Later messages of the Run that the Host \
+             omits: 0.]"
         )
     };
     let limit = count_context_item_tokens(&excerpt("一二三", 3));
@@ -220,5 +221,42 @@ fn one_run_above_the_limit_gives_an_excerpt_of_its_final_answer() {
     assert_eq!(
         (bounded(limit), bounded(limit - 1)),
         (expected("一二三", 3), expected("一二", 2))
+    );
+}
+
+/// When the author messages of the one Run are above the limit also with no answer text, the
+/// excerpt keeps the whole messages that fit, cuts the next message, and omits the answer. The
+/// input fits the limit.
+#[test]
+fn author_messages_above_the_limit_give_an_excerpt_that_fits() {
+    let (message, steering, answer) = ("甲".repeat(200), "乙".repeat(200), "丙".repeat(200));
+    let runs = [run(
+        "run-1",
+        &[
+            (ConversationRole::Author, message.as_str()),
+            (ConversationRole::Author, steering.as_str()),
+            (ConversationRole::Assistant, answer.as_str()),
+        ],
+    )];
+    let excerpt = |kept: usize| {
+        format!(
+            "{{\"role\":\"author\",\"run_id\":\"run-1\"}}\n{message}\n\n\
+             {{\"role\":\"author\",\"run_id\":\"run-1\"}}\n{} [The Host cut this message here. \
+             It keeps {kept} of its 200 characters. Later messages of the Run that the Host omits: \
+             1.]",
+            "乙".repeat(kept)
+        )
+    };
+    let limit = count_context_item_tokens(&excerpt(5));
+    let bounded = |limit| {
+        let input = conversation_capture_input(&runs, limit).unwrap();
+        (input.text, input.projection_mode)
+    };
+    assert_eq!(
+        (bounded(limit), bounded(limit - 1)),
+        (
+            (excerpt(5), ProjectionMode::DeterministicExcerpt),
+            (excerpt(4), ProjectionMode::DeterministicExcerpt)
+        )
     );
 }
