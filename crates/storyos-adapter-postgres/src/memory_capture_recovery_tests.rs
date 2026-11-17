@@ -141,9 +141,10 @@ async fn attempt_roles(admin: &Client, run_id: &str) -> Vec<String> {
         .collect()
 }
 
-/// When the Worker loses the Run Lease after the response of the capture committed, its stale
-/// fence stores nothing. The next claim continues the same RunStep, and the capture ends with one
-/// set of observations. A second delivery of the settled output call changes nothing.
+/// When the Worker loses the Run Lease after the response of the capture committed (a Model
+/// Gateway point) or before the Tool Gateway resolves its output call (a Tool Gateway point), its
+/// stale fence stores nothing. The next claim continues the same RunStep, and the capture ends
+/// with one set of observations. A second delivery of the settled output call changes nothing.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_lost_lease_and_a_second_delivery_give_one_set_of_observations() {
@@ -151,54 +152,63 @@ async fn a_lost_lease_and_a_second_delivery_give_one_set_of_observations() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, _, source) = project(&store, &admin, "fe1").await;
     let item = json!({"type": "foreshadowing", "title": "铜铃", "text": "铜铃会再响。"});
-    let started = start(&store, &scope, &source, &script(&[record(json!([item]))]))
+    let points = [
+        ("fe1", ContractFaultPoint::StreamCommitted),
+        ("fe5", ContractFaultPoint::ToolCallsCommitted),
+    ];
+    let mut ended = Vec::new();
+    for (prefix, point) in points {
+        let (scope, _, source) = project(&store, &admin, prefix).await;
+        let started = start(&store, &scope, &source, &script(&[record(json!([item]))]))
+            .await
+            .unwrap();
+        let run_id = started.run_id.clone();
+        let stale = claim_run(&admin, scope.clone(), run_id.clone()).await;
+        let fault = Fault::TakeOver {
+            admin: &admin,
+            run_id: run_id.clone(),
+        };
+        let observer = FaultAt::new(point, 1, fault);
+        let lost =
+            complete_agent_run(&store, &FakeDestination, &observer, &RuntimeClock, &stale).await;
+        let stale_delivery = store.next_tool_call(&stale).await;
+        let before = settlement(&admin, &run_id).await;
+        let current = claim_run(&admin, scope.clone(), run_id.clone()).await;
+        complete_agent_run(
+            &store,
+            &FakeDestination,
+            &NoContractFaults,
+            &RuntimeClock,
+            &current,
+        )
         .await
         .unwrap();
-    let run_id = started.run_id.clone();
-    let stale = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    let fault = Fault::TakeOver {
-        admin: &admin,
-        run_id: run_id.clone(),
-    };
-    let observer = FaultAt::new(ContractFaultPoint::StreamCommitted, 1, fault);
-    let lost = complete_agent_run(&store, &FakeDestination, &observer, &RuntimeClock, &stale).await;
-    let stale_delivery = store.next_tool_call(&stale).await;
-    let before = settlement(&admin, &run_id).await;
-    let current = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    complete_agent_run(
-        &store,
-        &FakeDestination,
-        &NoContractFaults,
-        &RuntimeClock,
-        &current,
-    )
-    .await
-    .unwrap();
-    let second_delivery = store.next_tool_call(&current).await.unwrap();
-
-    assert!(lost.is_err() && stale_delivery.is_err());
-    assert_eq!(before, json!(["claimed", "running", null, null, []]));
-    let observation = json!([1, "foreshadowing", "铜铃", "铜铃会再响。", "waiting"]);
-    assert_eq!(
-        (
+        let second_delivery = store.next_tool_call(&current).await.unwrap();
+        ended.push(json!([
+            lost.is_err() && stale_delivery.is_err(),
+            before,
             second_delivery.is_none(),
             settlement(&admin, &run_id).await,
             attempt_roles(&admin, &run_id).await
-        ),
-        (
-            true,
-            json!([
-                "completed",
-                "settled",
-                "observations_recorded",
-                null,
-                [observation]
-            ]),
-            vec!["decision:0".to_owned()]
-        )
-    );
+        ]));
+    }
+
+    let observation = json!([1, "foreshadowing", "铜铃", "铜铃会再响。", "waiting"]);
+    let one_set = json!([
+        true,
+        ["claimed", "running", null, null, []],
+        true,
+        [
+            "completed",
+            "settled",
+            "observations_recorded",
+            null,
+            [observation]
+        ],
+        ["decision:0"]
+    ]);
+    assert_eq!(ended, [one_set.clone(), one_set]);
 }
 
 /// A request of a capture with an unknown result recovers by the Retrieve of its reference or by

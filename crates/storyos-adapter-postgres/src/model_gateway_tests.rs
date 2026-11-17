@@ -676,11 +676,13 @@ async fn dispatch_claim_commits_before_an_exchange_with_no_open_transaction() {
                 };
                 2
             ],
-            [
+            vec![
+                ContractFaultPoint::DispatchClaimed,
+                ContractFaultPoint::StreamCommitted,
+                ContractFaultPoint::ToolCallsCommitted,
                 ContractFaultPoint::DispatchClaimed,
                 ContractFaultPoint::StreamCommitted
-            ]
-            .repeat(2),
+            ],
         )
     );
     let evidence = dispatch_evidence(&admin, &claim.run_id).await;
@@ -891,6 +893,7 @@ async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
                 ContractFaultPoint::StreamCommitted,
                 ContractFaultPoint::DispatchClaimed,
                 ContractFaultPoint::StreamCommitted,
+                ContractFaultPoint::ToolCallsCommitted,
                 ContractFaultPoint::DispatchClaimed,
                 ContractFaultPoint::StreamCommitted,
             ],

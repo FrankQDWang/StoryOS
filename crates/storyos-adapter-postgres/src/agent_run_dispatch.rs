@@ -18,6 +18,7 @@ impl ModelDispatchStore for PostgresProjectReader {
     async fn next_dispatch_work(
         &self,
         claim: &ClaimedAgentRun,
+        adapters: &'static [storyos_core::ModelAdapter],
     ) -> Result<NextDispatchWork, CompleteAgentRunError> {
         let lease_seconds = self.agent_run_lease_seconds()?;
         let mut checked_step = None;
@@ -54,7 +55,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                 WorkPhase::ToolCalls => return Ok(NextDispatchWork::ToolCalls),
                 WorkPhase::BetweenSteps(position) => {
                     checked_step = Some(position);
-                    let queued = self.author_run_queued(claim).await?;
+                    let queued = self.author_run_queued(adapters).await?;
                     if storyos_core::yields_to_author(position, queued) {
                         self.give_back(claim).await?;
                         return Ok(NextDispatchWork::Settled(CompleteAgentRun::Settled));

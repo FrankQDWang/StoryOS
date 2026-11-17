@@ -27,6 +27,17 @@ pub(crate) async fn project(
     admin: &Client,
     prefix: &str,
 ) -> (ProjectScope, String, MemoryCaptureSource) {
+    // A capture gives way to each queued Run of the author, and earlier tests leave queued Runs
+    // in the shared database. Park them, so that only the Runs of this test are queued.
+    admin
+        .execute(
+            "UPDATE storyos.agent_runs
+                SET status = 'paused', lease_expires_at = NULL, wakeup_pending = false
+              WHERE run_kind = 'author' AND status = 'queued'",
+            &[],
+        )
+        .await
+        .unwrap();
     let (scope, chapter_id, run_id) = queued(store, prefix).await;
     complete(store, admin, &scope, &run_id).await;
     let conversation_id: String = admin

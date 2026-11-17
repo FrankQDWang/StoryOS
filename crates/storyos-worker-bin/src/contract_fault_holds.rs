@@ -27,7 +27,9 @@ impl ContractFaultObserver for ContractFaultHolds {
             ContractFaultPoint::DispatchClaimed => &self.dispatch,
             ContractFaultPoint::StreamCommitted => &self.stream,
             ContractFaultPoint::CompactionStaged => &self.compaction,
-            ContractFaultPoint::ToolContextCommitted | ContractFaultPoint::ToolDispatchClaimed => {
+            ContractFaultPoint::ToolCallsCommitted
+            | ContractFaultPoint::ToolContextCommitted
+            | ContractFaultPoint::ToolDispatchClaimed => {
                 return;
             }
         };
