@@ -28,6 +28,7 @@ use crate::memory_entries::tests::write_versions;
 
 /// The pass takes the oldest observations whose expected input stays below the window after the
 /// output bound of the binding. The pass row records them, and the other observations wait. The
+/// Run names the Agent Plan Registration, so the start used the binding that the SQL moved. The
 /// Host refuses the request of the pass on the fake destination, so the pass fails, applies
 /// nothing, and each observation stays `waiting`.
 #[tokio::test]
@@ -74,9 +75,11 @@ async fn a_pass_takes_the_oldest_observations_that_fit_the_request() {
     let started = run_pass(&store, &admin, &scope).await;
     let taken: Value = admin
         .query_one(
-            "SELECT jsonb_build_array(jsonb_array_length(observations),
-                      observations -> -1 ->> 1)::text
-               FROM storyos.memory_consolidation_passes WHERE pass_id = $1::text::uuid",
+            "SELECT jsonb_build_array(jsonb_array_length(pass.observations),
+                      pass.observations -> -1 ->> 1, run.model_registration_revision)::text
+               FROM storyos.memory_consolidation_passes AS pass
+               JOIN storyos.agent_runs AS run USING (run_id)
+              WHERE pass.pass_id = $1::text::uuid",
             &[&started.pass_id],
         )
         .await
@@ -88,7 +91,7 @@ async fn a_pass_takes_the_oldest_observations_that_fit_the_request() {
     assert_eq!(
         (taken, settled(&admin, &started.run_id).await),
         (
-            json!([34, "34"]),
+            json!([34, "34", AGENT_PLAN_REGISTRATION.revision]),
             json!([
                 "refused",
                 "failed",
