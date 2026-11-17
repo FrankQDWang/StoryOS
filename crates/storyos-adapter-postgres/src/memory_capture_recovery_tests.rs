@@ -295,8 +295,8 @@ async fn an_unknown_result_recovers_and_a_rejected_request_fails_the_capture() {
     );
 }
 
-/// An edit of a Chapter during a capture does not change it: each request of the capture sends
-/// only its pinned input.
+/// An edit of a Chapter during a capture does not change its pinned input: each request sends the
+/// input and the Chapter list of the start. A later manuscript read gives the current text.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_edit_of_a_chapter_does_not_change_a_capture() {
@@ -307,29 +307,9 @@ async fn an_edit_of_a_chapter_does_not_change_a_capture() {
     let (scope, chapter_id, _, session) =
         crate::agent_run_read_chapter::tests::project(&store, &admin, "fe3", 0xfe40, &["Lin ran."])
             .await;
-    let source_run: String = admin
-        .query_one(
-            "SELECT run_id::text FROM storyos.agent_runs
-              WHERE project_id = $1::text::uuid AND run_kind = 'author'",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    let conversation_id: String = admin
-        .query_one(
-            "SELECT conversation_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&source_run],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    let source = storyos_application::MemoryCaptureSource::Conversation {
-        conversation_id,
-        first_run_id: source_run.clone(),
-        last_run_id: source_run,
-    };
-    let input = script(&[("propose_edit", json!({"reason": "改写"}))]);
+    let source = super::tools_tests::conversation_source(&admin, &scope).await;
+    let read = json!({"chapter": 1, "first_block": null, "last_block": null});
+    let input = script(&[("read_chapter", read)]);
     let started = start(&store, &scope, &source, &input).await.unwrap();
     let edit = (session.as_str(), 2, "fe43");
     let edit = replace_text(&store, &admin, &scope, edit, &chapter_id, (3, "Wei")).await;
@@ -339,7 +319,8 @@ async fn an_edit_of_a_chapter_does_not_change_a_capture() {
     let inputs: Vec<Value> = admin
         .query(
             "SELECT jsonb_path_query_array(payload,
-                      '$.selected[*] ? (@.source_class != \"tool_result\").content')::text
+                      '$.selected[*] ? (@.source_class == \"memory_capture_input\"
+                                       || @.source_class == \"chapter_list\").content')::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'
               ORDER BY decision_position",
@@ -355,6 +336,17 @@ async fn an_edit_of_a_chapter_does_not_change_a_capture() {
 [1,8,"Chapter A"]
 [2,0,"Fog"]"#;
     assert_eq!(inputs, vec![json!([input, chapters]); 2]);
+    let read: String = admin
+        .query_one(
+            "SELECT result_text FROM storyos.tool_calls
+              WHERE run_id = $1::text::uuid AND function_name = 'read_chapter'",
+            &[&started.run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    // The start had "Lin ran."; the read gives the current authoritative text.
+    assert!(read.ends_with("\n[block 1]\nWei ran."));
     assert_eq!(
         settlement(&admin, &started.run_id).await,
         json!(["completed", "settled", "no_observation", null, []])

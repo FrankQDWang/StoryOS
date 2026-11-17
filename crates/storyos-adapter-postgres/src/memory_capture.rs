@@ -365,3 +365,7 @@ mod failure_tests;
 #[cfg(test)]
 #[path = "memory_capture_recovery_tests.rs"]
 mod recovery_tests;
+
+#[cfg(test)]
+#[path = "memory_capture_tools_tests.rs"]
+mod tools_tests;
