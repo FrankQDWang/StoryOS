@@ -260,3 +260,60 @@ fn author_messages_above_the_limit_give_an_excerpt_that_fits() {
         )
     );
 }
+
+/// The rule of the consolidation row: due now with no earlier pass, due at the start of the last
+/// pass and 30 minutes when that is later, and no due time when no observation waits. The
+/// settlement of a capture and of a pass with each outcome use this one rule.
+#[test]
+fn a_waiting_observation_makes_the_project_due_after_the_interval_of_the_last_pass() {
+    let at = |seconds| SystemTime::UNIX_EPOCH + Duration::from_secs(seconds);
+    let now = at(10_000);
+    assert_eq!(
+        (
+            CONSOLIDATION_INTERVAL,
+            [None, Some(at(9_000)), Some(at(8_200)), Some(at(1_000))]
+                .map(|last_pass_start| consolidation_due(true, now, last_pass_start)),
+            [None, Some(at(9_000))].map(|last_pass_start| consolidation_due(
+                false,
+                now,
+                last_pass_start
+            )),
+        ),
+        (
+            Duration::from_secs(1_800),
+            [Some(now), Some(at(10_800)), Some(now), Some(now)],
+            [None, None],
+        )
+    );
+}
+
+/// The decision of a claimed consolidation row, in its order: no waiting observation, then a
+/// pass in progress.
+#[test]
+fn the_consolidation_decision_follows_its_order() {
+    let decide = |observation_waits, pass_in_progress| {
+        decide_consolidation(&ConsolidationFacts {
+            observation_waits,
+            pass_in_progress,
+        })
+    };
+    use ConsolidationSkip::*;
+    assert_eq!(
+        [
+            decide(false, true),
+            decide(false, false),
+            decide(true, true),
+            decide(true, false)
+        ],
+        [
+            Err(NothingWaits),
+            Err(NothingWaits),
+            Err(PassInProgress),
+            Ok(())
+        ]
+    );
+    assert_eq!(
+        [NothingWaits, PassInProgress, StartRefused].map(ConsolidationSkip::label),
+        ["no_observation_waits", "pass_in_progress", "start_refused"]
+    );
+}

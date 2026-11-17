@@ -266,9 +266,10 @@ pub use memory_index::{
 pub use memory_operation_decision::decide_memory_operations;
 pub use memory_prune::{MEMORY_UNUSED_AFTER_DAYS, memory_entry_unused};
 pub use memory_work_schedule::{
-    CONVERSATION_QUIET_TIME, ConversationCaptureFacts, ConversationCaptureInput,
-    ConversationCaptureSkip, ConversationRole, ConversationRunMessages, capture_settlement_due,
-    conversation_capture_due, conversation_capture_input, decide_conversation_capture,
+    CONSOLIDATION_INTERVAL, CONVERSATION_QUIET_TIME, ConsolidationFacts, ConsolidationSkip,
+    ConversationCaptureFacts, ConversationCaptureInput, ConversationCaptureSkip, ConversationRole,
+    ConversationRunMessages, capture_settlement_due, consolidation_due, conversation_capture_due,
+    conversation_capture_input, decide_consolidation, decide_conversation_capture,
 };
 pub use model_output::{
     AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, StreamItemRole, StreamItemState,

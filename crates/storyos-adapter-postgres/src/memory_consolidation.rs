@@ -50,8 +50,9 @@ impl MemoryConsolidationStore for PostgresProjectReader {
 
 /// Pins the current Model Use Binding, its grant, its Model Registration, and the Memory revision.
 /// Then it writes the queued Run, the pass row, and the Context Assembly of its one RunStep. The
-/// input has the oldest observations that fit the request. A refused start writes no row.
-async fn start(
+/// input has the oldest observations that fit the request. A refused start writes no row. The
+/// claim of a schedule row calls it in the transaction of the claim.
+pub(crate) async fn start(
     client: &Client,
     scope: &ProjectScope,
 ) -> Result<Result<StartedMemoryConsolidation, CaptureRefusal>, ProjectReadError> {
@@ -359,6 +360,7 @@ pub(crate) async fn execute(
         )
         .await
         .map_err(complete_database_error)?;
+    crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
     resolve(
         client,
         claim,
@@ -377,7 +379,8 @@ pub(crate) async fn execute(
 }
 
 /// Fails the running pass of the Run, when the Run has one, with the reason that Core gives from
-/// `end`. It applies nothing. A Run with no running pass is not changed.
+/// `end`. It applies nothing. A Run with no running pass is not changed. The settlement of a pass
+/// with each outcome can make the consolidation row of the Project due.
 pub(crate) async fn settle_end(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -387,7 +390,7 @@ pub(crate) async fn settle_end(
         return Ok(());
     };
     let scope = &claim.project_scope;
-    client
+    let failed = client
         .execute(
             "UPDATE storyos.memory_consolidation_passes SET outcome = 'failed', failure_reason = $4
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
@@ -401,6 +404,9 @@ pub(crate) async fn settle_end(
         )
         .await
         .map_err(complete_database_error)?;
+    if failed > 0 {
+        crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
+    }
     Ok(())
 }
 
@@ -415,3 +421,7 @@ mod recovery_tests;
 #[cfg(test)]
 #[path = "memory_consolidation_merge_tests.rs"]
 mod merge_tests;
+
+#[cfg(test)]
+#[path = "memory_consolidation_schedule_tests.rs"]
+mod schedule_tests;
