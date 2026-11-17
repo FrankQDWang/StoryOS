@@ -15,10 +15,11 @@ function manuscriptUseLine(use: ManuscriptUseInspect): string {
 }
 
 /**
- * The Chapters that a settled Run read, the terms that it searched in the manuscript, and the questions that it searched
- * by meaning, as plain lines in the order of the Run read (ADR 0095 section 1). The panel shows the list after the Skills of the turn, for the current turn
- * and for each history turn, from the Run read that it holds for the turn. A Run with no entry shows no list. The list
- * has no control and shows no text of a result (ADR 0040).
+ * The Chapters that a settled Run read, the terms that it searched in the manuscript, and the questions that it
+ * searched by meaning (ADR 0095 section 1). Each entry is one plain line, in the order of the Run read. The panel
+ * shows the list after the Skills of the turn. It shows the list for the current turn and for each history turn, from
+ * the Run read that it holds for the turn. A Run with no entry shows no list. The list has no control and shows no
+ * text of a result (ADR 0040).
  */
 export function ManuscriptUseList({ run }: { run: GetAgentRunResponse }) {
   const uses = settledRun(run) ? run.manuscript_uses ?? [] : [];
