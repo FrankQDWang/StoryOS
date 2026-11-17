@@ -670,7 +670,7 @@ async fn a_cancel_of_a_run_during_the_work_does_not_change_the_work() {
     let chapter = chapter(&store, &admin, ["2f3", "2f4"], "2f5", &texts()).await;
     let scope = chapter.scope.clone();
     let run_id = admit_embedding_run(&store, &scope, &chapter.chapter_id, "2f6", FAKE).await;
-    let cancel = cancellation(&store, &scope, 0x2fe0, &run_id).await;
+    let cancel = cancellation(&store, &scope, 0xf3f5, &run_id).await;
     park_other_work(&admin, &scope).await;
     wake(&admin, &scope).await;
     let claimed = claim(&store, FAKE_ONLY).await.unwrap();
@@ -778,7 +778,7 @@ async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
         .lock()
         .await;
     let (store, admin) = configured().await;
-    let chapter = chapter(&store, &admin, ["f3d0", "f3d1"], "f3d2", &texts()).await;
+    let chapter = chapter(&store, &admin, ["f3d", "2fe"], "2ff", &texts()).await;
     let scope = chapter.scope.clone();
     let id = chapter.chapter_id.clone();
     park_other_work(&admin, &scope).await;
