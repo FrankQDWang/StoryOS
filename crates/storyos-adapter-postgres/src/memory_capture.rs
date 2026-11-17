@@ -277,7 +277,8 @@ pub(crate) async fn persist_next_step(
 
 /// Settles the capture of the Run with the `outcome` that Core decided and stores each of
 /// `observations` as a waiting Memory Observation in list order, in the Tool Gateway transaction
-/// of the call. The settlement of a Conversation capture can make its schedule row due.
+/// of the call. The settlement of a Conversation capture can make its schedule row due, and a
+/// settlement that stores an observation makes the consolidation row of the Project due.
 pub(crate) async fn record_observations(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -333,6 +334,9 @@ pub(crate) async fn record_observations(
         )
         .await
         .map_err(complete_database_error)?;
+    if !observations.is_empty() {
+        crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
+    }
     Ok(())
 }
 
