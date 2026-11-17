@@ -65,7 +65,12 @@ impl MemoryWorkScheduleStore for PostgresProjectReader {
             .await
             .map_err(ProjectReadError::unavailable)?;
         let client = self.connect().await?;
-        client.batch_execute("BEGIN").await.map_err(read_error)?;
+        // The start reads the Memory head and its reference items in one snapshot, as
+        // `start_memory_capture` does. A contended claim fails with a serialization failure.
+        client
+            .batch_execute("BEGIN ISOLATION LEVEL SERIALIZABLE")
+            .await
+            .map_err(read_error)?;
         // A stop before the commit drops the connection, so the row stays due.
         let Some(claimed) = claim_and_decide(&client).await? else {
             client.batch_execute("COMMIT").await.map_err(read_error)?;
