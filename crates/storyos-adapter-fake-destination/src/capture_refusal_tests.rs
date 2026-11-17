@@ -10,7 +10,10 @@ use storyos_core::{
 use super::FakeDestination;
 
 /// The first request of a capture of a Chapter with `context` and `tool_exposure`.
-fn capture(context: Vec<RequestContextItem>, tool_exposure: ToolExposure) -> DestinationRequest {
+pub(crate) fn capture(
+    context: Vec<RequestContextItem>,
+    tool_exposure: ToolExposure,
+) -> DestinationRequest {
     DestinationRequest::Create(CreateRequest {
         attempt: RequestAttempt::New,
         purpose: CreatePurpose::MemoryCapture(CaptureInputKind::Chapter),

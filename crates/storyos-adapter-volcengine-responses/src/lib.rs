@@ -2,6 +2,7 @@
 
 mod capture_wire;
 mod embedding;
+mod pass_wire;
 mod probe;
 mod response;
 mod stream;
@@ -122,7 +123,14 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             {
                 capture_wire::capture_body(create, *kind, &route.provider_model_id, bounds)
             }
-            // The mapping of a pass request comes with S7-D4c.
+            // Only the mapping `v8` has the pass form (ADR 0094 section 6).
+            (CreatePurpose::MemoryConsolidation, _)
+                if route.mapping_revision
+                    == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+                    && create.pass_complete() =>
+            {
+                pass_wire::pass_body(create, &route.provider_model_id, bounds)
+            }
             (CreatePurpose::MemoryCapture(_) | CreatePurpose::MemoryConsolidation, _) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
