@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[test]
-fn each_kind_has_its_persisted_name_and_a_consolidation_is_not_dispatched() {
+fn each_kind_has_its_persisted_name_and_the_worker_dispatches_each_kind() {
     assert_eq!(
         (
             AgentRunKind::ALL.map(AgentRunKind::name),
@@ -15,7 +15,7 @@ fn each_kind_has_its_persisted_name_and_a_consolidation_is_not_dispatched() {
         ),
         (
             ["author", "memory_capture", "memory_consolidation"],
-            ["author", "memory_capture"],
+            ["author", "memory_capture", "memory_consolidation"],
             AgentRunKind::ALL.map(Some)
         )
     );
@@ -56,42 +56,46 @@ fn a_background_run_has_no_chapter_work_and_requires_a_call_in_each_request() {
     );
 }
 
-/// A capture has its own RunStep limit, and in its last RunStep the Host executes only an output
-/// call. A Run of the author keeps 24 RunSteps and executes no call of its last RunStep.
+/// A background Run has its own RunStep limit, and in its last RunStep the Host executes only its
+/// output call. A pass has one RunStep. A Run of the author keeps 24 RunSteps and executes no
+/// call of its last RunStep.
 #[test]
 fn each_kind_has_its_run_step_limit_and_its_last_run_step_rule() {
     let last = |kind: AgentRunKind| kind.max_run_steps() - 1;
-    let output = ToolOperation::RecordMemoryObservations;
-    let read = ToolOperation::ReadMemoryEntry;
+    let calls = [
+        ToolOperation::RecordMemoryObservations,
+        ToolOperation::ApplyMemoryOperations,
+        ToolOperation::ReadMemoryEntry,
+    ];
     assert_eq!(
         AgentRunKind::ALL.map(|kind| (
             kind.max_run_steps(),
-            [last(kind) - 1, last(kind)].map(|position| kind.run_step_limit(position)),
-            [output, read].map(|operation| kind.executes_call(RunStepLimit::Last, operation)),
-            [output, read].map(|operation| kind.executes_call(RunStepLimit::Open, operation)),
+            [0, last(kind)].map(|position| kind.run_step_limit(position)),
+            calls.map(|operation| kind.executes_call(RunStepLimit::Last, operation)),
+            calls.map(|operation| kind.executes_call(RunStepLimit::Open, operation)),
             kind.keeps_calls(RunStepLimit::Last),
         )),
         [
             (
                 MAX_RUN_STEPS,
                 [RunStepLimit::Open, RunStepLimit::Last],
-                [false, false],
-                [true, true],
+                [false, false, false],
+                [true; 3],
                 false
             ),
             (
                 MEMORY_CAPTURE_MAX_RUN_STEPS,
                 [RunStepLimit::Open, RunStepLimit::Last],
-                [true, false],
-                [true, true],
+                [true, false, false],
+                [true; 3],
                 true
             ),
             (
-                MAX_RUN_STEPS,
-                [RunStepLimit::Open, RunStepLimit::Last],
-                [false, false],
-                [true, true],
-                false
+                1,
+                [RunStepLimit::Last, RunStepLimit::Last],
+                [false, true, false],
+                [true; 3],
+                true
             ),
         ]
     );

@@ -254,7 +254,7 @@ pub(crate) async fn last_entry_version(
 
 /// The time form of a Memory record: RFC 3339 in UTC with milliseconds, so that the order of
 /// the texts is the order of the times.
-const TIME_FORM: &str = r#"YYYY-MM-DD"T"HH24:MI:SS.MS"Z""#;
+pub(crate) const TIME_FORM: &str = r#"YYYY-MM-DD"T"HH24:MI:SS.MS"Z""#;
 
 /// The current version of the entry with the number `number` of the Project now, or `None` when no
 /// current entry has the number.

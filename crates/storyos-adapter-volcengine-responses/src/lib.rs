@@ -112,8 +112,9 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             (CreatePurpose::CompactionSummary, _) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
-            // The mapping of a capture request comes with S7-D3f.
-            (CreatePurpose::MemoryCapture, _) => {
+            // The mapping of a capture request comes with S7-D3f, and of a pass request with
+            // S7-D4c.
+            (CreatePurpose::MemoryCapture | CreatePurpose::MemoryConsolidation, _) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
         };

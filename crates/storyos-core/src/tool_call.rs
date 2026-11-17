@@ -125,6 +125,9 @@ impl ValidatedToolCall {
             ToolIntake::RecordMemoryObservations(observations) => {
                 crate::record_memory_observations::arguments(observations)
             }
+            ToolIntake::ApplyMemoryOperations(operations) => {
+                crate::apply_memory_operations::arguments(operations)
+            }
         }
     }
 

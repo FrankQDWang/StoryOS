@@ -82,7 +82,8 @@ impl ExposureFacts<'_> {
                     | ToolOperation::ReadChapter
                     | ToolOperation::ReadMemoryEntry
                     | ToolOperation::RecordMemoryObservations => true,
-                    ToolOperation::ProposeEdit
+                    ToolOperation::ApplyMemoryOperations
+                    | ToolOperation::ProposeEdit
                     | ToolOperation::SubmitResearch
                     | ToolOperation::ReadToolResult
                     | ToolOperation::Finish
@@ -95,8 +96,11 @@ impl ExposureFacts<'_> {
                     | ToolOperation::WebFetch => false,
                 };
             }
-            // A consolidation pass sends one request with no Tool (ADR 0094 section 6).
-            AgentRunKind::MemoryConsolidation => return false,
+            // A consolidation pass sends one request, and it declares only its output Tool (ADR
+            // 0094 section 6).
+            AgentRunKind::MemoryConsolidation => {
+                return operation == ToolOperation::ApplyMemoryOperations;
+            }
             AgentRunKind::Author => {}
         }
         match operation {
@@ -112,8 +116,8 @@ impl ExposureFacts<'_> {
             ToolOperation::WriteMemory => true,
             ToolOperation::ReadMemoryEntry | ToolOperation::SearchMemory => self.memory_use,
             ToolOperation::HybridSearchManuscript => self.hybrid_search,
-            // Only a capture records observations.
-            ToolOperation::RecordMemoryObservations => false,
+            // Only a capture records observations, and only a pass applies operations.
+            ToolOperation::RecordMemoryObservations | ToolOperation::ApplyMemoryOperations => false,
             // The web research Tools are Tools of the research binding, not Host Tools.
             ToolOperation::WebSearch | ToolOperation::WebFetch => false,
         }
@@ -164,6 +168,7 @@ impl ToolOperation {
             Self::ReadMemoryEntry => "read_memory_entry",
             Self::SearchMemory => "search_memory",
             Self::RecordMemoryObservations => "record_memory_observations",
+            Self::ApplyMemoryOperations => "apply_memory_operations",
         }
     }
 
@@ -194,6 +199,7 @@ impl ToolOperation {
             Self::ReadMemoryEntry => crate::read_memory_entry::DESCRIPTION,
             Self::SearchMemory => crate::search_memory::DESCRIPTION,
             Self::RecordMemoryObservations => crate::record_memory_observations::DESCRIPTION,
+            Self::ApplyMemoryOperations => crate::apply_memory_operations::DESCRIPTION,
         }
     }
 }
@@ -251,6 +257,7 @@ impl ExposedTool {
             ToolOperation::RecordMemoryObservations => {
                 crate::record_memory_observations::parameters()
             }
+            ToolOperation::ApplyMemoryOperations => crate::apply_memory_operations::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,

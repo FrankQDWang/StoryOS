@@ -86,7 +86,8 @@ impl ToolEffectRequest {
             | ToolIntake::WriteMemory(_)
             | ToolIntake::ReadMemoryEntry { .. }
             | ToolIntake::SearchMemory { .. }
-            | ToolIntake::RecordMemoryObservations(_) => Vec::new(),
+            | ToolIntake::RecordMemoryObservations(_)
+            | ToolIntake::ApplyMemoryOperations(_) => Vec::new(),
         };
         Some(Self {
             external_read: envelope.external_read,

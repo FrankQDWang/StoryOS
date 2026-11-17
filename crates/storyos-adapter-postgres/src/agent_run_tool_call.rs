@@ -290,7 +290,8 @@ pub(crate) fn call_inspect(
         | storyos_core::ToolIntake::WriteMemory(_)
         | storyos_core::ToolIntake::ReadMemoryEntry { .. }
         | storyos_core::ToolIntake::SearchMemory { .. }
-        | storyos_core::ToolIntake::RecordMemoryObservations(_) => {
+        | storyos_core::ToolIntake::RecordMemoryObservations(_)
+        | storyos_core::ToolIntake::ApplyMemoryOperations(_) => {
             return Err(damaged());
         }
     })
