@@ -157,8 +157,9 @@ pub fn assemble_chapter_list(
     if entries.is_empty() {
         return;
     }
-    let (text, projection_mode) =
-        chapter_list_text(entries, &record.operation_requirement.chapter_id);
+    // A background Run has no Current Chapter.
+    let current = record.operation_requirement.chapter_id.as_deref();
+    let (text, projection_mode) = chapter_list_text(entries, current.unwrap_or_default());
     let token_count = count_context_item_tokens(&text);
     let source_version = format!("sha256:{}", hex_sha256(text.as_bytes()));
     record.considered.push(ConsideredSource {

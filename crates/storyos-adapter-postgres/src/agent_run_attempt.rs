@@ -40,7 +40,7 @@ pub(crate) async fn persist_uncertain_attempt(
     let mut continuation = crate::agent_run_continuation::decide_continuation(
         client,
         claim,
-        conversation_id,
+        run.conversation()?,
         author_message,
         assistance,
         &request.tool_exposure.digest(),

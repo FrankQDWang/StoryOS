@@ -166,6 +166,7 @@ mod list_projects;
 mod manuscript_block;
 mod manuscript_search;
 mod manuscript_tree;
+mod memory_capture;
 mod memory_entries;
 mod memory_entry_list;
 mod model_registration;

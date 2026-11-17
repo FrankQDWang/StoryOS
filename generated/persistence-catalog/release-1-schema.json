@@ -3424,6 +3424,111 @@
       },
       "triggers": {}
     },
+    "memory_captures": {
+      "columns": {
+        "capture_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "chapter_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "chapter_revision_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "conversation_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "first_run_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "last_run_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "outcome": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "run_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "source_kind": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "started_at": {
+          "default": "statement_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "state": {
+          "default": "'running'::text",
+          "nullable": false,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "memory_captures_chapter_revision_fkey": "FOREIGN KEY (owner_user_id, project_id, chapter_id, chapter_revision_id) REFERENCES storyos.authoritative_revisions(owner_user_id, project_id, manuscript_object_id, revision_id)",
+        "memory_captures_conversation_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id)",
+        "memory_captures_first_run_fkey": "FOREIGN KEY (owner_user_id, project_id, first_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)",
+        "memory_captures_last_run_fkey": "FOREIGN KEY (owner_user_id, project_id, last_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)",
+        "memory_captures_pkey": "PRIMARY KEY (owner_user_id, project_id, capture_id)",
+        "memory_captures_run_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
+        "memory_captures_run_key": "UNIQUE (owner_user_id, project_id, run_id)",
+        "memory_captures_source_check": "CHECK (((((source_kind = 'conversation'::text) AND (conversation_id IS NOT NULL) AND (first_run_id IS NOT NULL) AND (last_run_id IS NOT NULL) AND (chapter_id IS NULL) AND (chapter_revision_id IS NULL)) OR ((source_kind = 'chapter'::text) AND (chapter_id IS NOT NULL) AND (chapter_revision_id IS NOT NULL) AND (conversation_id IS NULL) AND (first_run_id IS NULL) AND (last_run_id IS NULL))) IS TRUE))",
+        "memory_captures_state_check": "CHECK (((((state = 'running'::text) AND (outcome IS NULL)) OR ((state = 'settled'::text) AND (outcome = ANY (ARRAY['observations_recorded'::text, 'no_observation'::text])))) IS TRUE))"
+      },
+      "indexes": {
+        "memory_captures_pkey": "CREATE UNIQUE INDEX memory_captures_pkey ON storyos.memory_captures USING btree (owner_user_id, project_id, capture_id)",
+        "memory_captures_run_key": "CREATE UNIQUE INDEX memory_captures_run_key ON storyos.memory_captures USING btree (owner_user_id, project_id, run_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_captures_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "memory_entry_reads": {
       "columns": {
         "memory_entry_id": {
@@ -3593,6 +3698,81 @@
       "owner": "storyos_owner",
       "policies": {
         "memory_entry_versions_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "memory_observations": {
+      "columns": {
+        "capture_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "entry_type": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "position": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "state": {
+          "default": "'waiting'::text",
+          "nullable": false,
+          "type": "text"
+        },
+        "text": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "title": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "memory_observations_capture_fkey": "FOREIGN KEY (owner_user_id, project_id, capture_id) REFERENCES storyos.memory_captures(owner_user_id, project_id, capture_id) MATCH FULL",
+        "memory_observations_pkey": "PRIMARY KEY (owner_user_id, project_id, capture_id, \"position\")",
+        "memory_observations_position_check": "CHECK (((\"position\" >= (1)::numeric) AND (\"position\" <= '18446744073709551615'::numeric)))",
+        "memory_observations_state_check": "CHECK ((state = ANY (ARRAY['waiting'::text, 'consumed'::text])))",
+        "memory_observations_type_check": "CHECK ((entry_type = ANY (ARRAY['writing_preference'::text, 'foreshadowing'::text, 'character'::text, 'relationship'::text, 'major_event'::text, 'other'::text])))"
+      },
+      "indexes": {
+        "memory_observations_pkey": "CREATE UNIQUE INDEX memory_observations_pkey ON storyos.memory_observations USING btree (owner_user_id, project_id, capture_id, \"position\")"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_observations_exact_scope": {
           "command": "ALL",
           "permissive": "PERMISSIVE",
           "roles": [

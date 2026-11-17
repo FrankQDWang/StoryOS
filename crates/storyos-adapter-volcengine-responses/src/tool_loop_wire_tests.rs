@@ -196,6 +196,7 @@ async fn the_mapping_v6_declares_read_tool_result_and_the_mapping_v5_keeps_its_r
                 model_registration_revision: registration,
                 skill_catalog: false,
                 memory_use: false,
+                run_kind: storyos_core::AgentRunKind::Author,
             }),
             tool_choice: ToolChoice::Required,
             ..request

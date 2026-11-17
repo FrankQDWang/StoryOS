@@ -128,7 +128,7 @@ impl ModelDispatchStore for PostgresProjectReader {
             if run.settled()
                 || run.attempt_id.is_some()
                 || run.author_message != request.author_message
-                || run.chapter_id != request.chapter_id
+                || run.chapter_id.as_deref().unwrap_or_default() != request.chapter_id
                 || crate::agent_run_steering::advance_before_request(
                     client,
                     claim,
@@ -186,7 +186,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                 crate::agent_run_expiry::insert_recovery(
                     client,
                     claim,
-                    &run.conversation_id,
+                    run.conversation()?,
                     &dispatch.row,
                     Some(model_attempt_id.as_str()),
                 )

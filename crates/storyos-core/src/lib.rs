@@ -30,6 +30,7 @@ mod instruction_binding;
 mod load_skill;
 mod manuscript_payload;
 mod manuscript_use;
+mod memory_capture;
 mod memory_entry;
 mod memory_index;
 mod model_output;
@@ -40,6 +41,7 @@ mod read_memory_entry;
 mod read_skill_resource;
 mod read_tool_result;
 mod rebuild_expired_reference;
+mod record_memory_observations;
 mod research_destination;
 mod research_source;
 mod research_synthesis;
@@ -214,6 +216,10 @@ pub use manuscript_payload::{
     upgrade_legacy_manuscript,
 };
 pub use manuscript_use::{ManuscriptUse, StoredManuscriptCall, manuscript_uses};
+pub use memory_capture::{
+    CaptureAdmissionFacts, CaptureRefusal, MemoryCaptureAssembly, admit_memory_capture,
+    assemble_memory_capture_context,
+};
 pub use memory_entry::{
     MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference,
     MemorySourceReferenceRead, memory_revision_pin, read_memory_source_references,
@@ -291,6 +297,10 @@ pub use readable_export_command::{
 pub use rebuild_expired_reference::{
     ContinuationReferenceCondition, ExpiryRebuildBlock, ExpiryRebuildDecision,
     ExpiryRebuildDisposition, ExpiryRebuildFacts, decide_confirmed_expiry_rebuild,
+};
+pub use record_memory_observations::{
+    CAPTURE_OBSERVATIONS_MAX, MemoryObservation, ObservationCandidate, ObservationRefusal,
+    RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC, validate_observations,
 };
 pub use reject_proposal_operations::{
     RejectProposalOperations, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,

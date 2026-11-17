@@ -83,7 +83,7 @@ pub(crate) async fn prior_chain(
     let continuation = crate::agent_run_continuation::decide_continuation(
         client,
         claim,
-        &run.conversation_id,
+        run.conversation()?,
         &run.author_message,
         &assistance,
         &exposure.digest(),
@@ -142,7 +142,7 @@ pub(crate) async fn summary_request(
         purpose: CreatePurpose::CompactionSummary,
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
-        chapter_id: run.chapter_id.clone(),
+        chapter_id: run.chapter()?.to_owned(),
         passage_resolution: None,
         passage_input: None,
         context: Vec::new(),
