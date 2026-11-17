@@ -16,7 +16,7 @@ use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, locked, 
 use crate::agent_run_work::complete_database_error;
 
 /// The revision of the deployment Embedding Registration in the transaction setting, or `NULL`.
-const DEPLOYMENT_REGISTRATION: &str =
+pub(crate) const DEPLOYMENT_REGISTRATION: &str =
     "NULLIF(current_setting('storyos.embedding_registration', true), '')";
 
 /// Whether the search by meaning is possible for the Run of `claim` (ADR 0095 section 4): the

@@ -59,7 +59,7 @@ Each layer records only the fields in this table:
 | --- | --- |
 | HTTP request | `method`, `route`, `status` |
 | Command sequence | `command_kind`, `project_id`, `command_id`, `author_command_admission_id`, `correlation_id`, `outcome` |
-| Worker claim | `project_id`, `run_id` or `export_id`, `fence_token`, `attempt`, `outcome` |
+| Worker claim | `project_id`, `run_id`, `export_id`, or `chapter_id`, `fence_token`, `attempt`, `outcome` |
 | Model Gateway | `project_id`, `run_id`, `request_kind`, `adapter`, `observation`, usage counters |
 | MCP client | `server_url`, `method`, `session_tag`, `request_bytes`, `response_bytes`, `observation`, `refused_method` |
 

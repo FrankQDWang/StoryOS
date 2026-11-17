@@ -14,6 +14,9 @@ import { assertProjectReceipts } from "./project-receipts.ts";
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const TITLE = "林舟";
 const TEXT = "船夫，不说话。\n夜里看灯。";
+/** The time limit of the wait for an enabled send button. The panel reads the earlier Run first, and under host load
+ * this read can take longer than the page timeout. */
+const SEND_ENABLED_TIMEOUT_MS = 30_000;
 const MESSAGE = `记住林舟。\nSCRIPT:write_memory create ${JSON.stringify({ type: "character", title: TITLE,
   description: "沉默的船夫。", text: TEXT })}`;
 
@@ -31,12 +34,15 @@ async function addChapter(baseUrl: string, setup: Awaited<ReturnType<typeof prep
   return created.effect.chapter_id;
 }
 
-/** Writes entry 2 with the origin `chapter` and the source `chapterId` with SQL, as a background write does. */
+/**
+ * Writes entry 2 with the origin `chapter` and the source `chapterId` with SQL, as a background write does. The entry
+ * identity is a version 7 UUID, because the Web client refuses an Activity Event whose aggregate identity is not one.
+ */
 async function writeChapterEntry(projectId: string, chapterId: string): Promise<void> {
   await queryStoryOSPostgres(`
     INSERT INTO storyos.memory_entry_versions (owner_user_id, project_id, memory_entry_id, entry_number, version,
         memory_revision, state, entry_type, origin, title, description, text, cause, source_references)
-      SELECT owner_user_id, project_id, md5(project_id::text || ':2')::uuid, 2, 1, memory_revision + 1, 'current',
+      SELECT owner_user_id, project_id, ('018f0000-0000-7001-8000-' || right(md5(project_id::text || ':2'), 12))::uuid, 2, 1, memory_revision + 1, 'current',
              'foreshadowing', 'chapter', '渡口的灯', '灯的来历。', '灯每夜亮一次。', '{}',
              jsonb_build_array(jsonb_build_object('kind', 'chapter', 'chapter_id', '${chapterId}'))
         FROM storyos.project_memory_heads WHERE project_id = '${projectId}'::uuid;
@@ -73,6 +79,7 @@ export async function verifyProductionMemorySettings(context: BrowserContext): P
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await page.locator('[data-assistant-availability="available"]').waitFor();
     await page.locator('textarea[name="assistant-message"]').fill(MESSAGE);
+    await expect(page.locator(".composer .send-button")).toBeEnabled({ timeout: SEND_ENABLED_TIMEOUT_MS });
     const admitted = page.waitForResponse((reply) =>
       reply.request().method() === "POST" && new URL(reply.url()).pathname.endsWith("/agent-runs"));
     await page.locator(".composer .send-button").click();
@@ -127,7 +134,8 @@ export async function verifyProductionMemorySettings(context: BrowserContext): P
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await page.locator('[data-assistant-availability="available"]').waitFor();
     await page.locator('textarea[name="assistant-message"]').fill("继续写。");
-    // The click waits until the panel has read the earlier Run and the send button is enabled.
+    // The wait for the response starts only after the panel has read the earlier Run and enabled the button.
+    await expect(page.locator(".composer .send-button")).toBeEnabled({ timeout: SEND_ENABLED_TIMEOUT_MS });
     const next = page.waitForResponse((reply) =>
       reply.request().method() === "POST" && new URL(reply.url()).pathname.endsWith("/agent-runs"));
     await page.locator(".composer .send-button").click();

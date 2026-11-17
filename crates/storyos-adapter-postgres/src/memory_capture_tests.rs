@@ -177,9 +177,12 @@ async fn a_started_capture_has_its_rows_and_the_worker_claims_it_after_the_run_o
             [
                 "memory_capture",
                 "host_schedule",
-                ["memory_capture_input"],
-                ["exact_required"],
-                ["林舟在雨夜撑船。"]
+                ["memory_capture_input", "chapter_list"],
+                ["exact_required", "exact_required"],
+                [
+                    "林舟在雨夜撑船。",
+                    "{\"volume\":\"Volume A\"}\n[1,0,\"Chapter A\"]"
+                ]
             ],
             0
         ])

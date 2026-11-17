@@ -64,7 +64,7 @@ fn digests(texts: &[String]) -> Vec<String> {
 pub(crate) struct Chapter {
     pub(crate) scope: ProjectScope,
     pub(crate) chapter_id: String,
-    editor_session_id: String,
+    pub(crate) editor_session_id: String,
     pub(crate) head: String,
     pub(crate) blocks: Vec<String>,
 }

@@ -143,3 +143,89 @@ fn the_outcome_of_a_capture_comes_from_the_facts_of_its_run() {
         ["step_limit", "failed"]
     );
 }
+
+/// The first RunStep of a capture selects the Memory Index at the head revision of its start, the
+/// Chapter list, and the delete marks after its input, also when no Conversation Memory Settings
+/// permit a read. The next RunStep keeps them. A Project with none of them adds no item.
+#[test]
+fn a_capture_gets_its_reference_items_after_its_input_and_keeps_them() {
+    let assembly = |input: &str| {
+        assemble_memory_capture_context(&MemoryCaptureAssembly {
+            operation_requirement_id: "requirement".to_owned(),
+            input_snapshot_id: "snapshot".to_owned(),
+            run_id: "run".to_owned(),
+            owner_user_id: "owner".to_owned(),
+            project_id: "project".to_owned(),
+            input: input.to_owned(),
+            destination_identity: "destination".to_owned(),
+        })
+    };
+    let index = [crate::MemoryIndexEntry {
+        number: 1,
+        entry_type: crate::MemoryEntryType::Character,
+        title: "林舟".to_owned(),
+        description: "撑船的人。".to_owned(),
+    }];
+    let chapters = [crate::ChapterListEntry {
+        volume_order: 1,
+        volume_title: "第一卷".to_owned(),
+        chapter_id: "chapter".to_owned(),
+        title: "雨夜".to_owned(),
+        length: 6,
+    }];
+    let marks = [crate::MemoryDeleteMark {
+        entry_type: crate::MemoryEntryType::Other,
+        title: "旧船".to_owned(),
+        description: "作者不要的内容。".to_owned(),
+    }];
+    let references = |memory_head| CaptureReferences {
+        memory_head,
+        memory_index: &index,
+        chapters: &chapters,
+        delete_marks: &marks,
+    };
+    let classes = |record: &CurrentPassageAssemblyRecord| {
+        (
+            record.operation_requirement.memory_revision,
+            record
+                .selected
+                .iter()
+                .map(|item| item.source_class)
+                .collect::<Vec<_>>(),
+        )
+    };
+    let mut first = assembly("林舟上了船。");
+    assemble_capture_references(&mut first, &references(3));
+    let mut next = assembly("林舟上了船。");
+    keep_capture_references(&mut next, &first);
+    let mut empty = assembly("林舟上了船。");
+    assemble_capture_references(
+        &mut empty,
+        &CaptureReferences {
+            memory_head: 0,
+            memory_index: &[],
+            chapters: &[],
+            delete_marks: &[],
+        },
+    );
+    let all = vec![
+        ContextSourceClass::MemoryCaptureInput,
+        ContextSourceClass::MemoryIndex,
+        ContextSourceClass::ChapterList,
+        ContextSourceClass::MemoryDeleteMarks,
+    ];
+
+    assert_eq!(
+        [classes(&first), classes(&next), classes(&empty)],
+        [
+            (Some(3), all.clone()),
+            (Some(3), all),
+            (None, vec![ContextSourceClass::MemoryCaptureInput]),
+        ]
+    );
+    assert_eq!(first.selected[1..], next.selected[1..]);
+    assert_eq!(
+        decode_assembly_record(&encode_assembly_record(&first)),
+        Some(first)
+    );
+}
