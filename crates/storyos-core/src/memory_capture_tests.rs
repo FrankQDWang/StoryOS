@@ -68,6 +68,7 @@ fn the_assembly_of_a_capture_has_one_exact_input_item_and_no_chapter() {
         owner_user_id: "owner".to_owned(),
         project_id: "project".to_owned(),
         input: "林舟上了船。".to_owned(),
+        projection_mode: ProjectionMode::ExactRequired,
         destination_identity: "destination".to_owned(),
     });
     let encoded = encode_assembly_record(&record);
@@ -157,6 +158,7 @@ fn a_capture_gets_its_reference_items_after_its_input_and_keeps_them() {
             owner_user_id: "owner".to_owned(),
             project_id: "project".to_owned(),
             input: input.to_owned(),
+            projection_mode: ProjectionMode::ExactRequired,
             destination_identity: "destination".to_owned(),
         })
     };

@@ -40,9 +40,9 @@ pub trait MemoryWorkScheduleStore: Sync {
     /// Whether one row is due now. The Worker asks it first, so that an idle step makes no claim.
     fn memory_work_due(&self) -> impl Future<Output = Result<bool, ProjectReadError>> + Send;
 
-    /// Claims one row whose due time is in the past with a row lock, decides from the facts of
-    /// its Conversation, starts one capture or none, and makes the due time empty, in one
-    /// transaction. `None`: no row is due.
+    /// Claims one row whose due time is in the past, with a row lock. The store decides from the
+    /// facts of its Conversation and starts one capture or none. Then it makes the due time
+    /// empty. One transaction does these steps. `None`: no row is due.
     fn claim_due_memory_work(
         &self,
     ) -> impl Future<Output = Result<Option<ClaimedMemoryWork>, ProjectReadError>> + Send;

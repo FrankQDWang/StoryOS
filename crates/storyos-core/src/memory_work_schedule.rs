@@ -1,9 +1,11 @@
 //! The schedule of background Memory work for a Project Conversation (ADR 0094 section 5, writer
 //! 2): the due time after the completion of a Run of the author, the decision for a claimed row
-//! from the facts that the store loads (ADR 0039), and the input text of a Conversation capture.
-//! Each time rule gets its times as values.
+//! from the facts that the store loads (ADR 0039), and the bounded input text of a Conversation
+//! capture. Each time rule gets its times as values.
 
 use std::time::{Duration, SystemTime};
+
+use crate::assemble_context::{ProjectionMode, count_context_item_tokens};
 
 /// The quiet time of a Project Conversation after the completion of a Run of the author. This
 /// is an initial value. S7-D7 can change it.
@@ -13,6 +15,23 @@ pub const CONVERSATION_QUIET_TIME: Duration = Duration::from_secs(/*30 minutes*/
 /// `settled_at` completed.
 pub fn conversation_capture_due(settled_at: SystemTime) -> SystemTime {
     settled_at + CONVERSATION_QUIET_TIME
+}
+
+/// The due time that the settlement of a Conversation capture with `outcome` at `settled_at`
+/// writes. Only `observations_recorded` and `no_observation` move the last Run that a capture
+/// read. When a completed Run is after that Run (`later_run`), the row is due at once. After
+/// `failed` or `step_limit`, the Host starts no capture for the same messages by itself. Then the
+/// next completed Run of the author sets the due time. `None`: the settlement writes no due time.
+pub fn capture_settlement_due(
+    outcome: crate::CaptureOutcome,
+    later_run: bool,
+    settled_at: SystemTime,
+) -> Option<SystemTime> {
+    let moves_last_run = matches!(
+        outcome,
+        crate::CaptureOutcome::ObservationsRecorded | crate::CaptureOutcome::NoObservation
+    );
+    (moves_last_run && later_run).then_some(settled_at)
 }
 
 /// The facts of one claimed schedule row of a Conversation.
@@ -36,7 +55,9 @@ pub enum ConversationCaptureSkip {
     /// The messages stay not read.
     ContributionNotPermitted,
     NothingUnread,
-    /// The settlement of that capture sets the due time again.
+    /// When that capture settles with `observations_recorded` or `no_observation`, and a completed
+    /// Run is after the last Run that it read, its settlement sets the due time again. After
+    /// `failed` or `step_limit`, the next completed Run of the author sets it.
     CaptureInProgress,
     /// The start of the capture refused (ADR 0094 section 8).
     StartRefused,
@@ -99,36 +120,103 @@ pub struct ConversationRunMessages {
     pub messages: Vec<(ConversationRole, String)>,
 }
 
-/// The input of one Conversation capture, and the first and the last Run that it reads.
+/// The input of one Conversation capture, the first and the last Run that it reads, and its
+/// projection mode.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConversationCaptureInput {
     pub text: String,
     pub first_run_id: String,
     pub last_run_id: String,
+    pub projection_mode: ProjectionMode,
 }
 
-/// The input of a capture from the unread Runs of the Conversation, the oldest first. Each
-/// message is one JSON line with its role and the identity of its Run, then its text. `None`:
-/// no Run is unread.
+/// The input of a capture from the unread Runs of the Conversation, the oldest first, at or below
+/// `item_token_limit` (ADR 0052). Each message is one JSON line with its role and the identity of
+/// its Run, then its text. The input has the oldest Runs that fit, and the last Run that it reads
+/// is the last of them. The next capture reads the other Runs.
+///
+/// When the oldest Run alone is above the limit, the input has only that Run as a
+/// `deterministic_excerpt`. It has the whole messages of the Run in their order while they fit.
+/// The first message that does not fit keeps its longest prefix that fits, and an explicit mark
+/// gives the kept and the total character counts and the count of the later messages that it
+/// omits. When the author messages of the Run fit, the cut is in the final answer. `None`: no Run
+/// is unread.
 pub fn conversation_capture_input(
     runs: &[ConversationRunMessages],
+    item_token_limit: u64,
 ) -> Option<ConversationCaptureInput> {
-    let (first, last) = (runs.first()?, runs.last()?);
-    let text = runs
-        .iter()
-        .flat_map(|run| {
-            run.messages.iter().map(|(role, text)| {
-                let header = serde_json::json!({"role": role.name(), "run_id": run.run_id});
-                format!("{header}\n{text}")
-            })
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n");
+    let first = runs.first()?;
+    let mut text = run_text(first, first.messages.len(), None);
+    if count_context_item_tokens(&text) > item_token_limit {
+        return Some(ConversationCaptureInput {
+            text: run_excerpt(first, item_token_limit),
+            first_run_id: first.run_id.clone(),
+            last_run_id: first.run_id.clone(),
+            projection_mode: ProjectionMode::DeterministicExcerpt,
+        });
+    }
+    let mut last = first;
+    for run in &runs[1..] {
+        let longer = format!("{text}\n\n{}", run_text(run, run.messages.len(), None));
+        if count_context_item_tokens(&longer) > item_token_limit {
+            break;
+        }
+        (text, last) = (longer, run);
+    }
     Some(ConversationCaptureInput {
         text,
         first_run_id: first.run_id.clone(),
         last_run_id: last.run_id.clone(),
+        projection_mode: ProjectionMode::ExactRequired,
     })
+}
+
+/// The first `whole` messages of one Run. With `Some(kept)`, the next message follows with only
+/// its first `kept` characters and the mark of the cut, and the later messages are omitted.
+fn run_text(run: &ConversationRunMessages, whole: usize, kept: Option<usize>) -> String {
+    let mut parts = Vec::new();
+    for (index, (role, text)) in run.messages.iter().enumerate() {
+        let header = serde_json::json!({"role": role.name(), "run_id": run.run_id});
+        if index < whole {
+            parts.push(format!("{header}\n{text}"));
+            continue;
+        }
+        if let Some(kept) = kept {
+            let prefix: String = text.chars().take(kept).collect();
+            let total = text.chars().count();
+            let omitted = run.messages.len() - index - 1;
+            parts.push(format!(
+                "{header}\n{prefix} [The Host cut this message here. It keeps {kept} of its {total} \
+                 characters. Later messages of the Run that the Host omits: {omitted}.]"
+            ));
+        }
+        break;
+    }
+    parts.join("\n\n")
+}
+
+/// The excerpt of one Run above the limit. The count of the text grows with each whole message
+/// and with each kept character, so the excerpt takes the most whole messages that leave room
+/// for the mark, and then a binary search finds the longest prefix of the next message.
+fn run_excerpt(run: &ConversationRunMessages, item_token_limit: u64) -> String {
+    let fits = |whole, kept| {
+        count_context_item_tokens(&run_text(run, whole, Some(kept))) <= item_token_limit
+    };
+    let mut whole = 0;
+    while whole + 1 < run.messages.len() && fits(whole + 1, 0) {
+        whole += 1;
+    }
+    let total = run.messages[whole].1.chars().count();
+    let (mut low, mut high) = (0, total);
+    while low < high {
+        let middle = (low + high).div_ceil(2);
+        if fits(whole, middle) {
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    run_text(run, whole, Some(low))
 }
 
 #[cfg(test)]
