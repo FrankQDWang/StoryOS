@@ -21,16 +21,16 @@ const SEND_ENABLED_TIMEOUT_MS = 30_000;
 const MESSAGE = `记住林舟。\nSCRIPT:write_memory create ${JSON.stringify({ type: "character", title: TITLE,
   description: "沉默的船夫。", text: TEXT })}`;
 
-/** Adds Chapter B to the Volume of the prepared Chapter, and returns its identity. */
-async function addChapter(baseUrl: string, setup: Awaited<ReturnType<typeof prepare>>): Promise<string> {
+/** Adds Chapter B to the Volume of the prepared Chapter with the keys `ns`7 and `ns`8, and returns its identity. */
+export async function addChapter(baseUrl: string, setup: Awaited<ReturnType<typeof prepare>>, ns = "b78a1"): Promise<string> {
   const volumeId = await queryStoryOSPostgres(`SELECT parent_volume_id::text FROM storyos.manuscript_objects
     WHERE manuscript_object_id = '${setup.chapterId}'::uuid`);
   const request = { command_schema: "storyos.command.create-chapter.request.v1" as const,
-    create_chapter_input: { title: "Chapter B", expected_tree_revision: "3", ...BINDING, correlation_id: id("b78a17") } };
+    create_chapter_input: { title: "Chapter B", expected_tree_revision: "3", ...BINDING, correlation_id: id(`${ns}7`) } };
   const created = await challenged(baseUrl, setup.fetchImpl, setup.projectId, "POST",
     "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", request.command_schema,
-    await digestCreateChapter(request), id("b78a18"), (antiForgery) => createChapter({ baseUrl, projectId: setup.projectId,
-      volumeId, fetchImpl: setup.fetchImpl, idempotencyKey: id("b78a18"), antiForgery, request }));
+    await digestCreateChapter(request), id(`${ns}8`), (antiForgery) => createChapter({ baseUrl, projectId: setup.projectId,
+      volumeId, fetchImpl: setup.fetchImpl, idempotencyKey: id(`${ns}8`), antiForgery, request }));
   if (created.effect.kind !== "authoritative_applied") throw new Error("Create Chapter must apply");
   return created.effect.chapter_id;
 }

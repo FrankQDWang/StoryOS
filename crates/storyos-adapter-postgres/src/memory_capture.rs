@@ -429,4 +429,4 @@ mod recovery_tests;
 
 #[cfg(test)]
 #[path = "memory_capture_tools_tests.rs"]
-mod tools_tests;
+pub(crate) mod tools_tests;
