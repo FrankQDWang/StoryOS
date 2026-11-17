@@ -34,6 +34,17 @@ at most 5 observations. Give an empty list when the input has no such fact.";
 /// The keys of an item. The strict schema requires each one, also when its value is null.
 const KEYS: [&str; 6] = ["kind", "type", "title", "text", "entry", "reason"];
 
+/// The keys that an item of a kind must have. The intake reads a missing key that the kind does
+/// not use as null: `entry` and `reason` of an observation, and `type`, `title`, and `text` of a
+/// conflict (#1685). An item with no known kind must have each key.
+fn required_keys(kind: Option<&Value>) -> &'static [&'static str] {
+    match kind.and_then(Value::as_str) {
+        Some("observation") => &KEYS[..4],
+        Some("conflict") => &["kind", "entry", "reason"],
+        _ => &KEYS,
+    }
+}
+
 /// The strict JSON Schema of the arguments. A value that the kind of an item does not use is null.
 pub(crate) fn parameters() -> Value {
     let mut types: Vec<Value> = MemoryEntryType::ALL
@@ -139,8 +150,11 @@ struct Arguments {
 pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
     let complete = arguments["observations"].as_array().is_some_and(|items| {
         items.iter().all(|item| {
-            item.as_object()
-                .is_some_and(|item| KEYS.iter().all(|key| item.contains_key(*key)))
+            item.as_object().is_some_and(|item| {
+                required_keys(item.get("kind"))
+                    .iter()
+                    .all(|key| item.contains_key(*key))
+            })
         })
     });
     if !complete {

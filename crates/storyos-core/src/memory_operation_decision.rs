@@ -10,8 +10,10 @@ use crate::{
 };
 
 /// The write of `candidate`, or the refusal of its shape. Create needs a type, update and merge
-/// need no type, and delete needs a reason and no values. Only a merge has entries, and the write
-/// of a merge is the change of its first entry.
+/// need no type, and delete needs a reason and no values. An update needs one or more of the
+/// title, the description, and the text, and a null value keeps the current value of the entry. A
+/// merge needs the description and the text, and a null title keeps the title of its first entry.
+/// Only a merge has entries, and the write of a merge is the change of its first entry.
 fn memory_write(candidate: &MemoryOperationCandidate) -> Result<MemoryWrite, MemoryWriteRefusal> {
     let action = match candidate.action {
         MemoryOperationAction::Create => MemoryWriteAction::Create,
@@ -26,13 +28,14 @@ fn memory_write(candidate: &MemoryOperationCandidate) -> Result<MemoryWrite, Mem
         && match candidate.action {
             MemoryOperationAction::Create => true,
             MemoryOperationAction::Update => {
-                candidate.entry_type.is_none() && given.iter().all(|value| value.is_some())
+                candidate.entry_type.is_none() && given.iter().any(|value| value.is_some())
             }
             MemoryOperationAction::Merge => {
                 candidate.entry.is_none()
                     && candidate.entry_type.is_none()
                     && candidate.reason.is_none()
-                    && given.iter().all(|value| value.is_some())
+                    && candidate.description.is_some()
+                    && candidate.text.is_some()
             }
             // A flag is not a write (`memory_conflict_flag`).
             MemoryOperationAction::FlagConflict => false,

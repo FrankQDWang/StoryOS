@@ -208,8 +208,8 @@ fn each_operation_is_decided_in_list_order_with_each_refusal() {
     );
 }
 
-/// A delete needs a reason, an update needs its three values and no type, and a delete of an
-/// entry keeps its origin. An operation names its entry also when the Host refuses it, and an
+/// A delete needs a reason, an update needs one or more of its three values and no type, and a
+/// delete of an entry keeps its origin. An operation names its entry also when the Host refuses it, and an
 /// observation number below 1 is not in the input. An empty list applies nothing.
 #[test]
 fn the_shape_of_each_action_and_an_empty_list() {
@@ -228,12 +228,14 @@ fn the_shape_of_each_action_and_an_empty_list() {
     no_reason["reason"] = json!(" ");
     let mut typed = update(5, "灯");
     typed["type"] = json!("other");
-    let mut partial = update(6, "灯");
-    partial["text"] = Value::Null;
+    let mut blank = update(6, "灯");
+    for key in ["title", "description", "text"] {
+        blank[key] = Value::Null;
+    }
     let candidates = operations(json!([
         no_reason,
         typed,
-        partial,
+        blank,
         delete(7),
         update(4, "灯"),
         create("other", "桥", "文。", json!([-1])),
@@ -263,6 +265,58 @@ fn the_shape_of_each_action_and_an_empty_list() {
 
 /// A pass whose pinned Memory revision is not the revision now decides no operation. A list with
 /// an admitted operation is applied.
+/// A null value of an update keeps the current value of the entry, and a null title of a merge
+/// keeps the title of its first entry. A merge with no text is refused (#1685).
+#[test]
+fn a_null_value_of_an_update_or_a_merge_keeps_the_current_value() {
+    let entries = [4, 5, 6, 7, 8, 9]
+        .map(|number| entry(number, MemoryEntryOrigin::Chapter, &format!("灯{number}")));
+    let facts = PassFacts {
+        pinned_revision: 1,
+        memory_revision: 1,
+        entries: &entries,
+        next_entry_number: 10,
+        observations: &[observation("chapter")],
+        marks: &[],
+        conflicts: &[],
+    };
+    let mut untitled = update(4, "灯");
+    untitled["title"] = Value::Null;
+    let mut text_only = update(5, "灯");
+    text_only["title"] = Value::Null;
+    text_only["description"] = Value::Null;
+    let mut merged = merge(json!([6, 7]), "合");
+    merged["title"] = Value::Null;
+    let mut no_text = merge(json!([8, 9]), "合");
+    no_text["title"] = Value::Null;
+    no_text["text"] = Value::Null;
+    let candidates = operations(json!([untitled, text_only, merged, no_text]));
+    let values: Vec<String> = settle_operations_call(&candidates, &facts)
+        .decisions
+        .iter()
+        .map(|decision| match decision {
+            Ok(admitted) => format!(
+                "{} {} {} {}",
+                admitted.version.number,
+                admitted.version.title,
+                admitted.version.description,
+                admitted.version.text
+            ),
+            Err(refusal) => refusal.label().to_owned(),
+        })
+        .collect();
+
+    assert_eq!(
+        values,
+        [
+            "4 灯4 新述。 新文。",
+            "5 灯5 述。 新文。",
+            "6 灯6 合述。 合文。",
+            "memory_entry_invalid",
+        ]
+    );
+}
+
 #[test]
 fn a_stale_pass_decides_no_operation() {
     let candidates = operations(json!([create("other", "桥", "文。", json!([1]))]));

@@ -41,6 +41,15 @@ const KEYS: [&str; 9] = [
     "reason",
 ];
 
+/// What a null title means for each action (#1685).
+const TITLE_NULL: &str = "Null for delete and flag_conflict. In an update, null keeps the title of \
+the entry. In a merge, null keeps the title of the first entry. An update needs one or more of the \
+title, the description, and the text.";
+
+/// What a null description or text means for each action (#1685).
+const VALUE_NULL: &str = "Null for delete and flag_conflict. In an update, null keeps the current \
+value of the entry. A merge needs a value.";
+
 /// The strict JSON Schema of the arguments. The description of `type` names the types, and no enum
 /// does. Thus the Host refuses only the operation with an unknown type (`memory_entry_invalid`).
 pub fn parameters() -> Value {
@@ -77,16 +86,13 @@ pub fn parameters() -> Value {
                                             actions."
                         },
                         "type": value(&types),
-                        "title": value(
-                            "One line, at most 30 characters. Null for delete and flag_conflict."
-                        ),
-                        "description": value(
-                            "One line, at most 100 characters. Null for delete and flag_conflict."
-                        ),
-                        "text": value(
-                            "Markdown, at most 600 characters, or 1500 for a character. Null for \
-                             delete and flag_conflict."
-                        ),
+                        "title": value(&format!("One line, at most 30 characters. {TITLE_NULL}")),
+                        "description": value(&format!(
+                            "One line, at most 100 characters. {VALUE_NULL}"
+                        )),
+                        "text": value(&format!(
+                            "Markdown, at most 600 characters, or 1500 for a character. {VALUE_NULL}"
+                        )),
                         "observations": {
                             "type": "array",
                             "items": { "type": "integer" },
