@@ -303,6 +303,29 @@ impl PassageIndexWorkStore for PostgresProjectReader {
     ) -> Result<bool, ProjectReadError> {
         self.fenced(claim, FencedWrite::Release { wait }).await
     }
+
+    /// The runtime role runs the mark in the worker scope. The worker policies of the work table
+    /// give it each row of each Project, and the table has the Embedding Registration and the
+    /// Chapter order of each row, so the mark reads no Chapter.
+    async fn mark_each_passage_index_work(&self) -> Result<u64, ProjectReadError> {
+        self.require_release1_storage_activation_proof()
+            .await
+            .map_err(ProjectReadError::unavailable)?;
+        let mut client = self.connect().await?;
+        let transaction = client.transaction().await.map_err(read_error)?;
+        set_worker_scope(&transaction).await?;
+        let marked = transaction
+            .execute(
+                "UPDATE storyos.passage_index_work
+                    SET mark_generation = mark_generation + 1, not_before = clock_timestamp()
+                  WHERE to_regclass('storyos.passage_vectors') IS NOT NULL",
+                &[],
+            )
+            .await
+            .map_err(read_error)?;
+        transaction.commit().await.map_err(read_error)?;
+        Ok(marked)
+    }
 }
 
 #[cfg(test)]

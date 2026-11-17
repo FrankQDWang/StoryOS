@@ -73,6 +73,12 @@ pub trait PassageIndexWorkStore: PassageVectorStore + EmbeddingDispatchStore {
         claim: &ClaimedPassageIndex,
         wait: Duration,
     ) -> impl Future<Output = Result<bool, ProjectReadError>> + Send;
+
+    /// Marks the work of each Chapter that has a work row, with no wait. Returns the number of
+    /// marked rows.
+    fn mark_each_passage_index_work(
+        &self,
+    ) -> impl Future<Output = Result<u64, ProjectReadError>> + Send;
 }
 
 /// The result of one step of a claim.
@@ -136,6 +142,20 @@ pub async fn claim_next_passage_index_work(
         }
     }
     Ok(claimed)
+}
+
+/// Marks the index work of each Chapter that has a work row, so that the work makes each vector
+/// row again (`storyos-worker --rebuild-passage-index`). It sends no request. Each live Chapter of a
+/// Project with the embedding use binding has a work row: the first binding marks each live
+/// Chapter, and each later change marks its Chapters. The work of a Chapter that is not live only
+/// removes its rows.
+#[tracing::instrument(skip_all, fields(marked = tracing::field::Empty))]
+pub async fn rebuild_passage_index(
+    store: &impl PassageIndexWorkStore,
+) -> Result<u64, ProjectReadError> {
+    let marked = store.mark_each_passage_index_work().await?;
+    tracing::Span::current().record("marked", marked.diagnostic());
+    Ok(marked)
 }
 
 /// One step of a claim. It removes the rows that are not a current passage, and then sends the

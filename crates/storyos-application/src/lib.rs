@@ -202,7 +202,8 @@ pub use passage_index::{
 };
 pub use passage_index_work::{
     ClaimedPassageIndex, PASSAGE_INDEX_LEASE, PASSAGE_INDEX_QUIET_TIME, PassageIndexStep,
-    PassageIndexWorkStore, claim_next_passage_index_work, step_passage_index_work,
+    PassageIndexWorkStore, claim_next_passage_index_work, rebuild_passage_index,
+    step_passage_index_work,
 };
 pub use passage_ranking::{
     PassageRankingFacts, PassageRankingStore, QuestionVector, rank_manuscript_passages,
