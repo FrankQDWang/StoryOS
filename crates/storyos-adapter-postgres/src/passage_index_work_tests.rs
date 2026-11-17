@@ -382,6 +382,8 @@ async fn one_claim_holds_the_work_after_the_quiet_time_and_its_steps_complete_it
     assert_eq!((third.mark_generation, third.fence_token), (3, 3));
     assert_eq!(step(&store, &third).await, PassageIndexStep::Written);
     // A change during the work marks the Chapter again, and the completion keeps that mark.
+    admin.batch_execute("BEGIN").await.unwrap();
+    deploy(&admin).await;
     mark_passage_index_work(
         &admin,
         &scope,
@@ -389,6 +391,7 @@ async fn one_claim_holds_the_work_after_the_quiet_time_and_its_steps_complete_it
     )
     .await
     .unwrap();
+    admin.batch_execute("COMMIT").await.unwrap();
     assert_eq!(step(&store, &third).await, PassageIndexStep::Completed);
     let id = chapter.chapter_id.clone();
     assert_eq!(work(&admin, &scope).await, vec![(id, 1, 4, 3, true)]);
