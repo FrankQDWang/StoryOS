@@ -340,11 +340,11 @@ async fn step_state(admin: &Client, scope: &ProjectScope, run_id: &str) -> Value
 }
 
 /// From two completed Runs of a Conversation on the fake destination to the entries through
-/// `run_once`. Each step does the first work of the loop order: the export work, then the queued
-/// Run of the author, then a due schedule row. The capture of the two Runs stores the observation,
-/// the pass that its settlement made due creates the entry of the script, and the entry is current
-/// with the Conversation as its origin. The test moves the due time of the Conversation after the
-/// completion of the second Run.
+/// `run_once`. The work of the Project changes in the loop order: the export work, then the queued
+/// Run of the author, then the due schedule row. The capture of the two Runs stores the
+/// observation, the pass that its settlement made due creates the entry of the script, and the
+/// entry is current with the Conversation as its origin. The test moves the due time of the
+/// Conversation after the completion of the second Run.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn run_once_takes_two_runs_through_a_capture_and_a_pass_to_the_entries() {
@@ -373,15 +373,23 @@ async fn run_once_takes_two_runs_through_a_capture_and_a_pass_to_the_entries() {
         tools: storyos_application::NoToolDestination,
         embeddings: storyos_application::NoEmbeddingDestination,
     };
-    let mut steps = Vec::new();
-    for step in 0..6 {
-        if step == 2 {
-            make_due(&admin, conversation_id).await;
-        }
+    // A step can claim work that other tests left. The test records the state of its Project
+    // only when it changes.
+    let mut states = vec![step_state(&admin, &scope, &second).await];
+    for _ in 0..24 {
         storyos_worker::run_once(&store, &destination)
             .await
             .unwrap();
-        steps.push(step_state(&admin, &scope, &second).await);
+        let state = step_state(&admin, &scope, &second).await;
+        if states.last() != Some(&state) {
+            if state[1] == "completed" && state[2].is_null() {
+                make_due(&admin, conversation_id).await;
+            }
+            states.push(state);
+        }
+        if states.last().unwrap()[3] == json!(["applied"]) {
+            break;
+        }
     }
     let due = pass_due(&admin, &scope).await;
     let origins: Vec<_> = storyos_application::list_memory_entries(&store, &scope)
@@ -393,9 +401,10 @@ async fn run_once_takes_two_runs_through_a_capture_and_a_pass_to_the_entries() {
         .collect();
 
     assert_eq!(
-        (Value::from(steps), due, origins),
+        (Value::from(states), due, origins),
         (
             json!([
+                [0, "queued", null, null],
                 [1, "queued", null, null],
                 [1, "completed", null, null],
                 [1, "completed", ["running"], null],
