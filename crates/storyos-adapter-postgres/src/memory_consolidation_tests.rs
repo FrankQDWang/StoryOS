@@ -409,6 +409,66 @@ async fn each_operation_writes_its_version_and_a_refused_operation_does_not_stop
     );
 }
 
+/// A null title of an update keeps the title of the entry, and the update writes the new
+/// description and text. A null title of a merge keeps the title of its first entry (#1685).
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_null_title_of_an_update_or_a_merge_keeps_the_title() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, _, source) = project(&store, &admin, "4e1").await;
+    let first = [
+        create("character", "林舟", json!([1])),
+        create("character", "林雪", json!([1])),
+        create("character", "林岚", json!([1])),
+    ];
+    capture(
+        &store,
+        &admin,
+        &scope,
+        &source,
+        json!([scripted("林舟", &first)]),
+    )
+    .await;
+    run_pass(&store, &admin, &scope).await;
+    let mut untitled = update(1, "新文。");
+    untitled["title"] = Value::Null;
+    untitled["description"] = json!("沉默的船夫。");
+    let merged = json!({
+        "action": "merge", "entry": null, "entries": [2, 3], "type": null, "title": null,
+        "description": "姐妹。", "text": "合文。", "observations": [1], "reason": null
+    });
+    let second = json!([scripted("林舟", &[untitled, merged])]);
+    capture(&store, &admin, &scope, &source, second).await;
+    let changed = run_pass(&store, &admin, &scope).await;
+    let row = admin
+        .query_one(
+            "SELECT jsonb_agg(jsonb_build_array(entry_number, state, title, description, text)
+                      ORDER BY entry_number)::text
+               FROM (SELECT DISTINCT ON (entry_number) entry_number, state, title, description, text
+                       FROM storyos.memory_entry_versions WHERE project_id = $1::text::uuid
+                      ORDER BY entry_number, version DESC) AS latest",
+            &[&scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap();
+    let latest: Value = serde_json::from_str(row.get(/*idx*/ 0)).unwrap();
+
+    assert_eq!(
+        (settled(&admin, &changed.run_id).await[3].clone(), latest),
+        (
+            json!([["applied", null, 1], ["applied", null, 2]]),
+            json!([
+                [1, "current", "林舟", "沉默的船夫。", "新文。"],
+                [2, "current", "林雪", "姐妹。", "合文。"],
+                [3, "deleted", "林岚", "述。", ""]
+            ])
+        )
+    );
+}
+
 /// One list with each refusal of the table, in list order, after one valid create. The Project
 /// has an entry of the author and 299 current entries, so the second create fills the Index.
 #[tokio::test]

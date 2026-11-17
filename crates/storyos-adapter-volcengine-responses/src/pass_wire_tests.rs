@@ -152,6 +152,35 @@ async fn a_pass_request_has_its_sections_and_one_strict_function() {
     );
 }
 
+/// The request text of the keys `title`, `description`, and `text` says what null means for each
+/// action (#1685): the mapping `v8` changed in place.
+#[tokio::test]
+async fn the_pass_request_says_what_null_means_for_each_action() {
+    let pass_body = body(full()).await;
+    let keys =
+        &pass_body["tools"][0]["parameters"]["properties"]["operations"]["items"]["properties"];
+    let null = "Null for delete and flag_conflict. In an update, null keeps the current value of \
+                the entry. A merge needs a value.";
+    assert_eq!(
+        [
+            &keys["title"]["description"],
+            &keys["description"]["description"],
+            &keys["text"]["description"]
+        ],
+        [
+            &json!(
+                "One line, at most 30 characters. Null for delete and flag_conflict. In an update, \
+                    null keeps the title of the entry. In a merge, null keeps the title of the first \
+                    entry. An update needs one or more of the title, the description, and the text."
+            ),
+            &json!(format!("One line, at most 100 characters. {null}")),
+            &json!(format!(
+                "Markdown, at most 600 characters, or 1500 for a character. {null}"
+            )),
+        ]
+    );
+}
+
 /// A Project with no entry and no delete mark: the user message has only the observations.
 #[tokio::test]
 async fn a_pass_request_with_no_entry_and_no_mark_has_only_the_observations() {

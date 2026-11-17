@@ -48,12 +48,27 @@ fn the_intake_takes_one_list_and_refuses_another_shape_and_u0000() {
         SPEC.intake(&json!({"observations": []})),
         Ok(ToolIntake::RecordMemoryObservations(Vec::new()))
     );
+    // A missing key that the kind does not use is null (#1685).
+    let short = json!({"observations": [
+        {"kind": "observation", "type": "character", "title": "林舟", "text": "船夫。"},
+        {"kind": "conflict", "entry": 1, "reason": "不符。"}
+    ]});
+    assert_eq!(
+        SPEC.intake(&short),
+        Ok(ToolIntake::RecordMemoryObservations(vec![
+            item("character", "林舟", "船夫。"),
+            conflict(1, "不符。")
+        ]))
+    );
     for malformed in [
         json!({}),
-        json!({"observations": [{"type": "character", "title": "林舟"}]}),
+        json!({"observations": [{"type": "character", "title": "林舟", "text": "船夫。",
+            "entry": null, "reason": null}]}),
+        json!({"observations": [{"kind": "observation", "type": "character", "title": "林舟"}]}),
+        json!({"observations": [{"kind": "conflict", "entry": 1}]}),
         json!({"observations": [{
             "kind": "observation", "type": "character", "title": "林舟", "text": "船夫。",
-            "entry": null
+            "entry": "一"
         }]}),
         json!({"observations": [], "reason": "no"}),
     ] {
