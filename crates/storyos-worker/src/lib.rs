@@ -8,10 +8,10 @@ use storyos_application::{
     ClaimedReadableExport, CompleteAgentRun, CompleteAgentRunError, CompleteArchiveExport,
     CompleteArchiveExportError, CompleteReadableExport, CompleteReadableExportError,
     ContractFaultObserver, DiagnosticField, DiagnosticId, EmbeddingDispatchStore,
-    EmbeddingProviderAdapter, ExportWorkStore, GatewayClock, ModelDispatchStore,
-    ModelProviderAdapter, ProjectReadError, SqlState, ToolDestinationAdapter, ToolDispatchStore,
-    claim_next_agent_run, claim_next_export_work, complete_agent_run_with_destinations,
-    complete_archive_export, complete_readable_export,
+    EmbeddingProviderAdapter, ExportWorkStore, GatewayClock, MemoryWorkOutcome,
+    MemoryWorkScheduleStore, ModelDispatchStore, ModelProviderAdapter, ProjectReadError, SqlState,
+    ToolDestinationAdapter, ToolDispatchStore, claim_next_agent_run, claim_next_export_work,
+    complete_agent_run_with_destinations, complete_archive_export, complete_readable_export,
 };
 
 const ATTEMPTS: u64 = 4;
@@ -24,6 +24,7 @@ pub trait WorkerStore:
     + ModelDispatchStore
     + ToolDispatchStore
     + EmbeddingDispatchStore
+    + MemoryWorkScheduleStore
 {
 }
 
@@ -33,6 +34,7 @@ impl<T> WorkerStore for T where
         + ModelDispatchStore
         + ToolDispatchStore
         + EmbeddingDispatchStore
+        + MemoryWorkScheduleStore
 {
 }
 
@@ -93,7 +95,10 @@ pub async fn run_once<
                     Err(error) => Err(error.into()),
                 }
             }
-            None => Ok(()),
+            None => {
+                claim_after_contention(|| memory_work_claim(store)).await?;
+                Ok(())
+            }
         },
     }
 }
@@ -131,11 +136,34 @@ async fn step<
                 agent_run_claim(store, destination, &claim, Retry::EachFailure).await,
                 Ok(_) | Err(CompleteAgentRunError::StaleFence)
             ),
-            Ok(None) => false,
+            Ok(None) => memory_work_claim(store)
+                .await
+                .unwrap_or_else(|error| claim_failed(&error)),
             Err(error) => claim_failed(&error),
         },
         Err(error) => claim_failed(&error),
     }
+}
+
+/// Claims one due schedule row of background Memory work after the AgentRun claim found no Run
+/// (ADR 0094 section 5). The store decides and starts the capture in the transaction of the
+/// claim, so the claim span has no completion attempt and no fence token (ADR 0047). `true`: a
+/// row was claimed.
+async fn memory_work_claim(store: &impl WorkerStore) -> Result<bool, ProjectReadError> {
+    let Some(claimed) = store.claim_due_memory_work().await? else {
+        return Ok(false);
+    };
+    let span = tracing::info_span!(
+        "memory_work_claim",
+        project_id = claimed.project_scope.project_id.diagnostic(),
+        run_id = tracing::field::Empty,
+        outcome = claimed.outcome.diagnostic(),
+    );
+    if let MemoryWorkOutcome::Started(started) = &claimed.outcome {
+        span.record("run_id", DiagnosticId(&started.run_id).diagnostic());
+    }
+    span.in_scope(|| {});
+    Ok(true)
 }
 
 /// Runs one claim again after a serialization failure, as the loop does, for at most `ATTEMPTS`

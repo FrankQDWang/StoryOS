@@ -49,9 +49,11 @@ fn connection_lost() -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(ConnectionLost))
 }
 
-/// A store with one queued AgentRun. The first claims fail with a serialization failure, and the
-/// first completions fail with `completion_failure`.
+/// A store with `runs` queued AgentRuns and one due schedule row. The first claims fail with a
+/// serialization failure, and the first completions fail with `completion_failure`.
 struct RaceStore {
+    runs: Mutex<u64>,
+    schedule_claims: Mutex<u64>,
     claim_failures: Mutex<u64>,
     completion_failures: Mutex<u64>,
     completion_failure: fn() -> CompleteAgentRunError,
@@ -104,7 +106,27 @@ impl AgentRunWorkStore for RaceStore {
             *failures -= 1;
             return Err(ProjectReadError::unavailable(SerializationFailure));
         }
+        let mut runs = self.runs.lock().unwrap();
+        if *runs == 0 {
+            return Ok(None);
+        }
+        *runs -= 1;
         Ok(Some(claim()))
+    }
+}
+
+impl MemoryWorkScheduleStore for RaceStore {
+    async fn claim_due_memory_work(
+        &self,
+    ) -> Result<Option<storyos_application::ClaimedMemoryWork>, ProjectReadError> {
+        *self.schedule_claims.lock().unwrap() += 1;
+        Ok(Some(storyos_application::ClaimedMemoryWork {
+            project_scope: claim().project_scope,
+            conversation_id: "conversation".to_owned(),
+            outcome: MemoryWorkOutcome::Skipped(
+                storyos_core::ConversationCaptureSkip::NothingUnread,
+            ),
+        }))
     }
 }
 
@@ -254,6 +276,8 @@ fn claim() -> ClaimedAgentRun {
 async fn run_once_claims_again_after_a_serialization_failure() {
     storyos_application::register_sql_state(serialization_failure_state);
     let store = RaceStore {
+        runs: Mutex::new(1),
+        schedule_claims: Mutex::new(0),
         claim_failures: Mutex::new(1),
         completion_failures: Mutex::new(0),
         completion_failure: serialization_failure,
@@ -277,6 +301,8 @@ async fn run_once_claims_again_after_a_serialization_failure() {
 async fn run_once_completes_again_after_a_serialization_failure() {
     storyos_application::register_sql_state(serialization_failure_state);
     let store = RaceStore {
+        runs: Mutex::new(1),
+        schedule_claims: Mutex::new(0),
         claim_failures: Mutex::new(0),
         completion_failures: Mutex::new(1),
         completion_failure: serialization_failure,
@@ -300,6 +326,8 @@ async fn run_once_completes_again_after_a_serialization_failure() {
 async fn run_once_stops_after_one_failure_that_is_not_a_serialization_failure() {
     storyos_application::register_sql_state(serialization_failure_state);
     let store = RaceStore {
+        runs: Mutex::new(1),
+        schedule_claims: Mutex::new(0),
         claim_failures: Mutex::new(0),
         completion_failures: Mutex::new(2),
         completion_failure: connection_lost,
@@ -325,5 +353,38 @@ async fn run_once_stops_after_one_failure_that_is_not_a_serialization_failure() 
             1,
             Vec::new()
         )
+    );
+}
+
+/// The Worker claims a due schedule row only when the AgentRun claim finds no Run (ADR 0094
+/// section 5): a Run of the author does not wait for background Memory work.
+#[tokio::test(start_paused = true)]
+async fn run_once_claims_a_schedule_row_only_after_the_agent_run_claim_finds_no_run() {
+    let store = RaceStore {
+        runs: Mutex::new(1),
+        schedule_claims: Mutex::new(0),
+        claim_failures: Mutex::new(0),
+        completion_failures: Mutex::new(0),
+        completion_failure: serialization_failure,
+        settled: Mutex::new(Vec::new()),
+    };
+    let destination = ModelDestination {
+        adapter: NoDestination,
+        observer: NoContractFaults,
+        tools: storyos_application::NoToolDestination,
+        embeddings: storyos_application::NoEmbeddingDestination,
+    };
+
+    run_once(&store, &destination).await.unwrap();
+    let after_run = *store.schedule_claims.lock().unwrap();
+    run_once(&store, &destination).await.unwrap();
+
+    assert_eq!(
+        (
+            after_run,
+            *store.schedule_claims.lock().unwrap(),
+            store.settled.lock().unwrap().clone()
+        ),
+        (0, 1, vec![claim()])
     );
 }

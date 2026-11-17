@@ -3,6 +3,7 @@
 //! test for each row of the decision table. The tests move the stored due time with the test
 //! administrator connection, and each test completes or parks each Run that it queued.
 
+use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ClaimedMemoryWork, ConversationSelection, MemoryCaptureSource, MemoryWorkOutcome,
@@ -17,6 +18,7 @@ use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_retrieval::tests::{adapter, destination, real_run};
 use crate::agent_run_steering::tests::{cancellation, claim_duties, queued};
 use crate::create_agent_run::context::chapter_list_tests::admitted;
+use crate::memory_capture::loop_tests::{other_records, record, script, settlement};
 use crate::memory_capture::tests::{project, run_capture};
 
 /// The conversation of a source of a capture.
@@ -355,6 +357,97 @@ async fn the_settings_and_a_refused_start_start_no_capture() {
             MemoryWorkOutcome::Skipped(ConversationCaptureSkip::ContributionNotPermitted),
             MemoryWorkOutcome::Skipped(ConversationCaptureSkip::StartRefused),
             0
+        )
+    );
+}
+
+/// The capture Run of the Conversation, and its capture row as its source, its first and its
+/// last Run, and whether it records the settings revision of its last Run.
+async fn capture_of(admin: &Client, conversation_id: &str) -> Option<(String, String)> {
+    let row = admin
+        .query_opt(
+            "SELECT capture.run_id::text, jsonb_build_array(capture.source_kind,
+                      capture.conversation_id::text, capture.first_run_id::text,
+                      capture.last_run_id::text,
+                      capture.memory_settings_revision = run.memory_settings_revision)::text
+               FROM storyos.memory_captures AS capture
+               JOIN storyos.agent_runs AS run
+                 ON (run.owner_user_id, run.project_id, run.run_id) =
+                    (capture.owner_user_id, capture.project_id, capture.last_run_id)
+              WHERE capture.conversation_id = $1::text::uuid",
+            &[&conversation_id],
+        )
+        .await
+        .unwrap();
+    row.map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1)))
+}
+
+/// Two completed Runs of a Conversation that permits contribution, on the fake destination, get
+/// one capture through `run_once` after their due time. The observations of the fake script are
+/// stored with the Conversation as their source, and no Memory Entry changes.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn run_once_captures_two_completed_runs_into_stored_observations() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, source) = project(&store, &admin, "298").await;
+    let MemoryCaptureSource::Conversation {
+        conversation_id,
+        first_run_id,
+        ..
+    } = &source
+    else {
+        unreachable!()
+    };
+    let observation = json!({"type": "character", "title": "林舟", "text": "沉默的船夫。"});
+    let message = format!("记住林舟。\n{}", script(&[record(json!([observation]))]));
+    let existing = ConversationSelection::Existing {
+        conversation_id: conversation_id.clone(),
+    };
+    let second = admitted(&store, &scope, &chapter_id, "299", &message, existing).await;
+    complete(&store, &admin, &scope, &second).await;
+    let before = other_records(&admin, &scope).await;
+    make_due(&admin, conversation_id).await;
+    let destination = storyos_worker::ModelDestination {
+        adapter: FakeDestination,
+        observer: NoContractFaults,
+        tools: storyos_application::NoToolDestination,
+        embeddings: storyos_application::NoEmbeddingDestination,
+    };
+    // One step claims the row and starts the capture. The next steps claim its Run, also after
+    // work that other tests left.
+    let mut captured: Option<(String, String)> = None;
+    for _ in 0..16 {
+        storyos_worker::run_once(&store, &destination)
+            .await
+            .unwrap();
+        captured = capture_of(&admin, conversation_id).await;
+        if let Some((run_id, _)) = &captured
+            && settlement(&admin, run_id).await[0] == "completed"
+        {
+            break;
+        }
+    }
+    let (run_id, row) = captured.expect("run_once must start one capture");
+
+    assert_eq!(
+        (
+            serde_json::from_str::<Value>(&row).unwrap(),
+            settlement(&admin, &run_id).await,
+            other_records(&admin, &scope).await
+        ),
+        (
+            json!(["conversation", conversation_id, first_run_id, second, true]),
+            json!([
+                "completed",
+                "settled",
+                "observations_recorded",
+                null,
+                [[1, "character", "林舟", "沉默的船夫。", "waiting"]]
+            ]),
+            before
         )
     );
 }
