@@ -192,6 +192,9 @@ pub enum EmbeddingRefusal {
     DisclosureOutsideGrant,
     InputOutOfBounds,
     CredentialUnavailable,
+    /// The adapter does not have the mapping revision or the request bounds of the Registration,
+    /// or the binding has no endpoint.
+    UnsupportedRequest,
 }
 
 impl EmbeddingRefusal {
@@ -202,6 +205,7 @@ impl EmbeddingRefusal {
             Self::DisclosureOutsideGrant => "disclosure_outside_grant",
             Self::InputOutOfBounds => "embedding_input_out_of_bounds",
             Self::CredentialUnavailable => "destination_credential_unavailable",
+            Self::UnsupportedRequest => "embedding_request_unsupported",
         }
     }
 }
