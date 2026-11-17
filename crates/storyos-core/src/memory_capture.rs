@@ -120,11 +120,14 @@ pub struct MemoryCaptureAssembly {
     pub owner_user_id: String,
     pub project_id: String,
     pub input: String,
+    /// `exact_required`, or `deterministic_excerpt` for the input of a Conversation capture whose
+    /// one Run is above the item limit.
+    pub projection_mode: ProjectionMode,
     pub destination_identity: String,
 }
 
 /// The Context Assembly of a capture: the Purpose `memory_capture`, the cause `host_schedule`,
-/// and one `memory_capture_input` item with the projection mode `exact_required`. The admission
+/// and one `memory_capture_input` item with the projection mode of the input. The admission
 /// refused an input above the item limit, so the assembly is complete.
 pub fn assemble_memory_capture_context(
     input: &MemoryCaptureAssembly,
@@ -166,7 +169,7 @@ pub fn assemble_memory_capture_context(
         selected: vec![SelectedProjection {
             source_class: ContextSourceClass::MemoryCaptureInput,
             source_version: input.input_snapshot_id.clone(),
-            projection_mode: ProjectionMode::ExactRequired,
+            projection_mode: input.projection_mode,
             token_count,
             content: input.input.clone(),
         }],

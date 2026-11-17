@@ -59,6 +59,66 @@ pub(crate) async fn mark_conversation_due(
     Ok(())
 }
 
+/// Sets the due time of the schedule row of the Conversation of the capture `capture_id` that
+/// settles with `outcome`, in the transaction of its settlement. A Chapter capture has no row.
+pub(crate) async fn mark_due_after_capture(
+    client: &Client,
+    claim: &ClaimedAgentRun,
+    capture_id: &str,
+    outcome: storyos_core::CaptureOutcome,
+) -> Result<(), CompleteAgentRunError> {
+    let keys: [&(dyn tokio_postgres::types::ToSql + Sync); 3] = [
+        &claim.project_scope.owner_user_id.as_ref(),
+        &claim.project_scope.project_id.as_ref(),
+        &capture_id,
+    ];
+    let Some(row) = client
+        .query_opt(
+            "SELECT capture.conversation_id::text,
+                    EXISTS (SELECT 1 FROM storyos.agent_runs AS run
+                             WHERE (run.owner_user_id, run.project_id, run.conversation_id) =
+                                   (capture.owner_user_id, capture.project_id,
+                                    capture.conversation_id)
+                               AND run.run_kind = 'author' AND run.status = 'completed'
+                               AND run.run_id > capture.last_run_id),
+                    clock_timestamp()
+               FROM storyos.memory_captures AS capture
+              WHERE (capture.owner_user_id, capture.project_id, capture.capture_id) =
+                    ($1::text::uuid, $2::text::uuid, $3::text::uuid)
+                AND capture.source_kind = 'conversation'",
+            &keys,
+        )
+        .await
+        .map_err(complete_database_error)?
+    else {
+        return Ok(());
+    };
+    let conversation_id: String = row.get(/*idx*/ 0);
+    let Some(due_at) =
+        storyos_core::capture_settlement_due(outcome, row.get(/*idx*/ 1), row.get(/*idx*/ 2))
+    else {
+        return Ok(());
+    };
+    client
+        .execute(
+            "INSERT INTO storyos.memory_work_schedules
+               (owner_user_id, project_id, work_kind, conversation_id, due_at)
+             VALUES ($1::text::uuid, $2::text::uuid, $3, $4::text::uuid, $5)
+             ON CONFLICT (owner_user_id, project_id, work_kind, conversation_id)
+             DO UPDATE SET due_at = EXCLUDED.due_at",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &CONVERSATION_CAPTURE,
+                &conversation_id,
+                &due_at,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    Ok(())
+}
+
 impl MemoryWorkScheduleStore for PostgresProjectReader {
     async fn memory_work_due(&self) -> Result<bool, ProjectReadError> {
         let client = self.connect().await?;
@@ -207,7 +267,9 @@ async fn decide_and_start(
     if let Err(skip) = storyos_core::decide_conversation_capture(&facts) {
         return Ok(MemoryWorkOutcome::Skipped(skip));
     }
-    let Some(input) = storyos_core::conversation_capture_input(&runs) else {
+    let Some(input) =
+        storyos_core::conversation_capture_input(&runs, storyos_core::CONTEXT_ITEM_TOKEN_LIMIT)
+    else {
         return Ok(MemoryWorkOutcome::Skipped(
             ConversationCaptureSkip::NothingUnread,
         ));
@@ -222,7 +284,10 @@ async fn decide_and_start(
         .batch_execute("SAVEPOINT capture_start")
         .await
         .map_err(read_error)?;
-    match crate::memory_capture::start(client, scope, &source, &input.text).await? {
+    let started =
+        crate::memory_capture::start(client, scope, &source, &input.text, input.projection_mode)
+            .await?;
+    match started {
         Ok(started) => Ok(MemoryWorkOutcome::Started(started)),
         Err(_) => {
             client

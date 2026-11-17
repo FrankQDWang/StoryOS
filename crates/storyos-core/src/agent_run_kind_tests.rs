@@ -1,8 +1,8 @@
 use super::{AgentRunKind, MEMORY_CAPTURE_MAX_RUN_STEPS, yields_to_author};
 use crate::{
     AGENT_PLAN_REGISTRATION, AGENT_PLAN_STREAMING_REGISTRATION, BudgetBounds,
-    HOST_FAKE_REGISTRATION, MAX_RUN_STEPS, MemoryCaptureAssembly, RunStepLimit, ToolChoice,
-    ToolOperation, assemble_memory_capture_context,
+    HOST_FAKE_REGISTRATION, MAX_RUN_STEPS, MemoryCaptureAssembly, ProjectionMode, RunStepLimit,
+    ToolChoice, ToolOperation, assemble_memory_capture_context,
 };
 
 #[test]
@@ -122,6 +122,7 @@ fn the_full_request_of_a_background_run_is_refused_at_the_window() {
         owner_user_id: "owner".to_owned(),
         project_id: "project".to_owned(),
         input: "林舟上了船。".to_owned(),
+        projection_mode: ProjectionMode::ExactRequired,
         destination_identity: "destination".to_owned(),
     });
     let bounds = BudgetBounds::AgentPlanRequestV2.as_str();
