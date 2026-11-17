@@ -1,5 +1,5 @@
-//! The schedule of background Memory work in the store (ADR 0094 sections 5 and 6, writer 2): the
-//! due writes in the transactions of the settlements, and the Worker claim of a due row. The
+//! The schedule of background Memory work in the store (ADR 0094 sections 5 and 6, writers 2 and
+//! 3): the due writes in the transactions of the settlements, and the Worker claim of a due row. The
 //! claim, the decision, the start of the capture or the pass, and the empty due time are one
 //! transaction. Thus a Worker that stops before the commit leaves the row due, and a second
 //! delivery starts no second capture for the same messages and no second pass. No record of this
@@ -65,7 +65,8 @@ pub(crate) async fn mark_conversation_due(
 }
 
 /// Sets the due time of the schedule row of the Conversation of the capture `capture_id` that
-/// settles with `outcome`, in the transaction of its settlement. A Chapter capture has no row.
+/// settles with `outcome`, in the transaction of its settlement. A Chapter capture has no row of a
+/// Conversation.
 pub(crate) async fn mark_due_after_capture(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -226,7 +227,7 @@ async fn claim_and_decide(
     let Some(row) = client
         .query_opt(
             "WITH next_work AS (
-               SELECT owner_user_id, project_id, work_kind, source_id
+               SELECT owner_user_id, project_id, work_kind, source_id, due_at
                  FROM storyos.memory_work_schedules
                 WHERE due_at <= clock_timestamp()
                 ORDER BY due_at, owner_user_id, project_id, work_kind, source_id
@@ -238,7 +239,8 @@ async fn claim_and_decide(
               WHERE (work.owner_user_id, work.project_id, work.work_kind, work.source_id) =
                     (next_work.owner_user_id, next_work.project_id, next_work.work_kind,
                      next_work.source_id)
-          RETURNING work.owner_user_id::text, work.project_id::text, work.conversation_id::text",
+          RETURNING work.owner_user_id::text, work.project_id::text, work.conversation_id::text,
+                    work.chapter_id::text, next_work.due_at",
             &[],
         )
         .await
@@ -250,9 +252,13 @@ async fn claim_and_decide(
         UserId::new(row.get::<_, String>(/*idx*/ 0)),
         ProjectId::new(row.get::<_, String>(/*idx*/ 1)),
     );
-    let source = match row.get::<_, Option<String>>(/*idx*/ 2) {
-        Some(conversation_id) => MemoryWorkSource::Conversation(conversation_id),
-        None => MemoryWorkSource::Project,
+    let source = match (
+        row.get::<_, Option<String>>(/*idx*/ 2),
+        row.get::<_, Option<String>>(/*idx*/ 3),
+    ) {
+        (Some(conversation_id), _) => MemoryWorkSource::Conversation(conversation_id),
+        (None, Some(chapter_id)) => MemoryWorkSource::Chapter(chapter_id),
+        (None, None) => MemoryWorkSource::Project,
     };
     client
         .execute(
@@ -264,11 +270,26 @@ async fn claim_and_decide(
         )
         .await
         .map_err(read_error)?;
-    let outcome = match &source {
+    let (source, outcome) = match source {
         MemoryWorkSource::Conversation(conversation_id) => {
-            decide_and_start(client, &scope, conversation_id).await?
+            let outcome = decide_and_start(client, &scope, &conversation_id).await?;
+            (MemoryWorkSource::Conversation(conversation_id), outcome)
         }
-        MemoryWorkSource::Project => decide_and_start_pass(client, &scope).await?,
+        MemoryWorkSource::Project => (
+            MemoryWorkSource::Project,
+            decide_and_start_pass(client, &scope).await?,
+        ),
+        // The decision can be for another due Chapter of the Project that is first in order.
+        MemoryWorkSource::Chapter(claimed) => {
+            let (chapter_id, outcome) = crate::chapter_capture_schedule::decide_and_start(
+                client,
+                &scope,
+                &claimed,
+                row.get(/*idx*/ 4),
+            )
+            .await?;
+            (MemoryWorkSource::Chapter(chapter_id), outcome)
+        }
     };
     Ok(Some(ClaimedMemoryWork {
         project_scope: scope,

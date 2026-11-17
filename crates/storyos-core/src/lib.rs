@@ -8,6 +8,7 @@ mod apply_memory_operations;
 mod archive_path;
 mod archive_zip;
 mod assemble_context;
+mod chapter_capture_schedule;
 mod chapter_list;
 mod compact_active_context;
 mod continuation_input;
@@ -135,6 +136,11 @@ pub use assemble_context::{
     InstructionBindingInput, PassageContextTarget, ProjectionMode, RejectionReason,
     assemble_current_passage_context, assemble_passage_collection, count_context_item_tokens,
     decode_assembly_record, encode_assembly_record,
+};
+pub use chapter_capture_schedule::{
+    CHAPTER_CAPTURE_INTERVAL, CHAPTER_CAPTURE_RATE, CHAPTER_QUIET_TIME, ChapterCaptureFacts,
+    ChapterCaptureInput, ChapterCaptureSkip, ChapterCaptureTurn, ChapterRowChange,
+    chapter_capture_due, chapter_capture_input, chapter_capture_turn, decide_chapter_capture,
 };
 pub use chapter_list::{ChapterListEntry, assemble_chapter_list};
 pub use compact_active_context::{

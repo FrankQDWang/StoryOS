@@ -227,7 +227,9 @@ async fn memory_work_claim_span(store: &impl WorkerStore) -> Result<bool, Projec
     let run_id = match &claimed.outcome {
         MemoryWorkOutcome::Started(started) => Some(&started.run_id),
         MemoryWorkOutcome::PassStarted(started) => Some(&started.run_id),
-        MemoryWorkOutcome::Skipped(_) | MemoryWorkOutcome::PassSkipped(_) => None,
+        MemoryWorkOutcome::Skipped(_)
+        | MemoryWorkOutcome::PassSkipped(_)
+        | MemoryWorkOutcome::ChapterSkipped(_) => None,
     };
     if let Some(run_id) = run_id {
         span.record("run_id", DiagnosticId(run_id).diagnostic());
