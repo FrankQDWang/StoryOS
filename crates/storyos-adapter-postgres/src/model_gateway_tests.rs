@@ -263,6 +263,27 @@ pub(crate) async fn queued_run_offering(
     destination: DeploymentDestination,
     research: Option<&'static ResearchToolOffer>,
 ) -> (ProjectScope, String, String) {
+    let (scope, chapter_id) = assisted_chapter(store, prefix).await;
+    let run_id = admit_run_in(
+        store,
+        &scope,
+        &chapter_id,
+        prefix,
+        destination,
+        "Help with this passage.",
+        ConversationSelection::New,
+        research,
+    )
+    .await;
+    (scope, chapter_id, run_id)
+}
+
+/// A Project of `prefix` with the available assistance on `host_fake_tool_loop`, Volume A, and
+/// Chapter A, and no Run. `prefix` gives the identities of the commands.
+pub(crate) async fn assisted_chapter(
+    store: &PostgresProjectReader,
+    prefix: &str,
+) -> (ProjectScope, String) {
     let scope: ProjectScope = seed_project(store, &format!("{prefix}0")).await;
     let assistance = command_issue(
         &scope,
@@ -308,18 +329,7 @@ pub(crate) async fn queued_run_offering(
         /*expected_tree_revision*/ 2,
     )
     .await;
-    let run_id = admit_run_in(
-        store,
-        &scope,
-        &chapter_id,
-        prefix,
-        destination,
-        "Help with this passage.",
-        ConversationSelection::New,
-        research,
-    )
-    .await;
-    (scope, chapter_id, run_id)
+    (scope, chapter_id)
 }
 
 /// Admits one queued AgentRun of a new conversation on `chapter_id`, in a deployment that offers

@@ -402,7 +402,7 @@ pub(crate) async fn settle_end(
 
 #[cfg(test)]
 #[path = "memory_consolidation_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 #[cfg(test)]
 #[path = "memory_consolidation_recovery_tests.rs"]
