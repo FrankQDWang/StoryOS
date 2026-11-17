@@ -2,6 +2,7 @@ import {
   createProjectCommandChallenge,
   digestSetCurrentChapter,
   setCurrentChapter,
+  StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { SetCurrentChapterResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -62,7 +63,9 @@ export async function setOwnedCurrentChapter(options: {
     inFlight.delete(identity);
     return switched;
   } catch (error) {
-    if (historicalAcknowledgementUnavailable(error)) {
+    // The caller waits for the Retry-After of a Challenge rate limit and repeats with the same key (#1679).
+    if (historicalAcknowledgementUnavailable(error)
+      || (error instanceof StoryOSProtocolError && error.status === 429)) {
       throw error;
     }
     const switched = await submitSetCurrentChapter(options, flight);
