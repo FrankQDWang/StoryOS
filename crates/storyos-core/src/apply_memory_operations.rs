@@ -22,11 +22,10 @@ pub const APPLY_MEMORY_OPERATIONS_TOOL_SPEC: ToolSpec = ToolSpec {
 };
 
 pub(crate) const DESCRIPTION: &str = "Applies the operations of this consolidation pass to the \
-Memory of the Project. Call it one time. Create an entry from one or more observations, update an \
-entry with what the observations add, merge two or more entries of one type into the first of \
-them, and delete an entry that is not true now. Each entry and each observation has its number \
-in the input. Give an empty list when the Memory needs no \
-change.";
+Memory of the Project. Call it one time. Create an entry from one or more observations. Update an \
+entry with what the observations add. Merge two or more entries of one type into the first of \
+them. Delete an entry that is not true now. Each entry and each observation has its number in \
+the input. Give an empty list when the Memory needs no change.";
 
 /// The keys of an operation. The strict schema requires each one, also when its value is null.
 const KEYS: [&str; 9] = [
@@ -418,13 +417,14 @@ fn decide_one(
     if targets.iter().any(|number| named.contains(number)) {
         return Err(MemoryOperationRefusal::EntryNamedTwice);
     }
-    // A merge has two or more entries, and each one time.
+    // A merge has two or more entries, each one time and each a number of an entry.
     let merge = candidate.action == MemoryOperationAction::Merge;
+    let given = candidate.entries.as_ref().map_or(0, Vec::len);
     let distinct = targets
         .iter()
         .enumerate()
         .all(|(index, number)| !targets[..index].contains(number));
-    if merge && (targets.len() < 2 || !distinct) {
+    if merge && (targets.len() < 2 || targets.len() != given || !distinct) {
         return Err(MemoryOperationRefusal::Write(MemoryWriteRefusal::Invalid));
     }
     let found: Vec<&PassMemoryEntry> = targets

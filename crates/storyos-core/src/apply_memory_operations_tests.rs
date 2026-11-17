@@ -343,10 +343,11 @@ fn a_merge_changes_its_first_entry_and_deletes_the_others() {
 }
 
 /// A merge needs two or more different current entries of one type and no entry of the author.
+/// A number that is not the number of an entry refuses the merge.
 /// It names each of its entries for the operations after it, also when the Host refuses it.
 #[test]
 fn each_refusal_of_a_merge() {
-    let mut entries: Vec<PassMemoryEntry> = (2..=11)
+    let mut entries: Vec<PassMemoryEntry> = (2..=13)
         .map(|number| {
             entry(
                 number,
@@ -369,6 +370,7 @@ fn each_refusal_of_a_merge() {
         merge(json!([9]), "合"),
         merge(json!([10, 10]), "合"),
         merge(json!([11, 99]), "合"),
+        merge(json!([12, -1, 13]), "合"),
     ]));
 
     assert_eq!(
@@ -383,6 +385,7 @@ fn each_refusal_of_a_merge() {
             "memory_entry_invalid",
             "memory_entry_invalid",
             "memory_entry_not_found",
+            "memory_entry_invalid",
         ]
     );
 }
