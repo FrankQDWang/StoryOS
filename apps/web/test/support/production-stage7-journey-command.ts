@@ -223,6 +223,11 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     assert.deepEqual([(await sent(read.runId, "chapter_list")).length, (await sent(read.runId, "memory_index")).length],
       [1, 1]);
     await expect(current.locator("[data-assistant-manuscript-uses]")).toHaveCount(0);
+    // The read settles, and its result has the text of entry 2 that the pass of step 3 created.
+    assert.equal(await value(`SELECT string_agg(function_name || ' ' || state || ' '
+        || (result_text LIKE '%林舟与阿禾。%')::text, ', ' ORDER BY call_id)
+      FROM storyos.tool_calls WHERE run_id = '${read.runId}'::uuid AND function_name <> 'finish'`),
+    "read_memory_entry settled true");
     const recalled = await message("铜铃是谁留下的？\nSCRIPT:search_memory 铜铃");
     assert.equal(await value(`SELECT string_agg(function_name || ' ' || state, ', ' ORDER BY call_id)
       FROM storyos.tool_calls WHERE run_id = '${recalled.runId}'::uuid AND function_name <> 'finish'`),
