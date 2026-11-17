@@ -3893,6 +3893,11 @@
     },
     "memory_work_schedules": {
       "columns": {
+        "chapter_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
         "conversation_id": {
           "default": null,
           "nullable": true,
@@ -3902,6 +3907,11 @@
           "default": null,
           "nullable": true,
           "type": "timestamp with time zone"
+        },
+        "held": {
+          "default": "false",
+          "nullable": false,
+          "type": "boolean"
         },
         "owner_user_id": {
           "default": null,
@@ -3925,9 +3935,11 @@
         }
       },
       "constraints": {
+        "memory_work_schedules_chapter_fkey": "FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id)",
         "memory_work_schedules_conversation_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id)",
+        "memory_work_schedules_held_check": "CHECK (((NOT held) OR ((work_kind = 'chapter_capture'::text) AND (due_at IS NULL))))",
         "memory_work_schedules_pkey": "PRIMARY KEY (owner_user_id, project_id, work_kind, source_id)",
-        "memory_work_schedules_source_check": "CHECK (((((work_kind = 'conversation_capture'::text) AND (conversation_id = source_id)) OR ((work_kind = 'consolidation'::text) AND (conversation_id IS NULL) AND (source_id = project_id))) IS TRUE))"
+        "memory_work_schedules_source_check": "CHECK (((((work_kind = 'conversation_capture'::text) AND (conversation_id = source_id) AND (chapter_id IS NULL)) OR ((work_kind = 'consolidation'::text) AND (conversation_id IS NULL) AND (chapter_id IS NULL) AND (source_id = project_id)) OR ((work_kind = 'chapter_capture'::text) AND (conversation_id IS NULL) AND (chapter_id = source_id))) IS TRUE))"
       },
       "indexes": {
         "memory_work_schedules_due_idx": "CREATE INDEX memory_work_schedules_due_idx ON storyos.memory_work_schedules USING btree (due_at) WHERE (due_at IS NOT NULL)",
