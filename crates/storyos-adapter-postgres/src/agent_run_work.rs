@@ -414,10 +414,9 @@ pub(crate) async fn settle_one_phase(
     let Some(attempt_id) = run.attempt_id.clone() else {
         // Compaction occurs before the decision request of each RunStep of the AgentRun, when
         // the mapping of the pinned Registration compacts (ADR 0055, ADR 0093).
-        // A background Run has no Conversation to compact.
-        let compacted = if run.kind.has_conversation()
-            && storyos_core::model_registration(&run.model_registration_revision)
-                .is_some_and(storyos_core::ModelRegistration::compacts)
+        let compacted = if run
+            .kind
+            .compacts_before_decision(&run.model_registration_revision)
         {
             match crate::agent_run_compaction::advance_active_compaction(client, claim, &run)
                 .await?

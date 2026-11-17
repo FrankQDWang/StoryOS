@@ -189,7 +189,7 @@ pub(crate) async fn create_request(
         )))
     })?;
     // A background Run has no Chapter, so it declares no Proposal target, and it is no probe.
-    let (declared_targets, probe) = match run.kind.has_conversation() {
+    let (declared_targets, probe) = match run.kind.reads_chapter_work() {
         true => (
             declared_targets(client, claim, run.chapter()?).await?,
             crate::agent_run_tool_probe::probe_request(client, claim, run).await?,
@@ -200,10 +200,10 @@ pub(crate) async fn create_request(
     // A Tool qualification probe settles after its one response, so the finish rule does not
     // apply to it, and its probe body sends no `tool_choice` (ADR 0049). A capture has no
     // `finish` call: each of its requests requires a call (ADR 0094 section 5).
-    let tool_choice = match (&probe, run.kind.requires_tool_call()) {
+    let tool_choice = match (&probe, run.kind.fixed_tool_choice()) {
         (Some(_), _) => storyos_core::ToolChoice::None,
-        (None, true) => storyos_core::ToolChoice::Required,
-        (None, false) => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
+        (None, Some(fixed)) => fixed,
+        (None, None) => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
     };
     let (prior_binding, previous_response_reference, prior_input) = match &probe {
         Some(probe) => (

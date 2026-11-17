@@ -50,7 +50,7 @@ pub(crate) async fn plan_expiry_rebuild(
         ..
     } = run;
     // A background Run has no Conversation, so it has no prior response to rebuild.
-    if !run.kind.has_conversation() {
+    if !run.kind.rebuilds_expired_reference() {
         return Ok(ExpiryAdmission::Dispatch(None));
     }
     let conversation_id = run.conversation()?;

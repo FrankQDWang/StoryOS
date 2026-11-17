@@ -76,7 +76,7 @@ pub(crate) async fn open_next_step(
         .as_ref()
         .ok_or_else(|| damaged("The Context Assembly of the function request is damaged"))?;
     // A background Run has no steering input, no Chapter, and no Receipt.
-    if !run.kind.has_conversation() {
+    if !run.kind.reads_steering() {
         let results = RunToolResults::load(client, claim).await?;
         let next_position = crate::agent_run_steering::next_position(&run.decision_position)?;
         crate::memory_capture::persist_next_step(
