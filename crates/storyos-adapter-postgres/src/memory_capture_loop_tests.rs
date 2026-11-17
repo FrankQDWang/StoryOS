@@ -12,7 +12,6 @@ use crate::agent_run_dispatch::tests::{admit_selected_run, queued_run_offering, 
 use crate::agent_run_finish_rule::tests::{calls, complete};
 use crate::create_agent_run_tests::skill_tests::{fixture, set};
 
-/// The input of a capture: one script line for each call, in RunStep order.
 /// The Tool Exposure of each RunStep of a capture (ADR 0094 section 5).
 pub(crate) const CAPTURE_TOOLS: [&str; 4] = [
     "read_chapter",
@@ -21,6 +20,7 @@ pub(crate) const CAPTURE_TOOLS: [&str; 4] = [
     "record_memory_observations",
 ];
 
+/// The input of a capture: one script line for each call, in RunStep order.
 pub(crate) fn script(calls: &[(&str, Value)]) -> String {
     let lines: Vec<String> = calls
         .iter()

@@ -217,9 +217,9 @@ async fn add_references(
     Ok(())
 }
 
-/// The Context Assembly of the next RunStep of a capture: the input item and the reference items
-/// of the RunStep before, and one `tool_result` item for each resolved ToolCall of the Run (ADR
-/// 0085).
+/// The Context Assembly of the next RunStep of a capture. It has the input item and the reference
+/// items of the RunStep before. It also has one `tool_result` item for each resolved ToolCall of
+/// the Run (ADR 0085).
 pub(crate) async fn persist_next_step(
     client: &Client,
     claim: &ClaimedAgentRun,

@@ -204,8 +204,8 @@ const CAPTURE_REFERENCE_CLASSES: [ContextSourceClass; 3] = [
     ContextSourceClass::MemoryDeleteMarks,
 ];
 
-/// Adds the reference items after the input item: the Memory Index at the head revision of the
-/// start, the Chapter list, and the delete marks. A capture always gets the Index. The
+/// Adds the reference items after the input item. They are the Memory Index at the head revision
+/// of the start, the Chapter list, and the delete marks. A capture always gets the Index. The
 /// Conversation Memory Settings control it only for a Run of a Project Conversation.
 pub fn assemble_capture_references(
     record: &mut CurrentPassageAssemblyRecord,
@@ -218,7 +218,7 @@ pub fn assemble_capture_references(
 }
 
 /// Keeps the reference items and the Memory revision of the RunStep `before` in the Context
-/// Assembly of the next RunStep, so that they stay a part of the current input (ADR 0085).
+/// Assembly of the next RunStep. Thus they stay a part of the current input (ADR 0085).
 pub fn keep_capture_references(
     record: &mut CurrentPassageAssemblyRecord,
     before: &CurrentPassageAssemblyRecord,

@@ -464,9 +464,9 @@ fn only_an_ordinary_response_without_a_decision_and_with_a_complete_call_request
     );
 }
 
-/// A capture exposes its three read-only Tools and its output Tool, and a consolidation pass
-/// exposes no Tool, also with an active research binding, a Skill, and the search by meaning.
-/// The Memory Settings of a Conversation do not control a capture (ADR 0094 sections 4 to 6).
+/// A capture exposes its three read-only Tools and its output Tool. A consolidation pass exposes
+/// no Tool. This is also true with a research binding, a Skill, and the search by meaning. The
+/// Memory Settings of a Conversation do not control a capture (ADR 0094 sections 4 to 6).
 #[test]
 fn a_background_run_gets_only_the_tools_of_its_kind() {
     let active = [bound(

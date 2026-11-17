@@ -3,12 +3,13 @@
 //! and the manuscript and Memory reads execute as in a Run of the author.
 
 use serde_json::{Value, json};
-use storyos_application::{MemoryCaptureSource, ProjectScope};
+use storyos_application::{ChapterId, DeleteChapterInput, MemoryCaptureSource, ProjectScope};
 use tokio_postgres::Client;
 
 use super::loop_tests::{record, script, settlement};
 use super::tests::{run_capture, start};
 use crate::agent_run_dispatch::tests::stores;
+use crate::command_sequence::tests::{DELETE_CHAPTER, delete_chapter, issued};
 use crate::memory_entries::tests::write_versions;
 
 /// The Conversation of the first Run of the author of the Project, as the source of a capture.
@@ -64,7 +65,8 @@ async fn set_cause(admin: &Client, scope: &ProjectScope, number: u64, kind: &str
 
 /// The first request of a capture sends the Memory Index, the Chapter list, and the delete marks
 /// after its input, with no Conversation Memory Settings. Only the deletes of the author are
-/// marks, newest first. A Project with no entry sends only the input and the Chapter list.
+/// marks, newest first. A Project with no entry sends no Index and no marks. A Project with no
+/// live Chapter, no entry, and no mark sends only the input.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_first_request_of_a_capture_sends_its_reference_items() {
@@ -90,6 +92,15 @@ async fn the_first_request_of_a_capture_sends_its_reference_items() {
     set_cause(&admin, &scope, 3, "author_request").await;
     let after = start(&store, &scope, &source, input).await.unwrap();
     run_capture(&store, &admin, &scope, &after.run_id).await;
+    let (empty, chapter_id, empty_source) = super::tests::project(&store, &admin, "fea").await;
+    let remove = DeleteChapterInput {
+        chapter_id: ChapterId::new(chapter_id.as_str()),
+        expected_tree_revision: 3,
+    };
+    let remove = issued(&store, &empty, 0xfe98, &DELETE_CHAPTER, remove).await;
+    delete_chapter(&store, &remove).await.unwrap();
+    let only_input = start(&store, &empty, &empty_source, input).await.unwrap();
+    run_capture(&store, &admin, &empty, &only_input.run_id).await;
 
     let chapters = json!({"source_class": "chapter_list",
                           "content": "{\"volume\":\"Volume A\"}\n[1,0,\"Chapter A\"]"});
@@ -98,6 +109,7 @@ async fn the_first_request_of_a_capture_sends_its_reference_items() {
         [
             first_request_items(&admin, &before.run_id).await,
             first_request_items(&admin, &after.run_id).await,
+            first_request_items(&admin, &only_input.run_id).await,
         ],
         [
             json!([input, chapters]),
@@ -113,6 +125,7 @@ async fn the_first_request_of_a_capture_sends_its_reference_items() {
                     "{\"description\":\"一条旧船。\",\"title\":\"旧船\",\"type\":\"other\"}"
                 )},
             ]),
+            json!([input]),
         ]
     );
 }
