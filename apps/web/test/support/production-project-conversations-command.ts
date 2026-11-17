@@ -16,7 +16,7 @@ const MESSAGE_B = "第二段对话：林舟的语气要不要更冷？";
 const MESSAGE_A2 = "回到第一段对话：再看一下结尾。";
 
 /** Sends one message from the composer, and returns the createAgentRun request and the admitted response. */
-async function send(page: Page, text: string) {
+export async function send(page: Page, text: string) {
   await page.locator('textarea[name="assistant-message"]').fill(text);
   const response = page.waitForResponse((reply) =>
     reply.request().method() === "POST" && new URL(reply.url()).pathname.endsWith("/agent-runs"));
@@ -30,7 +30,7 @@ async function send(page: Page, text: string) {
 }
 
 /** Each exchange of the panel as its author messages and its result, the oldest first. */
-function exchanges(page: Page) {
+export function exchanges(page: Page) {
   return page.locator("[data-assistant-history-run], [data-assistant-current-run]").evaluateAll((sections) =>
     sections.map((section) => [...section.querySelectorAll(".assistant-author-message, .assistant-result")]
       .map((line) => line.textContent)));

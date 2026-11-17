@@ -75,6 +75,21 @@ export async function drainLeftoverWork() {
   throw new Error("leftover AgentRun or export work did not drain");
 }
 
+/**
+ * Settles each due row of the background Memory work and each queued AgentRun, of each Project. The Worker claims a due
+ * row only when no Run waits, so a row of an earlier file cannot take the place of the work of a journey.
+ */
+export async function drainDueMemoryWork(extraEnv?: Readonly<Record<string, string>>) {
+  for (let attempt = 0; attempt < 64; attempt += 1) {
+    const leftover = await queryPostgres(`
+      SELECT ((SELECT count(*) FROM storyos.memory_work_schedules WHERE due_at <= clock_timestamp())
+       + (SELECT count(*) FROM storyos.agent_runs WHERE status IN ('queued', 'claimed')))::text`);
+    if (leftover === "0") return;
+    await settleOnce(extraEnv);
+  }
+  throw new Error("leftover background Memory work did not drain");
+}
+
 /** Issues one Command Challenge for this command inside the Challenge rate budget. */
 export function issueChallenge(
   baseUrl: string,
