@@ -9,16 +9,17 @@ use storyos_application::{
     ProjectScope, StartedMemoryConsolidation,
 };
 use storyos_core::{
-    AgentRunKind, AssistanceAvailability, CaptureRefusal, CaptureRunEnd, CurrentMemoryEntry,
-    MemoryConsolidationAssembly, MemoryEntryOrigin, MemoryEntryType, MemoryOperationCandidate,
-    MemorySourceReference, PassMemoryEntry, PassObservation, ToolCallState,
+    AgentRunKind, AssistanceAvailability, CaptureRefusal, CaptureRunEnd,
+    MemoryConsolidationAssembly, MemoryEntryType, MemoryOperationCandidate, MemorySourceReference,
+    PassMemoryEntry, PassObservation, ToolCallState,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
 use crate::agent_run_work::complete_database_error;
-use crate::memory_entries::{TIME_FORM, VersionSource, lock_memory_head, write_memory_version};
+use crate::memory_consolidation_versions::{pass_entries, unused_entries, write_admitted};
+use crate::memory_entries::lock_memory_head;
 use crate::update_project_assistance::read_assistance_record;
 use crate::{PostgresProjectReader, read_error};
 
@@ -187,84 +188,6 @@ async fn start(
     Ok(Ok(StartedMemoryConsolidation { pass_id, run_id }))
 }
 
-/// The numbers of the entries of `entries` that Core gives the mark `unused`, from the time of the
-/// last read of each entry by a Run of the author, the time of its last change, and the time now.
-async fn unused_entries(
-    client: &Client,
-    scope: &ProjectScope,
-    entries: &[(PassMemoryEntry, String)],
-) -> Result<Vec<u64>, BoxError> {
-    let reads = crate::memory_entries::last_memory_reads(client, scope).await?;
-    let now: String = client
-        .query_one(
-            "SELECT to_char(statement_timestamp() AT TIME ZONE 'UTC', $1)",
-            &[&TIME_FORM],
-        )
-        .await?
-        .get(/*idx*/ 0);
-    let unused = entries.iter().filter(|(pass_entry, changed_at)| {
-        let number = pass_entry.entry.number;
-        let read = reads
-            .iter()
-            .find(|(_, read_number, _)| *read_number == number);
-        let last_read = read.and_then(|(_, _, time)| time.as_deref());
-        storyos_core::memory_entry_unused(pass_entry.origin, last_read, changed_at, &now)
-    });
-    Ok(unused
-        .map(|(pass_entry, _)| pass_entry.entry.number)
-        .collect())
-}
-
-/// One current entry of the Project now, with the time of its last change and its source
-/// references.
-struct StoredEntry {
-    entry: PassMemoryEntry,
-    changed_at: String,
-    sources: Vec<Value>,
-}
-
-/// The last version of each current entry of the Project now, in the order of the numbers.
-async fn pass_entries(client: &Client, scope: &ProjectScope) -> Result<Vec<StoredEntry>, BoxError> {
-    let rows = client
-        .query(
-            &format!(
-                "SELECT memory_entry_id::text, entry_number::text, version::text, entry_type,
-                        title, description, text, origin, to_char(recorded_at AT TIME ZONE 'UTC',
-                        '{TIME_FORM}'), source_references::text
-                   FROM (SELECT DISTINCT ON (memory_entry_id) *
-                           FROM storyos.memory_entry_versions
-                          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                          ORDER BY memory_entry_id, memory_revision DESC) AS latest
-                  WHERE state = 'current'
-                  ORDER BY entry_number"
-            ),
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-        )
-        .await?;
-    let invalid = || Box::new(std::io::Error::other("A Memory Entry row is invalid"));
-    rows.iter()
-        .map(|row| {
-            let number = |index| row.get::<_, &str>(index).parse().map_err(|_| invalid());
-            Ok(StoredEntry {
-                entry: PassMemoryEntry {
-                    entry: CurrentMemoryEntry {
-                        memory_entry_id: row.get(0),
-                        number: number(1)?,
-                        version: number(2)?,
-                        entry_type: MemoryEntryType::parse(row.get(3)).ok_or_else(invalid)?,
-                        title: row.get(4),
-                        description: row.get(5),
-                        text: row.get(6),
-                    },
-                    origin: MemoryEntryOrigin::parse(row.get(7)).ok_or_else(invalid)?,
-                },
-                changed_at: row.get(8),
-                sources: serde_json::from_str(row.get(9))?,
-            })
-        })
-        .collect()
-}
-
 /// Each observation that waits in the Project, the oldest capture first and in list order, with
 /// its key `[capture, position]`.
 async fn waiting_observations(
@@ -385,7 +308,6 @@ pub(crate) async fn execute(
             marks: &marks,
         },
     );
-    let stored_of = |number: u64| stored.iter().find(|item| item.entry.entry.number == number);
     let cause = json!({ "kind": "consolidation", "run_id": claim.run_id, "pass_id": pass_id });
     let mut written = revision;
     let mut results = Vec::new();
@@ -395,43 +317,7 @@ pub(crate) async fn execute(
             None => ("not_applied", None, None),
             Some(Err(refusal)) => ("refused", Some(refusal.label()), None),
             Some(Ok(admitted)) => {
-                // The result holds the sources of its entry, of each merged entry, and of the
-                // observations. A merged entry keeps its own sources in its deleted version.
-                let numbers = [&admitted.version].into_iter().chain(&admitted.merged);
-                let all = numbers
-                    .filter_map(|version| stored_of(version.number))
-                    .flat_map(|item| item.sources.iter().cloned())
-                    .chain(admitted.sources.iter().map(|source| json!(source)));
-                let mut unique: Vec<Value> = Vec::new();
-                for source in all {
-                    if !unique.contains(&source) {
-                        unique.push(source);
-                    }
-                }
-                let source = VersionSource {
-                    origin: admitted.origin.as_str(),
-                    cause: cause.clone(),
-                    source_references: Value::from(unique),
-                };
-                let new_entry_id = Uuid::now_v7().to_string();
-                let version = (written, &admitted.version, new_entry_id.as_str());
-                write_memory_version(client, scope, version, &source)
-                    .await
-                    .map_err(unavailable)?;
-                written += 1;
-                for merged in &admitted.merged {
-                    let item = stored_of(merged.number)
-                        .ok_or_else(|| damaged("A merged entry is missing"))?;
-                    let source = VersionSource {
-                        origin: item.entry.origin.as_str(),
-                        cause: cause.clone(),
-                        source_references: Value::from(item.sources.clone()),
-                    };
-                    write_memory_version(client, scope, (written, merged, ""), &source)
-                        .await
-                        .map_err(unavailable)?;
-                    written += 1;
-                }
+                written = write_admitted(client, scope, written, admitted, &stored, &cause).await?;
                 ("applied", None, Some(admitted.version.number))
             }
         };
