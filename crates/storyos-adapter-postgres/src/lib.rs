@@ -731,13 +731,18 @@ impl PostgresProjectReader {
 
     /// The Embedding Registration of the deployment. Each Project command transaction has its
     /// revision in the transaction setting `storyos.embedding_registration`, and the Tool
-    /// Exposure and the hybrid search read it there.
+    /// Exposure, the hybrid search, and the marks of the passage index work read it there.
     pub fn with_embedding_registration(
         mut self,
         registration: Option<&'static storyos_core::EmbeddingRegistration>,
     ) -> Self {
         self.embedding_registration = registration;
         self
+    }
+
+    /// The Embedding Registration of the deployment, or `None`.
+    pub fn embedding_registration(&self) -> Option<&'static storyos_core::EmbeddingRegistration> {
+        self.embedding_registration
     }
 
     /// Sets the transaction setting of the deployment Embedding Registration. With no

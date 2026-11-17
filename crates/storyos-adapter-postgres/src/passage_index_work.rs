@@ -10,6 +10,7 @@ use storyos_application::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
+use crate::agent_run_hybrid_search::DEPLOYMENT_REGISTRATION;
 use crate::export_work::set_worker_scope;
 use crate::passage_vectors::{delete_passage_vectors, insert_passage_vector};
 
@@ -31,8 +32,11 @@ pub(crate) enum MarkedChapters<'a> {
     Live,
 }
 
-/// Marks the index work of the Chapters in the transaction of the change. A Project with no
-/// embedding use binding, or a database with no vector table, gets no mark.
+/// Marks the index work of the Chapters in the transaction of the change. There is no mark when
+/// the deployment has no embedding configuration or the database has no vector table. There is
+/// also no mark when the latest embedding use binding of the Project has another Embedding
+/// Registration than the deployment. The setting `storyos.embedding_registration` of the
+/// transaction gives the Registration of the deployment.
 pub(crate) async fn mark_passage_index_work(
     client: &Client,
     scope: &ProjectScope,
@@ -44,7 +48,8 @@ pub(crate) async fn mark_passage_index_work(
     };
     client
         .execute(
-            "WITH binding AS (
+            &format!(
+                "WITH binding AS (
                SELECT embedding_registration_revision
                  FROM storyos.project_external_use_binding_revisions
                 WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
@@ -76,6 +81,7 @@ pub(crate) async fn mark_passage_index_work(
                     now() + ($4::bigint * interval '1 second')
                FROM chapters CROSS JOIN binding
               WHERE to_regclass('storyos.passage_vectors') IS NOT NULL
+                AND binding.embedding_registration_revision::text = {DEPLOYMENT_REGISTRATION}
                 AND CASE WHEN $3::text[] IS NULL THEN NOT chapters.removed
                          ELSE chapters.chapter_id::text = ANY($3::text[])
                            OR chapters.parent_volume_id::text = ANY($3::text[]) END
@@ -83,7 +89,8 @@ pub(crate) async fn mark_passage_index_work(
                SET mark_generation = work.mark_generation + 1,
                    embedding_registration_revision = EXCLUDED.embedding_registration_revision,
                    chapter_order = EXCLUDED.chapter_order,
-                   not_before = EXCLUDED.not_before",
+                   not_before = EXCLUDED.not_before"
+            ),
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),

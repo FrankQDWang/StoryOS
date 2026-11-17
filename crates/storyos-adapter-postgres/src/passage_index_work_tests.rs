@@ -29,6 +29,23 @@ use crate::project_embedding_binding::tests::{FAKE, embedding_project};
 
 const FAKE_ONLY: &[&EmbeddingRegistration] = &[&HOST_FAKE_EMBEDDING_REGISTRATION];
 
+/// The stores of a deployment with the fake embedding configuration.
+pub(crate) async fn configured() -> (PostgresProjectReader, Client) {
+    let (store, admin) = stores().await;
+    (store.with_embedding_registration(FAKE), admin)
+}
+
+/// Gives the open transaction of `admin` the fake embedding configuration of the deployment.
+pub(crate) async fn deploy(admin: &Client) {
+    admin
+        .execute(
+            "SELECT set_config('storyos.embedding_registration', $1, true)",
+            &[&HOST_FAKE_EMBEDDING_REGISTRATION.revision],
+        )
+        .await
+        .unwrap();
+}
+
 /// The work rows of the Project in Chapter order: the Chapter, its order, its mark generation,
 /// its completed generation, and whether its quiet time runs.
 pub(crate) async fn work(
@@ -184,15 +201,15 @@ async fn each_change_of_a_chapter_marks_its_work_in_the_transaction_of_the_chang
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let (store, admin) = stores().await;
-    let mut chapter = chapter(&store, &admin, ["b50", "b51"], "b52", &texts()).await;
+    let (store, admin) = configured().await;
+    let mut chapter = chapter(&store, &admin, ["f30", "f31"], "f32", &texts()).await;
     let scope = chapter.scope.clone();
     let one = chapter.chapter_id.clone();
     let row = |id: &str, order, generation| (id.to_owned(), order, generation, 0, true);
     // The new binding marked the live Chapter, and the Author Edit of the fixture marked it again.
     assert_eq!(work(&admin, &scope).await, vec![row(&one, 1, 2)]);
 
-    let command = prepend(&store, &chapter, ("b522", 2), 0, "新的一句。").await;
+    let command = prepend(&store, &chapter, ("f322", 2), 0, "新的一句。").await;
     store.apply_author_edit(&command).await.unwrap();
     assert_eq!(work(&admin, &scope).await, vec![row(&one, 1, 3)]);
 
@@ -204,20 +221,20 @@ async fn each_change_of_a_chapter_marks_its_work_in_the_transaction_of_the_chang
         &chapter.editor_session_id,
         frontier,
         &chapter.head,
-        "b523",
+        "f323",
     )
     .await;
     assert!(matches!(undone.outcome, TransitionOutcome::Applied(_)));
     assert_eq!(work(&admin, &scope).await, vec![row(&one, 1, 4)]);
 
     let (volume, tree) = volume_and_tree(&admin, &scope, &one).await;
-    let two = titled_chapter(&store, &scope, "b524", &volume, "第二章", tree).await;
+    let two = titled_chapter(&store, &scope, "f324", &volume, "第二章", tree).await;
     assert_eq!(
         work(&admin, &scope).await,
         vec![row(&one, 1, 4), row(&two, 2, 1)]
     );
 
-    let deleted = settle_delete_chapter(&store, &scope, "b525", &two, tree + 1).await;
+    let deleted = settle_delete_chapter(&store, &scope, "f325", &two, tree + 1).await;
     assert!(matches!(deleted.outcome, TransitionOutcome::Applied(_)));
     let delete_sequence = latest_forward(&admin, &scope).await;
     assert_eq!(
@@ -231,14 +248,24 @@ async fn each_change_of_a_chapter_marks_its_work_in_the_transaction_of_the_chang
         &chapter.editor_session_id,
         delete_sequence,
         &head(&admin, &one).await,
-        "b526",
+        "f326",
     )
     .await;
     assert!(matches!(restored.outcome, TransitionOutcome::Applied(_)));
-    assert_eq!(
-        work(&admin, &scope).await,
-        vec![row(&one, 1, 4), row(&two, 2, 3)]
-    );
+    let marked = vec![row(&one, 1, 4), row(&two, 2, 3)];
+    assert_eq!(work(&admin, &scope).await, marked);
+
+    // The binding stays after the deployment loses its embedding configuration or gets another
+    // Embedding Registration. Then an Author Edit changes the head and writes no mark.
+    let other = Some(&AGENT_PLAN_EMBEDDING_REGISTRATION);
+    for (registration, named) in [(None, ("f327", 3)), (other, ("f328", 4))] {
+        chapter.head = head(&admin, &one).await;
+        let deployment = store.clone().with_embedding_registration(registration);
+        let command = prepend(&deployment, &chapter, named, 0, "又一句。").await;
+        deployment.apply_author_edit(&command).await.unwrap();
+        assert_ne!(head(&admin, &one).await, chapter.head);
+        assert_eq!(work(&admin, &scope).await, marked);
+    }
 }
 
 #[tokio::test]
@@ -247,8 +274,8 @@ async fn one_claim_holds_the_work_after_the_quiet_time_and_its_steps_complete_it
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let (store, admin) = stores().await;
-    let mut chapter = chapter(&store, &admin, ["b53", "b54"], "b55", &texts()).await;
+    let (store, admin) = configured().await;
+    let mut chapter = chapter(&store, &admin, ["f33", "f34"], "f35", &texts()).await;
     let scope = chapter.scope.clone();
     park_other_work(&admin, &scope).await;
     // The quiet time of the Author Edit runs.
@@ -300,7 +327,7 @@ async fn one_claim_holds_the_work_after_the_quiet_time_and_its_steps_complete_it
     let other = ClaimedPassageIndex {
         project_scope: ProjectScope::new(
             scope.owner_user_id.clone(),
-            ProjectId::new("018f0000-0000-7001-8000-00000000b5ff"),
+            ProjectId::new("018f0000-0000-7001-8000-00000000f3ff"),
         ),
         ..second.clone()
     };
@@ -347,7 +374,7 @@ async fn one_claim_holds_the_work_after_the_quiet_time_and_its_steps_complete_it
 
     // An edit marks the Chapter again. The next work removes the row that is not current and
     // sends one request for the changed passage.
-    let command = prepend(&store, &chapter, ("b552", 2), 0, "新的一句。").await;
+    let command = prepend(&store, &chapter, ("f352", 2), 0, "新的一句。").await;
     store.apply_author_edit(&command).await.unwrap();
     chapter.head = head(&admin, &chapter.chapter_id).await;
     wake(&admin, &scope).await;
@@ -385,10 +412,10 @@ async fn a_request_with_no_vector_keeps_the_mark_and_the_next_try_waits_for_the_
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let (store, admin) = stores().await;
+    let (store, admin) = configured().await;
     let mut texts = texts();
     texts[4].push_str(EMBEDDING_REJECTION_MARKER);
-    let mut chapter = chapter(&store, &admin, ["b56", "b57"], "b58", &texts).await;
+    let mut chapter = chapter(&store, &admin, ["f36", "f37"], "f38", &texts).await;
     let scope = chapter.scope.clone();
     let id = chapter.chapter_id.clone();
     park_other_work(&admin, &scope).await;
@@ -409,7 +436,7 @@ async fn a_request_with_no_vector_keeps_the_mark_and_the_next_try_waits_for_the_
     let mut sequence = 2;
     for marker in ["", EMBEDDING_UNKNOWN_MARKER, EMBEDDING_NOT_SUBMITTED_MARKER] {
         if !marker.is_empty() {
-            let suffix = format!("b58{sequence}");
+            let suffix = format!("f38{sequence}");
             let command = prepend(&store, &chapter, (&suffix, sequence), 4, marker).await;
             store.apply_author_edit(&command).await.unwrap();
             chapter.head = head(&admin, &id).await;
@@ -442,16 +469,16 @@ async fn a_manuscript_that_exists_gets_its_work_in_chapter_order_with_the_first_
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let (store, admin) = stores().await;
+    let (store, admin) = configured().await;
     // A deployment with no embedding configuration makes no binding and writes no mark.
-    let (scope, one, run_id) = embedding_project(&store, &admin, ["b59", "b5a"], None).await;
+    let (scope, one, run_id) = embedding_project(&store, &admin, ["f39", "f3a"], None).await;
     complete(&store, &admin, &scope, &run_id).await;
     let (volume, tree) = volume_and_tree(&admin, &scope, &one).await;
-    let two = titled_chapter(&store, &scope, "b5b0", &volume, "第二章", tree).await;
-    let three = titled_chapter(&store, &scope, "b5b1", &volume, "第三章", tree + 1).await;
+    let two = titled_chapter(&store, &scope, "f3b0", &volume, "第二章", tree).await;
+    let three = titled_chapter(&store, &scope, "f3b1", &volume, "第三章", tree + 1).await;
     assert_eq!(work(&admin, &scope).await, Vec::new());
 
-    let run_id = admit_embedding_run(&store, &scope, &one, "b5c", FAKE).await;
+    let run_id = admit_embedding_run(&store, &scope, &one, "f3c", FAKE).await;
     complete(&store, &admin, &scope, &run_id).await;
     let live = |id: &str, order| (id.to_owned(), order, 1, 0, false);
     assert_eq!(
@@ -491,6 +518,7 @@ async fn a_manuscript_that_exists_gets_its_work_in_chapter_order_with_the_first_
         )
         .await
         .unwrap();
+    deploy(&admin).await;
     mark_passage_index_work(&admin, &scope, MarkedChapters::Changed(&[&one]))
         .await
         .unwrap();

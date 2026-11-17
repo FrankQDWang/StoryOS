@@ -211,10 +211,12 @@ impl ServerState {
             .allowed_origin
             .as_deref()
             .and_then(TupleOrigin::from_allowed_origin);
-        let project_store = config
-            .database_url
-            .as_ref()
-            .map(|url| PostgresProjectReader::new(url.expose_secret()));
+        // The Project commands mark the passage index work only with the embedding
+        // configuration of the deployment (ADR 0095 section 4).
+        let project_store = config.database_url.as_ref().map(|url| {
+            PostgresProjectReader::new(url.expose_secret())
+                .with_embedding_registration(config.embedding)
+        });
         let session_allowed_origins = config
             .session_bindings
             .iter()
