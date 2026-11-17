@@ -308,7 +308,16 @@ async fn decide_and_start_pass(
         .query_one(
             "SELECT EXISTS (SELECT 1 FROM storyos.memory_observations
                              WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
-                               AND state = 'waiting'),
+                               AND state = 'waiting' AND kind = 'observation'),
+                    EXISTS (SELECT 1 FROM storyos.memory_observations
+                             WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
+                               AND state = 'waiting' AND kind = 'conflict'),
+                    EXISTS (SELECT 1 FROM (SELECT DISTINCT ON (memory_entry_id) state
+                                             FROM storyos.memory_entry_versions
+                                            WHERE (owner_user_id, project_id) =
+                                                  ($1::text::uuid, $2::text::uuid)
+                                            ORDER BY memory_entry_id, memory_revision DESC) AS latest
+                             WHERE latest.state = 'current'),
                     EXISTS (SELECT 1 FROM storyos.memory_consolidation_passes
                              WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
                                AND outcome IS NULL)",
@@ -318,7 +327,9 @@ async fn decide_and_start_pass(
         .map_err(read_error)?;
     let facts = ConsolidationFacts {
         observation_waits: row.get(/*idx*/ 0),
-        pass_in_progress: row.get(/*idx*/ 1),
+        conflict_waits: row.get(/*idx*/ 1),
+        entry_current: row.get(/*idx*/ 2),
+        pass_in_progress: row.get(/*idx*/ 3),
     };
     if let Err(skip) = storyos_core::decide_consolidation(&facts) {
         return Ok(MemoryWorkOutcome::PassSkipped(skip));
