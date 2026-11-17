@@ -178,6 +178,7 @@ mod open_block_proposal;
 mod open_proposal_list;
 mod ordinary_passage_targets;
 mod passage_collection;
+mod passage_index_work;
 mod passage_ranking;
 mod passage_vectors;
 mod pause_agent_run;
@@ -731,7 +732,7 @@ impl PostgresProjectReader {
 
     /// The Embedding Registration of the deployment. Each Project command transaction has its
     /// revision in the transaction setting `storyos.embedding_registration`, and the Tool
-    /// Exposure and the hybrid search read it there.
+    /// Exposure, the hybrid search, and the marks of the passage index work read it there.
     pub fn with_embedding_registration(
         mut self,
         registration: Option<&'static storyos_core::EmbeddingRegistration>,

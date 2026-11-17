@@ -208,7 +208,7 @@ impl ProjectCommand for CreateAgentRunInput {
         if let Some(registration) = embedding {
             crate::project_embedding_binding::insert_embedding_binding(
                 client,
-                envelope,
+                &envelope.project_scope,
                 registration,
             )
             .await
