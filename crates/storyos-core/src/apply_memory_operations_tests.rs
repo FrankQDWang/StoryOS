@@ -2,8 +2,9 @@ use serde_json::{Value, json};
 
 use super::{MemoryOperationCandidate, PassFacts, PassMemoryEntry, intake, settle_operations_call};
 use crate::{
-    ConsolidationOutcome, CurrentMemoryEntry, IntakeRefusal, MemoryDeleteMark, MemoryEntryOrigin,
-    MemoryEntryState, MemoryEntryType, MemorySourceReference, MemoryWriteAction, PassObservation,
+    ConsolidationOutcome, CurrentMemoryEntry, IntakeRefusal, MemoryConflictFlag, MemoryDeleteMark,
+    MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference, MemoryWriteAction,
+    PassObservation,
 };
 
 fn entry(number: u64, origin: MemoryEntryOrigin, title: &str) -> PassMemoryEntry {
@@ -72,6 +73,13 @@ fn delete(entry: u64) -> Value {
     })
 }
 
+fn flag(entry: u64, reason: &str, observations: Value) -> Value {
+    json!({
+        "action": "flag_conflict", "entry": entry, "entries": null, "type": null, "title": null,
+        "description": null, "text": null, "observations": observations, "reason": reason
+    })
+}
+
 /// The decision of each operation: the action, the number, the origin, and the count of the
 /// sources of an admitted operation, and the numbers that a merge deleted, or the label of a
 /// refusal.
@@ -108,7 +116,10 @@ fn the_intake_needs_each_key_and_refuses_an_unstorable_text() {
     let item = &super::parameters()["properties"]["operations"]["items"]["properties"];
     assert_eq!(
         (item["type"].get("enum"), &item["action"]["enum"]),
-        (None, &json!(["create", "update", "merge", "delete"]))
+        (
+            None,
+            &json!(["create", "update", "merge", "delete", "flag_conflict"])
+        )
     );
     let mut partial = delete(1);
     partial.as_object_mut().unwrap().remove("reason");
@@ -425,7 +436,8 @@ fn a_delete_mark_refuses_its_type_and_title() {
 }
 
 /// The entry of the author keeps its text: each operation kind that names it is refused, and a
-/// create with its type and its title is refused by the write rule.
+/// create with its type and its title is refused by the write rule. A conflict flag is the one
+/// kind that the Host admits, and its version has the values of the entry.
 #[test]
 fn no_operation_changes_an_entry_of_the_author() {
     let entries = [
@@ -439,19 +451,127 @@ fn no_operation_changes_an_entry_of_the_author() {
         update(1, "阿青"),
         merge(json!([2, 1]), "阿青"),
         delete(1),
+        flag(1, "与第三章不符。", json!([1])),
     ];
-    let refusals: Vec<Vec<String>> = kinds
+    let refusals: Vec<String> = kinds
         .iter()
-        .map(|kind| decided(&operations(json!([kind])), &facts))
+        .flat_map(|kind| decided(&operations(json!([kind])), &facts))
         .collect();
+    let flagged = settle_operations_call(&operations(json!([&kinds[4]])), &facts);
+    let Ok(admitted) = &flagged.decisions[0] else {
+        panic!("the flag is admitted");
+    };
+    let version = &admitted.version;
 
     assert_eq!(
-        refusals,
-        [
-            ["memory_entry_exists"],
-            ["author_entry"],
-            ["author_entry"],
-            ["author_entry"]
-        ]
+        (
+            refusals,
+            [&version.title, &version.description, &version.text]
+        ),
+        (
+            [
+                "memory_entry_exists",
+                "author_entry",
+                "author_entry",
+                "author_entry",
+                "Change 1 author_request 0",
+            ]
+            .map(String::from)
+            .to_vec(),
+            [
+                &entries[0].entry.title,
+                &entries[0].entry.description,
+                &entries[0].entry.text
+            ]
+        )
+    );
+}
+
+/// A flag version has the values of the version before it, the trimmed reason, and the source of
+/// the first observation. A flag needs a current entry of the author and one or more
+/// observations, and no other value. Its reason is one line at most as long as a description, and
+/// a line break at an end of the reason also refuses the flag. It names its
+/// entry for the operations after it.
+#[test]
+fn a_conflict_flag_keeps_the_entry_and_each_refusal_of_a_flag() {
+    let mut entries: Vec<PassMemoryEntry> = (1..=10)
+        .map(|number| {
+            entry(
+                number,
+                MemoryEntryOrigin::AuthorRequest,
+                &format!("条{number}"),
+            )
+        })
+        .collect();
+    entries[1].origin = MemoryEntryOrigin::Chapter;
+    entries[2].origin = MemoryEntryOrigin::Conversation;
+    let observations = [observation("conversation"), observation("chapter")];
+    let facts = pass(&entries, &observations, &[]);
+    let mut titled = flag(8, "不符。", json!([1]));
+    titled["title"] = json!("条8");
+    let candidates = operations(json!([
+        flag(1, " 与第三章不符。 ", json!([2, 1])),
+        update(1, "条1"),
+        flag(2, "不符。", json!([1])),
+        flag(3, "不符。", json!([1])),
+        flag(99, "不符。", json!([1])),
+        flag(4, &"长".repeat(101), json!([1])),
+        flag(5, &"长".repeat(100), json!([1])),
+        flag(6, "不符。\n第二行", json!([1])),
+        flag(9, "不符。\n", json!([1])),
+        flag(10, "\r\n不符。", json!([1])),
+        flag(7, "不符。", json!([])),
+        titled,
+    ]));
+    let settlement = settle_operations_call(&candidates, &facts);
+    let Ok(admitted) = &settlement.decisions[0] else {
+        panic!("the first flag is admitted");
+    };
+    let mut expected = entries[0].entry.clone();
+    expected.version = 2;
+
+    assert_eq!(
+        (
+            decided(&candidates, &facts),
+            (
+                admitted.version.state,
+                admitted.version.entry_type,
+                [
+                    &admitted.version.title,
+                    &admitted.version.description,
+                    &admitted.version.text
+                ],
+                admitted.version.version
+            ),
+            admitted.version.flag.clone()
+        ),
+        (
+            [
+                "Change 1 author_request 0",
+                "entry_named_twice",
+                "flag_needs_author_entry",
+                "flag_needs_author_entry",
+                "memory_entry_not_found",
+                "memory_entry_too_long",
+                "Change 5 author_request 0",
+                "memory_entry_invalid",
+                "memory_entry_invalid",
+                "memory_entry_invalid",
+                "memory_entry_invalid",
+                "memory_entry_invalid",
+            ]
+            .map(String::from)
+            .to_vec(),
+            (
+                MemoryEntryState::Current,
+                expected.entry_type,
+                [&expected.title, &expected.description, &expected.text],
+                expected.version
+            ),
+            Some(MemoryConflictFlag {
+                reason: "与第三章不符。".to_owned(),
+                source: observations[1].source.clone(),
+            })
+        )
     );
 }

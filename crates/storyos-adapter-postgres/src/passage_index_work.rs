@@ -127,6 +127,39 @@ async fn hold_fence(
     Ok(held == 1)
 }
 
+/// The condition of a work row that a claim can take: `$1` is the Embedding Registrations and
+/// `$2` is the cut revision. The read of waiting work and the claim use this one condition.
+macro_rules! waiting_work {
+    () => {
+        "to_regclass('storyos.passage_vectors') IS NOT NULL
+         AND work.embedding_registration_revision::text = ANY($1::text[])
+         AND (work.mark_generation > work.completed_generation
+              OR work.indexed_cut_revision IS DISTINCT FROM $2)
+         AND work.not_before <= clock_timestamp()
+         AND (work.lease_expires_at IS NULL OR work.lease_expires_at <= clock_timestamp())"
+    };
+}
+
+/// Whether a work row that a claim can take is in the worker scope of `client`.
+async fn passage_index_row_waits(
+    client: &impl tokio_postgres::GenericClient,
+    registration_revisions: &[&str],
+    cut_revision: &str,
+) -> Result<bool, ProjectReadError> {
+    Ok(client
+        .query_one(
+            concat!(
+                "SELECT EXISTS (SELECT 1 FROM storyos.passage_index_work AS work WHERE ",
+                waiting_work!(),
+                ")"
+            ),
+            &[&registration_revisions, &cut_revision],
+        )
+        .await
+        .map_err(read_error)?
+        .get(/*idx*/ 0))
+}
+
 /// Claims the next pending work row in the worker scope of `client`, after its quiet time.
 pub(crate) async fn claim_passage_index_row(
     client: &impl tokio_postgres::GenericClient,
@@ -136,16 +169,13 @@ pub(crate) async fn claim_passage_index_row(
 ) -> Result<Option<ClaimedPassageIndex>, ProjectReadError> {
     let claimed = client
         .query_opt(
-            "WITH next_work AS (
+            concat!(
+                "WITH next_work AS (
                    SELECT owner_user_id, project_id, chapter_id
                      FROM storyos.passage_index_work AS work
-                    WHERE to_regclass('storyos.passage_vectors') IS NOT NULL
-                      AND work.embedding_registration_revision::text = ANY($1::text[])
-                      AND (work.mark_generation > work.completed_generation
-                           OR work.indexed_cut_revision IS DISTINCT FROM $2)
-                      AND work.not_before <= clock_timestamp()
-                      AND (work.lease_expires_at IS NULL
-                           OR work.lease_expires_at <= clock_timestamp())
+                    WHERE ",
+                waiting_work!(),
+                "
                     ORDER BY work.not_before, work.chapter_order, work.chapter_id
                     FOR UPDATE SKIP LOCKED
                     LIMIT 1
@@ -159,7 +189,8 @@ pub(crate) async fn claim_passage_index_row(
                         (next_work.owner_user_id, next_work.project_id, next_work.chapter_id)
               RETURNING work.owner_user_id::text, work.project_id::text, work.chapter_id::text,
                         work.embedding_registration_revision::text, work.mark_generation,
-                        work.fence_token",
+                        work.fence_token"
+            ),
             &[&registration_revisions, &cut_revision, &seconds(lease)],
         )
         .await
@@ -252,6 +283,19 @@ impl PostgresProjectReader {
 }
 
 impl PassageIndexWorkStore for PostgresProjectReader {
+    async fn passage_index_work_waits(
+        &self,
+        registration_revisions: &[&str],
+        cut_revision: &str,
+    ) -> Result<bool, ProjectReadError> {
+        let client = self.connect().await?;
+        client.batch_execute("BEGIN").await.map_err(read_error)?;
+        set_worker_scope(&*client).await?;
+        let waits = passage_index_row_waits(&*client, registration_revisions, cut_revision).await?;
+        client.batch_execute("COMMIT").await.map_err(read_error)?;
+        Ok(waits)
+    }
+
     async fn claim_next_passage_index_work(
         &self,
         registration_revisions: &[&str],

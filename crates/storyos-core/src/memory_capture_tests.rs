@@ -145,9 +145,10 @@ fn the_outcome_of_a_capture_comes_from_the_facts_of_its_run() {
     );
 }
 
-/// The first RunStep of a capture selects three items after its input: the Memory Index at the
-/// head revision of its start, the Chapter list, and the delete marks. This is also true when no
-/// Conversation Memory Settings permit a read. The next RunStep keeps them. A Project with none of them adds no item.
+/// The first RunStep of a capture selects three items after its input. They are the Memory Index
+/// at the head revision of its start, the Chapter list, and the delete marks. This is also true
+/// when no Conversation Memory Settings permit a read. The next RunStep keeps them. A Project with
+/// none of them adds no item.
 #[test]
 fn a_capture_gets_its_reference_items_after_its_input_and_keeps_them() {
     let assembly = |input: &str| {

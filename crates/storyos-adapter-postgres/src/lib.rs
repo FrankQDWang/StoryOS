@@ -173,6 +173,7 @@ mod manuscript_search;
 mod manuscript_tree;
 mod memory_capture;
 mod memory_consolidation;
+mod memory_consolidation_versions;
 mod memory_entries;
 mod memory_entry_list;
 mod memory_work_schedule;
