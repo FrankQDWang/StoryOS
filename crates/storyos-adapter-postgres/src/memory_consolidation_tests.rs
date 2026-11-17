@@ -12,7 +12,7 @@ use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::stores;
 use crate::memory_capture::loop_tests::{record, requests, script};
 use crate::memory_capture::tests::{project, run_capture, start};
-use crate::memory_entries::tests::write_versions;
+use crate::memory_entries::tests::{archived_rows, write_versions};
 
 /// Settles one capture of `source` with the observations `observations`.
 pub(super) async fn capture(
@@ -487,5 +487,72 @@ async fn each_refusal_of_the_table_refuses_only_its_operation() {
             Some(1),
             before
         )
+    );
+}
+
+/// The values of `keys` of each row of `rows`, sorted. The rows come from an archive file.
+fn archived_values(rows: &[Value], keys: &[&str]) -> Value {
+    let mut values: Vec<Value> = rows
+        .iter()
+        .map(|row| Value::Array(keys.iter().map(|key| row[*key].clone()).collect()))
+        .collect();
+    values.sort_by_key(Value::to_string);
+    Value::Array(values)
+}
+
+/// S7-E1b: the Project Export Archive holds each consolidation pass and each Conversation Memory
+/// Settings revision of the Project. No other archive test names these two tables. The lead of
+/// this test is `a2`.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_archive_holds_the_passes_and_the_conversation_memory_settings() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, _, source) = project(&store, &admin, "a24").await;
+    let fact = json!([{"type": "character", "title": "林舟", "text": "船夫。"}]);
+    capture(&store, &admin, &scope, &source, fact).await;
+    let pass = run_pass(&store, &admin, &scope).await;
+    let tables = [
+        "memory_consolidation_passes",
+        "conversation_memory_settings",
+    ];
+    let [passes, settings] = archived_rows(&store, &scope, "a2", tables).await;
+    let stored = |sql: &'static str| {
+        let admin = &admin;
+        let project = scope.project_id.as_ref().to_owned();
+        async move {
+            let row = admin.query_one(sql, &[&project]).await.unwrap();
+            serde_json::from_str::<Value>(row.get(/*idx*/ 0)).unwrap()
+        }
+    };
+    let stored_passes = stored(
+        "SELECT jsonb_agg(jsonb_build_array(pass_id, run_id, outcome) ORDER BY pass_id)::text
+           FROM storyos.memory_consolidation_passes WHERE project_id = $1::text::uuid",
+    )
+    .await;
+    let stored_settings = stored(
+        "SELECT jsonb_agg(jsonb_build_array(conversation_id, memory_settings_revision,
+                  use_enabled, contribution_enabled) ORDER BY conversation_id, memory_settings_revision)::text
+           FROM storyos.conversation_memory_settings WHERE project_id = $1::text::uuid",
+    )
+    .await;
+
+    assert_eq!(
+        (
+            archived_values(&passes, &["pass_id", "run_id", "outcome"]),
+            archived_values(
+                &settings,
+                &[
+                    "conversation_id",
+                    "memory_settings_revision",
+                    "use_enabled",
+                    "contribution_enabled"
+                ]
+            ),
+            stored_passes[0][1].clone(),
+        ),
+        (stored_passes, stored_settings, json!(pass.run_id))
     );
 }
