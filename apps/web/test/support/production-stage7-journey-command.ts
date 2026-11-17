@@ -63,8 +63,9 @@ async function sent(runId: string, sourceClass: string): Promise<string[]> {
 /**
  * ADR 0094, ADR 0095, and the author journey S7-JRN-001: one Project does each step in order, in the production
  * client, with the fake destination. The journey writes no product row directly. Each SQL statement of the test
- * administrator connection makes a row of the background work due, ends the quiet time of the index work, or parks
- * the rows of the Project at the end.
+ * administrator connection makes a row of the background work due, ends the quiet time of the index work, moves the
+ * start time of the last Chapter capture back by the rate interval, or parks the rows of the Project at the end.
+ * The store tests of S7-D5 prove the rate, so the journey has no wait for a time of the product.
  */
 export async function verifyProductionStage7Journey(context: BrowserContext): Promise<void> {
   const started: (() => Promise<unknown>)[] = [];
@@ -99,9 +100,19 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     const current = page.locator("[data-assistant-current-run]");
     const typeInChapter = async (chapterId: string, lines: string[]) => {
       const button = page.locator(`button[data-chapter-id="${chapterId}"]`);
-      await button.click();
-      // The editor shows the Chapter before the caret goes into its text.
-      await page.locator(`button[data-chapter-id="${chapterId}"][aria-current="true"]`).waitFor();
+      // A click while the panel renders a Run can be lost, so the click repeats until the Chapter is current. The
+      // editor shows the Chapter before the caret goes into its text.
+      await expect(async () => {
+        await button.click();
+        await expect(button).toHaveAttribute("aria-current", "true", { timeout: 2_000 });
+      }).toPass({ timeout: 20_000 }).catch(async (error: unknown) => {
+        throw new Error(`the Chapter did not open: ${JSON.stringify({
+          alerts: await page.locator('[role="alert"]').allTextContents(),
+          title: await page.locator(".editor-panel h2").allTextContents(),
+          save: await page.locator("[data-save-state]").evaluateAll((items) => items.map((item) =>
+            `${item.getAttribute("data-save-state")}/${item.getAttribute("data-unsettled-intent-count")}`)),
+        })}`, { cause: error });
+      });
       await expect(page.locator(".editor-panel h2")).toHaveText(await button.innerText());
       await page.locator(SAVED).waitFor();
       // The caret can be at the start of the text after the Chapter opens. An Enter before and after each line puts
@@ -231,13 +242,16 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     assert.equal(await value(`SELECT bool_and(result_text LIKE '%阿禾在渡口卖鱼%')::text FROM storyos.tool_calls
       WHERE run_id = '${searched.runId}'::uuid AND function_name LIKE '%search_manuscript'`), "true");
 
-    // 6. The Chapter rate lets the next Chapter capture start 2 minutes after the last start. Then the author writes
-    // a conflict in Chapter A. Statement 3 makes its row due, and statement 4 makes the pass due before its rate.
-    // Chapter A has no script line before it: the fake model calls the script lines of a capture input in order.
-    const wait = Number(await value(`SELECT greatest(0, ceil(extract(epoch FROM max(started_at) + interval '2 minutes'
-        - clock_timestamp()) * 1000))::text FROM storyos.memory_captures
-      WHERE project_id = '${project}'::uuid AND source_kind = 'chapter'`));
-    await new Promise((resolve) => setTimeout(resolve, wait + 1000));
+    // 6. The Chapter rate lets the next Chapter capture start 2 minutes after the last start. Statement 3 moves that
+    // start back by the rate interval, and the time stays before its settlement. The author writes a conflict in
+    // Chapter A. Statement 4 makes its row due, and statement 5 makes the pass due before its rate. Chapter A has no
+    // script line before it: the fake model calls the script lines of a capture input in order.
+    await page.goto(workspace);
+    await page.locator('[data-assistant-availability="available"]').waitFor();
+    assert.equal(await value(`WITH moved AS (UPDATE storyos.memory_captures SET started_at = started_at - interval '2 minutes'
+      WHERE capture_id = (SELECT capture_id FROM storyos.memory_captures WHERE project_id = '${project}'::uuid
+                            AND source_kind = 'chapter' ORDER BY started_at DESC LIMIT 1)
+      RETURNING 1) SELECT count(*)::text FROM moved`), "1");
     await typeInChapter(setup.chapterId, ["林舟把铜铃丢进了河里。", capture([{ kind: "conflict", entry: 1,
       reason: CONFLICT_REASON, type: null, title: null, text: null }])]);
     await committed(setup.chapterId, "conflict");
@@ -270,8 +284,8 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     await expect(bell.locator('[data-memory-entry-flag="flagged"]')).toHaveCount(0);
     assert.equal(await bell.locator(".memory-entry-text").textContent(), CHANGED_BELL);
 
-    // 7. The author deletes entry 2. A later capture asks for it again, statement 5 makes the Conversation row due,
-    // and statement 6 makes the pass due. The pass refuses the create, and entry 2 stays deleted.
+    // 7. The author deletes entry 2. A later capture asks for it again, statement 6 makes the Conversation row due,
+    // and statement 7 makes the pass due. The pass refuses the create, and entry 2 stays deleted.
     await pair.locator("[data-memory-delete]").click();
     await pair.locator("[data-memory-delete-confirm]").click();
     await expect(page.locator('[data-memory-group="relationship"]')).toHaveCount(0);
@@ -293,7 +307,7 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     await expect(page.locator('[data-memory-group="relationship"]')).toHaveCount(0);
     assert.deepEqual(errors, []);
 
-    // Statement 7 parks each row of the background work of the Project, so that no later file starts its work.
+    // Statement 8 parks each row of the background work of the Project, so that no later file starts its work.
     await value(`UPDATE storyos.memory_work_schedules SET due_at = NULL WHERE project_id = '${project}'::uuid`);
     assert.equal(await value(`SELECT ((SELECT count(*) FROM storyos.memory_work_schedules
         WHERE project_id = '${project}'::uuid AND due_at IS NOT NULL)
