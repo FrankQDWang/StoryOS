@@ -107,6 +107,11 @@ impl ModelProviderAdapter for FakeDestination {
         if matches!(create.purpose, CreatePurpose::MemoryCapture(_)) && !create.capture_complete() {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
+        // The real route refuses a pass request with no observations item, no output Tool, or a
+        // prior response reference.
+        if create.purpose == CreatePurpose::MemoryConsolidation && !create.pass_complete() {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        }
         let mapping_revision = HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
         let mut wire = current_input(create);
         wire["mapping_revision"] = serde_json::json!(mapping_revision);
@@ -411,3 +416,7 @@ mod stub_rejection_tests;
 #[cfg(test)]
 #[path = "capture_refusal_tests.rs"]
 mod capture_refusal_tests;
+
+#[cfg(test)]
+#[path = "pass_refusal_tests.rs"]
+mod pass_refusal_tests;
