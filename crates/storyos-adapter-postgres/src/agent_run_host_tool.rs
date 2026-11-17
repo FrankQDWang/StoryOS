@@ -53,8 +53,8 @@ pub(crate) async fn execute(
         ToolIntake::SearchManuscript { query } => {
             return crate::agent_run_search_manuscript::execute(client, claim, row, query).await;
         }
-        ToolIntake::HybridSearchManuscript { terms, .. } => {
-            return crate::agent_run_hybrid_search::execute(client, claim, row, terms).await;
+        ToolIntake::HybridSearchManuscript { .. } => {
+            return crate::agent_run_hybrid_search::execute(client, claim, row).await;
         }
         ToolIntake::WriteMemory(write) => {
             return crate::agent_run_write_memory::execute(client, claim, row, write).await;

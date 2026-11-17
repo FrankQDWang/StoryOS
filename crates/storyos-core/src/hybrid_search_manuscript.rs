@@ -6,9 +6,9 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
-    ChapterPassages, IntakeRefusal, PassageTerms, TOOL_RESULT_TEXT_MAX_BYTES, ToolIntake,
-    ToolOperation, ToolResultText, ToolSpec, admit_passage_ranking, exact_term_list,
-    fuse_passage_lists,
+    ChapterPassages, EmbeddingRefusal, IntakeRefusal, NearestPassage, PassageTerms,
+    TOOL_RESULT_TEXT_MAX_BYTES, ToolIntake, ToolOperation, ToolResultText, ToolSpec,
+    admit_passage_ranking, exact_term_list, fuse_passage_lists, vector_list,
 };
 
 pub const HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC: ToolSpec = ToolSpec {
@@ -73,11 +73,18 @@ pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HybridSearchRefusal {
     /// At the call, the deployment has no embedding configuration or the database has no vector
-    /// store.
+    /// store, or the admission refuses the embedding request of the question (ADR 0095 section
+    /// 3).
     Unavailable,
 }
 
 impl HybridSearchRefusal {
+    /// The refusal of a call whose embedding request the admission refused. Each admission
+    /// refusal gives `Unavailable`, and the Embedding Attempt is not written.
+    pub fn of_embedding(_refusal: EmbeddingRefusal) -> Self {
+        Self::Unavailable
+    }
+
     /// The stable label of the refusal, for the `refusal` of the ToolCall row.
     pub fn label(self) -> &'static str {
         match self {
@@ -110,23 +117,24 @@ pub fn admit_hybrid_search(
 pub const NO_SEARCH_BY_MEANING: &str = "The search by meaning was not available for this call, so \
 this result has only the passages that have the exact terms.";
 
-/// The result of a call with the terms `terms` and no vector of the question, for the current
-/// passages `chapters`: the exact-term list of S7-C3a, with `NO_SEARCH_BY_MEANING` as its first
-/// line (ADR 0095 section 1).
+/// The result of a call with the terms `terms` for the current passages `chapters` (ADR 0095
+/// section 1). With the nearest vector rows of the question, the exact-term list and the vector
+/// list are joined with Reciprocal Rank Fusion. With no vector of the question, because the
+/// embedding request failed, the result is the exact-term list with `NO_SEARCH_BY_MEANING` as its
+/// first line.
 pub fn hybrid_search_result(
     chapters: &[ChapterPassages],
+    nearest: Option<&[NearestPassage]>,
     terms: &PassageTerms,
     call_id: &str,
 ) -> ToolResultText {
     let exact = exact_term_list(chapters, terms);
-    let ranked = fuse_passage_lists(&[&exact]);
-    admit_passage_ranking(
-        chapters,
-        &ranked,
-        terms,
-        Some(NO_SEARCH_BY_MEANING),
-        call_id,
-    )
+    let (vector, notice) = match nearest {
+        Some(nearest) => (vector_list(chapters, nearest), None),
+        None => (Vec::new(), Some(NO_SEARCH_BY_MEANING)),
+    };
+    let ranked = fuse_passage_lists(&[&exact, &vector]);
+    admit_passage_ranking(chapters, &ranked, terms, notice, call_id)
 }
 
 #[cfg(test)]

@@ -181,7 +181,9 @@ pub use memory_entries::{
     MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem, list_memory_entries,
 };
 pub use memory_work_schedule::{ClaimedMemoryWork, MemoryWorkOutcome, MemoryWorkScheduleStore};
-pub use model_gateway::{complete_agent_run, complete_agent_run_with_tools};
+pub use model_gateway::{
+    complete_agent_run, complete_agent_run_with_destinations, complete_agent_run_with_tools,
+};
 pub use model_gateway_ports::{
     AbortRequest, AbortTicket, CacheSetting, CacheUse, CommittedCancellation,
     ContractFaultObserver, ContractFaultPoint, CreatePurpose, CreateRequest, CredentialReference,
@@ -269,8 +271,8 @@ pub use set_current_chapter::{
     CurrentChapterSelected, SetCurrentChapterInput, SetCurrentChapterSettlement,
 };
 pub use tool_gateway_ports::{
-    NoToolDestination, ToolCallRequest, ToolDestinationAdapter, ToolDispatchClaim,
-    ToolDispatchRecord, ToolDispatchStore,
+    NoToolDestination, QuestionSearch, ToolCallRequest, ToolDestinationAdapter, ToolDispatchClaim,
+    ToolDispatchRecord, ToolDispatchStore, ToolWork,
 };
 pub use undo_latest_author_action::{
     AuthorUndoFrontierPosition, UndoApplied, UndoLatestAuthorActionInput,
