@@ -222,3 +222,39 @@ async fn an_empty_list_settles_the_capture_with_no_observation_after_each_refusa
         json!(["completed", "settled", "no_observation", []])
     );
 }
+
+/// The RunStep limit of ADR 0091 bounds the loop of a capture: after 23 refused calls, the request
+/// of the last RunStep sends `none`, the Host executes no call of it, and the Run ends with 24
+/// decision requests. S7-D3c gives the capture its failure outcome.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_last_run_step_of_a_capture_sends_none_and_executes_no_call() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, _, source) = project(&store, &admin, "fdb").await;
+    let refused_calls = vec![("propose_edit", json!({"reason": "改写"})); 23];
+    let started = start(&store, &scope, &source, &script(&refused_calls))
+        .await
+        .unwrap();
+    complete(&store, &admin, &scope, &started.run_id).await;
+
+    let calls = calls(&admin, &started.run_id).await;
+    let states: Vec<Value> = calls.iter().map(|call| call[2].clone()).collect();
+    assert_eq!(states, vec![json!("refused"); 23]);
+    let requests = requests(&admin, &started.run_id).await;
+    let choices: Vec<Value> = requests
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r[1].clone())
+        .collect();
+    let mut expected = vec![json!("required"); 23];
+    expected.push(json!("none"));
+    assert_eq!(choices, expected);
+    assert_eq!(
+        settlement(&admin, &started.run_id).await,
+        json!(["completed", "running", null, []])
+    );
+}

@@ -68,13 +68,16 @@ impl AgentRunKind {
         self.has_conversation()
     }
 
-    /// The `tool_choice` of each request of a Run of the kind, when the kind decides it. A
-    /// background Run has no `finish` call, so each request requires a call, and its output call
-    /// ends it. The finish rule decides the `tool_choice` of a Run of the author.
-    pub fn fixed_tool_choice(self) -> Option<crate::ToolChoice> {
+    /// The `tool_choice` of the request of a RunStep at `limit`, when the kind decides it. A
+    /// background Run has no `finish` call, so each request before the last RunStep requires a
+    /// call, and its output call ends it. The last RunStep sends `none`, and the Host executes no
+    /// call of it (ADR 0091). The finish rule decides the `tool_choice` of a Run of the author.
+    pub fn fixed_tool_choice(self, limit: crate::RunStepLimit) -> Option<crate::ToolChoice> {
         match self {
             Self::Author => None,
-            Self::MemoryCapture | Self::MemoryConsolidation => Some(crate::ToolChoice::Required),
+            Self::MemoryCapture | Self::MemoryConsolidation => {
+                Some(crate::step_tool_choice(limit, &[]))
+            }
         }
     }
 }

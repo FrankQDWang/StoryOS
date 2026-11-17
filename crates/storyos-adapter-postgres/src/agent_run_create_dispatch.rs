@@ -200,7 +200,8 @@ pub(crate) async fn create_request(
     // A Tool qualification probe settles after its one response, so the finish rule does not
     // apply to it, and its probe body sends no `tool_choice` (ADR 0049). A capture has no
     // `finish` call: each of its requests requires a call (ADR 0094 section 5).
-    let tool_choice = match (&probe, run.kind.fixed_tool_choice()) {
+    let limit = crate::agent_run_finish_rule::run_step_limit(run)?;
+    let tool_choice = match (&probe, run.kind.fixed_tool_choice(limit)) {
         (Some(_), _) => storyos_core::ToolChoice::None,
         (None, Some(fixed)) => fixed,
         (None, None) => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
