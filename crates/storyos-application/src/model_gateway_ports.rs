@@ -263,11 +263,11 @@ impl CreateRequest {
         input && output
     }
 
-    /// Whether a pass request has the form of each pass mapping: an entries item or an observations
-    /// item, the output Tool, and no prior response reference (ADR 0094 section 6). A pass with
-    /// only conflict items sends the entries and no observation (ADR 0094 section 7). A pass has
-    /// one RunStep, so it continues no response. An adapter refuses a pass request without this
-    /// form before dispatch.
+    /// Whether a pass request has the form of each pass mapping (ADR 0094 section 6). It has an
+    /// entries item or an observations item, the output Tool, and no prior response reference. A
+    /// pass with only conflict items sends the entries and no observation (ADR 0094 section 7). A
+    /// pass has one RunStep, so it continues no response. An adapter refuses a pass request
+    /// without this form before dispatch.
     pub fn pass_complete(&self) -> bool {
         let observations = (self.context.iter()).any(|item| {
             matches!(

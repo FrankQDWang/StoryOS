@@ -117,9 +117,12 @@ pub fn consolidation_due(
 /// The facts of one claimed consolidation row of a Project.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConsolidationFacts {
-    /// An observation of a request waits in the Project, or a conflict item waits and the Project
-    /// has a current entry.
+    /// An observation of a request waits in the Project. A conflict item is not one.
     pub observation_waits: bool,
+    /// A conflict item waits in the Project.
+    pub conflict_waits: bool,
+    /// The Project has a current entry.
+    pub entry_current: bool,
     /// A pass of the Project is in progress.
     pub pass_in_progress: bool,
 }
@@ -148,7 +151,9 @@ impl ConsolidationSkip {
 /// Decides whether a claimed consolidation row starts one pass. `Ok`: one pass starts, when the
 /// admission of the start permits it.
 pub fn decide_consolidation(facts: &ConsolidationFacts) -> Result<(), ConsolidationSkip> {
-    if !facts.observation_waits {
+    // A pass with only conflicts sends the entries, so it needs a current entry (ADR 0094
+    // section 7). With no entry, the conflicts wait.
+    if !(facts.observation_waits || (facts.conflict_waits && facts.entry_current)) {
         return Err(ConsolidationSkip::NothingWaits);
     }
     if facts.pass_in_progress {

@@ -213,20 +213,6 @@ async fn a_conflict_flags_only_an_entry_of_its_own_project() {
     );
 }
 
-/// The source classes of the decision Context Assembly of the Run `run_id`.
-async fn request_classes(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_path_query_array(payload, '$.selected[*].source_class')::text
-               FROM storyos.context_assembly_manifests
-              WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
-}
-
 /// A pass with only a conflict item sends the entries and no observation. The model gives an
 /// empty list, and the Host writes the flag after it, so the pass is `applied`.
 #[tokio::test]
@@ -240,10 +226,21 @@ async fn a_pass_with_only_a_conflict_sends_the_entries_and_flags_the_entry() {
     seed(&admin, &scope, &[(1, "other", "author_request", "阿青")]).await;
     capture(&store, &admin, &scope, &source, json!([conflict(1, "甲")])).await;
     let started = run_pass(&store, &admin, &scope).await;
+    // The source classes of the decision Context Assembly of the pass.
+    let classes: String = admin
+        .query_one(
+            "SELECT jsonb_path_query_array(payload, '$.selected[*].source_class')::text
+               FROM storyos.context_assembly_manifests
+              WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
+            &[&started.run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
 
     assert_eq!(
         (
-            request_classes(&admin, &started.run_id).await,
+            serde_json::from_str::<Value>(&classes).unwrap(),
             settled(&admin, &started.run_id).await,
             flag_lines(&admin, &scope).await[1].clone()
         ),
@@ -255,8 +252,9 @@ async fn a_pass_with_only_a_conflict_sends_the_entries_and_flags_the_entry() {
     );
 }
 
-/// When only conflicts wait and the Project has no current entry, the claim of the consolidation
-/// row starts no pass: no Run and no pass row, the conflict waits, and the due time is empty.
+/// Only conflicts wait, and the Project has no current entry. Then the claim of the consolidation
+/// row starts no pass. There is no Run and no pass row, the conflict waits, and the due time is
+/// empty.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn no_pass_starts_for_conflicts_when_the_project_has_no_current_entry() {

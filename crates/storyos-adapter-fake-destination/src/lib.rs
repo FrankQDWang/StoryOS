@@ -107,8 +107,8 @@ impl ModelProviderAdapter for FakeDestination {
         if matches!(create.purpose, CreatePurpose::MemoryCapture(_)) && !create.capture_complete() {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
-        // The real route refuses a pass request with no observations item, no output Tool, or a
-        // prior response reference.
+        // The real route refuses a pass request with no entries item and no observations item, no
+        // output Tool, or a prior response reference.
         if create.purpose == CreatePurpose::MemoryConsolidation && !create.pass_complete() {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
