@@ -6,8 +6,8 @@ import { afterAll, test } from "vitest";
 import * as client from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateEditorSessionResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { bootProtectedWebClient } from "../../src/boot.ts";
-import { BINDING, USER_A, addVolume, createProject, createStory, drainLeftoverWork, freshNamespace, id, openProposal,
-  problemOf, serverForFile, settleOnce,
+import { BINDING, USER_A, addVolume, createProject, createStory, deleteMemoryEntryInput, drainLeftoverWork,
+  freshNamespace, id, openProposal, problemOf, seedMemoryEntry, serverForFile, settleOnce,
 } from "../support/http-harness.ts";
 import type { CommandInput, ProjectCommandId, TestProject, TestStory } from "../support/http-harness.ts";
 import { queryStoryOSPostgres } from "../support/node-integration.ts";
@@ -231,6 +231,13 @@ const COMMANDS: CommandRows = {
       } } };
     },
     expected: { effect: { kind: "authoritative_applied", revision: "1" } },
+  },
+  deleteMemoryEntry: {
+    arrange: async () => {
+      const project = await createStory(server, { title: "Smoke Memory Delete Novel" });
+      return { project, input: deleteMemoryEntryInput(project, await seedMemoryEntry(project.projectId), "1") };
+    },
+    expected: { effect: { kind: "authoritative_applied", version: "2", memory_revision: "2" } },
   },
   createEditorSession: {
     arrange: async () => {

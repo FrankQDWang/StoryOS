@@ -397,7 +397,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
-            &delete_memory_entry_call(&store, /*base*/ 0x9d10).await,
+            &delete_memory_entry_call(&store, /*base*/ 0xad10).await,
         )
         .await,
         failed_then_settled(

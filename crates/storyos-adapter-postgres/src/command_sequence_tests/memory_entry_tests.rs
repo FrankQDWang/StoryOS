@@ -1,5 +1,5 @@
 //! The rows of the Delete Memory Entry command in the table-driven contract suite (ADR 0094
-//! section 6). The lead of these tests is `9d`.
+//! section 6). The lead of these tests is `ad`.
 
 use storyos_application::{DeleteMemoryEntryInput, ProjectScope};
 use storyos_contracts::CommandKind;

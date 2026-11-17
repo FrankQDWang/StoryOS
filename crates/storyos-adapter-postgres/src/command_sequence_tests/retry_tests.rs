@@ -131,7 +131,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
-            &delete_memory_entry_call(&store, /*base*/ 0x9d20).await,
+            &delete_memory_entry_call(&store, /*base*/ 0xad20).await,
         )
         .await,
         in_progress_retry(

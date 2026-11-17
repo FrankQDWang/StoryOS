@@ -159,7 +159,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         evidence_replays(
             &store,
             &admin,
-            &delete_memory_entry_call(&store, /*base*/ 0x9d30).await,
+            &delete_memory_entry_call(&store, /*base*/ 0xad30).await,
         )
         .await,
         evidence_replays(

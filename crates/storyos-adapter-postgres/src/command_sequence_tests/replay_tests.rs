@@ -294,9 +294,9 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     }
 
     // A delete of a changed entry, the applied delete, and a delete of the deleted entry.
-    let scope = seed_project(&store, "9d40").await;
+    let scope = seed_project(&store, "ad40").await;
     let memory_entry_id = seed_memory_entry(&admin, &scope).await;
-    for (suffix, expected_version) in [(0x9d41, 2), (0x9d42, 1), (0x9d43, 1)] {
+    for (suffix, expected_version) in [(0xad41, 2), (0xad42, 1), (0xad43, 1)] {
         let input = DeleteMemoryEntryInput {
             memory_entry_id: memory_entry_id.clone(),
             expected_version,

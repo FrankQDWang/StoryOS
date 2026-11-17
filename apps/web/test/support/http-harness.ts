@@ -478,6 +478,27 @@ export function deleteChapterInput(project: TestProject, chapterId: string,
   }, path: { chapterId } };
 }
 
+/** The input of `deleteMemoryEntry`. */
+export function deleteMemoryEntryInput(project: TestProject, memoryEntryId: string,
+  expectedVersion: string): CommandInput<"deleteMemoryEntry"> {
+  return { request: {
+    command_schema: "storyos.command.delete-memory-entry.request.v1",
+    delete_memory_entry_input: { expected_version: expectedVersion, ...project.binding() },
+  }, path: { memoryEntryId } };
+}
+
+/** Writes the entry 1 of the Project of User A with SQL as its version 1, and gives its identity. The values are
+ * test constants. */
+export async function seedMemoryEntry(projectId: string): Promise<string> {
+  return queryStoryOSPostgres(`
+    INSERT INTO storyos.project_memory_heads VALUES ('${USER_A}', '${projectId}', 1, 2);
+    INSERT INTO storyos.memory_entry_versions (owner_user_id, project_id, memory_entry_id, entry_number, version,
+      memory_revision, state, entry_type, origin, title, description, text, cause, source_references)
+    VALUES ('${USER_A}', '${projectId}', md5('${projectId}:1')::uuid, 1, 1, 1, 'current', 'character',
+      'author_request', '阿青', '渡口的船夫。', '阿青在渡口撑船。', '{"kind": "author_request"}', '[]')
+    RETURNING memory_entry_id::text`);
+}
+
 /** The applied effect of `createVolume`. It throws when the command did not apply. */
 export function appliedVolume(created: CommandResponse<"createVolume">) {
   if (created.effect.kind !== "authoritative_applied") {

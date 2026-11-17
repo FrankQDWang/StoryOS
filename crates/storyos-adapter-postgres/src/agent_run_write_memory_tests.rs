@@ -34,7 +34,7 @@ fn settled(text: &str) -> Value {
     json!(["write_memory", "settled", null, text, true])
 }
 
-fn refused(refusal: MemoryWriteRefusal) -> Value {
+pub(crate) fn refused(refusal: MemoryWriteRefusal) -> Value {
     json!([
         "write_memory",
         "refused",
@@ -51,7 +51,7 @@ fn finish() -> Value {
 /// Each version row of the Project of `scope` in the order of its Memory revision, as one line:
 /// the number, the version, the revision, the state, the type, the origin, the title, the
 /// description, the text, and the kind of the cause.
-async fn versions(admin: &Client, scope: &ProjectScope) -> Vec<Value> {
+pub(crate) async fn versions(admin: &Client, scope: &ProjectScope) -> Vec<Value> {
     admin
         .query(
             "SELECT concat_ws(' ', entry_number, version, memory_revision, state, entry_type,
@@ -69,7 +69,7 @@ async fn versions(admin: &Client, scope: &ProjectScope) -> Vec<Value> {
 }
 
 /// The Memory revision and the next entry number of the head of the Project of `scope`.
-async fn memory_head(admin: &Client, scope: &ProjectScope) -> Option<(i64, i64)> {
+pub(crate) async fn memory_head(admin: &Client, scope: &ProjectScope) -> Option<(i64, i64)> {
     admin
         .query_opt(
             "SELECT memory_revision::bigint, next_entry_number::bigint
