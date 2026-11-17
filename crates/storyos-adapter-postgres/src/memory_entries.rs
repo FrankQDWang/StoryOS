@@ -107,9 +107,9 @@ pub(crate) async fn memory_head(
     row.map_or(Ok(0), |row| numeric(row.get(0)))
 }
 
-/// The marks of the entries that the author deleted, newest first (ADR 0094 section 8): the last
-/// version of each entry, when its state is `deleted` and its cause is a delete by the author. A
-/// capture and the consolidation pass of S7-D4b read them. The read takes no lock.
+/// The marks of the entries that the author deleted, newest first (ADR 0094 section 8). A mark is
+/// the last version of an entry with the state `deleted` and a cause that is a delete by the
+/// author. A capture and the consolidation pass of S7-D4b read them. The read takes no lock.
 pub(crate) async fn read_delete_marks(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,

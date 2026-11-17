@@ -239,8 +239,8 @@ pub use manuscript_payload::{
 };
 pub use manuscript_use::{ManuscriptUse, StoredManuscriptCall, manuscript_uses};
 pub use memory_capture::{
-    CaptureAdmissionFacts, CaptureEnd, CaptureReferences, CaptureRefusal, CaptureRunEnd,
-    MemoryCaptureAssembly, admit_memory_capture, assemble_capture_references,
+    CaptureAdmissionFacts, CaptureEnd, CaptureInputKind, CaptureReferences, CaptureRefusal,
+    CaptureRunEnd, MemoryCaptureAssembly, admit_memory_capture, assemble_capture_references,
     assemble_memory_capture_context, capture_end, keep_capture_references,
 };
 pub use memory_consolidation::{

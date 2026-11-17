@@ -301,3 +301,46 @@ async fn a_refused_output_call_in_the_last_run_step_settles_with_the_step_limit(
         json!(["completed", "settled", "step_limit", null, []])
     );
 }
+
+/// Each request of a capture has the kind of the input of the capture row: a Conversation or a
+/// Chapter. The adapter gives each kind its own section (ADR 0094 section 5).
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn each_request_of_a_capture_has_the_kind_of_its_input() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, conversation) = project(&store, &admin, "590").await;
+    let revision_id: String = admin
+        .query_one(
+            "SELECT revision_id::text FROM storyos.authoritative_revisions
+              WHERE manuscript_object_id = $1::text::uuid LIMIT 1",
+            &[&chapter_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let chapter = MemoryCaptureSource::Chapter {
+        chapter_id,
+        revision_id,
+    };
+    let mut kinds = Vec::new();
+    for source in [&conversation, &chapter] {
+        let started = start(&store, &scope, source, "雨。").await.unwrap();
+        run_capture(&store, &admin, &scope, &started.run_id).await;
+        let row = admin
+            .query_one(
+                "SELECT jsonb_agg(wire ->> 'capture_input')::text
+                   FROM storyos.model_attempts,
+                        LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
+                  WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+                &[&started.run_id],
+            )
+            .await
+            .unwrap();
+        kinds.push(serde_json::from_str::<Value>(row.get(/*idx*/ 0)).unwrap());
+    }
+
+    assert_eq!(kinds, [json!(["conversation"]), json!(["chapter"])]);
+}

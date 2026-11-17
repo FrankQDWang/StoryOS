@@ -239,12 +239,17 @@ pub(crate) async fn create_request(
     };
     let input = record_input(record, assembly, &run.author_message);
     let context = RequestContextItem::sent(input.context, previous_response_reference.as_deref());
+    let purpose = match (probe, run.kind) {
+        (Some(probe), _) => CreatePurpose::ToolQualification(probe.request),
+        (None, storyos_core::AgentRunKind::MemoryCapture) => {
+            CreatePurpose::MemoryCapture(crate::memory_capture::input_kind(client, claim).await?)
+        }
+        (None, kind) => CreatePurpose::of_run(kind, /*capture_input*/ None)
+            .ok_or_else(|| crate::agent_run_tool_authority::damaged("The purpose of the Run"))?,
+    };
     Ok(CreateRequest {
         attempt,
-        purpose: match probe {
-            Some(probe) => CreatePurpose::ToolQualification(probe.request),
-            None => CreatePurpose::of_run(run.kind),
-        },
+        purpose,
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
         chapter_id: run.chapter_id.clone().unwrap_or_default(),

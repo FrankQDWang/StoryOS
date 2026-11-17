@@ -275,7 +275,7 @@ pub(crate) fn create_body(
     let mut body = serde_json::json!({
         "model": provider_model_id,
         "instructions": instructions,
-        "input": input(request),
+        "input": input(request, &request_text(request)),
         "max_output_tokens": bounds.max_output_tokens,
         "stream": true,
         "store": true,
@@ -303,12 +303,12 @@ pub(crate) fn create_body(
     storyos_core::canonical_json(&body)
 }
 
-/// The input items. A prior response reference holds the author message and the calls of that
-/// response, so an incremental continuation sends only their outputs. When the current input
-/// changed after the prior response read it, the outputs follow the current input, and the
-/// current input says that it replaces the earlier input. Each call of the prior response that
-/// the Host did not execute gets its output last (ADR 0091 section 5).
-fn input(request: &CreateRequest) -> serde_json::Value {
+/// The input items, with `text` as the user message. A prior response reference holds the user
+/// message and the calls of that response, so an incremental continuation sends only their
+/// outputs. When the current input changed after the prior response read it, the outputs follow
+/// the current input, and the current input says that it replaces the earlier input. Each call of
+/// the prior response that the Host did not execute gets its output last (ADR 0091 section 5).
+pub(crate) fn input(request: &CreateRequest, text: &str) -> serde_json::Value {
     let message = |text: String| {
         serde_json::json!({
             "role": "user",
@@ -318,11 +318,8 @@ fn input(request: &CreateRequest) -> serde_json::Value {
     let replaced = request.previous_response_reference.is_some()
         && request.prior_input == PriorInput::Replaced;
     let current = || match replaced {
-        true => message(format!(
-            "{REPLACED_INPUT_LABEL}\n\n{}",
-            request_text(request)
-        )),
-        false => message(request_text(request)),
+        true => message(format!("{REPLACED_INPUT_LABEL}\n\n{text}")),
+        false => message(text.to_owned()),
     };
     let output = |call_id: &str, output: &str| serde_json::json!({"type": "function_call_output", "call_id": call_id, "output": output});
     let unexecuted = request
@@ -346,7 +343,7 @@ fn input(request: &CreateRequest) -> serde_json::Value {
             .chain(unexecuted)
             .collect();
     }
-    let message = message(request_text(request));
+    let message = message(text.to_owned());
     let calls = request.tool_outputs.iter().map(|item| {
         serde_json::json!({"type": "function_call", "call_id": item.call_id,
                            "name": item.name, "arguments": item.arguments})

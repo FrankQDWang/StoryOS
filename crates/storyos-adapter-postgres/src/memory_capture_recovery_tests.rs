@@ -53,7 +53,7 @@ impl ModelProviderAdapter for FaultyCapture {
         request: &DestinationRequest,
     ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
         let at_step = matches!(request, DestinationRequest::Create(create)
-            if create.purpose == CreatePurpose::MemoryCapture
+            if matches!(create.purpose, CreatePurpose::MemoryCapture(_))
                 && create.tool_outputs.len() == self.step);
         let marker = match self.fault {
             CaptureFault::Retrieve => "SCRIPT:retrieve-complete",

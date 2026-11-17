@@ -103,6 +103,10 @@ impl ModelProviderAdapter for FakeDestination {
         if create.route.mapping_revision != HOST_FAKE_TOOL_LOOP_MAPPING_REVISION {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
+        // The real route refuses a capture request with no input item or no output Tool.
+        if matches!(create.purpose, CreatePurpose::MemoryCapture(_)) && !create.capture_complete() {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        }
         let mapping_revision = HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
         let mut wire = current_input(create);
         wire["mapping_revision"] = serde_json::json!(mapping_revision);
@@ -111,7 +115,13 @@ impl ModelProviderAdapter for FakeDestination {
         }
         wire["tool_choice"] = serde_json::json!(create.tool_choice.as_str());
         match create.purpose {
-            CreatePurpose::MemoryCapture => wire["purpose"] = serde_json::json!("memory_capture"),
+            CreatePurpose::MemoryCapture(kind) => {
+                wire["purpose"] = serde_json::json!("memory_capture");
+                wire["capture_input"] = serde_json::json!(match kind {
+                    storyos_core::CaptureInputKind::Conversation => "conversation",
+                    storyos_core::CaptureInputKind::Chapter => "chapter",
+                });
+            }
             CreatePurpose::MemoryConsolidation => {
                 wire["purpose"] = serde_json::json!("memory_consolidation");
             }
@@ -172,7 +182,7 @@ impl ModelProviderAdapter for FakeDestination {
             (None, Some(reference)) => FakePlan::UnknownCreate(reference),
             (None, None) => {
                 let planned = match create.purpose {
-                    CreatePurpose::MemoryCapture => capture_plan::plan(create),
+                    CreatePurpose::MemoryCapture(_) => capture_plan::plan(create),
                     CreatePurpose::MemoryConsolidation => consolidation_plan::plan(create),
                     _ => tool_loop_plan::plan(create),
                 };
@@ -397,3 +407,7 @@ fn wire_digest(wire: &serde_json::Value) -> String {
 #[cfg(test)]
 #[path = "stub_rejection_tests.rs"]
 mod stub_rejection_tests;
+
+#[cfg(test)]
+#[path = "capture_refusal_tests.rs"]
+mod capture_refusal_tests;
