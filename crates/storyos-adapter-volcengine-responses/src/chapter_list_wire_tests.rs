@@ -152,6 +152,86 @@ async fn the_read_chapter_and_search_paragraphs_follow_the_chapter_list_paragrap
     );
 }
 
+/// ADR 0095 sections 1 and 4: a request of the mapping `v8` with the search by meaning declares
+/// `hybrid_search_manuscript` after `search_manuscript` with its strict schema, and its
+/// instructions do not change.
+#[tokio::test]
+async fn the_mapping_v8_declares_the_hybrid_search_after_the_keyword_search() {
+    let request = v8(vec![
+        item(
+            ContextSourceClass::AuthorInstruction,
+            "Who waits at the quay?",
+        ),
+        item(ContextSourceClass::WorkingTarget, "The rain fell hard."),
+        item(
+            ContextSourceClass::ChapterList,
+            "[1,19,\"Rain\",\"current\"]",
+        ),
+    ]);
+    let hybrid = CreateRequest {
+        tool_exposure: storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
+            bound: &[],
+            model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
+            skill_catalog: false,
+            memory_use: false,
+            hybrid_search: true,
+            run_kind: storyos_core::AgentRunKind::Author,
+        }),
+        ..request.clone()
+    };
+    let (declared, plain) = (body(hybrid).await, body(request).await);
+    let names: Vec<&str> = (declared["tools"].as_array().unwrap().iter())
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect();
+
+    assert_eq!(
+        (
+            &declared["instructions"],
+            names[names.len() - 4..].to_vec(),
+            &declared["tools"][names.len() - 3],
+        ),
+        (
+            &plain["instructions"],
+            vec![
+                "search_manuscript",
+                "hybrid_search_manuscript",
+                "write_memory",
+                "finish"
+            ],
+            &json!({
+                "type": "function",
+                "name": "hybrid_search_manuscript",
+                "description": "Finds the passages of the manuscript that answer a question in \
+                                ordinary words, also when the passages do not have the words of \
+                                the question. Use search_manuscript first. Use this Tool when \
+                                search_manuscript finds nothing, or when the question has no \
+                                exact term. Give the exact terms that you know, for example \
+                                names, in terms. Then read the Blocks near a passage with \
+                                read_chapter.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string",
+                            "description": "The question in ordinary words."
+                        },
+                        "terms": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "The exact words or phrases that the passages can \
+                                            have, with the same letter case. The list can be \
+                                            empty."
+                        }
+                    },
+                    "required": ["question", "terms"],
+                    "additionalProperties": false
+                },
+                "strict": true
+            }),
+        )
+    );
+}
+
 /// ADR 0094 section 2 and ADR 0095 section 1: in the item order of a Run with a bound Project
 /// Instruction, the section `Project instruction` is after the author request and before the
 /// Skill sections, and the section `Chapter list` is after the Skill sections and before the

@@ -42,6 +42,7 @@ fn each_current_mapping_declares_search_manuscript_with_a_strict_schema() {
             model_registration_revision: revision,
             skill_catalog: false,
             memory_use: false,
+            hybrid_search: false,
             run_kind: crate::AgentRunKind::Author,
         })
         .tools

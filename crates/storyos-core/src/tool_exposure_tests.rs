@@ -28,6 +28,7 @@ fn exposure(bound: &[BoundTool], model_registration_revision: &str) -> ToolExpos
         model_registration_revision,
         skill_catalog: false,
         memory_use: false,
+        hybrid_search: false,
         run_kind: crate::AgentRunKind::Author,
     })
 }
@@ -137,6 +138,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             model_registration_revision: revision,
             skill_catalog: true,
             memory_use: true,
+            hybrid_search: true,
             run_kind: crate::AgentRunKind::Author,
         })
     };
@@ -149,6 +151,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
                     | crate::ToolOperation::ReadSkillResource
                     | crate::ToolOperation::ReadMemoryEntry
                     | crate::ToolOperation::SearchMemory
+                    | crate::ToolOperation::HybridSearchManuscript
             )
         });
         exposure
@@ -156,8 +159,9 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
     // The mapping `v8` and the fake tool loop mapping declare `…0e0104`, and a Run that pinned
     // the Registration of the mapping `v7` keeps `…0e0103`. Each declares `load_skill` and
     // `read_skill_resource` only for a Run whose pinned catalog has a Skill (ADR 0089 section 3),
-    // and `read_memory_entry` and `search_memory` only for a Run whose captured settings have use
-    // (ADR 0094 section 4).
+    // `read_memory_entry` and `search_memory` only for a Run whose captured settings have use
+    // (ADR 0094 section 4), and `hybrid_search_manuscript` only when the search by meaning is
+    // possible (ADR 0095 section 4).
     for (revision, registration) in [
         (
             HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
@@ -205,6 +209,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
                 "read_skill_resource",
                 "read_chapter",
                 "search_manuscript",
+                "hybrid_search_manuscript",
                 "write_memory",
                 "read_memory_entry",
                 "search_memory",
@@ -223,14 +228,14 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             "018f0000-0000-7001-8000-0000000e0104",
             "018f0000-0000-7001-8000-0000000e0103",
             "018f0000-0000-7001-8000-0000000e0102",
-            12,
+            13,
         )
     );
     let declared = host(&HOST_TOOL_REGISTRATION);
     assert_eq!(
         (
             declared.tools[4].declaration().parameters,
-            declared.tools[10].declaration().parameters,
+            declared.tools[11].declaration().parameters,
         ),
         (
             json!({
@@ -473,6 +478,7 @@ fn a_background_run_gets_only_the_tools_of_its_kind() {
             model_registration_revision: HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
             skill_catalog: true,
             memory_use: true,
+            hybrid_search: false,
             run_kind,
         })
         .tools

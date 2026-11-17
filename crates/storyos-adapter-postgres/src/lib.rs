@@ -107,6 +107,7 @@ mod agent_run_dispatch;
 mod agent_run_expiry;
 mod agent_run_finish_rule;
 mod agent_run_host_tool;
+mod agent_run_hybrid_search;
 mod agent_run_lease;
 mod agent_run_load_skill;
 mod agent_run_manuscript_uses;
@@ -258,6 +259,9 @@ pub struct PostgresProjectReader {
     pool: Arc<ConnectionPool>,
     challenge_rate_clock_unix_seconds: Option<i64>,
     readable_export_lease_ttl: Duration,
+    /// The Embedding Registration of the deployment, or `None` when the deployment has no
+    /// embedding configuration (ADR 0095 section 4).
+    embedding_registration: Option<&'static storyos_core::EmbeddingRegistration>,
 }
 
 impl ProjectCommandChallengeStore for PostgresProjectReader {
@@ -530,6 +534,7 @@ impl PostgresProjectReader {
             .await
             .map_err(challenge_error)?;
         set_challenge_scope_on_client(&client, scope).await?;
+        self.set_embedding_registration(&client).await?;
         Ok(PostgresProjectCommandTransaction { client })
     }
 
@@ -543,6 +548,7 @@ impl PostgresProjectReader {
             .await
             .map_err(challenge_error)?;
         set_challenge_scope_on_client(&client, scope).await?;
+        self.set_embedding_registration(&client).await?;
         Ok(PostgresProjectCommandTransaction { client })
     }
 
@@ -718,7 +724,38 @@ impl PostgresProjectReader {
             pool: Arc::new(ConnectionPool::new(database_url.into())),
             challenge_rate_clock_unix_seconds: None,
             readable_export_lease_ttl: Duration::from_secs(30),
+            embedding_registration: None,
         }
+    }
+
+    /// The Embedding Registration of the deployment. Each Project command transaction has its
+    /// revision in the transaction setting `storyos.embedding_registration`, and the Tool
+    /// Exposure and the hybrid search read it there.
+    pub fn with_embedding_registration(
+        mut self,
+        registration: Option<&'static storyos_core::EmbeddingRegistration>,
+    ) -> Self {
+        self.embedding_registration = registration;
+        self
+    }
+
+    /// Sets the transaction setting of the deployment Embedding Registration. With no
+    /// Registration, the setting stays empty.
+    async fn set_embedding_registration(
+        &self,
+        client: &PooledClient,
+    ) -> Result<(), ProjectCommandChallengeError> {
+        let Some(registration) = self.embedding_registration else {
+            return Ok(());
+        };
+        client
+            .execute(
+                "SELECT set_config('storyos.embedding_registration', $1, true)",
+                &[&registration.revision],
+            )
+            .await
+            .map(|_| ())
+            .map_err(challenge_error)
     }
 
     pub fn with_readable_export_lease_ttl(mut self, ttl: Duration) -> Self {

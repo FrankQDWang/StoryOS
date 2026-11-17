@@ -17,8 +17,8 @@
 //! - `SCRIPT:load_skill ...` gets the load script of `load_plan`.
 //! - `SCRIPT:read_skill_resource ...` gets the resource script of `skill_resource_plan`.
 //! - `SCRIPT:read_chapter ...` gets the Chapter read script of `read_chapter_plan`.
-//! - `SCRIPT:search_manuscript ...` gets the manuscript search script of
-//!   `search_manuscript_plan`.
+//! - `SCRIPT:search_manuscript ...` and `SCRIPT:hybrid_search_manuscript ...` get the manuscript
+//!   search script of `search_manuscript_plan`.
 //! - `SCRIPT:write_memory ...` gets the Memory write script of `write_memory_plan`.
 //! - `SCRIPT:read_memory_entry ...` gets the Memory read script of `read_memory_entry_plan`.
 //! - `SCRIPT:search_memory ...` gets the Memory search script of `search_memory_plan`.

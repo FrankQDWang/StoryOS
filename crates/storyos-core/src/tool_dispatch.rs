@@ -82,6 +82,7 @@ impl ToolEffectRequest {
             | ToolIntake::ReadSkillResource { .. }
             | ToolIntake::ReadChapter { .. }
             | ToolIntake::SearchManuscript { .. }
+            | ToolIntake::HybridSearchManuscript { .. }
             | ToolIntake::WriteMemory(_)
             | ToolIntake::ReadMemoryEntry { .. }
             | ToolIntake::SearchMemory { .. }

@@ -136,7 +136,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let store = PostgresProjectReader::new(database_url.expose_secret())
             .with_readable_export_lease_ttl(storyos_worker::readable_export_lease_ttl(
                 settings.export_lease_ttl_secs,
-            ));
+            ))
+            .with_embedding_registration(embedding);
         let destination = storyos_worker::ModelDestination {
             adapter: storyos_adapter_fake_destination::FakeDestination,
             observer: storyos_application::NoContractFaults,

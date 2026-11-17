@@ -40,6 +40,8 @@ pub enum ToolOperation {
     ReadChapter,
     /// The Host Tool with which the Agent finds an exact term in the manuscript (ADR 0095).
     SearchManuscript,
+    /// The Host Tool with which the Agent finds the passages that answer a question (ADR 0095).
+    HybridSearchManuscript,
     /// The Host Tool with which the Agent writes one Memory Entry on the request of the author
     /// (ADR 0094 section 5).
     WriteMemory,
@@ -153,6 +155,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::READ_SKILL_RESOURCE_TOOL_SPEC,
         &crate::READ_CHAPTER_TOOL_SPEC,
         &crate::SEARCH_MANUSCRIPT_TOOL_SPEC,
+        &crate::HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC,
         &crate::WRITE_MEMORY_TOOL_SPEC,
         &crate::READ_MEMORY_ENTRY_TOOL_SPEC,
         &crate::SEARCH_MEMORY_TOOL_SPEC,
@@ -197,6 +200,10 @@ pub enum ToolIntake {
     SearchManuscript {
         query: String,
     },
+    HybridSearchManuscript {
+        question: String,
+        terms: Vec<String>,
+    },
     WriteMemory(crate::MemoryWrite),
     ReadMemoryEntry {
         entry: i64,
@@ -220,6 +227,9 @@ pub enum IntakeRefusal {
     UnstorableText,
     /// The `reason` of a load is empty, has more than 512 characters, or has a control character.
     Reason,
+    /// The `terms` of a passage search are more than 8, or a term is empty or has more than 64
+    /// characters.
+    Terms,
 }
 
 #[derive(Deserialize)]
@@ -298,6 +308,9 @@ impl ToolSpec {
             ToolOperation::ReadSkillResource => crate::read_skill_resource::intake(arguments),
             ToolOperation::ReadChapter => crate::read_chapter::intake(arguments),
             ToolOperation::SearchManuscript => crate::search_manuscript::intake(arguments),
+            ToolOperation::HybridSearchManuscript => {
+                crate::hybrid_search_manuscript::intake(arguments)
+            }
             ToolOperation::WriteMemory => crate::write_memory::intake(arguments),
             ToolOperation::ReadMemoryEntry => crate::read_memory_entry::intake(arguments),
             ToolOperation::SearchMemory => crate::search_memory::intake(arguments),
@@ -364,6 +377,7 @@ impl ServerArguments {
                 | ToolIntake::ReadSkillResource { .. }
                 | ToolIntake::ReadChapter { .. }
                 | ToolIntake::SearchManuscript { .. }
+                | ToolIntake::HybridSearchManuscript { .. }
                 | ToolIntake::WriteMemory(_)
                 | ToolIntake::ReadMemoryEntry { .. }
                 | ToolIntake::SearchMemory { .. }
@@ -380,6 +394,7 @@ impl ServerArguments {
                 | ToolIntake::ReadSkillResource { .. }
                 | ToolIntake::ReadChapter { .. }
                 | ToolIntake::SearchManuscript { .. }
+                | ToolIntake::HybridSearchManuscript { .. }
                 | ToolIntake::WriteMemory(_)
                 | ToolIntake::ReadMemoryEntry { .. }
                 | ToolIntake::SearchMemory { .. }

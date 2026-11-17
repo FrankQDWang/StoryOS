@@ -221,6 +221,7 @@ pub(crate) fn research_exposure() -> storyos_core::ToolExposure {
         model_registration_revision: storyos_core::AGENT_PLAN_TOOL_LOOP_REGISTRATION.revision,
         skill_catalog: false,
         memory_use: false,
+        hybrid_search: false,
         run_kind: storyos_core::AgentRunKind::Author,
     })
 }

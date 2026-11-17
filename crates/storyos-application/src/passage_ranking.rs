@@ -58,6 +58,7 @@ pub async fn rank_manuscript_passages(
         &facts.chapters,
         &ranked,
         terms,
+        None,
         call_id,
     )))
 }

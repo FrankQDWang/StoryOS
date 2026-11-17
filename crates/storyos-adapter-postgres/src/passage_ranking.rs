@@ -56,7 +56,8 @@ impl PassageRankingStore for PostgresProjectReader {
     }
 }
 
-async fn read_facts(
+/// Reads the facts of one ranking with `client`, in the transaction of the caller.
+pub(crate) async fn read_facts(
     client: &impl GenericClient,
     scope: &ProjectScope,
     question: Option<QuestionVector<'_>>,

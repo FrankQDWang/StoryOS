@@ -139,6 +139,7 @@ pub fn capture_research_sources(
         | ToolIntake::ReadSkillResource { .. }
         | ToolIntake::ReadChapter { .. }
         | ToolIntake::SearchManuscript { .. }
+        | ToolIntake::HybridSearchManuscript { .. }
         | ToolIntake::WriteMemory(_)
         | ToolIntake::ReadMemoryEntry { .. }
         | ToolIntake::SearchMemory { .. }
