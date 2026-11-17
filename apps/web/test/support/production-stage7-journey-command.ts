@@ -131,8 +131,9 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     { timeout: 10_000 }).toContain(marker);
     const settled = (table: string, where: string) => value(`SELECT count(*)::text FROM storyos.${table}
       WHERE project_id = '${project}'::uuid AND outcome IS NOT NULL AND ${where}`);
-    // ADR 0038 permits 10 Challenges of the shared class in each minute for each Project. The journey asks for 16 in
-    // less than one minute: 8 in steps 1 to 4 and 8 in steps 5 to 7. So it resets the windows at the start of step 5.
+    // ADR 0038 permits 10 Challenges of the shared class in each minute for each Project, and the client does not wait
+    // when the limit refuses a send or a Chapter switch (#1679). The journey asks for about 17 in less than one minute,
+    // so it resets the windows of the Project before steps 3, 5, and 6. Each part then asks for at most 5.
     const resetChallenges = () => value(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
       WHERE project_id = '${project}'::uuid`);
     const openSettings = async () => {
@@ -169,8 +170,10 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     await expect(bell.locator('a[data-memory-entry-origin="conversation"]')).toHaveText("你让助手记住的");
     assert.equal(await bell.locator(".memory-entry-text").textContent(), BELL);
 
-    // 3. A message of Conversation A and a line of Chapter B hold the capture scripts. Statement 1 makes the two rows
-    // due, the Conversation first. Each capture records one fact, and the pass creates one entry for each fact.
+    await resetChallenges();
+    // 3. Statement 1 resets the Challenge rate windows. A message of Conversation A and a line of Chapter B hold the
+    // capture scripts. Statement 2 makes the two rows due, the Conversation first. Each capture records one fact, and
+    // the pass applies one create operation for each fact.
     await page.goto(workspace);
     await page.locator('[data-assistant-availability="available"]').waitFor();
     const talk = await message(`整理一下这段对话。\n${capture([scripted("relationship", "林舟与阿禾", 1)])}`);
@@ -186,8 +189,9 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     assert.equal(await value(`SELECT string_agg(source_kind || ' ' || outcome, ', ' ORDER BY capture_id)
       FROM storyos.memory_captures WHERE project_id = '${project}'::uuid`),
     "conversation observations_recorded, chapter observations_recorded");
-    assert.equal(await value(`SELECT outcome FROM storyos.memory_consolidation_passes
-      WHERE project_id = '${project}'::uuid`), "applied");
+    assert.equal(await value(`SELECT outcome || ' ' || (SELECT string_agg(item ->> 'result', ',')
+        FROM jsonb_array_elements(operations) AS item)
+      FROM storyos.memory_consolidation_passes WHERE project_id = '${project}'::uuid`), "applied applied,applied");
     await openSettings();
     const pair = page.locator('[data-memory-group="relationship"] [data-memory-entry="2"]');
     const fire = page.locator('[data-memory-group="major_event"] [data-memory-entry="3"]');
@@ -213,13 +217,21 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     await turn(talk.runId).waitFor();
 
     await resetChallenges();
-    // 5. Statement 2 resets the Challenge rate windows. Run 1 of the step reads entry 2. Its request has the Chapter
-    // list and the Memory Index, and the panel shows no line for the read. Run 2 searches Memory, and the panel shows
-    // no line for the search. Statement 3 ends the quiet time of the index work. Run 3 searches with a keyword, reads
-    // Chapter B, and searches by meaning, and the panel shows one line for each use.
+    // 5. Statement 3 resets the Challenge rate windows. The author goes back to Chapter A, so the Runs work on Chapter A.
+    // Run 1 of the step reads entry 2. Its request has the Chapter list and the Memory Index, and the panel shows no
+    // line for the read. Run 2 searches Memory, and the panel shows no line for the search. Statement 4 ends the quiet
+    // time of the index work. Run 3 finds the passage of Chapter B with a keyword, reads Chapter B, and finds the
+    // passage by meaning, and the panel shows one line for each use.
+    const chapterA = page.locator(`button[data-chapter-id="${setup.chapterId}"]`);
+    await chapterA.click();
+    await expect(chapterA).toHaveAttribute("aria-current", "true");
+    await expect(page.locator(".editor-panel h2")).toHaveText("Chapter A");
+    await page.locator(SAVED).waitFor();
     const read = await message("回到第一段对话。\nSCRIPT:read_memory_entry 2");
     assert.equal(read.request.create_agent_run_input.conversation.kind, "existing");
     assert.equal(read.conversationId, first.conversationId);
+    assert.deepEqual(read.request.create_agent_run_input.working_target,
+      { kind: "current_chapter", chapter_id: setup.chapterId });
     assert.deepEqual([(await sent(read.runId, "chapter_list")).length, (await sent(read.runId, "memory_index")).length],
       [1, 1]);
     await expect(current.locator("[data-assistant-manuscript-uses]")).toHaveCount(0);
@@ -245,14 +257,18 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     assert.equal(await value(`SELECT string_agg(function_name || ' ' || state, ', ' ORDER BY call_id)
       FROM storyos.tool_calls WHERE run_id = '${searched.runId}'::uuid AND function_name <> 'finish'`),
     "hybrid_search_manuscript settled, read_chapter settled, search_manuscript settled");
-    // The keyword search and the hybrid search each find the passage of Chapter B.
-    assert.equal(await value(`SELECT bool_and(result_text LIKE '%阿禾在渡口卖鱼%')::text FROM storyos.tool_calls
-      WHERE run_id = '${searched.runId}'::uuid AND function_name LIKE '%search_manuscript'`), "true");
+    // The Run works on Chapter A. The keyword search, the read, and the hybrid search each give the passage of Chapter B.
+    assert.deepEqual(searched.request.create_agent_run_input.working_target,
+      { kind: "current_chapter", chapter_id: setup.chapterId });
+    assert.equal(await value(`SELECT count(*) FILTER (WHERE result_text LIKE '%阿禾在渡口卖鱼%')::text
+      FROM storyos.tool_calls WHERE run_id = '${searched.runId}'::uuid AND function_name <> 'finish'`), "3");
 
-    // 6. The Chapter rate lets the next Chapter capture start 2 minutes after the last start. Statement 4 moves that
-    // start back by the rate interval, and the time stays before its settlement. The author writes a conflict in
-    // Chapter A. Statement 5 makes its row due, and statement 6 makes the pass due before its rate. Chapter A has no
-    // script line before it: the fake model calls the script lines of a capture input in order.
+    // 6. Statement 5 resets the Challenge rate windows. The Chapter rate lets the next Chapter capture start 2 minutes
+    // after the last start. Statement 6 moves that start back by the rate interval, and the time stays before its
+    // settlement. The author writes a conflict in Chapter A. Statement 7 makes its row due, and statement 8 makes the
+    // pass due before its rate. Chapter A has no script line before it: the fake model calls the script lines of a
+    // capture input in order.
+    await resetChallenges();
     assert.equal(await value(`WITH moved AS (UPDATE storyos.memory_captures SET started_at = started_at - interval '2 minutes'
       WHERE capture_id = (SELECT capture_id FROM storyos.memory_captures WHERE project_id = '${project}'::uuid
                             AND source_kind = 'chapter' ORDER BY started_at DESC LIMIT 1)
@@ -289,8 +305,8 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     await expect(bell.locator('[data-memory-entry-flag="flagged"]')).toHaveCount(0);
     assert.equal(await bell.locator(".memory-entry-text").textContent(), CHANGED_BELL);
 
-    // 7. The author deletes entry 2. A later capture asks for it again, statement 7 makes the Conversation row due,
-    // and statement 8 makes the pass due. The pass refuses the create, and entry 2 stays deleted.
+    // 7. The author deletes entry 2. A later capture asks for it again, statement 9 makes the Conversation row due,
+    // and statement 10 makes the pass due. The pass refuses the create, and entry 2 stays deleted.
     await pair.locator("[data-memory-delete]").click();
     await pair.locator("[data-memory-delete-confirm]").click();
     await expect(page.locator('[data-memory-group="relationship"]')).toHaveCount(0);
@@ -312,7 +328,7 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     await expect(page.locator('[data-memory-group="relationship"]')).toHaveCount(0);
     assert.deepEqual(errors, []);
 
-    // Statement 9 parks each row of the background work of the Project, so that no later file starts its work.
+    // Statement 11 parks each row of the background work of the Project, so that no later file starts its work.
     await value(`UPDATE storyos.memory_work_schedules SET due_at = NULL WHERE project_id = '${project}'::uuid`);
     assert.equal(await value(`SELECT ((SELECT count(*) FROM storyos.memory_work_schedules
         WHERE project_id = '${project}'::uuid AND due_at IS NOT NULL)
