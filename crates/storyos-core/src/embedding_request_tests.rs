@@ -97,6 +97,7 @@ fn the_admission_gives_one_typed_refusal_for_each_failed_fact() {
             EmbeddingRefusal::DisclosureOutsideGrant,
             EmbeddingRefusal::InputOutOfBounds,
             EmbeddingRefusal::CredentialUnavailable,
+            EmbeddingRefusal::UnsupportedRequest,
         ]
         .map(EmbeddingRefusal::code),
         [
@@ -105,6 +106,7 @@ fn the_admission_gives_one_typed_refusal_for_each_failed_fact() {
             "disclosure_outside_grant",
             "embedding_input_out_of_bounds",
             "destination_credential_unavailable",
+            "embedding_request_unsupported",
         ]
     );
 }

@@ -13,13 +13,16 @@ use uuid::Uuid;
 use crate::command_sequence::unavailable;
 use crate::project_destination_binding::binding_shape;
 
-/// The latest embedding use binding of the Project and its grant.
+/// The latest embedding use binding of the Project, its grant, and the endpoint of its evidence.
+/// Columns: 0 binding revision, 1 Embedding Registration revision, 2 grant, 3 grant scope,
+/// 4 destination identity, 5 evidence revision, 6 destination kind, 7 Credential Reference,
+/// 8 endpoint.
 pub(crate) const CURRENT_EMBEDDING_BINDING: &str = "
     SELECT binding.project_model_use_binding_revision::text,
            binding.embedding_registration_revision::text, grant_row.grant_id::text,
            grant_row.grant_scope, binding.processing_destination_identity::text,
            binding.evidence_revision::text, identity.destination_kind,
-           binding.credential_reference
+           binding.credential_reference, evidence.endpoint
       FROM storyos.project_external_use_binding_revisions AS binding
       JOIN storyos.project_destination_grants AS grant_row
         ON (grant_row.owner_user_id, grant_row.project_id, grant_row.grant_id) =
@@ -28,6 +31,11 @@ pub(crate) const CURRENT_EMBEDDING_BINDING: &str = "
         ON (identity.owner_user_id, identity.project_id,
             identity.processing_destination_identity) =
            (binding.owner_user_id, binding.project_id, binding.processing_destination_identity)
+      JOIN storyos.processing_destination_identity_evidence_revisions AS evidence
+        ON (evidence.owner_user_id, evidence.project_id, evidence.processing_destination_identity,
+            evidence.evidence_revision) =
+           (binding.owner_user_id, binding.project_id, binding.processing_destination_identity,
+            binding.evidence_revision)
      WHERE binding.owner_user_id = $1::text::uuid AND binding.project_id = $2::text::uuid
        AND binding.embedding_registration_revision IS NOT NULL
      ORDER BY binding.project_model_use_binding_revision DESC

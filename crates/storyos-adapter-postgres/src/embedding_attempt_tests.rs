@@ -1,14 +1,16 @@
 //! The Embedding Attempt (ADR 0095 section 3): the row that the claim commits before the exchange,
-//! its settlement, one store test for each typed refusal, and the Project Scope. Test prefix lead
-//! `ab` (`ab7` and later; `project_embedding_binding_tests` uses `ab1` to `ab6`).
+//! its settlement, one store test for each typed refusal, the route of the binding, and the
+//! Project Scope. Test prefix lead `ab` (`ab0`, and `ab7` and later;
+//! `project_embedding_binding_tests` uses `ab1` to `ab6`).
 
 use std::sync::Mutex;
 
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeEmbeddings;
 use storyos_application::{
-    CredentialUnavailable, EmbeddingObservation, EmbeddingProviderAdapter, EmbeddingResult,
-    NoEmbeddingDestination, PreparedEmbeddingRequest, ProjectScope, dispatch_embedding,
+    CredentialReference, EmbeddingDispatchStore as _, EmbeddingObservation,
+    EmbeddingProviderAdapter, EmbeddingResult, EmbeddingRoute, NoEmbeddingDestination,
+    PreDispatchRefusal, PreparedEmbeddingRequest, ProjectScope, dispatch_embedding,
 };
 use storyos_core::{
     AGENT_PLAN_EMBEDDING_REGISTRATION, EmbeddingInput, EmbeddingRefusal, EmbeddingRegistration,
@@ -37,9 +39,10 @@ impl EmbeddingProviderAdapter for Held<'_> {
     async fn prepare(
         &self,
         registration: &'static EmbeddingRegistration,
+        route: &EmbeddingRoute,
         input: &EmbeddingInput,
-    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, CredentialUnavailable> {
-        FakeEmbeddings.prepare(registration, input).await
+    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
+        FakeEmbeddings.prepare(registration, route, input).await
     }
 
     async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
@@ -426,5 +429,33 @@ async fn each_refusal_writes_no_attempt_and_gives_its_typed_reason() {
             attempts(&admin, foreign.project_id.as_ref()).await,
         ],
         [json!([]), json!([])]
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_route_is_the_endpoint_of_the_evidence_and_the_reference_of_the_current_binding() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (agent_plan, ..) = project(
+        &store,
+        &admin,
+        ["ab0", "abf"],
+        Some(&AGENT_PLAN_EMBEDDING_REGISTRATION),
+    )
+    .await;
+    park_queued_runs(&admin, &agent_plan).await;
+
+    assert_eq!(
+        store.embedding_route(&agent_plan).await.unwrap(),
+        Some(EmbeddingRoute {
+            registration_revision: AGENT_PLAN_EMBEDDING_REGISTRATION.revision.to_owned(),
+            endpoint: Some(storyos_core::AGENT_PLAN_ENDPOINT.to_owned()),
+            credential_reference: Some(CredentialReference(
+                storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned()
+            )),
+        })
     );
 }
