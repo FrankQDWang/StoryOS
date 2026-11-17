@@ -702,8 +702,8 @@ async fn a_cancellation_or_a_pause_during_the_question_request_keeps_the_result_
 }
 
 /// ADR 0095 section 3: the Worker stops while the question request is in progress. Its Embedding
-/// Attempt stays in OutcomeUnknown with no settlement, and the next claim of the Run sends a new request with a new
-/// attempt and settles the call.
+/// Attempt stays in OutcomeUnknown with no settlement. The next claim of the Run sends a new
+/// request with a new attempt, and it settles the call.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_next_claim_after_a_stopped_worker_sends_a_new_question_request() {

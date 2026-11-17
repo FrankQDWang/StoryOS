@@ -100,7 +100,6 @@ impl ToolDispatchStore for PostgresProjectReader {
         .await
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
     async fn record_question_search(
         &self,
         claim: &ClaimedAgentRun,
