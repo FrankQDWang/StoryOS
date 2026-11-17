@@ -72,6 +72,8 @@ struct Work {
     /// The text of the one Chapter with index work, and the passages with a row.
     index: Option<(ChapterPassageSource, Vec<PassageVectorKey>)>,
     index_claimed: bool,
+    /// The reads of waiting index work.
+    index_reads: u64,
     /// The Embedding Registrations of each index claim.
     claimed_registrations: Vec<Vec<String>>,
     events: Vec<&'static str>,
@@ -83,6 +85,7 @@ impl Default for Work {
             schedule_rows: 1,
             index: None,
             index_claimed: false,
+            index_reads: 0,
             claimed_registrations: Vec::new(),
             events: Vec::new(),
         }
@@ -316,6 +319,16 @@ impl PassageVectorStore for RaceStore {
 }
 
 impl PassageIndexWorkStore for RaceStore {
+    async fn passage_index_work_waits(
+        &self,
+        _registration_revisions: &[&str],
+        _cut_revision: &str,
+    ) -> Result<bool, ProjectReadError> {
+        let mut work = self.work.lock().unwrap();
+        work.index_reads += 1;
+        Ok(work.index.is_some() && !work.index_claimed)
+    }
+
     async fn claim_next_passage_index_work(
         &self,
         registration_revisions: &[&str],
@@ -652,5 +665,73 @@ async fn run_once_claims_a_schedule_row_only_after_the_agent_run_claim_finds_no_
             store.settled.lock().unwrap().clone()
         ),
         (0, 1, vec![claim()])
+    );
+}
+
+/// Collects the JSON lines of the Diagnostic Projection in memory.
+#[derive(Clone, Default)]
+struct Projection(std::sync::Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for Projection {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// ADR 0047: an idle turn of the loop writes no claim span and no line. It reads one time whether
+/// index work waits. A Worker with no Embedding Registration makes no store call for index work. A
+/// turn that claims index work still has its claim span with the outcome `claimed`.
+#[tokio::test(start_paused = true)]
+async fn an_idle_turn_writes_no_line_and_a_claim_keeps_its_span() {
+    let projection = Projection::default();
+    let writer = projection.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .json()
+        .with_max_level(tracing::Level::INFO)
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+        .with_writer(move || writer.clone())
+        .finish();
+    let _default = tracing::subscriber::set_default(subscriber);
+    let lines = || String::from_utf8(projection.0.lock().unwrap().clone()).unwrap();
+    let idle = RaceStore {
+        work: Mutex::new(Work {
+            schedule_rows: 0,
+            ..Work::default()
+        }),
+        ..index_store(0)
+    };
+    let no_embeddings = ModelDestination {
+        adapter: NoDestination,
+        observer: NoContractFaults,
+        tools: storyos_application::NoToolDestination,
+        embeddings: storyos_application::NoEmbeddingDestination,
+    };
+    let mut index = None;
+
+    let fake_turn = step(&idle, &fake_destination(), &mut index).await;
+    let fake_reads = idle.work.lock().unwrap().index_reads;
+    let no_embeddings_turn = step(&idle, &no_embeddings, &mut index).await;
+    let idle_lines = lines();
+    let work = index_store(0);
+    let claim_turn = step(&work, &fake_destination(), &mut index).await;
+    let claim_lines = lines();
+
+    assert_eq!(
+        (
+            fake_turn,
+            fake_reads,
+            no_embeddings_turn,
+            idle.work.lock().unwrap().index_reads,
+            idle_lines,
+            claim_turn,
+            claim_lines.contains(r#""name":"claim_next_passage_index_work""#),
+            claim_lines.contains(r#""outcome":"claimed""#),
+        ),
+        (false, 1, false, 1, String::new(), true, true, true)
     );
 }

@@ -1,6 +1,6 @@
 //! The store tests of the passage index work (ADR 0095 section 4). The tests move the times of the
 //! work rows with the admin connection, and they park the work of other Projects. Test prefix
-//! leads `f3` and `2f`.
+//! leads `f3`, `2f`, and `59`.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -212,6 +212,14 @@ async fn run_status(admin: &Client, run_id: &str) -> String {
         .await
         .unwrap()
         .get(0)
+}
+
+/// Whether work that a claim of `revisions` can take waits.
+async fn waits(store: &PostgresProjectReader, revisions: &[&str]) -> bool {
+    store
+        .passage_index_work_waits(revisions, PASSAGE_CUT_REVISION)
+        .await
+        .unwrap()
 }
 
 /// The steps of one claim until a step does not write.
@@ -819,5 +827,33 @@ async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
     assert_eq!(
         work(&admin, &scope).await,
         vec![(id, 1, 3, 3, false), (two, 2, 1, 1, false)]
+    );
+}
+
+/// The claim asks this read first, so that an idle turn of the Worker makes no claim span. The read
+/// sees only work that a claim can take. Work in its quiet time, work of another registration,
+/// held work, and completed work do not wait.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_read_of_waiting_work_sees_only_work_that_a_claim_can_take() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = configured().await;
+    let chapter = chapter(&store, &admin, ["591", "592"], "593", &texts()).await;
+    let scope = chapter.scope.clone();
+    park_other_work(&admin, &scope).await;
+    let fake = [HOST_FAKE_EMBEDDING_REGISTRATION.revision];
+    let quiet = waits(&store, &fake).await;
+    wake(&admin, &scope).await;
+    let due = waits(&store, &fake).await;
+    let other = waits(&store, &[AGENT_PLAN_EMBEDDING_REGISTRATION.revision]).await;
+    let claimed = claim(&store, FAKE_ONLY).await.unwrap();
+    let held = waits(&store, &fake).await;
+    steps(&store, &claimed).await;
+
+    assert_eq!(
+        (quiet, due, other, held, waits(&store, &fake).await),
+        (false, true, false, false, false)
     );
 }

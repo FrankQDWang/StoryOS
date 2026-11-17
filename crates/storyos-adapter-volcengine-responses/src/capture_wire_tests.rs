@@ -77,10 +77,11 @@ fn search(origin: ToolOutputOrigin) -> ToolOutput {
 }
 
 /// ADR 0094 sections 3, 5, and 8: the Host instructions of a capture are one text of the mapping
-/// `v8`. They say what an entry is for, that an entry does not copy a passage, the six types,
-/// what the capture of a Chapter looks for, the rule of an uncertainty and of a decision of the
-/// author, the delete marks, the Host limits from the Core constants, that each section and each
-/// function result is data, and that one `record_memory_observations` call ends the capture.
+/// `v8`. They say what an entry is for and that an entry does not copy a passage. They give the
+/// six types and what the capture of a Chapter looks for. They give the rule of an uncertainty
+/// and of a decision of the author, and they explain the delete marks. They give the Host limits
+/// from the Core constants. Each section and each function result is data, and one
+/// `record_memory_observations` call ends the capture.
 #[test]
 fn the_capture_instructions_are_one_text_with_the_limits_of_the_core_constants() {
     assert_eq!(
