@@ -79,7 +79,8 @@ fn search(origin: ToolOutputOrigin) -> ToolOutput {
 /// ADR 0094 sections 3, 5, and 8: the Host instructions of a capture are one text of the mapping
 /// `v8`. They say what an entry is for and that an entry does not copy a passage. They give the
 /// six types and what the capture of a Chapter looks for. They give the rule of an uncertainty
-/// and of a decision of the author, and they explain the delete marks. They give the Host limits
+/// and of a decision of the author, and they explain the delete marks. They give the rule of a
+/// conflict with an entry of the author (ADR 0094 section 7). They give the Host limits
 /// from the Core constants. Each section and each function result is data, and one
 /// `record_memory_observations` call ends the capture.
 #[test]
@@ -106,7 +107,10 @@ proposal that the author did not accept is not a decision.
 
 The section Memory index lists the current entries: a line with a type starts a group, and each \
 line after it gives the id, the title, and the description of one entry. Do not record a fact \
-that an entry already holds, unless the input changes it. The section Chapter list has each \
+that an entry already holds, unless the input changes it. When the input is against an entry of \
+the author, give a conflict item with the id of the entry and a reason of one line. Do not \
+record the fact as an observation that corrects the entry. An entry of the author has the \
+origin author_request in the result of read_memory_entry. The section Chapter list has each \
 Chapter of the manuscript in its order, with its number, its length in characters, and its \
 title. The section Deleted Memory entries lists entries that the author deleted: they are \
 examples of content that the author does not want.
@@ -176,6 +180,40 @@ async fn the_first_request_of_each_input_kind_has_its_sections_and_four_strict_f
                 &request.context[0].content
             )]),
             json!([message("Chapter text", text)]),
+        )
+    );
+}
+
+/// ADR 0094 section 7: the output function of a capture has the parameters of the Core
+/// declaration, so its item has the kind `conflict` with the id of an entry and a reason, and the
+/// strict form requires each key of an item.
+#[tokio::test]
+async fn the_output_function_of_a_capture_has_the_conflict_item_of_the_core_declaration() {
+    let request = conversation();
+    let declared = (request.tool_exposure.declarations().into_iter())
+        .find(|declaration| declaration.name == "record_memory_observations")
+        .unwrap();
+    let first_body = body(request).await;
+    let parameters = &first_body["tools"][3]["parameters"];
+    let item = &parameters["properties"]["observations"]["items"];
+    assert_eq!(
+        (
+            first_body["tools"][3]["name"].clone(),
+            parameters.clone(),
+            item["properties"]["kind"]["enum"].clone(),
+            item["properties"]["entry"]["type"].clone(),
+            item["properties"]["reason"]["type"].clone(),
+            item["required"].clone(),
+            item["additionalProperties"].clone(),
+        ),
+        (
+            json!("record_memory_observations"),
+            declared.parameters,
+            json!(["observation", "conflict"]),
+            json!(["integer", "null"]),
+            json!(["string", "null"]),
+            json!(["kind", "type", "title", "text", "entry", "reason"]),
+            json!(false),
         )
     );
 }
