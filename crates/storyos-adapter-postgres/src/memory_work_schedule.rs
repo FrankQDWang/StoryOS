@@ -374,3 +374,7 @@ async fn unread_runs(
 #[cfg(test)]
 #[path = "memory_work_schedule_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "memory_work_outcome_tests.rs"]
+mod outcome_tests;
