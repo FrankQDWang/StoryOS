@@ -29,8 +29,15 @@ test("the Run read of getAgentRun gives each manuscript Tool use of the Run", as
       SELECT model_attempt_id::text FROM storyos.model_attempts
        WHERE run_id = '${used.run_id}'::uuid AND attempt_role = 'decision' AND decision_position = 0`);
     const first = await inspectRun(started.baseUrl, story, used.run_id, attempt);
+    // The Tool Exposure of the request has the keyword search and the read, and no hybrid search.
+    const exposed = await queryStoryOSPostgres(`
+      SELECT string_agg(tool ->> 'name', ' ' ORDER BY tool ->> 'name')
+        FROM storyos.model_attempts, jsonb_array_elements(payload #> '{step_snapshot,tool_exposure,tools}') AS tool
+       WHERE model_attempt_id = '${attempt}'::uuid
+         AND tool ->> 'name' IN ('search_manuscript', 'read_chapter', 'hybrid_search_manuscript')`);
 
     assert.deepEqual([used.status, plain.status], ["completed", "completed"]);
+    assert.equal(exposed, "read_chapter search_manuscript");
     assert.deepEqual(used.manuscript_uses, [
       { kind: "keyword_search", query: "Lin" },
       { kind: "chapter_read", chapter_id: story.chapterIds[1], title: "Fog" },

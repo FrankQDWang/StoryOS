@@ -683,3 +683,6 @@ mod flag_show_tests;
 
 #[path = "memory_conflict_chapter_path_tests.rs"]
 mod chapter_path_tests;
+
+#[path = "memory_failed_work_tests.rs"]
+mod failed_work_tests;
