@@ -31,15 +31,32 @@ impl ToolDispatchStore for PostgresProjectReader {
         claim: &ClaimedAgentRun,
     ) -> Result<Option<ToolCallRequest>, CompleteAgentRunError> {
         self.in_tool_transaction(claim, async |client| {
-            if load_run_phase(client, claim).await?.settled() {
+            let run = load_run_phase(client, claim).await?;
+            if run.settled() {
                 return Ok(None);
             }
+            let limit = crate::agent_run_finish_rule::run_step_limit(&run)?;
             while let Some(row) = next_unresolved(client, claim).await? {
                 if row.state == ToolCallState::Dispatched {
                     let fence = ToolCallFence::Restart {
                         fence_token: claim.fence_token,
                     };
                     settle_interrupted(client, claim, &row, fence).await?;
+                    continue;
+                }
+                // In the last RunStep, the Host executes only the call that the kind of the Run
+                // allows there (ADR 0091 section 5, ADR 0094 section 5).
+                let operation =
+                    storyos_core::tool_spec(&row.spec_revision).map(|spec| spec.operation);
+                if operation.is_some_and(|operation| !run.kind.executes_call(limit, operation)) {
+                    refuse(
+                        client,
+                        claim,
+                        &row,
+                        ToolCallState::Refused,
+                        "run_step_limit",
+                    )
+                    .await?;
                     continue;
                 }
                 if let Some(spec) =
