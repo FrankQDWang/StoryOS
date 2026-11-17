@@ -1,15 +1,18 @@
-//! The manuscript Tool uses of a Run, in the Run read (ADR 0095 section 1).
+//! The manuscript Tool uses of a Run, in the Run read (ADR 0095 section 1). Test prefix leads
+//! `ac`, and `feb` to `fef`.
 
+use storyos_adapter_fake_destination::EMBEDDING_REJECTION_MARKER;
 use storyos_application::{
     AgentRunReadSelection, AgentRunReadStore, ConversationSelection, ProjectScope,
 };
-use storyos_core::{AgentRunStatus, ManuscriptUse};
+use storyos_core::{AgentRunStatus, ManuscriptUse, NO_SEARCH_BY_MEANING};
 
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::stores;
 use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_read_chapter::tests::project;
 use crate::create_agent_run::context::chapter_list_tests::admitted;
+use crate::project_embedding_binding::tests::{FAKE, embedding_project};
 
 fn chapter_read(chapter_id: &str, title: &str) -> ManuscriptUse {
     ManuscriptUse::ChapterRead {
@@ -21,6 +24,12 @@ fn chapter_read(chapter_id: &str, title: &str) -> ManuscriptUse {
 fn keyword_search(query: &str) -> ManuscriptUse {
     ManuscriptUse::KeywordSearch {
         query: query.to_owned(),
+    }
+}
+
+fn hybrid_search(question: &str) -> ManuscriptUse {
+    ManuscriptUse::HybridSearch {
+        question: question.to_owned(),
     }
 }
 
@@ -141,4 +150,85 @@ async fn each_run_read_names_only_the_uses_of_its_own_run() {
             .collect::<Vec<_>>()
     );
     assert_eq!(uses(&store, &runs[1].0, &runs[0].1).await, None);
+}
+
+/// ADR 0095 section 1: each question of a settled `hybrid_search_manuscript` call is one entry.
+/// A call that settled with the exact-term list only, because the embedding request of its
+/// question gave no vector, gives the entry. A refused call gives no entry. A Run of another Project has only its own entries: its
+/// call is refused because the Project has no embedding use binding.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_run_read_names_each_question_of_a_hybrid_search_only_in_its_own_run() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (plain, admin) = stores().await;
+    let store = plain.clone().with_embedding_registration(FAKE);
+    let (bound, chapter_id, first) = embedding_project(&store, &admin, ["feb", "fec"], FAKE).await;
+    complete(&store, &admin, &bound, &first).await;
+    // A hybrid search, a keyword search, the same question again with no term, an empty
+    // question, and a second question whose embedding request is rejected.
+    let rejected = format!("{EMBEDDING_REJECTION_MARKER} 钟声从哪里来？");
+    let message = format!(
+        "SCRIPT:hybrid_search_manuscript 谁在渡口等船？|Lin\nSCRIPT:search_manuscript Lin\n\
+         SCRIPT:hybrid_search_manuscript 谁在渡口等船？\n\
+         SCRIPT:hybrid_search_manuscript |Lin\nSCRIPT:hybrid_search_manuscript {rejected}"
+    );
+    let new = ConversationSelection::New;
+    let used = admitted(&store, &bound, &chapter_id, "fed", &message, new).await;
+    complete(&store, &admin, &bound, &used).await;
+    let (other, other_chapter, _, _) = project(&plain, &admin, "fee", 0xfef8, &["Lin ran."]).await;
+    let message =
+        "SCRIPT:hybrid_search_manuscript 谁在渡口等船？\nSCRIPT:search_manuscript 谁在渡口等船？";
+    let new = ConversationSelection::New;
+    let unbound = admitted(&plain, &other, &other_chapter, "fef", message, new).await;
+    complete(&plain, &admin, &other, &unbound).await;
+    // The Run of each hybrid search call (true for the Run of the bound Project), its state, and
+    // whether its result is the exact-term list only.
+    let states: Vec<(bool, String, bool)> = admin
+        .query(
+            "SELECT run_id = $2::text::uuid, state,
+                    COALESCE(starts_with(result_text, $1), false)
+               FROM storyos.tool_calls
+              WHERE run_id IN ($2::text::uuid, $3::text::uuid)
+                AND function_name = 'hybrid_search_manuscript'
+              ORDER BY run_id = $2::text::uuid DESC, decision_position, call_position",
+            &[&NO_SEARCH_BY_MEANING, &used, &unbound],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1), row.get(/*idx*/ 2)))
+        .collect();
+
+    // Only the call of the rejected request has the exact-term list only. The Run of the other
+    // Project gets no entry for its refused call.
+    assert_eq!(
+        (
+            states,
+            uses(&store, &bound, &used).await,
+            uses(&store, &bound, &first).await,
+            uses(&plain, &other, &unbound).await,
+            uses(&plain, &other, &used).await,
+        ),
+        (
+            [
+                (true, "settled", false),
+                (true, "settled", false),
+                (true, "refused", false),
+                (true, "settled", true),
+                (false, "refused", false),
+            ]
+            .map(|(bound, state, exact)| (bound, state.to_owned(), exact))
+            .to_vec(),
+            Some(Some(vec![
+                hybrid_search("谁在渡口等船？"),
+                keyword_search("Lin"),
+                hybrid_search(&rejected),
+            ])),
+            Some(Some(Vec::new())),
+            Some(Some(vec![keyword_search("谁在渡口等船？")])),
+            None,
+        )
+    );
 }

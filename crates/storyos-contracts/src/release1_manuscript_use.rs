@@ -13,4 +13,7 @@ pub enum ManuscriptUseInspect {
     /// The Agent searched the manuscript for the exact text `query` with a settled
     /// `search_manuscript` call.
     KeywordSearch { query: String },
+    /// The Agent searched the manuscript by meaning for the question `question` with a settled
+    /// `hybrid_search_manuscript` call. The entry has no passage text, no vector, and no score.
+    HybridSearch { question: String },
 }

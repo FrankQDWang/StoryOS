@@ -9,12 +9,14 @@ function manuscriptUseLine(use: ManuscriptUseInspect): string {
       return `查阅了章节「${use.title}」`;
     case "keyword_search":
       return `在全书中搜索了「${use.query}」`;
+    case "hybrid_search":
+      return `按意思在全书中搜索了「${use.question}」`;
   }
 }
 
 /**
- * The Chapters that a settled Run read and the terms that it searched in the manuscript, as plain lines in the order
- * of the Run read (ADR 0095 section 1). The panel shows the list after the Skills of the turn, for the current turn
+ * The Chapters that a settled Run read, the terms that it searched in the manuscript, and the questions that it searched
+ * by meaning, as plain lines in the order of the Run read (ADR 0095 section 1). The panel shows the list after the Skills of the turn, for the current turn
  * and for each history turn, from the Run read that it holds for the turn. A Run with no entry shows no list. The list
  * has no control and shows no text of a result (ADR 0040).
  */

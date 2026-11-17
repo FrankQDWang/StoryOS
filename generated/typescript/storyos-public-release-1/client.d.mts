@@ -489,7 +489,7 @@ export type MemoryWriteActionInspect = "create" | "change" | "delete";
 
 export type SkillUseInspect = { "provenance": "author_selected", name: string, } | { "provenance": "agent_selected", name: string, reason: string, };
 
-export type ManuscriptUseInspect = { "kind": "chapter_read", chapter_id: string, title: string, } | { "kind": "keyword_search", query: string, };
+export type ManuscriptUseInspect = { "kind": "chapter_read", chapter_id: string, title: string, } | { "kind": "keyword_search", query: string, } | { "kind": "hybrid_search", question: string, };
 
 export type ContinuationInputMappingInspect = "none" | "incremental" | "full" | "new_transport";
 

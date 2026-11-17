@@ -45,8 +45,8 @@ const WITH_SKILLS = { ...ALL, skill_uses: [{ provenance: "author_selected", name
 const SKILL_LINES = ["使用了你选择的技能「dialogue-style-guide」", "使用了技能「internal-comms」：The request asks for an update."];
 // ADR 0095 section 1: the manuscript Tool uses of the turn go after its Skills.
 const WITH_USES = { ...WITH_SKILLS, manuscript_uses: [{ kind: "keyword_search", query: "Lin" },
-  { kind: "chapter_read", chapter_id: CHAPTER, title: "Fog" }] };
-const USE_LINES = ["在全书中搜索了「Lin」", "查阅了章节「Fog」"];
+  { kind: "hybrid_search", question: "谁在渡口等船？" }, { kind: "chapter_read", chapter_id: CHAPTER, title: "Fog" }] };
+const USE_LINES = ["在全书中搜索了「Lin」", "按意思在全书中搜索了「谁在渡口等船？」", "查阅了章节「Fog」"];
 // ADR 0094 section 5: each Memory write of the turn is one line at the position of its result.
 const create = { kind: "memory_write", decision_id: PROPOSAL_DECISION, action: "create", title: "铜铃" };
 const change = { kind: "memory_write", decision_id: PROPOSAL_DECISION, action: "change", title: "铜铃声" };
@@ -115,7 +115,7 @@ it.each([
     [RESEARCH_SYNTHESIS_SENTENCE, ...ARTIFACT_LINES, "用到故事里", PROPOSAL_SENTENCE, LOCATION, ANSWER]],
   ["a Research Artifact, a Proposal, a final answer text, and two Skills", WITH_SKILLS,
     [RESEARCH_SYNTHESIS_SENTENCE, ...SKILL_LINES, ...ARTIFACT_LINES, "用到故事里", PROPOSAL_SENTENCE, LOCATION, ANSWER]],
-  ["two Skills, a search, and a read of a Chapter", WITH_USES, [RESEARCH_SYNTHESIS_SENTENCE, ...SKILL_LINES,
+  ["two Skills, a search, a search by meaning, and a read of a Chapter", WITH_USES, [RESEARCH_SYNTHESIS_SENTENCE, ...SKILL_LINES,
     ...USE_LINES, ...ARTIFACT_LINES, "用到故事里", PROPOSAL_SENTENCE, LOCATION, ANSWER]],
   ["a Proposal and a final answer text", completedRun("018f0000-0000-7001-8000-000000000d31", [proposal, answer]),
     [PROPOSAL_SENTENCE, LOCATION, ANSWER]],
@@ -137,7 +137,7 @@ it.each([
 
 it.each([
   ["no manuscript Tool use", ALL, []],
-  ["a search and a read of a Chapter", WITH_USES, [...SKILL_LINES, ...USE_LINES]],
+  ["a search, a search by meaning, and a read of a Chapter", WITH_USES, [...SKILL_LINES, ...USE_LINES]],
 ])("shows the same results in the history turn of a Run with %s", async (_, earlier, lines) => {
   const current = { ...agentRunFixture, project_scope: scope, run_id: "018f0000-0000-7001-8000-000000000d41",
     status: "queued", decision: { kind: "absent" } };
@@ -152,6 +152,31 @@ it.each([
       // The button "用到故事里" stays with the current Run (#1427).
       expect(shownResults(panel.host.querySelector(`[data-assistant-history-run="${earlier.run_id}"]`)))
         .toEqual([RESEARCH_SYNTHESIS_SENTENCE, ...lines, ...ARTIFACT_LINES, PROPOSAL_SENTENCE, LOCATION, ANSWER]);
+    } finally {
+      await panel.remove();
+    }
+  });
+});
+
+// ADR 0095 section 1: a search by meaning that settled with the exact-term list only, because the embedding request
+// gave no vector, has the same entry. The Agent got a result, so the turn shows the line after its first result and no
+// error.
+it("shows the line of a search by meaning with no error, in the current turn and in a history turn", async () => {
+  const uses = { manuscript_uses: [{ kind: "hybrid_search", question: "钟声从哪里来？" }] };
+  const earlier = { ...completedRun("018f0000-0000-7001-8000-000000000d44", [answer]), ...uses };
+  const current = { ...completedRun("018f0000-0000-7001-8000-000000000d45", [answer]), ...uses };
+  await inActEnvironment(async () => {
+    const panel = await renderPanel([earlier, current], { message: "钟声从哪里来？",
+      correlationId: "018f0000-0000-7001-8000-000000000d1c", idempotencyKey: "018f0000-0000-7001-8000-000000000d1d",
+      snapshotId: "018f0000-0000-7001-8000-000000000d1e", runId: current.run_id,
+      history: [{ requestId: "018f0000-0000-7001-8000-000000000d1f", chapterId: CHAPTER, conversationId: CONVERSATION,
+        runId: earlier.run_id, run: earlier, message: "钟声从哪里来？", status: "completed", result: ANSWER }] });
+    try {
+      const turns = [panel.host.querySelector(`[data-assistant-history-run="${earlier.run_id}"]`),
+        panel.host.querySelector("[data-assistant-current-run]")];
+      expect(turns.map(turn => [shownResults(turn), turn?.querySelectorAll("[role=alert], [role=status]").length,
+        turn?.querySelector("[data-assistant-manuscript-uses]")?.querySelectorAll("a, button").length]))
+        .toEqual([0, 1].map(() => [[ANSWER, "按意思在全书中搜索了「钟声从哪里来？」"], 0, 0]));
     } finally {
       await panel.remove();
     }
