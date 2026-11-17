@@ -519,9 +519,10 @@ type AuthorEditContext = {
   session: { editor_session: { editor_session_id: string } };
 };
 
-/** Builds one author edit from the current editor session base of the writer. */
+/** Builds one author edit from the current editor session base of the writer, with one unit for each primitive. */
 export async function authorEditRequest(started: Started, context: AuthorEditContext,
-  primitive: AuthorEditPrimitive, ownership: EditOwnership, sequence: string, ns: string): Promise<ApplyAuthorEditRequest> {
+  primitives: AuthorEditPrimitive | readonly AuthorEditPrimitive[], ownership: EditOwnership, sequence: string,
+  ns: string): Promise<ApplyAuthorEditRequest> {
   const { projectId, fetchImpl } = context.prepared;
   const session = await getEditorSession({ baseUrl: started.baseUrl, projectId, fetchImpl,
     editorSessionId: context.session.editor_session.editor_session_id });
@@ -540,10 +541,11 @@ export async function authorEditRequest(started: Started, context: AuthorEditCon
     observed_ownership_partition: proposal ? "mixed" : "authoritative",
     editor_contract_revision: "storyos.editor-contract.release-1.v3",
     undo_group_id: id(`${ns}2`), completed_intent_record_id: id(`${ns}3`), local_intent_sequence: sequence,
-    author_edit_units: [{ normalized_primitives: [primitive], selection_snapshot: {
-      coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-      from: "from" in primitive ? primitive.from : "offset" in primitive ? primitive.offset : 0,
-      to: "to" in primitive ? primitive.to : "offset" in primitive ? primitive.offset : 0 } }],
+    author_edit_units: (Array.isArray(primitives) ? primitives : [primitives]).map((primitive: AuthorEditPrimitive) => ({
+      normalized_primitives: [primitive], selection_snapshot: {
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+        from: "from" in primitive ? primitive.from : "offset" in primitive ? primitive.offset : 0,
+        to: "to" in primitive ? primitive.to : "offset" in primitive ? primitive.offset : 0 } })),
   };
   return request;
 }
