@@ -1,6 +1,7 @@
 //! The validation of the operations of one `apply_memory_operations` call in list order (ADR 0039,
-//! ADR 0094 sections 6 and 8): the shape of each action, the checks of the list, the write rule of
-//! S7-D1a2, the delete marks, and the versions of a merge. A conflict flag has its own module.
+//! ADR 0094 sections 6 and 8). It checks the shape of each action and the list. It applies the
+//! write rule of S7-D1a2 and the delete marks, and it gives the versions of a merge. A conflict
+//! flag has its own module.
 
 use crate::{
     AdmittedOperation, CurrentMemoryEntry, MemoryDeleteMark, MemoryEntryOrigin, MemoryEntryType,

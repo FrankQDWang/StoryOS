@@ -1,7 +1,7 @@
 //! The current entries of a consolidation pass and the versions that its settlement writes (ADR
-//! 0094 sections 6 and 8): the entries with their sources and the mark `unused`, and the version
-//! of each admitted operation, with the deleted version of each entry that a merge merged, or the
-//! flag version of a conflict flag.
+//! 0094 sections 6, 7, and 8). The entries have their sources and the mark `unused`. Each admitted
+//! operation writes its version. A merge also writes the deleted version of each merged entry.
+//! A conflict flag writes a flag version.
 
 use serde_json::{Value, json};
 use storyos_application::{CompleteAgentRunError, ProjectScope};

@@ -488,12 +488,13 @@ fn no_operation_changes_an_entry_of_the_author() {
 }
 
 /// A flag version has the values of the version before it, the trimmed reason, and the source of
-/// the first observation. A flag needs a current entry of the author, a reason of one line at
-/// most as long as a description, one or more observations, and no other value. It names its
+/// the first observation. A flag needs a current entry of the author and one or more
+/// observations, and no other value. Its reason is one line at most as long as a description, and
+/// a line break at an end of the reason also refuses the flag. It names its
 /// entry for the operations after it.
 #[test]
 fn a_conflict_flag_keeps_the_entry_and_each_refusal_of_a_flag() {
-    let mut entries: Vec<PassMemoryEntry> = (1..=8)
+    let mut entries: Vec<PassMemoryEntry> = (1..=10)
         .map(|number| {
             entry(
                 number,
@@ -517,6 +518,8 @@ fn a_conflict_flag_keeps_the_entry_and_each_refusal_of_a_flag() {
         flag(4, &"长".repeat(101), json!([1])),
         flag(5, &"长".repeat(100), json!([1])),
         flag(6, "不符。\n第二行", json!([1])),
+        flag(9, "不符。\n", json!([1])),
+        flag(10, "\r\n不符。", json!([1])),
         flag(7, "不符。", json!([])),
         titled,
     ]));
@@ -551,6 +554,8 @@ fn a_conflict_flag_keeps_the_entry_and_each_refusal_of_a_flag() {
                 "memory_entry_not_found",
                 "memory_entry_too_long",
                 "Change 5 author_request 0",
+                "memory_entry_invalid",
+                "memory_entry_invalid",
                 "memory_entry_invalid",
                 "memory_entry_invalid",
                 "memory_entry_invalid",

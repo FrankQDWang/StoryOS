@@ -33,7 +33,9 @@ pub(crate) fn decide_flag(
         &candidate.description,
         &candidate.text,
     ];
-    let reason = candidate.reason.as_deref().map(str::trim);
+    // A control character at an end is a line break too, so the check reads the given reason.
+    let given = candidate.reason.as_deref();
+    let reason = given.map(str::trim);
     let source = candidate
         .observations
         .first()
@@ -46,7 +48,7 @@ pub(crate) fn decide_flag(
     if candidate.entries.is_some()
         || values.iter().any(|value| value.is_some())
         || reason.is_empty()
-        || reason.chars().any(char::is_control)
+        || given.is_some_and(|given| given.chars().any(char::is_control))
     {
         return Err(invalid);
     }
