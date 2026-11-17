@@ -60,10 +60,13 @@ async function makeDue(kind: "chapter_capture" | "consolidation" | "conversation
   assert.equal(changed, "1", `the statement must change exactly 1 row: ${statement}`);
 }
 
-async function until(label: string, check: () => Promise<boolean>, limitMs = 30 * 60_000): Promise<void> {
+// Each poll also checks the stops of the plan, so that no request follows a request above a limit.
+async function until(projectId: string, label: string, check: () => Promise<boolean>, limitMs = 30 * 60_000) {
   const start = Date.now();
   let shown = start;
-  while (!(await check())) {
+  for (;;) {
+    await checkLimits(projectId, false);
+    if (await check()) break;
     if (Date.now() - start > limitMs) throw new Error(`STOP: no end of ${label} in ${limitMs / 60_000} minutes`);
     if (Date.now() - shown > 60_000) { note(`wait ${label}`); shown = Date.now(); }
     await sleep(5_000);
@@ -71,20 +74,28 @@ async function until(label: string, check: () => Promise<boolean>, limitMs = 30 
   note(`done ${label}`);
 }
 
-// The stops of the plan: more than 150 model requests, a capture or pass request above 60,000 reported input
-// tokens, or a request of a Run of the author above 150,000.
-async function checkLimits(projectId: string): Promise<void> {
-  const [usage] = await rows<{ requests: number; background_max: number | null; author_max: number | null }>(`
-    SELECT count(*)::int AS requests,
+// The stops of the plan: more than 150 model requests, more than 2,500,000 reported input tokens in all, a capture
+// or pass request above 60,000 reported input tokens, a request of a Run of the author above 150,000, or failed
+// work: a capture or a pass with the outcome `failed`, or a Run of the author that is `refused` or `cancelled`.
+async function checkLimits(projectId: string, show = true): Promise<void> {
+  const project = `project_id = '${projectId}'::uuid`;
+  const [usage] = await rows<{ requests: number; input: number | null; background_max: number | null;
+    author_max: number | null; failed: number }>(`
+    SELECT count(*)::int AS requests, sum((a.payload #>> '{usage,input_tokens}')::int)::int AS input,
       max((a.payload #>> '{usage,input_tokens}')::int) FILTER (WHERE r.run_kind <> 'author') AS background_max,
-      max((a.payload #>> '{usage,input_tokens}')::int) FILTER (WHERE r.run_kind = 'author') AS author_max
+      max((a.payload #>> '{usage,input_tokens}')::int) FILTER (WHERE r.run_kind = 'author') AS author_max,
+      ((SELECT count(*) FROM storyos.memory_captures WHERE ${project} AND outcome = 'failed')
+        + (SELECT count(*) FROM storyos.memory_consolidation_passes WHERE ${project} AND outcome = 'failed')
+        + (SELECT count(*) FROM storyos.agent_runs WHERE ${project} AND run_kind = 'author'
+            AND status IN ('refused', 'cancelled')))::int AS failed
       FROM storyos.model_attempts AS a JOIN storyos.agent_runs AS r USING (owner_user_id, project_id, run_id)
-     WHERE a.project_id = '${projectId}'::uuid`);
+     WHERE a.${project}`);
   assert.ok(usage);
-  note(`usage ${JSON.stringify(usage)}`);
-  if (usage.requests > 150 || (usage.background_max ?? 0) > 60_000 || (usage.author_max ?? 0) > 150_000) {
+  if (show) note(`usage ${JSON.stringify(usage)}`);
+  if (usage.requests > 150 || (usage.input ?? 0) > 2_500_000 || (usage.background_max ?? 0) > 60_000
+    || (usage.author_max ?? 0) > 150_000 || usage.failed > 0) {
     process.kill(Number(workerPid), "SIGTERM");
-    throw new Error(`STOP: a limit of the plan is passed: ${JSON.stringify(usage)}`);
+    throw new Error(`STOP: a stop of the plan: ${JSON.stringify(usage)}`);
   }
 }
 
@@ -103,7 +114,7 @@ async function captureThenPass(projectId: string, label: string, source: Source,
   const passes = await settledPasses(projectId);
   if (await captures(projectId, source, false) > before) note(`capture ${label} started by time: no statement`);
   else await makeDue(source.kind, projectId, source.id);
-  await until(`capture ${label}`, async () => (await captures(projectId, source, true)) > before);
+  await until(projectId, `capture ${label}`, async () => (await captures(projectId, source, true)) > before);
   await checkLimits(projectId);
   const due = await sql(`SELECT coalesce((SELECT CASE WHEN due_at IS NULL THEN 'none' WHEN due_at > now()
       THEN 'later' ELSE 'now' END FROM storyos.memory_work_schedules WHERE project_id = '${projectId}'::uuid
@@ -112,7 +123,7 @@ async function captureThenPass(projectId: string, label: string, source: Source,
     WHERE project_id = '${projectId}'::uuid;`)) > passes;
   if (due === "none" && !passStarted) { note(`no pass after ${label}: the pass row has no due time`); return; }
   if (due === "later") await makeDue("consolidation", projectId, projectId);
-  await until(`pass ${label}`, async () => (await settledPasses(projectId)) > passes);
+  await until(projectId, `pass ${label}`, async () => (await settledPasses(projectId)) > passes);
   await checkLimits(projectId);
   snapshots[label] = await rows(`SELECT DISTINCT ON (memory_entry_id) entry_number, version, state, entry_type,
       origin, title, length(text) AS length, text, flag_reason FROM storyos.memory_entry_versions
@@ -131,8 +142,10 @@ async function authorRun(story: Story, text: string, conversationId?: string): P
     request: runRequest(story.current, story.key(), text, conversation) }));
   const effect = created.response.effect;
   if (effect.kind !== "admitted") throw new Error(`STOP: the Run was not admitted: ${created.body}`);
-  await until(`Run ${effect.run_id}`, async () => ["completed", "failed", "cancelled"].includes((await client.getAgentRun({
-    baseUrl: story.baseUrl, projectId: story.projectId, fetchImpl: story.fetchImpl, runId: effect.run_id })).status));
+  const status = async () => (await client.getAgentRun({
+    baseUrl: story.baseUrl, projectId: story.projectId, fetchImpl: story.fetchImpl, runId: effect.run_id })).status;
+  await until(story.projectId, `Run ${effect.run_id}`, async () => ["completed", "failed", "cancelled"]
+    .includes(await status()));
   await checkLimits(story.projectId);
   return effect.run_id;
 }
@@ -232,6 +245,9 @@ async function measures(projectId: string): Promise<void> {
            ORDER BY t.decision_position, t.call_position) FROM storyos.tool_calls AS t
           WHERE t.${project} AND t.run_id = r.run_id) AS tool_calls
       FROM storyos.agent_runs AS r WHERE r.${project} AND r.run_kind = 'author' ORDER BY r.run_id`),
+    answers: await rows(`SELECT DISTINCT ON (a.run_id) a.run_id, a.payload #>> '{decision,text}' AS answer
+      FROM storyos.model_attempts AS a JOIN storyos.agent_runs AS r USING (owner_user_id, project_id, run_id)
+     WHERE a.${project} AND r.run_kind = 'author' ORDER BY a.run_id, a.decision_position DESC`),
     schedules: await rows(`SELECT work_kind, source_id, due_at, held FROM storyos.memory_work_schedules
      WHERE ${project} ORDER BY work_kind, source_id`),
   };

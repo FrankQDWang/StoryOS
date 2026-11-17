@@ -32,6 +32,8 @@ The plan was posted on the ticket before the first request ([plan comment](https
 
 Final count: **62 model requests, 818,006 reported input tokens, and 169,328 output tokens**, inside each limit. No stop of the plan occurred.
 
+During the run, the script checked the request count and the input of each request after each capture, each pass, and each Run settled. It did not check the total input, and it did not stop on failed work. The run had no failed work. After review round 1 of the pull request, the script checks each stop of the plan in each poll of a wait, also the total input and failed work (a capture or a pass with the outcome `failed`, or a Run of the author that is `refused` or `cancelled`), and it reads the answers. The run used the earlier version of `ee880700`.
+
 | Kind | Requests | Input | Output | Largest input |
 | --- | --- | --- | --- | --- |
 | Runs of the author (7) | 22 | 558,286 | 6,780 | 41,595 |
@@ -134,6 +136,33 @@ The Index of each request had 35 entries, 3,176 counted tokens, and the flag of 
 | 沈知南现在在哪里读书，学什么？ | R6, 2 RunSteps | none | It gives the text of Chapter 9 and the entry of the author, says that they conflict, and asks the author to decide. | yes |
 | 我之前说顾青禾后面会怎么样？ | R7, 3 RunSteps | `read_memory_entry` 38 | She dies in Chapter 12 and leaves her half of the house to 陆小满. | yes |
 
+The answers are the `decision.text` of the last request of each Run (M57, M59, M62). The executor read them with a read-only query before the database was removed (section [Queries](#queries)). The text is as the model gave it:
+
+> **R5:** 当年买房的钱是**沈怀山与顾青禾各出一半**：一九八三年房管所卖临水街一号，总价四千二百元；沈怀山钱不够，顾青禾拿出亡夫留下的抚恤金**两千一百元**凑齐半价。沈怀山立字据写明房屋二人共有、各占一半，变卖须双方同意，赵德明见证；二〇一九年又重写字据并经镇司法所公证。因当年忌讳寡妇与鳏夫联名，房契上只写了沈怀山一人。
+>
+> 另待您确认：沈知南的设定以**北京建筑学大四（测绘）**为准，还是以第九章现写的**成都临床医学大四**为准？
+
+> **R6:** 按**正文第九章现在的写法**，沈知南在**成都**读大学，学的是**临床医学**，今年大四（证据：他带着《内科学》，说“学医就是这样，放假也得背”，还在本子上画心脏血管、给顾青禾量血压）。
+>
+> 但这与您此前定下的固定设定冲突：记忆条目33写的是他在**北京**读**建筑学**大四，回乡是为了测绘茶馆和老桥（该条目已标冲突）。
+>
+> 所以两处目前不一致。请您裁定以哪个为准：
+> - 若以**北京建筑学**为准，我可以把第九章的《内科学》、学医台词、画血管、量血压等细节改成测绘相关内容；
+> - 若以**成都临床医学**为准，我就更新记忆条目33，后续章节按医学生续写。
+>
+> 您说一声即可，我再动笔。
+
+> **R7:** 根据您此前留下的剧情备忘（记忆条目38，来源是您本人的要求，正文目前只写到第十章，尚未落实）：
+>
+> **顾青禾将在第十二章去世**，并在生前立下遗嘱，把自己名下**那一半临水茶馆房产留给陆小满**（陆砚的高中生妹妹），而不是亲子顾远。
+>
+> 当时记下的几个牵连点：
+> - 她这一半产权易主后，知遥未来的共有人、也是卖房否决权人，就变成了陆小满，直接牵动保馆与收购主线。
+> - 她有亲儿子顾远（深圳工程师），却把房产留给非亲非故的陆小满，这个“越过亲生子的托付”需要在前文铺垫动机，也可能引发顾远的反应或冲突。
+> - 陆小满当时还是高中生、未成年即承接半栋房产，她本人的意愿、监护问题以及陆砚的态度，都可能成为情节点。
+>
+> 这只是规划备忘，不是已成文的事实；写到第十一、十二章时以您最新的指示为准。需要的话，我可以帮您在现有章节里检查、补一些为这份遗嘱做铺垫的伏笔。
+
 The Runs of the author in Conversation A had 2, 4, 3, and 3 RunSteps. The input of one request grew from 10,738 (R1) to 41,595 (R4), because each Run carries the earlier turns of the Conversation.
 
 ## The three counts of the plan
@@ -185,4 +214,5 @@ The script `apps/web/test/support/memory-calibration.ts` has each query in its f
 - Context items: the items of `context_assembly_manifests.payload` with `source_class` `memory_index` or `chapter_list` and their `token_count`.
 - Entries after each pass: the latest row of each `memory_entry_id` in `memory_entry_versions`, with its length, origin, state, and flag.
 - Runs of the author: `agent_runs` with `run_kind = 'author'`, its RunSteps, and its `tool_calls`.
-- Answers: `model_attempts.payload -> 'decision'` of the last request of R5, R6, and R7.
+- Answers: `model_attempts.payload #>> '{decision,text}'` of the last request of each Run of the author (`answers`). The run of `ee880700` did not have this query in the script. The executor read `payload -> 'decision'` of M57, M59, and M62 with a read-only `psql` query on the database of the run, before the database was removed.
+- Stops: `checkLimits` counts the requests, sums the reported input, takes the largest input of a capture or a pass and of a Run of the author, and counts the failed captures, the failed passes, and the Runs of the author that are `refused` or `cancelled`.
