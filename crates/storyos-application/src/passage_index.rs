@@ -135,35 +135,9 @@ pub async fn index_chapter_passages(
             .await?;
         return Ok(PassageIndexResult::ChapterNotLive { removed });
     };
-    let blocks: Vec<PassageBlock<'_>> = chapter
-        .blocks
-        .iter()
-        .map(|block| PassageBlock {
-            block_id: &block.manuscript_block_id,
-            text: &block.text,
-        })
-        .collect();
-    let mut seen = BTreeSet::new();
-    let current: Vec<_> = cut_passages(&blocks)
-        .into_iter()
-        .filter(|passage| seen.insert(passage.digest.clone()))
-        .map(|passage| {
-            let key = PassageVectorKey {
-                embedding_registration_revision: configured.revision.to_owned(),
-                cut_revision: PASSAGE_CUT_REVISION.to_owned(),
-                passage_digest: passage.digest,
-            };
-            (key, passage.text)
-        })
-        .collect();
+    let PassagePlan { current, stale } =
+        plan_passages(&chapter, configured.revision, &facts.stored);
     let stored: BTreeSet<&PassageVectorKey> = facts.stored.iter().collect();
-    let current_keys: BTreeSet<&PassageVectorKey> = current.iter().map(|(key, _)| key).collect();
-    let stale: Vec<PassageVectorKey> = facts
-        .stored
-        .iter()
-        .filter(|key| !current_keys.contains(key))
-        .cloned()
-        .collect();
     let mut report = PassageIndexReport {
         passages: current.len(),
         removed: store
@@ -176,12 +150,7 @@ pub async fn index_chapter_passages(
             report.unchanged += 1;
             continue;
         }
-        let input = EmbeddingInput::Passage {
-            chapter_id: chapter_id.to_owned(),
-            revision_id: chapter.head_revision_id.clone(),
-            passage_digest: key.passage_digest.clone(),
-            text: passage_embedding_text(&chapter.volume_title, &chapter.title, text),
-        };
+        let input = passage_input(&chapter, chapter_id, key, text);
         match dispatch_embedding(store, adapter, Some(configured), scope, &input).await? {
             EmbeddingResult::Vector(embedding) => {
                 store
@@ -203,4 +172,61 @@ pub async fn index_chapter_passages(
         }
     }
     Ok(PassageIndexResult::Indexed(report))
+}
+
+/// The distinct current passages of a Chapter with their keys, in passage order, and the stored
+/// keys that are not a current passage.
+pub(crate) struct PassagePlan {
+    pub(crate) current: Vec<(PassageVectorKey, String)>,
+    pub(crate) stale: Vec<PassageVectorKey>,
+}
+
+pub(crate) fn plan_passages(
+    chapter: &ChapterPassageSource,
+    registration_revision: &str,
+    stored: &[PassageVectorKey],
+) -> PassagePlan {
+    let blocks: Vec<PassageBlock<'_>> = chapter
+        .blocks
+        .iter()
+        .map(|block| PassageBlock {
+            block_id: &block.manuscript_block_id,
+            text: &block.text,
+        })
+        .collect();
+    let mut seen = BTreeSet::new();
+    let current: Vec<_> = cut_passages(&blocks)
+        .into_iter()
+        .filter(|passage| seen.insert(passage.digest.clone()))
+        .map(|passage| {
+            let key = PassageVectorKey {
+                embedding_registration_revision: registration_revision.to_owned(),
+                cut_revision: PASSAGE_CUT_REVISION.to_owned(),
+                passage_digest: passage.digest,
+            };
+            (key, passage.text)
+        })
+        .collect();
+    let current_keys: BTreeSet<&PassageVectorKey> = current.iter().map(|(key, _)| key).collect();
+    let stale = stored
+        .iter()
+        .filter(|key| !current_keys.contains(key))
+        .cloned()
+        .collect();
+    PassagePlan { current, stale }
+}
+
+/// The embedding input of one passage of the Chapter.
+pub(crate) fn passage_input(
+    chapter: &ChapterPassageSource,
+    chapter_id: &str,
+    key: &PassageVectorKey,
+    text: &str,
+) -> EmbeddingInput {
+    EmbeddingInput::Passage {
+        chapter_id: chapter_id.to_owned(),
+        revision_id: chapter.head_revision_id.clone(),
+        passage_digest: key.passage_digest.clone(),
+        text: passage_embedding_text(&chapter.volume_title, &chapter.title, text),
+    }
 }

@@ -69,6 +69,18 @@ pub(crate) async fn persist_structure_commit(
     receipt_id: &str,
     binding: StructureCommitBinding<'_>,
 ) -> Result<(), tokio_postgres::Error> {
+    // A Structure Transition changes the Chapter or the Chapters of the Volume (ADR 0095 section 4).
+    let changed = match &binding.identity {
+        StructureAffectedIdentity::Volume { volume_id } => *volume_id,
+        StructureAffectedIdentity::Chapter { chapter_id }
+        | StructureAffectedIdentity::ChapterInitialRevision { chapter_id, .. } => *chapter_id,
+    };
+    crate::passage_index_work::mark_passage_index_work(
+        client,
+        scope,
+        crate::passage_index_work::MarkedChapters::Changed(&[changed]),
+    )
+    .await?;
     match &binding.identity {
         StructureAffectedIdentity::Volume { .. } | StructureAffectedIdentity::Chapter { .. } => {
             persist_empty_pair_structure_commit(

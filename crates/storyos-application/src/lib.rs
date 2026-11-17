@@ -68,6 +68,7 @@ mod memory_capture;
 mod memory_entries;
 mod open_proposal_list;
 mod passage_index;
+mod passage_index_work;
 mod passage_ranking;
 mod pinned_export_source;
 mod project_activity;
@@ -198,6 +199,10 @@ pub use passage_index::{
     ChapterPassageSource, PassageIndexFacts, PassageIndexFailure, PassageIndexReport,
     PassageIndexResult, PassageVectorKey, PassageVectorRow, PassageVectorStore,
     index_chapter_passages,
+};
+pub use passage_index_work::{
+    ClaimedPassageIndex, PASSAGE_INDEX_LEASE, PASSAGE_INDEX_QUIET_TIME, PassageIndexStep,
+    PassageIndexWorkStore, claim_next_passage_index_work, step_passage_index_work,
 };
 pub use passage_ranking::{
     PassageRankingFacts, PassageRankingStore, QuestionVector, rank_manuscript_passages,
