@@ -646,6 +646,7 @@ fn the_expected_input_counts_the_memory_index_with_the_current_input() {
             entry_type: crate::MemoryEntryType::Character,
             title: "Lin".to_owned(),
             description: "A quiet ferryman.".to_owned(),
+            flagged: false,
         }],
     );
     let index_tokens = decision.selected.last().map(|item| item.token_count);

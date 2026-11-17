@@ -25,6 +25,15 @@ pub enum MemoryEntrySourceItem {
     },
 }
 
+/// The conflict flag of the current version of an entry (ADR 0094 section 7).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemoryEntryFlagItem {
+    pub reason: String,
+    pub source: MemoryEntrySourceItem,
+    /// The time of the flag version, RFC 3339 in UTC with milliseconds.
+    pub flagged_at: String,
+}
+
 /// The current version of one Memory Entry.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryEntryListItem {
@@ -40,6 +49,8 @@ pub struct MemoryEntryListItem {
     pub source: Option<MemoryEntrySourceItem>,
     /// RFC 3339 in UTC with milliseconds.
     pub changed_at: String,
+    /// `Some` when the current version is a flag version.
+    pub flag: Option<MemoryEntryFlagItem>,
 }
 
 /// Reads the current Memory Entries under an already authenticated exact Project Scope. The read

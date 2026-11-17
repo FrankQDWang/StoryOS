@@ -1,13 +1,15 @@
 //! The read of the current Memory Entries of a Project for the settings page (ADR 0094 section 9).
 //! The source of an entry is the first source reference of its current version. A reference to a
 //! record that the Project does not have now is unavailable and does not fail the read (Memory
-//! contract, section 10). The read does not read the Conversation Memory Settings. No diagnostic
+//! contract, section 10). A flag version gives the flag with its source (ADR 0094 section 7). The
+//! read does not read the Conversation Memory Settings. No diagnostic
 //! records a title, a description, or a text of an entry (ADR 0047).
 
 use std::collections::{HashMap, HashSet};
 
 use storyos_application::{
-    MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem, ProjectReadError, ProjectScope,
+    MemoryEntryFlagItem, MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem,
+    ProjectReadError, ProjectScope,
 };
 use storyos_core::{MemoryEntryOrigin, MemoryEntryType, MemorySourceReference};
 
@@ -65,6 +67,15 @@ impl MemoryEntryReader for PostgresProjectReader {
             };
         rows.into_iter()
             .map(|row| {
+                let flag = match row.get::<_, Option<String>>(10) {
+                    Some(reason) => Some(MemoryEntryFlagItem {
+                        reason,
+                        source: source(row.get(11))
+                            .ok_or_else(|| damaged("A Memory flag source is invalid"))?,
+                        flagged_at: row.get(12),
+                    }),
+                    None => None,
+                };
                 Ok(MemoryEntryListItem {
                     memory_entry_id: row.get(0),
                     number: counter(row.get(1))?,
@@ -78,6 +89,7 @@ impl MemoryEntryReader for PostgresProjectReader {
                         .ok_or_else(|| damaged("A Memory Entry origin is invalid"))?,
                     source: source(row.get(8)),
                     changed_at: row.get(9),
+                    flag,
                 })
             })
             .collect::<Result<_, _>>()
@@ -108,7 +120,9 @@ async fn read_facts(
             &format!(
                 "SELECT memory_entry_id::text, entry_number::text, version::text, entry_type,
                         title, description, text, origin, (source_references -> 0)::text,
-                        to_char({LAST_CHANGE} AT TIME ZONE 'UTC', '{TIME_FORM}')
+                        to_char({LAST_CHANGE} AT TIME ZONE 'UTC', '{TIME_FORM}'),
+                        flag_reason, flag_source::text,
+                        to_char(recorded_at AT TIME ZONE 'UTC', '{TIME_FORM}')
                    FROM (SELECT DISTINCT ON (memory_entry_id) *
                            FROM storyos.memory_entry_versions
                           WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid

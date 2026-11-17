@@ -29,7 +29,12 @@ use crate::set_current_chapter_authority_tests::open_session_request;
 
 /// Makes the row of the Chapter due `seconds` ago, and each other row not due, so that the
 /// claim takes this row. A Chapter with no commit gets its row.
-async fn make_chapter_due(admin: &Client, scope: &ProjectScope, chapter_id: &str, seconds: i32) {
+pub(crate) async fn make_chapter_due(
+    admin: &Client,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    seconds: i32,
+) {
     let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
     let others = "UPDATE storyos.memory_work_schedules SET due_at = NULL
                    WHERE due_at IS NOT NULL AND project_id <> $1::text::uuid";
