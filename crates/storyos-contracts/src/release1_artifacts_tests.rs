@@ -722,6 +722,7 @@ fn assert_receipt_sequence_documents(generated: &GeneratedFiles) {
             "create-project",
             "create-volume",
             "delete-chapter",
+            "delete-memory-entry",
             "delete-volume",
             "pause-agent-run",
             "set-current-chapter",

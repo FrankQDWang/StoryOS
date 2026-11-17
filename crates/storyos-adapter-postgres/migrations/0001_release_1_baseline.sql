@@ -20,6 +20,7 @@ CREATE DOMAIN storyos.command_kind AS text CHECK (VALUE IN (
     'createProject',
     'createVolume',
     'deleteChapter',
+    'deleteMemoryEntry',
     'deleteVolume',
     'exportHumanReadableManuscript',
     'exportProjectArchive',
@@ -51,6 +52,7 @@ CREATE DOMAIN storyos.event_kind AS text CHECK (VALUE IN (
     'chapter_updated',
     'current_chapter_set',
     'human_readable_manuscript_export_settled',
+    'memory_entry_deleted',
     'project_assistance_updated',
     'project_created',
     'project_export_settled',
@@ -613,7 +615,7 @@ CREATE TABLE storyos.author_command_admissions (
             AND local_intent_sequence IS NULL
             AND challenge_consumed_at IS NOT NULL
             AND challenge_expires_at IS NOT NULL)
-        OR (command_kind = ANY (ARRAY['deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text])
+        OR (command_kind = ANY (ARRAY['deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text])
             AND action_class = 'explicit_project_command'::text
             AND editor_session_id IS NULL
             AND writer_generation IS NULL
@@ -855,7 +857,7 @@ BEGIN
 END
 $$;
 
-CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN (((new.action_class <> 'agent_run_control'::text) AND (new.command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission();
+CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN (((new.action_class <> 'agent_run_control'::text) AND (new.command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission();
 
 CREATE TABLE storyos.scope_counters (
     owner_user_id uuid NOT NULL,
@@ -976,7 +978,7 @@ CREATE TABLE storyos.domain_receipts (
             AND array_position(draft_artifact_refs, NULL::text) IS NULL
             AND array_position(artifact_lifecycle_event_refs, NULL::text) IS NULL
             AND array_position(condition_refs, NULL::text) IS NULL
-            AND (((command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR ((command_kind = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0))))
+            AND (((command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR ((command_kind = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0))))
         OR (command_kind = 'replanProposal'::text
             AND cardinality(expected_heads) = 1
             AND cardinality(prior_heads) <= 1
@@ -1383,6 +1385,25 @@ CREATE TABLE storyos.domain_receipts (
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
             AND (result_payload ->> 'reason'::text) = 'stale_instruction_revision'::text
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'deleteMemoryEntry'::text
+            AND result_kind = 'authoritative_applied'::text
+            AND result_payload = '{}'::jsonb
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'deleteMemoryEntry'::text
+            AND result_kind = 'no_effect'::text
+            AND result_payload ? 'reason'::text
+            AND (result_payload - 'reason'::text) = '{}'::jsonb
+            AND (result_payload ->> 'reason'::text) = 'already_deleted'::text
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'deleteMemoryEntry'::text
+            AND result_kind = 'conflicted'::text
+            AND result_payload ? 'reason'::text
+            AND (result_payload - 'reason'::text) = '{}'::jsonb
+            AND (result_payload ->> 'reason'::text) = 'entry_changed'::text
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'createAgentRun'::text
@@ -1968,6 +1989,14 @@ CREATE TABLE storyos.project_activity_event_payloads (
             AND jsonb_typeof((payload -> 'instruction_revision_id'::text)) = 'string'::text
             AND jsonb_typeof((payload -> 'revision'::text)) = 'string'::text
             AND (((payload - 'kind'::text) - 'instruction_revision_id'::text) - 'revision'::text) = '{}'::jsonb)
+        OR (jsonb_typeof(payload) = 'object'::text
+            AND event_kind = 'memory_entry_deleted'::text
+            AND receipt_result_kind = 'authoritative_applied'::text
+            AND (payload ->> 'kind'::text) = 'memory_entry_deleted'::text
+            AND jsonb_typeof((payload -> 'memory_entry_id'::text)) = 'string'::text
+            AND jsonb_typeof((payload -> 'version'::text)) = 'string'::text
+            AND jsonb_typeof((payload -> 'memory_revision'::text)) = 'string'::text
+            AND ((((payload - 'kind'::text) - 'memory_entry_id'::text) - 'version'::text) - 'memory_revision'::text) = '{}'::jsonb)
         OR (jsonb_typeof(payload) = 'object'::text
             AND event_kind = 'agent_run_created'::text
             AND receipt_result_kind = 'authoritative_applied'::text
@@ -2574,6 +2603,30 @@ BEGIN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'updateProjectInstruction with zero text effect cannot have an authority or Activity relation';
+    END IF;
+
+  ELSIF scoped_command_kind = 'deleteMemoryEntry' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF (activity_count, action_count, commit_count, revision_envelope_count,
+          payload_count)
+           <> (0, 0, 0, 0, 1)
+         OR payload_event_kind IS DISTINCT FROM 'memory_entry_deleted' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'deleteMemoryEntry applied requires one Memory Activity and zero manuscript authority';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'deleteMemoryEntry with zero Memory effect cannot have an authority or Activity relation';
     END IF;
 
   ELSIF scoped_command_kind = 'createAgentRun' THEN

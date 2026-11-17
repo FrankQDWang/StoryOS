@@ -32,6 +32,7 @@ mod create_project;
 mod create_project_challenge;
 mod create_volume;
 mod delete_chapter;
+mod delete_memory_entry;
 mod delete_volume;
 mod editor_session;
 mod get_proposal;
@@ -103,6 +104,7 @@ use create_project::create_project;
 use create_project_challenge::create_project_challenge;
 use create_volume::create_volume;
 use delete_chapter::delete_chapter;
+use delete_memory_entry::delete_memory_entry;
 use delete_volume::delete_volume;
 use editor_session::{create_editor_session, get_editor_session};
 use get_proposal::get_proposal;
@@ -356,6 +358,13 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::LIST_MEMORY_ENTRIES_METHOD),
                 list_memory_entries,
+            ),
+        )
+        .route(
+            contracts::DELETE_MEMORY_ENTRY_PATH,
+            routing::on(
+                method_filter(contracts::DELETE_MEMORY_ENTRY_METHOD),
+                delete_memory_entry,
             ),
         )
         .route(

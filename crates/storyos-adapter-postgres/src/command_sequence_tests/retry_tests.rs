@@ -12,6 +12,7 @@ use crate::set_current_chapter_authority_tests::open_session;
 
 use super::acceptance::accept_proposal_call;
 use super::agent_run::{cancel_agent_run_call, create_agent_run_call, pause_agent_run_call};
+use super::memory_entry::delete_memory_entry_call;
 use super::project_session::{
     TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, take_over_project_writer,
     take_over_project_writer_call, update_project_assistance_call, update_project_call,
@@ -130,6 +131,12 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
+            &delete_memory_entry_call(&store, /*base*/ 0x9d20).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
             &take_over_project_writer_call(&store, /*base*/ 0x5ea0).await,
         )
         .await,
@@ -194,7 +201,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         )
         .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 21]);
+    assert_eq!(observed, vec![(true, [0; 5]); 22]);
 }
 
 #[tokio::test]

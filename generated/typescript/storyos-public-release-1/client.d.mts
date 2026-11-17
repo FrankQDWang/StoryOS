@@ -103,6 +103,18 @@ export type MemoryEntryInspect = { memory_entry_id: string, entry_number: string
 
 export type ListMemoryEntriesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, entries: Array<MemoryEntryInspect>, };
 
+export type DeleteMemoryEntryInput = { expected_version: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type DeleteMemoryEntryRequest = { command_schema: string, delete_memory_entry_input: DeleteMemoryEntryInput, };
+
+export type DeleteMemoryEntryNoEffectReason = "already_deleted";
+
+export type DeleteMemoryEntryConflictReason = "entry_changed";
+
+export type DeleteMemoryEntryEffect = { "kind": "authoritative_applied", memory_entry_id: string, version: string, memory_revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: DeleteMemoryEntryNoEffectReason, } | { "kind": "conflicted", reason: DeleteMemoryEntryConflictReason, };
+
+export type DeleteMemoryEntryResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: DeleteMemoryEntryEffect, };
+
 export type CreateEditorSessionRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type EditorReadOnlyReason = "secondary_session" | "superseded_by_takeover" | "binding_invalid";
@@ -231,7 +243,7 @@ export type AuthorEditProposalTarget = { proposal_id: string, operation_id: stri
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, proposal_target?: AuthorEditProposalTarget | null, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "updateProjectInstruction" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "updateProjectInstruction" | "deleteMemoryEntry" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -726,6 +738,8 @@ export declare function getProjectInstruction(options: StoryOSQueryOptions & { p
 export declare function digestUpdateProjectInstruction(request: UpdateProjectInstructionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function updateProjectInstruction(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectInstructionRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectInstructionResponse>;
 export declare function listMemoryEntries(options: StoryOSQueryOptions & { projectId: string }): Promise<ListMemoryEntriesResponse>;
+export declare function digestDeleteMemoryEntry(request: DeleteMemoryEntryRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function deleteMemoryEntry(options: StoryOSQueryOptions & { projectId: string; memoryEntryId: string; request: DeleteMemoryEntryRequest; idempotencyKey: string; antiForgery: string }): Promise<DeleteMemoryEntryResponse>;
 export declare function digestCreateEditorSession(request: CreateEditorSessionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;

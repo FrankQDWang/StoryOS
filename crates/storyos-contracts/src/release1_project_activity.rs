@@ -56,6 +56,7 @@ activity_kinds! {
     ProjectUpdated => ("project_updated", "storyos.event.project-updated.v1"),
     ProjectAssistanceUpdated => ("project_assistance_updated", "storyos.event.project-assistance-updated.v1"),
     ProjectInstructionUpdated => ("project_instruction_updated", "storyos.event.project-instruction-updated.v1"),
+    MemoryEntryDeleted => ("memory_entry_deleted", "storyos.event.memory-entry-deleted.v1"),
     VolumeCreated => ("volume_created", "storyos.event.volume-created.v1", "storyos.event.volume-created.v2"),
     VolumeUpdated => ("volume_updated", "storyos.event.volume-updated.v1"),
     ChapterCreated => ("chapter_created", "storyos.event.chapter-created.v1", "storyos.event.chapter-created.v2"),

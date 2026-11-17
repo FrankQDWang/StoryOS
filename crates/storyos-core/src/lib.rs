@@ -17,6 +17,7 @@ mod create_chapter;
 mod create_project;
 mod create_volume;
 mod delete_chapter;
+mod delete_memory_entry;
 mod delete_volume;
 mod deployment_destination;
 mod earlier_author_messages;
@@ -156,6 +157,10 @@ pub use delete_chapter::{
     ChapterRemovalLifecycle, DeleteChapter, DeleteChapterApplied, DeleteChapterConflict,
     DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteChapterResult,
     delete_chapter,
+};
+pub use delete_memory_entry::{
+    DeleteMemoryEntry, DeleteMemoryEntryConflict, DeleteMemoryEntryNoEffect,
+    DeleteMemoryEntryRefusal, DeleteMemoryEntryResult, LastMemoryVersion, delete_memory_entry,
 };
 pub use delete_volume::{
     DeleteVolume, DeleteVolumeApplied, DeleteVolumeConflict, DeleteVolumeNoEffect,

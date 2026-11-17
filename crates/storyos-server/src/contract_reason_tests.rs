@@ -5,8 +5,9 @@ use storyos_contracts as contracts;
 use storyos_core::{
     CancelAgentRunConflict, CancelAgentRunNoEffect, CreateChapterConflict, CreateChapterRefusal,
     CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect,
-    DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
-    PauseAgentRunConflict, PauseAgentRunNoEffect, ReasonCode, RejectProposalOperationsConflict,
+    DeleteChapterRefusal, DeleteMemoryEntryConflict, DeleteMemoryEntryNoEffect,
+    DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal, PauseAgentRunConflict,
+    PauseAgentRunNoEffect, ReasonCode, RejectProposalOperationsConflict,
     RejectProposalOperationsRefusal, ReopenRejectedOperationsConflict,
     ReopenRejectedOperationsRefusal, ReopenWithdrawnProposalConflict,
     ReopenWithdrawnProposalNoEffect, ReopenWithdrawnProposalRefusal, ReplanProposalConflict,
@@ -167,6 +168,14 @@ fn every_project_setting_reason_maps_to_its_public_reason() {
     assert_maps(vec![(
         UpdateProjectInstructionConflict::StaleInstructionRevision,
         contracts::UpdateProjectInstructionConflictReason::StaleInstructionRevision,
+    )]);
+    assert_maps(vec![(
+        DeleteMemoryEntryNoEffect::AlreadyDeleted,
+        contracts::DeleteMemoryEntryNoEffectReason::AlreadyDeleted,
+    )]);
+    assert_maps(vec![(
+        DeleteMemoryEntryConflict::EntryChanged,
+        contracts::DeleteMemoryEntryConflictReason::EntryChanged,
     )]);
 }
 

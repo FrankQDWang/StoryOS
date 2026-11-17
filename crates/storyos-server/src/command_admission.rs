@@ -123,6 +123,10 @@ project_command_request!(
     nested update_project_instruction_input
 );
 project_command_request!(
+    contracts::DeleteMemoryEntryRequest,
+    nested delete_memory_entry_input
+);
+project_command_request!(
     contracts::ReopenWithdrawnProposalRequest,
     nested reopen_withdrawn_proposal_input
 );

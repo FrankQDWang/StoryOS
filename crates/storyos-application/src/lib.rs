@@ -55,6 +55,7 @@ mod chapter_query;
 mod create_agent_run;
 mod create_project;
 mod create_project_challenge;
+mod delete_memory_entry;
 mod editor_session;
 mod export_work;
 mod get_proposal;
@@ -131,6 +132,9 @@ pub use create_project::{
 pub use create_project_challenge::{
     CreateProjectChallenge, CreateProjectChallengeBinding, CreateProjectChallengeStore,
     IssueCreateProjectChallenge, issue_create_project_challenge,
+};
+pub use delete_memory_entry::{
+    DeleteMemoryEntryError, DeleteMemoryEntryInput, DeleteMemoryEntrySettlement, MemoryEntryDeleted,
 };
 pub use embedding_gateway::{
     EmbeddingClaim, EmbeddingDispatchStore, EmbeddingObservation, EmbeddingProjection,
