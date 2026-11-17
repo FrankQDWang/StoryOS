@@ -107,6 +107,62 @@ async fn a_conflict_item_waits_as_an_observation_and_names_only_an_entry_of_the_
     );
 }
 
+/// The request of a pass whose row has a fact and a conflict (S7-D4c): the pass row has both in
+/// its input list, and the request that the destination got has only the fact, as observation 1.
+/// No line of the request has the reason of the conflict. The lead of this test is `594`.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_request_of_a_pass_has_no_conflict_of_its_pass_row() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, _, source) = project(&store, &admin, "594").await;
+    seed(&admin, &scope, &[(1, "other", "author_request", "阿青")]).await;
+    let fact = json!({ "type": "other", "title": "桥", "text": "桥在渡口下游。" });
+    let reason = "与第三章不符。";
+    capture(
+        &store,
+        &admin,
+        &scope,
+        &source,
+        json!([fact, conflict(1, reason)]),
+    )
+    .await;
+    let started = run_pass(&store, &admin, &scope).await;
+    let row = admin
+        .query_one(
+            "SELECT jsonb_build_array(jsonb_array_length(pass.observations),
+                      (SELECT jsonb_agg(item.content)
+                         FROM storyos.model_attempts AS attempt,
+                              jsonb_path_query((attempt.payload #>> '{wire,serialized_payload}')::jsonb,
+                                '$.context[*] ? (@.source_class == \"memory_observations\").content')
+                                AS item(content)
+                        WHERE attempt.run_id = pass.run_id),
+                      (SELECT bool_or(strpos(attempt.payload::text, $2) > 0)
+                         FROM storyos.model_attempts AS attempt
+                        WHERE attempt.run_id = pass.run_id))::text
+               FROM storyos.memory_consolidation_passes AS pass
+              WHERE pass.run_id = $1::text::uuid",
+            &[&started.run_id, &reason],
+        )
+        .await
+        .unwrap();
+    let [input, items, reason_sent]: [Value; 3] = serde_json::from_str(row.get(/*idx*/ 0)).unwrap();
+    let observations: Vec<Value> = (items.as_array().unwrap().iter())
+        .flat_map(|item| item.as_str().unwrap().lines())
+        .map(|line| {
+            let line: Value = serde_json::from_str(line).unwrap();
+            json!([line["observation"], line["title"]])
+        })
+        .collect();
+
+    assert_eq!(
+        (input, observations, reason_sent),
+        (json!(2), vec![json!([1, "桥"])], json!(false))
+    );
+}
+
 /// A pass that a delete of the author makes stale writes no flag, and its conflicts wait. The
 /// next pass writes the Host flag of the entry that is still current after the flag of the model,
 /// so the Host flag is the current flag. The conflict of the deleted entry gives no flag. Each

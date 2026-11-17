@@ -38,7 +38,7 @@ proposal and from a guess: a proposal that the author did not accept is not a de
 The section Memory index lists the current entries: a line with a type starts a group, and each \
 line after it gives the id, the title, and the description of one entry. Do not record a fact \
 that an entry already holds, unless the input changes it. When the input is against an entry of \
-the author, give a conflict item with the id of the entry and a reason of one line, and do not \
+the author, give a conflict item with the id of the entry and a reason of one line. Do not \
 record the fact as an observation that corrects the entry. An entry of the author has the \
 origin {author} in the result of read_memory_entry. The section Chapter list has each \
 Chapter of the manuscript in its order, with its number, its length in characters, and its \
