@@ -17,7 +17,7 @@ impl AgentRunKind {
     pub const ALL: [Self; 3] = [Self::Author, Self::MemoryCapture, Self::MemoryConsolidation];
 
     /// The kinds that the Worker claims and dispatches. A queued Run of another kind stays queued.
-    pub const DISPATCHED: [Self; 1] = [Self::Author];
+    pub const DISPATCHED: [Self; 2] = [Self::Author, Self::MemoryCapture];
 
     /// The persisted name of the kind.
     pub fn name(self) -> &'static str {

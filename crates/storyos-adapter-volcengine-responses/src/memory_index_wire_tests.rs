@@ -136,6 +136,7 @@ async fn a_run_with_memory_use_adds_the_read_and_search_sentences_to_the_memory_
             model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
             skill_catalog: false,
             memory_use: true,
+            run_kind: storyos_core::AgentRunKind::Author,
         }),
         ..request
     };

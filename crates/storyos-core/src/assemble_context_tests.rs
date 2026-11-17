@@ -33,7 +33,7 @@ fn requirement(input: &CurrentPassageAssembly) -> OperationRequirementRecord {
         project_id: input.project_id.clone(),
         purpose: ContextPurpose::CurrentPassageAssistance,
         cause: ContextCause::AuthorRequest,
-        chapter_id: input.chapter_id.clone(),
+        chapter_id: Some(input.chapter_id.clone()),
         chapter_revision_id: input.chapter_revision_id.clone(),
         proposal_target_block_ids: input.proposal_target_block_ids.clone(),
         passage_targets: None,
