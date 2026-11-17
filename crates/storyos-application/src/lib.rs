@@ -134,9 +134,9 @@ pub use create_project_challenge::{
     IssueCreateProjectChallenge, issue_create_project_challenge,
 };
 pub use embedding_gateway::{
-    CredentialUnavailable, EmbeddingClaim, EmbeddingDispatchStore, EmbeddingObservation,
-    EmbeddingProjection, EmbeddingProviderAdapter, EmbeddingRecord, EmbeddingResult,
-    EmbeddingUsage, NoEmbeddingDestination, PreparedEmbeddingRequest, dispatch_embedding,
+    EmbeddingClaim, EmbeddingDispatchStore, EmbeddingObservation, EmbeddingProjection,
+    EmbeddingProviderAdapter, EmbeddingRecord, EmbeddingResult, EmbeddingRoute, EmbeddingUsage,
+    NoEmbeddingDestination, PreparedEmbeddingRequest, dispatch_embedding,
 };
 pub use export_work::{ClaimedExportWork, ExportWorkStore, claim_next_export_work};
 pub use get_proposal::{

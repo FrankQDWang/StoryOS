@@ -8,9 +8,7 @@ mod wire;
 
 use std::time::Duration;
 
-pub use embedding::{
-    AgentPlanEmbeddings, EmbeddingObservation, EmbeddingRequest, PreparedEmbedding,
-};
+pub use embedding::{AgentPlanEmbeddingExchange, AgentPlanEmbeddings};
 
 use storyos_application::{
     CacheSetting, CreatePurpose, CredentialResolver, DestinationRequest, ModelProviderAdapter,
