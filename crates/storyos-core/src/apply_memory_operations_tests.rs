@@ -85,9 +85,15 @@ fn decided(candidates: &[MemoryOperationCandidate], facts: &PassFacts<'_>) -> Ve
 }
 
 /// The intake needs each key of each operation and no other key, and it refuses an unknown
-/// action and U+0000. It admits an empty list and a null value.
+/// action and U+0000. It admits an empty list and a null value. The schema has no enum of the
+/// types, as the intake admits each type text and the validation refuses an unknown type.
 #[test]
 fn the_intake_needs_each_key_and_refuses_an_unstorable_text() {
+    let item = &super::parameters()["properties"]["operations"]["items"]["properties"];
+    assert_eq!(
+        (item["type"].get("enum"), &item["action"]["enum"]),
+        (None, &json!(["create", "update", "delete"]))
+    );
     let mut partial = delete(1);
     partial.as_object_mut().unwrap().remove("reason");
     let mut extra = delete(1);
@@ -174,24 +180,33 @@ fn each_operation_is_decided_in_list_order_with_each_refusal() {
 }
 
 /// A delete needs a reason, an update needs its three values and no type, and a delete of an
-/// entry keeps its origin. An empty list applies nothing.
+/// entry keeps its origin. An operation names its entry also when the Host refuses it, and an
+/// observation number below 1 is not in the input. An empty list applies nothing.
 #[test]
 fn the_shape_of_each_action_and_an_empty_list() {
-    let entries = [entry(4, MemoryEntryOrigin::Chapter, "灯")];
+    let entries = [4, 5, 6, 7]
+        .map(|number| entry(number, MemoryEntryOrigin::Chapter, &format!("灯{number}")));
     let facts = PassFacts {
         pinned_revision: 1,
         memory_revision: 1,
         entries: &entries,
-        next_entry_number: 5,
+        next_entry_number: 8,
         observations: &[observation("conversation")],
     };
     let mut no_reason = delete(4);
     no_reason["reason"] = json!(" ");
-    let mut typed = update(4, "灯");
+    let mut typed = update(5, "灯");
     typed["type"] = json!("other");
-    let mut partial = update(4, "灯");
+    let mut partial = update(6, "灯");
     partial["text"] = Value::Null;
-    let candidates = operations(json!([no_reason, typed, partial, delete(4)]));
+    let candidates = operations(json!([
+        no_reason,
+        typed,
+        partial,
+        delete(7),
+        update(4, "灯"),
+        create("other", "桥", "文。", json!([-1])),
+    ]));
     let empty = settle_operations_call(&[], &facts);
 
     assert_eq!(
@@ -205,7 +220,9 @@ fn the_shape_of_each_action_and_an_empty_list() {
                 "memory_entry_invalid".to_owned(),
                 "memory_entry_invalid".to_owned(),
                 "memory_entry_invalid".to_owned(),
-                format!("{:?} 4 chapter 0", MemoryWriteAction::Delete),
+                format!("{:?} 7 chapter 0", MemoryWriteAction::Delete),
+                "entry_named_twice".to_owned(),
+                "observation_unavailable".to_owned(),
             ],
             ConsolidationOutcome::NoOperation,
             0

@@ -25,13 +25,15 @@ const KEYS: [&str; 8] = [
     "reason",
 ];
 
-/// The strict JSON Schema of the arguments.
+/// The strict JSON Schema of the arguments. The schema names the types in the description and
+/// not as an enum, so an operation with an unknown type is refused alone (`memory_entry_invalid`)
+/// and does not refuse the call.
 pub fn parameters() -> Value {
-    let types: Vec<Value> = MemoryEntryType::ALL
-        .iter()
-        .map(|t| json!(t.as_str()))
-        .chain([Value::Null])
-        .collect();
+    let types: Vec<&str> = MemoryEntryType::ALL.iter().map(|t| t.as_str()).collect();
+    let types = format!(
+        "The type of a new entry: one of {}. Null for update and delete.",
+        types.join(", ")
+    );
     let value =
         |description: &str| json!({ "type": ["string", "null"], "description": description });
     json!({
@@ -49,11 +51,7 @@ pub fn parameters() -> Value {
                             "description": "The number of the entry to update or delete. Null \
                                             for create."
                         },
-                        "type": {
-                            "type": ["string", "null"],
-                            "enum": types,
-                            "description": "The type of a new entry. Null for update and delete."
-                        },
+                        "type": value(&types),
                         "title": value("One line, at most 30 characters. Null for delete."),
                         "description": value("One line, at most 100 characters. Null for delete."),
                         "text": value(
@@ -99,7 +97,7 @@ pub struct MemoryOperationCandidate {
     pub title: Option<String>,
     pub description: Option<String>,
     pub text: Option<String>,
-    pub observations: Vec<u64>,
+    pub observations: Vec<i64>,
     pub reason: Option<String>,
 }
 
@@ -168,7 +166,8 @@ pub struct PassMemoryEntry {
 pub enum MemoryOperationRefusal {
     /// An update or a delete names an entry whose origin is the request of the author.
     AuthorEntry,
-    /// A second operation of the list names the same entry.
+    /// A second operation of the list names the same entry. An update or a delete names its entry
+    /// also when the Host refuses it.
     EntryNamedTwice,
     /// An operation names an observation that is not in the input of the pass.
     ObservationUnavailable,
@@ -255,9 +254,20 @@ pub fn decide_memory_operations(
     let mut decisions = Vec::new();
     for candidate in candidates {
         let decision = decide_one(candidate, &current, next_entry_number, observations, &named);
+        // An update or a delete names its entry also when the Host refuses it.
+        match (&decision, candidate.action) {
+            (Ok(admitted), MemoryOperationAction::Create) => named.push(admitted.version.number),
+            (Err(_), MemoryOperationAction::Create) => {}
+            (_, MemoryOperationAction::Update | MemoryOperationAction::Delete) => {
+                named.extend(
+                    candidate
+                        .entry
+                        .and_then(|number| u64::try_from(number).ok()),
+                );
+            }
+        }
         if let Ok(admitted) = &decision {
             let number = admitted.version.number;
-            named.push(number);
             current.retain(|entry| entry.entry.number != number);
             if admitted.version.action == MemoryWriteAction::Create {
                 next_entry_number += 1;
@@ -295,7 +305,7 @@ fn decide_one(
     named: &[u64],
 ) -> Result<AdmittedOperation, MemoryOperationRefusal> {
     let create = candidate.action == MemoryOperationAction::Create;
-    let origin_of = |number: &u64| {
+    let origin_of = |number: &i64| {
         usize::try_from(*number)
             .ok()
             .and_then(|number| number.checked_sub(1))
