@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use super::{
     MemoryConsolidationAssembly, PassObservation, admit_memory_consolidation,
-    assemble_memory_consolidation_context, consolidation_failure,
+    assemble_memory_consolidation_context, consolidation_failure, pass_observation_count,
 };
 use crate::assemble_context::{CONTEXT_ITEM_TOKEN_LIMIT, ContextPurpose};
 use crate::{
@@ -159,5 +159,50 @@ fn a_pass_with_no_settled_call_fails() {
             Some("destination_rejected"),
             Some("cancelled")
         ]
+    );
+}
+
+/// A pass takes the oldest observations whose expected input stays below the window after the
+/// output bound. With one more observation, the request is too long. The Host fake has no known
+/// window, so its pass takes each observation.
+#[test]
+fn a_pass_takes_the_oldest_observations_that_fit_the_request() {
+    let observations: Vec<PassObservation> = (0..40)
+        .map(|_| PassObservation {
+            entry_type: MemoryEntryType::Other,
+            title: "渡口".to_owned(),
+            text: "长".repeat(30_000),
+            source: MemorySourceReference::Chapter {
+                chapter_id: "chapter".to_owned(),
+            },
+        })
+        .collect();
+    let input = |observations| MemoryConsolidationAssembly {
+        operation_requirement_id: "requirement".to_owned(),
+        run_id: "run".to_owned(),
+        owner_user_id: "owner".to_owned(),
+        project_id: "project".to_owned(),
+        destination_identity: "destination".to_owned(),
+        memory_revision: 1,
+        entries: &[],
+        observations,
+    };
+    let agent_plan = crate::AGENT_PLAN_REGISTRATION.revision;
+    let bounds = crate::BudgetBounds::AgentPlanRequestV2.as_str();
+    let taken = pass_observation_count(&input(&observations), agent_plan, bounds);
+    let too_long = |count: usize| {
+        let record = assemble_memory_consolidation_context(&input(&observations[..count]));
+        crate::later_request_too_long(agent_plan, bounds, &record, &[])
+    };
+    let host_fake = crate::HOST_FAKE_TOOL_LOOP_REGISTRATION.revision;
+
+    assert_eq!(
+        (
+            taken > 0 && taken < observations.len(),
+            too_long(taken),
+            too_long(taken + 1),
+            pass_observation_count(&input(&observations), host_fake, "not_required"),
+        ),
+        (true, false, true, 40)
     );
 }

@@ -16,24 +16,27 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
+use crate::agent_run_control::CONTROL_SETTLEMENTS;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, AppliedVariant, Classification,
     CommandResponse, CommandSpec, CommandWrite, LockedProject, ProjectCommand, ReplayEffect,
-    settle_project_command, unavailable,
+    settle_project_command_after_contention, unavailable,
 };
 use crate::memory_entries::{
     VersionSource, last_entry_version, lock_memory_head, write_memory_version,
 };
 
 impl PostgresProjectReader {
-    /// Settles one delete of a Memory Entry by the author.
+    /// Settles one delete of a Memory Entry by the author. A delete that waited on the lock of the
+    /// Memory head while a consolidation pass settled loses a serialization race. It then settles
+    /// again in a new transaction, so the author does not wait for the pass (ADR 0094 section 6).
     pub async fn delete_memory_entry(
         &self,
         envelope: &ProjectCommandEnvelope,
         input: &DeleteMemoryEntryInput,
     ) -> Result<DeleteMemoryEntrySettlement, DeleteMemoryEntryError> {
-        settle_project_command(self, envelope, input).await
+        settle_project_command_after_contention(self, envelope, input, CONTROL_SETTLEMENTS).await
     }
 }
 
@@ -130,4 +133,4 @@ impl ProjectCommand for DeleteMemoryEntryInput {
 
 #[cfg(test)]
 #[path = "delete_memory_entry_tests.rs"]
-mod tests;
+pub(crate) mod tests;

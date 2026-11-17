@@ -15,7 +15,7 @@ use crate::memory_capture::tests::{project, run_capture, start};
 use crate::memory_entries::tests::write_versions;
 
 /// Settles one capture of `source` with the observations `observations`.
-async fn capture(
+pub(super) async fn capture(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
@@ -28,8 +28,8 @@ async fn capture(
     run_capture(store, admin, scope, &started.run_id).await;
 }
 
-/// One observation of the type `other` whose text is the script lines of `operations`.
-fn scripted(title: &str, operations: &[Value]) -> Value {
+/// One observation of the type `character` whose text is the script lines of `operations`.
+pub(super) fn scripted(title: &str, operations: &[Value]) -> Value {
     let lines: Vec<String> = operations
         .iter()
         .map(|operation| format!("SCRIPT:operation {operation}"))
@@ -37,21 +37,21 @@ fn scripted(title: &str, operations: &[Value]) -> Value {
     json!({ "type": "character", "title": title, "text": format!("脚本。\n{}", lines.join("\n")) })
 }
 
-fn create(entry_type: &str, title: &str, observations: Value) -> Value {
+pub(super) fn create(entry_type: &str, title: &str, observations: Value) -> Value {
     json!({
         "action": "create", "entry": null, "type": entry_type, "title": title,
         "description": "述。", "text": "文。", "observations": observations, "reason": null
     })
 }
 
-fn update(entry: u64, text: &str) -> Value {
+pub(super) fn update(entry: u64, text: &str) -> Value {
     json!({
         "action": "update", "entry": entry, "type": null, "title": "林舟", "description": "船夫。",
         "text": text, "observations": [1], "reason": null
     })
 }
 
-fn delete(entry: u64) -> Value {
+pub(super) fn delete(entry: u64) -> Value {
     json!({
         "action": "delete", "entry": entry, "type": null, "title": null, "description": null,
         "text": null, "observations": [], "reason": "灯已灭。"
@@ -59,7 +59,7 @@ fn delete(entry: u64) -> Value {
 }
 
 /// Starts a pass of the Project of `scope` with a direct call and completes its Run.
-async fn run_pass(
+pub(super) async fn run_pass(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
@@ -75,7 +75,7 @@ async fn run_pass(
 
 /// The Run status, the outcome, the failure reason, and the result of each operation of the pass
 /// of the Run `run_id`, and the state of each observation of its Project.
-async fn settled(admin: &Client, run_id: &str) -> Value {
+pub(super) async fn settled(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
             "SELECT jsonb_build_array(run.status, pass.outcome, pass.failure_reason,
@@ -99,7 +99,7 @@ async fn settled(admin: &Client, run_id: &str) -> Value {
 /// Each version that a pass wrote in the Project of `scope`, in the order of the Memory revisions:
 /// the number, the version, the revision, the state, the type, the origin, the title, the text,
 /// the cause kind, and the source kinds.
-async fn versions(admin: &Client, scope: &ProjectScope) -> Value {
+pub(super) async fn versions(admin: &Client, scope: &ProjectScope) -> Value {
     let row = admin
         .query_one(
             "SELECT COALESCE(jsonb_agg(jsonb_build_array(entry_number, version, memory_revision,
@@ -118,7 +118,7 @@ async fn versions(admin: &Client, scope: &ProjectScope) -> Value {
 /// The count of the rows of each table that a pass must not write (threat model, AP-22): the
 /// Proposals, the manuscript, the Project Instruction, the Skill records, the grants, and the
 /// bindings.
-async fn guarded(admin: &Client, scope: &ProjectScope) -> Vec<i64> {
+pub(super) async fn guarded(admin: &Client, scope: &ProjectScope) -> Vec<i64> {
     let tables = [
         "proposals",
         "authoritative_revisions",
