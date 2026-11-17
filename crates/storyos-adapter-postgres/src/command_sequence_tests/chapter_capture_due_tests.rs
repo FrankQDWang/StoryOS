@@ -49,7 +49,11 @@ fn changed(
 ) -> Vec<(&'static str, bool)> {
     after
         .iter()
-        .filter(|row| !before.iter().any(|earlier| earlier.0 == row.0 && earlier.1 == row.1))
+        .filter(|row| {
+            !before
+                .iter()
+                .any(|earlier| earlier.0 == row.0 && earlier.1 == row.1)
+        })
         .map(|row| (label(&row.0), row.2))
         .collect()
 }
@@ -62,12 +66,10 @@ async fn edit(
     session: &str,
     (suffix, text): (u16, &str),
 ) {
+    let chapter = "SELECT chapter_object_id::text FROM storyos.editor_session_base_snapshots
+                    WHERE editor_session_id = $1::text::uuid";
     let chapter_id: String = admin
-        .query_one(
-            "SELECT chapter_object_id::text FROM storyos.editor_session_base_snapshots
-              WHERE editor_session_id = $1::text::uuid",
-            &[&session],
-        )
+        .query_one(chapter, &[&session])
         .await
         .unwrap()
         .get(/*idx*/ 0);
@@ -100,12 +102,10 @@ async fn each_commit_that_changes_the_text_of_a_chapter_writes_the_due_time_of_i
     let (store, admin) = stores().await;
     let (scope, input, chapter_a_head) = acceptable_proposal(&store, &admin, 0x8300).await;
     let chapter_of = async |revision_id: &str| -> String {
+        let chapter = "SELECT manuscript_object_id::text FROM storyos.authoritative_revisions
+                        WHERE revision_id = $1::text::uuid";
         admin
-            .query_one(
-                "SELECT manuscript_object_id::text FROM storyos.authoritative_revisions
-                  WHERE revision_id = $1::text::uuid",
-                &[&revision_id],
-            )
+            .query_one(chapter, &[&revision_id])
             .await
             .unwrap()
             .get(/*idx*/ 0)
@@ -119,7 +119,10 @@ async fn each_commit_that_changes_the_text_of_a_chapter_writes_the_due_time_of_i
     };
     let session = input.editor_session_id.as_ref().to_owned();
     let mut rows = chapter_rows(&admin, &scope).await;
-    let mut steps = vec![("createChapter", rows.iter().map(|row| (label(&row.0), row.2)).collect())];
+    let mut steps = vec![(
+        "createChapter",
+        rows.iter().map(|row| (label(&row.0), row.2)).collect(),
+    )];
     let mut step = async |kind: &'static str, rows: &mut Vec<(String, SystemTime, bool)>| {
         let after = chapter_rows(&admin, &scope).await;
         steps.push((kind, changed(rows, &after, label)));

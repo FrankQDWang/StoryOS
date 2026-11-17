@@ -27,7 +27,10 @@ fn the_due_time_is_the_quiet_time_or_the_interval_of_the_last_capture() {
 #[test]
 fn the_first_chapter_in_order_goes_first_at_the_rate_of_the_project() {
     let now = at(10_000);
-    let turn = |positions: &[usize], last_start| chapter_capture_turn(positions, last_start, now);
+    let turn = |positions: &[usize], last_start| {
+        chapter_capture_turn(positions, last_start, now)
+            .map(|turn| (turn.first, turn.rate_permits_at))
+    };
     assert_eq!(
         [
             turn(&[3, 1, 2], None),
@@ -36,19 +39,10 @@ fn the_first_chapter_in_order_goes_first_at_the_rate_of_the_project() {
             turn(&[], None),
         ],
         [
-            Some(ChapterCaptureTurn {
-                first: 1,
-                rate_permits_at: None
-            }),
-            Some(ChapterCaptureTurn {
-                first: 1,
-                rate_permits_at: None
-            }),
-            Some(ChapterCaptureTurn {
-                first: 0,
-                rate_permits_at: Some(at(10_090))
-            }),
-            None,
+            Some((1, None)),
+            Some((1, None)),
+            Some((0, Some(at(10_090)))),
+            None
         ]
     );
 }

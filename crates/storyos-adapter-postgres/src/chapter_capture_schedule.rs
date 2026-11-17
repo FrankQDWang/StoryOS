@@ -28,22 +28,18 @@ pub(crate) async fn mark_chapter_due(
     scope: &ProjectScope,
     chapter_id: &str,
 ) -> Result<(), tokio_postgres::Error> {
-    let keys = [
-        scope.owner_user_id.as_ref(),
-        scope.project_id.as_ref(),
-        chapter_id,
-    ];
+    let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
     let row = client
         .query_one(
             "SELECT clock_timestamp(),
                     (SELECT max(started_at) FROM storyos.memory_captures
                       WHERE (owner_user_id, project_id, chapter_id) =
                             ($1::text::uuid, $2::text::uuid, $3::text::uuid))",
-            &[&keys[0], &keys[1], &keys[2]],
+            &[&keys[0], &keys[1], &chapter_id],
         )
         .await?;
     let due_at = storyos_core::chapter_capture_due(row.get(/*idx*/ 0), row.get(/*idx*/ 1));
-    write_due(client, keys, due_at).await
+    write_due(client, scope, chapter_id, due_at).await
 }
 
 /// Sets the due time of the row of the Chapter of the capture `capture_id`, in the transaction of
@@ -87,23 +83,20 @@ pub(crate) async fn mark_due_after_capture(
         return Ok(());
     };
     let due_at = storyos_core::chapter_capture_due(committed_at, row.get(/*idx*/ 2));
-    let keys = [
-        scope.owner_user_id.as_ref(),
-        scope.project_id.as_ref(),
-        chapter_id.as_str(),
-    ];
-    write_due(client, keys, due_at)
+    write_due(client, scope, &chapter_id, due_at)
         .await
         .map_err(complete_database_error)
 }
 
-/// Inserts the row of the Chapter of `keys` with `due_at`, or moves the due time of a row that
-/// is not `held`.
+/// Inserts the row of the Chapter with `due_at`, or moves the due time of a row that is not
+/// `held`.
 async fn write_due(
     client: &Client,
-    keys: [&str; 3],
+    scope: &ProjectScope,
+    chapter_id: &str,
     due_at: SystemTime,
 ) -> Result<(), tokio_postgres::Error> {
+    let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
     client
         .execute(
             "INSERT INTO storyos.memory_work_schedules AS work
@@ -111,7 +104,7 @@ async fn write_due(
              VALUES ($1::text::uuid, $2::text::uuid, $4, $3::text::uuid, $3::text::uuid, $5)
              ON CONFLICT (owner_user_id, project_id, work_kind, source_id)
              DO UPDATE SET due_at = EXCLUDED.due_at WHERE NOT work.held",
-            &[&keys[0], &keys[1], &keys[2], &CHAPTER_CAPTURE, &due_at],
+            &[&keys[0], &keys[1], &chapter_id, &CHAPTER_CAPTURE, &due_at],
         )
         .await
         .map(|_| ())
@@ -171,8 +164,8 @@ pub(crate) async fn decide_and_start(
         .ok_or_else(|| missing("the claimed Chapter row is missing"))?;
     let chapter_id = due[turn.first].clone();
     if chapter_id != claimed {
-        set_due(client, scope, claimed, Some(claimed_due)).await?;
-        set_due(client, scope, &chapter_id, None).await?;
+        set_row(client, scope, claimed, (false, Some(claimed_due))).await?;
+        set_row(client, scope, &chapter_id, (false, None)).await?;
     }
     let read_id = ChapterId::new(chapter_id.clone());
     let extent = LiveChapterReadExtent::CurrentChapter {
@@ -199,9 +192,13 @@ pub(crate) async fn decide_and_start(
         )
         .await
         .map_err(read_error)?;
+    let text_empty = chapter
+        .blocks
+        .iter()
+        .all(|block| block.text.trim().is_empty());
     let facts = ChapterCaptureFacts {
         live: true,
-        text_empty: chapter.blocks.iter().all(|block| block.text.trim().is_empty()),
+        text_empty,
         revision_read: captures.get(/*idx*/ 0),
         capture_in_progress: captures.get(/*idx*/ 1),
         rate_permits_at: turn.rate_permits_at,
@@ -213,12 +210,8 @@ pub(crate) async fn decide_and_start(
     }
     let blocks: Vec<String> = chapter.blocks.into_iter().map(|block| block.text).collect();
     let number = position(&chapter_id).map_or(0, |index| index + 1);
-    let input = storyos_core::chapter_capture_input(
-        &chapter.title,
-        number,
-        &blocks,
-        storyos_core::CONTEXT_ITEM_TOKEN_LIMIT,
-    );
+    let limit = storyos_core::CONTEXT_ITEM_TOKEN_LIMIT;
+    let input = storyos_core::chapter_capture_input(&chapter.title, number, &blocks, limit);
     let source = MemoryCaptureSource::Chapter {
         chapter_id: chapter_id.clone(),
         revision_id: chapter.head_revision_id,
@@ -290,23 +283,9 @@ async fn apply(
     match skip.row_change() {
         ChapterRowChange::DueEmpty => Ok(()),
         ChapterRowChange::DueAt(permitted) => {
-            set_due(client, scope, chapter_id, Some(permitted)).await
+            set_row(client, scope, chapter_id, (false, Some(permitted))).await
         }
-        ChapterRowChange::Held => client
-            .execute(
-                "UPDATE storyos.memory_work_schedules SET held = true, due_at = NULL
-                  WHERE (owner_user_id, project_id, work_kind, source_id) =
-                        ($1::text::uuid, $2::text::uuid, $3, $4::text::uuid)",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &CHAPTER_CAPTURE,
-                    &chapter_id,
-                ],
-            )
-            .await
-            .map(|_| ())
-            .map_err(read_error),
+        ChapterRowChange::Held => set_row(client, scope, chapter_id, (true, None)).await,
     }
 }
 
@@ -314,22 +293,25 @@ fn missing(message: &'static str) -> ProjectReadError {
     ProjectReadError::unavailable(std::io::Error::other(message))
 }
 
-async fn set_due(
+/// Sets `held` and the due time of the row of `chapter_id`.
+async fn set_row(
     client: &Client,
     scope: &ProjectScope,
     chapter_id: &str,
-    due_at: Option<SystemTime>,
+    (held, due_at): (bool, Option<SystemTime>),
 ) -> Result<(), ProjectReadError> {
+    let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
     client
         .execute(
-            "UPDATE storyos.memory_work_schedules SET due_at = $5
+            "UPDATE storyos.memory_work_schedules SET held = $5, due_at = $6
               WHERE (owner_user_id, project_id, work_kind, source_id) =
                     ($1::text::uuid, $2::text::uuid, $3, $4::text::uuid)",
             &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
+                &keys[0],
+                &keys[1],
                 &CHAPTER_CAPTURE,
                 &chapter_id,
+                &held,
                 &due_at,
             ],
         )
@@ -337,7 +319,6 @@ async fn set_due(
         .map(|_| ())
         .map_err(read_error)
 }
-
 
 #[cfg(test)]
 #[path = "chapter_capture_schedule_tests.rs"]

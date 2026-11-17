@@ -8,9 +8,9 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ChapterId, ClaimedMemoryWork, CreateChapterInput, DeleteChapterInput, DiagnosticField,
-    EditorSessionId, EditorSessionStore, MemoryCaptureSource, MemoryCaptureStore, MemoryEntrySourceItem,
-    MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource, NoContractFaults, ProjectScope,
-    StartedMemoryCapture,
+    EditorSessionId, EditorSessionStore, MemoryCaptureSource, MemoryCaptureStore,
+    MemoryEntrySourceItem, MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource,
+    NoContractFaults, ProjectScope, StartedMemoryCapture,
 };
 use storyos_core::{CreateChapterPlacement, MemoryEntryOrigin, TransitionOutcome};
 use tokio_postgres::Client;
@@ -32,14 +32,10 @@ use crate::set_current_chapter_authority_tests::open_session_request;
 /// Makes the row of the Chapter due `seconds` ago, and each other row not due, so that the
 /// claim takes this row. A Chapter with no commit gets its row.
 async fn make_chapter_due(admin: &Client, scope: &ProjectScope, chapter_id: &str, seconds: i32) {
-    admin
-        .execute(
-            "UPDATE storyos.memory_work_schedules SET due_at = NULL
-              WHERE due_at IS NOT NULL AND project_id <> $1::text::uuid",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
+    let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
+    let others = "UPDATE storyos.memory_work_schedules SET due_at = NULL
+                   WHERE due_at IS NOT NULL AND project_id <> $1::text::uuid";
+    admin.execute(others, &[&keys[1]]).await.unwrap();
     admin
         .execute(
             "INSERT INTO storyos.memory_work_schedules
@@ -48,12 +44,7 @@ async fn make_chapter_due(admin: &Client, scope: &ProjectScope, chapter_id: &str
                      $3::text::uuid, clock_timestamp() - make_interval(secs => $4))
              ON CONFLICT (owner_user_id, project_id, work_kind, source_id)
              DO UPDATE SET due_at = EXCLUDED.due_at, held = false",
-            &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &chapter_id,
-                &f64::from(seconds),
-            ],
+            &[&keys[0], &keys[1], &chapter_id, &f64::from(seconds)],
         )
         .await
         .unwrap();
@@ -93,86 +84,106 @@ async fn due_state(admin: &Client, chapter_id: &str) -> Value {
         .unwrap()
 }
 
-/// Claims the due row of the Chapter. Returns the label of the outcome and the row after it.
-async fn decide(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    chapter_id: &str,
-) -> (&'static str, Value) {
-    make_chapter_due(admin, scope, chapter_id, /*seconds*/ 1).await;
-    let claimed = store.claim_due_memory_work().await.unwrap().unwrap();
-    assert_eq!(
-        (&claimed.project_scope, &claimed.source),
-        (scope, &MemoryWorkSource::Chapter(chapter_id.to_owned()))
-    );
-    park_queued_runs(admin, scope).await;
-    (claimed.outcome.diagnostic(), row(admin, chapter_id).await)
+/// One test Project: its stores, its Scope, and its writer Editor Session.
+struct Fixture {
+    store: PostgresProjectReader,
+    admin: Client,
+    scope: ProjectScope,
+    session: String,
 }
 
-/// Moves each capture start of the Project 3 minutes back, so that the rate permits a start.
-async fn move_starts_back(admin: &Client, scope: &ProjectScope) {
-    admin
-        .execute(
-            "UPDATE storyos.memory_captures SET started_at = started_at - interval '3 minutes'
-              WHERE project_id = $1::text::uuid",
-            &[&scope.project_id.as_ref()],
+impl Fixture {
+    /// Claims the due row of the Chapter. Returns the label of the outcome and the row after it.
+    async fn decide(&self, chapter_id: &str) -> (&'static str, Value) {
+        make_chapter_due(&self.admin, &self.scope, chapter_id, /*seconds*/ 1).await;
+        let claimed = self.store.claim_due_memory_work().await.unwrap().unwrap();
+        let source = MemoryWorkSource::Chapter(chapter_id.to_owned());
+        assert_eq!(
+            (&claimed.project_scope, &claimed.source),
+            (&self.scope, &source)
+        );
+        park_queued_runs(&self.admin, &self.scope).await;
+        (
+            claimed.outcome.diagnostic(),
+            row(&self.admin, chapter_id).await,
         )
-        .await
-        .unwrap();
+    }
+
+    /// Moves each capture start of the Project 3 minutes back, so that the rate permits a start.
+    async fn move_starts_back(&self) {
+        let moved =
+            "UPDATE storyos.memory_captures SET started_at = started_at - interval '3 minutes'
+                      WHERE project_id = $1::text::uuid";
+        let project_id = self.scope.project_id.as_ref();
+        self.admin.execute(moved, &[&project_id]).await.unwrap();
+    }
+
+    /// One Author Edit with the local intent `sequence` and the challenge `suffix` that writes
+    /// `sentences` at the start of the first Block of `chapter_id`, one Block each.
+    async fn edit(&self, (sequence, suffix): (u64, u16), chapter_id: &str, sentences: &[&str]) {
+        let suffix = format!("{suffix:04x}");
+        let edit = (self.session.as_str(), sequence, suffix.as_str());
+        let (store, admin, scope) = (&self.store, &self.admin, &self.scope);
+        let write = write_blocks(store, admin, scope, edit, chapter_id, sentences).await;
+        store.apply_author_edit(&write).await.unwrap();
+    }
+
+    /// Selects `chapter_id` as the Current Chapter after `from`, so that the next edit can
+    /// change it.
+    async fn select(&self, suffix: u16, chapter_id: &str, from: &str) {
+        let writer = EditorSessionId::new(self.session.as_str());
+        let (store, admin, scope) = (&self.store, &self.admin, &self.scope);
+        let call = select(store, admin, scope, (&writer, suffix), chapter_id, from).await;
+        store
+            .set_current_chapter(&call.envelope, &call.input)
+            .await
+            .unwrap();
+    }
+
+    /// Starts one capture of the Chapter at its head with no observation.
+    async fn start_capture(&self, chapter_id: &str) -> StartedMemoryCapture {
+        let source = MemoryCaptureSource::Chapter {
+            chapter_id: chapter_id.to_owned(),
+            revision_id: head(&self.admin, chapter_id).await.0,
+        };
+        let input = script(&[record(json!([]))]);
+        let started = self
+            .store
+            .start_memory_capture(&self.scope, &source, &input);
+        started.await.unwrap().unwrap()
+    }
+
+    async fn run_capture(&self, started: &StartedMemoryCapture) {
+        run_capture(&self.store, &self.admin, &self.scope, &started.run_id).await;
+    }
 }
 
-/// One Author Edit of the Editor Session `session` that writes `sentences` at the start of the
-/// first Block of `chapter_id`, one Block each.
-async fn edit(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    (session, sequence, suffix): (&str, u64, u16),
-    chapter_id: &str,
-    sentences: &[&str],
-) {
-    let suffix = format!("{suffix:04x}");
-    let edit = (session, sequence, suffix.as_str());
-    let write = write_blocks(store, admin, scope, edit, chapter_id, sentences).await;
-    store.apply_author_edit(&write).await.unwrap();
-}
-
-/// The writer Editor Session `session` selects `chapter_id` as the Current Chapter after `from`,
-/// so that the next edit can change it.
-async fn select_chapter(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    (session, suffix): (&str, u16),
-    chapter_id: &str,
-    from: &str,
-) {
-    let writer = EditorSessionId::new(session);
-    let call = select(store, admin, scope, (&writer, suffix), chapter_id, from).await;
-    store
-        .set_current_chapter(&call.envelope, &call.input)
-        .await
-        .unwrap();
-}
-
-/// Starts one capture of the Chapter at its head with no observation.
-async fn start_capture(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    chapter_id: &str,
-) -> StartedMemoryCapture {
-    let source = MemoryCaptureSource::Chapter {
-        chapter_id: chapter_id.to_owned(),
-        revision_id: head(admin, chapter_id).await.0,
+/// A Project of `lead` whose Chapter A has the Blocks `sentences`, with a second empty Chapter
+/// `Fog` and an open Editor Session. `suffix` to `suffix + 2` are its challenges.
+async fn fixture(lead: &str, suffix: u16, sentences: &[&str]) -> (Fixture, String, String) {
+    let (store, admin) = stores().await;
+    let (scope, chapter_a, fog, session) = project(&store, &admin, lead, suffix, sentences).await;
+    let fixture = Fixture {
+        store,
+        admin,
+        scope,
+        session,
     };
-    let input = script(&[record(json!([]))]);
-    store
-        .start_memory_capture(scope, &source, &input)
-        .await
-        .unwrap()
-        .unwrap()
+    (fixture, chapter_a, fog)
+}
+
+fn destination() -> storyos_worker::ModelDestination<
+    FakeDestination,
+    NoContractFaults,
+    storyos_application::NoToolDestination,
+    storyos_application::NoEmbeddingDestination,
+> {
+    storyos_worker::ModelDestination {
+        adapter: FakeDestination,
+        observer: NoContractFaults,
+        tools: storyos_application::NoToolDestination,
+        embeddings: storyos_application::NoEmbeddingDestination,
+    }
 }
 
 /// Each row of the decision table of S7-D5 for one claimed row, in the order of the table. The
@@ -185,45 +196,41 @@ async fn a_claimed_chapter_row_follows_the_rows_of_the_decision_table() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let (store, admin) = stores().await;
-    let (scope, chapter_a, fog, session) = project(&store, &admin, "832", 0x8390, &["雨夜。"]).await;
-    let mut decisions = vec![decide(&store, &admin, &scope, &fog).await];
+    let (f, chapter_a, fog) = fixture("832", 0x8390, &["雨夜。"]).await;
+    let mut decisions = vec![f.decide(&fog).await];
 
-    let first = start_capture(&store, &admin, &scope, &chapter_a).await;
-    edit(&store, &admin, &scope, (&session, 2, 0x8393), &chapter_a, &["风。"]).await;
-    decisions.push(decide(&store, &admin, &scope, &chapter_a).await);
-    run_capture(&store, &admin, &scope, &first.run_id).await;
-    let after_settlement = row(&admin, &chapter_a).await;
+    let first = f.start_capture(&chapter_a).await;
+    f.edit((2, 0x8393), &chapter_a, &["风。"]).await;
+    decisions.push(f.decide(&chapter_a).await);
+    f.run_capture(&first).await;
+    let after_settlement = row(&f.admin, &chapter_a).await;
 
-    let second = start_capture(&store, &admin, &scope, &chapter_a).await;
-    run_capture(&store, &admin, &scope, &second.run_id).await;
-    decisions.push(decide(&store, &admin, &scope, &chapter_a).await);
-    edit(&store, &admin, &scope, (&session, 3, 0x8394), &chapter_a, &["霜。"]).await;
-    decisions.push(decide(&store, &admin, &scope, &chapter_a).await);
+    let second = f.start_capture(&chapter_a).await;
+    f.run_capture(&second).await;
+    decisions.push(f.decide(&chapter_a).await);
+    f.edit((3, 0x8394), &chapter_a, &["霜。"]).await;
+    decisions.push(f.decide(&chapter_a).await);
 
-    move_starts_back(&admin, &scope).await;
+    f.move_starts_back().await;
     let grant = "UPDATE storyos.project_destination_grants
                     SET grant_scope = 'project_writing_assistance_v4' WHERE project_id = $1::text::uuid";
-    admin
-        .execute(grant, &[&scope.project_id.as_ref()])
-        .await
-        .unwrap();
-    decisions.push(decide(&store, &admin, &scope, &chapter_a).await);
-    edit(&store, &admin, &scope, (&session, 4, 0x8395), &chapter_a, &["雪。"]).await;
-    let held_after_commit = row(&admin, &chapter_a).await;
+    let project_id = f.scope.project_id.as_ref();
+    f.admin.execute(grant, &[&project_id]).await.unwrap();
+    decisions.push(f.decide(&chapter_a).await);
+    f.edit((4, 0x8395), &chapter_a, &["雪。"]).await;
+    let held_after_commit = row(&f.admin, &chapter_a).await;
 
     let input = DeleteChapterInput {
         chapter_id: ChapterId::new(fog.as_str()),
         expected_tree_revision: 4,
     };
-    let call = issued(&store, &scope, 0x8396, &DELETE_CHAPTER, input).await;
-    delete_chapter(&store, &call).await.unwrap();
-    decisions.push(decide(&store, &admin, &scope, &fog).await);
-    let captures: i64 = admin
-        .query_one(
-            "SELECT count(*) FROM storyos.memory_captures WHERE project_id = $1::text::uuid",
-            &[&scope.project_id.as_ref()],
-        )
+    let call = issued(&f.store, &f.scope, 0x8396, &DELETE_CHAPTER, input).await;
+    delete_chapter(&f.store, &call).await.unwrap();
+    decisions.push(f.decide(&fog).await);
+    let count = "SELECT count(*) FROM storyos.memory_captures WHERE project_id = $1::text::uuid";
+    let captures: i64 = f
+        .admin
+        .query_one(count, &[&project_id])
         .await
         .unwrap()
         .get(/*idx*/ 0);
@@ -258,11 +265,17 @@ async fn a_project_with_no_completed_run_holds_the_row() {
     park_queued_runs(&admin, &scope).await;
     let request = open_session_request(&store, &scope, "83d0").await;
     store.create_editor_session(&request).await.unwrap();
-    let session = request.editor_session_id.as_ref();
-    edit(&store, &admin, &scope, (session, 1, 0x83d1), &chapter_id, &["雨。"]).await;
+    let session = request.editor_session_id.as_ref().to_owned();
+    let f = Fixture {
+        store,
+        admin,
+        scope,
+        session,
+    };
+    f.edit((1, 0x83d1), &chapter_id, &["雨。"]).await;
 
     assert_eq!(
-        decide(&store, &admin, &scope, &chapter_id).await,
+        f.decide(&chapter_id).await,
         ("no_completed_run", json!([true, null]))
     );
 }
@@ -277,84 +290,69 @@ async fn three_due_chapters_start_in_chapter_order_at_the_rate_of_the_project() 
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let (store, admin) = stores().await;
-    let (scope, chapter_a, fog, session) = project(&store, &admin, "833", 0x83a0, &["雨。"]).await;
-    select_chapter(&store, &admin, &scope, (&session, 0x83a6), &fog, &chapter_a).await;
-    edit(&store, &admin, &scope, (&session, 2, 0x83a3), &fog, &["雾。"]).await;
-    let volume_id: String = admin
-        .query_one(
-            "SELECT parent_volume_id::text FROM storyos.manuscript_objects
-              WHERE manuscript_object_id = $1::text::uuid",
-            &[&chapter_a],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
+    let (f, chapter_a, fog) = fixture("833", 0x83a0, &["雨。"]).await;
+    let (store, admin, scope) = (&f.store, &f.admin, &f.scope);
+    f.select(0x83a6, &fog, &chapter_a).await;
+    f.edit((2, 0x83a3), &fog, &["雾。"]).await;
+    let parent = "SELECT parent_volume_id::text FROM storyos.manuscript_objects
+                   WHERE manuscript_object_id = $1::text::uuid";
     let input = CreateChapterInput {
-        volume_id,
+        volume_id: admin
+            .query_one(parent, &[&chapter_a])
+            .await
+            .unwrap()
+            .get(/*idx*/ 0),
         title: "Ice".to_owned(),
         placement: CreateChapterPlacement::Append,
         expected_tree_revision: 4,
     };
-    let call = issued(&store, &scope, 0x83a4, &CREATE_CHAPTER, input).await;
-    let ice = match create_chapter(&store, &call).await.unwrap().outcome {
-        TransitionOutcome::Applied(applied) => applied.effect.chapter_id,
-        other => panic!("{other:?}"),
+    let call = issued(store, scope, 0x83a4, &CREATE_CHAPTER, input).await;
+    let TransitionOutcome::Applied(created) = create_chapter(store, &call).await.unwrap().outcome
+    else {
+        panic!("Ice must be created");
     };
-    select_chapter(&store, &admin, &scope, (&session, 0x83a7), &ice, &fog).await;
-    edit(&store, &admin, &scope, (&session, 3, 0x83a5), &ice, &["冰。"]).await;
+    let ice = created.effect.chapter_id;
+    f.select(0x83a7, &ice, &fog).await;
+    f.edit((3, 0x83a5), &ice, &["冰。"]).await;
     // The due times are in the reverse of the Chapter order.
-    make_chapter_due(&admin, &scope, &chapter_a, /*seconds*/ 1).await;
-    make_chapter_due(&admin, &scope, &fog, /*seconds*/ 2).await;
-    make_chapter_due(&admin, &scope, &ice, /*seconds*/ 3).await;
-    let chapters = [&chapter_a, &fog, &ice];
+    for (seconds, chapter_id) in [(1, &chapter_a), (2, &fog), (3, &ice)] {
+        make_chapter_due(admin, scope, chapter_id, seconds).await;
+    }
     let state = async || {
-        let titles: Vec<String> = admin
-            .query(
-                "SELECT chapter.title FROM storyos.memory_captures AS capture
-                   JOIN storyos.manuscript_objects AS chapter
-                     ON chapter.manuscript_object_id = capture.chapter_id
-                  WHERE capture.project_id = $1::text::uuid ORDER BY capture.capture_id",
-                &[&scope.project_id.as_ref()],
-            )
-            .await
-            .unwrap()
-            .iter()
-            .map(|row| row.get(/*idx*/ 0))
-            .collect();
+        let titles = "SELECT chapter.title FROM storyos.memory_captures AS capture
+                        JOIN storyos.manuscript_objects AS chapter
+                          ON chapter.manuscript_object_id = capture.chapter_id
+                       WHERE capture.project_id = $1::text::uuid ORDER BY capture.capture_id";
+        let project_id = scope.project_id.as_ref();
+        let titles = admin.query(titles, &[&project_id]).await.unwrap();
+        let titles: Vec<String> = titles.iter().map(|row| row.get(/*idx*/ 0)).collect();
         let mut rows = Vec::new();
-        for chapter_id in chapters {
-            rows.push(due_state(&admin, chapter_id).await);
+        for chapter_id in [&chapter_a, &fog, &ice] {
+            rows.push(due_state(admin, chapter_id).await);
         }
         json!([titles, rows])
     };
-    let destination = storyos_worker::ModelDestination {
-        adapter: FakeDestination,
-        observer: NoContractFaults,
-        tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
-    };
     // A step can claim work that other tests left. The test records the state of its Project
     // only when a capture starts.
-    let mut states = Vec::new();
-    let mut rate = None;
+    let (mut states, mut rate) = (Vec::new(), None);
     for _ in 0..24 {
-        storyos_worker::run_once(&store, &destination)
+        storyos_worker::run_once(store, &destination())
             .await
             .unwrap();
         let now = state().await;
         if states.last() == Some(&now) || now[0] == json!([]) {
             continue;
         }
-        park_queued_runs(&admin, &scope).await;
+        park_queued_runs(admin, scope).await;
         states.push(now);
         if rate.is_none() {
             let claimed = store.claim_due_memory_work().await.unwrap();
-            rate = Some((claimed.map(|claimed| claimed.outcome.diagnostic()), state().await));
-            make_chapter_due(&admin, &scope, &fog, /*seconds*/ 2).await;
-            make_chapter_due(&admin, &scope, &ice, /*seconds*/ 3).await;
+            let outcome = claimed.map(|claimed| claimed.outcome.diagnostic());
+            rate = Some((outcome, state().await));
+            make_chapter_due(admin, scope, &fog, /*seconds*/ 2).await;
+            make_chapter_due(admin, scope, &ice, /*seconds*/ 3).await;
         }
-        move_starts_back(&admin, &scope).await;
+        f.move_starts_back().await;
         if states.len() == 3 {
             break;
         }
@@ -407,18 +405,17 @@ async fn the_input_is_the_title_the_number_and_the_text_with_its_excerpt() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let (store, admin) = stores().await;
     let sentences = ["雨夜。", "林舟撑船。"];
-    let (scope, chapter_a, fog, session) = project(&store, &admin, "834", 0x83b0, &sentences).await;
+    let (f, chapter_a, fog) = fixture("834", 0x83b0, &sentences).await;
     let half = usize::try_from(storyos_core::CONTEXT_ITEM_TOKEN_LIMIT).unwrap() / 2 + 1_000;
     let long = ["雾".repeat(half), "霜".repeat(half)];
-    let long_refs = [long[0].as_str(), long[1].as_str()];
-    select_chapter(&store, &admin, &scope, (&session, 0x83b4), &fog, &chapter_a).await;
-    edit(&store, &admin, &scope, (&session, 2, 0x83b3), &fog, &long_refs).await;
+    let long = [long[0].as_str(), long[1].as_str()];
+    f.select(0x83b4, &fog, &chapter_a).await;
+    f.edit((2, 0x83b3), &fog, &long).await;
     let mut inputs = Vec::new();
     for chapter_id in [&chapter_a, &fog] {
-        make_chapter_due(&admin, &scope, chapter_id, /*seconds*/ 1).await;
-        let claimed = store.claim_due_memory_work().await.unwrap();
+        make_chapter_due(&f.admin, &f.scope, chapter_id, /*seconds*/ 1).await;
+        let claimed = f.store.claim_due_memory_work().await.unwrap();
         let Some(ClaimedMemoryWork {
             outcome: MemoryWorkOutcome::Started(started),
             ..
@@ -426,32 +423,23 @@ async fn the_input_is_the_title_the_number_and_the_text_with_its_excerpt() {
         else {
             panic!("the claim must start a capture: {claimed:?}");
         };
-        park_queued_runs(&admin, &scope).await;
-        move_starts_back(&admin, &scope).await;
-        inputs.push(input_of(&admin, &started.run_id, chapter_id).await);
+        park_queued_runs(&f.admin, &f.scope).await;
+        f.move_starts_back().await;
+        inputs.push(input_of(&f.admin, &started.run_id, chapter_id).await);
     }
-    let expected = |title: &str, number: usize, blocks: &[&str]| {
+    let expected = |mode: &str, title: &str, number: usize, blocks: &[&str]| {
         let blocks: Vec<String> = blocks.iter().map(|block| (*block).to_owned()).collect();
         let limit = storyos_core::CONTEXT_ITEM_TOKEN_LIMIT;
-        let input = storyos_core::chapter_capture_input(title, number, &blocks, limit);
-        let mode = match input.projection_mode {
-            storyos_core::ProjectionMode::ExactRequired => "exact_required",
-            storyos_core::ProjectionMode::DeterministicExcerpt => "deterministic_excerpt",
-            other => panic!("{other:?}"),
-        };
-        (mode.to_owned(), input.text)
+        let text = storyos_core::chapter_capture_input(title, number, &blocks, limit).text;
+        (mode.to_owned(), text)
     };
 
     assert_eq!(
         inputs,
         [
-            expected("Chapter A", 1, &sentences),
-            expected("Fog", 2, &long_refs)
+            expected("exact_required", "Chapter A", 1, &sentences),
+            expected("deterministic_excerpt", "Fog", 2, &long)
         ]
-    );
-    assert_eq!(
-        [inputs[0].0.as_str(), inputs[1].0.as_str()],
-        ["exact_required", "deterministic_excerpt"]
     );
 }
 
@@ -471,12 +459,6 @@ async fn run_once_takes_a_changed_chapter_through_a_capture_and_a_pass_to_an_ent
     let sentences = ["林舟在雨夜撑船。", call];
     let (scope, chapter_id, _, _) = project(&store, &admin, "835", 0x83c0, &sentences).await;
     make_chapter_due(&admin, &scope, &chapter_id, /*seconds*/ 1).await;
-    let destination = storyos_worker::ModelDestination {
-        adapter: FakeDestination,
-        observer: NoContractFaults,
-        tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
-    };
     let state = async || {
         admin
             .query_one(
@@ -496,7 +478,7 @@ async fn run_once_takes_a_changed_chapter_through_a_capture_and_a_pass_to_an_ent
     // only when it changes.
     let mut states = vec![state().await];
     for _ in 0..24 {
-        storyos_worker::run_once(&store, &destination)
+        storyos_worker::run_once(&store, &destination())
             .await
             .unwrap();
         let now = state().await;
