@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { listMemoryEntries } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { MemoryEntryInspect, MemoryEntryTypeInspect }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { deleteMemoryEntryOnce } from "./delete-memory-entry.ts";
+import type { MemoryDeleteFlight } from "./delete-memory-entry.ts";
 import { sameScope } from "./project-instruction.ts";
 import type { SettingsSectionProps } from "./project-settings.tsx";
 
@@ -19,6 +21,9 @@ const ORIGIN_LINES = { author_request: "你让助手记住的", conversation: "�
 const EMPTY_SENTENCE = "助手还没有记住任何内容。";
 const SOURCE_UNAVAILABLE = "来源已不可用";
 const READ_FAILED_SENTENCE = "无法读取记忆，请稍后再试。";
+// The ticket #1579 gives the three control words. The two sentences wait for the words of the author.
+const CHANGED_SENTENCE = "这条记忆已经改变，没有删除。";
+const DELETE_FAILED_SENTENCE = "无法删除这条记忆，请稍后再试。";
 
 type Group = { type: MemoryEntryTypeInspect; entries: MemoryEntryInspect[] };
 
@@ -33,13 +38,18 @@ function groups(entries: readonly MemoryEntryInspect[]): Group[] {
   return result;
 }
 
+/** The step of the delete control of one entry, and the sentence under the entry after a delete. */
+type DeleteStep = { memoryEntryId: string; step: "confirm" | "sending" | "changed" | "failed" };
+
 /**
  * The Memory section of the settings page (ADR 0094 section 9). It shows each current Memory Entry at the time of the
- * read, and it has no control that changes an entry.
+ * read. The only control that changes an entry is its delete control, and a delete has no undo.
  */
-export function MemorySection({ scope, baseUrl, fetchImpl }: SettingsSectionProps) {
+export function MemorySection({ scope, baseUrl, fetchImpl, cryptoImpl }: SettingsSectionProps) {
   const [entries, setEntries] = useState<readonly MemoryEntryInspect[] | "failed">();
   const [reads, setReads] = useState(0);
+  const [deleting, setDeleting] = useState<DeleteStep>();
+  const flight = useRef<MemoryDeleteFlight>(undefined);
   const { owner_user_id: ownerUserId, project_id: projectId } = scope;
   useEffect(() => {
     let current = true;
@@ -50,6 +60,21 @@ export function MemorySection({ scope, baseUrl, fetchImpl }: SettingsSectionProp
     return () => { current = false; };
   }, [baseUrl, fetchImpl, ownerUserId, projectId, reads]);
   const time = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" });
+  const confirmDelete = async (entry: MemoryEntryInspect) => {
+    const memoryEntryId = entry.memory_entry_id;
+    setDeleting({ memoryEntryId, step: "sending" });
+    const result = await deleteMemoryEntryOnce({ baseUrl, fetchImpl, cryptoImpl, scope, memoryEntryId,
+      version: entry.version, flight: flight.current });
+    flight.current = result.flight;
+    if (result.outcome === "deleted") {
+      setDeleting(undefined);
+      setEntries((shown) => shown === "failed" || shown === undefined
+        ? shown : shown.filter((item) => item.memory_entry_id !== memoryEntryId));
+    } else {
+      setDeleting({ memoryEntryId, step: result.outcome });
+      if (result.outcome === "changed") setReads((count) => count + 1);
+    }
+  };
   return (
     <section className="settings-section memory-section" aria-labelledby="memory-heading" data-memory-section="">
       <h2 id="memory-heading">记忆</h2>
@@ -77,8 +102,14 @@ export function MemorySection({ scope, baseUrl, fetchImpl }: SettingsSectionProp
                   <Origin entry={entry} projectId={projectId} />
                   <time dateTime={entry.changed_at}>{time.format(new Date(entry.changed_at))}</time>
                 </p>
-                {/* The place of the delete control of S7-D2b. */}
-                <div className="memory-entry-actions" data-memory-entry-actions="" />
+                <div className="memory-entry-actions" data-memory-entry-actions="">
+                  <DeleteControl
+                    step={deleting?.memoryEntryId === entry.memory_entry_id ? deleting.step : undefined}
+                    onDelete={() => setDeleting({ memoryEntryId: entry.memory_entry_id, step: "confirm" })}
+                    onConfirm={() => void confirmDelete(entry)}
+                    onCancel={() => setDeleting(undefined)}
+                  />
+                </div>
               </li>
             ))}
           </ul>
@@ -86,6 +117,28 @@ export function MemorySection({ scope, baseUrl, fetchImpl }: SettingsSectionProp
       ))}
     </section>
   );
+}
+
+/**
+ * The delete control of one entry: "删除", then "确认删除" and "取消". Only "确认删除" sends the command. After a delete
+ * that did not apply, the entry shows one sentence under the control.
+ */
+function DeleteControl({ step, onDelete, onConfirm, onCancel }: {
+  step: DeleteStep["step"] | undefined;
+  onDelete: () => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const sentence = step === "changed" ? CHANGED_SENTENCE : step === "failed" ? DELETE_FAILED_SENTENCE : undefined;
+  return <>
+    {step === "confirm" || step === "sending" ? <>
+      <button type="button" data-memory-delete-confirm="" disabled={step === "sending"} onClick={onConfirm}>
+        确认删除
+      </button>
+      <button type="button" data-memory-delete-cancel="" disabled={step === "sending"} onClick={onCancel}>取消</button>
+    </> : <button type="button" data-memory-delete="" onClick={onDelete}>删除</button>}
+    {sentence === undefined ? null : <p role="alert" data-memory-delete-notice={step}>{sentence}</p>}
+  </>;
 }
 
 /**
