@@ -71,8 +71,8 @@ fn a_block_with_no_letter_and_no_digit_ends_the_passage_and_is_in_no_passage() {
 
 #[test]
 fn a_block_above_the_limit_is_cut_at_the_last_sentence_end_before_the_limit() {
-    // 79 sentences of 10 characters, then one quoted sentence of 12 characters that ends at
-    // character 802, then more text.
+    // 79 sentences of 10 characters, then a quoted sentence whose closing quote is character 797,
+    // then more text.
     let quoted = "“你回来了。”他说";
     let long = format!("{}{quoted}{}", SENTENCE.repeat(79), SENTENCE.repeat(20));
     let before = format!("{}“你回来了。”", SENTENCE.repeat(79));
@@ -97,6 +97,23 @@ fn a_block_above_the_limit_is_cut_at_the_last_sentence_end_before_the_limit() {
     );
     assert_eq!(passages[1].text, before);
     assert_eq!(format!("{}{}", passages[1].text, passages[2].text), long);
+}
+
+#[test]
+fn the_parts_of_a_block_above_the_limit_keep_each_character_of_the_block() {
+    // The part after the cut has only punctuation, and it stays a passage of the block.
+    let long = format!("{}。”", "潮".repeat(800));
+
+    let passages = cut_passages(&[block("b1", &long)]);
+
+    assert_eq!(shape(&passages), [("b1", "b1", 800), ("b1", "b1", 2)]);
+    assert_eq!(
+        passages
+            .iter()
+            .map(|passage| passage.text.as_str())
+            .collect::<String>(),
+        long
+    );
 }
 
 #[test]

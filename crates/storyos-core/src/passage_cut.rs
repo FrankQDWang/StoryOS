@@ -104,7 +104,7 @@ fn passage(first_block_id: &str, last_block_id: &str, text: &str) -> Passage {
     }
 }
 
-/// The parts of one block above the limit. A part with no letter and no digit is dropped.
+/// The parts of one block above the limit. Together they are the text of the block.
 fn long_block_parts(text: &str) -> Vec<&str> {
     let mut parts = Vec::new();
     let mut rest = text;
@@ -114,7 +114,6 @@ fn long_block_parts(text: &str) -> Vec<&str> {
         rest = &rest[cut..];
     }
     parts.push(rest);
-    parts.retain(|part| !is_separator(part));
     parts
 }
 

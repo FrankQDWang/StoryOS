@@ -499,6 +499,9 @@ async fn a_read_in_one_project_scope_gets_only_its_rows_and_cannot_name_another_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_vector_store_is_available_exactly_when_the_database_offers_the_extension() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
     let (store, admin) = stores().await;
     let scope = ProjectScope::new(
         UserId::new("018f0000-0000-7001-8000-0000000028f1"),
