@@ -267,7 +267,7 @@ async fn write_subject(
     payload["original_result_retrieval"] = crate::agent_run_retrieval::subject(
         reference,
         claim,
-        &run.conversation_id,
+        run.conversation()?,
         &identity,
         RetrievalAdvance::of(run).mapping_revision,
     );

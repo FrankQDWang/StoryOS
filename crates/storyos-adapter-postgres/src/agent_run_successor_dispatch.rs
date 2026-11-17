@@ -482,7 +482,7 @@ pub(crate) async fn finish_dispatched(
             declared_targets: crate::agent_run_create_dispatch::declared_targets(
                 client,
                 claim,
-                &run.chapter_id,
+                run.chapter()?,
             )
             .await?,
         }));

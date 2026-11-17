@@ -247,7 +247,7 @@ pub(crate) async fn open_selected_proposal(
         crate::open_block_proposal::open_selected_prose_change(
             client,
             claim,
-            &run.chapter_id,
+            run.chapter()?,
             decision_id,
             text,
             &run.author_message,

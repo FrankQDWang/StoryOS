@@ -84,7 +84,7 @@ impl GrantScope {
         }
     }
 
-    fn names_purpose(self, purpose: ContextPurpose) -> bool {
+    pub fn names_purpose(self, purpose: ContextPurpose) -> bool {
         let first = match purpose {
             ContextPurpose::CurrentPassageAssistance => 1,
             ContextPurpose::ActiveContextCompaction => 2,

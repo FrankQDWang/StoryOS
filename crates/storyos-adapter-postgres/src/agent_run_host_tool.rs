@@ -62,6 +62,12 @@ pub(crate) async fn execute(
         ToolIntake::SearchMemory { query } => {
             return crate::agent_run_search_memory::execute(client, claim, row, query).await;
         }
+        // The Worker does not dispatch a capture Run, and only a capture Run has this Tool.
+        ToolIntake::RecordMemoryObservations(_) => {
+            return Err(damaged(
+                "A Run that the Worker dispatches has no output call",
+            ));
+        }
         ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } | ToolIntake::Finish => {}
     }
     let refused_beside: bool = client

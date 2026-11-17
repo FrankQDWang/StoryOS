@@ -4386,6 +4386,79 @@ CREATE POLICY memory_entry_reads_exact_scope ON storyos.memory_entry_reads USING
 
 GRANT SELECT,INSERT ON TABLE storyos.memory_entry_reads TO storyos_runtime;
 
+-- Memory captures (ADR 0094 sections 5 and 8). One row for each capture: its source, its background
+-- Run, its start time, its state, and its outcome. The source is a Project Conversation with the first
+-- and the last Run whose messages the capture read, or a Chapter with its Revision. The Run pins the
+-- Model Registration, and thus the mapping revision that gives the instruction text. The settled call
+-- of `record_memory_observations` settles the capture in its transaction. The runtime role can read and
+-- insert a row, it can change only the state and the outcome, and it cannot delete a row.
+
+CREATE TABLE storyos.memory_captures (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    capture_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    source_kind text NOT NULL,
+    conversation_id uuid,
+    first_run_id uuid,
+    last_run_id uuid,
+    chapter_id uuid,
+    chapter_revision_id uuid,
+    started_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    state text DEFAULT 'running'::text NOT NULL,
+    outcome text,
+    CONSTRAINT memory_captures_pkey PRIMARY KEY (owner_user_id, project_id, capture_id),
+    CONSTRAINT memory_captures_run_key UNIQUE (owner_user_id, project_id, run_id),
+    CONSTRAINT memory_captures_source_check CHECK (((((source_kind = 'conversation'::text) AND (conversation_id IS NOT NULL) AND (first_run_id IS NOT NULL) AND (last_run_id IS NOT NULL) AND (chapter_id IS NULL) AND (chapter_revision_id IS NULL)) OR ((source_kind = 'chapter'::text) AND (chapter_id IS NOT NULL) AND (chapter_revision_id IS NOT NULL) AND (conversation_id IS NULL) AND (first_run_id IS NULL) AND (last_run_id IS NULL))) IS TRUE)),
+    CONSTRAINT memory_captures_state_check CHECK (((((state = 'running'::text) AND (outcome IS NULL)) OR ((state = 'settled'::text) AND (outcome = ANY (ARRAY['observations_recorded'::text, 'no_observation'::text])))) IS TRUE)),
+    CONSTRAINT memory_captures_run_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT memory_captures_conversation_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id),
+    CONSTRAINT memory_captures_first_run_fkey FOREIGN KEY (owner_user_id, project_id, first_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id),
+    CONSTRAINT memory_captures_last_run_fkey FOREIGN KEY (owner_user_id, project_id, last_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id),
+    CONSTRAINT memory_captures_chapter_revision_fkey FOREIGN KEY (owner_user_id, project_id, chapter_id, chapter_revision_id) REFERENCES storyos.authoritative_revisions(owner_user_id, project_id, manuscript_object_id, revision_id)
+);
+
+ALTER TABLE storyos.memory_captures ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_captures FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_captures_exact_scope ON storyos.memory_captures USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.memory_captures TO storyos_runtime;
+
+GRANT UPDATE(state, outcome) ON TABLE storyos.memory_captures TO storyos_runtime;
+
+-- Memory Observations (ADR 0094 sections 5 and 8). One row for each item of the settled list of a
+-- capture, in list order from position 1: its type, its title, its text, and its state. An observation
+-- waits until a consolidation pass consumes it, and it stays as the record of its capture. The runtime
+-- role can read and insert a row, it can change only the state, and it cannot delete a row.
+
+CREATE TABLE storyos.memory_observations (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    capture_id uuid NOT NULL,
+    "position" numeric(20,0) NOT NULL,
+    entry_type text NOT NULL,
+    title text NOT NULL,
+    text text NOT NULL,
+    state text DEFAULT 'waiting'::text NOT NULL,
+    CONSTRAINT memory_observations_pkey PRIMARY KEY (owner_user_id, project_id, capture_id, "position"),
+    CONSTRAINT memory_observations_position_check CHECK ((("position" >= (1)::numeric) AND ("position" <= '18446744073709551615'::numeric))),
+    CONSTRAINT memory_observations_type_check CHECK ((entry_type = ANY (ARRAY['writing_preference'::text, 'foreshadowing'::text, 'character'::text, 'relationship'::text, 'major_event'::text, 'other'::text]))),
+    CONSTRAINT memory_observations_state_check CHECK ((state = ANY (ARRAY['waiting'::text, 'consumed'::text]))),
+    CONSTRAINT memory_observations_capture_fkey FOREIGN KEY (owner_user_id, project_id, capture_id) REFERENCES storyos.memory_captures(owner_user_id, project_id, capture_id) MATCH FULL
+);
+
+ALTER TABLE storyos.memory_observations ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_observations FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_observations_exact_scope ON storyos.memory_observations USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.memory_observations TO storyos_runtime;
+
+GRANT UPDATE(state) ON TABLE storyos.memory_observations TO storyos_runtime;
+
 -- Source Snapshots and Source Gaps. The settlement of a research ToolCall writes them in its own
 -- transaction: one immutable Snapshot for each captured search entry or page, and one Gap for each
 -- requested URL that the server reported as failed, empty, or missing. The revisions of one URL in a
