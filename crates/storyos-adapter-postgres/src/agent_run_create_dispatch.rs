@@ -188,14 +188,8 @@ pub(crate) async fn create_request(
             "Invalid retained Context",
         )))
     })?;
-    // A capture has no Chapter, so it declares no Proposal target, and it is no probe.
-    let (declared_targets, probe) = match run.chapter_id.as_deref() {
-        Some(chapter_id) => (
-            declared_targets(client, claim, chapter_id).await?,
-            crate::agent_run_tool_probe::probe_request(client, claim, run).await?,
-        ),
-        None => (Vec::new(), None),
-    };
+    let declared_targets = declared_targets(client, claim, run.chapter()?).await?;
+    let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
     // A Tool qualification probe settles after its one response, so the finish rule does not
     // apply to it, and its probe body sends no `tool_choice` (ADR 0049).

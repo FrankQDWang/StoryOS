@@ -61,9 +61,10 @@ pub const SKILL_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistrat
     ..FIRST_HOST_TOOL_REGISTRATION
 };
 
-/// The current Host Tools: the six Host Tools of the mapping `v7`, `read_chapter`, and
-/// `search_manuscript`, the Memory Tools `write_memory`, `read_memory_entry`, and
-/// `search_memory`, and the output Tool of a capture `record_memory_observations`, to which the Stage 7 tickets add their Tools before `finish` (ADR 0093 section 3, ADR 0094, ADR 0095).
+/// The current Host Tools: the six Host Tools of the mapping `v7`, `read_chapter`,
+/// `search_manuscript`, the Memory Tools `write_memory`, `read_memory_entry`, and `search_memory`,
+/// and the output Tool `record_memory_observations` of a capture. The Stage 7 tickets add their
+/// Tools before `finish` (ADR 0093 section 3, ADR 0094, ADR 0095).
 /// `ExposureFacts::has_host_tool` decides which of them a RunStep declares.
 pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     revision: "018f0000-0000-7001-8000-0000000e0104",

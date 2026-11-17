@@ -38,6 +38,8 @@ pub enum MemoryCaptureStartRefusal {
     SourceNotFound,
 }
 
+/// The store port of the start of a capture (ADR 0094 section 5). A trigger calls it after a
+/// Run of the author in the Project completed.
 pub trait MemoryCaptureStore: Sync {
     /// Starts one capture of `source` with the input text `input` in one transaction.
     fn start_memory_capture(

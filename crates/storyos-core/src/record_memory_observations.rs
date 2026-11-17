@@ -19,15 +19,15 @@ pub const RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC: ToolSpec = ToolSpec {
     result_text_max_bytes: 512,
 };
 
-/// The Host limit of the number of observations of one capture (initial value, S7-D7 can change
-/// it).
+/// The Host limit of the number of observations of one capture. It is an initial value, and S7-D7
+/// can change it.
 pub const CAPTURE_OBSERVATIONS_MAX: usize = 5;
 
 pub(crate) const DESCRIPTION: &str = "Records the Memory Observations of this capture and ends \
 the capture. Call it one time, when you have read the input. An observation is a fact that a \
-later Chapter needs and that a search of the manuscript cannot find: a writing preference of the \
-author, a foreshadowing, a character, a relationship, a major event, or another fact. Give at most \
-5 observations. Give an empty list when the input has no such fact.";
+later Chapter needs and that a search of the manuscript cannot find. It is a writing preference \
+of the author, a foreshadowing, a character, a relationship, a major event, or another fact. Give \
+at most 5 observations. Give an empty list when the input has no such fact.";
 
 /// The strict JSON Schema of the arguments.
 pub(crate) fn parameters() -> Value {
