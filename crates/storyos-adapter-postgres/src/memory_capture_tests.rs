@@ -103,11 +103,32 @@ async fn a_started_capture_stays_queued_and_the_worker_claims_only_the_run_of_th
         .unwrap();
     let new = ConversationSelection::New;
     let author = admitted(&store, &scope, &chapter_id, "fd2", "Help.", new).await;
-    let claim = store
-        .claim_next_agent_run(FakeDestination::ADAPTERS)
+    // An earlier test can leave claimable work for the HTTP phase, so the claim does not see the
+    // work of another Project: a queued Run is paused, and another Run gets a far lease.
+    let hide = "WITH old AS (SELECT run_id, status, lease_expires_at FROM storyos.agent_runs
+                   WHERE project_id <> $1::text::uuid AND status IN ('queued', 'claimed', 'cancelled'))
+                UPDATE storyos.agent_runs AS run
+                   SET status = CASE old.status WHEN 'queued' THEN 'paused' ELSE old.status END,
+                       lease_expires_at = CASE old.status WHEN 'queued' THEN NULL ELSE 'infinity'::timestamptz END
+                  FROM old WHERE run.run_id = old.run_id
+             RETURNING old.run_id::text, old.status, old.lease_expires_at::text";
+    let hidden = admin
+        .query(hide, &[&scope.project_id.as_ref()])
         .await
-        .unwrap()
         .unwrap();
+    let column =
+        |idx: usize| -> Vec<Option<String>> { hidden.iter().map(|row| row.get(idx)).collect() };
+    let claim = store.claim_next_agent_run(FakeDestination::ADAPTERS).await;
+    let restore = "UPDATE storyos.agent_runs AS run
+                      SET status = old.status, lease_expires_at = old.lease::timestamptz
+                     FROM unnest($1::text[], $2::text[], $3::text[]) AS old(run_id, status, lease)
+                    WHERE run.run_id = old.run_id::uuid";
+    let restored = [column(0), column(1), column(2)];
+    admin
+        .execute(restore, &[&restored[0], &restored[1], &restored[2]])
+        .await
+        .unwrap();
+    let claim = claim.unwrap().unwrap();
     let adapter = FakeDestination;
     complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
