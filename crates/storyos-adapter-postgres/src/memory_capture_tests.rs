@@ -1,6 +1,6 @@
 //! The start of a capture in the store (ADR 0094 sections 5 and 8): the queued Run, the capture,
-//! and the first RunStep, each refusal, the Worker that leaves a capture Run queued, the runtime
-//! role, the Project Scope, and the Project Export Archive. Each test parks its capture Run.
+//! and the first RunStep, each refusal, the runtime role, the Project Scope, and the Project
+//! Export Archive. Each test parks its capture Run.
 
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
@@ -22,7 +22,7 @@ use crate::memory_entries::tests::{archived_rows, as_runtime};
 use crate::project_research_binding::tests::park_queued_runs;
 
 /// A Project of `prefix` with one completed author Run, its Chapter, and the source of that Run.
-async fn project(
+pub(crate) async fn project(
     store: &PostgresProjectReader,
     admin: &Client,
     prefix: &str,
@@ -45,7 +45,7 @@ async fn project(
     (scope, chapter_id, source)
 }
 
-async fn start(
+pub(crate) async fn start(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     source: &MemoryCaptureSource,
@@ -87,12 +87,11 @@ async fn started_rows(admin: &Client, started: &StartedMemoryCapture) -> Value {
     serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
 }
 
-/// A start writes the queued Run, the capture, and the first RunStep. The Worker claims the later
-/// Run of the author and not the capture Run, so the capture Run stays queued and no request goes
-/// to a destination for it.
+/// A start writes the queued Run, the capture, and the first RunStep. The Worker claims the capture
+/// Run after the earlier Run of the author, and the empty list of the fake settles it.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_started_capture_stays_queued_and_the_worker_claims_only_the_run_of_the_author() {
+async fn a_started_capture_has_its_rows_and_the_worker_claims_it_after_the_run_of_the_author() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -103,6 +102,7 @@ async fn a_started_capture_stays_queued_and_the_worker_claims_only_the_run_of_th
         .unwrap();
     let new = ConversationSelection::New;
     let author = admitted(&store, &scope, &chapter_id, "fd2", "Help.", new).await;
+    let queued_rows = started_rows(&admin, &started).await;
     // An earlier test can leave claimable work for the HTTP phase, so the claim does not see the
     // work of another Project: a queued Run is paused, and another Run gets a far lease.
     let hide = "WITH old AS (SELECT run_id, status, lease_expires_at FROM storyos.agent_runs
@@ -118,7 +118,10 @@ async fn a_started_capture_stays_queued_and_the_worker_claims_only_the_run_of_th
         .unwrap();
     let column =
         |idx: usize| -> Vec<Option<String>> { hidden.iter().map(|row| row.get(idx)).collect() };
-    let claim = store.claim_next_agent_run(FakeDestination::ADAPTERS).await;
+    let mut claims = Vec::new();
+    for _ in 0..2 {
+        claims.push(store.claim_next_agent_run(FakeDestination::ADAPTERS).await);
+    }
     let restore = "UPDATE storyos.agent_runs AS run
                       SET status = old.status, lease_expires_at = old.lease::timestamptz
                      FROM unnest($1::text[], $2::text[], $3::text[]) AS old(run_id, status, lease)
@@ -128,15 +131,29 @@ async fn a_started_capture_stays_queued_and_the_worker_claims_only_the_run_of_th
         .execute(restore, &[&restored[0], &restored[1], &restored[2]])
         .await
         .unwrap();
-    let claim = claim.unwrap().unwrap();
-    let adapter = FakeDestination;
-    complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
-        .await
-        .unwrap();
+    let mut claimed = Vec::new();
+    for claim in claims {
+        let claim = claim.unwrap().unwrap();
+        let adapter = FakeDestination;
+        complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
+            .await
+            .unwrap();
+        claimed.push(claim.run_id);
+    }
 
-    assert_eq!(claim.run_id, author);
+    assert_eq!(claimed, [author, started.run_id.clone()]);
+    let settled = started_rows(&admin, &started).await;
     assert_eq!(
-        started_rows(&admin, &started).await,
+        [&settled[1], &settled[5], &settled[6], &settled[9]],
+        [
+            &json!("completed"),
+            &json!("settled"),
+            &json!("no_observation"),
+            &json!(1)
+        ]
+    );
+    assert_eq!(
+        queued_rows,
         json!([
             "memory_capture",
             "queued",
@@ -156,7 +173,6 @@ async fn a_started_capture_stays_queued_and_the_worker_claims_only_the_run_of_th
             0
         ])
     );
-    park_queued_runs(&admin, &scope).await;
 }
 
 /// Each refused start writes no Run and no capture: no binding, an input above the item limit, a

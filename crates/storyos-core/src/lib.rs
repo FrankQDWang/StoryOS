@@ -300,7 +300,7 @@ pub use rebuild_expired_reference::{
 };
 pub use record_memory_observations::{
     CAPTURE_OBSERVATIONS_MAX, MemoryObservation, ObservationCandidate, ObservationRefusal,
-    RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC, validate_observations,
+    RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC, observations_result, validate_observations,
 };
 pub use reject_proposal_operations::{
     RejectProposalOperations, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,

@@ -137,13 +137,13 @@ impl ObservationRefusal {
                 format!("the list has more than {CAPTURE_OBSERVATIONS_MAX} observations")
             }
             Self::Invalid { position } => format!(
-                "the observation {position} has a type that is not one of the six types, or a \
-                 title or a text that is empty, or a title that is not one line"
+                "the observation {position} is not valid. Its type is not one of the six types, \
+                 its title or its text is empty, or its title is not one line"
             ),
             Self::TooLong { position } => format!(
-                "the observation {position} is too long: a title has at most \
-                 {MEMORY_TITLE_MAX_CHARS} characters, and a text at most {MEMORY_TEXT_MAX_CHARS}, \
-                 or {MEMORY_CHARACTER_TEXT_MAX_CHARS} for a character"
+                "the observation {position} is too long. A title has at most \
+                 {MEMORY_TITLE_MAX_CHARS} characters. A text has at most {MEMORY_TEXT_MAX_CHARS} \
+                 characters, or {MEMORY_CHARACTER_TEXT_MAX_CHARS} for a character"
             ),
         };
         crate::host_tool_result(&format!(
@@ -193,6 +193,14 @@ pub fn validate_observations(
         });
     }
     Ok(observations)
+}
+
+/// The result of the settled call. The capture ends with it, so no request reads it.
+pub fn observations_result(count: usize) -> ToolResultText {
+    crate::host_tool_result(&match count {
+        0 => "The Host recorded no observation, and the capture is complete.".to_owned(),
+        count => format!("The Host recorded {count} observations, and the capture is complete."),
+    })
 }
 
 #[cfg(test)]

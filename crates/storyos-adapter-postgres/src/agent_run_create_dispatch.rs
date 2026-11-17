@@ -188,14 +188,22 @@ pub(crate) async fn create_request(
             "Invalid retained Context",
         )))
     })?;
-    let declared_targets = declared_targets(client, claim, run.chapter()?).await?;
-    let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
+    // A background Run has no Chapter, so it declares no Proposal target, and it is no probe.
+    let (declared_targets, probe) = match run.kind.has_conversation() {
+        true => (
+            declared_targets(client, claim, run.chapter()?).await?,
+            crate::agent_run_tool_probe::probe_request(client, claim, run).await?,
+        ),
+        false => (Vec::new(), None),
+    };
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
     // A Tool qualification probe settles after its one response, so the finish rule does not
-    // apply to it, and its probe body sends no `tool_choice` (ADR 0049).
-    let tool_choice = match probe {
-        Some(_) => storyos_core::ToolChoice::None,
-        None => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
+    // apply to it, and its probe body sends no `tool_choice` (ADR 0049). A capture has no
+    // `finish` call: each of its requests requires a call (ADR 0094 section 5).
+    let tool_choice = match (&probe, run.kind.requires_tool_call()) {
+        (Some(_), _) => storyos_core::ToolChoice::None,
+        (None, true) => storyos_core::ToolChoice::Required,
+        (None, false) => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
     };
     let (prior_binding, previous_response_reference, prior_input) = match &probe {
         Some(probe) => (
@@ -235,9 +243,14 @@ pub(crate) async fn create_request(
     let context = RequestContextItem::sent(input.context, previous_response_reference.as_deref());
     Ok(CreateRequest {
         attempt,
-        purpose: probe.map_or(CreatePurpose::Decision, |probe| {
-            CreatePurpose::ToolQualification(probe.request)
-        }),
+        purpose: match probe {
+            Some(probe) => CreatePurpose::ToolQualification(probe.request),
+            None => CreatePurpose::of_run(run.kind).ok_or_else(|| {
+                CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
+                    "The Worker does not dispatch a Run of this kind",
+                )))
+            })?,
+        },
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
         chapter_id: run.chapter_id.clone().unwrap_or_default(),
@@ -358,7 +371,7 @@ async fn previous_response_reference(
                     let wire = crate::agent_run_continuation::decide_continuation(
                         client,
                         claim,
-                        run.conversation()?,
+                        run.conversation_id.as_deref(),
                         &run.author_message,
                         &assistance,
                         tool_exposure_digest,
