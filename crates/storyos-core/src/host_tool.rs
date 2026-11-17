@@ -3,8 +3,8 @@
 //! Outbound Disclosure Event, and it gives the Agent no authority.
 
 use crate::{
-    ContextSourceClass, FINISH_TOOL_SPEC, LOAD_SKILL_TOOL_SPEC, ModelRegistration,
-    PROPOSE_EDIT_TOOL_SPEC, READ_CHAPTER_TOOL_SPEC, READ_MEMORY_ENTRY_TOOL_SPEC,
+    ContextSourceClass, FINISH_TOOL_SPEC, HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC, LOAD_SKILL_TOOL_SPEC,
+    ModelRegistration, PROPOSE_EDIT_TOOL_SPEC, READ_CHAPTER_TOOL_SPEC, READ_MEMORY_ENTRY_TOOL_SPEC,
     READ_SKILL_RESOURCE_TOOL_SPEC, READ_TOOL_RESULT_TOOL_SPEC,
     RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC, SEARCH_MANUSCRIPT_TOOL_SPEC, SEARCH_MEMORY_TOOL_SPEC,
     SUBMIT_RESEARCH_TOOL_SPEC, ToolIntake, ToolOperation, ToolRegistrationKind, ToolResultText,
@@ -62,7 +62,7 @@ pub const SKILL_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistrat
 };
 
 /// The current Host Tools: the six Host Tools of the mapping `v7`, `read_chapter`,
-/// `search_manuscript`, the Memory Tools `write_memory`, `read_memory_entry`, and `search_memory`,
+/// `search_manuscript`, `hybrid_search_manuscript`, the Memory Tools `write_memory`, `read_memory_entry`, and `search_memory`,
 /// and the output Tool `record_memory_observations` of a capture. The Stage 7 tickets add their
 /// Tools before `finish` (ADR 0093 section 3, ADR 0094, ADR 0095).
 /// `ExposureFacts::has_host_tool` decides which of them a RunStep declares.
@@ -76,6 +76,7 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
         &READ_SKILL_RESOURCE_TOOL_SPEC,
         &READ_CHAPTER_TOOL_SPEC,
         &SEARCH_MANUSCRIPT_TOOL_SPEC,
+        &HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC,
         &WRITE_MEMORY_TOOL_SPEC,
         &READ_MEMORY_ENTRY_TOOL_SPEC,
         &SEARCH_MEMORY_TOOL_SPEC,
@@ -91,7 +92,9 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
 pub fn host_tool_result_class(spec: &ToolSpec) -> ContextSourceClass {
     match spec.operation {
         ToolOperation::ReadChapter => ContextSourceClass::ManuscriptReadResult,
-        ToolOperation::SearchManuscript => ContextSourceClass::ManuscriptSearchResult,
+        ToolOperation::SearchManuscript | ToolOperation::HybridSearchManuscript => {
+            ContextSourceClass::ManuscriptSearchResult
+        }
         ToolOperation::ReadMemoryEntry => ContextSourceClass::MemoryReadResult,
         ToolOperation::SearchMemory => ContextSourceClass::MemorySearchResult,
         ToolOperation::WebSearch
@@ -160,7 +163,8 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         // The store executes `propose_edit`, because it opens a Proposal, `submit_research`,
         // because it records a Research Artifact, `read_tool_result`, because it reads a stored
         // ToolCall, and `load_skill` and `read_skill_resource`, because they read a SkillPackage
-        // Snapshot, `read_chapter` and `search_manuscript`, because they read the manuscript,
+        // Snapshot, `read_chapter`, `search_manuscript`, and `hybrid_search_manuscript`, because
+        // they read the manuscript,
         // `write_memory`, because it writes a Memory Entry, `read_memory_entry`, because it
         // reads a Memory Entry and records the read, `search_memory`, because it reads the
         // Memory Entries, and `record_memory_observations`, because it writes the observations.
@@ -173,6 +177,7 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         | ToolIntake::ReadSkillResource { .. }
         | ToolIntake::ReadChapter { .. }
         | ToolIntake::SearchManuscript { .. }
+        | ToolIntake::HybridSearchManuscript { .. }
         | ToolIntake::WriteMemory(_)
         | ToolIntake::ReadMemoryEntry { .. }
         | ToolIntake::SearchMemory { .. }

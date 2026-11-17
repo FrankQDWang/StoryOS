@@ -27,6 +27,7 @@ mod function_calling;
 mod grant_scope;
 mod host_fake_profile;
 mod host_tool;
+mod hybrid_search_manuscript;
 mod instruction_binding;
 mod load_skill;
 mod manuscript_payload;
@@ -207,6 +208,10 @@ pub use host_tool::{
     HOST_TOOL_REGISTRATIONS, HostToolRegistration, READ_RESULT_HOST_TOOL_REGISTRATION,
     SKILL_HOST_TOOL_REGISTRATION, execute_host_tool, host_tool, host_tool_result,
     host_tool_result_class,
+};
+pub use hybrid_search_manuscript::{
+    HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC, HybridSearchRefusal, NO_SEARCH_BY_MEANING,
+    admit_hybrid_search, hybrid_search_result,
 };
 pub use instruction_binding::{
     BoundInstruction, assemble_instruction_binding, project_instruction_binding,

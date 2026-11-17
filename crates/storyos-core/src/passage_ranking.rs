@@ -217,7 +217,8 @@ pub fn fuse_passage_lists(lists: &[&[PassagePlace]]) -> Vec<PassagePlace> {
         .collect()
 }
 
-/// The result of the ranked passages `ranked` for the native call `call_id`. The first line is
+/// The result of the ranked passages `ranked` for the native call `call_id`. A `notice` is the
+/// first line, and its cost is in the cost of the header. The next line is
 /// the canonical JSON object `{"passages", "passages_returned", "terms"}`. Each passage then has
 /// the line of its Chapter, one line with the numbers of its Blocks, and its current text. The
 /// result has whole passages in rank order while its `tool_result` item, with its boundary and
@@ -228,14 +229,19 @@ pub fn admit_passage_ranking(
     chapters: &[ChapterPassages],
     ranked: &[PassagePlace],
     terms: &PassageTerms,
+    notice: Option<&str>,
     call_id: &str,
 ) -> ToolResultText {
     let header = |returned: usize| {
-        crate::project_archive::canonical_json(&json!({
+        let header = crate::project_archive::canonical_json(&json!({
             "passages": ranked.len(),
             "passages_returned": returned,
             "terms": terms.as_slice(),
-        }))
+        }));
+        match notice {
+            Some(notice) => format!("{notice}\n{header}"),
+            None => header,
+        }
     };
     if ranked.is_empty() {
         return crate::host_tool_result(&format!("{}\n{NO_PASSAGE}", header(0)));

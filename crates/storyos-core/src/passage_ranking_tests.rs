@@ -208,8 +208,8 @@ fn the_result_has_one_header_and_the_chapter_line_blocks_and_text_of_each_passag
     chapters[0].passages[0].last_block = 3;
     let ranked = [place(1, 0), place(0, 0)];
 
-    let result = admit_passage_ranking(&chapters, &ranked, &terms(&["林雪"]), "call-1");
-    let empty = admit_passage_ranking(&chapters, &[], &terms(&[]), "call-1");
+    let result = admit_passage_ranking(&chapters, &ranked, &terms(&["林雪"]), None, "call-1");
+    let empty = admit_passage_ranking(&chapters, &[], &terms(&[]), None, "call-1");
 
     assert_eq!(
         result.text,
@@ -244,6 +244,7 @@ fn the_result_keeps_whole_passages_while_its_item_fits_the_limit() {
             &[chapter("一", &[first, second])],
             &[place(0, 0), place(0, 1)],
             &terms(&[]),
+            None,
             "call-1",
         )
         .text

@@ -12,6 +12,7 @@ fn exposure(revision: &str, memory_use: bool) -> ToolExposure {
         model_registration_revision: revision,
         skill_catalog: false,
         memory_use,
+        hybrid_search: false,
         run_kind: crate::AgentRunKind::Author,
     })
 }

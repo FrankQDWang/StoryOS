@@ -286,6 +286,7 @@ pub(crate) fn call_inspect(
         | storyos_core::ToolIntake::ReadSkillResource { .. }
         | storyos_core::ToolIntake::ReadChapter { .. }
         | storyos_core::ToolIntake::SearchManuscript { .. }
+        | storyos_core::ToolIntake::HybridSearchManuscript { .. }
         | storyos_core::ToolIntake::WriteMemory(_)
         | storyos_core::ToolIntake::ReadMemoryEntry { .. }
         | storyos_core::ToolIntake::SearchMemory { .. }
