@@ -29,7 +29,7 @@ use crate::command_sequence::tests::{DELETE_MEMORY_ENTRY, issued, seed_project};
 use crate::create_agent_run::context::chapter_list_tests::admitted;
 use crate::memory_entries::tests::{Version, archived, write_versions};
 
-type Outcome = Result<
+pub(crate) type Outcome = Result<
     TransitionOutcome<
         MemoryEntryDeleted,
         DeleteMemoryEntryNoEffect,
@@ -47,7 +47,7 @@ const TWO_ENTRIES: [Version<'static>; 3] = [
 ];
 
 /// Deletes `memory_entry_id` in the Project of `scope` with the Command Challenge `suffix`.
-async fn delete(
+pub(crate) async fn delete(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: u16,
