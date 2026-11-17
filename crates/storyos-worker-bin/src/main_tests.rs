@@ -6,15 +6,15 @@ use std::time::Duration;
 
 use storyos_application::{
     AgentRunWorkStore, ArchiveExportWorkStore, ClaimedAgentRun, ClaimedArchiveExport,
-    ClaimedExportWork, ClaimedPassageIndex, ClaimedReadableExport, CompleteAgentRunError,
-    CompleteArchiveExport, CompleteArchiveExportError, CompleteReadableExport,
-    CompleteReadableExportError, DestinationRequest, DispatchClaim, DispatchRecord, EmbeddingClaim,
-    EmbeddingDispatchStore, EmbeddingProjection, EmbeddingRecord, EmbeddingResult, EmbeddingRoute,
-    ExportWorkStore, ModelDispatchStore, NextDispatchWork, PassageIndexFacts,
-    PassageIndexWorkStore, PassageVectorKey, PassageVectorRow, PassageVectorStore,
-    ProjectReadError, ProjectScope, QuestionSearch, ReadableExportWorkStore, ResponseReference,
-    StreamStop, ToolCallRequest, ToolDispatchClaim, ToolDispatchRecord, ToolDispatchStore,
-    ToolWork, WirePayloadProjection,
+    ClaimedExportWork, ClaimedMemoryWork, ClaimedPassageIndex, ClaimedReadableExport,
+    CompleteAgentRunError, CompleteArchiveExport, CompleteArchiveExportError,
+    CompleteReadableExport, CompleteReadableExportError, DestinationRequest, DispatchClaim,
+    DispatchRecord, EmbeddingClaim, EmbeddingDispatchStore, EmbeddingProjection, EmbeddingRecord,
+    EmbeddingResult, EmbeddingRoute, ExportWorkStore, MemoryWorkScheduleStore, ModelDispatchStore,
+    NextDispatchWork, PassageIndexFacts, PassageIndexWorkStore, PassageVectorKey, PassageVectorRow,
+    PassageVectorStore, ProjectReadError, ProjectScope, QuestionSearch, ReadableExportWorkStore,
+    ResponseReference, StreamStop, ToolCallRequest, ToolDispatchClaim, ToolDispatchRecord,
+    ToolDispatchStore, ToolWork, WirePayloadProjection,
 };
 use storyos_core::{
     AGENT_PLAN_EMBEDDING_REGISTRATION, EmbeddingInput, EmbeddingRefusal, EmbeddingRegistration,
@@ -79,6 +79,17 @@ impl AgentRunWorkStore for RecordingStore {
     ) -> Result<Option<ClaimedAgentRun>, ProjectReadError> {
         self.record(format!("agent_run {adapters:?}"));
         Ok(None)
+    }
+}
+
+impl MemoryWorkScheduleStore for RecordingStore {
+    async fn memory_work_due(&self) -> Result<bool, ProjectReadError> {
+        self.record("schedule".to_owned());
+        Ok(false)
+    }
+
+    async fn claim_due_memory_work(&self) -> Result<Option<ClaimedMemoryWork>, ProjectReadError> {
+        unreachable!("the store has no due schedule row")
     }
 }
 
@@ -296,7 +307,10 @@ async fn the_binary_claims_the_index_work_of_each_embedding_adapter_that_it_comp
     );
     assert_eq!(
         run("--claim-only").await,
-        ("claim_only", vec!["export".to_owned(), agent_run, index])
+        (
+            "claim_only",
+            vec!["export".to_owned(), agent_run, "schedule".to_owned(), index]
+        )
     );
 }
 

@@ -645,6 +645,9 @@ pub(crate) async fn update_run(
     if updated == 1 {
         let end = storyos_core::CaptureRunEnd::Status { status, reason };
         crate::memory_capture::settle_end(client, claim, end).await?;
+        if status == "completed" {
+            crate::memory_work_schedule::mark_conversation_due(client, claim).await?;
+        }
     }
     Ok(())
 }

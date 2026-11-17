@@ -173,6 +173,7 @@ mod manuscript_tree;
 mod memory_capture;
 mod memory_entries;
 mod memory_entry_list;
+mod memory_work_schedule;
 mod model_registration;
 mod open_block_proposal;
 mod open_proposal_list;

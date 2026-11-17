@@ -36,6 +36,7 @@ mod memory_capture;
 mod memory_delete_marks;
 mod memory_entry;
 mod memory_index;
+mod memory_work_schedule;
 mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
@@ -244,6 +245,11 @@ pub use memory_entry::{
 pub use memory_index::{
     MEMORY_INDEX_MAX_ENTRIES, MEMORY_INDEX_TOKEN_LIMIT, MemoryIndexEntry, assemble_memory_index,
     memory_index_text,
+};
+pub use memory_work_schedule::{
+    CONVERSATION_QUIET_TIME, ConversationCaptureFacts, ConversationCaptureInput,
+    ConversationCaptureSkip, ConversationRole, ConversationRunMessages, conversation_capture_due,
+    conversation_capture_input, decide_conversation_capture,
 };
 pub use model_output::{
     AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, StreamItemRole, StreamItemState,

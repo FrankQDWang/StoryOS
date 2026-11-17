@@ -52,9 +52,11 @@ fn connection_lost() -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(ConnectionLost))
 }
 
-/// A store with the queued AgentRuns and the index work of `work`. The first claims fail with a
-/// serialization failure, and the first completions fail with `completion_failure`.
+/// A store with `runs` queued AgentRuns, and the schedule rows and the index work of `work`. The
+/// first claims fail with a/// serialization failure, and the first completions fail with `completion_failure`.
 struct RaceStore {
+    runs: Mutex<u64>,
+    schedule_claims: Mutex<u64>,
     claim_failures: Mutex<u64>,
     completion_failures: Mutex<u64>,
     completion_failure: fn() -> CompleteAgentRunError,
@@ -65,7 +67,8 @@ struct RaceStore {
 /// The queued work of the store and the order of what the Worker did. The first embedding request
 /// is the barrier: an AgentRun becomes ready during it.
 struct Work {
-    queued_runs: u64,
+    /// The due schedule rows of background Memory work.
+    schedule_rows: u64,
     /// The text of the one Chapter with index work, and the passages with a row.
     index: Option<(ChapterPassageSource, Vec<PassageVectorKey>)>,
     index_claimed: bool,
@@ -77,7 +80,7 @@ struct Work {
 impl Default for Work {
     fn default() -> Self {
         Self {
-            queued_runs: 1,
+            schedule_rows: 1,
             index: None,
             index_claimed: false,
             claimed_registrations: Vec::new(),
@@ -86,8 +89,9 @@ impl Default for Work {
     }
 }
 
-/// A store with no queued AgentRun and the index work of one Chapter with two passages.
-fn index_store() -> RaceStore {
+/// A store with no queued AgentRun, `schedule_rows` due schedule rows, and the index work of one
+/// Chapter with two passages.
+fn index_store(schedule_rows: u64) -> RaceStore {
     let block = |id: &str, text: String| ManuscriptSearchBlockFact {
         manuscript_block_id: id.to_owned(),
         text,
@@ -103,12 +107,14 @@ fn index_store() -> RaceStore {
         ],
     };
     RaceStore {
+        runs: Mutex::new(0),
+        schedule_claims: Mutex::new(0),
         claim_failures: Mutex::new(0),
         completion_failures: Mutex::new(0),
         completion_failure: connection_lost,
         settled: Mutex::new(Vec::new()),
         work: Mutex::new(Work {
-            queued_runs: 0,
+            schedule_rows,
             index: Some((chapter, Vec::new())),
             ..Work::default()
         }),
@@ -161,13 +167,35 @@ impl AgentRunWorkStore for RaceStore {
             *failures -= 1;
             return Err(ProjectReadError::unavailable(SerializationFailure));
         }
-        let mut work = self.work.lock().unwrap();
-        if work.queued_runs == 0 {
+        let mut runs = self.runs.lock().unwrap();
+        if *runs == 0 {
             return Ok(None);
         }
-        work.queued_runs -= 1;
-        work.events.push("agent_run");
+        *runs -= 1;
+        self.work.lock().unwrap().events.push("agent_run");
         Ok(Some(claim()))
+    }
+}
+
+impl MemoryWorkScheduleStore for RaceStore {
+    async fn memory_work_due(&self) -> Result<bool, ProjectReadError> {
+        Ok(self.work.lock().unwrap().schedule_rows > 0)
+    }
+
+    async fn claim_due_memory_work(
+        &self,
+    ) -> Result<Option<storyos_application::ClaimedMemoryWork>, ProjectReadError> {
+        *self.schedule_claims.lock().unwrap() += 1;
+        let mut work = self.work.lock().unwrap();
+        work.schedule_rows -= 1;
+        work.events.push("schedule");
+        Ok(Some(storyos_application::ClaimedMemoryWork {
+            project_scope: claim().project_scope,
+            conversation_id: "conversation".to_owned(),
+            outcome: MemoryWorkOutcome::Skipped(
+                storyos_core::ConversationCaptureSkip::NothingUnread,
+            ),
+        }))
     }
 }
 
@@ -230,7 +258,7 @@ impl storyos_application::EmbeddingDispatchStore for RaceStore {
     > {
         let mut work = self.work.lock().unwrap();
         if !work.events.contains(&"request") {
-            work.queued_runs += 1;
+            *self.runs.lock().unwrap() += 1;
         }
         work.events.push("request");
         Ok(Ok(storyos_application::EmbeddingClaim {
@@ -434,6 +462,8 @@ fn claim() -> ClaimedAgentRun {
 async fn run_once_claims_again_after_a_serialization_failure() {
     storyos_application::register_sql_state(serialization_failure_state);
     let store = RaceStore {
+        runs: Mutex::new(1),
+        schedule_claims: Mutex::new(0),
         claim_failures: Mutex::new(1),
         completion_failures: Mutex::new(0),
         completion_failure: serialization_failure,
@@ -458,6 +488,8 @@ async fn run_once_claims_again_after_a_serialization_failure() {
 async fn run_once_completes_again_after_a_serialization_failure() {
     storyos_application::register_sql_state(serialization_failure_state);
     let store = RaceStore {
+        runs: Mutex::new(1),
+        schedule_claims: Mutex::new(0),
         claim_failures: Mutex::new(0),
         completion_failures: Mutex::new(1),
         completion_failure: serialization_failure,
@@ -482,6 +514,8 @@ async fn run_once_completes_again_after_a_serialization_failure() {
 async fn run_once_stops_after_one_failure_that_is_not_a_serialization_failure() {
     storyos_application::register_sql_state(serialization_failure_state);
     let store = RaceStore {
+        runs: Mutex::new(1),
+        schedule_claims: Mutex::new(0),
         claim_failures: Mutex::new(0),
         completion_failures: Mutex::new(2),
         completion_failure: connection_lost,
@@ -525,14 +559,16 @@ fn fake_destination() -> ModelDestination<
     }
 }
 
+/// A due schedule row and the index work at the same time: the schedule row goes first. An
+/// AgentRun that becomes ready during the first embedding request goes before the next request.
 #[tokio::test(start_paused = true)]
-async fn the_loop_claims_an_agent_run_that_becomes_ready_before_the_next_embedding_request() {
-    let store = index_store();
+async fn the_loop_claims_the_schedule_row_and_a_ready_agent_run_before_the_index_work() {
+    let store = index_store(1);
     // The destination of the Worker inside the Server process.
     let destination = fake_destination();
     let mut index = None;
     let mut turns = Vec::new();
-    for _ in 0..5 {
+    for _ in 0..6 {
         turns.push(step(&store, &destination, &mut index).await);
     }
 
@@ -544,8 +580,9 @@ async fn the_loop_claims_an_agent_run_that_becomes_ready_before_the_next_embeddi
             store.settled.lock().unwrap().len()
         ),
         (
-            vec![true, true, true, true, false],
+            vec![true, true, true, true, true, false],
             vec![
+                "schedule",
                 "index_claim",
                 "request",
                 "agent_run",
@@ -562,15 +599,58 @@ async fn the_loop_claims_an_agent_run_that_becomes_ready_before_the_next_embeddi
     );
 }
 
+/// A due schedule row and the index work at the same time: `run_once` claims the schedule row, and
+/// the next `run_once` completes one index claim.
 #[tokio::test(start_paused = true)]
-async fn run_once_claims_the_index_work_after_the_other_work_and_completes_the_claim() {
-    let store = index_store();
+async fn run_once_claims_the_schedule_row_before_the_index_work_and_completes_the_claim() {
+    let store = index_store(1);
+    run_once(&store, &fake_destination())
+        .await
+        .expect("the schedule row is claimed");
+    let after_schedule = store.work.lock().unwrap().events.clone();
     run_once(&store, &fake_destination())
         .await
         .expect("the index work completes");
 
     assert_eq!(
-        store.work.lock().unwrap().events,
-        ["index_claim", "request", "request", "completed"]
+        (after_schedule, store.work.lock().unwrap().events.clone()),
+        (
+            vec!["schedule"],
+            vec!["schedule", "index_claim", "request", "request", "completed"]
+        )
+    );
+}
+
+/// The Worker claims a due schedule row only when the AgentRun claim finds no Run (ADR 0094
+/// section 5): a Run of the author does not wait for background Memory work.
+#[tokio::test(start_paused = true)]
+async fn run_once_claims_a_schedule_row_only_after_the_agent_run_claim_finds_no_run() {
+    let store = RaceStore {
+        runs: Mutex::new(1),
+        schedule_claims: Mutex::new(0),
+        claim_failures: Mutex::new(0),
+        completion_failures: Mutex::new(0),
+        completion_failure: serialization_failure,
+        settled: Mutex::new(Vec::new()),
+        work: Mutex::default(),
+    };
+    let destination = ModelDestination {
+        adapter: NoDestination,
+        observer: NoContractFaults,
+        tools: storyos_application::NoToolDestination,
+        embeddings: storyos_application::NoEmbeddingDestination,
+    };
+
+    run_once(&store, &destination).await.unwrap();
+    let after_run = *store.schedule_claims.lock().unwrap();
+    run_once(&store, &destination).await.unwrap();
+
+    assert_eq!(
+        (
+            after_run,
+            *store.schedule_claims.lock().unwrap(),
+            store.settled.lock().unwrap().clone()
+        ),
+        (0, 1, vec![claim()])
     );
 }

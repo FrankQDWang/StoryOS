@@ -258,8 +258,9 @@ async fn a_refused_start_writes_no_row() {
 }
 
 /// The runtime role cannot change the content of a capture or of an observation and cannot
-/// delete them, a read in the Scope of another Project sees no row, and the archive has each
-/// row. SQL writes the observation as a test row, because S7-D3b2 settles the output call.
+/// delete them or a schedule row, a read in the Scope of another Project sees no row, and the
+/// archive has each row and the schedule row of the Conversation. SQL writes the observation as a
+/// test row, because S7-D3b2 settles the output call.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_runtime_role_cannot_change_a_capture_and_the_archive_has_its_rows() {
@@ -291,6 +292,7 @@ async fn the_runtime_role_cannot_change_a_capture_and_the_archive_has_its_rows()
         "UPDATE storyos.memory_observations SET text = 'x'",
         "DELETE FROM storyos.memory_captures",
         "DELETE FROM storyos.memory_observations",
+        "DELETE FROM storyos.memory_work_schedules",
     ];
     let refused = || Err("42501".to_owned());
     let reads = [
@@ -304,23 +306,49 @@ async fn the_runtime_role_cannot_change_a_capture_and_the_archive_has_its_rows()
             as_runtime(&other, &reads).await
         ),
         (
-            vec![Ok(1), refused(), refused(), refused(), refused()],
+            vec![Ok(1), refused(), refused(), refused(), refused(), refused()],
             vec![Ok(0), Ok(0)]
         )
     );
-    let tables = ["memory_captures", "memory_observations"];
-    let [captures, observations] = archived_rows(&store, &scope, "fd", tables).await;
-    let keys = ["source_kind", "state", "outcome", "entry_type", "title"];
+    let tables = [
+        "memory_captures",
+        "memory_observations",
+        "memory_work_schedules",
+    ];
+    let [captures, observations, schedules] = archived_rows(&store, &scope, "fd", tables).await;
+    let keys = [
+        "source_kind",
+        "state",
+        "outcome",
+        "entry_type",
+        "title",
+        "work_kind",
+    ];
     let fields = |rows: Vec<Value>| -> Vec<_> {
         rows.iter()
             .map(|row| json!(keys.map(|k| row[k].clone())))
             .collect()
     };
     assert_eq!(
-        (fields(captures), fields(observations)),
+        (fields(captures), fields(observations), fields(schedules)),
         (
-            vec![json!(["conversation", "running", null, null, null])],
-            vec![json!([null, "waiting", null, "foreshadowing", "铜铃"])]
+            vec![json!(["conversation", "running", null, null, null, null])],
+            vec![json!([
+                null,
+                "waiting",
+                null,
+                "foreshadowing",
+                "铜铃",
+                null
+            ])],
+            vec![json!([
+                null,
+                null,
+                null,
+                null,
+                null,
+                "conversation_capture"
+            ])]
         )
     );
 }

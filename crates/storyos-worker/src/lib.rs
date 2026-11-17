@@ -8,11 +8,12 @@ use storyos_application::{
     ClaimedPassageIndex, ClaimedReadableExport, CompleteAgentRun, CompleteAgentRunError,
     CompleteArchiveExport, CompleteArchiveExportError, CompleteReadableExport,
     CompleteReadableExportError, ContractFaultObserver, DiagnosticField, DiagnosticId,
-    EmbeddingProviderAdapter, ExportWorkStore, GatewayClock, ModelDispatchStore,
-    ModelProviderAdapter, PassageIndexStep, PassageIndexWorkStore, ProjectReadError, SqlState,
-    ToolDestinationAdapter, ToolDispatchStore, claim_next_agent_run, claim_next_export_work,
-    claim_next_passage_index_work, complete_agent_run_with_destinations, complete_archive_export,
-    complete_readable_export, step_passage_index_work,
+    EmbeddingProviderAdapter, ExportWorkStore, GatewayClock, MemoryWorkOutcome,
+    MemoryWorkScheduleStore, ModelDispatchStore, ModelProviderAdapter, PassageIndexStep,
+    PassageIndexWorkStore, ProjectReadError, SqlState, ToolDestinationAdapter, ToolDispatchStore,
+    claim_next_agent_run, claim_next_export_work, claim_next_passage_index_work,
+    complete_agent_run_with_destinations, complete_archive_export, complete_readable_export,
+    step_passage_index_work,
 };
 
 const ATTEMPTS: u64 = 4;
@@ -21,7 +22,12 @@ const SERIALIZATION_FAILURE: &str = "40001";
 /// Combined persistence port for the packaged Worker loop. The index work store has the embedding
 /// dispatch store.
 pub trait WorkerStore:
-    ExportWorkStore + AgentRunWorkStore + ModelDispatchStore + ToolDispatchStore + PassageIndexWorkStore
+    ExportWorkStore
+    + AgentRunWorkStore
+    + ModelDispatchStore
+    + ToolDispatchStore
+    + MemoryWorkScheduleStore
+    + PassageIndexWorkStore
 {
 }
 
@@ -30,6 +36,7 @@ impl<T> WorkerStore for T where
         + AgentRunWorkStore
         + ModelDispatchStore
         + ToolDispatchStore
+        + MemoryWorkScheduleStore
         + PassageIndexWorkStore
 {
 }
@@ -93,6 +100,9 @@ pub async fn run_once<
                 }
             }
             None => {
+                if claim_after_contention(|| memory_work_claim(store)).await? {
+                    return Ok(());
+                }
                 let mut index = None;
                 passage_index_step(store, &destination.embeddings, &mut index).await?;
                 while index.is_some() {
@@ -109,6 +119,7 @@ pub async fn claim_only<A: ModelProviderAdapter, E: EmbeddingProviderAdapter>(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if claim_next_export_work(store).await?.is_some()
         || claim_next_agent_run(store, A::ADAPTERS).await?.is_some()
+        || memory_work_claim(store).await?
     {
         return Ok(());
     }
@@ -140,8 +151,14 @@ async fn step<
                 agent_run_claim(store, destination, &claim, Retry::EachFailure).await,
                 Ok(_) | Err(CompleteAgentRunError::StaleFence)
             ),
-            Ok(None) => match passage_index_step(store, &destination.embeddings, index).await {
-                Ok(worked) => worked,
+            Ok(None) => match memory_work_claim(store).await {
+                Ok(true) => true,
+                Ok(false) => {
+                    match passage_index_step(store, &destination.embeddings, index).await {
+                        Ok(worked) => worked,
+                        Err(error) => claim_failed(&error),
+                    }
+                }
                 Err(error) => claim_failed(&error),
             },
             Err(error) => claim_failed(&error),
@@ -150,12 +167,11 @@ async fn step<
     }
 }
 
-/// The index work comes after each other claim (ADR 0095 section 4). The schedule claim of
-/// background Memory work (S7-D3e) is not in the loop yet, and it goes before this step. The step
-/// does the next step of the held claim, or it claims the next work and does its first step. The
-/// claim stays held while its steps write rows, so each turn of the loop sends at most one
-/// embedding request, and the next turn claims the other work first. Returns whether it did a
-/// step.
+/// The index work comes after each other claim, also after a schedule row of background Memory
+/// work (ADR 0095 section 4). The step does the next step of the held claim, or it claims the next
+/// work and does its first step. The claim stays held while its steps write rows, so each turn of
+/// the loop sends at most one embedding request, and the next turn claims the other work first.
+/// Returns whether it did a step.
 async fn passage_index_step<E: EmbeddingProviderAdapter>(
     store: &impl WorkerStore,
     embeddings: &E,
@@ -172,6 +188,44 @@ async fn passage_index_step<E: EmbeddingProviderAdapter>(
     if step == PassageIndexStep::Written {
         *held = Some(claim);
     }
+    Ok(true)
+}
+
+/// Claims one due schedule row of background Memory work after the AgentRun claim found no Run
+/// (ADR 0094 section 5). The step asks for a due row first, so that an idle step makes no claim
+/// span. `true`: a row was claimed.
+async fn memory_work_claim(store: &impl WorkerStore) -> Result<bool, ProjectReadError> {
+    if !store.memory_work_due().await? {
+        return Ok(false);
+    }
+    memory_work_claim_span(store).await
+}
+
+/// The claim span of one schedule row (ADR 0047). The store decides and starts the capture in the
+/// transaction of the claim, so the span has no completion attempt and no fence token.
+#[tracing::instrument(skip_all, fields(
+    project_id = tracing::field::Empty,
+    run_id = tracing::field::Empty,
+    outcome = tracing::field::Empty,
+))]
+async fn memory_work_claim_span(store: &impl WorkerStore) -> Result<bool, ProjectReadError> {
+    let span = tracing::Span::current();
+    let claimed = match store.claim_due_memory_work().await {
+        Ok(Some(claimed)) => claimed,
+        Ok(None) => {
+            span.record("outcome", "no_due_row");
+            return Ok(false);
+        }
+        Err(error) => {
+            span.record("outcome", error.diagnostic());
+            return Err(error);
+        }
+    };
+    span.record("project_id", claimed.project_scope.project_id.diagnostic());
+    if let MemoryWorkOutcome::Started(started) = &claimed.outcome {
+        span.record("run_id", DiagnosticId(&started.run_id).diagnostic());
+    }
+    span.record("outcome", claimed.outcome.diagnostic());
     Ok(true)
 }
 
