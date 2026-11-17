@@ -39,22 +39,22 @@ pub(super) fn scripted(title: &str, operations: &[Value]) -> Value {
 
 pub(super) fn create(entry_type: &str, title: &str, observations: Value) -> Value {
     json!({
-        "action": "create", "entry": null, "type": entry_type, "title": title,
+        "action": "create", "entry": null, "entries": null, "type": entry_type, "title": title,
         "description": "述。", "text": "文。", "observations": observations, "reason": null
     })
 }
 
 pub(super) fn update(entry: u64, text: &str) -> Value {
     json!({
-        "action": "update", "entry": entry, "type": null, "title": "林舟", "description": "船夫。",
-        "text": text, "observations": [1], "reason": null
+        "action": "update", "entry": entry, "entries": null, "type": null, "title": "林舟",
+        "description": "船夫。", "text": text, "observations": [1], "reason": null
     })
 }
 
 pub(super) fn delete(entry: u64) -> Value {
     json!({
-        "action": "delete", "entry": entry, "type": null, "title": null, "description": null,
-        "text": null, "observations": [], "reason": "灯已灭。"
+        "action": "delete", "entry": entry, "entries": null, "type": null, "title": null,
+        "description": null, "text": null, "observations": [], "reason": "灯已灭。"
     })
 }
 

@@ -10,8 +10,8 @@ use crate::assemble_context::{
     count_context_item_tokens,
 };
 use crate::{
-    CaptureRefusal, CaptureRunEnd, GrantScope, MemoryEntryOrigin, MemoryEntryType,
-    MemorySourceReference, PassMemoryEntry, canonical_json,
+    CaptureRefusal, CaptureRunEnd, GrantScope, MemoryDeleteMark, MemoryEntryOrigin,
+    MemoryEntryType, MemorySourceReference, PassMemoryEntry, canonical_json,
 };
 
 /// The most RunSteps of one pass: the pass sends one request (ADR 0094 section 6).
@@ -71,20 +71,26 @@ pub struct MemoryConsolidationAssembly<'a> {
     pub memory_revision: u64,
     /// Each current entry at that revision, with the time of its last change.
     pub entries: &'a [(PassMemoryEntry, String)],
+    /// The numbers of the entries with the mark `unused` (S7-D4b).
+    pub unused: &'a [u64],
     /// Each observation that waits, the oldest first.
     pub observations: &'a [PassObservation],
+    /// The marks of the entries that the author deleted, newest first.
+    pub marks: &'a [MemoryDeleteMark],
 }
 
 /// The Context Assembly of a pass: the Purpose `memory_consolidation`, the cause
-/// `host_schedule`, the current entries as `memory_entries` items, and the observations as
-/// `memory_observations` items. Each line is one JSON object, and each item holds the lines that
-/// fit the Context item limit (ADR 0052), so a large set is more than one item.
+/// `host_schedule`, the current entries as `memory_entries` items, the observations as
+/// `memory_observations` items, and then the `memory_delete_marks` item of S7-D3d. Each line is
+/// one JSON object, and each item holds the lines that fit the Context item limit (ADR 0052), so
+/// a large set is more than one item. The line of an entry with the mark `unused` has the key
+/// `unused`.
 pub fn assemble_memory_consolidation_context(
     input: &MemoryConsolidationAssembly<'_>,
 ) -> CurrentPassageAssemblyRecord {
     let entry_lines = input.entries.iter().map(|(pass_entry, changed_at)| {
         let entry = &pass_entry.entry;
-        canonical_json(&serde_json::json!({
+        let mut line = serde_json::json!({
             "id": entry.number,
             "type": entry.entry_type.as_str(),
             "title": entry.title,
@@ -92,7 +98,11 @@ pub fn assemble_memory_consolidation_context(
             "text": entry.text,
             "origin": pass_entry.origin.as_str(),
             "changed_at": changed_at,
-        }))
+        });
+        if input.unused.contains(&entry.number) {
+            line["unused"] = serde_json::Value::Bool(true);
+        }
+        canonical_json(&line)
     });
     let observation_lines = (1_u64..).zip(input.observations).map(|(number, item)| {
         canonical_json(&serde_json::json!({
@@ -109,7 +119,7 @@ pub fn assemble_memory_consolidation_context(
             observation_lines,
         ))
         .collect();
-    CurrentPassageAssemblyRecord {
+    let mut record = CurrentPassageAssemblyRecord {
         operation_requirement: OperationRequirementRecord {
             operation_requirement_id: input.operation_requirement_id.clone(),
             input_snapshot_id: input.operation_requirement_id.clone(),
@@ -158,7 +168,9 @@ pub fn assemble_memory_consolidation_context(
             destination_and_outbound: false,
         },
         destination_io: DestinationIo::None,
-    }
+    };
+    crate::assemble_memory_delete_marks(&mut record, input.marks);
+    record
 }
 
 /// The count of the oldest observations of `input` that the pass takes (ADR 0094 section 6). It is

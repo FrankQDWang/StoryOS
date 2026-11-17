@@ -113,6 +113,12 @@ pub(crate) async fn start(
         .await
         .map_err(read_error)?
         .get(/*idx*/ 0);
+    let unused = unused_entries(client, scope, &entries)
+        .await
+        .map_err(unavailable)?;
+    let marks = crate::memory_entries::read_delete_marks(client, scope)
+        .await
+        .map_err(unavailable)?;
     let (run_id, pass_id) = (Uuid::now_v7().to_string(), Uuid::now_v7().to_string());
     let mut assembly = MemoryConsolidationAssembly {
         operation_requirement_id: Uuid::now_v7().to_string(),
@@ -122,7 +128,9 @@ pub(crate) async fn start(
         destination_identity: assistance.processing_destination_identity.clone(),
         memory_revision: revision,
         entries: &entries,
+        unused: &unused,
         observations: &observations,
+        marks: &marks,
     };
     let taken = storyos_core::pass_observation_count(
         &assembly,
@@ -178,6 +186,34 @@ pub(crate) async fn start(
     .await
     .map_err(ProjectReadError::unavailable)?;
     Ok(Ok(StartedMemoryConsolidation { pass_id, run_id }))
+}
+
+/// The numbers of the entries of `entries` that Core gives the mark `unused`, from the time of the
+/// last read of each entry by a Run of the author, the time of its last change, and the time now.
+async fn unused_entries(
+    client: &Client,
+    scope: &ProjectScope,
+    entries: &[(PassMemoryEntry, String)],
+) -> Result<Vec<u64>, BoxError> {
+    let reads = crate::memory_entries::last_memory_reads(client, scope).await?;
+    let now: String = client
+        .query_one(
+            "SELECT to_char(statement_timestamp() AT TIME ZONE 'UTC', $1)",
+            &[&TIME_FORM],
+        )
+        .await?
+        .get(/*idx*/ 0);
+    let unused = entries.iter().filter(|(pass_entry, changed_at)| {
+        let number = pass_entry.entry.number;
+        let read = reads
+            .iter()
+            .find(|(_, read_number, _)| *read_number == number);
+        let last_read = read.and_then(|(_, _, time)| time.as_deref());
+        storyos_core::memory_entry_unused(pass_entry.origin, last_read, changed_at, &now)
+    });
+    Ok(unused
+        .map(|(pass_entry, _)| pass_entry.entry.number)
+        .collect())
 }
 
 /// One current entry of the Project now, with the time of its last change and its source
@@ -334,6 +370,9 @@ pub(crate) async fn execute(
         .await
         .map_err(unavailable)?;
     let stored = pass_entries(client, scope).await.map_err(unavailable)?;
+    let marks = crate::memory_entries::read_delete_marks(client, scope)
+        .await
+        .map_err(unavailable)?;
     let entries: Vec<PassMemoryEntry> = stored.iter().map(|item| item.entry.clone()).collect();
     let input: Vec<PassObservation> = observations.iter().map(|(_, o)| o.clone()).collect();
     let settlement = storyos_core::settle_operations_call(
@@ -344,8 +383,10 @@ pub(crate) async fn execute(
             entries: &entries,
             next_entry_number,
             observations: &input,
+            marks: &marks,
         },
     );
+    let stored_of = |number: u64| stored.iter().find(|item| item.entry.entry.number == number);
     let cause = json!({ "kind": "consolidation", "run_id": claim.run_id, "pass_id": pass_id });
     let mut written = revision;
     let mut results = Vec::new();
@@ -355,20 +396,23 @@ pub(crate) async fn execute(
             None => ("not_applied", None, None),
             Some(Err(refusal)) => ("refused", Some(refusal.label()), None),
             Some(Ok(admitted)) => {
-                let earlier = stored
-                    .iter()
-                    .find(|item| item.entry.entry.number == admitted.version.number)
-                    .map_or(&[][..], |item| &item.sources[..]);
-                let mut sources = earlier.to_vec();
-                for source in admitted.sources.iter().map(|source| json!(source)) {
-                    if !sources.contains(&source) {
-                        sources.push(source);
+                // The result holds the sources of its entry, of each merged entry, and of the
+                // observations. A merged entry keeps its own sources in its deleted version.
+                let numbers = [&admitted.version].into_iter().chain(&admitted.merged);
+                let all = numbers
+                    .filter_map(|version| stored_of(version.number))
+                    .flat_map(|item| item.sources.iter().cloned())
+                    .chain(admitted.sources.iter().map(|source| json!(source)));
+                let mut unique: Vec<Value> = Vec::new();
+                for source in all {
+                    if !unique.contains(&source) {
+                        unique.push(source);
                     }
                 }
                 let source = VersionSource {
                     origin: admitted.origin.as_str(),
                     cause: cause.clone(),
-                    source_references: Value::from(sources),
+                    source_references: Value::from(unique),
                 };
                 let new_entry_id = Uuid::now_v7().to_string();
                 let version = (written, &admitted.version, new_entry_id.as_str());
@@ -376,6 +420,19 @@ pub(crate) async fn execute(
                     .await
                     .map_err(unavailable)?;
                 written += 1;
+                for merged in &admitted.merged {
+                    let item = stored_of(merged.number)
+                        .ok_or_else(|| damaged("A merged entry is missing"))?;
+                    let source = VersionSource {
+                        origin: item.entry.origin.as_str(),
+                        cause: cause.clone(),
+                        source_references: Value::from(item.sources.clone()),
+                    };
+                    write_memory_version(client, scope, (written, merged, ""), &source)
+                        .await
+                        .map_err(unavailable)?;
+                    written += 1;
+                }
                 ("applied", None, Some(admitted.version.number))
             }
         };
@@ -474,6 +531,10 @@ mod tests;
 #[cfg(test)]
 #[path = "memory_consolidation_recovery_tests.rs"]
 mod recovery_tests;
+
+#[cfg(test)]
+#[path = "memory_consolidation_merge_tests.rs"]
+mod merge_tests;
 
 #[cfg(test)]
 #[path = "memory_consolidation_schedule_tests.rs"]

@@ -2,8 +2,8 @@ use serde_json::{Value, json};
 
 use super::{MemoryOperationCandidate, PassFacts, PassMemoryEntry, intake, settle_operations_call};
 use crate::{
-    ConsolidationOutcome, CurrentMemoryEntry, IntakeRefusal, MemoryEntryOrigin, MemoryEntryType,
-    MemorySourceReference, MemoryWriteAction, PassObservation,
+    ConsolidationOutcome, CurrentMemoryEntry, IntakeRefusal, MemoryDeleteMark, MemoryEntryOrigin,
+    MemoryEntryState, MemoryEntryType, MemorySourceReference, MemoryWriteAction, PassObservation,
 };
 
 fn entry(number: u64, origin: MemoryEntryOrigin, title: &str) -> PassMemoryEntry {
@@ -46,39 +46,55 @@ fn observation(source: &str) -> PassObservation {
 
 fn create(entry_type: &str, title: &str, text: &str, observations: Value) -> Value {
     json!({
-        "action": "create", "entry": null, "type": entry_type, "title": title,
+        "action": "create", "entry": null, "entries": null, "type": entry_type, "title": title,
         "description": "述。", "text": text, "observations": observations, "reason": null
     })
 }
 
 fn update(entry: u64, title: &str) -> Value {
     json!({
-        "action": "update", "entry": entry, "type": null, "title": title, "description": "新述。",
-        "text": "新文。", "observations": [1], "reason": null
+        "action": "update", "entry": entry, "entries": null, "type": null, "title": title,
+        "description": "新述。", "text": "新文。", "observations": [1], "reason": null
+    })
+}
+
+fn merge(entries: Value, title: &str) -> Value {
+    json!({
+        "action": "merge", "entry": null, "entries": entries, "type": null, "title": title,
+        "description": "合述。", "text": "合文。", "observations": [1], "reason": null
     })
 }
 
 fn delete(entry: u64) -> Value {
     json!({
-        "action": "delete", "entry": entry, "type": null, "title": null, "description": null,
-        "text": null, "observations": [], "reason": "不再成立。"
+        "action": "delete", "entry": entry, "entries": null, "type": null, "title": null,
+        "description": null, "text": null, "observations": [], "reason": "不再成立。"
     })
 }
 
 /// The decision of each operation: the action, the number, the origin, and the count of the
-/// sources of an admitted operation, or the label of a refusal.
+/// sources of an admitted operation, and the numbers that a merge deleted, or the label of a
+/// refusal.
 fn decided(candidates: &[MemoryOperationCandidate], facts: &PassFacts<'_>) -> Vec<String> {
     settle_operations_call(candidates, facts)
         .decisions
         .iter()
         .map(|decision| match decision {
-            Ok(admitted) => format!(
-                "{:?} {} {} {}",
-                admitted.version.action,
-                admitted.version.number,
-                admitted.origin.as_str(),
-                admitted.sources.len()
-            ),
+            Ok(admitted) => {
+                let merged: Vec<String> = admitted
+                    .merged
+                    .iter()
+                    .map(|version| format!(" -{}", version.number))
+                    .collect();
+                format!(
+                    "{:?} {} {} {}{}",
+                    admitted.version.action,
+                    admitted.version.number,
+                    admitted.origin.as_str(),
+                    admitted.sources.len(),
+                    merged.concat()
+                )
+            }
             Err(refusal) => refusal.label().to_owned(),
         })
         .collect()
@@ -92,14 +108,14 @@ fn the_intake_needs_each_key_and_refuses_an_unstorable_text() {
     let item = &super::parameters()["properties"]["operations"]["items"]["properties"];
     assert_eq!(
         (item["type"].get("enum"), &item["action"]["enum"]),
-        (None, &json!(["create", "update", "delete"]))
+        (None, &json!(["create", "update", "merge", "delete"]))
     );
     let mut partial = delete(1);
     partial.as_object_mut().unwrap().remove("reason");
     let mut extra = delete(1);
     extra["state"] = json!("deleted");
     let mut action = delete(1);
-    action["action"] = json!("merge");
+    action["action"] = json!("rename");
     let unstorable = create("other", "灯\0", "文。", json!([1]));
     assert_eq!(
         [
@@ -146,6 +162,7 @@ fn each_operation_is_decided_in_list_order_with_each_refusal() {
         entries: &entries,
         next_entry_number: 300,
         observations: &observations,
+        marks: &[],
     };
     let candidates = operations(json!([
         create("foreshadowing", "灯", "灯每夜亮一次。", json!([1, 2, 1])),
@@ -192,6 +209,7 @@ fn the_shape_of_each_action_and_an_empty_list() {
         entries: &entries,
         next_entry_number: 8,
         observations: &[observation("conversation")],
+        marks: &[],
     };
     let mut no_reason = delete(4);
     no_reason["reason"] = json!(" ");
@@ -244,6 +262,7 @@ fn a_stale_pass_decides_no_operation() {
                 entries: &[],
                 next_entry_number: 1,
                 observations: &[observation("conversation")],
+                marks: &[],
             },
         );
         (settlement.outcome, settlement.decisions.len())
@@ -253,6 +272,186 @@ fn a_stale_pass_decides_no_operation() {
         [
             (ConsolidationOutcome::Stale, 0),
             (ConsolidationOutcome::Applied, 1)
+        ]
+    );
+}
+
+/// The facts of a pass at the pinned Memory revision 1, with `entries` and `marks`.
+fn pass<'a>(
+    entries: &'a [PassMemoryEntry],
+    observations: &'a [PassObservation],
+    marks: &'a [MemoryDeleteMark],
+) -> PassFacts<'a> {
+    PassFacts {
+        pinned_revision: 1,
+        memory_revision: 1,
+        entries,
+        next_entry_number: entries.iter().map(|e| e.entry.number).max().unwrap_or(0) + 1,
+        observations,
+        marks,
+    }
+}
+
+/// A merge gives the result to its first entry and the state `deleted` to each other entry, each
+/// in its next version. The result can have the title of a merged entry, and the merge makes room
+/// in the full Memory Index for a later create of the same list.
+#[test]
+fn a_merge_changes_its_first_entry_and_deletes_the_others() {
+    let entries: Vec<PassMemoryEntry> = (1..=300)
+        .map(|number| entry(number, MemoryEntryOrigin::Chapter, &format!("条{number}")))
+        .collect();
+    let observations = [observation("conversation")];
+    let facts = pass(&entries, &observations, &[]);
+    let candidates = operations(json!([
+        create("other", "桥", "文。", json!([1])),
+        merge(json!([3, 2, 4]), "条2"),
+        create("other", "桥", "文。", json!([1])),
+    ]));
+    let settlement = settle_operations_call(&candidates, &facts);
+    let Ok(admitted) = &settlement.decisions[1] else {
+        panic!("the merge is admitted");
+    };
+    let versions: Vec<_> = [&admitted.version]
+        .into_iter()
+        .chain(&admitted.merged)
+        .map(|v| {
+            (
+                v.number,
+                v.version,
+                v.state,
+                v.title.as_str(),
+                v.text.as_str(),
+            )
+        })
+        .collect();
+
+    assert_eq!(
+        (decided(&candidates, &facts), versions),
+        (
+            vec![
+                "memory_index_full".to_owned(),
+                "Change 3 chapter 1 -2 -4".to_owned(),
+                "Create 301 conversation 1".to_owned(),
+            ],
+            vec![
+                (3, 2, MemoryEntryState::Current, "条2", "合文。"),
+                (2, 2, MemoryEntryState::Deleted, "条2", ""),
+                (4, 2, MemoryEntryState::Deleted, "条4", ""),
+            ]
+        )
+    );
+}
+
+/// A merge needs two or more different current entries of one type and no entry of the author.
+/// A number that is not the number of an entry refuses the merge.
+/// It names each of its entries for the operations after it, also when the Host refuses it.
+#[test]
+fn each_refusal_of_a_merge() {
+    let mut entries: Vec<PassMemoryEntry> = (2..=13)
+        .map(|number| {
+            entry(
+                number,
+                MemoryEntryOrigin::Conversation,
+                &format!("条{number}"),
+            )
+        })
+        .collect();
+    entries.push(entry(1, MemoryEntryOrigin::AuthorRequest, "阿青"));
+    entries[0].entry.entry_type = MemoryEntryType::Character;
+    let observations = [observation("conversation")];
+    let facts = pass(&entries, &observations, &[]);
+    let candidates = operations(json!([
+        merge(json!([3, 1]), "合"),
+        merge(json!([2, 4]), "合"),
+        update(5, "条5"),
+        merge(json!([5, 6]), "合"),
+        merge(json!([7, 8]), "合"),
+        delete(8),
+        merge(json!([9]), "合"),
+        merge(json!([10, 10]), "合"),
+        merge(json!([11, 99]), "合"),
+        merge(json!([12, -1, 13]), "合"),
+    ]));
+
+    assert_eq!(
+        decided(&candidates, &facts),
+        [
+            "author_entry",
+            "merge_type_mismatch",
+            "Change 5 conversation 1",
+            "entry_named_twice",
+            "Change 7 conversation 1 -8",
+            "entry_named_twice",
+            "memory_entry_invalid",
+            "memory_entry_invalid",
+            "memory_entry_not_found",
+            "memory_entry_invalid",
+        ]
+    );
+}
+
+/// A create, an update, and a merge that give an entry the type and the title of a delete mark
+/// are refused, with no regard to white space at the two ends. The same title with another type
+/// and a delete of an entry are admitted.
+#[test]
+fn a_delete_mark_refuses_its_type_and_title() {
+    let entries = [2, 3, 4, 5]
+        .map(|number| entry(number, MemoryEntryOrigin::Chapter, &format!("条{number}")));
+    let observations = [observation("chapter")];
+    let marks = [MemoryDeleteMark {
+        entry_type: MemoryEntryType::Other,
+        title: " 旧灯 ".to_owned(),
+        description: "述。".to_owned(),
+    }];
+    let facts = pass(&entries, &observations, &marks);
+    let candidates = operations(json!([
+        create("other", " 旧灯", "文。", json!([1])),
+        update(2, "旧灯 "),
+        merge(json!([3, 4]), "旧灯"),
+        create("foreshadowing", "旧灯", "文。", json!([1])),
+        delete(5),
+    ]));
+
+    assert_eq!(
+        decided(&candidates, &facts),
+        [
+            "deleted_by_author",
+            "deleted_by_author",
+            "deleted_by_author",
+            "Create 6 chapter 1",
+            "Delete 5 chapter 0",
+        ]
+    );
+}
+
+/// The entry of the author keeps its text: each operation kind that names it is refused, and a
+/// create with its type and its title is refused by the write rule.
+#[test]
+fn no_operation_changes_an_entry_of_the_author() {
+    let entries = [
+        entry(1, MemoryEntryOrigin::AuthorRequest, "阿青"),
+        entry(2, MemoryEntryOrigin::Chapter, "条2"),
+    ];
+    let observations = [observation("chapter")];
+    let facts = pass(&entries, &observations, &[]);
+    let kinds = [
+        create("other", "阿青", "新文。", json!([1])),
+        update(1, "阿青"),
+        merge(json!([2, 1]), "阿青"),
+        delete(1),
+    ];
+    let refusals: Vec<Vec<String>> = kinds
+        .iter()
+        .map(|kind| decided(&operations(json!([kind])), &facts))
+        .collect();
+
+    assert_eq!(
+        refusals,
+        [
+            ["memory_entry_exists"],
+            ["author_entry"],
+            ["author_entry"],
+            ["author_entry"]
         ]
     );
 }

@@ -145,9 +145,9 @@ fn the_outcome_of_a_capture_comes_from_the_facts_of_its_run() {
     );
 }
 
-/// The first RunStep of a capture selects the Memory Index at the head revision of its start, the
-/// Chapter list, and the delete marks after its input, also when no Conversation Memory Settings
-/// permit a read. The next RunStep keeps them. A Project with none of them adds no item.
+/// The first RunStep of a capture selects three items after its input: the Memory Index at the
+/// head revision of its start, the Chapter list, and the delete marks. This is also true when no
+/// Conversation Memory Settings permit a read. The next RunStep keeps them. A Project with none of them adds no item.
 #[test]
 fn a_capture_gets_its_reference_items_after_its_input_and_keeps_them() {
     let assembly = |input: &str| {
@@ -229,5 +229,65 @@ fn a_capture_gets_its_reference_items_after_its_input_and_keeps_them() {
     assert_eq!(
         decode_assembly_record(&encode_assembly_record(&first)),
         Some(first)
+    );
+}
+
+/// ADR 0056: the expected input of the first request of a capture counts each section that the
+/// request sends: the input, the Memory Index, the Chapter list, and the delete marks.
+#[test]
+fn the_expected_input_of_a_capture_counts_each_section() {
+    let mut record = assemble_memory_capture_context(&MemoryCaptureAssembly {
+        operation_requirement_id: "requirement".to_owned(),
+        input_snapshot_id: "snapshot".to_owned(),
+        run_id: "run".to_owned(),
+        owner_user_id: "owner".to_owned(),
+        project_id: "project".to_owned(),
+        input: "林舟上了船。".to_owned(),
+        projection_mode: ProjectionMode::ExactRequired,
+        destination_identity: "destination".to_owned(),
+    });
+    assemble_capture_references(
+        &mut record,
+        &CaptureReferences {
+            memory_head: 1,
+            memory_index: &[crate::MemoryIndexEntry {
+                number: 1,
+                entry_type: crate::MemoryEntryType::Character,
+                title: "林舟".to_owned(),
+                description: "撑船的人。".to_owned(),
+            }],
+            chapters: &[crate::ChapterListEntry {
+                volume_order: 1,
+                volume_title: "第一卷".to_owned(),
+                chapter_id: "chapter".to_owned(),
+                title: "雨夜".to_owned(),
+                length: 6,
+            }],
+            delete_marks: &[crate::MemoryDeleteMark {
+                entry_type: crate::MemoryEntryType::Other,
+                title: "旧船".to_owned(),
+                description: "作者不要的内容。".to_owned(),
+            }],
+        },
+    );
+    let trigger = crate::CompactionTrigger::from_facts(&crate::CompactionRequestFacts {
+        model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
+        budget_bounds: "",
+        author_message: "",
+        decision: Some(&record),
+        declared_target_texts: &[],
+        prior_reported_tokens: None,
+        prior_decision_id: None,
+        prior_input: crate::PriorInput::Current,
+        decision_position: "0",
+        compacted_earlier: false,
+    });
+    let sections: Vec<u64> = (record.selected.iter())
+        .map(|item| crate::assemble_context::count_context_item_tokens(&item.content))
+        .collect();
+
+    assert_eq!(
+        (sections.len(), trigger.sent_input_tokens),
+        (4, sections.iter().sum::<u64>())
     );
 }

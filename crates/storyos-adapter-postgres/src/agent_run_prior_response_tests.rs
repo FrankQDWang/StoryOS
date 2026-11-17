@@ -94,7 +94,7 @@ impl<A: ModelProviderAdapter + Sync> ModelProviderAdapter for RealWire<A> {
                 CreatePurpose::CompactionSummary => "summary",
                 CreatePurpose::Decision
                 | CreatePurpose::ToolQualification(_)
-                | CreatePurpose::MemoryCapture
+                | CreatePurpose::MemoryCapture(_)
                 | CreatePurpose::MemoryConsolidation => "decision",
             };
             self.bodies.lock().unwrap().push(json!([

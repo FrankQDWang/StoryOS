@@ -88,21 +88,26 @@ pub enum CreatePurpose {
     /// sends the constant author message or a constant function output, and no project content.
     /// Its response makes no Agent Decision.
     ToolQualification(ToolProbeRequest),
-    /// One RunStep of a capture (ADR 0094 section 5). The request sends the input of the
-    /// capture and the Tool outputs of the Run, and it has no author message and no Chapter.
-    MemoryCapture,
+    /// One RunStep of a capture (ADR 0094 section 5), with the kind of its input. The request
+    /// sends the input of the capture and the Tool outputs of the Run, and it has no author
+    /// message and no Chapter.
+    MemoryCapture(storyos_core::CaptureInputKind),
     /// The one RunStep of a consolidation pass (ADR 0094 section 6). The request sends the
     /// current entries and the observations, and it has no author message and no Chapter.
     MemoryConsolidation,
 }
 
 impl CreatePurpose {
-    /// The purpose of a decision request of a Run of `kind`.
-    pub fn of_run(kind: storyos_core::AgentRunKind) -> Self {
+    /// The purpose of a decision request of a Run of `kind`. A capture also needs the kind of
+    /// its input `capture_input`, so a capture with no kind has no purpose.
+    pub fn of_run(
+        kind: storyos_core::AgentRunKind,
+        capture_input: Option<storyos_core::CaptureInputKind>,
+    ) -> Option<Self> {
         match kind {
-            storyos_core::AgentRunKind::Author => Self::Decision,
-            storyos_core::AgentRunKind::MemoryCapture => Self::MemoryCapture,
-            storyos_core::AgentRunKind::MemoryConsolidation => Self::MemoryConsolidation,
+            storyos_core::AgentRunKind::Author => Some(Self::Decision),
+            storyos_core::AgentRunKind::MemoryCapture => capture_input.map(Self::MemoryCapture),
+            storyos_core::AgentRunKind::MemoryConsolidation => Some(Self::MemoryConsolidation),
         }
     }
 }
@@ -245,6 +250,17 @@ impl CreateRequest {
             declared_targets: &self.declared_targets,
             selection_references: &self.selection_references,
         }
+    }
+
+    /// Whether a capture request has the parts that each capture mapping sends: its input item
+    /// and its output Tool. An adapter refuses a capture request without them before dispatch.
+    pub fn capture_complete(&self) -> bool {
+        let input = (self.context.iter())
+            .any(|item| item.source_class == ContextSourceClass::MemoryCaptureInput);
+        let output = (self.tool_exposure.tools.iter()).any(|tool| {
+            tool.spec.operation == storyos_core::ToolOperation::RecordMemoryObservations
+        });
+        input && output
     }
 }
 

@@ -1,5 +1,6 @@
 //! The Model Provider Adapter of the Volcengine Agent Plan Responses route (ADR 0033, ADR 0039).
 
+mod capture_wire;
 mod embedding;
 mod probe;
 mod response;
@@ -112,9 +113,17 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             (CreatePurpose::CompactionSummary, _) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
-            // The mapping of a capture request comes with S7-D3f, and of a pass request with
-            // S7-D4c.
-            (CreatePurpose::MemoryCapture | CreatePurpose::MemoryConsolidation, _) => {
+            // Only the mapping `v8` has the capture form (ADR 0094 section 5). A Run that pinned
+            // an earlier Registration keeps its mapping, so its capture request is refused.
+            (CreatePurpose::MemoryCapture(kind), _)
+                if route.mapping_revision
+                    == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+                    && create.capture_complete() =>
+            {
+                capture_wire::capture_body(create, *kind, &route.provider_model_id, bounds)
+            }
+            // The mapping of a pass request comes with S7-D4c.
+            (CreatePurpose::MemoryCapture(_) | CreatePurpose::MemoryConsolidation, _) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
         };
