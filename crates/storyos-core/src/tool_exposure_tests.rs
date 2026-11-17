@@ -28,6 +28,7 @@ fn exposure(bound: &[BoundTool], model_registration_revision: &str) -> ToolExpos
         model_registration_revision,
         skill_catalog: false,
         memory_use: false,
+        run_kind: crate::AgentRunKind::Author,
     })
 }
 
@@ -113,10 +114,12 @@ fn each_other_binding_or_registration_exposes_nothing() {
 
 #[test]
 fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mapping() {
+    // A Run of the author never records Memory Observations.
     let host = |registration: &'static crate::HostToolRegistration| ToolExposure {
         tools: registration
             .tools
             .iter()
+            .filter(|spec| spec.operation != crate::ToolOperation::RecordMemoryObservations)
             .map(|spec| ExposedTool {
                 name: spec.operation.function_name(),
                 registration_id: registration.id,
@@ -134,6 +137,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             model_registration_revision: revision,
             skill_catalog: true,
             memory_use: true,
+            run_kind: crate::AgentRunKind::Author,
         })
     };
     let without_skill = |registration| {
@@ -219,7 +223,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             "018f0000-0000-7001-8000-0000000e0104",
             "018f0000-0000-7001-8000-0000000e0103",
             "018f0000-0000-7001-8000-0000000e0102",
-            11,
+            12,
         )
     );
     let declared = host(&HOST_TOOL_REGISTRATION);
@@ -453,4 +457,36 @@ fn only_an_ordinary_response_without_a_decision_and_with_a_complete_call_request
             ResponseDisposition::Decision,
         ]
     );
+}
+
+/// A capture exposes only its output Tool and a consolidation pass exposes no Tool, also with an
+/// active research binding, a Skill, and Memory use (ADR 0094 sections 5 and 6).
+#[test]
+fn a_background_run_gets_only_the_tools_of_its_kind() {
+    let active = [bound(
+        ToolRegistrationLifecycle::Active,
+        Some(ToolCompatibilityDecision::Compatible),
+    )];
+    let names = |run_kind| -> Vec<&str> {
+        ToolExposure::compute(&ExposureFacts {
+            bound: &active,
+            model_registration_revision: HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
+            skill_catalog: true,
+            memory_use: true,
+            run_kind,
+        })
+        .tools
+        .iter()
+        .map(|tool| tool.name)
+        .collect()
+    };
+
+    assert_eq!(
+        names(crate::AgentRunKind::MemoryCapture),
+        ["record_memory_observations"]
+    );
+    assert!(names(crate::AgentRunKind::MemoryConsolidation).is_empty());
+    let author = names(crate::AgentRunKind::Author);
+    assert!(author.contains(&"web_search") && author.contains(&"finish"));
+    assert!(!author.contains(&"record_memory_observations"));
 }

@@ -189,58 +189,15 @@ pub(crate) async fn persist_current_passage_assembly(
     if let Some(candidates) = command.tool_results {
         storyos_core::assemble_tool_result_continuation(&mut record, candidates);
     }
-    let payload = encode_assembly_record(&record).to_string();
-    client
-        .execute(
-            "INSERT INTO storyos.operation_requirements
-               (owner_user_id, project_id, operation_requirement_id, run_id,
-                input_snapshot_id, receipt_id, payload, decision_position)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7::text::jsonb, $8::text::numeric)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &operation_requirement_id,
-                &command.run_id,
-                &input_snapshot_id,
-                &command.receipt_id,
-                &payload,
-                &command.decision_position,
-            ],
-        )
-        .await
-        .map_err(agent_run_database_error)?;
-    let assembly_manifest_id = uuid::Uuid::now_v7().to_string();
-    let sufficiency = match record.sufficiency {
-        storyos_core::ContextSufficiency::Complete => "complete",
-        storyos_core::ContextSufficiency::Blocked { .. } => "blocked",
-    };
-    client
-        .execute(
-            "INSERT INTO storyos.context_assembly_manifests
-               (owner_user_id, project_id, context_assembly_manifest_id,
-                operation_requirement_id, run_id, sufficiency,
-                destination_context_manifest_id, outbound_disclosure_manifest_id,
-                payload, receipt_id, decision_position)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
-                     $4::text::uuid, $5::text::uuid, $6,
-                     $7::text::uuid, $8::text::uuid, $9::text::jsonb, $10::text::uuid, $11::text::numeric)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &assembly_manifest_id,
-                &operation_requirement_id,
-                &command.run_id,
-                &sufficiency,
-                &None::<&str>,
-                &None::<&str>,
-                &payload,
-                &command.receipt_id,
-                &command.decision_position,
-            ],
-        )
-        .await
-        .map_err(agent_run_database_error)?;
+    let assembly_manifest_id = insert_assembly(
+        client,
+        command.project_scope,
+        command.run_id,
+        Some(command.receipt_id),
+        command.decision_position,
+        &record,
+    )
+    .await?;
     Ok(AgentRunContext {
         assembly_manifest_id,
         destination_context_manifest_id: None,
@@ -338,10 +295,12 @@ pub(super) async fn load_assembled_context(
             "The Context Assembly Manifest is damaged",
         )))
     })?;
-    let current_revision =
-        current_chapter_payload(client, scope, &record.operation_requirement.chapter_id)
+    let current_revision = match record.operation_requirement.chapter_id.as_deref() {
+        Some(chapter_id) => current_chapter_payload(client, scope, chapter_id)
             .await?
-            .map(|(revision_id, _)| revision_id);
+            .map(|(revision_id, _)| revision_id),
+        None => None,
+    };
     let working_target_availability = match (
         record.operation_requirement.chapter_revision_id.as_deref(),
         current_revision.as_deref(),
@@ -439,6 +398,71 @@ pub(crate) async fn current_chapter_payload(
         .await
         .map_err(agent_run_database_error)?;
     Ok(row.map(|row| (row.get(0), row.get(1))))
+}
+
+/// Writes the Operation Requirement and the Context Assembly Manifest of one RunStep, and gives
+/// the manifest identifier. A background Run has no Receipt (ADR 0094 section 5).
+pub(crate) async fn insert_assembly(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    run_id: &str,
+    receipt_id: Option<&str>,
+    decision_position: &str,
+    record: &storyos_core::CurrentPassageAssemblyRecord,
+) -> Result<String, CreateAgentRunError> {
+    let payload = encode_assembly_record(record).to_string();
+    client
+        .execute(
+            "INSERT INTO storyos.operation_requirements
+               (owner_user_id, project_id, operation_requirement_id, run_id,
+                input_snapshot_id, receipt_id, payload, decision_position)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                     $5::text::uuid, $6::text::uuid, $7::text::jsonb, $8::text::numeric)",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &record.operation_requirement.operation_requirement_id,
+                &run_id,
+                &record.operation_requirement.input_snapshot_id,
+                &receipt_id,
+                &payload,
+                &decision_position,
+            ],
+        )
+        .await
+        .map_err(agent_run_database_error)?;
+    let assembly_manifest_id = uuid::Uuid::now_v7().to_string();
+    let sufficiency = match record.sufficiency {
+        storyos_core::ContextSufficiency::Complete => "complete",
+        storyos_core::ContextSufficiency::Blocked { .. } => "blocked",
+    };
+    client
+        .execute(
+            "INSERT INTO storyos.context_assembly_manifests
+               (owner_user_id, project_id, context_assembly_manifest_id,
+                operation_requirement_id, run_id, sufficiency,
+                destination_context_manifest_id, outbound_disclosure_manifest_id,
+                payload, receipt_id, decision_position)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
+                     $4::text::uuid, $5::text::uuid, $6,
+                     $7::text::uuid, $8::text::uuid, $9::text::jsonb, $10::text::uuid, $11::text::numeric)",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &assembly_manifest_id,
+                &record.operation_requirement.operation_requirement_id,
+                &run_id,
+                &sufficiency,
+                &None::<&str>,
+                &None::<&str>,
+                &payload,
+                &receipt_id,
+                &decision_position,
+            ],
+        )
+        .await
+        .map_err(agent_run_database_error)?;
+    Ok(assembly_manifest_id)
 }
 
 #[cfg(test)]

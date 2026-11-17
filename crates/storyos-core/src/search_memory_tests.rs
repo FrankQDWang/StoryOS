@@ -15,6 +15,7 @@ fn names(revision: &str, memory_use: bool) -> Vec<&'static str> {
         model_registration_revision: revision,
         skill_catalog: false,
         memory_use,
+        run_kind: crate::AgentRunKind::Author,
     });
     exposure.tools.iter().map(|tool| tool.name).collect()
 }
@@ -59,6 +60,7 @@ fn a_run_with_memory_use_declares_search_memory_with_a_strict_schema() {
             model_registration_revision: revision,
             skill_catalog: false,
             memory_use: true,
+            run_kind: crate::AgentRunKind::Author,
         });
         let search = exposure.tools[7].declaration();
         assert_eq!(

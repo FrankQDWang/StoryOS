@@ -4,9 +4,11 @@
 //! the next Run, and the Project Export Archive.
 
 use serde_json::{Value, json};
+use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, CompleteAgentRunError,
-    ContractFaultPoint, ConversationSelection, ProjectScope, complete_agent_run_with_tools,
+    ContractFaultPoint, ConversationSelection, NoContractFaults, ProjectScope, complete_agent_run,
+    complete_agent_run_with_tools,
 };
 use storyos_core::{
     DeploymentDestination, MEMORY_TITLE_MAX_CHARS, MemoryWriteRefusal, RESEARCH_TOOL_OFFER,
@@ -18,7 +20,7 @@ use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_load_skill::tests::calls;
 use crate::agent_run_retrieval::tests::destination;
 use crate::agent_run_steering::tests::{
-    AuthorAction, AuthorAt, Moment, cancellation, queued, settle,
+    AuthorAction, AuthorAt, Moment, cancellation, claim_duties, queued, settle,
 };
 use crate::agent_run_tool_dispatch::tests::{client, exa_tools, mcp_replies, point_mcp};
 use crate::agent_run_tool_recovery::tests::{Fault, FaultAt};
@@ -348,6 +350,18 @@ async fn a_settled_create_stays_when_the_author_cancels_the_run_later() {
         AuthorAction::Cancel(Box::new(cancel)),
     );
     let _cancelled = settle(&store, &admin, &scope, &run_id, &author).await;
+    // A new claim does the cancellation duties of the request that was out, so the Run leaves no
+    // work for the drain of the HTTP tests.
+    let claim = claim_duties(&admin, &scope, &run_id).await.unwrap();
+    complete_agent_run(
+        &store,
+        &FakeDestination,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    )
+    .await
+    .unwrap();
 
     let created = "The Host created the Memory entry 1 with the title \"铜铃\".";
     let status = calls(&admin, &run_id).await;

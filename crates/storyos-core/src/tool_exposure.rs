@@ -9,9 +9,9 @@
 use serde_json::{Value, json};
 
 use crate::{
-    AgentDecisionOutcome, CapabilityEvidence, IntakeField, NativeStreamItem, StreamItemRole,
-    StreamItemState, ToolOperation, ToolRegistrationLifecycle, ToolSpec, model_registration,
-    tool_registration,
+    AgentDecisionOutcome, AgentRunKind, CapabilityEvidence, IntakeField, NativeStreamItem,
+    StreamItemRole, StreamItemState, ToolOperation, ToolRegistrationLifecycle, ToolSpec,
+    model_registration, tool_registration,
 };
 
 /// The native type of the function call item of the Agent Plan route.
@@ -59,6 +59,8 @@ pub struct ExposureFacts<'a> {
     /// Whether the Conversation Memory Settings that the Run captured have `use_enabled`. A Run
     /// with no settings, as a background Run, has no use (ADR 0094 section 4).
     pub memory_use: bool,
+    /// The kind of the Run. A background Run gets only the Tools of its kind (ADR 0094 section 5).
+    pub run_kind: AgentRunKind,
 }
 
 impl ExposureFacts<'_> {
@@ -67,6 +69,15 @@ impl ExposureFacts<'_> {
     /// in the pinned catalog of the Run, so a Run with no Skill declares the Tools of before
     /// (ADR 0089 section 3).
     fn has_host_tool(&self, operation: ToolOperation) -> bool {
+        match self.run_kind {
+            // A capture ends only with its output Tool, and it gets no other Tool until S7-D3d.
+            AgentRunKind::MemoryCapture => {
+                return operation == ToolOperation::RecordMemoryObservations;
+            }
+            // A consolidation pass sends one request with no Tool (ADR 0094 section 6).
+            AgentRunKind::MemoryConsolidation => return false,
+            AgentRunKind::Author => {}
+        }
         match operation {
             ToolOperation::LoadSkill | ToolOperation::ReadSkillResource => self.skill_catalog,
             ToolOperation::ProposeEdit
@@ -79,6 +90,8 @@ impl ExposureFacts<'_> {
             // not depend on the Conversation Memory Settings (ADR 0094 section 5).
             ToolOperation::WriteMemory => true,
             ToolOperation::ReadMemoryEntry | ToolOperation::SearchMemory => self.memory_use,
+            // Only a capture records observations.
+            ToolOperation::RecordMemoryObservations => false,
             // The web research Tools are Tools of the research binding, not Host Tools.
             ToolOperation::WebSearch | ToolOperation::WebFetch => false,
         }
@@ -127,6 +140,7 @@ impl ToolOperation {
             Self::WriteMemory => "write_memory",
             Self::ReadMemoryEntry => "read_memory_entry",
             Self::SearchMemory => "search_memory",
+            Self::RecordMemoryObservations => "record_memory_observations",
         }
     }
 
@@ -155,6 +169,7 @@ impl ToolOperation {
             Self::WriteMemory => crate::write_memory::DESCRIPTION,
             Self::ReadMemoryEntry => crate::read_memory_entry::DESCRIPTION,
             Self::SearchMemory => crate::search_memory::DESCRIPTION,
+            Self::RecordMemoryObservations => crate::record_memory_observations::DESCRIPTION,
         }
     }
 }
@@ -208,6 +223,9 @@ impl ExposedTool {
             ToolOperation::WriteMemory => crate::write_memory::parameters(),
             ToolOperation::ReadMemoryEntry => crate::read_memory_entry::parameters(),
             ToolOperation::SearchMemory => crate::search_memory::parameters(),
+            ToolOperation::RecordMemoryObservations => {
+                crate::record_memory_observations::parameters()
+            }
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,
@@ -261,7 +279,12 @@ impl ToolExposure {
             return Self::empty();
         };
         let mut tools: Vec<ExposedTool> = Vec::new();
-        for bound in facts.bound {
+        // A background Run gets no research Tool.
+        let bound = match facts.run_kind {
+            AgentRunKind::Author => facts.bound,
+            AgentRunKind::MemoryCapture | AgentRunKind::MemoryConsolidation => &[],
+        };
+        for bound in bound {
             if bound.lifecycle != ToolRegistrationLifecycle::Active
                 || bound.compatibility != Some(ToolCompatibilityDecision::Compatible)
             {

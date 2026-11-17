@@ -48,6 +48,9 @@ pub enum ToolOperation {
     /// The Host Tool with which the Agent finds the Memory Entries that hold an exact term (ADR
     /// 0094 section 4).
     SearchMemory,
+    /// The Host Tool with which a capture gives its Memory Observations and ends (ADR 0094
+    /// section 5).
+    RecordMemoryObservations,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -153,6 +156,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::WRITE_MEMORY_TOOL_SPEC,
         &crate::READ_MEMORY_ENTRY_TOOL_SPEC,
         &crate::SEARCH_MEMORY_TOOL_SPEC,
+        &crate::RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -200,6 +204,7 @@ pub enum ToolIntake {
     SearchMemory {
         query: String,
     },
+    RecordMemoryObservations(Vec<crate::ObservationCandidate>),
 }
 
 /// Why the arguments of a function call do not fit the typed intake.
@@ -296,6 +301,9 @@ impl ToolSpec {
             ToolOperation::WriteMemory => crate::write_memory::intake(arguments),
             ToolOperation::ReadMemoryEntry => crate::read_memory_entry::intake(arguments),
             ToolOperation::SearchMemory => crate::search_memory::intake(arguments),
+            ToolOperation::RecordMemoryObservations => {
+                crate::record_memory_observations::intake(arguments)
+            }
         }
     }
 }
@@ -358,7 +366,8 @@ impl ServerArguments {
                 | ToolIntake::SearchManuscript { .. }
                 | ToolIntake::WriteMemory(_)
                 | ToolIntake::ReadMemoryEntry { .. }
-                | ToolIntake::SearchMemory { .. },
+                | ToolIntake::SearchMemory { .. }
+                | ToolIntake::RecordMemoryObservations(_),
             )
             | (
                 Self::Fetch { .. },
@@ -373,7 +382,8 @@ impl ServerArguments {
                 | ToolIntake::SearchManuscript { .. }
                 | ToolIntake::WriteMemory(_)
                 | ToolIntake::ReadMemoryEntry { .. }
-                | ToolIntake::SearchMemory { .. },
+                | ToolIntake::SearchMemory { .. }
+                | ToolIntake::RecordMemoryObservations(_),
             ) => {
                 return None;
             }
