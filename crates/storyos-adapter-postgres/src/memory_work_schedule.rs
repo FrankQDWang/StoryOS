@@ -1,18 +1,20 @@
-//! The schedule of background Memory work in the store (ADR 0094 section 5, writer 2): the due
-//! write in the transaction of the completion of a Run of the author, and the Worker claim of a
-//! due row. The claim, the decision, the start of the capture, and the empty due time are one
+//! The schedule of background Memory work in the store (ADR 0094 sections 5 and 6, writer 2): the
+//! due writes in the transactions of the settlements, and the Worker claim of a due row. The
+//! claim, the decision, the start of the capture or the pass, and the empty due time are one
 //! transaction. Thus a Worker that stops before the commit leaves the row due, and a second
-//! delivery starts no second capture for the same messages. No record of this work has message
-//! text outside the input of the capture (ADR 0047).
+//! delivery starts no second capture for the same messages and no second pass. No record of this
+//! work has message text outside the input of the capture (ADR 0047).
 
 use std::time::SystemTime;
 
 use storyos_application::{
     ClaimedAgentRun, ClaimedMemoryWork, CompleteAgentRunError, MemoryCaptureSource,
-    MemoryWorkOutcome, MemoryWorkScheduleStore, ProjectId, ProjectReadError, ProjectScope, UserId,
+    MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource, ProjectId, ProjectReadError,
+    ProjectScope, UserId,
 };
 use storyos_core::{
-    ConversationCaptureFacts, ConversationCaptureSkip, ConversationRole, ConversationRunMessages,
+    ConsolidationFacts, ConsolidationSkip, ConversationCaptureFacts, ConversationCaptureSkip,
+    ConversationRole, ConversationRunMessages,
 };
 use tokio_postgres::Client;
 
@@ -22,6 +24,8 @@ use crate::{PostgresProjectReader, read_error};
 
 /// The kind of the schedule row of a Project Conversation.
 const CONVERSATION_CAPTURE: &str = "conversation_capture";
+/// The kind of the schedule row of the consolidation pass of a Project.
+const CONSOLIDATION: &str = "consolidation";
 
 /// Sets the due time of the schedule row of the Conversation of the completed Run of the author
 /// `claim`, in the transaction of its settlement. A background Run has no Conversation, so it
@@ -38,13 +42,14 @@ pub(crate) async fn mark_conversation_due(
     client
         .execute(
             "INSERT INTO storyos.memory_work_schedules
-               (owner_user_id, project_id, work_kind, conversation_id, due_at)
-             SELECT run.owner_user_id, run.project_id, $4, run.conversation_id, $5
+               (owner_user_id, project_id, work_kind, source_id, conversation_id, due_at)
+             SELECT run.owner_user_id, run.project_id, $4, run.conversation_id,
+                    run.conversation_id, $5
                FROM storyos.agent_runs AS run
               WHERE (run.owner_user_id, run.project_id, run.run_id) =
                     ($1::text::uuid, $2::text::uuid, $3::text::uuid)
                 AND run.run_kind = 'author'
-             ON CONFLICT (owner_user_id, project_id, work_kind, conversation_id)
+             ON CONFLICT (owner_user_id, project_id, work_kind, source_id)
              DO UPDATE SET due_at = EXCLUDED.due_at",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
@@ -102,9 +107,9 @@ pub(crate) async fn mark_due_after_capture(
     client
         .execute(
             "INSERT INTO storyos.memory_work_schedules
-               (owner_user_id, project_id, work_kind, conversation_id, due_at)
-             VALUES ($1::text::uuid, $2::text::uuid, $3, $4::text::uuid, $5)
-             ON CONFLICT (owner_user_id, project_id, work_kind, conversation_id)
+               (owner_user_id, project_id, work_kind, source_id, conversation_id, due_at)
+             VALUES ($1::text::uuid, $2::text::uuid, $3, $4::text::uuid, $4::text::uuid, $5)
+             ON CONFLICT (owner_user_id, project_id, work_kind, source_id)
              DO UPDATE SET due_at = EXCLUDED.due_at",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
@@ -113,6 +118,45 @@ pub(crate) async fn mark_due_after_capture(
                 &conversation_id,
                 &due_at,
             ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    Ok(())
+}
+
+/// Sets the due time of the consolidation row of the Project of `scope` by the rule of Core, in the
+/// transaction of the settlement of a capture that stored observations or of a pass with each
+/// outcome. When no observation waits, the row does not change.
+pub(crate) async fn mark_consolidation_due(
+    client: &Client,
+    scope: &ProjectScope,
+) -> Result<(), CompleteAgentRunError> {
+    let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
+    let row = client
+        .query_one(
+            "SELECT EXISTS (SELECT 1 FROM storyos.memory_observations
+                             WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
+                               AND state = 'waiting'),
+                    clock_timestamp(),
+                    (SELECT max(started_at) FROM storyos.memory_consolidation_passes
+                      WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid))",
+            &[&keys[0], &keys[1]],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    let Some(due_at) =
+        storyos_core::consolidation_due(row.get(/*idx*/ 0), row.get(/*idx*/ 1), row.get(/*idx*/ 2))
+    else {
+        return Ok(());
+    };
+    client
+        .execute(
+            "INSERT INTO storyos.memory_work_schedules
+               (owner_user_id, project_id, work_kind, source_id, due_at)
+             VALUES ($1::text::uuid, $2::text::uuid, $3, $2::text::uuid, $4)
+             ON CONFLICT (owner_user_id, project_id, work_kind, source_id)
+             DO UPDATE SET due_at = EXCLUDED.due_at",
+            &[&keys[0], &keys[1], &CONSOLIDATION, &due_at],
         )
         .await
         .map_err(complete_database_error)?;
@@ -182,18 +226,18 @@ async fn claim_and_decide(
     let Some(row) = client
         .query_opt(
             "WITH next_work AS (
-               SELECT owner_user_id, project_id, work_kind, conversation_id
+               SELECT owner_user_id, project_id, work_kind, source_id
                  FROM storyos.memory_work_schedules
                 WHERE due_at <= clock_timestamp()
-                ORDER BY due_at, owner_user_id, project_id, conversation_id
+                ORDER BY due_at, owner_user_id, project_id, work_kind, source_id
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
              )
              UPDATE storyos.memory_work_schedules AS work SET due_at = NULL
                FROM next_work
-              WHERE (work.owner_user_id, work.project_id, work.work_kind, work.conversation_id) =
+              WHERE (work.owner_user_id, work.project_id, work.work_kind, work.source_id) =
                     (next_work.owner_user_id, next_work.project_id, next_work.work_kind,
-                     next_work.conversation_id)
+                     next_work.source_id)
           RETURNING work.owner_user_id::text, work.project_id::text, work.conversation_id::text",
             &[],
         )
@@ -206,7 +250,10 @@ async fn claim_and_decide(
         UserId::new(row.get::<_, String>(/*idx*/ 0)),
         ProjectId::new(row.get::<_, String>(/*idx*/ 1)),
     );
-    let conversation_id: String = row.get(/*idx*/ 2);
+    let source = match row.get::<_, Option<String>>(/*idx*/ 2) {
+        Some(conversation_id) => MemoryWorkSource::Conversation(conversation_id),
+        None => MemoryWorkSource::Project,
+    };
     client
         .execute(
             "SELECT set_config('storyos.scope_mode', '', true),
@@ -217,12 +264,60 @@ async fn claim_and_decide(
         )
         .await
         .map_err(read_error)?;
-    let outcome = decide_and_start(client, &scope, &conversation_id).await?;
+    let outcome = match &source {
+        MemoryWorkSource::Conversation(conversation_id) => {
+            decide_and_start(client, &scope, conversation_id).await?
+        }
+        MemoryWorkSource::Project => decide_and_start_pass(client, &scope).await?,
+    };
     Ok(Some(ClaimedMemoryWork {
         project_scope: scope,
-        conversation_id,
+        source,
         outcome,
     }))
+}
+
+/// Decides for the consolidation row of the Project and starts one pass or none. A refused start
+/// writes no row, and the empty due time stays.
+async fn decide_and_start_pass(
+    client: &PooledClient,
+    scope: &ProjectScope,
+) -> Result<MemoryWorkOutcome, ProjectReadError> {
+    let row = client
+        .query_one(
+            "SELECT EXISTS (SELECT 1 FROM storyos.memory_observations
+                             WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
+                               AND state = 'waiting'),
+                    EXISTS (SELECT 1 FROM storyos.memory_consolidation_passes
+                             WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
+                               AND outcome IS NULL)",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .map_err(read_error)?;
+    let facts = ConsolidationFacts {
+        observation_waits: row.get(/*idx*/ 0),
+        pass_in_progress: row.get(/*idx*/ 1),
+    };
+    if let Err(skip) = storyos_core::decide_consolidation(&facts) {
+        return Ok(MemoryWorkOutcome::PassSkipped(skip));
+    }
+    client
+        .batch_execute("SAVEPOINT pass_start")
+        .await
+        .map_err(read_error)?;
+    match crate::memory_consolidation::start(client, scope).await? {
+        Ok(started) => Ok(MemoryWorkOutcome::PassStarted(started)),
+        Err(_) => {
+            client
+                .batch_execute("ROLLBACK TO SAVEPOINT pass_start")
+                .await
+                .map_err(read_error)?;
+            Ok(MemoryWorkOutcome::PassSkipped(
+                ConsolidationSkip::StartRefused,
+            ))
+        }
+    }
 }
 
 async fn decide_and_start(
@@ -373,7 +468,7 @@ async fn unread_runs(
 
 #[cfg(test)]
 #[path = "memory_work_schedule_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 #[cfg(test)]
 #[path = "memory_work_outcome_tests.rs"]

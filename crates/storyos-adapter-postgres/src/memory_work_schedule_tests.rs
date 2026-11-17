@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ClaimedMemoryWork, ConversationSelection, MemoryCaptureSource, MemoryWorkOutcome,
-    MemoryWorkScheduleStore, NoContractFaults, ProjectScope, complete_agent_run,
+    MemoryWorkScheduleStore, MemoryWorkSource, NoContractFaults, ProjectScope, complete_agent_run,
 };
 use storyos_core::ConversationCaptureSkip;
 use tokio_postgres::Client;
@@ -71,8 +71,11 @@ pub(crate) async fn claim_due(
     make_due(admin, conversation_id).await;
     let claimed = store.claim_due_memory_work().await.unwrap().unwrap();
     assert_eq!(
-        (&claimed.project_scope, claimed.conversation_id.as_str()),
-        (scope, conversation_id)
+        (&claimed.project_scope, &claimed.source),
+        (
+            scope,
+            &MemoryWorkSource::Conversation(conversation_id.to_owned())
+        )
     );
     assert_eq!(due(admin, conversation_id).await, Some(None));
     claimed.outcome

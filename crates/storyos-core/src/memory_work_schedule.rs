@@ -1,7 +1,8 @@
-//! The schedule of background Memory work for a Project Conversation (ADR 0094 section 5, writer
-//! 2): the due time after the completion of a Run of the author, the decision for a claimed row
-//! from the facts that the store loads (ADR 0039), and the bounded input text of a Conversation
-//! capture. Each time rule gets its times as values.
+//! The schedule of background Memory work (ADR 0094 sections 5 and 6, writer 2). For a Project
+//! Conversation: the due time after the completion of a Run of the author, the decision for a
+//! claimed row from the facts that the store loads (ADR 0039), and the bounded input text of a
+//! Conversation capture. For a Project: the due time of a consolidation pass and the decision for
+//! its claimed row. Each time rule gets its times as values.
 
 use std::time::{Duration, SystemTime};
 
@@ -91,6 +92,66 @@ pub fn decide_conversation_capture(
     }
     if facts.capture_in_progress {
         return Err(ConversationCaptureSkip::CaptureInProgress);
+    }
+    Ok(())
+}
+
+/// The least time from the start of a consolidation pass of a Project to the start of the next
+/// pass. This is an initial value. S7-D7 can change it.
+pub const CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(/*30 minutes*/ 1800);
+
+/// The due time of the consolidation row of a Project that a settlement at `now` writes. The
+/// settlement of a capture that stored observations and the settlement of each pass use it.
+/// When an observation waits, the row is due at `now`. When the last pass of the Project started
+/// at `last_pass_start`, the row is due at that start and the interval if that is later. `None`:
+/// no observation waits, and the settlement writes no due time.
+pub fn consolidation_due(
+    observation_waits: bool,
+    now: SystemTime,
+    last_pass_start: Option<SystemTime>,
+) -> Option<SystemTime> {
+    let earliest = last_pass_start.map(|start| start + CONSOLIDATION_INTERVAL);
+    observation_waits.then(|| earliest.map_or(now, |earliest| now.max(earliest)))
+}
+
+/// The facts of one claimed consolidation row of a Project.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ConsolidationFacts {
+    /// A Memory Observation of the Project waits.
+    pub observation_waits: bool,
+    /// A pass of the Project is in progress.
+    pub pass_in_progress: bool,
+}
+
+/// Why a claimed consolidation row started no pass. The due time becomes empty in each case.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConsolidationSkip {
+    /// The next capture that stores observations sets the due time again.
+    NothingWaits,
+    /// The settlement of that pass sets the due time again when an observation still waits.
+    PassInProgress,
+    /// The admission of S7-D3b refused the start (ADR 0094 section 8).
+    StartRefused,
+}
+
+impl ConsolidationSkip {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::NothingWaits => "no_observation_waits",
+            Self::PassInProgress => "pass_in_progress",
+            Self::StartRefused => "start_refused",
+        }
+    }
+}
+
+/// Decides whether a claimed consolidation row starts one pass. `Ok`: one pass starts, when the
+/// admission of the start permits it.
+pub fn decide_consolidation(facts: &ConsolidationFacts) -> Result<(), ConsolidationSkip> {
+    if !facts.observation_waits {
+        return Err(ConsolidationSkip::NothingWaits);
+    }
+    if facts.pass_in_progress {
+        return Err(ConsolidationSkip::PassInProgress);
     }
     Ok(())
 }

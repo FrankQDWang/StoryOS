@@ -191,7 +191,7 @@ impl MemoryWorkScheduleStore for RaceStore {
         work.events.push("schedule");
         Ok(Some(storyos_application::ClaimedMemoryWork {
             project_scope: claim().project_scope,
-            conversation_id: "conversation".to_owned(),
+            source: storyos_application::MemoryWorkSource::Conversation("conversation".to_owned()),
             outcome: MemoryWorkOutcome::Skipped(
                 storyos_core::ConversationCaptureSkip::NothingUnread,
             ),

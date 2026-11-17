@@ -59,11 +59,12 @@ Each layer records only the fields in this table:
 | --- | --- |
 | HTTP request | `method`, `route`, `status` |
 | Command sequence | `command_kind`, `project_id`, `command_id`, `author_command_admission_id`, `correlation_id`, `outcome` |
-| Worker claim | `project_id`, `run_id`, `export_id`, or `chapter_id`, `fence_token`, `attempt`, `outcome` |
+| Worker claim | `project_id`, `run_id`, `export_id`, or `chapter_id`, `kind`, `fence_token`, `attempt`, `outcome` |
 | Model Gateway | `project_id`, `run_id`, `request_kind`, `adapter`, `observation`, usage counters |
 | MCP client | `server_url`, `method`, `session_tag`, `request_bytes`, `response_bytes`, `observation`, `refused_method` |
 
 - `outcome` is a static category: the name of the applied variant, `replayed`, or a refusal reason code.
+- `kind` is the static kind of a claimed schedule row of background Memory work: `conversation_capture` or `consolidation` (ADR 0094).
 - `correlation_id` is the client UUID that the Server validates.
 - No span records `owner_user_id`. `project_id` identifies the Project Scope.
 - No span records a digest, an idempotency key, a nonce, a Credential Reference, or a credential value.
