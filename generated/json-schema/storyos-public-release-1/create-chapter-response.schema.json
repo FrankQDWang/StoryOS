@@ -276,6 +276,7 @@
         "exportProjectArchive",
         "updateProjectAssistance",
         "updateProjectInstruction",
+        "deleteMemoryEntry",
         "createAgentRun",
         "pauseAgentRun",
         "steerAgentRun",

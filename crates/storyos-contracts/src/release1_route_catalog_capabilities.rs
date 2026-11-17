@@ -26,6 +26,7 @@ const CAPABILITIES: &[Capability] = &[
             "getProjectInstruction",
             "updateProjectInstruction",
             "listMemoryEntries",
+            "deleteMemoryEntry",
         ],
         operation_actions: &[],
     },

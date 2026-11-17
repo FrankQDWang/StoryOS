@@ -187,6 +187,10 @@ pub use release1_manuscript_tree::{
 };
 pub use release1_manuscript_use::ManuscriptUseInspect;
 pub use release1_memory_entries::{
+    DELETE_MEMORY_ENTRY_DIGEST_PROFILE, DELETE_MEMORY_ENTRY_METHOD, DELETE_MEMORY_ENTRY_PATH,
+    DELETE_MEMORY_ENTRY_REQUEST_SCHEMA_ID, DELETE_MEMORY_ENTRY_RESPONSE_SCHEMA_ID,
+    DeleteMemoryEntryConflictReason, DeleteMemoryEntryEffect, DeleteMemoryEntryInput,
+    DeleteMemoryEntryNoEffectReason, DeleteMemoryEntryRequest, DeleteMemoryEntryResponse,
     LIST_MEMORY_ENTRIES_METHOD, LIST_MEMORY_ENTRIES_PATH, LIST_MEMORY_ENTRIES_RESPONSE_SCHEMA_ID,
     ListMemoryEntriesResponse, MemoryEntryInspect, MemoryEntryOriginInspect,
     MemoryEntrySourceInspect, MemoryEntryTypeInspect, MemorySourceAvailability,

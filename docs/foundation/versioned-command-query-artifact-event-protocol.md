@@ -2204,6 +2204,18 @@ of the last change. A source record that is not available gives the mark
 `unavailable` and does not fail the read. The read has no pages and writes no
 row. It does not read the Conversation Memory Settings, so the author sees each
 entry that the Agent can read.
+
+`deleteMemoryEntry` is the author command of the delete control of the Memory
+section (ADR 0094 sections 6 and 9). Its path names the entry, and its body
+gives the version that the page showed. It settles through the command sequence
+with the profile `ActivityOnly` and writes no Author Action, so it is outside
+Author Undo. An applied delete writes the `deleted` version of the entry, keeps
+each earlier version, and records one Project Activity Event of the kind
+`memory_entry_deleted` with the entry, the version, and the Memory revision. An
+entry that is already deleted gives `no_effect` with `already_deleted`, a stale
+version gives `conflicted` with `entry_changed`, and an entry of no version in
+the Project answers as an unavailable resource. The Web client accepts the
+Activity kind and shows nothing for it.
 `getArtifact` reads exact document/Note revisions; `retrieveContext` provides
 bounded Agent search/read through current publication and use checks. Neither
 index hits nor a latest Artifact alias can replace a published-set identity.

@@ -1,14 +1,20 @@
-//! The wire form of the query that lists the current Memory Entries of a Project for the settings
-//! page (ADR 0094 section 9).
+//! The wire forms of the query that lists the current Memory Entries of a Project for the settings
+//! page, and of the command that deletes one entry (ADR 0094 sections 6 and 9).
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{HttpMethod, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
+use crate::release1_author_edit::DomainReceipt;
 
 pub const LIST_MEMORY_ENTRIES_REQUEST_SCHEMA_ID: &str = "storyos.query.memory-entries.request.v1";
 pub const LIST_MEMORY_ENTRIES_RESPONSE_SCHEMA_ID: &str = "storyos.query.memory-entries.response.v1";
+pub const DELETE_MEMORY_ENTRY_REQUEST_SCHEMA_ID: &str =
+    "storyos.command.delete-memory-entry.request.v1";
+pub const DELETE_MEMORY_ENTRY_RESPONSE_SCHEMA_ID: &str =
+    "storyos.command.delete-memory-entry.response.v1";
+pub const DELETE_MEMORY_ENTRY_DIGEST_PROFILE: &str = "storyos.command.deleteMemoryEntry.jcs.v1";
 
 pub(super) const LIST_MEMORY_ENTRIES: QueryOperation = QueryOperation {
     operation_id: "listMemoryEntries",
@@ -33,8 +39,35 @@ pub(super) const LIST_MEMORY_ENTRIES: QueryOperation = QueryOperation {
     fixture: "storyos.golden.listMemoryEntries.positive.v1",
 };
 
+pub(super) const DELETE_MEMORY_ENTRY: QueryOperation = QueryOperation {
+    operation_id: "deleteMemoryEntry",
+    method: HttpMethod::Delete,
+    path: "/api/v1/projects/{project_id}/memory-entries/{memory_entry_id}",
+    request_schema: DELETE_MEMORY_ENTRY_REQUEST_SCHEMA_ID,
+    response_schema: DELETE_MEMORY_ENTRY_RESPONSE_SCHEMA_ID,
+    responses: &[
+        (200, "Memory Entry deleted"),
+        (400, "Invalid request"),
+        (401, "Authentication required"),
+        (403, "Request origin refused"),
+        (404, "Resource unavailable"),
+        (405, "Method not allowed"),
+        (409, "Idempotency binding conflict"),
+        (412, "Session binding refused"),
+        (413, "Request too large"),
+        (415, "Unsupported content type"),
+        (422, "Delete Memory Entry refused"),
+        (428, "Precondition required"),
+        (429, "Rate limited"),
+        (503, "Service unavailable"),
+    ],
+    fixture: "storyos.golden.deleteMemoryEntry.positive.v1",
+};
+
 pub const LIST_MEMORY_ENTRIES_PATH: &str = LIST_MEMORY_ENTRIES.path;
 pub const LIST_MEMORY_ENTRIES_METHOD: &str = LIST_MEMORY_ENTRIES.method.as_str();
+pub const DELETE_MEMORY_ENTRY_PATH: &str = DELETE_MEMORY_ENTRY.path;
+pub const DELETE_MEMORY_ENTRY_METHOD: &str = DELETE_MEMORY_ENTRY.method.as_str();
 
 /// The type of a Memory Entry (ADR 0094 section 3), in the order of the Memory Index.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -108,4 +141,65 @@ pub struct ListMemoryEntriesResponse {
     pub correlation_id: String,
     pub project_scope: crate::release1::ProjectScope,
     pub entries: Vec<MemoryEntryInspect>,
+}
+
+/// The entry of the route and the version of it that the page showed.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DeleteMemoryEntryInput {
+    pub expected_version: String,
+    pub client_contract_revision: String,
+    pub security_policy_revision: String,
+    pub correlation_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DeleteMemoryEntryRequest {
+    pub command_schema: String,
+    pub delete_memory_entry_input: DeleteMemoryEntryInput,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum DeleteMemoryEntryNoEffectReason {
+    AlreadyDeleted,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum DeleteMemoryEntryConflictReason {
+    EntryChanged,
+}
+
+/// The effect of one delete. An applied delete gives the `deleted` version of the entry and the
+/// Memory revision of the Project after it.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DeleteMemoryEntryEffect {
+    AuthoritativeApplied {
+        memory_entry_id: String,
+        version: String,
+        memory_revision: String,
+        project_activity_position: String,
+    },
+    NoEffect {
+        reason: DeleteMemoryEntryNoEffectReason,
+    },
+    Conflicted {
+        reason: DeleteMemoryEntryConflictReason,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DeleteMemoryEntryResponse {
+    pub schema_id: String,
+    pub correlation_id: String,
+    pub project_scope: crate::release1::ProjectScope,
+    pub command_id: String,
+    pub author_command_admission_id: String,
+    pub receipt: DomainReceipt,
+    pub project: ControlledProject,
+    pub effect: DeleteMemoryEntryEffect,
 }

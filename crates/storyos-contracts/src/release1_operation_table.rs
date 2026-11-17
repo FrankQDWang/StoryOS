@@ -345,6 +345,7 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &project_instruction_rows::GET_PROJECT_INSTRUCTION_ROW,
     &project_instruction_rows::UPDATE_PROJECT_INSTRUCTION_ROW,
     &memory_entries_rows::LIST_MEMORY_ENTRIES_ROW,
+    &memory_entries_rows::DELETE_MEMORY_ENTRY_ROW,
     &editor_session_rows::CREATE_EDITOR_SESSION_ROW,
     &editor_session_rows::GET_EDITOR_SESSION_ROW,
     &editor_session_rows::TAKE_OVER_PROJECT_WRITER_ROW,

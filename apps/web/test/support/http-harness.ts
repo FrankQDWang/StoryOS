@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -476,6 +476,28 @@ export function deleteChapterInput(project: TestProject, chapterId: string,
     command_schema: "storyos.command.delete-chapter.request.v1",
     delete_chapter_input: { expected_tree_revision: expectedTreeRevision, ...project.binding() },
   }, path: { chapterId } };
+}
+
+/** The input of `deleteMemoryEntry`. */
+export function deleteMemoryEntryInput(project: TestProject, memoryEntryId: string,
+  expectedVersion: string): CommandInput<"deleteMemoryEntry"> {
+  return { request: {
+    command_schema: "storyos.command.delete-memory-entry.request.v1",
+    delete_memory_entry_input: { expected_version: expectedVersion, ...project.binding() },
+  }, path: { memoryEntryId } };
+}
+
+/** Writes the entry 1 of the Project of User A with SQL as its version 1 with a new identity, and gives the
+ * identity. The values are test constants. */
+export async function seedMemoryEntry(projectId: string): Promise<string> {
+  const memoryEntryId = randomUUID();
+  await queryStoryOSPostgres(`
+    WITH head AS (INSERT INTO storyos.project_memory_heads VALUES ('${USER_A}', '${projectId}', 1, 2))
+    INSERT INTO storyos.memory_entry_versions (owner_user_id, project_id, memory_entry_id, entry_number, version,
+      memory_revision, state, entry_type, origin, title, description, text, cause, source_references)
+    VALUES ('${USER_A}', '${projectId}', '${memoryEntryId}', 1, 1, 1, 'current', 'character',
+      'author_request', '阿青', '渡口的船夫。', '阿青在渡口撑船。', '{"kind": "author_request"}', '[]')`);
+  return memoryEntryId;
 }
 
 /** The applied effect of `createVolume`. It throws when the command did not apply. */

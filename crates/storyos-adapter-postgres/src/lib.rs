@@ -156,6 +156,7 @@ mod create_project_challenge;
 mod create_volume;
 mod current_producer_withdrawal;
 mod delete_chapter;
+mod delete_memory_entry;
 mod delete_volume;
 mod editor_session;
 mod editor_session_acknowledgement;
