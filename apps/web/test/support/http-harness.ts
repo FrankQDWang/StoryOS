@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -487,16 +487,17 @@ export function deleteMemoryEntryInput(project: TestProject, memoryEntryId: stri
   }, path: { memoryEntryId } };
 }
 
-/** Writes the entry 1 of the Project of User A with SQL as its version 1, and gives its identity. The values are
- * test constants. */
+/** Writes the entry 1 of the Project of User A with SQL as its version 1 with a new identity, and gives the
+ * identity. The values are test constants. */
 export async function seedMemoryEntry(projectId: string): Promise<string> {
-  return queryStoryOSPostgres(`
-    INSERT INTO storyos.project_memory_heads VALUES ('${USER_A}', '${projectId}', 1, 2);
+  const memoryEntryId = randomUUID();
+  await queryStoryOSPostgres(`
+    WITH head AS (INSERT INTO storyos.project_memory_heads VALUES ('${USER_A}', '${projectId}', 1, 2))
     INSERT INTO storyos.memory_entry_versions (owner_user_id, project_id, memory_entry_id, entry_number, version,
       memory_revision, state, entry_type, origin, title, description, text, cause, source_references)
-    VALUES ('${USER_A}', '${projectId}', md5('${projectId}:1')::uuid, 1, 1, 1, 'current', 'character',
-      'author_request', '阿青', '渡口的船夫。', '阿青在渡口撑船。', '{"kind": "author_request"}', '[]')
-    RETURNING memory_entry_id::text`);
+    VALUES ('${USER_A}', '${projectId}', '${memoryEntryId}', 1, 1, 1, 'current', 'character',
+      'author_request', '阿青', '渡口的船夫。', '阿青在渡口撑船。', '{"kind": "author_request"}', '[]')`);
+  return memoryEntryId;
 }
 
 /** The applied effect of `createVolume`. It throws when the command did not apply. */
