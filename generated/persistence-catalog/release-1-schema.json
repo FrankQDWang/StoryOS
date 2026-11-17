@@ -3541,6 +3541,93 @@
       },
       "triggers": {}
     },
+    "memory_consolidation_passes": {
+      "columns": {
+        "failure_reason": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "memory_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "observations": {
+          "default": null,
+          "nullable": false,
+          "type": "jsonb"
+        },
+        "operations": {
+          "default": null,
+          "nullable": true,
+          "type": "jsonb"
+        },
+        "outcome": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "pass_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "run_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "started_at": {
+          "default": "statement_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        }
+      },
+      "constraints": {
+        "memory_consolidation_passes_outcome_check": "CHECK (((((outcome IS NULL) OR (outcome = ANY (ARRAY['applied'::text, 'no_operation'::text, 'stale'::text, 'failed'::text]))) AND (COALESCE((outcome = 'failed'::text), false) = (failure_reason IS NOT NULL)) AND ((failure_reason IS NULL) OR ((char_length(failure_reason) >= 1) AND (char_length(failure_reason) <= 64)))) IS TRUE))",
+        "memory_consolidation_passes_pkey": "PRIMARY KEY (owner_user_id, project_id, pass_id)",
+        "memory_consolidation_passes_revision_check": "CHECK (((memory_revision >= (0)::numeric) AND (memory_revision <= '18446744073709551615'::numeric)))",
+        "memory_consolidation_passes_run_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
+        "memory_consolidation_passes_run_key": "UNIQUE (owner_user_id, project_id, run_id)",
+        "memory_consolidation_passes_shape": "CHECK (((jsonb_typeof(observations) = 'array'::text) AND ((operations IS NULL) OR (jsonb_typeof(operations) = 'array'::text))))"
+      },
+      "indexes": {
+        "memory_consolidation_passes_pkey": "CREATE UNIQUE INDEX memory_consolidation_passes_pkey ON storyos.memory_consolidation_passes USING btree (owner_user_id, project_id, pass_id)",
+        "memory_consolidation_passes_run_key": "CREATE UNIQUE INDEX memory_consolidation_passes_run_key ON storyos.memory_consolidation_passes USING btree (owner_user_id, project_id, run_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_consolidation_passes_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "memory_entry_reads": {
       "columns": {
         "memory_entry_id": {

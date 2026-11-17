@@ -23,7 +23,8 @@ impl AgentRunKind {
     pub const ALL: [Self; 3] = [Self::Author, Self::MemoryCapture, Self::MemoryConsolidation];
 
     /// The kinds that the Worker claims and dispatches. A queued Run of another kind stays queued.
-    pub const DISPATCHED: [Self; 2] = [Self::Author, Self::MemoryCapture];
+    pub const DISPATCHED: [Self; 3] =
+        [Self::Author, Self::MemoryCapture, Self::MemoryConsolidation];
 
     /// The persisted name of the kind.
     pub fn name(self) -> &'static str {
@@ -85,12 +86,12 @@ impl AgentRunKind {
         }
     }
 
-    /// The most RunSteps of a Run of the kind. A consolidation pass keeps the limit of ADR 0091
-    /// until its ticket sets one.
+    /// The most RunSteps of a Run of the kind. A consolidation pass sends one request.
     pub fn max_run_steps(self) -> u64 {
         match self {
-            Self::Author | Self::MemoryConsolidation => crate::MAX_RUN_STEPS,
+            Self::Author => crate::MAX_RUN_STEPS,
             Self::MemoryCapture => MEMORY_CAPTURE_MAX_RUN_STEPS,
+            Self::MemoryConsolidation => crate::MEMORY_CONSOLIDATION_MAX_RUN_STEPS,
         }
     }
 
@@ -99,13 +100,14 @@ impl AgentRunKind {
         RunStepLimit::within(self.max_run_steps(), decision_position)
     }
 
-    /// The one operation that the Host executes in the last RunStep of a Run of the kind. A
-    /// capture can still record its observations there. The Host executes no call of the last
-    /// RunStep of another kind (ADR 0091 section 5).
+    /// The one operation that the Host executes in the last RunStep of a Run of the kind: the
+    /// output Tool of a background Run. The Host executes no call of the last RunStep of a Run of
+    /// the author (ADR 0091 section 5).
     fn last_step_operation(self) -> Option<ToolOperation> {
         match self {
             Self::MemoryCapture => Some(ToolOperation::RecordMemoryObservations),
-            Self::Author | Self::MemoryConsolidation => None,
+            Self::MemoryConsolidation => Some(ToolOperation::ApplyMemoryOperations),
+            Self::Author => None,
         }
     }
 

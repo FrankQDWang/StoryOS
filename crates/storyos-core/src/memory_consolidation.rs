@@ -10,9 +10,35 @@ use crate::assemble_context::{
     count_context_item_tokens,
 };
 use crate::{
-    CaptureRunEnd, MemoryEntryOrigin, MemoryEntryType, MemorySourceReference, PassMemoryEntry,
-    canonical_json,
+    CaptureRefusal, CaptureRunEnd, GrantScope, MemoryEntryOrigin, MemoryEntryType,
+    MemorySourceReference, PassMemoryEntry, canonical_json,
 };
+
+/// The most RunSteps of one pass: the pass sends one request (ADR 0094 section 6).
+pub const MEMORY_CONSOLIDATION_MAX_RUN_STEPS: u64 = 1;
+
+/// Decides the start of a pass with the admission rule of a capture (S7-D3b): the Project has a
+/// current Model Use Binding, its assistance is available, and the scope of the grant names the
+/// Purpose `memory_consolidation`.
+pub fn admit_memory_consolidation(
+    binding: bool,
+    assistance_available: bool,
+    grant_scope: Option<&str>,
+) -> Result<(), CaptureRefusal> {
+    if !binding {
+        return Err(CaptureRefusal::NoModelUseBinding);
+    }
+    if !assistance_available {
+        return Err(CaptureRefusal::AssistanceUnavailable);
+    }
+    let granted = grant_scope
+        .and_then(GrantScope::parse)
+        .is_some_and(|scope| scope.names_purpose(ContextPurpose::MemoryConsolidation));
+    match granted {
+        true => Ok(()),
+        false => Err(CaptureRefusal::PurposeNotGranted),
+    }
+}
 
 /// One observation of the input of a pass. Its number in the input is its position, from 1.
 #[derive(Clone, Debug, Eq, PartialEq)]

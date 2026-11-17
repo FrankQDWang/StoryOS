@@ -640,11 +640,12 @@ pub(crate) async fn update_run(
         )
         .await
         .map_err(complete_database_error)?;
-    // A capture that the Run ends before an output call settled gets its outcome in the same
-    // transaction (ADR 0094 section 5). A stale fence changes nothing.
+    // A capture or a pass that the Run ends before an output call settled gets its outcome in the
+    // same transaction (ADR 0094 sections 5 and 6). A stale fence changes nothing.
     if updated == 1 {
         let end = storyos_core::CaptureRunEnd::Status { status, reason };
         crate::memory_capture::settle_end(client, claim, end).await?;
+        crate::memory_consolidation::settle_end(client, claim, end).await?;
         if status == "completed" {
             crate::memory_work_schedule::mark_conversation_due(client, claim).await?;
         }

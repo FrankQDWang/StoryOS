@@ -174,19 +174,6 @@ async fn visible_rows(store: &PostgresProjectReader, scope: &ProjectScope, run_i
         .unwrap()
 }
 
-/// Pauses each live Run of the Project, because later HTTP files drain all queued work.
-async fn park_project(admin: &Client, scope: &ProjectScope) {
-    admin
-        .execute(
-            "UPDATE storyos.agent_runs
-                SET status = 'paused', lease_expires_at = NULL, wakeup_pending = false
-              WHERE project_id = $1::text::uuid AND status IN ('queued', 'claimed')",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_database_check_refuses_each_other_form_of_an_agent_run() {
@@ -461,49 +448,6 @@ pub(crate) async fn claim_in_project(
         .unwrap();
     others.batch_execute("ROLLBACK").await.unwrap();
     claimed
-}
-
-/// The Worker claims a Run of a dispatched kind only: a queued consolidation stays queued.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn the_worker_claims_no_consolidation_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let call = create_agent_run_call(&store, /*base*/ 0x7730).await;
-    store
-        .create_agent_run(&call.envelope, &call.input)
-        .await
-        .unwrap();
-    let scope = call.envelope.project_scope.clone();
-    let author = call.input.run_id.clone();
-    // The background Run has the Model Registration of the Run of the author.
-    let background = "ffffffff-ffff-7fff-bfff-000000007730";
-    background_run(&admin, &author, background, "queued").await;
-    let consolidation = "UPDATE storyos.agent_runs SET run_kind = 'memory_consolidation'
-                          WHERE run_id = $1::text::uuid";
-    admin.execute(consolidation, &[&background]).await.unwrap();
-    let claim = async || {
-        claim_in_project(&store, &scope)
-            .await
-            .map(|claim| claim.run_id)
-    };
-    let claims = [claim().await, claim().await];
-    let status = admin
-        .query_one(
-            "SELECT status::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&background],
-        )
-        .await
-        .unwrap()
-        .get::<_, String>(/*idx*/ 0);
-    park_project(&admin, &scope).await;
-
-    assert_eq!(
-        (claims, status),
-        ([Some(author), None], "queued".to_owned())
-    );
 }
 
 /// The Continuation Binding that the first decision request of the Run names as its prior

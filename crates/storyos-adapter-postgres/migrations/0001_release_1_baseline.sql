@@ -4536,6 +4536,41 @@ GRANT SELECT,INSERT ON TABLE storyos.memory_observations TO storyos_runtime;
 
 GRANT UPDATE(state) ON TABLE storyos.memory_observations TO storyos_runtime;
 
+-- Memory consolidation passes (ADR 0094 sections 6 and 8). One row for each pass: its background Run,
+-- its start time, the Memory revision that it pinned, and the observations of its input in input
+-- order as [capture, position] pairs. The settled call of `apply_memory_operations` gives the outcome
+-- and each operation of the reply with its result. The runtime role can read and insert a row, it can
+-- change only the outcome, the failure reason, and the operations, and it cannot delete a row.
+
+CREATE TABLE storyos.memory_consolidation_passes (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    pass_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    started_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    memory_revision numeric(20,0) NOT NULL,
+    observations jsonb NOT NULL,
+    outcome text,
+    failure_reason text,
+    operations jsonb,
+    CONSTRAINT memory_consolidation_passes_pkey PRIMARY KEY (owner_user_id, project_id, pass_id),
+    CONSTRAINT memory_consolidation_passes_run_key UNIQUE (owner_user_id, project_id, run_id),
+    CONSTRAINT memory_consolidation_passes_revision_check CHECK (((memory_revision >= (0)::numeric) AND (memory_revision <= '18446744073709551615'::numeric))),
+    CONSTRAINT memory_consolidation_passes_shape CHECK (((jsonb_typeof(observations) = 'array'::text) AND ((operations IS NULL) OR (jsonb_typeof(operations) = 'array'::text)))),
+    CONSTRAINT memory_consolidation_passes_outcome_check CHECK ((((outcome IS NULL) OR (outcome = ANY (ARRAY['applied'::text, 'no_operation'::text, 'stale'::text, 'failed'::text]))) AND (COALESCE((outcome = 'failed'::text), false) = (failure_reason IS NOT NULL)) AND ((failure_reason IS NULL) OR ((char_length(failure_reason) >= 1) AND (char_length(failure_reason) <= 64)))) IS TRUE),
+    CONSTRAINT memory_consolidation_passes_run_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL
+);
+
+ALTER TABLE storyos.memory_consolidation_passes ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_consolidation_passes FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_consolidation_passes_exact_scope ON storyos.memory_consolidation_passes USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.memory_consolidation_passes TO storyos_runtime;
+
+GRANT UPDATE(outcome, failure_reason, operations) ON TABLE storyos.memory_consolidation_passes TO storyos_runtime;
+
 -- Source Snapshots and Source Gaps. The settlement of a research ToolCall writes them in its own
 -- transaction: one immutable Snapshot for each captured search entry or page, and one Gap for each
 -- requested URL that the server reported as failed, empty, or missing. The revisions of one URL in a

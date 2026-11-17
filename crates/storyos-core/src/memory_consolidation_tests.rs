@@ -1,14 +1,36 @@
 use serde_json::{Value, json};
 
 use super::{
-    MemoryConsolidationAssembly, PassObservation, assemble_memory_consolidation_context,
-    consolidation_failure,
+    MemoryConsolidationAssembly, PassObservation, admit_memory_consolidation,
+    assemble_memory_consolidation_context, consolidation_failure,
 };
 use crate::assemble_context::{CONTEXT_ITEM_TOKEN_LIMIT, ContextPurpose};
 use crate::{
-    CaptureRunEnd, ContextSourceClass, CurrentMemoryEntry, MemoryEntryOrigin, MemoryEntryType,
-    MemorySourceReference, PassMemoryEntry, ProjectionMode,
+    CaptureRefusal, CaptureRunEnd, ContextSourceClass, CurrentMemoryEntry, MemoryEntryOrigin,
+    MemoryEntryType, MemorySourceReference, PassMemoryEntry, ProjectionMode,
 };
+
+/// The start uses the admission rule of a capture with the Purpose `memory_consolidation`.
+#[test]
+fn the_start_of_a_pass_needs_a_binding_an_available_assistance_and_the_purpose() {
+    let scopes = [
+        (false, true, Some("project_writing_assistance_v5")),
+        (true, false, Some("project_writing_assistance_v5")),
+        (true, true, Some("project_writing_assistance_v4")),
+        (true, true, Some("project_writing_assistance_v5")),
+    ];
+    assert_eq!(
+        scopes.map(|(binding, available, scope)| admit_memory_consolidation(
+            binding, available, scope
+        )),
+        [
+            Err(CaptureRefusal::NoModelUseBinding),
+            Err(CaptureRefusal::AssistanceUnavailable),
+            Err(CaptureRefusal::PurposeNotGranted),
+            Ok(())
+        ]
+    );
+}
 
 /// The Context Assembly of a pass has the current entries and the observations as lines, the
 /// oldest observation first. A set above the Context item limit is more than one item, and each

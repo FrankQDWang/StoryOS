@@ -162,6 +162,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     ("memory_captures", "canonical/memory_captures.json"),
     ("memory_observations", "canonical/memory_observations.json"),
     (
+        "memory_consolidation_passes",
+        "canonical/memory_consolidation_passes.json",
+    ),
+    (
         "memory_work_schedules",
         "canonical/memory_work_schedules.json",
     ),

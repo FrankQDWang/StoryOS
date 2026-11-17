@@ -10,8 +10,22 @@ use serde_json::{Value, json};
 use crate::{
     ConsolidationOutcome, CurrentMemoryEntry, IntakeRefusal, MemoryEntryOrigin, MemoryEntryType,
     MemorySourceReference, MemoryVersionWrite, MemoryWrite, MemoryWriteAction, MemoryWriteRefusal,
-    PassObservation, ToolResultText,
+    PassObservation, ToolIntake, ToolOperation, ToolResultText, ToolSpec,
 };
+
+pub const APPLY_MEMORY_OPERATIONS_TOOL_SPEC: ToolSpec = ToolSpec {
+    revision: "storyos.tool.apply-memory-operations.v1",
+    operation: ToolOperation::ApplyMemoryOperations,
+    intake_contract: &[],
+    envelope: None,
+    result_text_max_bytes: 512,
+};
+
+pub(crate) const DESCRIPTION: &str = "Applies the operations of this consolidation pass to the \
+Memory of the Project. Call it one time. Create an entry from one or more observations, update an \
+entry with what the observations add, and delete an entry that is not true now. Each entry and \
+each observation has its number in the input. Give an empty list when the Memory needs no \
+change.";
 
 /// The keys of an operation. The strict schema requires each one, also when its value is null.
 const KEYS: [&str; 8] = [
@@ -25,9 +39,8 @@ const KEYS: [&str; 8] = [
     "reason",
 ];
 
-/// The strict JSON Schema of the arguments. The schema names the types in the description and
-/// not as an enum, so an operation with an unknown type is refused alone (`memory_entry_invalid`)
-/// and does not refuse the call.
+/// The strict JSON Schema of the arguments. The description of `type` names the types, and no enum
+/// does. Thus the Host refuses only the operation with an unknown type (`memory_entry_invalid`).
 pub fn parameters() -> Value {
     let types: Vec<&str> = MemoryEntryType::ALL.iter().map(|t| t.as_str()).collect();
     let types = format!(
@@ -152,6 +165,20 @@ pub fn intake(arguments: &Value) -> Result<Vec<MemoryOperationCandidate>, Intake
         true => Err(IntakeRefusal::UnstorableText),
         false => Ok(operations),
     }
+}
+
+/// The typed intake of a call of the Tool.
+pub(crate) fn tool_intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
+    intake(arguments).map(ToolIntake::ApplyMemoryOperations)
+}
+
+/// The arguments of a validated call, as the ToolCall record keeps them.
+pub(crate) fn arguments(operations: &[MemoryOperationCandidate]) -> Value {
+    let items: Vec<Value> = operations
+        .iter()
+        .map(MemoryOperationCandidate::arguments)
+        .collect();
+    json!({ "operations": items })
 }
 
 /// One current entry of the pass, at the Memory revision that the pass pinned.
@@ -382,10 +409,9 @@ pub struct PassSettlement {
     pub result: ToolResultText,
 }
 
-/// Settles the call of a pass (ADR 0039, ADR 0094 section 6). When the Memory revision now is not
-/// the pinned revision, the input of the pass is older than the entries, and the pass applies
-/// nothing. Otherwise Core decides each operation, and the outcome is `applied` when one or more
-/// operations applied.
+/// Settles the call of a pass (ADR 0039, ADR 0094 section 6). A pass whose pinned Memory revision
+/// is not the revision now is stale, and it applies nothing. Otherwise Core decides each
+/// operation. The outcome is `applied` when one or more operations applied.
 pub fn settle_operations_call(
     candidates: &[MemoryOperationCandidate],
     facts: &PassFacts<'_>,

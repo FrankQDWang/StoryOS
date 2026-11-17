@@ -68,10 +68,10 @@ mod tool_result_stub;
 mod tool_spec;
 mod unknown_create_successor;
 pub use apply_memory_operations::{
-    AdmittedOperation, MemoryOperationAction, MemoryOperationCandidate, MemoryOperationRefusal,
-    PassFacts, PassMemoryEntry, PassSettlement, decide_memory_operations,
-    intake as apply_memory_operations_intake, parameters as apply_memory_operations_parameters,
-    settle_operations_call,
+    APPLY_MEMORY_OPERATIONS_TOOL_SPEC, AdmittedOperation, MemoryOperationAction,
+    MemoryOperationCandidate, MemoryOperationRefusal, PassFacts, PassMemoryEntry, PassSettlement,
+    decide_memory_operations, intake as apply_memory_operations_intake,
+    parameters as apply_memory_operations_parameters, settle_operations_call,
 };
 pub use ordinary_passage_request::{
     HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
@@ -243,8 +243,9 @@ pub use memory_capture::{
     assemble_memory_capture_context, capture_end, keep_capture_references,
 };
 pub use memory_consolidation::{
-    ConsolidationOutcome, MemoryConsolidationAssembly, PassObservation,
-    assemble_memory_consolidation_context, consolidation_failure,
+    ConsolidationOutcome, MEMORY_CONSOLIDATION_MAX_RUN_STEPS, MemoryConsolidationAssembly,
+    PassObservation, admit_memory_consolidation, assemble_memory_consolidation_context,
+    consolidation_failure,
 };
 pub use memory_delete_marks::{
     MEMORY_DELETE_MARK_CAUSES, MemoryDeleteMark, assemble_memory_delete_marks,
