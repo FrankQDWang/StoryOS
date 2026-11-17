@@ -87,14 +87,11 @@ async fn start(
             return Ok(Err(MemoryCaptureStartRefusal::Admission(refusal)));
         }
     };
-    if !source_exists(client, scope, source).await? {
-        return Ok(Err(MemoryCaptureStartRefusal::SourceNotFound));
-    }
     let run_id = Uuid::now_v7().to_string();
     let capture_id = Uuid::now_v7().to_string();
     // Background work writes no grant and no binding: the Run pins the current ones. The first
     // Run of the author made the Agent of the Project.
-    let inserted = client
+    client
         .execute(
             "INSERT INTO storyos.agent_runs
                (owner_user_id, project_id, run_id, project_agent_id, grant_id,
@@ -115,50 +112,52 @@ async fn start(
         )
         .await
         .map_err(read_error)?;
-    if inserted != 1 {
-        return Err(ProjectReadError::unavailable(std::io::Error::other(
-            "A capture needs the Agent of the Project",
-        )));
-    }
-    let (kind, conversation, first, last, chapter, revision) = match source {
+    let (conversation, first, last, chapter, revision) = match source {
         MemoryCaptureSource::Conversation {
-            conversation_id,
-            first_run_id,
-            last_run_id,
-        } => (
-            "conversation",
-            Some(conversation_id),
-            Some(first_run_id),
-            Some(last_run_id),
-            None,
-            None,
-        ),
+            conversation_id: c,
+            first_run_id: f,
+            last_run_id: l,
+        } => (Some(c), Some(f), Some(l), None, None),
         MemoryCaptureSource::Chapter {
-            chapter_id,
-            revision_id,
-        } => (
-            "chapter",
-            None,
-            None,
-            None,
-            Some(chapter_id),
-            Some(revision_id),
-        ),
+            chapter_id: c,
+            revision_id: r,
+        } => (None, None, None, Some(c), Some(r)),
     };
-    client
+    // The source must be in the Project Scope: the two Runs are Runs of the Conversation, in
+    // order, or the Revision is a Revision of the Chapter.
+    let inserted = client
         .execute(
             "INSERT INTO storyos.memory_captures
                (owner_user_id, project_id, capture_id, run_id, source_kind, conversation_id,
                 first_run_id, last_run_id, chapter_id, chapter_revision_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5,
-                     $6::text::uuid, $7::text::uuid, $8::text::uuid, $9::text::uuid,
-                     $10::text::uuid)",
+             SELECT run.owner_user_id, run.project_id, $3::text::uuid, run.run_id,
+                    CASE WHEN $5::text IS NULL THEN 'chapter' ELSE 'conversation' END,
+                    $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid, $9::text::uuid
+               FROM storyos.agent_runs AS run
+              WHERE (run.owner_user_id, run.project_id, run.run_id) =
+                    ($1::text::uuid, $2::text::uuid, $4::text::uuid)
+                AND (EXISTS (SELECT 1 FROM storyos.agent_runs AS first
+                               JOIN storyos.agent_runs AS last
+                                 ON (last.owner_user_id, last.project_id, last.conversation_id) =
+                                    (first.owner_user_id, first.project_id, first.conversation_id)
+                              WHERE (first.owner_user_id, first.project_id) =
+                                    (run.owner_user_id, run.project_id)
+                                AND first.conversation_id = $5::text::uuid
+                                AND first.run_id = $6::text::uuid AND last.run_id = $7::text::uuid
+                                AND first.run_id <= last.run_id)
+                  OR EXISTS (SELECT 1 FROM storyos.authoritative_revisions AS revision
+                               JOIN storyos.manuscript_objects AS chapter
+                                 USING (owner_user_id, project_id, manuscript_object_id)
+                              WHERE (revision.owner_user_id, revision.project_id) =
+                                    (run.owner_user_id, run.project_id)
+                                AND revision.manuscript_object_id = $8::text::uuid
+                                AND revision.revision_id = $9::text::uuid
+                                AND chapter.object_kind = 'chapter'))",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &capture_id,
                 &run_id,
-                &kind,
                 &conversation,
                 &first,
                 &last,
@@ -168,6 +167,9 @@ async fn start(
         )
         .await
         .map_err(read_error)?;
+    if inserted != 1 {
+        return Ok(Err(MemoryCaptureStartRefusal::SourceNotFound));
+    }
     let record = storyos_core::assemble_memory_capture_context(&MemoryCaptureAssembly {
         operation_requirement_id: Uuid::now_v7().to_string(),
         input_snapshot_id: Uuid::now_v7().to_string(),
@@ -183,61 +185,6 @@ async fn start(
     .await
     .map_err(ProjectReadError::unavailable)?;
     Ok(Ok(StartedMemoryCapture { capture_id, run_id }))
-}
-
-/// Whether the source is in the Project Scope: the two Runs are Runs of the Conversation, in
-/// order, or the Revision is a Revision of the Chapter.
-async fn source_exists(
-    client: &Client,
-    scope: &ProjectScope,
-    source: &MemoryCaptureSource,
-) -> Result<bool, ProjectReadError> {
-    let (owner, project) = (scope.owner_user_id.as_ref(), scope.project_id.as_ref());
-    let row = match source {
-        MemoryCaptureSource::Conversation {
-            conversation_id,
-            first_run_id,
-            last_run_id,
-        } => {
-            client
-                .query_one(
-                    "SELECT EXISTS (SELECT 1 FROM storyos.agent_runs AS first
-                              JOIN storyos.agent_runs AS last
-                                ON (last.owner_user_id, last.project_id, last.conversation_id) =
-                                   (first.owner_user_id, first.project_id, first.conversation_id)
-                             WHERE first.owner_user_id = $1::text::uuid
-                               AND first.project_id = $2::text::uuid
-                               AND first.conversation_id = $3::text::uuid
-                               AND first.run_id = $4::text::uuid
-                               AND last.run_id = $5::text::uuid
-                               AND first.run_id <= last.run_id)",
-                    &[&owner, &project, conversation_id, first_run_id, last_run_id],
-                )
-                .await
-        }
-        MemoryCaptureSource::Chapter {
-            chapter_id,
-            revision_id,
-        } => {
-            client
-                .query_one(
-                    "SELECT EXISTS (SELECT 1 FROM storyos.authoritative_revisions AS revision
-                              JOIN storyos.manuscript_objects AS chapter
-                                ON (chapter.owner_user_id, chapter.project_id,
-                                    chapter.manuscript_object_id) =
-                                   (revision.owner_user_id, revision.project_id,
-                                    revision.manuscript_object_id)
-                             WHERE revision.owner_user_id = $1::text::uuid
-                               AND revision.project_id = $2::text::uuid
-                               AND revision.manuscript_object_id = $3::text::uuid
-                               AND revision.revision_id = $4::text::uuid
-                               AND chapter.object_kind = 'chapter')",
-                    &[&owner, &project, chapter_id, revision_id],
-                )
-                .await
-        }
-    };
-    Ok(row.map_err(read_error)?.get(/*idx*/ 0))
 }
 
 /// The Context Assembly of the next RunStep of a capture: the input item of the RunStep before,
@@ -337,3 +284,7 @@ pub(crate) async fn record_observations(
         .map_err(complete_database_error)?;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "memory_capture_tests.rs"]
+mod tests;
