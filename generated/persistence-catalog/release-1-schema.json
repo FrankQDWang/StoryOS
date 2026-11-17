@@ -4196,6 +4196,120 @@
       },
       "triggers": {}
     },
+    "passage_index_work": {
+      "columns": {
+        "chapter_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "chapter_order": {
+          "default": null,
+          "nullable": false,
+          "type": "bigint"
+        },
+        "claim_generation": {
+          "default": "0",
+          "nullable": false,
+          "type": "bigint"
+        },
+        "completed_generation": {
+          "default": "0",
+          "nullable": false,
+          "type": "bigint"
+        },
+        "embedding_registration_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "fence_token": {
+          "default": "0",
+          "nullable": false,
+          "type": "bigint"
+        },
+        "indexed_cut_revision": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "lease_expires_at": {
+          "default": null,
+          "nullable": true,
+          "type": "timestamp with time zone"
+        },
+        "mark_generation": {
+          "default": "1",
+          "nullable": false,
+          "type": "bigint"
+        },
+        "not_before": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        }
+      },
+      "constraints": {
+        "passage_index_work_chapter_fkey": "FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id) MATCH FULL",
+        "passage_index_work_chapter_order_check": "CHECK ((chapter_order >= 1))",
+        "passage_index_work_claim_check": "CHECK (((claim_generation >= 0) AND (fence_token = claim_generation)))",
+        "passage_index_work_generation_check": "CHECK (((mark_generation >= 1) AND (completed_generation >= 0) AND (completed_generation <= mark_generation)))",
+        "passage_index_work_indexed_cut_revision_check": "CHECK (((indexed_cut_revision IS NULL) OR ((length(indexed_cut_revision) >= 1) AND (length(indexed_cut_revision) <= 128))))",
+        "passage_index_work_pkey": "PRIMARY KEY (owner_user_id, project_id, chapter_id)"
+      },
+      "indexes": {
+        "passage_index_work_pkey": "CREATE UNIQUE INDEX passage_index_work_pkey ON storyos.passage_index_work USING btree (owner_user_id, project_id, chapter_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "passage_index_work_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))",
+          "with_check": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))"
+        },
+        "passage_index_work_worker_select": {
+          "command": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))",
+          "with_check": null
+        },
+        "passage_index_work_worker_update": {
+          "command": "UPDATE",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))",
+          "with_check": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=arw/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "passage_vectors": {
       "columns": {
         "chapter_id": {
