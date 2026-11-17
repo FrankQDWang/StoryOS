@@ -3834,8 +3834,18 @@
           "nullable": false,
           "type": "uuid"
         },
+        "entry_number": {
+          "default": null,
+          "nullable": true,
+          "type": "numeric(20,0)"
+        },
         "entry_type": {
           "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "kind": {
+          "default": "'observation'::text",
           "nullable": false,
           "type": "text"
         },
@@ -3854,6 +3864,11 @@
           "nullable": false,
           "type": "uuid"
         },
+        "reason": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
         "state": {
           "default": "'waiting'::text",
           "nullable": false,
@@ -3861,17 +3876,18 @@
         },
         "text": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "text"
         },
         "title": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "text"
         }
       },
       "constraints": {
         "memory_observations_capture_fkey": "FOREIGN KEY (owner_user_id, project_id, capture_id) REFERENCES storyos.memory_captures(owner_user_id, project_id, capture_id) MATCH FULL",
+        "memory_observations_kind_shape": "CHECK ((((kind = 'observation'::text) AND (entry_type IS NOT NULL) AND (title IS NOT NULL) AND (text IS NOT NULL) AND (entry_number IS NULL) AND (reason IS NULL)) OR ((kind = 'conflict'::text) AND (entry_type IS NULL) AND (title IS NULL) AND (text IS NULL) AND (entry_number >= (1)::numeric) AND (char_length(reason) >= 1))))",
         "memory_observations_pkey": "PRIMARY KEY (owner_user_id, project_id, capture_id, \"position\")",
         "memory_observations_position_check": "CHECK (((\"position\" >= (1)::numeric) AND (\"position\" <= '18446744073709551615'::numeric)))",
         "memory_observations_state_check": "CHECK ((state = ANY (ARRAY['waiting'::text, 'consumed'::text])))",

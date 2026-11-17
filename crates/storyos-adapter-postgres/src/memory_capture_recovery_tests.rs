@@ -119,7 +119,7 @@ fn output_call(observations: &Value) -> NativeStreamItem {
         text: None,
         summary: None,
         call_id: Some("call_capture_recovered".to_owned()),
-        arguments: Some(json!({ "observations": observations }).to_string()),
+        arguments: Some(record(observations.clone()).1.to_string()),
         refusal: None,
         native_type: Some(storyos_core::FUNCTION_CALL_NATIVE_TYPE.to_owned()),
         name: Some("record_memory_observations".to_owned()),

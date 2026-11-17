@@ -254,8 +254,8 @@ pub use memory_capture::{
 pub use memory_conflict_flag::MemoryConflictFlag;
 pub use memory_consolidation::{
     ConsolidationOutcome, MEMORY_CONSOLIDATION_MAX_RUN_STEPS, MemoryConsolidationAssembly,
-    PassObservation, admit_memory_consolidation, assemble_memory_consolidation_context,
-    consolidation_failure, pass_observation_count,
+    PassConflict, PassObservation, admit_memory_consolidation,
+    assemble_memory_consolidation_context, consolidation_failure, pass_observation_count,
 };
 pub use memory_delete_marks::{
     MEMORY_DELETE_MARK_CAUSES, MemoryDeleteMark, assemble_memory_delete_marks,
@@ -355,8 +355,9 @@ pub use rebuild_expired_reference::{
 };
 pub use record_memory_observations::{
     CAPTURE_OBSERVATIONS_MAX, CaptureOutcome, MemoryObservation, ObservationCallSettlement,
-    ObservationCandidate, ObservationRefusal, RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
-    observations_result, settle_observation_call, validate_observations,
+    ObservationCandidate, ObservationKind, ObservationRefusal,
+    RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC, observations_result, settle_observation_call,
+    validate_observations,
 };
 pub use reject_proposal_operations::{
     RejectProposalOperations, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
