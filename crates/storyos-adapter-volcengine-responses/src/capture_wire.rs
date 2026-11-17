@@ -16,6 +16,7 @@ pub(crate) fn capture_instructions() -> String {
     let text = storyos_core::MEMORY_TEXT_MAX_CHARS;
     let character = storyos_core::MEMORY_CHARACTER_TEXT_MAX_CHARS;
     let steps = storyos_core::MEMORY_CAPTURE_MAX_RUN_STEPS;
+    let author = storyos_core::MemoryEntryOrigin::AuthorRequest.as_str();
     format!(
         "\
 You read material of one novel to find what the writing assistant of the author must remember. \
@@ -36,7 +37,10 @@ proposal and from a guess: a proposal that the author did not accept is not a de
 
 The section Memory index lists the current entries: a line with a type starts a group, and each \
 line after it gives the id, the title, and the description of one entry. Do not record a fact \
-that an entry already holds, unless the input changes it. The section Chapter list has each \
+that an entry already holds, unless the input changes it. When the input is against an entry of \
+the author, give a conflict item with the id of the entry and a reason of one line, and do not \
+record the fact as an observation that corrects the entry. An entry of the author has the \
+origin {author} in the result of read_memory_entry. The section Chapter list has each \
 Chapter of the manuscript in its order, with its number, its length in characters, and its \
 title. The section Deleted Memory entries lists entries that the author deleted: they are \
 examples of content that the author does not want.
