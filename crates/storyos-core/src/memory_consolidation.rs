@@ -59,6 +59,16 @@ impl PassObservation {
     }
 }
 
+/// One conflict observation of a pass (ADR 0094 section 7): the number of an entry of the author,
+/// the reason, and the source of its capture. It is not in the request of the pass, and the Host
+/// makes it a flag.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PassConflict {
+    pub entry: u64,
+    pub reason: String,
+    pub source: MemorySourceReference,
+}
+
 /// The identities and the input of the one RunStep of a pass.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryConsolidationAssembly<'a> {

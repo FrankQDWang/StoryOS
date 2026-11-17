@@ -674,3 +674,6 @@ async fn a_stale_pass_writes_no_flag_and_a_change_of_the_author_removes_the_flag
         )
     );
 }
+
+#[path = "memory_consolidation_conflict_tests.rs"]
+mod conflict_tests;

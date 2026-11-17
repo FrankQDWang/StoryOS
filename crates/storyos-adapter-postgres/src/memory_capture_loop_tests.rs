@@ -29,8 +29,20 @@ pub(crate) fn script(calls: &[(&str, Value)]) -> String {
     format!("林舟在雨夜撑船。\n{}", lines.join("\n"))
 }
 
+/// The `record_memory_observations` call with `observations`. An item with no key `kind` is an
+/// observation of a fact, and it gets the null entry and the null reason of the strict schema.
 pub(crate) fn record(observations: Value) -> (&'static str, Value) {
-    let arguments = json!({ "observations": observations });
+    let items = observations.as_array().into_iter().flatten().map(|item| {
+        let mut item = item.clone();
+        if item.get("kind").is_none() {
+            let fact = json!({ "kind": "observation", "entry": null, "reason": null });
+            item.as_object_mut()
+                .unwrap()
+                .extend(fact.as_object().unwrap().clone());
+        }
+        item
+    });
+    let arguments = json!({ "observations": items.collect::<Vec<_>>() });
     ("record_memory_observations", arguments)
 }
 

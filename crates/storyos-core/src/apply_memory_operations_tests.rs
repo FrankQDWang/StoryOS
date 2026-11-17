@@ -4,7 +4,7 @@ use super::{MemoryOperationCandidate, PassFacts, PassMemoryEntry, intake, settle
 use crate::{
     ConsolidationOutcome, CurrentMemoryEntry, IntakeRefusal, MemoryConflictFlag, MemoryDeleteMark,
     MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference, MemoryWriteAction,
-    PassObservation,
+    PassConflict, PassObservation,
 };
 
 fn entry(number: u64, origin: MemoryEntryOrigin, title: &str) -> PassMemoryEntry {
@@ -174,6 +174,7 @@ fn each_operation_is_decided_in_list_order_with_each_refusal() {
         next_entry_number: 300,
         observations: &observations,
         marks: &[],
+        conflicts: &[],
     };
     let candidates = operations(json!([
         create("foreshadowing", "灯", "灯每夜亮一次。", json!([1, 2, 1])),
@@ -221,6 +222,7 @@ fn the_shape_of_each_action_and_an_empty_list() {
         next_entry_number: 8,
         observations: &[observation("conversation")],
         marks: &[],
+        conflicts: &[],
     };
     let mut no_reason = delete(4);
     no_reason["reason"] = json!(" ");
@@ -274,6 +276,7 @@ fn a_stale_pass_decides_no_operation() {
                 next_entry_number: 1,
                 observations: &[observation("conversation")],
                 marks: &[],
+                conflicts: &[],
             },
         );
         (settlement.outcome, settlement.decisions.len())
@@ -300,6 +303,7 @@ fn pass<'a>(
         next_entry_number: entries.iter().map(|e| e.entry.number).max().unwrap_or(0) + 1,
         observations,
         marks,
+        conflicts: &[],
     }
 }
 
@@ -573,5 +577,74 @@ fn a_conflict_flag_keeps_the_entry_and_each_refusal_of_a_flag() {
                 source: observations[1].source.clone(),
             })
         )
+    );
+}
+
+/// A conflict of the input with the reason `reason`, from the Chapter of the tests.
+fn host_conflict(entry: u64, reason: &str) -> PassConflict {
+    PassConflict {
+        entry,
+        reason: reason.to_owned(),
+        source: observation("chapter").source,
+    }
+}
+
+/// The Host writes a flag for each conflict whose entry is a current entry of the author, after
+/// the operations of the model, so its flag is the current flag. A conflict of a background entry
+/// or of a number with no entry gives no flag. An empty list with a flag is `applied`, and a
+/// stale pass writes no flag.
+#[test]
+fn the_host_flags_each_conflict_of_an_entry_of_the_author_after_the_operations() {
+    let mut entries = [1, 2, 3].map(|n| entry(n, MemoryEntryOrigin::AuthorRequest, "条"));
+    entries[1].origin = MemoryEntryOrigin::Chapter;
+    let observations = [observation("conversation")];
+    let conflicts = [
+        host_conflict(1, "甲"),
+        host_conflict(2, "乙"),
+        host_conflict(99, "丙"),
+        host_conflict(3, "丁"),
+        host_conflict(3, "戊"),
+    ];
+    let facts = PassFacts {
+        conflicts: &conflicts,
+        ..pass(&entries, &observations, &[])
+    };
+    let flags = |candidates: &[MemoryOperationCandidate], facts: &PassFacts<'_>| {
+        let settlement = settle_operations_call(candidates, facts);
+        let flags: Vec<(u64, u64, String)> = (settlement.flags.iter())
+            .map(|f| {
+                (
+                    f.version.number,
+                    f.version.version,
+                    f.version.flag.clone().unwrap().reason,
+                )
+            })
+            .collect();
+        (settlement.outcome, flags)
+    };
+    let model = operations(json!([flag(1, "模型", json!([1]))]));
+    let stale = PassFacts {
+        memory_revision: 2,
+        ..facts
+    };
+    let line = |number, version, reason: &str| (number, version, reason.to_owned());
+
+    assert_eq!(
+        [
+            flags(&model, &facts),
+            flags(&[], &facts),
+            flags(&model, &stale)
+        ],
+        [
+            (
+                ConsolidationOutcome::Applied,
+                vec![line(1, 3, "甲"), line(3, 2, "丁"), line(3, 3, "戊")]
+            ),
+            (
+                ConsolidationOutcome::Applied,
+                vec![line(1, 2, "甲"), line(3, 2, "丁"), line(3, 3, "戊")]
+            ),
+            (ConsolidationOutcome::Stale, vec![]),
+        ]
     );
 }

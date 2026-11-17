@@ -94,6 +94,21 @@ pub fn decide_memory_operations(
     observations: &[PassObservation],
     marks: &[MemoryDeleteMark],
 ) -> Vec<Result<AdmittedOperation, MemoryOperationRefusal>> {
+    decide_with_entries(candidates, entries, next_entry_number, observations, marks).0
+}
+
+/// The decisions of `decide_memory_operations`, and the current entries after the admitted
+/// operations.
+pub(crate) fn decide_with_entries(
+    candidates: &[MemoryOperationCandidate],
+    entries: &[PassMemoryEntry],
+    next_entry_number: u64,
+    observations: &[PassObservation],
+    marks: &[MemoryDeleteMark],
+) -> (
+    Vec<Result<AdmittedOperation, MemoryOperationRefusal>>,
+    Vec<PassMemoryEntry>,
+) {
     let mut current = entries.to_vec();
     let mut next_entry_number = next_entry_number;
     let mut named = Vec::new();
@@ -140,7 +155,7 @@ pub fn decide_memory_operations(
         }
         decisions.push(decision);
     }
-    decisions
+    (decisions, current)
 }
 
 /// The facts of one decision: the current entries, the next entry number, the observations of

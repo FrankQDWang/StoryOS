@@ -6,7 +6,8 @@
 use serde_json::{Value, json};
 use storyos_application::{CompleteAgentRunError, ProjectScope};
 use storyos_core::{
-    AdmittedOperation, CurrentMemoryEntry, MemoryEntryOrigin, MemoryEntryType, PassMemoryEntry,
+    AdmittedOperation, CurrentMemoryEntry, MemoryEntryOrigin, MemoryEntryType,
+    MemorySourceReference, PassConflict, PassMemoryEntry, PassObservation,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -42,6 +43,66 @@ pub(crate) async fn unused_entries(
     Ok(unused
         .map(|(pass_entry, _)| pass_entry.entry.number)
         .collect())
+}
+
+/// One item of the input of a pass: an observation of the request, or a conflict that the Host
+/// makes a flag (ADR 0094 section 7).
+#[derive(Clone)]
+pub(crate) enum PassItem {
+    Observation(PassObservation),
+    Conflict(PassConflict),
+}
+
+/// The item of a row with the columns capture, position, type, title, text, Conversation,
+/// Chapter, entry number, and reason. The source is the source of the capture.
+pub(crate) fn pass_item(row: &tokio_postgres::Row) -> Result<([String; 2], PassItem), BoxError> {
+    let source = match (row.get(5), row.get(6)) {
+        (Some(conversation_id), _) => MemorySourceReference::Conversation {
+            conversation_id,
+            run_id: None,
+            tool_call_id: None,
+        },
+        (None, Some(chapter_id)) => MemorySourceReference::Chapter { chapter_id },
+        (None, None) => return Err("A capture has no source".into()),
+    };
+    let item = match row.get::<_, Option<&str>>(7) {
+        Some(entry) => PassItem::Conflict(PassConflict {
+            entry: entry.parse()?,
+            reason: row.get(8),
+            source,
+        }),
+        None => PassItem::Observation(PassObservation {
+            entry_type: MemoryEntryType::parse(row.get(2))
+                .ok_or("A Memory Observation type is invalid")?,
+            title: row.get(3),
+            text: row.get(4),
+            source,
+        }),
+    };
+    Ok(([row.get(0), row.get(1)], item))
+}
+
+/// The keys and the observations of the request of `items`, in order, and the conflicts with
+/// their keys.
+#[expect(clippy::type_complexity, reason = "three parallel lists of one input")]
+pub(crate) fn split_items(
+    items: Vec<([String; 2], PassItem)>,
+) -> (
+    Vec<[String; 2]>,
+    Vec<PassObservation>,
+    Vec<([String; 2], PassConflict)>,
+) {
+    let (mut keys, mut observations, mut conflicts) = (Vec::new(), Vec::new(), Vec::new());
+    for (key, item) in items {
+        match item {
+            PassItem::Observation(observation) => {
+                keys.push(key);
+                observations.push(observation);
+            }
+            PassItem::Conflict(conflict) => conflicts.push((key, conflict)),
+        }
+    }
+    (keys, observations, conflicts)
 }
 
 /// One current entry of the Project now, with the time of its last change and its source
