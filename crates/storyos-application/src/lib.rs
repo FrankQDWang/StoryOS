@@ -66,6 +66,7 @@ mod manuscript_structure;
 mod manuscript_tree;
 mod memory_entries;
 mod open_proposal_list;
+mod passage_index;
 mod pinned_export_source;
 mod project_activity;
 mod project_command;
@@ -187,6 +188,11 @@ pub use model_gateway_ports::{
 };
 pub use open_proposal_list::{
     OpenProposalList, OpenProposalListItem, OpenProposalListReader, list_open_proposals,
+};
+pub use passage_index::{
+    ChapterPassageSource, PassageIndexFacts, PassageIndexFailure, PassageIndexReport,
+    PassageIndexResult, PassageVectorKey, PassageVectorRow, PassageVectorStore,
+    index_chapter_passages,
 };
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,
