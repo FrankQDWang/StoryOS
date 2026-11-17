@@ -3461,6 +3461,11 @@
           "nullable": true,
           "type": "uuid"
         },
+        "memory_settings_revision": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
         "outcome": {
           "default": null,
           "nullable": true,
@@ -3506,7 +3511,8 @@
         "memory_captures_pkey": "PRIMARY KEY (owner_user_id, project_id, capture_id)",
         "memory_captures_run_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
         "memory_captures_run_key": "UNIQUE (owner_user_id, project_id, run_id)",
-        "memory_captures_source_check": "CHECK (((((source_kind = 'conversation'::text) AND (conversation_id IS NOT NULL) AND (first_run_id IS NOT NULL) AND (last_run_id IS NOT NULL) AND (chapter_id IS NULL) AND (chapter_revision_id IS NULL)) OR ((source_kind = 'chapter'::text) AND (chapter_id IS NOT NULL) AND (chapter_revision_id IS NOT NULL) AND (conversation_id IS NULL) AND (first_run_id IS NULL) AND (last_run_id IS NULL))) IS TRUE))",
+        "memory_captures_settings_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision)",
+        "memory_captures_source_check": "CHECK (((((source_kind = 'conversation'::text) AND (conversation_id IS NOT NULL) AND (first_run_id IS NOT NULL) AND (last_run_id IS NOT NULL) AND (memory_settings_revision IS NOT NULL) AND (chapter_id IS NULL) AND (chapter_revision_id IS NULL)) OR ((source_kind = 'chapter'::text) AND (chapter_id IS NOT NULL) AND (chapter_revision_id IS NOT NULL) AND (conversation_id IS NULL) AND (first_run_id IS NULL) AND (last_run_id IS NULL) AND (memory_settings_revision IS NULL))) IS TRUE))",
         "memory_captures_state_check": "CHECK (((((state = 'running'::text) AND (outcome IS NULL)) OR ((state = 'settled'::text) AND (outcome = ANY (ARRAY['observations_recorded'::text, 'no_observation'::text, 'step_limit'::text, 'failed'::text])))) IS TRUE))"
       },
       "indexes": {
@@ -3791,6 +3797,83 @@
       "privileges": [
         "storyos_owner=arwdDxt/storyos_owner",
         "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "memory_work_schedules": {
+      "columns": {
+        "conversation_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "due_at": {
+          "default": null,
+          "nullable": true,
+          "type": "timestamp with time zone"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "work_kind": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "memory_work_schedules_conversation_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id) MATCH FULL",
+        "memory_work_schedules_kind_check": "CHECK ((work_kind = 'conversation_capture'::text))",
+        "memory_work_schedules_pkey": "PRIMARY KEY (owner_user_id, project_id, work_kind, conversation_id)"
+      },
+      "indexes": {
+        "memory_work_schedules_due_idx": "CREATE INDEX memory_work_schedules_due_idx ON storyos.memory_work_schedules USING btree (due_at) WHERE (due_at IS NOT NULL)",
+        "memory_work_schedules_pkey": "CREATE UNIQUE INDEX memory_work_schedules_pkey ON storyos.memory_work_schedules USING btree (owner_user_id, project_id, work_kind, conversation_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_work_schedules_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))",
+          "with_check": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))"
+        },
+        "memory_work_schedules_worker_select": {
+          "command": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))",
+          "with_check": null
+        },
+        "memory_work_schedules_worker_update": {
+          "command": "UPDATE",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))",
+          "with_check": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=arw/storyos_owner"
       ],
       "row_level_security": {
         "enabled": true,
