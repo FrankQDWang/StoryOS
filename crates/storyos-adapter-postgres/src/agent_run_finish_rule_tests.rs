@@ -1,10 +1,11 @@
 use serde_json::{Value, json};
-use storyos_adapter_fake_destination::{FakeDestination, LIMIT_ANSWER};
+use storyos_adapter_fake_destination::{FakeDestination, FakeEmbeddings, LIMIT_ANSWER};
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, CacheUse,
     ConversationSelection, CreateRequest, DestinationRequest, ModelProviderAdapter, ModelResponse,
-    ModelStreamSink, ModelUsage, NoContractFaults, Observation, PreDispatchRefusal,
-    PreparedRequest, ProjectScope, complete_agent_run,
+    ModelStreamSink, ModelUsage, NoContractFaults, NoToolDestination, Observation,
+    PreDispatchRefusal, PreparedRequest, ProjectScope, complete_agent_run,
+    complete_agent_run_with_destinations,
 };
 use storyos_core::{
     ADVISORY_TEXT, AgentRunStatus, CallValidationRefusal, DeploymentDestination,
@@ -18,7 +19,8 @@ use crate::agent_run_dispatch::tests::{
     RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
 };
 
-/// Claims and completes the queued Run `run_id` in a process with no Tool adapter.
+/// Claims and completes the queued Run `run_id` in a process with no Tool adapter and with the
+/// fake embedding destination.
 pub(crate) async fn complete(
     store: &PostgresProjectReader,
     admin: &Client,
@@ -26,9 +28,11 @@ pub(crate) async fn complete(
     run_id: &str,
 ) {
     let claim = claim_run(admin, scope.clone(), run_id.to_owned()).await;
-    complete_agent_run(
+    complete_agent_run_with_destinations(
         store,
         &FakeDestination,
+        &NoToolDestination,
+        &FakeEmbeddings,
         &NoContractFaults,
         &RuntimeClock,
         &claim,
