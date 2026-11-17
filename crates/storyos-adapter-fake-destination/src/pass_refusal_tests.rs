@@ -25,9 +25,11 @@ fn pass(
 }
 
 /// The fake refuses each pass request that the Agent Plan mapping refuses: a request with no
-/// observations item, with no output Tool, or with a prior response reference.
+/// entries item and no observations item, with no output Tool, or with a prior response
+/// reference. A request with entries and no observation is a pass with only conflict items.
 #[tokio::test]
-async fn the_fake_refuses_a_pass_with_no_observation_no_output_tool_or_a_prior_reference() {
+async fn the_fake_refuses_a_pass_with_no_entry_and_no_observation_no_output_tool_or_a_prior_reference()
+ {
     let tools = ToolExposure::compute(&ExposureFacts {
         bound: &[],
         model_registration_revision: storyos_core::HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
@@ -46,9 +48,11 @@ async fn the_fake_refuses_a_pass_with_no_observation_no_output_tool_or_a_prior_r
         ContextSourceClass::MemoryObservations,
         "{\"observation\":1}",
     );
+    let marks = item(ContextSourceClass::MemoryDeleteMarks, "{\"title\":\"灯\"}");
     let both = vec![entries.clone(), observations];
     let mut results = Vec::new();
     for request in [
+        pass(vec![marks], tools.clone(), None),
         pass(vec![entries], tools.clone(), None),
         pass(both.clone(), ToolExposure::empty(), None),
         pass(both.clone(), tools.clone(), Some("resp_1")),
@@ -67,6 +71,7 @@ async fn the_fake_refuses_a_pass_with_no_observation_no_output_tool_or_a_prior_r
         results,
         [
             Err(PreDispatchRefusal::UnsupportedRequest),
+            Ok(serde_json::json!("memory_consolidation")),
             Err(PreDispatchRefusal::UnsupportedRequest),
             Err(PreDispatchRefusal::UnsupportedRequest),
             Ok(serde_json::json!("memory_consolidation"))

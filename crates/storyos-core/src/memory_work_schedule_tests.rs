@@ -287,27 +287,39 @@ fn a_waiting_observation_makes_the_project_due_after_the_interval_of_the_last_pa
     );
 }
 
-/// The decision of a claimed consolidation row, in its order: no waiting observation, then a
-/// pass in progress.
+/// The decision of a claimed consolidation row, in its order: nothing for a pass, then a pass in
+/// progress. A waiting conflict is something for a pass only when the Project has a current entry.
 #[test]
 fn the_consolidation_decision_follows_its_order() {
-    let decide = |observation_waits, pass_in_progress| {
+    let decide = |[
+        observation_waits,
+        conflict_waits,
+        entry_current,
+        pass_in_progress,
+    ]: [bool; 4]| {
         decide_consolidation(&ConsolidationFacts {
             observation_waits,
+            conflict_waits,
+            entry_current,
             pass_in_progress,
         })
     };
     use ConsolidationSkip::*;
     assert_eq!(
         [
-            decide(false, true),
-            decide(false, false),
-            decide(true, true),
-            decide(true, false)
-        ],
+            [false, false, true, true],
+            [false, false, true, false],
+            [false, true, false, false],
+            [false, true, true, false],
+            [true, false, false, true],
+            [true, false, false, false],
+        ]
+        .map(decide),
         [
             Err(NothingWaits),
             Err(NothingWaits),
+            Err(NothingWaits),
+            Ok(()),
             Err(PassInProgress),
             Ok(())
         ]
