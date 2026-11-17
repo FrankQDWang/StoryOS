@@ -222,8 +222,8 @@ impl ObservationRefusal {
                  conflict has only an entry and a reason of one line"
             ),
             Self::ConflictEntryUnavailable { position } => format!(
-                "the conflict {position} names no current entry of the author. Use the id of an \
-                 entry with the origin author_request of the section Memory index"
+                "the conflict {position} names no current entry of the author. An entry of the \
+                 author has the origin author_request in the result of read_memory_entry"
             ),
             Self::ReasonTooLong { position } => format!(
                 "the reason of the conflict {position} is too long. A reason has at most \

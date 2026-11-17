@@ -254,7 +254,10 @@ fn a_conflict_item_names_an_entry_of_the_author_with_a_short_reason() {
             ObservationRefusal::ConflictEntryUnavailable { position: 2 }
                 .result()
                 .text
-                .contains("the conflict 2 names no current entry of the author")
+                .contains(
+                    "the conflict 2 names no current entry of the author. An entry of the author \
+                     has the origin author_request in the result of read_memory_entry"
+                )
         ),
         (
             labels
