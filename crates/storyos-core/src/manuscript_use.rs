@@ -93,7 +93,8 @@ fn settled_use(call: &StoredManuscriptCall<'_>) -> Option<ManuscriptUse> {
         | ToolIntake::WriteMemory(_)
         | ToolIntake::ReadMemoryEntry { .. }
         | ToolIntake::SearchMemory { .. }
-        | ToolIntake::RecordMemoryObservations(_) => None,
+        | ToolIntake::RecordMemoryObservations(_)
+        | ToolIntake::ApplyMemoryOperations(_) => None,
     }
 }
 

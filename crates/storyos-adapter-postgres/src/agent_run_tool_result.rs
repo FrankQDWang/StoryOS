@@ -81,6 +81,7 @@ pub(crate) async fn open_next_step(
         if crate::agent_run_finish_rule::run_step_limit(run)? == storyos_core::RunStepLimit::Last {
             let end = storyos_core::CaptureRunEnd::LastRunStepEnded;
             crate::memory_capture::settle_end(client, claim, end).await?;
+            crate::memory_consolidation::settle_end(client, claim, end).await?;
             return crate::agent_run_work::complete(client, claim).await;
         }
         let results = RunToolResults::load(client, claim).await?;

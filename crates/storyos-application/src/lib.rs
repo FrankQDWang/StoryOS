@@ -65,6 +65,7 @@ mod manuscript_statistics;
 mod manuscript_structure;
 mod manuscript_tree;
 mod memory_capture;
+mod memory_consolidation;
 mod memory_entries;
 mod memory_work_schedule;
 mod open_proposal_list;
@@ -177,6 +178,7 @@ pub use manuscript_tree::{
 pub use memory_capture::{
     MemoryCaptureSource, MemoryCaptureStartRefusal, MemoryCaptureStore, StartedMemoryCapture,
 };
+pub use memory_consolidation::{MemoryConsolidationStore, StartedMemoryConsolidation};
 pub use memory_entries::{
     MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem, list_memory_entries,
 };

@@ -115,12 +115,18 @@ fn each_other_binding_or_registration_exposes_nothing() {
 
 #[test]
 fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mapping() {
-    // A Run of the author never records Memory Observations.
+    // A Run of the author never records Memory Observations and never applies a pass.
     let host = |registration: &'static crate::HostToolRegistration| ToolExposure {
         tools: registration
             .tools
             .iter()
-            .filter(|spec| spec.operation != crate::ToolOperation::RecordMemoryObservations)
+            .filter(|spec| {
+                !matches!(
+                    spec.operation,
+                    crate::ToolOperation::RecordMemoryObservations
+                        | crate::ToolOperation::ApplyMemoryOperations
+                )
+            })
             .map(|spec| ExposedTool {
                 name: spec.operation.function_name(),
                 registration_id: registration.id,
@@ -228,7 +234,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             "018f0000-0000-7001-8000-0000000e0104",
             "018f0000-0000-7001-8000-0000000e0103",
             "018f0000-0000-7001-8000-0000000e0102",
-            13,
+            14,
         )
     );
     let declared = host(&HOST_TOOL_REGISTRATION);
@@ -465,7 +471,7 @@ fn only_an_ordinary_response_without_a_decision_and_with_a_complete_call_request
 }
 
 /// A capture exposes its three read-only Tools and its output Tool. A consolidation pass exposes
-/// no Tool. This is also true with a research binding, a Skill, and the search by meaning. The
+/// only its output Tool. This is also true with a research binding, a Skill, and the search by meaning. The
 /// Memory Settings of a Conversation do not control a capture (ADR 0094 sections 4 to 6).
 #[test]
 fn a_background_run_gets_only_the_tools_of_its_kind() {
@@ -513,6 +519,10 @@ fn a_background_run_gets_only_the_tools_of_its_kind() {
         [capture.to_vec(), capture.to_vec()]
     );
     assert!(author_only.iter().all(|name| author.contains(name)));
-    assert!(names(crate::AgentRunKind::MemoryConsolidation, true).is_empty());
+    assert_eq!(
+        names(crate::AgentRunKind::MemoryConsolidation, true),
+        ["apply_memory_operations"]
+    );
     assert!(!author.contains(&"record_memory_observations"));
+    assert!(!author.contains(&"apply_memory_operations"));
 }

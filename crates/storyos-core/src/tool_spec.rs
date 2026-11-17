@@ -53,6 +53,9 @@ pub enum ToolOperation {
     /// The Host Tool with which a capture gives its Memory Observations and ends (ADR 0094
     /// section 5).
     RecordMemoryObservations,
+    /// The Host Tool with which a consolidation pass gives its operations and ends (ADR 0094
+    /// section 6).
+    ApplyMemoryOperations,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -160,6 +163,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::READ_MEMORY_ENTRY_TOOL_SPEC,
         &crate::SEARCH_MEMORY_TOOL_SPEC,
         &crate::RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
+        &crate::APPLY_MEMORY_OPERATIONS_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -212,6 +216,7 @@ pub enum ToolIntake {
         query: String,
     },
     RecordMemoryObservations(Vec<crate::ObservationCandidate>),
+    ApplyMemoryOperations(Vec<crate::MemoryOperationCandidate>),
 }
 
 /// Why the arguments of a function call do not fit the typed intake.
@@ -317,6 +322,9 @@ impl ToolSpec {
             ToolOperation::RecordMemoryObservations => {
                 crate::record_memory_observations::intake(arguments)
             }
+            ToolOperation::ApplyMemoryOperations => {
+                crate::apply_memory_operations::tool_intake(arguments)
+            }
         }
     }
 }
@@ -381,7 +389,8 @@ impl ServerArguments {
                 | ToolIntake::WriteMemory(_)
                 | ToolIntake::ReadMemoryEntry { .. }
                 | ToolIntake::SearchMemory { .. }
-                | ToolIntake::RecordMemoryObservations(_),
+                | ToolIntake::RecordMemoryObservations(_)
+                | ToolIntake::ApplyMemoryOperations(_),
             )
             | (
                 Self::Fetch { .. },
@@ -398,7 +407,8 @@ impl ServerArguments {
                 | ToolIntake::WriteMemory(_)
                 | ToolIntake::ReadMemoryEntry { .. }
                 | ToolIntake::SearchMemory { .. }
-                | ToolIntake::RecordMemoryObservations(_),
+                | ToolIntake::RecordMemoryObservations(_)
+                | ToolIntake::ApplyMemoryOperations(_),
             ) => {
                 return None;
             }
