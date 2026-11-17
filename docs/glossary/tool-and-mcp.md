@@ -37,7 +37,7 @@ The host-owned, versioned record that binds a built-in implementation or exact T
 _Avoid_: Tool Discovery Record, Project Tool Enablement, Tool Exposure
 
 **Host Tool**:
-A Tool whose Tool Registration binds a built-in implementation that StoryOS executes in its own process. It has no external destination, so its ToolCall has no Destination Attempt and no Outbound Disclosure Event. Its ToolCall, its validation, and its result are the same records as those of each other Tool, and it gives the Agent no authority ([ADR 0091](../adr/0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)).
+A Tool whose Tool Registration binds a built-in implementation that StoryOS executes in its own process. It has no external destination, so its ToolCall has no Destination Attempt and no Outbound Disclosure Event. Its ToolCall, its validation, and its result are the same records as those of each other Tool, and it gives the Agent no authority ([ADR 0091](../adr/0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)). `hybrid_search_manuscript` sends one embedding request of its question before its result, and that request has its own Embedding Attempt ([ADR 0095](../adr/0095-give-the-agent-the-whole-manuscript-through-host-tools-and-add-a-hybrid-search-with-pgvector-and-a-volcengine-embedding-model.md)).
 _Avoid_: Built-in command, Provider-hosted Tool, MCP tool, Agent Decision kind
 
 **Project Tool Enablement**:

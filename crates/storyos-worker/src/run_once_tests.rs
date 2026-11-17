@@ -112,7 +112,16 @@ impl storyos_application::ToolDispatchStore for RaceStore {
     async fn next_tool_call(
         &self,
         _claim: &ClaimedAgentRun,
-    ) -> Result<Option<storyos_application::ToolCallRequest>, CompleteAgentRunError> {
+    ) -> Result<Option<storyos_application::ToolWork>, CompleteAgentRunError> {
+        unreachable!("the AgentRun settles without a ToolCall")
+    }
+
+    async fn record_question_search(
+        &self,
+        _claim: &ClaimedAgentRun,
+        _search: &storyos_application::QuestionSearch,
+        _result: storyos_application::EmbeddingResult,
+    ) -> Result<(), CompleteAgentRunError> {
         unreachable!("the AgentRun settles without a ToolCall")
     }
 
@@ -131,6 +140,37 @@ impl storyos_application::ToolDispatchStore for RaceStore {
         _record: storyos_application::ToolDispatchRecord<'_>,
     ) -> Result<(), CompleteAgentRunError> {
         unreachable!("the AgentRun settles without a ToolCall")
+    }
+}
+
+impl storyos_application::EmbeddingDispatchStore for RaceStore {
+    async fn embedding_route(
+        &self,
+        _scope: &ProjectScope,
+    ) -> Result<Option<storyos_application::EmbeddingRoute>, ProjectReadError> {
+        unreachable!("the AgentRun settles without an embedding request")
+    }
+
+    async fn commit_embedding_claim(
+        &self,
+        _scope: &ProjectScope,
+        _registration: Option<&'static storyos_core::EmbeddingRegistration>,
+        _input: &storyos_core::EmbeddingInput,
+        _projection: &storyos_application::EmbeddingProjection,
+    ) -> Result<
+        Result<storyos_application::EmbeddingClaim, storyos_core::EmbeddingRefusal>,
+        ProjectReadError,
+    > {
+        unreachable!("the AgentRun settles without an embedding request")
+    }
+
+    async fn record_embedding(
+        &self,
+        _scope: &ProjectScope,
+        _claim: &storyos_application::EmbeddingClaim,
+        _record: &storyos_application::EmbeddingRecord<'_>,
+    ) -> Result<(), ProjectReadError> {
+        unreachable!("the AgentRun settles without an embedding request")
     }
 }
 

@@ -7,10 +7,13 @@ use crate::model_gateway_ports::{
 };
 use crate::model_lease_renewal::renew_while;
 use crate::model_stream_commit::GatewaySink;
-use crate::tool_gateway::dispatch_tool_calls;
+use crate::tool_gateway::{
+    Embeddings, NoQuestionEmbeddings, QuestionEmbeddings, dispatch_tool_calls,
+};
 use crate::tool_gateway_ports::{NoToolDestination, ToolDestinationAdapter, ToolDispatchStore};
 use crate::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DiagnosticField, DiagnosticId,
+    EmbeddingDispatchStore, EmbeddingProviderAdapter,
 };
 
 /// Gets the next work, prepares, claims, exchanges with no open transaction, and records,
@@ -26,11 +29,51 @@ pub async fn complete_agent_run(
     complete_agent_run_with_tools(store, adapter, &NoToolDestination, observer, clock, claim).await
 }
 
-/// `complete_agent_run` with the Tool destination `tools` for the ToolDispatch phase.
+/// `complete_agent_run` with the Tool destination `tools` for the ToolDispatch phase. The
+/// embedding request of each question refuses with `embedding_not_configured`.
 pub async fn complete_agent_run_with_tools(
     store: &(impl ModelDispatchStore + ToolDispatchStore),
     adapter: &impl ModelProviderAdapter,
     tools: &impl ToolDestinationAdapter,
+    observer: &impl ContractFaultObserver,
+    clock: &impl GatewayClock,
+    claim: &ClaimedAgentRun,
+) -> Result<CompleteAgentRun, CompleteAgentRunError> {
+    run(
+        store,
+        adapter,
+        tools,
+        &NoQuestionEmbeddings,
+        observer,
+        clock,
+        claim,
+    )
+    .await
+}
+
+/// `complete_agent_run_with_tools` with the embedding destination `embeddings` for the questions
+/// of the `hybrid_search_manuscript` calls (ADR 0095 section 1).
+pub async fn complete_agent_run_with_destinations(
+    store: &(impl ModelDispatchStore + ToolDispatchStore + EmbeddingDispatchStore),
+    adapter: &impl ModelProviderAdapter,
+    tools: &impl ToolDestinationAdapter,
+    embeddings: &impl EmbeddingProviderAdapter,
+    observer: &impl ContractFaultObserver,
+    clock: &impl GatewayClock,
+    claim: &ClaimedAgentRun,
+) -> Result<CompleteAgentRun, CompleteAgentRunError> {
+    let embeddings = Embeddings {
+        store,
+        adapter: embeddings,
+    };
+    run(store, adapter, tools, &embeddings, observer, clock, claim).await
+}
+
+async fn run(
+    store: &(impl ModelDispatchStore + ToolDispatchStore),
+    adapter: &impl ModelProviderAdapter,
+    tools: &impl ToolDestinationAdapter,
+    embeddings: &impl QuestionEmbeddings,
     observer: &impl ContractFaultObserver,
     clock: &impl GatewayClock,
     claim: &ClaimedAgentRun,
@@ -48,7 +91,7 @@ pub async fn complete_agent_run_with_tools(
             NextDispatchWork::Request(request) => *request,
             NextDispatchWork::Abort(cancellation) => cancellation.into_abort(),
             NextDispatchWork::ToolCalls => {
-                dispatch_tool_calls(store, tools, observer, clock, claim).await?;
+                dispatch_tool_calls(store, tools, embeddings, observer, clock, claim).await?;
                 continue;
             }
         };
