@@ -195,14 +195,6 @@ pub fn validate_observations(
     Ok(observations)
 }
 
-/// The result of the settled call. The capture ends with it, so no request reads it.
-pub fn observations_result(count: usize) -> ToolResultText {
-    crate::host_tool_result(&match count {
-        0 => "The Host recorded no observation, and the capture is complete.".to_owned(),
-        count => format!("The Host recorded {count} observations, and the capture is complete."),
-    })
-}
-
 #[cfg(test)]
 #[path = "record_memory_observations_tests.rs"]
 mod tests;

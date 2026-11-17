@@ -7,7 +7,7 @@
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ToolOutput, ToolOutputOrigin};
 use storyos_core::{
-    AgentRunKind, CurrentPassageAssemblyRecord, ToolCallState, ToolResultCandidate, ToolResultForm,
+    CurrentPassageAssemblyRecord, ToolCallState, ToolResultCandidate, ToolResultForm,
     ToolResultOutput,
 };
 
@@ -75,20 +75,6 @@ pub(crate) async fn open_next_step(
         .disclosure_request
         .as_ref()
         .ok_or_else(|| damaged("The Context Assembly of the function request is damaged"))?;
-    // A background Run has no steering input, no Chapter, and no Receipt.
-    if let AgentRunKind::MemoryCapture | AgentRunKind::MemoryConsolidation = run.kind {
-        let results = RunToolResults::load(client, claim).await?;
-        let next_position = crate::agent_run_steering::next_position(&run.decision_position)?;
-        crate::memory_capture::persist_next_step(
-            client,
-            claim,
-            retained,
-            &next_position,
-            &results.candidates(),
-        )
-        .await?;
-        return activate_step(client, claim, &next_position).await;
-    }
     let mut retained = retained.clone();
     let steering =
         crate::agent_run_steering::read_next(client, claim, &run.decision_position, &mut retained)
@@ -149,15 +135,6 @@ pub(crate) async fn open_next_step(
     )
     .await
     .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    activate_step(client, claim, &next_position).await
-}
-
-/// Makes the RunStep at `next_position` the active RunStep of the Run.
-async fn activate_step(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    next_position: &str,
-) -> Result<WorkPhase, CompleteAgentRunError> {
     client
         .execute(
             "UPDATE storyos.agent_runs SET active_decision_position = $4::text::numeric

@@ -1,6 +1,5 @@
 //! The Model Provider Adapter of the Contract-Faithful Fake Destination.
 
-mod capture_plan;
 mod create_plan;
 mod embedding;
 mod load_plan;
@@ -109,9 +108,6 @@ impl ModelProviderAdapter for FakeDestination {
             wire["previous_response_reference"] = serde_json::json!(reference);
         }
         wire["tool_choice"] = serde_json::json!(create.tool_choice.as_str());
-        if create.purpose == CreatePurpose::MemoryCapture {
-            wire["purpose"] = serde_json::json!("memory_capture");
-        }
         wire["tools"] = create
             .tool_exposure
             .tools
@@ -166,10 +162,7 @@ impl ModelProviderAdapter for FakeDestination {
             }),
             (None, Some(reference)) => FakePlan::UnknownCreate(reference),
             (None, None) => {
-                let planned = match create.purpose == CreatePurpose::MemoryCapture {
-                    true => capture_plan::plan(create),
-                    false => tool_loop_plan::plan(create),
-                };
+                let planned = tool_loop_plan::plan(create);
                 let reference = recovery_plan::mint_response_reference(
                     &projection.digest,
                     match create.successor_of {

@@ -112,10 +112,6 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             (CreatePurpose::CompactionSummary, _) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
-            // The mapping of a capture request comes with S7-D3f.
-            (CreatePurpose::MemoryCapture, _) => {
-                return Err(PreDispatchRefusal::UnsupportedRequest);
-            }
         };
         let projection = WirePayloadProjection {
             execution_profile: EXECUTION_PROFILE.to_owned(),

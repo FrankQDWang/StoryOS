@@ -1,29 +1,33 @@
-//! A capture in the store (ADR 0094 sections 5 and 8): the start and its refusals, the Worker
-//! loop with only the output Tool, the settled call and its observations, the runtime role, the
-//! Project Scope, and the Project Export Archive.
+//! The start of a capture in the store (ADR 0094 sections 5 and 8): the queued Run, the capture,
+//! and the first RunStep, each refusal, the Worker that leaves a capture Run queued, the runtime
+//! role, the Project Scope, and the Project Export Archive. Each test parks its capture Run.
 
 use serde_json::{Value, json};
+use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    MemoryCaptureSource, MemoryCaptureStartRefusal, MemoryCaptureStore, ProjectScope,
-    StartedMemoryCapture,
+    AgentRunWorkStore, ConversationSelection, MemoryCaptureSource, MemoryCaptureStartRefusal,
+    MemoryCaptureStore, ModelProviderAdapter, NoContractFaults, ProjectScope, StartedMemoryCapture,
+    complete_agent_run,
 };
-use storyos_core::{CaptureRefusal, ObservationRefusal};
+use storyos_core::CaptureRefusal;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_finish_rule::tests::{calls, complete};
+use crate::agent_run_dispatch::tests::{RuntimeClock, stores};
+use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_steering::tests::queued;
 use crate::command_sequence::tests::seed_project;
+use crate::create_agent_run::context::chapter_list_tests::admitted;
 use crate::memory_entries::tests::{archived_rows, as_runtime};
+use crate::project_research_binding::tests::park_queued_runs;
 
-/// A Project of `prefix` with one completed author Run, and the source of that Run.
+/// A Project of `prefix` with one completed author Run, its Chapter, and the source of that Run.
 async fn project(
     store: &PostgresProjectReader,
     admin: &Client,
     prefix: &str,
-) -> (ProjectScope, MemoryCaptureSource) {
-    let (scope, _chapter_id, run_id) = queued(store, prefix).await;
+) -> (ProjectScope, String, MemoryCaptureSource) {
+    let (scope, chapter_id, run_id) = queued(store, prefix).await;
     complete(store, admin, &scope, &run_id).await;
     let conversation_id: String = admin
         .query_one(
@@ -38,7 +42,7 @@ async fn project(
         first_run_id: run_id.clone(),
         last_run_id: run_id,
     };
-    (scope, source)
+    (scope, chapter_id, source)
 }
 
 async fn start(
@@ -53,205 +57,89 @@ async fn start(
         .unwrap()
 }
 
-/// The input of a capture: one script line for each call, in RunStep order.
-fn script(calls: &[(&str, Value)]) -> String {
-    let lines: Vec<String> = calls
-        .iter()
-        .map(|(name, arguments)| format!("SCRIPT:capture {name} {arguments}"))
-        .collect();
-    format!("林舟在雨夜撑船。\n{}", lines.join("\n"))
-}
-
-fn record(observations: Value) -> (&'static str, Value) {
-    (
-        "record_memory_observations",
-        json!({ "observations": observations }),
-    )
-}
-
-fn refused(position: u64, label: &str, text: &str) -> Value {
-    json!([
-        position,
-        "record_memory_observations",
-        "refused",
-        label,
-        text
-    ])
-}
-
-/// The Run status, the capture state and outcome, and each observation of the Run `run_id`.
-async fn settlement(admin: &Client, run_id: &str) -> Value {
+/// The Run of the capture as its kind and status, the capture as its source and state, the
+/// Context Assembly of its first RunStep as its Purpose, its cause, and each selected item, and
+/// the count of its Model Attempts.
+async fn started_rows(admin: &Client, started: &StartedMemoryCapture) -> Value {
     let row = admin
         .query_one(
-            "SELECT jsonb_build_array(run.status, capture.state, capture.outcome,
-                      COALESCE((SELECT jsonb_agg(jsonb_build_array(item.position, item.entry_type,
-                                  item.title, item.text, item.state) ORDER BY item.position)
-                                  FROM storyos.memory_observations AS item
-                                 WHERE item.capture_id = capture.capture_id), '[]'))::text
+            "SELECT jsonb_build_array(run.run_kind, run.status, run.chapter_id,
+                      run.conversation_id, capture.source_kind, capture.state, capture.outcome,
+                      capture.capture_id::text = $2,
+                      (SELECT jsonb_build_array(
+                                payload #>> '{operation_requirement,purpose}',
+                                payload #>> '{operation_requirement,cause}',
+                                jsonb_path_query_array(payload, '$.selected[*].source_class'),
+                                jsonb_path_query_array(payload, '$.selected[*].projection_mode'),
+                                jsonb_path_query_array(payload, '$.selected[*].content'))
+                         FROM storyos.context_assembly_manifests
+                        WHERE run_id = run.run_id AND manifest_role = 'decision'
+                          AND decision_position = 0),
+                      (SELECT count(*) FROM storyos.model_attempts
+                        WHERE run_id = run.run_id))::text
                FROM storyos.agent_runs AS run
                JOIN storyos.memory_captures AS capture USING (owner_user_id, project_id, run_id)
               WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
+            &[&started.run_id, &started.capture_id],
         )
         .await
         .unwrap();
     serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
 }
 
-/// The count of the Memory entry versions, the Proposals, the Research Artifacts, and the
-/// Authoritative Revisions of the Project of `scope`.
-async fn other_records(admin: &Client, scope: &ProjectScope) -> Value {
-    let tables = [
-        "memory_entry_versions",
-        "proposals",
-        "research_artifacts",
-        "authoritative_revisions",
-    ];
-    let mut counts = Vec::new();
-    for table in tables {
-        let row = admin
-            .query_one(
-                &format!(
-                    "SELECT count(*) FROM storyos.{table}
-                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid"
-                ),
-                &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-            )
-            .await
-            .unwrap();
-        counts.push(row.get::<_, i64>(/*idx*/ 0));
-    }
-    json!(counts)
-}
-
-/// For each decision request of the Run: its purpose, its `tool_choice`, and the names of its
-/// Tools.
-async fn requests(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(wire ->> 'purpose', wire ->> 'tool_choice',
-                      wire -> 'tools')
-                      ORDER BY decision_position)::text
-               FROM storyos.model_attempts,
-                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
-              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
-}
-
-/// An unexposed call and a refused list do not end the capture: the next RunStep corrects the
-/// list, the settled call stores each observation in list order and completes the Run, and the
-/// capture writes no Memory entry, no Proposal, no Research Artifact, and no manuscript change.
+/// A start writes the queued Run, the capture, and the first RunStep. The Worker claims the later
+/// Run of the author and not the capture Run, so the capture Run stays queued and no request goes
+/// to a destination for it.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_capture_records_its_observations_after_refused_calls_and_writes_no_other_record() {
+async fn a_started_capture_stays_queued_and_the_worker_claims_only_the_run_of_the_author() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, source) = project(&store, &admin, "fd1").await;
-    let before = other_records(&admin, &scope).await;
-    let item = |kind, title| json!({"type": kind, "title": title, "text": "雨夜。"});
-    let kinds = ["character", "other", "other", "major_event", "relationship"];
-    let five: Vec<Value> = kinds.iter().map(|kind| item(*kind, "林舟")).collect();
-    let input = script(&[
-        ("propose_edit", json!({"reason": "改写"})),
-        record(json!(vec![item("other", "林舟"); 6])),
-        record(json!([item("other", "林舟"), item("place", "港口")])),
-        record(json!(five)),
-    ]);
-    let started = start(&store, &scope, &source, &input).await.unwrap();
-    complete(&store, &admin, &scope, &started.run_id).await;
+    let (scope, chapter_id, source) = project(&store, &admin, "fd1").await;
+    let started = start(&store, &scope, &source, "林舟在雨夜撑船。")
+        .await
+        .unwrap();
+    let new = ConversationSelection::New;
+    let author = admitted(&store, &scope, &chapter_id, "fd2", "Help.", new).await;
+    let claim = store
+        .claim_next_agent_run(FakeDestination::ADAPTERS)
+        .await
+        .unwrap()
+        .unwrap();
+    let adapter = FakeDestination;
+    complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
 
-    let calls = calls(&admin, &started.run_id).await;
+    assert_eq!(claim.run_id, author);
     assert_eq!(
-        (calls[0][1].clone(), calls[0][2].clone()),
-        (json!("propose_edit"), json!("refused"))
-    );
-    let too_many = ObservationRefusal::TooMany;
-    let invalid = ObservationRefusal::Invalid { position: 2 };
-    assert_eq!(
-        calls[1..],
-        [
-            refused(1, too_many.label(), &too_many.result().text),
-            refused(2, invalid.label(), &invalid.result().text),
-            json!([
-                3,
-                "record_memory_observations",
-                "settled",
-                null,
-                "The Host recorded 5 observations, and the capture is complete."
-            ]),
-        ]
-    );
-    let observation = |position, kind| json!([position, kind, "林舟", "雨夜。", "waiting"]);
-    assert_eq!(
-        settlement(&admin, &started.run_id).await,
+        started_rows(&admin, &started).await,
         json!([
-            "completed",
-            "settled",
-            "observations_recorded",
+            "memory_capture",
+            "queued",
+            null,
+            null,
+            "conversation",
+            "running",
+            null,
+            true,
             [
-                observation(1, "character"),
-                observation(2, "other"),
-                observation(3, "other"),
-                observation(4, "major_event"),
-                observation(5, "relationship"),
-            ]
+                "memory_capture",
+                "host_schedule",
+                ["memory_capture_input"],
+                ["exact_required"],
+                ["林舟在雨夜撑船。"]
+            ],
+            0
         ])
     );
-    let request = json!(["memory_capture", "required", ["record_memory_observations"]]);
-    assert_eq!(
-        requests(&admin, &started.run_id).await,
-        json!(vec![request; 4])
-    );
-    assert_eq!(other_records(&admin, &scope).await, before);
+    park_queued_runs(&admin, &scope).await;
 }
 
-/// U+0000, an empty title, and a long text refuse the call with their labels, and an empty list
-/// settles the capture with no observation.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn an_empty_list_settles_the_capture_with_no_observation_after_each_refusal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let (scope, source) = project(&store, &admin, "fd2").await;
-    let long = "字".repeat(storyos_core::MEMORY_TEXT_MAX_CHARS + 1);
-    let input = script(&[
-        record(json!([{"type": "other", "title": "雨", "text": "a\u{0}"}])),
-        record(json!([{"type": "other", "title": " ", "text": "雨。"}])),
-        record(json!([{"type": "other", "title": "雨", "text": long}])),
-    ]);
-    let started = start(&store, &scope, &source, &input).await.unwrap();
-    complete(&store, &admin, &scope, &started.run_id).await;
-
-    let labels: Vec<Value> = calls(&admin, &started.run_id)
-        .await
-        .iter()
-        .map(|call| json!([call[2], call[3]]))
-        .collect();
-    assert_eq!(
-        labels,
-        [
-            json!(["refused", "unstorable_text"]),
-            json!(["refused", "observation_invalid"]),
-            json!(["refused", "observation_too_long"]),
-            json!(["settled", null]),
-        ]
-    );
-    assert_eq!(
-        settlement(&admin, &started.run_id).await,
-        json!(["completed", "settled", "no_observation", []])
-    );
-}
-
-/// Each refused start writes no Run and no capture: no binding, a grant that does not name the
-/// Purpose, an input above the item limit, and a source of another Project.
+/// Each refused start writes no Run and no capture: no binding, an input above the item limit, a
+/// source of another Project, a grant that does not name the Purpose, and no assistance.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_refused_start_writes_no_row() {
@@ -259,8 +147,8 @@ async fn a_refused_start_writes_no_row() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, source) = project(&store, &admin, "fd3").await;
-    let (other, other_source) = project(&store, &admin, "fd4").await;
+    let (scope, _, source) = project(&store, &admin, "fd3").await;
+    let (other, _, other_source) = project(&store, &admin, "fd4").await;
     let unbound = seed_project(&store, "fd50").await;
     let rows = async |scope: &ProjectScope| {
         admin
@@ -297,25 +185,30 @@ async fn a_refused_start_writes_no_row() {
             Err(MemoryCaptureStartRefusal::SourceNotFound),
         ]
     );
-    admin
-        .execute(
-            "UPDATE storyos.project_destination_grants
-                SET grant_scope = 'project_writing_assistance_v4'
-              WHERE project_id = $1::text::uuid",
-            &[&other.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
+    let other_id = other.project_id.as_ref();
+    let grant = "UPDATE storyos.project_destination_grants
+                    SET grant_scope = 'project_writing_assistance_v4' WHERE project_id = $1::text::uuid";
+    admin.execute(grant, &[&other_id]).await.unwrap();
+    let not_granted = start(&store, &other, &other_source, "雨。").await;
+    let policy = "UPDATE storyos.project_policy_revisions SET availability = 'unavailable'
+                   WHERE project_id = $1::text::uuid";
+    admin.execute(policy, &[&other_id]).await.unwrap();
     assert_eq!(
-        start(&store, &other, &other_source, "雨。").await,
-        Err(admission(CaptureRefusal::PurposeNotGranted))
+        [
+            not_granted,
+            start(&store, &other, &other_source, "雨。").await
+        ],
+        [
+            Err(admission(CaptureRefusal::PurposeNotGranted)),
+            Err(admission(CaptureRefusal::AssistanceUnavailable))
+        ]
     );
     assert_eq!((rows(&scope).await, rows(&unbound).await), (before, (0, 0)));
 }
 
 /// The runtime role cannot change the content of a capture or of an observation and cannot
 /// delete them, a read in the Scope of another Project sees no row, and the archive has each
-/// row.
+/// row. SQL writes the observation as a test row, because S7-D3b2 settles the output call.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_runtime_role_cannot_change_a_capture_and_the_archive_has_its_rows() {
@@ -323,13 +216,24 @@ async fn the_runtime_role_cannot_change_a_capture_and_the_archive_has_its_rows()
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, source) = project(&store, &admin, "fd6").await;
+    let (scope, _, source) = project(&store, &admin, "fd6").await;
     let other = seed_project(&store, "fd70").await;
-    let input = script(&[record(json!([
-        {"type": "foreshadowing", "title": "铜铃", "text": "铜铃会再响。"}
-    ]))]);
-    let started = start(&store, &scope, &source, &input).await.unwrap();
-    complete(&store, &admin, &scope, &started.run_id).await;
+    let started = start(&store, &scope, &source, "铜铃响了。").await.unwrap();
+    park_queued_runs(&admin, &scope).await;
+    admin
+        .execute(
+            "INSERT INTO storyos.memory_observations
+               (owner_user_id, project_id, capture_id, position, entry_type, title, text)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 1, 'foreshadowing', '铜铃',
+                     '铜铃会再响。')",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &started.capture_id,
+            ],
+        )
+        .await
+        .unwrap();
     let statements = [
         "SELECT 1 FROM storyos.memory_observations",
         "UPDATE storyos.memory_captures SET source_kind = 'chapter'",
@@ -353,27 +257,19 @@ async fn the_runtime_role_cannot_change_a_capture_and_the_archive_has_its_rows()
             vec![Ok(0), Ok(0)]
         )
     );
-    let [captures, observations] = archived_rows(
-        &store,
-        &scope,
-        "fd",
-        ["memory_captures", "memory_observations"],
-    )
-    .await;
+    let tables = ["memory_captures", "memory_observations"];
+    let [captures, observations] = archived_rows(&store, &scope, "fd", tables).await;
+    let keys = ["source_kind", "state", "outcome", "entry_type", "title"];
+    let fields = |rows: Vec<Value>| -> Vec<_> {
+        rows.iter()
+            .map(|row| json!(keys.map(|k| row[k].clone())))
+            .collect()
+    };
     assert_eq!(
+        (fields(captures), fields(observations)),
         (
-            captures
-                .iter()
-                .map(|row| json!([row["source_kind"], row["state"], row["outcome"]]))
-                .collect::<Vec<_>>(),
-            observations
-                .iter()
-                .map(|row| json!([row["entry_type"], row["title"], row["state"]]))
-                .collect::<Vec<_>>()
-        ),
-        (
-            vec![json!(["conversation", "settled", "observations_recorded"])],
-            vec![json!(["foreshadowing", "铜铃", "waiting"])]
+            vec![json!(["conversation", "running", null, null, null])],
+            vec![json!([null, "waiting", null, "foreshadowing", "铜铃"])]
         )
     );
 }

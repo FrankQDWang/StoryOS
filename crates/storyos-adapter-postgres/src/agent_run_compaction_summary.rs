@@ -83,7 +83,7 @@ pub(crate) async fn prior_chain(
     let continuation = crate::agent_run_continuation::decide_continuation(
         client,
         claim,
-        Some(run.conversation()?),
+        run.conversation()?,
         &run.author_message,
         &assistance,
         &exposure.digest(),

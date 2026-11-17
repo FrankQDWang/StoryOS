@@ -117,7 +117,6 @@ mod agent_run_read_chapter;
 mod agent_run_read_memory_entry;
 mod agent_run_read_skill_resource;
 mod agent_run_read_tool_result;
-mod agent_run_record_observations;
 mod agent_run_recovery;
 mod agent_run_results;
 mod agent_run_retrieval;

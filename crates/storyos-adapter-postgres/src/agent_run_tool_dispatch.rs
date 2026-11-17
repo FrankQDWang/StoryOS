@@ -46,12 +46,6 @@ impl ToolDispatchStore for PostgresProjectReader {
                     storyos_core::host_tool(&row.registration_revision, &row.spec_revision)
                 {
                     crate::agent_run_host_tool::execute(client, claim, &row, spec).await?;
-                    // The settled output call of a capture completed its Run (ADR 0094 section 5).
-                    if spec.operation == storyos_core::ToolOperation::RecordMemoryObservations
-                        && load_run_phase(client, claim).await?.settled()
-                    {
-                        return Ok(None);
-                    }
                     continue;
                 }
                 let plan = row.plan()?;
