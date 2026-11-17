@@ -139,7 +139,14 @@ async fn each_project_export_table_is_a_live_table() {
                 .any(|(table, _)| *table == "embedding_attempts")
     );
     // StoryOS builds the passage vectors again from the Chapters, so the archive does not hold
-    // them (ADR 0095 section 2).
+    // them or their index work (ADR 0095 sections 2 and 4).
+    assert!(
+        live.contains("passage_index_work")
+            && !PROJECT_EXPORT_TABLES.contains(&"passage_index_work")
+            && !super::EXPORT_TABLES
+                .iter()
+                .any(|(table, _)| *table == "passage_index_work")
+    );
     assert!(
         live.contains("passage_vectors")
             && !PROJECT_EXPORT_TABLES.contains(&"passage_vectors")
