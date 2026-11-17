@@ -154,29 +154,10 @@ pub(crate) async fn persist_current_passage_assembly(
     .await
     .map_err(agent_run_database_error)?;
     storyos_core::assemble_skill_catalog(&mut record, &catalog);
-    let chapters = crate::manuscript_search::read_live_chapter_blocks(
-        client,
-        command.project_scope,
-        crate::manuscript_search::LiveChapterReadExtent::AllChapters,
-    )
-    .await
-    .map_err(|error| CreateAgentRunError::Unavailable(Box::new(error)))?;
-    storyos_core::assemble_chapter_list(
-        &mut record,
-        &chapters
-            .into_iter()
-            .map(|chapter| storyos_core::ChapterListEntry {
-                volume_order: chapter.volume_order,
-                volume_title: chapter.volume_title,
-                chapter_id: chapter.chapter_id.as_ref().to_owned(),
-                title: chapter.title,
-                length: storyos_core::count_stored_texts(
-                    chapter.blocks.iter().map(|block| block.text.as_str()),
-                )
-                .character_count,
-            })
-            .collect::<Vec<_>>(),
-    );
+    let chapters = chapter_list_entries(client, command.project_scope)
+        .await
+        .map_err(|error| CreateAgentRunError::Unavailable(Box::new(error)))?;
+    storyos_core::assemble_chapter_list(&mut record, &chapters);
     let memory = match command.memory_revision {
         Some(revision) => {
             crate::memory_entries::read_memory_index(client, command.project_scope, revision)
@@ -463,6 +444,33 @@ pub(crate) async fn insert_assembly(
         .await
         .map_err(agent_run_database_error)?;
     Ok(assembly_manifest_id)
+}
+
+/// The entries of the Chapter list of the Project: each live Chapter in manuscript order with the
+/// character count of its authoritative head text.
+pub(crate) async fn chapter_list_entries(
+    client: &impl tokio_postgres::GenericClient,
+    scope: &ProjectScope,
+) -> Result<Vec<storyos_core::ChapterListEntry>, storyos_application::ProjectReadError> {
+    let chapters = crate::manuscript_search::read_live_chapter_blocks(
+        client,
+        scope,
+        crate::manuscript_search::LiveChapterReadExtent::AllChapters,
+    )
+    .await?;
+    Ok(chapters
+        .into_iter()
+        .map(|chapter| storyos_core::ChapterListEntry {
+            volume_order: chapter.volume_order,
+            volume_title: chapter.volume_title,
+            chapter_id: chapter.chapter_id.as_ref().to_owned(),
+            title: chapter.title,
+            length: storyos_core::count_stored_texts(
+                chapter.blocks.iter().map(|block| block.text.as_str()),
+            )
+            .character_count,
+        })
+        .collect())
 }
 
 #[cfg(test)]

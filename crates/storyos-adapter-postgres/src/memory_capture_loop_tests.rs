@@ -13,6 +13,14 @@ use crate::agent_run_finish_rule::tests::{calls, complete};
 use crate::create_agent_run_tests::skill_tests::{fixture, set};
 
 /// The input of a capture: one script line for each call, in RunStep order.
+/// The Tool Exposure of each RunStep of a capture (ADR 0094 section 5).
+pub(crate) const CAPTURE_TOOLS: [&str; 4] = [
+    "read_chapter",
+    "search_manuscript",
+    "read_memory_entry",
+    "record_memory_observations",
+];
+
 pub(crate) fn script(calls: &[(&str, Value)]) -> String {
     let lines: Vec<String> = calls
         .iter()
@@ -179,7 +187,7 @@ async fn a_capture_records_its_observations_after_refused_calls_and_writes_no_ot
             observations
         ])
     );
-    let request = json!(["memory_capture", "required", ["record_memory_observations"]]);
+    let request = json!(["memory_capture", "required", CAPTURE_TOOLS]);
     assert_eq!(
         requests(&admin, &started.run_id).await,
         json!(vec![request; 4])
@@ -250,7 +258,7 @@ async fn a_capture_that_never_records_settles_with_the_step_limit() {
         .map(|call| json!([call[1], call[2]]))
         .collect();
     assert_eq!(states, vec![json!(["propose_edit", "refused"]); max]);
-    let request = json!(["memory_capture", "required", ["record_memory_observations"]]);
+    let request = json!(["memory_capture", "required", CAPTURE_TOOLS]);
     assert_eq!(
         requests(&admin, &started.run_id).await,
         json!(vec![request; max])

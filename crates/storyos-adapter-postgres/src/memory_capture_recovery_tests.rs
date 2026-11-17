@@ -350,7 +350,11 @@ async fn an_edit_of_a_chapter_does_not_change_a_capture() {
         .iter()
         .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
         .collect();
-    assert_eq!(inputs, vec![json!([input]); 2]);
+    // The pinned input keeps the Chapter list of the start: 8 characters before the edit.
+    let chapters = r#"{"volume":"Volume A"}
+[1,8,"Chapter A"]
+[2,0,"Fog"]"#;
+    assert_eq!(inputs, vec![json!([input, chapters]); 2]);
     assert_eq!(
         settlement(&admin, &started.run_id).await,
         json!(["completed", "settled", "no_observation", null, []])
