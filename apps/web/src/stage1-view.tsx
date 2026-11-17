@@ -271,25 +271,30 @@ function ProjectReadyView({
     return (async () => {
       let reopened = false;
       let cancelled = false;
+      // A repeat uses the Chapter of the first read, so the command and its idempotency key stay the same.
+      let target: GetChapterResponse | undefined;
       try {
         const quiet = await active.wait.retry(() => {
           active.waiting = false;
           setSwitchWaiting(undefined);
           return writing.runAfterQuiesce("settled", async () => {
             if (generation !== switchGenerationRef.current) return;
-            const opened = await openSelectedChapter({
-              baseUrl,
-              projectId: state.project.project.project_id,
-              chapterId,
-              expectedScope: state.project.project_scope,
-              fetchImpl,
-            });
-            if (generation !== switchGenerationRef.current) return;
-            if (opened.kind !== "opened") {
-              setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
-              return;
+            if (target === undefined) {
+              const opened = await openSelectedChapter({
+                baseUrl,
+                projectId: state.project.project.project_id,
+                chapterId,
+                expectedScope: state.project.project_scope,
+                fetchImpl,
+              });
+              if (generation !== switchGenerationRef.current) return;
+              if (opened.kind !== "opened") {
+                setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
+                return;
+              }
+              target = opened.chapter;
             }
-            // A Challenge rate limit propagates to the wait. The repeat uses the same idempotency key.
+            // A Challenge rate limit propagates to the wait.
             const switched = await setOwnedCurrentChapter({
               baseUrl,
               fetchImpl,
@@ -297,7 +302,7 @@ function ProjectReadyView({
               projectId: state.project.project.project_id,
               chapterId,
               expectedCurrentChapterId: currentChapterId,
-              expectedTargetRevisionId: opened.chapter.chapter.current_revision.revision_id,
+              expectedTargetRevisionId: target.chapter.current_revision.revision_id,
               editorSessionId,
             });
             if (switched.effect.kind !== "authoritative_applied"

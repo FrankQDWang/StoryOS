@@ -156,12 +156,15 @@ it("keeps the switch in progress through a Challenge rate limit and opens the Ch
   await expect.poll(opened.shown).toEqual({ title: "Chapter B", alert: undefined, waiting: "" });
   expect({ waited: opened.waited, switchesBefore, switches: opened.switches(),
     challenges: opened.server.challengeKeys.length, keys: new Set(opened.server.challengeKeys).size,
+    // The repeat does not read Chapter B again, so its Revision and the idempotency key stay the same.
+    chapterB: opened.server.requests.filter((entry) => entry.endsWith(`/chapters/${CHAPTER_B}`)).length,
     sessions: opened.server.requests.filter((entry) => entry.endsWith("/editor-sessions")).length }).toEqual({
     waited: { title: "Chapter A", alert: undefined, waiting: CHAPTER_B },
     switchesBefore: 0,
     switches: 1,
     challenges: 2,
     keys: 1,
+    chapterB: 2,
     sessions: 1,
   });
 });
