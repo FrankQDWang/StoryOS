@@ -33,6 +33,7 @@ command_kinds! {
     UpdateProject => "updateProject",
     UpdateProjectAssistance => "updateProjectAssistance",
     UpdateProjectInstruction => "updateProjectInstruction",
+    DeleteMemoryEntry => "deleteMemoryEntry",
     CreateEditorSession => "createEditorSession",
     TakeOverProjectWriter => "takeOverProjectWriter",
     CreateVolume => "createVolume",

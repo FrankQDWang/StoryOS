@@ -5,7 +5,8 @@
 
 use storyos_application::ProjectScope;
 use storyos_core::{
-    CurrentMemoryEntry, MemoryEntryRead, MemoryEntryType, MemoryIndexEntry, MemoryVersionWrite,
+    CurrentMemoryEntry, LastMemoryVersion, MemoryEntryRead, MemoryEntryState, MemoryEntryType,
+    MemoryIndexEntry, MemoryVersionWrite,
 };
 
 fn invalid(message: &'static str) -> Box<dyn std::error::Error + Send + Sync> {
@@ -138,6 +139,64 @@ pub(crate) async fn current_memory(
         })
         .collect::<Result<_, Box<dyn std::error::Error + Send + Sync>>>()?;
     Ok((revision, next, entries))
+}
+
+/// Locks the Memory head of the Project and gives its Memory revision. Each writer of a Memory
+/// version takes the lock before it reads the Memory, so that the `write_memory` call of a Run and
+/// the delete of the author move the Memory revision one at a time. A Project with no head has no
+/// entry, no row to lock, and the revision 0.
+pub(crate) async fn lock_memory_head(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    let row = client
+        .query_opt(
+            "SELECT memory_revision::text FROM storyos.project_memory_heads
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+              FOR UPDATE",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await?;
+    row.map_or(Ok(0), |row| numeric(row.get(0)))
+}
+
+/// The last version of the entry `memory_entry_id` of the Project in each state, or `None` when
+/// the Project has no entry with the identity.
+pub(crate) async fn last_entry_version(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    memory_entry_id: &str,
+) -> Result<Option<LastMemoryVersion>, Box<dyn std::error::Error + Send + Sync>> {
+    let row = client
+        .query_opt(
+            "SELECT memory_entry_id::text, entry_number::text, version::text, state, entry_type,
+                    title, description
+               FROM storyos.memory_entry_versions
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND memory_entry_id = $3::text::uuid
+              ORDER BY memory_revision DESC
+              LIMIT 1",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &memory_entry_id,
+            ],
+        )
+        .await?;
+    row.map(|row| {
+        Ok(LastMemoryVersion {
+            memory_entry_id: row.get(0),
+            number: numeric(row.get(1))?,
+            version: numeric(row.get(2))?,
+            state: MemoryEntryState::parse(row.get(3))
+                .ok_or_else(|| invalid("A Memory Entry state is invalid"))?,
+            entry_type: MemoryEntryType::parse(row.get(4))
+                .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
+            title: row.get(5),
+            description: row.get(6),
+        })
+    })
+    .transpose()
 }
 
 /// The time form of a Memory record: RFC 3339 in UTC with milliseconds, so that the order of

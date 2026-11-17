@@ -5,7 +5,8 @@ use storyos_application::{
     ProjectCommandError, RefusableCommandError,
 };
 use storyos_core::{
-    CreateAgentRunRefusal, ExportHumanReadableManuscriptRefusal, UpdateProjectInstructionRefusal,
+    CreateAgentRunRefusal, DeleteMemoryEntryRefusal, ExportHumanReadableManuscriptRefusal,
+    UpdateProjectInstructionRefusal,
 };
 use tokio_postgres::error::SqlState;
 
@@ -68,6 +69,14 @@ impl RefusalCode for UpdateProjectInstructionRefusal {
     fn refusal_code(&self) -> &'static str {
         match self {
             Self::InstructionOverItemLimit => "instruction_over_item_limit",
+        }
+    }
+}
+
+impl RefusalCode for DeleteMemoryEntryRefusal {
+    fn refusal_code(&self) -> &'static str {
+        match self {
+            Self::EntryNotFound => "memory_entry_not_found",
         }
     }
 }

@@ -31,6 +31,7 @@ fn event_owner(kind: ProjectActivityKind) -> Owner {
         | ProjectActivityKind::ProjectUpdated
         | ProjectActivityKind::ProjectAssistanceUpdated
         | ProjectActivityKind::ProjectInstructionUpdated
+        | ProjectActivityKind::MemoryEntryDeleted
         | ProjectActivityKind::VolumeCreated
         | ProjectActivityKind::VolumeUpdated
         | ProjectActivityKind::VolumeDeleted

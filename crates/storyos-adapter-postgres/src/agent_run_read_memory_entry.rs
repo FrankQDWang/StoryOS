@@ -65,4 +65,4 @@ pub(crate) async fn execute(
 
 #[cfg(test)]
 #[path = "agent_run_read_memory_entry_tests.rs"]
-mod tests;
+pub(crate) mod tests;
