@@ -21,12 +21,24 @@ const SET_CURRENT_CHAPTER = "storyos.command.set-current-chapter.request.v1";
 
 type Timer = { callback: () => void; timeout: number; cleared: boolean };
 
-/** A fake Server with Chapters A (current), B, and C. It refuses the next Challenge of `limited` one time. */
+const LIMITED_BODY = JSON.stringify({ schema_id: "storyos.problem.v1", code: "challenge_rate_limited",
+  message: "The command challenge rate limit is exceeded." });
+
+/** Runs the queued microtasks. The fake gives each response in microtasks, so no timer is necessary. */
+async function drainMicrotasks() {
+  for (let turn = 0; turn < 40; turn += 1) await Promise.resolve();
+}
+
+/**
+ * A fake Server with Chapters A (current), B, and C. It refuses the next Challenge of `limited` one time. When
+ * `held` is true, it also refuses the Challenge after that one, but only when the test calls `release`.
+ */
 function fakeServer() {
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
   let current = CHAPTER;
-  const server = { requests: [] as string[], challengeKeys: [] as string[], limited: undefined as string | undefined };
+  const server = { requests: [] as string[], challengeKeys: [] as string[], limited: undefined as string | undefined,
+    held: false, release: undefined as (() => void) | undefined };
   const session = () => current === CHAPTER ? scenario.session : { ...scenario.session,
     base_snapshot: { ...scenario.session.base_snapshot, chapter_id: current,
       authoritative_head_revision_id: REVISIONS[current]!, target_refs: [`manuscript:${current}`],
@@ -64,10 +76,15 @@ function fakeServer() {
       const request = JSON.parse(String(init?.body)) as { command_schema: string; idempotency_key: string };
       if (request.command_schema === SET_CURRENT_CHAPTER) server.challengeKeys.push(request.idempotency_key);
       if (request.command_schema === server.limited) {
-        server.limited = undefined;
-        return new Response(JSON.stringify({ schema_id: "storyos.problem.v1", code: "challenge_rate_limited",
-          message: "The command challenge rate limit is exceeded." }),
-        { status: 429, headers: { "content-type": "application/json", "retry-after": "7" } });
+        // The body resolves in a microtask, so the test can wait for the end of the attempt with no timer.
+        const refusal = new Response(LIMITED_BODY,
+          { status: 429, headers: { "content-type": "application/json", "retry-after": "7" } });
+        Object.defineProperty(refusal, "text", { value: async () => LIMITED_BODY });
+        if (server.limited !== undefined && server.held && server.challengeKeys.length > 1) {
+          return new Promise<Response>((resolve) => { server.release = () => resolve(refusal); });
+        }
+        if (!server.held) server.limited = undefined;
+        return refusal;
       }
       return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-09-12T00:00:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
@@ -99,7 +116,7 @@ afterEach(async () => {
 });
 
 /** Opens the workspace, refuses the next Challenge of `limited`, and clicks Chapter B in the manuscript tree. */
-async function clickWhileLimited(limited: string) {
+async function clickWhileLimited(limited: string, held = false) {
   const { scenario, server, fetchImpl } = fakeServer();
   await deleteJournal(scenario.journalName);
   document.body.innerHTML = '<main id="app"></main>';
@@ -119,6 +136,7 @@ async function clickWhileLimited(limited: string) {
     loaded.root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${chapterId}"]`)!.click();
   await expect.poll(() => loaded.root.querySelector(`button[data-chapter-id="${CHAPTER_B}"]`)).not.toBeNull();
   server.limited = limited;
+  server.held = held;
   click(CHAPTER_B);
   await expect.poll(() => timers.filter((timer) => timer.timeout === 7_000).length).toBe(1);
   const shown = () => ({ title: loaded.root.querySelector(".editor-panel h2")?.textContent,
@@ -154,7 +172,7 @@ it("ends the wait of a switch when the author clicks another Chapter, and opens 
   opened.click(CHAPTER_C);
   await expect.poll(opened.shown).toEqual({ title: "Chapter C", alert: undefined, waiting: "" });
   opened.timers.find((timer) => timer.timeout === 7_000)!.callback();
-  await new Promise((resolve) => { setTimeout(resolve, 50); });
+  await drainMicrotasks();
 
   expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared, switches: opened.switches(),
     chapterB: opened.server.requests.filter((entry) => entry.endsWith(`/chapters/${CHAPTER_B}`)).length,
@@ -169,8 +187,22 @@ it("ends the wait of a switch when the author leaves the Project, and sends no r
 
   opened.view.unmount();
   opened.timers.find((timer) => timer.timeout === 7_000)!.callback();
-  await new Promise((resolve) => { setTimeout(resolve, 50); });
+  await drainMicrotasks();
 
   expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared,
     later: opened.server.requests.slice(requests) }).toEqual({ cleared: true, later: [] });
+});
+
+it("ends a repeat in progress when the author leaves the Project, and starts no later wait", async () => {
+  const opened = await clickWhileLimited(SET_CURRENT_CHAPTER, true);
+
+  opened.timers.find((timer) => timer.timeout === 7_000)!.callback();
+  await expect.poll(() => opened.server.release).not.toBeUndefined();
+  const requests = opened.server.requests.length;
+  opened.view.unmount();
+  opened.server.release!();
+  await drainMicrotasks();
+
+  expect({ timeouts: opened.timers.filter((timer) => timer.timeout === 7_000).length,
+    later: opened.server.requests.slice(requests) }).toEqual({ timeouts: 1, later: [] });
 });

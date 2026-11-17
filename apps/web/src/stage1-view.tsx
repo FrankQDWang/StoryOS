@@ -143,8 +143,9 @@ function ProjectReadyView({
   const [switchRecovery, setSwitchRecovery] = useState<string>();
   // The Chapter whose switch waits for the Retry-After of a Command Challenge rate limit (#1679).
   const [switchWaiting, setSwitchWaiting] = useState<string>();
-  const waitingSwitchRef = useRef<ChallengeAdmissionWait | undefined>(undefined);
-  useEffect(() => () => { waitingSwitchRef.current?.cancel(); }, []);
+  // The wait of the current switch, from the click to its end. Closing the view ends it.
+  const switchWaitRef = useRef<{ wait: ChallengeAdmissionWait; waiting: boolean } | undefined>(undefined);
+  useEffect(() => () => { switchWaitRef.current?.wait.cancel(); }, []);
   // A locator of the current AgentRun or of a navigation stays in memory and only causes an earlier list read.
   // A Chapter change remounts this view, so the store of the Project keeps the locators for the next view.
   const projectId = state.project.project.project_id;
@@ -248,11 +249,11 @@ function ProjectReadyView({
   // when the command changed the Current Chapter and the workspace opens again at the Chapter.
   const selectChapter = (chapterId: string): Promise<boolean> => {
     // The latest click of the author wins: a click ends the wait of an earlier switch (#1679).
-    const waiting = waitingSwitchRef.current;
-    if (structureInFlightRef.current && waiting === undefined) return Promise.resolve(false);
-    if (waiting !== undefined) {
-      waiting.cancel();
-      waitingSwitchRef.current = undefined;
+    const earlier = switchWaitRef.current;
+    if (structureInFlightRef.current && earlier?.waiting !== true) return Promise.resolve(false);
+    if (earlier?.waiting === true) {
+      earlier.wait.cancel();
+      switchWaitRef.current = undefined;
       setSwitchWaiting(undefined);
       structureInFlightRef.current = false;
     }
@@ -265,13 +266,14 @@ function ProjectReadyView({
     const editorSessionId = state.editor.session.editor_session.editor_session_id;
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
-    const wait = createChallengeAdmissionWait(writingTimers);
+    const active = { wait: createChallengeAdmissionWait(writingTimers), waiting: false };
+    switchWaitRef.current = active;
     return (async () => {
       let reopened = false;
       let cancelled = false;
       try {
-        const quiet = await wait.retry(() => {
-          waitingSwitchRef.current = undefined;
+        const quiet = await active.wait.retry(() => {
+          active.waiting = false;
           setSwitchWaiting(undefined);
           return writing.runAfterQuiesce("settled", async () => {
             if (generation !== switchGenerationRef.current) return;
@@ -312,7 +314,7 @@ function ProjectReadyView({
             }));
           });
         }, () => {
-          waitingSwitchRef.current = wait;
+          active.waiting = true;
           setSwitchWaiting(chapterId);
         });
         if (quiet === undefined) {
@@ -329,6 +331,7 @@ function ProjectReadyView({
       } finally {
         // A cancelled wait belongs to an earlier click or to a view that closed.
         if (!cancelled) structureInFlightRef.current = false;
+        if (switchWaitRef.current === active) switchWaitRef.current = undefined;
       }
       return reopened;
     })();
