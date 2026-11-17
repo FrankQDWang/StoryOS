@@ -94,6 +94,6 @@ test("listMemoryEntries gives the conflict flag only for a flagged entry of its 
       source: { kind: "chapter", chapter_id: chapterId, title: "Chapter A", availability: "available" } },
     plain, false]);
   const stranger = sessionFetch(started.baseUrl, "session-b");
-  await assert.rejects(() => list({ ...story, fetchImpl: stranger }),
+  await assert.rejects(() => listMemoryEntries({ baseUrl: started.baseUrl, projectId: story.projectId, fetchImpl: stranger }),
     (error) => unavailable(error, USER_A, "第三章说他不撑船。"));
 });
