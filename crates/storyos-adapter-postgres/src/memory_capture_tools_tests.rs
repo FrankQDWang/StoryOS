@@ -1,6 +1,6 @@
-//! The read-only Tools and the reference items of a capture (ADR 0094 sections 4, 5, and 8): the
-//! first request sends the Memory Index, the Chapter list, and the delete marks after the input,
-//! and the manuscript and Memory reads execute as in a Run of the author.
+//! The read-only Tools and the reference items of a capture (ADR 0094 sections 4, 5, and 8). The
+//! first request sends the Memory Index, the Chapter list, and the delete marks after the input.
+//! The manuscript and Memory reads execute as in a Run of the author.
 
 use serde_json::{Value, json};
 use storyos_application::{ChapterId, DeleteChapterInput, MemoryCaptureSource, ProjectScope};

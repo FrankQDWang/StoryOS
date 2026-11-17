@@ -137,9 +137,9 @@ pub struct ConversationCaptureInput {
 ///
 /// When the oldest Run alone is above the limit, the input has only that Run as a
 /// `deterministic_excerpt`. It has the whole messages of the Run in their order while they fit.
-/// The first message that does not fit keeps its longest prefix that fits, and an explicit mark
-/// gives the kept and the total character counts and the count of the later messages that it
-/// omits. When the author messages of the Run fit, the cut is in the final answer. `None`: no Run
+/// The first message that does not fit keeps its longest prefix that fits. An explicit mark gives
+/// the kept and the total character counts. It also gives the count of the later messages that
+/// the excerpt omits. When the author messages of the Run fit, the cut is in the final answer. `None`: no Run
 /// is unread.
 pub fn conversation_capture_input(
     runs: &[ConversationRunMessages],
@@ -196,8 +196,8 @@ fn run_text(run: &ConversationRunMessages, whole: usize, kept: Option<usize>) ->
 }
 
 /// The excerpt of one Run above the limit. The count of the text grows with each whole message
-/// and with each kept character, so the excerpt takes the most whole messages that leave room
-/// for the mark, and then a binary search finds the longest prefix of the next message.
+/// and with each kept character. Thus the excerpt takes the most whole messages that leave room
+/// for the mark. Then a binary search finds the longest prefix of the next message.
 fn run_excerpt(run: &ConversationRunMessages, item_token_limit: u64) -> String {
     let fits = |whole, kept| {
         count_context_item_tokens(&run_text(run, whole, Some(kept))) <= item_token_limit
