@@ -2,6 +2,7 @@ use serde_json::json;
 
 use super::*;
 use crate::RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC as SPEC;
+use ObservationRefusal::{Invalid, TooLong, TooMany};
 
 fn item(entry_type: &str, title: &str, text: &str) -> ObservationCandidate {
     ObservationCandidate {
@@ -79,24 +80,15 @@ fn one_refused_item_refuses_the_list_with_its_position() {
     for (list, refusal) in cases {
         assert_eq!(validate_observations(&list), Err(refusal));
     }
+    let labels =
+        [TooMany, Invalid { position: 1 }, TooLong { position: 1 }].map(ObservationRefusal::label);
+    let labels = labels.join(" ");
     assert_eq!(
-        [
-            ObservationRefusal::TooMany.label(),
-            ObservationRefusal::Invalid { position: 1 }.label(),
-            ObservationRefusal::TooLong { position: 1 }.label(),
-        ],
-        [
-            "too_many_observations",
-            "observation_invalid",
-            "observation_too_long"
-        ]
+        labels,
+        "too_many_observations observation_invalid observation_too_long"
     );
-    assert!(
-        ObservationRefusal::TooLong { position: 3 }
-            .result()
-            .text
-            .contains("the observation 3 is too long")
-    );
+    let text = TooLong { position: 3 }.result().text;
+    assert!(text.contains("the observation 3 is too long"));
 }
 
 #[test]
