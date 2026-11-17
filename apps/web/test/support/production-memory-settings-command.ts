@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrowserContext } from "playwright";
+import type { BrowserContext, Page } from "playwright";
 import { expect } from "playwright/test";
 
 import { createChapter, digestCreateChapter, getProject }
@@ -17,6 +17,19 @@ const TEXT = "船夫，不说话。\n夜里看灯。";
 /** The time limit of the wait for an enabled send button. The panel reads the earlier Run first, and under host load
  * this read can take longer than the page timeout. */
 const SEND_ENABLED_TIMEOUT_MS = 30_000;
+
+/**
+ * Types `text` into the composer and waits until the send button is enabled. The composer mounts again when the
+ * Project Scope of the panel arrives, and that mount clears its message. So the wait types the text again while the
+ * message is not `text`.
+ */
+async function typeMessage(page: Page, text: string): Promise<void> {
+  const message = page.locator('textarea[name="assistant-message"]');
+  await expect(async () => {
+    if (await message.inputValue() !== text) await message.fill(text);
+    await expect(page.locator(".composer .send-button")).toBeEnabled({ timeout: 1_000 });
+  }).toPass({ timeout: SEND_ENABLED_TIMEOUT_MS });
+}
 const MESSAGE = `记住林舟。\nSCRIPT:write_memory create ${JSON.stringify({ type: "character", title: TITLE,
   description: "沉默的船夫。", text: TEXT })}`;
 
@@ -75,8 +88,7 @@ export async function verifyProductionMemorySettings(context: BrowserContext): P
     await page.locator(`button[data-chapter-id="${setup.chapterId}"]`).click();
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await page.locator('[data-assistant-availability="available"]').waitFor();
-    await page.locator('textarea[name="assistant-message"]').fill(MESSAGE);
-    await expect(page.locator(".composer .send-button")).toBeEnabled({ timeout: SEND_ENABLED_TIMEOUT_MS });
+    await typeMessage(page, MESSAGE);
     const admitted = page.waitForResponse((reply) =>
       reply.request().method() === "POST" && new URL(reply.url()).pathname.endsWith("/agent-runs"));
     await page.locator(".composer .send-button").click();
@@ -130,9 +142,8 @@ export async function verifyProductionMemorySettings(context: BrowserContext): P
     await page.goto(workspace);
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await page.locator('[data-assistant-availability="available"]').waitFor();
-    await page.locator('textarea[name="assistant-message"]').fill("继续写。");
     // The wait for the response starts only after the panel has read the earlier Run and enabled the button.
-    await expect(page.locator(".composer .send-button")).toBeEnabled({ timeout: SEND_ENABLED_TIMEOUT_MS });
+    await typeMessage(page, "继续写。");
     const next = page.waitForResponse((reply) =>
       reply.request().method() === "POST" && new URL(reply.url()).pathname.endsWith("/agent-runs"));
     await page.locator(".composer .send-button").click();
