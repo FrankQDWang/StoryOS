@@ -648,6 +648,7 @@ pub(crate) async fn update_run(
         crate::memory_consolidation::settle_end(client, claim, end).await?;
         if status == "completed" {
             crate::memory_work_schedule::mark_conversation_due(client, claim).await?;
+            crate::chapter_capture_schedule::release_held(client, claim).await?;
         }
     }
     Ok(())

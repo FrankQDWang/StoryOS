@@ -118,18 +118,13 @@ async fn ends(admin: &Client, run_id: &str) -> Value {
     json!([settled[0], settled[2], read[2], read[3]])
 }
 
-/// A Worker that stops after the claim of the row of the Conversation and before the start of its
-/// capture leaves the row due, because the claim and the start are one transaction. The next
-/// claim starts one capture, and a second delivery starts no second capture for the same
-/// messages. Returns whether the stopped claim failed, the due state after it, the skip of the
-/// second delivery, and the count of the captures of the Conversation, and the started capture.
-async fn stopped_claim(
-    store: &PostgresProjectReader,
+/// Runs `claim` while a lock holds the start of a capture after the claim of a row, and ends the
+/// session of the claim at that point. This is the stop of the Worker. Returns the result of
+/// `claim`.
+pub(crate) async fn stopped_at_the_start<T>(
     admin: &Client,
-    scope: &ProjectScope,
-    conversation_id: &str,
-) -> (Value, StartedMemoryCapture) {
-    make_due(admin, conversation_id).await;
+    claim: impl std::future::Future<Output = T>,
+) -> T {
     // The lock holds the start of the capture after the claim of the row. The end of the session
     // of the claim is the stop of the Worker.
     admin
@@ -168,7 +163,23 @@ async fn stopped_claim(
         }
         admin.batch_execute("ROLLBACK").await.unwrap();
     };
-    let (stopped, ()) = tokio::join!(store.claim_due_memory_work(), stop);
+    let (claimed, ()) = tokio::join!(claim, stop);
+    claimed
+}
+
+/// A Worker that stops after the claim of the row of the Conversation and before the start of its
+/// capture leaves the row due, because the claim and the start are one transaction. The next
+/// claim starts one capture, and a second delivery starts no second capture for the same
+/// messages. Returns whether the stopped claim failed, the due state after it, the skip of the
+/// second delivery, and the count of the captures of the Conversation, and the started capture.
+async fn stopped_claim(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    conversation_id: &str,
+) -> (Value, StartedMemoryCapture) {
+    make_due(admin, conversation_id).await;
+    let stopped = stopped_at_the_start(admin, store.claim_due_memory_work()).await;
     let after_stop = due(admin, conversation_id).await;
     let capture = store.claim_due_memory_work().await.unwrap().unwrap();
     let capture = started(capture.outcome);

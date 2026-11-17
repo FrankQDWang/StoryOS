@@ -504,4 +504,4 @@ pub(crate) mod tests;
 
 #[cfg(test)]
 #[path = "memory_work_outcome_tests.rs"]
-mod outcome_tests;
+pub(crate) mod outcome_tests;
