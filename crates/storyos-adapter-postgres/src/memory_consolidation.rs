@@ -47,9 +47,9 @@ impl MemoryConsolidationStore for PostgresProjectReader {
     }
 }
 
-/// Pins the current Model Use Binding, its grant, its Model Registration, and the Memory revision
-/// of the Project, and writes the queued Run, the pass row, and the Context Assembly of its one
-/// RunStep. A refused start writes no row.
+/// Pins the current Model Use Binding, its grant, its Model Registration, and the Memory revision.
+/// Then it writes the queued Run, the pass row, and the Context Assembly of its one RunStep. The
+/// input has the oldest observations that fit the request. A refused start writes no row.
 async fn start(
     client: &Client,
     scope: &ProjectScope,
@@ -86,11 +86,48 @@ async fn start(
     let revision = crate::memory_entries::memory_head(client, scope)
         .await
         .map_err(unavailable)?;
-    let entries = pass_entries(client, scope).await.map_err(unavailable)?;
-    let observations = waiting_observations(client, scope)
+    let entries: Vec<(PassMemoryEntry, String)> = pass_entries(client, scope)
         .await
-        .map_err(unavailable)?;
+        .map_err(unavailable)?
+        .into_iter()
+        .map(|entry| (entry.entry, entry.changed_at))
+        .collect();
+    let (keys_of, observations): (Vec<[String; 2]>, Vec<PassObservation>) =
+        waiting_observations(client, scope)
+            .await
+            .map_err(unavailable)?
+            .into_iter()
+            .unzip();
+    let budget_bounds: String = client
+        .query_one(
+            "SELECT budget_bounds FROM storyos.project_external_use_binding_revisions
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND project_model_use_binding_revision = $3::text::uuid",
+            &[
+                &keys[0],
+                &keys[1],
+                &assistance.project_model_use_binding_revision,
+            ],
+        )
+        .await
+        .map_err(read_error)?
+        .get(/*idx*/ 0);
     let (run_id, pass_id) = (Uuid::now_v7().to_string(), Uuid::now_v7().to_string());
+    let mut assembly = MemoryConsolidationAssembly {
+        operation_requirement_id: Uuid::now_v7().to_string(),
+        run_id: run_id.clone(),
+        owner_user_id: keys[0].to_owned(),
+        project_id: keys[1].to_owned(),
+        destination_identity: assistance.processing_destination_identity.clone(),
+        memory_revision: revision,
+        entries: &entries,
+        observations: &observations,
+    };
+    let taken = storyos_core::pass_observation_count(
+        &assembly,
+        &assistance.model_registration_revision,
+        &budget_bounds,
+    );
     // Background work writes no grant and no binding: the Run pins the current ones. The first
     // Run of the author made the Agent of the Project.
     client
@@ -114,7 +151,7 @@ async fn start(
         )
         .await
         .map_err(read_error)?;
-    let input: Vec<Value> = observations.iter().map(|(key, _)| json!(key)).collect();
+    let input: Vec<Value> = keys_of[..taken].iter().map(|key| json!(key)).collect();
     client
         .execute(
             "INSERT INTO storyos.memory_consolidation_passes
@@ -132,23 +169,8 @@ async fn start(
         )
         .await
         .map_err(read_error)?;
-    let entries: Vec<(PassMemoryEntry, String)> = entries
-        .into_iter()
-        .map(|entry| (entry.entry, entry.changed_at))
-        .collect();
-    let observations: Vec<PassObservation> =
-        observations.into_iter().map(|(_, item)| item).collect();
-    let record =
-        storyos_core::assemble_memory_consolidation_context(&MemoryConsolidationAssembly {
-            operation_requirement_id: Uuid::now_v7().to_string(),
-            run_id: run_id.clone(),
-            owner_user_id: keys[0].to_owned(),
-            project_id: keys[1].to_owned(),
-            destination_identity: assistance.processing_destination_identity,
-            memory_revision: revision,
-            entries: &entries,
-            observations: &observations,
-        });
+    assembly.observations = &observations[..taken];
+    let record = storyos_core::assemble_memory_consolidation_context(&assembly);
     crate::create_agent_run::context::insert_assembly(
         client, scope, &run_id, /*receipt_id*/ None, "0", &record,
     )
@@ -442,3 +464,7 @@ pub(crate) async fn settle_end(
 #[cfg(test)]
 #[path = "memory_consolidation_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "memory_consolidation_recovery_tests.rs"]
+mod recovery_tests;
