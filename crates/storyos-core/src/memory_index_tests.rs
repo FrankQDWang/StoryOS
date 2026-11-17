@@ -20,6 +20,7 @@ fn entry(
         entry_type,
         title: title.to_owned(),
         description: description.to_owned(),
+        flagged: false,
     }
 }
 
@@ -70,6 +71,40 @@ fn the_index_has_one_group_for_each_type_in_the_order_of_the_type_list() {
             ]
             .join("\n"),
             ProjectionMode::ExactRequired,
+        )
+    );
+}
+
+/// ADR 0094 section 7: the line of an entry with a conflict flag has one more field and no
+/// reason. The line of an entry with no flag is the line of S7-D1a, so an Index with no flag has
+/// the same text as before the flag.
+#[test]
+fn the_line_of_a_flagged_entry_has_one_more_field() {
+    let mut entries = [
+        entry(1, MemoryEntryType::Character, "阿青", "林舟的妹妹。"),
+        entry(2, MemoryEntryType::Character, "林舟", "沉默的船夫。"),
+    ];
+    let (unflagged, _) = memory_index_text(&entries);
+    entries[0].flagged = true;
+
+    assert_eq!(
+        (unflagged, memory_index_text(&entries)),
+        (
+            [
+                r#"{"type":"character"}"#,
+                r#"{"description":"林舟的妹妹。","id":1,"title":"阿青"}"#,
+                r#"{"description":"沉默的船夫。","id":2,"title":"林舟"}"#,
+            ]
+            .join("\n"),
+            (
+                [
+                    r#"{"type":"character"}"#,
+                    r#"{"conflict_flag":true,"description":"林舟的妹妹。","id":1,"title":"阿青"}"#,
+                    r#"{"description":"沉默的船夫。","id":2,"title":"林舟"}"#,
+                ]
+                .join("\n"),
+                ProjectionMode::ExactRequired,
+            )
         )
     );
 }

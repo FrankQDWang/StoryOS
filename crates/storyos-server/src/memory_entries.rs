@@ -40,6 +40,11 @@ pub(super) async fn list_memory_entries(
                 origin: origin(entry.origin),
                 source: entry.source.map(source),
                 changed_at: entry.changed_at,
+                flag: entry.flag.map(|flag| contracts::MemoryEntryFlagInspect {
+                    reason: flag.reason,
+                    source: source(flag.source),
+                    flagged_at: flag.flagged_at,
+                }),
             })
             .collect(),
     }))

@@ -1,6 +1,9 @@
 use serde_json::json;
 
-use super::{MEMORY_READ_NOT_FOUND, MemoryEntryRead, READ_MEMORY_ENTRY_TOOL_SPEC};
+use super::{
+    MEMORY_READ_NOT_FOUND, MemoryEntryRead, MemoryFlagSource, MemoryReadFlag,
+    READ_MEMORY_ENTRY_TOOL_SPEC,
+};
 use crate::{
     AGENT_PLAN_REGISTRATION, AGENT_PLAN_SKILL_REGISTRATION, ContextSourceClass, ExposureFacts,
     HOST_FAKE_TOOL_LOOP_REGISTRATION, IntakeRefusal, MemoryEntryType, ToolExposure, ToolIntake,
@@ -139,6 +142,7 @@ fn a_read_gives_the_lines_and_the_exact_text_and_a_missing_entry_is_refused() {
         origin: "author_request".to_owned(),
         changed_at: "2026-11-17T08:00:00.000Z".to_owned(),
         text: "- 十年前落水\n\t- 从此不上船\n".to_owned(),
+        flag: None,
     };
     assert_eq!(
         (
@@ -157,5 +161,47 @@ fn a_read_gives_the_lines_and_the_exact_text_and_a_missing_entry_is_refused() {
                 .to_owned(),
             ContextSourceClass::MemoryReadResult,
         )
+    );
+}
+
+/// ADR 0094 section 7: the result for an entry with a conflict flag has the reason and the
+/// source after `changed_at`, and the same text. The source is a Chapter with its number and
+/// title, a Project Conversation, or a source that is not available now.
+#[test]
+fn a_read_of_a_flagged_entry_gives_the_reason_and_the_source() {
+    let read = |source| MemoryEntryRead {
+        memory_entry_id: "entry-1".to_owned(),
+        version: 3,
+        entry_type: MemoryEntryType::Other,
+        title: "渡口".to_owned(),
+        description: "渡口在桥下。".to_owned(),
+        origin: "author_request".to_owned(),
+        changed_at: "2026-11-17T08:00:00.000Z".to_owned(),
+        text: "桥在渡口上游。".to_owned(),
+        flag: Some(MemoryReadFlag {
+            reason: "第三章说桥在下游。".to_owned(),
+            source,
+        }),
+    };
+    let head = "type: other\ntitle: 渡口\ndescription: 渡口在桥下。\norigin: author_request\n\
+                changed_at: 2026-11-17T08:00:00.000Z\nconflict_flag: 第三章说桥在下游。\n\
+                conflict_source: ";
+    let chapter = MemoryFlagSource::Chapter {
+        number: 3,
+        title: "雨夜".to_owned(),
+    };
+    assert_eq!(
+        [
+            chapter,
+            MemoryFlagSource::Conversation,
+            MemoryFlagSource::Unavailable,
+        ]
+        .map(|source| read(source).result().text),
+        [
+            "Chapter 3 of the Chapter list, 雨夜",
+            "a Project Conversation",
+            "a source that is not available now",
+        ]
+        .map(|source| format!("{head}{source}\n\n桥在渡口上游。"))
     );
 }

@@ -177,6 +177,32 @@ it("shows each entry in the group of its type with its text, its origin line, an
   }
 });
 
+it("shows 可能已过时, the reason, the source, and the sentence on a flagged entry, with no other control", async () => {
+  const flag = (source: NonNullable<MemoryEntryInspect["source"]>) =>
+    ({ reason: "第三章说桥在下游。", source, flagged_at: "2026-11-17T09:00:00.000Z" });
+  const flagged = [
+    entry(1, { flag: flag({ kind: "chapter", chapter_id: CHAPTER, title: "渡口", availability: "available" }) }),
+    entry(2, { flag: flag({ kind: "conversation", conversation_id: CONVERSATION, availability: "available" }) }),
+    entry(3, { flag: flag({ kind: "chapter", chapter_id: CHAPTER, title: null, availability: "unavailable" }) }),
+  ];
+  await settingsPage(fakeServer([listed(flagged)]).fetchImpl);
+  await expect.poll(() => document.querySelectorAll("[data-memory-entry-flag=flagged]").length).toBe(3);
+  const shown = [...document.querySelectorAll<HTMLElement>("[data-memory-entry]")].map((item) => {
+    const place = item.querySelector("h4 + [data-memory-entry-flag]");
+    const source = place?.querySelector("[data-memory-flag-source]");
+    return [[...place?.querySelectorAll("p") ?? []].map((line) => line.textContent),
+      source?.getAttribute("data-memory-flag-source"), source?.getAttribute("href") ?? null,
+      item.querySelector(".memory-entry-text")?.textContent,
+      [...item.querySelectorAll("input, textarea, select, button")].map((control) => control.textContent)];
+  });
+  const lines = (source: string) => ["可能已过时 第三章说桥在下游。", source, "可以在对话中告诉助手哪个是对的，或删除这条记忆。"];
+  expect(shown).toEqual([
+    [lines("来自章节《渡口》"), "chapter", `/projects/${PROJECT}?chapter=${CHAPTER}`, "内容1。", ["删除"]],
+    [lines("来自对话"), "conversation", `/projects/${PROJECT}?conversation=${CONVERSATION}`, "内容2。", ["删除"]],
+    [lines("来源已不可用"), "unavailable", null, "内容3。", ["删除"]],
+  ]);
+});
+
 it("asks one time before a delete, and 取消 restores the control and sends nothing", async () => {
   const server = fakeServer([listed(ENTRIES)]);
   await settingsPage(server.fetchImpl);

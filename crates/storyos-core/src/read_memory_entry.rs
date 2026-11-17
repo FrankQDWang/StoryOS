@@ -78,15 +78,55 @@ pub struct MemoryEntryRead {
     /// The time of the write of the version, in UTC, in the form of RFC 3339.
     pub changed_at: String,
     pub text: String,
+    /// The conflict flag of the version, when it is a flag version (ADR 0094 section 7).
+    pub flag: Option<MemoryReadFlag>,
+}
+
+/// The conflict flag of an entry in the result of a read: the reason and the source.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemoryReadFlag {
+    pub reason: String,
+    pub source: MemoryFlagSource,
+}
+
+/// The source of a conflict flag at the time of a read.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MemoryFlagSource {
+    /// A live Chapter with its number in the Chapter list and its title.
+    Chapter { number: u64, title: String },
+    /// A Project Conversation of the Project.
+    Conversation,
+    /// A Chapter or a Project Conversation that the Project does not have now.
+    Unavailable,
+}
+
+impl MemoryFlagSource {
+    fn line(&self) -> String {
+        match self {
+            Self::Chapter { number, title } => {
+                format!("Chapter {number} of the Chapter list, {title}")
+            }
+            Self::Conversation => "a Project Conversation".to_owned(),
+            Self::Unavailable => "a source that is not available now".to_owned(),
+        }
+    }
 }
 
 impl MemoryEntryRead {
     /// The result of the settled read: the lines `type`, `title`, `description`, `origin`, and
     /// `changed_at`, an empty line, and then the exact text of the entry. A title and a
-    /// description are one line, so each line has one value.
+    /// description are one line, so each line has one value. An entry with a conflict flag has
+    /// the lines `conflict_flag` with the reason and `conflict_source` after `changed_at`.
     pub fn result(&self) -> ToolResultText {
+        let flag = self.flag.as_ref().map_or(String::new(), |flag| {
+            format!(
+                "\nconflict_flag: {}\nconflict_source: {}",
+                flag.reason,
+                flag.source.line()
+            )
+        });
         crate::host_tool_result(&format!(
-            "type: {}\ntitle: {}\ndescription: {}\norigin: {}\nchanged_at: {}\n\n{}",
+            "type: {}\ntitle: {}\ndescription: {}\norigin: {}\nchanged_at: {}{flag}\n\n{}",
             self.entry_type.as_str(),
             self.title,
             self.description,

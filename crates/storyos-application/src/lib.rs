@@ -180,7 +180,8 @@ pub use memory_capture::{
 };
 pub use memory_consolidation::{MemoryConsolidationStore, StartedMemoryConsolidation};
 pub use memory_entries::{
-    MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem, list_memory_entries,
+    MemoryEntryFlagItem, MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem,
+    list_memory_entries,
 };
 pub use memory_work_schedule::{
     ClaimedMemoryWork, MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource,

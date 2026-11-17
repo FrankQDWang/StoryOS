@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { listMemoryEntries } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { MemoryEntryInspect, MemoryEntryTypeInspect }
+import type { MemoryEntryInspect, MemoryEntrySourceInspect, MemoryEntryTypeInspect }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { deleteMemoryEntryOnce } from "./delete-memory-entry.ts";
 import type { MemoryDeleteFlight } from "./delete-memory-entry.ts";
@@ -24,6 +24,9 @@ const READ_FAILED_SENTENCE = "无法读取记忆，请稍后再试。";
 // The ticket #1629 gives the three control words and the two sentences. The author approved them on 2026-11-17.
 const CHANGED_SENTENCE = "这条记忆已经改变，没有删除。";
 const DELETE_FAILED_SENTENCE = "无法删除这条记忆，请稍后再试。";
+// The ticket #1589 gives the words and the sentence of a conflict flag. The author approved them on 2026-11-16.
+const FLAG_WORDS = "可能已过时";
+const FLAG_SENTENCE = "可以在对话中告诉助手哪个是对的，或删除这条记忆。";
 
 type Group = { type: MemoryEntryTypeInspect; entries: MemoryEntryInspect[] };
 
@@ -110,8 +113,7 @@ export function MemorySection({ scope, baseUrl, fetchImpl, cryptoImpl }: Setting
             {group.entries.map((entry) => (
               <li key={entry.memory_entry_id} className="memory-entry" data-memory-entry={entry.entry_number}>
                 <h4>{entry.title}</h4>
-                {/* The place of the conflict flag of S7-D6. */}
-                <div className="memory-entry-flag" data-memory-entry-flag="" />
+                <Flag entry={entry} projectId={projectId} />
                 <p className="memory-entry-text">{entry.text}</p>
                 <p className="memory-entry-origin">
                   <Origin entry={entry} projectId={projectId} />
@@ -156,17 +158,49 @@ function DeleteControl({ step, onDelete, onConfirm, onCancel }: {
   </>;
 }
 
+/** The line of a Chapter source with its title, or `undefined` when the Chapter is not in the manuscript tree now. */
+function chapterLine(source: MemoryEntrySourceInspect | null): string | undefined {
+  return source?.kind === "chapter" && source.title !== null ? `来自章节《${source.title}》` : undefined;
+}
+
 /**
  * The origin line of an entry. An available Project Conversation or Chapter is a link to its workspace address with an
  * ordinary page load. An unavailable source has no link.
  */
 function Origin({ entry, projectId }: { entry: MemoryEntryInspect; projectId: string }) {
-  const { source } = entry;
-  const line = entry.origin === "chapter"
-    ? source?.kind === "chapter" && source.title !== null ? `来自章节《${source.title}》` : undefined
-    : ORIGIN_LINES[entry.origin];
+  const line = entry.origin === "chapter" ? chapterLine(entry.source) : ORIGIN_LINES[entry.origin];
+  return <SourceLine source={entry.source} line={line} projectId={projectId} mark="data-memory-entry-origin" />;
+}
+
+/**
+ * The conflict flag of an entry below its title (ADR 0094 section 7): "可能已过时", the reason, the source of the conflict,
+ * and the sentence that tells the author what to do. An entry with no flag has an empty place. No control removes a flag.
+ */
+function Flag({ entry, projectId }: { entry: MemoryEntryInspect; projectId: string }) {
+  const { flag } = entry;
+  if (flag === undefined) return <div className="memory-entry-flag" data-memory-entry-flag="" />;
+  const line = flag.source.kind === "chapter" ? chapterLine(flag.source) : ORIGIN_LINES.conversation;
+  return (
+    <div className="memory-entry-flag" data-memory-entry-flag="flagged">
+      <p><strong>{FLAG_WORDS}</strong> <span data-memory-flag-reason="">{flag.reason}</span></p>
+      <p><SourceLine source={flag.source} line={line} projectId={projectId} mark="data-memory-flag-source" /></p>
+      <p>{FLAG_SENTENCE}</p>
+    </div>
+  );
+}
+
+/**
+ * A source as a link to its workspace address, or as its line and the sentence of an unavailable source with no link.
+ * The attribute `mark` has the kind of the source, or `unavailable`.
+ */
+function SourceLine({ source, line, projectId, mark }: {
+  source: MemoryEntrySourceInspect | null;
+  line: string | undefined;
+  projectId: string;
+  mark: "data-memory-entry-origin" | "data-memory-flag-source";
+}) {
   if (source === null || source.availability === "unavailable") {
-    return <span data-memory-entry-origin="unavailable">
+    return <span {...{ [mark]: "unavailable" }}>
       {line === undefined ? null : <span>{line}</span>}
       <span>{SOURCE_UNAVAILABLE}</span>
     </span>;
@@ -174,5 +208,5 @@ function Origin({ entry, projectId }: { entry: MemoryEntryInspect; projectId: st
   const address = source.kind === "conversation"
     ? `/projects/${projectId}?conversation=${source.conversation_id}`
     : `/projects/${projectId}?chapter=${source.chapter_id}`;
-  return <a href={address} data-memory-entry-origin={source.kind}>{line}</a>;
+  return <a href={address} {...{ [mark]: source.kind }}>{line}</a>;
 }
