@@ -263,19 +263,18 @@ fn the_shape_of_each_action_and_an_empty_list() {
     );
 }
 
-/// A pass whose pinned Memory revision is not the revision now decides no operation. A list with
-/// an admitted operation is applied.
-/// A null value of an update keeps the current value of the entry, and a null title of a merge
-/// keeps the title of its first entry. A merge with no text is refused (#1685).
+/// A null title, description, or text of an update keeps the current value of the entry, and a
+/// null title of a merge keeps the title of its first entry. A merge with no text is refused
+/// (#1685).
 #[test]
 fn a_null_value_of_an_update_or_a_merge_keeps_the_current_value() {
-    let entries = [4, 5, 6, 7, 8, 9]
+    let entries = [4, 5, 6, 7, 8, 9, 10]
         .map(|number| entry(number, MemoryEntryOrigin::Chapter, &format!("灯{number}")));
     let facts = PassFacts {
         pinned_revision: 1,
         memory_revision: 1,
         entries: &entries,
-        next_entry_number: 10,
+        next_entry_number: 11,
         observations: &[observation("chapter")],
         marks: &[],
         conflicts: &[],
@@ -285,12 +284,14 @@ fn a_null_value_of_an_update_or_a_merge_keeps_the_current_value() {
     let mut text_only = update(5, "灯");
     text_only["title"] = Value::Null;
     text_only["description"] = Value::Null;
+    let mut no_new_text = update(10, "新灯");
+    no_new_text["text"] = Value::Null;
     let mut merged = merge(json!([6, 7]), "合");
     merged["title"] = Value::Null;
     let mut no_text = merge(json!([8, 9]), "合");
     no_text["title"] = Value::Null;
     no_text["text"] = Value::Null;
-    let candidates = operations(json!([untitled, text_only, merged, no_text]));
+    let candidates = operations(json!([untitled, text_only, no_new_text, merged, no_text]));
     let values: Vec<String> = settle_operations_call(&candidates, &facts)
         .decisions
         .iter()
@@ -311,12 +312,15 @@ fn a_null_value_of_an_update_or_a_merge_keeps_the_current_value() {
         [
             "4 灯4 新述。 新文。",
             "5 灯5 述。 新文。",
+            "10 新灯 新述。 文。",
             "6 灯6 合述。 合文。",
             "memory_entry_invalid",
         ]
     );
 }
 
+/// A pass whose pinned Memory revision is not the revision now decides no operation. A list with
+/// an admitted operation is applied.
 #[test]
 fn a_stale_pass_decides_no_operation() {
     let candidates = operations(json!([create("other", "桥", "文。", json!([1]))]));
