@@ -104,10 +104,10 @@ pub(crate) async fn execute(
 }
 
 /// Ranks the passages of the call of `search` with its exact terms and the result of the
-/// embedding request, and settles the call. A vector gives the fused result; a settled request
-/// gives the exact-term list after the line that says that the search by meaning was not
-/// available; a refusal of the admission refuses the call with `hybrid_search_unavailable`. A
-/// call that is not pending changes nothing.
+/// embedding request, and settles the call. A vector gives the fused result. A settled request
+/// with no vector gives the exact-term list after the line that says that the search by meaning
+/// was not available. A refusal of the admission refuses the call with
+/// `hybrid_search_unavailable`. A call that is not pending changes nothing.
 pub(crate) async fn record(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,

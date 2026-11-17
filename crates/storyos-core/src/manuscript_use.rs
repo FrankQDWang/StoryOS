@@ -31,11 +31,11 @@ pub struct StoredManuscriptCall<'a> {
     pub result_text: Option<&'a str>,
 }
 
-/// The manuscript Tool uses of a Run from its stored calls `calls` in item order: one entry for
-/// each Chapter that a settled `read_chapter` call gave, one entry for each query of a settled
-/// `search_manuscript` call, and one entry for each question of a settled
-/// `hybrid_search_manuscript` call, in the order of the first use. A call that did not settle and
-/// a call of another Tool give no entry.
+/// The manuscript Tool uses of a Run from its stored calls `calls`, in item order. A settled
+/// `read_chapter` call gives one entry for each Chapter that it read. A settled
+/// `search_manuscript` call gives one entry for each query. A settled `hybrid_search_manuscript`
+/// call gives one entry for each question. The entries are in the order of the first use. A call
+/// that did not settle and a call of another Tool give no entry.
 pub fn manuscript_uses(calls: &[StoredManuscriptCall<'_>]) -> Vec<ManuscriptUse> {
     let mut uses: Vec<ManuscriptUse> = Vec::new();
     for call in calls {
