@@ -99,7 +99,9 @@ export type MemorySourceAvailability = "available" | "unavailable";
 
 export type MemoryEntrySourceInspect = { "kind": "conversation", conversation_id: string, availability: MemorySourceAvailability, } | { "kind": "chapter", chapter_id: string, title: string | null, availability: MemorySourceAvailability, };
 
-export type MemoryEntryInspect = { memory_entry_id: string, entry_number: string, version: string, entry_type: MemoryEntryTypeInspect, title: string, description: string, text: string, origin: MemoryEntryOriginInspect, source: MemoryEntrySourceInspect | null, changed_at: string, };
+export type MemoryEntryFlagInspect = { reason: string, source: MemoryEntrySourceInspect, flagged_at: string, };
+
+export type MemoryEntryInspect = { memory_entry_id: string, entry_number: string, version: string, entry_type: MemoryEntryTypeInspect, title: string, description: string, text: string, origin: MemoryEntryOriginInspect, source: MemoryEntrySourceInspect | null, changed_at: string, flag?: MemoryEntryFlagInspect, };
 
 export type ListMemoryEntriesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, entries: Array<MemoryEntryInspect>, };
 

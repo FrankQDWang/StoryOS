@@ -20,11 +20,15 @@ pub struct MemoryIndexEntry {
     pub entry_type: MemoryEntryType,
     pub title: String,
     pub description: String,
+    /// `true` when the last version of the entry at the pinned revision is a flag version (ADR
+    /// 0094 section 7). The Index does not hold the reason of the flag.
+    pub flagged: bool,
 }
 
 /// The text of the `memory_index` item and its projection mode. Each type that has an entry is
 /// one group, in the order of the type list. A group starts with the line `{"type": type}`, and
-/// each entry is the line `{"description", "id", "title"}`, in the order of the numbers. When the
+/// each entry is the line `{"description", "id", "title"}`, in the order of the numbers. The line
+/// of an entry with a conflict flag also has the field `"conflict_flag": true`. When the
 /// entries are above a Host limit, the text lists the entries in order up to the limit and ends
 /// with the line `{"not_listed": count}`. Then the mode is `deterministic_excerpt`.
 pub fn memory_index_text(entries: &[MemoryIndexEntry]) -> (String, ProjectionMode) {
@@ -54,13 +58,23 @@ fn render(entries: &[&MemoryIndexEntry]) -> String {
                 &serde_json::json!({ "type": entry.entry_type.as_str() }),
             ));
         }
-        lines.push(canonical_json(&serde_json::json!({
-            "id": entry.number,
-            "title": entry.title,
-            "description": entry.description,
-        })));
+        lines.push(index_line(entry));
     }
     lines.join("\n")
+}
+
+/// The line of one entry. An entry with no flag has the line of S7-D1a, so an Index with no flag
+/// has the same text as before the flag.
+fn index_line(entry: &MemoryIndexEntry) -> String {
+    let mut line = serde_json::json!({
+        "id": entry.number,
+        "title": entry.title,
+        "description": entry.description,
+    });
+    if entry.flagged {
+        line["conflict_flag"] = serde_json::Value::Bool(true);
+    }
+    canonical_json(&line)
 }
 
 fn excerpt(entries: &[&MemoryIndexEntry], listed: usize) -> String {

@@ -6,7 +6,8 @@
 use storyos_application::ProjectScope;
 use storyos_core::{
     CurrentMemoryEntry, LastMemoryVersion, MemoryDeleteMark, MemoryEntryRead, MemoryEntryState,
-    MemoryEntryType, MemoryIndexEntry, MemoryVersionWrite,
+    MemoryEntryType, MemoryFlagSource, MemoryIndexEntry, MemoryReadFlag, MemorySourceReference,
+    MemoryVersionWrite,
 };
 
 fn invalid(message: &'static str) -> Box<dyn std::error::Error + Send + Sync> {
@@ -55,7 +56,8 @@ pub(crate) async fn memory_revision_pin(
 }
 
 /// The current Memory Entries of the Project at `memory_revision`: for each entry, the version
-/// with the highest Memory revision that is not above it, when its state is `current`.
+/// with the highest Memory revision that is not above it, when its state is `current`. The entry
+/// is flagged when that version is a flag version (ADR 0094 section 7).
 pub(crate) async fn read_memory_index(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
@@ -63,9 +65,9 @@ pub(crate) async fn read_memory_index(
 ) -> Result<Vec<MemoryIndexEntry>, Box<dyn std::error::Error + Send + Sync>> {
     let rows = client
         .query(
-            "SELECT entry_number::text, entry_type, title, description
+            "SELECT entry_number::text, entry_type, title, description, flag_reason IS NOT NULL
                FROM (SELECT DISTINCT ON (memory_entry_id)
-                            entry_number, state, entry_type, title, description
+                            entry_number, state, entry_type, title, description, flag_reason
                        FROM storyos.memory_entry_versions
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                         AND memory_revision <= $3::text::numeric
@@ -86,6 +88,7 @@ pub(crate) async fn read_memory_index(
                     .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
                 title: row.get(2),
                 description: row.get(3),
+                flagged: row.get(4),
             })
         })
         .collect()
@@ -267,7 +270,7 @@ pub(crate) const LAST_CHANGE: &str = "(SELECT changed.recorded_at
       LIMIT 1)";
 
 /// The current version of the entry with the number `number` of the Project now, or `None` when no
-/// current entry has the number.
+/// current entry has the number. A flag version gives its reason and its source now.
 pub(crate) async fn read_current_entry(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
@@ -277,7 +280,8 @@ pub(crate) async fn read_current_entry(
         .query_opt(
             &format!(
                 "SELECT memory_entry_id::text, version::text, entry_type, title, description,
-                        origin, to_char({LAST_CHANGE} AT TIME ZONE 'UTC', $4), text
+                        origin, to_char({LAST_CHANGE} AT TIME ZONE 'UTC', $4), text,
+                        flag_reason, flag_source::text
                    FROM (SELECT DISTINCT ON (memory_entry_id) *
                            FROM storyos.memory_entry_versions
                           WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
@@ -293,7 +297,20 @@ pub(crate) async fn read_current_entry(
             ],
         )
         .await?;
-    row.map(|row| {
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let flag = match (
+        row.get::<_, Option<String>>(8),
+        row.get::<_, Option<String>>(9),
+    ) {
+        (Some(reason), Some(source)) => Some(MemoryReadFlag {
+            reason,
+            source: flag_source(client, scope, &source).await?,
+        }),
+        _ => None,
+    };
+    let read = (|| {
         Ok(MemoryEntryRead {
             memory_entry_id: row.get(0),
             version: numeric(row.get(1))?,
@@ -304,9 +321,55 @@ pub(crate) async fn read_current_entry(
             origin: row.get(5),
             changed_at: row.get(6),
             text: row.get(7),
+            flag,
         })
+    })();
+    read.map(Some)
+}
+
+/// The source of a flag now: a live Chapter with its number in the Chapter list, a Project
+/// Conversation of the Project, or a source that the Project does not have now.
+async fn flag_source(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    source: &str,
+) -> Result<MemoryFlagSource, Box<dyn std::error::Error + Send + Sync>> {
+    let source = serde_json::from_str::<MemorySourceReference>(source).ok();
+    Ok(match source {
+        Some(MemorySourceReference::Chapter { chapter_id }) => {
+            let chapters =
+                crate::create_agent_run::context::chapter_list_entries(client, scope).await?;
+            (chapters.into_iter().zip(1..))
+                .find(|(chapter, _)| chapter.chapter_id == chapter_id)
+                .map_or(MemoryFlagSource::Unavailable, |(chapter, number)| {
+                    MemoryFlagSource::Chapter {
+                        number,
+                        title: chapter.title,
+                    }
+                })
+        }
+        Some(MemorySourceReference::Conversation {
+            conversation_id, ..
+        }) => {
+            let found = client
+                .query_opt(
+                    "SELECT 1 FROM storyos.project_conversations
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND conversation_id::text = $3",
+                    &[
+                        &scope.owner_user_id.as_ref(),
+                        &scope.project_id.as_ref(),
+                        &conversation_id,
+                    ],
+                )
+                .await?;
+            match found {
+                Some(_) => MemoryFlagSource::Conversation,
+                None => MemoryFlagSource::Unavailable,
+            }
+        }
+        None => MemoryFlagSource::Unavailable,
     })
-    .transpose()
 }
 
 /// For each current entry of the Project, in number order: its identity, its number, and the time

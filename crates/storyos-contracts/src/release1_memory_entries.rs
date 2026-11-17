@@ -114,8 +114,18 @@ pub enum MemoryEntrySourceInspect {
     },
 }
 
+/// The conflict flag of the current version of an entry (ADR 0094 section 7): the reason, the
+/// source of the conflict, and the time of the flag version.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryEntryFlagInspect {
+    pub reason: String,
+    pub source: MemoryEntrySourceInspect,
+    pub flagged_at: String,
+}
+
 /// The current version of one Memory Entry. The `source` is `null` when the version has no source
-/// reference that the Host can decode.
+/// reference that the Host can decode. Only an entry with a conflict flag has `flag`.
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct MemoryEntryInspect {
@@ -130,6 +140,11 @@ pub struct MemoryEntryInspect {
     #[schemars(required)]
     pub source: Option<MemoryEntrySourceInspect>,
     pub changed_at: String,
+    // The field can be absent, but its value cannot be null.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "MemoryEntryFlagInspect")]
+    #[ts(optional)]
+    pub flag: Option<MemoryEntryFlagInspect>,
 }
 
 /// The current entries of a Project in the order of the Memory Index. The Host limits bound the

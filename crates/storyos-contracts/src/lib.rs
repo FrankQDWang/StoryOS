@@ -192,8 +192,9 @@ pub use release1_memory_entries::{
     DeleteMemoryEntryConflictReason, DeleteMemoryEntryEffect, DeleteMemoryEntryInput,
     DeleteMemoryEntryNoEffectReason, DeleteMemoryEntryRequest, DeleteMemoryEntryResponse,
     LIST_MEMORY_ENTRIES_METHOD, LIST_MEMORY_ENTRIES_PATH, LIST_MEMORY_ENTRIES_RESPONSE_SCHEMA_ID,
-    ListMemoryEntriesResponse, MemoryEntryInspect, MemoryEntryOriginInspect,
-    MemoryEntrySourceInspect, MemoryEntryTypeInspect, MemorySourceAvailability,
+    ListMemoryEntriesResponse, MemoryEntryFlagInspect, MemoryEntryInspect,
+    MemoryEntryOriginInspect, MemoryEntrySourceInspect, MemoryEntryTypeInspect,
+    MemorySourceAvailability,
 };
 pub use release1_open_proposal_list::{
     LIST_CHAPTER_OPEN_PROPOSALS_METHOD, LIST_CHAPTER_OPEN_PROPOSALS_PATH,

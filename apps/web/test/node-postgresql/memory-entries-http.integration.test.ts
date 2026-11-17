@@ -5,7 +5,8 @@ import { test } from "vitest";
 
 import { listMemoryEntries } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres, requireStoryOSProtocolError, sessionFetch } from "../support/node-integration.ts";
-import { USER_A, admitRun, drainLeftoverWork, id, prepare, serverForFile, settleOnce } from "../support/http-harness.ts";
+import { USER_A, admitRun, createStory, drainLeftoverWork, flagMemoryEntry, id, prepare, seedMemoryEntry, serverForFile,
+  settleOnce } from "../support/http-harness.ts";
 
 // The read of the Memory section of the settings page at the HTTP seam (ADR 0094 section 9).
 const started = serverForFile();
@@ -70,4 +71,29 @@ test("listMemoryEntries gives the current entries of one Project in Memory Index
     (error) => unavailable(error, USER_A, "林舟", "灯塔"));
   await assert.rejects(() => listMemoryEntries({ ...project, projectId: elsewhere.projectId, fetchImpl: stranger }),
     (error) => unavailable(error, USER_A));
+});
+
+test("listMemoryEntries gives the conflict flag only for a flagged entry of its own Project", async () => {
+  await drainLeftoverWork();
+  const story = await createStory(started, { title: "Memory Flag Novel" });
+  const other = await createStory(started, { title: "Other Memory Flag Novel" });
+  const flagged = await seedMemoryEntry(story.projectId);
+  const plain = await seedMemoryEntry(other.projectId);
+  const chapterId = story.chapterIds[0] ?? "";
+  await flagMemoryEntry(story.projectId, flagged, "第三章说他不撑船。", { kind: "chapter", chapter_id: chapterId });
+  const list = (project: typeof story) => listMemoryEntries({ baseUrl: project.baseUrl, projectId: project.projectId,
+    fetchImpl: project.fetchImpl });
+
+  const [entry] = (await list(story)).entries;
+  const [unflagged] = (await list(other)).entries;
+  assert.ok(entry && unflagged);
+  assert.match(entry.flag?.flagged_at ?? "", DATE_TIME);
+  // The flag version keeps the text and the time of the last change. The entry with no flag has no flag key.
+  assert.deepEqual([entry.version, entry.text, entry.flag, unflagged.memory_entry_id, "flag" in unflagged],
+    ["2", "阿青在渡口撑船。", { reason: "第三章说他不撑船。", flagged_at: entry.flag?.flagged_at,
+      source: { kind: "chapter", chapter_id: chapterId, title: "Chapter A", availability: "available" } },
+    plain, false]);
+  const stranger = sessionFetch(started.baseUrl, "session-b");
+  await assert.rejects(() => list({ ...story, fetchImpl: stranger }),
+    (error) => unavailable(error, USER_A, "第三章说他不撑船。"));
 });

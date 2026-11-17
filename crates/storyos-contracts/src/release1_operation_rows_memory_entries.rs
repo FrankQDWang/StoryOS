@@ -10,9 +10,9 @@ use super::{
 use crate::release1_memory_entries::{
     DELETE_MEMORY_ENTRY, DeleteMemoryEntryConflictReason, DeleteMemoryEntryEffect,
     DeleteMemoryEntryInput, DeleteMemoryEntryNoEffectReason, DeleteMemoryEntryRequest,
-    DeleteMemoryEntryResponse, LIST_MEMORY_ENTRIES, ListMemoryEntriesResponse, MemoryEntryInspect,
-    MemoryEntryOriginInspect, MemoryEntrySourceInspect, MemoryEntryTypeInspect,
-    MemorySourceAvailability,
+    DeleteMemoryEntryResponse, LIST_MEMORY_ENTRIES, ListMemoryEntriesResponse,
+    MemoryEntryFlagInspect, MemoryEntryInspect, MemoryEntryOriginInspect, MemoryEntrySourceInspect,
+    MemoryEntryTypeInspect, MemorySourceAvailability,
 };
 use crate::release1_operation_registry::RegisteredOperation;
 use crate::release1_project_activity::ProjectActivityKind;
@@ -38,6 +38,7 @@ pub(super) const LIST_MEMORY_ENTRIES_ROW: OperationRow = OperationRow {
         MemoryEntryOriginInspect::decl,
         MemorySourceAvailability::decl,
         MemoryEntrySourceInspect::decl,
+        MemoryEntryFlagInspect::decl,
         MemoryEntryInspect::decl,
         ListMemoryEntriesResponse::decl,
     ],
@@ -96,7 +97,10 @@ const LIST_MEMORY_ENTRIES_RESPONSE: &[Patch] = &[
     ),
     Patch(
         DATE_TIME,
-        &["/$defs/MemoryEntryInspect/properties/changed_at"],
+        &[
+            "/$defs/MemoryEntryFlagInspect/properties/flagged_at",
+            "/$defs/MemoryEntryInspect/properties/changed_at",
+        ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
 ];

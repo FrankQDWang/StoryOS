@@ -168,6 +168,7 @@ fn a_capture_gets_its_reference_items_after_its_input_and_keeps_them() {
         entry_type: crate::MemoryEntryType::Character,
         title: "林舟".to_owned(),
         description: "撑船的人。".to_owned(),
+        flagged: false,
     }];
     let chapters = [crate::ChapterListEntry {
         volume_order: 1,
@@ -256,6 +257,7 @@ fn the_expected_input_of_a_capture_counts_each_section() {
                 entry_type: crate::MemoryEntryType::Character,
                 title: "林舟".to_owned(),
                 description: "撑船的人。".to_owned(),
+                flagged: false,
             }],
             chapters: &[crate::ChapterListEntry {
                 volume_order: 1,

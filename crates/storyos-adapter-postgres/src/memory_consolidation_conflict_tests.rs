@@ -15,7 +15,7 @@ use crate::memory_capture::tests::{project, run_capture, start};
 use crate::memory_entries::tests::archived_rows;
 
 /// A conflict item of a capture with the entry `entry` and the reason `reason`.
-fn conflict(entry: u64, reason: &str) -> Value {
+pub(super) fn conflict(entry: u64, reason: &str) -> Value {
     json!({
         "kind": "conflict", "type": null, "title": null, "text": null, "entry": entry,
         "reason": reason
@@ -41,7 +41,7 @@ async fn observation_lines(admin: &Client, scope: &ProjectScope) -> Value {
 }
 
 /// The identity of the entry `number` of the Project.
-async fn entry_id(admin: &Client, scope: &ProjectScope, number: u64) -> String {
+pub(super) async fn entry_id(admin: &Client, scope: &ProjectScope, number: u64) -> String {
     let row = admin
         .query_one(
             "SELECT memory_entry_id::text FROM storyos.memory_entry_versions

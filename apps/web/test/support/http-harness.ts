@@ -500,6 +500,23 @@ export async function seedMemoryEntry(projectId: string): Promise<string> {
   return memoryEntryId;
 }
 
+/**
+ * Writes the flag version 2 of the entry that `seedMemoryEntry` wrote, at the Memory revision 2, with the reason
+ * `reason` and the source reference `source` (ADR 0094 section 7). A consolidation pass writes such a version.
+ */
+export async function flagMemoryEntry(projectId: string, memoryEntryId: string, reason: string,
+  source: Readonly<Record<string, string>>): Promise<void> {
+  await queryStoryOSPostgres(`
+    WITH head AS (UPDATE storyos.project_memory_heads SET memory_revision = 2
+                   WHERE owner_user_id = '${USER_A}' AND project_id = '${projectId}')
+    INSERT INTO storyos.memory_entry_versions (owner_user_id, project_id, memory_entry_id, entry_number, version,
+      memory_revision, state, entry_type, origin, title, description, text, cause, source_references, flag_reason,
+      flag_source)
+    SELECT owner_user_id, project_id, memory_entry_id, entry_number, 2, 2, state, entry_type, origin, title,
+      description, text, '{"kind": "conflict_flag"}', '[]', '${reason}', '${JSON.stringify(source)}'
+      FROM storyos.memory_entry_versions WHERE project_id = '${projectId}' AND memory_entry_id = '${memoryEntryId}'`);
+}
+
 /** The applied effect of `createVolume`. It throws when the command did not apply. */
 export function appliedVolume(created: CommandResponse<"createVolume">) {
   if (created.effect.kind !== "authoritative_applied") {

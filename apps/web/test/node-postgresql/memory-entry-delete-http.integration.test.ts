@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { afterAll, test } from "vitest";
 
 import { listMemoryEntries } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { USER_A, assertForeignRefused, createStory, deleteMemoryEntryInput, drainLeftoverWork, problemOf,
-  seedMemoryEntry, serverForFile } from "../support/http-harness.ts";
+import { USER_A, assertForeignRefused, createStory, deleteMemoryEntryInput, drainLeftoverWork, flagMemoryEntry,
+  problemOf, seedMemoryEntry, serverForFile } from "../support/http-harness.ts";
 import type { TestProject } from "../support/http-harness.ts";
 import { queryStoryOSPostgres } from "../support/node-integration.ts";
 
@@ -54,4 +54,20 @@ test("deleteMemoryEntry deletes one entry of its Project and an exact retry repl
   await assertForeignRefused(story, "deleteMemoryEntry", deleteMemoryEntryInput(story, entry, "2"));
   assert.equal(await versions(story.projectId), "1 current author_request, 2 deleted author_delete");
   assert.deepEqual(await listed(other), [foreign]);
+});
+
+test("deleteMemoryEntry with the version before a conflict flag gives entry_changed", async () => {
+  await drainLeftoverWork();
+  const story = await createStory(server, { title: "Memory Flag Delete Novel" });
+  const entry = await seedMemoryEntry(story.projectId);
+  await flagMemoryEntry(story.projectId, entry, "第三章说他不撑船。", { kind: "chapter", chapter_id: story.chapterIds[0] ?? "" });
+
+  // The page showed the version 1 and not the flag, so the delete does not apply.
+  const stale = await story.send("deleteMemoryEntry", deleteMemoryEntryInput(story, entry, "1"));
+  assert.deepEqual(stale.response.effect, { kind: "conflicted", reason: "entry_changed" });
+  const deleted = await story.send("deleteMemoryEntry", deleteMemoryEntryInput(story, entry, "2"));
+  assert.equal(deleted.response.effect.kind, "authoritative_applied");
+  assert.equal(await versions(story.projectId),
+    "1 current author_request, 2 current conflict_flag, 3 deleted author_delete");
+  assert.deepEqual(await listed(story), []);
 });

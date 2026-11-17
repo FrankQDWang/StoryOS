@@ -361,18 +361,22 @@ pub fn decide_memory_write(
     {
         return Err(MemoryWriteRefusal::Exists(other.number));
     }
+    // The written version has no flag. The check counts the other lines with no flag too. Above
+    // the limit, the Index of a Run is an excerpt.
     let index: Vec<MemoryIndexEntry> = others
         .map(|entry| MemoryIndexEntry {
             number: entry.number,
             entry_type: entry.entry_type,
             title: entry.title.clone(),
             description: entry.description.clone(),
+            flagged: false,
         })
         .chain([MemoryIndexEntry {
             number: version.number,
             entry_type: version.entry_type,
             title: version.title.clone(),
             description: version.description.clone(),
+            flagged: false,
         }])
         .collect();
     match memory_index_text(&index).1 {

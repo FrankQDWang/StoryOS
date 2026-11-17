@@ -1,8 +1,30 @@
 {
   "$defs": {
+    "MemoryEntryFlagInspect": {
+      "additionalProperties": false,
+      "description": "The conflict flag of the current version of an entry (ADR 0094 section 7): the reason, the\nsource of the conflict, and the time of the flag version.",
+      "properties": {
+        "flagged_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/MemoryEntrySourceInspect"
+        }
+      },
+      "required": [
+        "reason",
+        "source",
+        "flagged_at"
+      ],
+      "type": "object"
+    },
     "MemoryEntryInspect": {
       "additionalProperties": false,
-      "description": "The current version of one Memory Entry. The `source` is `null` when the version has no source\nreference that the Host can decode.",
+      "description": "The current version of one Memory Entry. The `source` is `null` when the version has no source\nreference that the Host can decode. Only an entry with a conflict flag has `flag`.",
       "properties": {
         "changed_at": {
           "format": "date-time",
@@ -17,6 +39,9 @@
         },
         "entry_type": {
           "$ref": "#/$defs/MemoryEntryTypeInspect"
+        },
+        "flag": {
+          "$ref": "#/$defs/MemoryEntryFlagInspect"
         },
         "memory_entry_id": {
           "format": "uuid",
