@@ -8,12 +8,12 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ConversationSelection, MemoryCaptureSource, MemoryWorkOutcome, MemoryWorkScheduleStore,
-    NoContractFaults, StartedMemoryCapture, complete_agent_run,
+    NoContractFaults, ProjectScope, StartedMemoryCapture, complete_agent_run,
 };
-use storyos_core::ConversationCaptureSkip;
 use tokio_postgres::Client;
 
 use super::tests::{claim_due, make_due};
+use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, stores};
 use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_steering::tests::{
@@ -118,10 +118,81 @@ async fn ends(admin: &Client, run_id: &str) -> Value {
     json!([settled[0], settled[2], read[2], read[3]])
 }
 
+/// A Worker that stops after the claim of the row of the Conversation and before the start of its
+/// capture leaves the row due, because the claim and the start are one transaction. The next
+/// claim starts one capture, and a second delivery starts no second capture for the same
+/// messages. Returns whether the stopped claim failed, the due state after it, the skip of the
+/// second delivery, and the count of the captures of the Conversation, and the started capture.
+async fn stopped_claim(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    conversation_id: &str,
+) -> (Value, StartedMemoryCapture) {
+    make_due(admin, conversation_id).await;
+    // The lock holds the start of the capture after the claim of the row. The end of the session
+    // of the claim is the stop of the Worker.
+    admin
+        .batch_execute("BEGIN; LOCK TABLE storyos.memory_captures IN SHARE ROW EXCLUSIVE MODE")
+        .await
+        .unwrap();
+    let stop = async {
+        // A blocked session gives no signal, so this is the one wait with a sleep. The lock goes
+        // only after the session of the claim ended.
+        let mut stopped: Option<i32> = None;
+        for _ in 0..1_000 {
+            let session: Option<i32> = match stopped {
+                None => admin
+                    .query_opt(
+                        "SELECT waiting.pid
+                           FROM (SELECT pid FROM pg_locks
+                                  WHERE NOT granted
+                                    AND relation = 'storyos.memory_captures'::regclass
+                                 OFFSET 0) AS waiting
+                          WHERE pg_terminate_backend(waiting.pid)",
+                        &[],
+                    )
+                    .await
+                    .unwrap(),
+                Some(pid) => admin
+                    .query_opt("SELECT pid FROM pg_stat_activity WHERE pid = $1", &[&pid])
+                    .await
+                    .unwrap(),
+            }
+            .map(|row| row.get(/*idx*/ 0));
+            match (stopped, session) {
+                (None, Some(pid)) => stopped = Some(pid),
+                (Some(_), None) => break,
+                _ => tokio::time::sleep(std::time::Duration::from_millis(/*millis*/ 10)).await,
+            }
+        }
+        admin.batch_execute("ROLLBACK").await.unwrap();
+    };
+    let (stopped, ()) = tokio::join!(store.claim_due_memory_work(), stop);
+    let after_stop = due(admin, conversation_id).await;
+    let capture = store.claim_due_memory_work().await.unwrap().unwrap();
+    let capture = started(capture.outcome);
+    let MemoryWorkOutcome::Skipped(second) = claim_due(store, admin, scope, conversation_id).await
+    else {
+        panic!("a second delivery must start no capture");
+    };
+    let captures: i64 = admin
+        .query_one(
+            "SELECT count(*) FROM storyos.memory_captures WHERE conversation_id = $1::text::uuid",
+            &[&conversation_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let facts = json!([stopped.is_err(), after_stop, second.label(), captures]);
+    (facts, capture)
+}
+
 /// The input has the messages of each completed Run of its Conversation after the last Run that
 /// a capture read, also a steering input that a RunStep read. A cancelled Run gives no message. A
 /// capture reads only the Conversation of its row in its Project Scope. A capture with no later
-/// Run settles with `no_observation`, and the due time stays empty.
+/// Run settles with `no_observation`, and the due time stays empty. The row of the second Project
+/// goes through a stopped Worker (`stopped_claim`).
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_capture_reads_the_completed_runs_of_its_conversation_and_no_cancelled_run() {
@@ -168,20 +239,20 @@ async fn each_capture_reads_the_completed_runs_of_its_conversation_and_no_cancel
     let conversation = existing(&conversation_id);
     let last = admitted(&store, &scope, &chapter_id, "582", "继续写。", conversation).await;
     complete(&store, &admin, &scope, &last).await;
+    let capture = started(claim_due(&store, &admin, &scope, &conversation_id).await);
+    run_capture(&store, &admin, &scope, &capture.run_id).await;
+    let mut reads = vec![
+        read_runs(&admin, &capture.run_id).await,
+        settlement(&admin, &capture.run_id).await[2].clone(),
+    ];
     let (other_conversation, other_first) = source_runs(&other);
-    let mut reads = Vec::new();
-    for (scope, conversation_id) in [
-        (&scope, &conversation_id),
-        (&other_scope, &other_conversation),
-    ] {
-        let capture = started(claim_due(&store, &admin, scope, conversation_id).await);
-        run_capture(&store, &admin, scope, &capture.run_id).await;
-        reads.push(read_runs(&admin, &capture.run_id).await);
-        reads.push(settlement(&admin, &capture.run_id).await[2].clone());
-    }
+    let (stop, capture) = stopped_claim(&store, &admin, &other_scope, &other_conversation).await;
+    run_capture(&store, &admin, &other_scope, &capture.run_id).await;
+    reads.push(read_runs(&admin, &capture.run_id).await);
+    reads.push(settlement(&admin, &capture.run_id).await[2].clone());
 
     assert_eq!(
-        (reads, due(&admin, &conversation_id).await),
+        (reads, due(&admin, &conversation_id).await, stop),
         (
             vec![
                 json!([
@@ -208,7 +279,8 @@ async fn each_capture_reads_the_completed_runs_of_its_conversation_and_no_cancel
                 ]),
                 json!("no_observation"),
             ],
-            "empty".to_owned()
+            "empty".to_owned(),
+            json!([true, "now", "capture_in_progress", 1])
         )
     );
 }
@@ -338,8 +410,9 @@ async fn a_new_message_during_a_capture_does_not_wait_and_the_settlement_makes_t
 }
 
 /// The settlement of a `step_limit` or a `failed` capture does not set the due time, so the Host
-/// starts no capture for the same messages by itself. The next capture reads also the messages
-/// that the capture before it did not complete. The next completed Run makes the row due again.
+/// starts no capture for the same messages by itself: a Run that completes during the capture
+/// leaves the row due at the end of the quiet time, not at once. The next capture reads also the
+/// messages that the capture before it did not complete.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_failed_or_step_limit_capture_sets_no_due_time_and_the_next_capture_reads_its_runs() {
@@ -357,10 +430,22 @@ async fn a_failed_or_step_limit_capture_sets_no_due_time_and_the_next_capture_re
     let conversation = existing(&conversation_id);
     let second = admitted(&store, &scope, &chapter_id, "58d", &edits, conversation).await;
     complete(&store, &admin, &scope, &second).await;
+    let during = |prefix: &'static str| {
+        let (store, admin, scope) = (&store, &admin, &scope);
+        let (chapter_id, conversation) = (chapter_id.clone(), existing(&conversation_id));
+        async move {
+            let run_id =
+                admitted(store, scope, &chapter_id, prefix, "继续写。", conversation).await;
+            complete(store, admin, scope, &run_id).await;
+            run_id
+        }
+    };
     let limited = started(claim_due(&store, &admin, &scope, &conversation_id).await);
+    let third = during("58e").await;
     run_capture(&store, &admin, &scope, &limited.run_id).await;
     let after_limit = due(&admin, &conversation_id).await;
     let failed = started(claim_due(&store, &admin, &scope, &conversation_id).await);
+    let fourth = during("58f").await;
     let grant = |version: &'static str| {
         let admin = &admin;
         let project_id = scope.project_id.as_ref().to_owned();
@@ -382,10 +467,6 @@ async fn a_failed_or_step_limit_capture_sets_no_due_time_and_the_next_capture_re
     run_capture(&store, &admin, &scope, &failed.run_id).await;
     grant("v5").await;
     let after_failed = due(&admin, &conversation_id).await;
-    let conversation = existing(&conversation_id);
-    let third = admitted(&store, &scope, &chapter_id, "58e", "继续写。", conversation).await;
-    complete(&store, &admin, &scope, &third).await;
-    let after_third = due(&admin, &conversation_id).await;
     let next = started(claim_due(&store, &admin, &scope, &conversation_id).await);
     run_capture(&store, &admin, &scope, &next.run_id).await;
 
@@ -395,93 +476,14 @@ async fn a_failed_or_step_limit_capture_sets_no_due_time_and_the_next_capture_re
             after_limit,
             ends(&admin, &failed.run_id).await,
             after_failed,
-            after_third,
             ends(&admin, &next.run_id).await
         ),
         (
             json!(["completed", "step_limit", first, second]),
-            "empty".to_owned(),
-            json!(["refused", "failed", first, second]),
-            "empty".to_owned(),
             "quiet".to_owned(),
-            json!(["completed", "step_limit", first, third])
-        )
-    );
-}
-
-/// A Worker that stops after the claim of a row and before the start of its capture leaves the
-/// row due, because the claim and the start are one transaction. The next claim starts one
-/// capture, and a second delivery starts no second capture for the same messages.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_stopped_worker_leaves_the_row_due_and_the_next_claim_starts_one_capture() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let (scope, _, source) = project(&store, &admin, "58f").await;
-    let (conversation_id, _) = source_runs(&source);
-    make_due(&admin, &conversation_id).await;
-    // The lock holds the start of the capture after the claim of the row. The end of the session
-    // of the claim is the stop of the Worker.
-    admin
-        .batch_execute("BEGIN; LOCK TABLE storyos.memory_captures IN SHARE ROW EXCLUSIVE MODE")
-        .await
-        .unwrap();
-    let stop = async {
-        // A blocked session gives no signal, so this is the one wait with a sleep. The lock goes
-        // only after the session of the claim ended.
-        let mut stopped: Option<i32> = None;
-        for _ in 0..1_000 {
-            let session: Option<i32> = match stopped {
-                None => admin
-                    .query_opt(
-                        "SELECT waiting.pid
-                           FROM (SELECT pid FROM pg_locks
-                                  WHERE NOT granted
-                                    AND relation = 'storyos.memory_captures'::regclass
-                                 OFFSET 0) AS waiting
-                          WHERE pg_terminate_backend(waiting.pid)",
-                        &[],
-                    )
-                    .await
-                    .unwrap(),
-                Some(pid) => admin
-                    .query_opt("SELECT pid FROM pg_stat_activity WHERE pid = $1", &[&pid])
-                    .await
-                    .unwrap(),
-            }
-            .map(|row| row.get(/*idx*/ 0));
-            match (stopped, session) {
-                (None, Some(pid)) => stopped = Some(pid),
-                (Some(_), None) => break,
-                _ => tokio::time::sleep(std::time::Duration::from_millis(/*millis*/ 10)).await,
-            }
-        }
-        admin.batch_execute("ROLLBACK").await.unwrap();
-    };
-    let (stopped, ()) = tokio::join!(store.claim_due_memory_work(), stop);
-    let after_stop = due(&admin, &conversation_id).await;
-    let capture = store.claim_due_memory_work().await.unwrap().unwrap();
-    let capture = started(capture.outcome);
-    let second = claim_due(&store, &admin, &scope, &conversation_id).await;
-    run_capture(&store, &admin, &scope, &capture.run_id).await;
-    let captures: i64 = admin
-        .query_one(
-            "SELECT count(*) FROM storyos.memory_captures WHERE conversation_id = $1::text::uuid",
-            &[&conversation_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-
-    assert_eq!(
-        (stopped.is_err(), after_stop, second, captures),
-        (
-            true,
-            "now".to_owned(),
-            MemoryWorkOutcome::Skipped(ConversationCaptureSkip::CaptureInProgress),
-            1
+            json!(["refused", "failed", first, third]),
+            "quiet".to_owned(),
+            json!(["completed", "step_limit", first, fourth])
         )
     );
 }
