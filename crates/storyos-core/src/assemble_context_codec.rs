@@ -124,7 +124,10 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 Some(Some("host_schedule")) => ContextCause::HostSchedule,
                 Some(_) => return None,
             },
-            chapter_id: requirement.get("chapter_id")?.as_str()?.to_owned(),
+            chapter_id: match requirement.get("chapter_id")? {
+                serde_json::Value::Null => None,
+                value => Some(value.as_str()?.to_owned()),
+            },
             chapter_revision_id: match requirement.get("chapter_revision_id")? {
                 serde_json::Value::Null => None,
                 value => Some(value.as_str()?.to_owned()),

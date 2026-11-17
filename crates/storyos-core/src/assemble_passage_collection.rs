@@ -105,7 +105,7 @@ pub fn assemble_passage_collection(
         });
         reasons.push(ContextBlockReason::WorkingTargetRevisionUnavailable);
     }
-    record.operation_requirement.chapter_id = source.chapter_id.clone();
+    record.operation_requirement.chapter_id = Some(source.chapter_id.clone());
     record.operation_requirement.chapter_revision_id = source.chapter_revision_id.clone();
     record.operation_requirement.proposal_target_block_ids =
         source.proposal_target_block_ids.clone();

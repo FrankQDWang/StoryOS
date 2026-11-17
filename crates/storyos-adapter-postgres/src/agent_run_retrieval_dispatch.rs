@@ -140,7 +140,7 @@ pub(crate) async fn record_original_result(
     let advance = RetrievalAdvance::of(run);
     let fenced = run.status == "cancelled";
     let declared: Vec<_> =
-        crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
+        crate::agent_run_create_dispatch::declared_targets(client, claim, run.chapter()?)
             .await?
             .iter()
             .map(DeclaredTarget::location)
@@ -302,7 +302,7 @@ pub(crate) async fn record_late_result(
         .cloned()
         .ok_or_else(|| unavailable(std::io::Error::other("The successor marker is missing")))?;
     let declared: Vec<_> =
-        crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
+        crate::agent_run_create_dispatch::declared_targets(client, claim, run.chapter()?)
             .await?
             .iter()
             .map(DeclaredTarget::location)

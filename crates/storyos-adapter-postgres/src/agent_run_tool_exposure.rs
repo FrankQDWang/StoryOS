@@ -99,6 +99,7 @@ pub(crate) async fn tool_exposure(
         model_registration_revision: &run.model_registration_revision,
         skill_catalog,
         memory_use,
+        run_kind: run.kind,
     }))
 }
 

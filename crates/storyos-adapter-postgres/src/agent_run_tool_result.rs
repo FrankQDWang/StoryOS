@@ -117,7 +117,7 @@ pub(crate) async fn open_next_step(
         &PassageContextInput {
             project_scope: &claim.project_scope,
             run_id: &claim.run_id,
-            chapter_id: &run.chapter_id,
+            chapter_id: run.chapter()?,
             author_message: &author_message,
             receipt_id: &receipt_id,
             decision_position: &next_position,

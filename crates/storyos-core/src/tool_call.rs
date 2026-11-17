@@ -119,6 +119,9 @@ impl ValidatedToolCall {
             ToolIntake::WriteMemory(write) => write.arguments(),
             ToolIntake::ReadMemoryEntry { entry } => json!({ "entry": entry }),
             ToolIntake::SearchMemory { query } => json!({ "query": query }),
+            ToolIntake::RecordMemoryObservations(observations) => {
+                crate::record_memory_observations::arguments(observations)
+            }
         }
     }
 

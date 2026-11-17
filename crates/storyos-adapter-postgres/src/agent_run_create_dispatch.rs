@@ -188,7 +188,7 @@ pub(crate) async fn create_request(
             "Invalid retained Context",
         )))
     })?;
-    let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
+    let declared_targets = declared_targets(client, claim, run.chapter()?).await?;
     let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
     // A Tool qualification probe settles after its one response, so the finish rule does not
@@ -240,7 +240,7 @@ pub(crate) async fn create_request(
         }),
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
-        chapter_id: run.chapter_id.clone(),
+        chapter_id: run.chapter_id.clone().unwrap_or_default(),
         passage_resolution: input.passage_resolution,
         passage_input: input.passage_input,
         context,
@@ -358,7 +358,7 @@ async fn previous_response_reference(
                     let wire = crate::agent_run_continuation::decide_continuation(
                         client,
                         claim,
-                        &run.conversation_id,
+                        run.conversation()?,
                         &run.author_message,
                         &assistance,
                         tool_exposure_digest,

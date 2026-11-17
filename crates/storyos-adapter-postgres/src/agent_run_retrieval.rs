@@ -39,8 +39,8 @@ impl<'a> RetrievalAdvance<'a> {
     pub(crate) fn of(run: &'a RunPhaseRow) -> Self {
         Self {
             attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
-            conversation_id: &run.conversation_id,
-            chapter_id: &run.chapter_id,
+            conversation_id: run.conversation_id.as_deref().unwrap_or_default(),
+            chapter_id: run.chapter_id.as_deref().unwrap_or_default(),
             run_status: &run.status,
             grant_admitted: crate::agent_run_work::grant_admitted(run),
             mapping_revision: storyos_core::model_registration(&run.model_registration_revision)

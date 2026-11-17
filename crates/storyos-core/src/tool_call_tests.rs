@@ -22,6 +22,7 @@ fn pinned() -> ExposureSnapshot {
         model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
         skill_catalog: false,
         memory_use: false,
+        run_kind: crate::AgentRunKind::Author,
     });
     ExposureSnapshot::decode(Some(&exposure.snapshot())).unwrap()
 }

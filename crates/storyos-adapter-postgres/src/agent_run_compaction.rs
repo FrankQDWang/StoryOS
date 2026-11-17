@@ -190,7 +190,7 @@ async fn declared_target_texts(
         return Ok(Vec::new());
     }
     Ok(
-        crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
+        crate::agent_run_create_dispatch::declared_targets(client, claim, run.chapter()?)
             .await?
             .into_iter()
             .map(|target| target.block_text)
