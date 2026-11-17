@@ -1,6 +1,6 @@
 //! The validation of the operations of one `apply_memory_operations` call in list order (ADR 0039,
 //! ADR 0094 sections 6 and 8): the shape of each action, the checks of the list, the write rule of
-//! S7-D1a2, the delete marks, and the versions of a merge.
+//! S7-D1a2, the delete marks, and the versions of a merge. A conflict flag has its own module.
 
 use crate::{
     AdmittedOperation, CurrentMemoryEntry, MemoryDeleteMark, MemoryEntryOrigin, MemoryEntryType,
@@ -14,7 +14,9 @@ use crate::{
 fn memory_write(candidate: &MemoryOperationCandidate) -> Result<MemoryWrite, MemoryWriteRefusal> {
     let action = match candidate.action {
         MemoryOperationAction::Create => MemoryWriteAction::Create,
-        MemoryOperationAction::Update | MemoryOperationAction::Merge => MemoryWriteAction::Change,
+        MemoryOperationAction::Update
+        | MemoryOperationAction::Merge
+        | MemoryOperationAction::FlagConflict => MemoryWriteAction::Change,
         MemoryOperationAction::Delete => MemoryWriteAction::Delete,
     };
     let given = [&candidate.title, &candidate.description, &candidate.text];
@@ -31,6 +33,8 @@ fn memory_write(candidate: &MemoryOperationCandidate) -> Result<MemoryWrite, Mem
                     && candidate.reason.is_none()
                     && given.iter().all(|value| value.is_some())
             }
+            // A flag is not a write (`memory_conflict_flag`).
+            MemoryOperationAction::FlagConflict => false,
             MemoryOperationAction::Delete => {
                 candidate.entry_type.is_none()
                     && candidate.reason.as_deref().is_some_and(|reason| {
@@ -61,12 +65,14 @@ fn memory_write(candidate: &MemoryOperationCandidate) -> Result<MemoryWrite, Mem
     }
 }
 
-/// The numbers of the entries that `candidate` names: the entry of an update or a delete, and
-/// each entry of a merge. A create names no entry.
+/// The numbers of the entries that `candidate` names: the entry of an update, a delete, or a flag,
+/// and each entry of a merge. A create names no entry.
 fn named_entries(candidate: &MemoryOperationCandidate) -> Vec<u64> {
     let numbers = match candidate.action {
         MemoryOperationAction::Create => &[][..],
-        MemoryOperationAction::Update | MemoryOperationAction::Delete => candidate.entry.as_slice(),
+        MemoryOperationAction::Update
+        | MemoryOperationAction::Delete
+        | MemoryOperationAction::FlagConflict => candidate.entry.as_slice(),
         MemoryOperationAction::Merge => candidate.entries.as_deref().unwrap_or_default(),
     };
     numbers
@@ -94,7 +100,7 @@ pub fn decide_memory_operations(
     for candidate in candidates {
         let facts = (current.as_slice(), next_entry_number, observations, marks);
         let decision = decide_one(candidate, facts, &named);
-        // An update, a merge, or a delete names its entries also when the Host refuses it.
+        // An update, a merge, a delete, or a flag names its entries also when the Host refuses it.
         match (&decision, candidate.action) {
             (Ok(admitted), MemoryOperationAction::Create) => named.push(admitted.version.number),
             (Err(_), MemoryOperationAction::Create) => {}
@@ -174,6 +180,9 @@ fn decide_one(
     let targets = named_entries(candidate);
     if targets.iter().any(|number| named.contains(number)) {
         return Err(MemoryOperationRefusal::EntryNamedTwice);
+    }
+    if candidate.action == MemoryOperationAction::FlagConflict {
+        return crate::memory_conflict_flag::decide_flag(candidate, current, observations);
     }
     // A merge has two or more entries, each one time and each a number of an entry.
     let merge = candidate.action == MemoryOperationAction::Merge;

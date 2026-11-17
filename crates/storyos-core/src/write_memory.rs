@@ -169,7 +169,8 @@ pub struct CurrentMemoryEntry {
     pub text: String,
 }
 
-/// The version that one admitted write adds. `memory_entry_id` is `None` for a new entry.
+/// The version that one admitted write adds. `memory_entry_id` is `None` for a new entry. Only a
+/// flag version (ADR 0094 section 7) has a `flag`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryVersionWrite {
     pub action: MemoryWriteAction,
@@ -181,6 +182,7 @@ pub struct MemoryVersionWrite {
     pub title: String,
     pub description: String,
     pub text: String,
+    pub flag: Option<crate::MemoryConflictFlag>,
 }
 
 impl MemoryVersionWrite {
@@ -320,6 +322,7 @@ pub fn decide_memory_write(
             title: title.unwrap_or_default().to_owned(),
             description: description.unwrap_or_default().to_owned(),
             text: write.text.clone().unwrap_or_default(),
+            flag: None,
         },
         (_, None) => return Err(MemoryWriteRefusal::NotFound),
         (action, Some(entry)) => MemoryVersionWrite {
@@ -340,6 +343,7 @@ pub fn decide_memory_write(
                     write.text.clone().unwrap_or_else(|| entry.text.clone())
                 }
             },
+            flag: None,
         },
     };
     if version.state == MemoryEntryState::Deleted {

@@ -34,6 +34,7 @@ mod load_skill;
 mod manuscript_payload;
 mod manuscript_use;
 mod memory_capture;
+mod memory_conflict_flag;
 mod memory_consolidation;
 mod memory_delete_marks;
 mod memory_entry;
@@ -244,6 +245,7 @@ pub use memory_capture::{
     MemoryCaptureAssembly, admit_memory_capture, assemble_capture_references,
     assemble_memory_capture_context, capture_end, keep_capture_references,
 };
+pub use memory_conflict_flag::MemoryConflictFlag;
 pub use memory_consolidation::{
     ConsolidationOutcome, MEMORY_CONSOLIDATION_MAX_RUN_STEPS, MemoryConsolidationAssembly,
     PassObservation, admit_memory_consolidation, assemble_memory_consolidation_context,

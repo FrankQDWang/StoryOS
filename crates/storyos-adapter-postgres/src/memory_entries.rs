@@ -256,6 +256,16 @@ pub(crate) async fn last_entry_version(
 /// the texts is the order of the times.
 pub(crate) const TIME_FORM: &str = r#"YYYY-MM-DD"T"HH24:MI:SS.MS"Z""#;
 
+/// The time of the last change of the entry of the row `latest` (ADR 0094 section 7): the time of
+/// its last version that is not a flag version.
+pub(crate) const LAST_CHANGE: &str = "(SELECT changed.recorded_at
+       FROM storyos.memory_entry_versions AS changed
+      WHERE (changed.owner_user_id, changed.project_id, changed.memory_entry_id) =
+            (latest.owner_user_id, latest.project_id, latest.memory_entry_id)
+        AND changed.flag_reason IS NULL
+      ORDER BY changed.memory_revision DESC
+      LIMIT 1)";
+
 /// The current version of the entry with the number `number` of the Project now, or `None` when no
 /// current entry has the number.
 pub(crate) async fn read_current_entry(
@@ -265,14 +275,16 @@ pub(crate) async fn read_current_entry(
 ) -> Result<Option<MemoryEntryRead>, Box<dyn std::error::Error + Send + Sync>> {
     let row = client
         .query_opt(
-            "SELECT memory_entry_id::text, version::text, entry_type, title, description, origin,
-                    to_char(recorded_at AT TIME ZONE 'UTC', $4), text
-               FROM (SELECT DISTINCT ON (memory_entry_id) *
-                       FROM storyos.memory_entry_versions
-                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                        AND entry_number = $3::text::numeric
-                      ORDER BY memory_entry_id, memory_revision DESC) AS latest
-              WHERE state = 'current'",
+            &format!(
+                "SELECT memory_entry_id::text, version::text, entry_type, title, description,
+                        origin, to_char({LAST_CHANGE} AT TIME ZONE 'UTC', $4), text
+                   FROM (SELECT DISTINCT ON (memory_entry_id) *
+                           FROM storyos.memory_entry_versions
+                          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                            AND entry_number = $3::text::numeric
+                          ORDER BY memory_entry_id, memory_revision DESC) AS latest
+                  WHERE state = 'current'"
+            ),
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -343,13 +355,18 @@ pub(crate) struct VersionSource<'a> {
 }
 
 /// Writes `version` as the next Memory revision of the Project after `revision`, and moves the
-/// head. A new entry gets the identity `new_entry_id` and the next entry number after it.
+/// head. A new entry gets the identity `new_entry_id` and the next entry number after it. The flag
+/// of a flag version goes into the columns `flag_reason` and `flag_source`.
 pub(crate) async fn write_memory_version(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     (revision, version, new_entry_id): (u64, &MemoryVersionWrite, &str),
     source: &VersionSource<'_>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let flag_source = version
+        .flag
+        .as_ref()
+        .map(|flag| serde_json::json!(flag.source).to_string());
     let next_number = match version.memory_entry_id {
         Some(_) => None,
         None => Some((version.number + 1).to_string()),
@@ -367,10 +384,10 @@ pub(crate) async fn write_memory_version(
              INSERT INTO storyos.memory_entry_versions
                  (owner_user_id, project_id, memory_entry_id, entry_number, version,
                   memory_revision, state, entry_type, origin, title, description, text, cause,
-                  source_references)
+                  source_references, flag_reason, flag_source)
              SELECT $1::text::uuid, $2::text::uuid, $5::text::uuid, $6::text::numeric,
                     $7::text::numeric, head.memory_revision, $8, $9, $10, $11, $12, $13,
-                    $14::text::jsonb, $15::text::jsonb
+                    $14::text::jsonb, $15::text::jsonb, $16, $17::text::jsonb
                FROM head",
             &[
                 &scope.owner_user_id.as_ref(),
@@ -388,6 +405,8 @@ pub(crate) async fn write_memory_version(
                 &version.text,
                 &source.cause.to_string(),
                 &source.source_references.to_string(),
+                &version.flag.as_ref().map(|flag| flag.reason.as_str()),
+                &flag_source,
             ],
         )
         .await?;

@@ -61,9 +61,9 @@ fn utc_milliseconds(time: &str) -> Option<i64> {
     Some(((days * 24 + hour) * 60 + minute) * 60_000 + second * 1000 + milli)
 }
 
-/// Decides the mark `unused` of one current entry from the time of its last read by a Run of
-/// the author, the time of its last change, and the time now, each in the store form. An entry
-/// of the author never gets the mark. A background entry gets it when its last change and its
+/// Decides the mark `unused` of one current entry. Its inputs are three times in the store form:
+/// the last read by a Run of the author, the last change, and now. An entry of the author never
+/// gets the mark. A background entry gets it when its last change and its
 /// last read, if any, are `MEMORY_UNUSED_AFTER_DAYS` days or more before now. A time in another
 /// form gives no mark.
 pub fn memory_entry_unused(

@@ -12,6 +12,7 @@ use storyos_application::{
 use storyos_core::{MemoryEntryOrigin, MemoryEntryType, MemorySourceReference};
 
 use super::{PostgresProjectReader, read_error, set_scope};
+use crate::memory_entries::{LAST_CHANGE, TIME_FORM};
 
 /// The rows of the current entries, the Conversations of the Project, and the title of each live
 /// Chapter, or `None` when the Project is not visible.
@@ -104,15 +105,16 @@ async fn read_facts(
     }
     let rows = client
         .query(
-            "SELECT memory_entry_id::text, entry_number::text, version::text, entry_type,
-                    title, description, text, origin, (source_references -> 0)::text,
-                    to_char(recorded_at AT TIME ZONE 'UTC',
-                            'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
-               FROM (SELECT DISTINCT ON (memory_entry_id) *
-                       FROM storyos.memory_entry_versions
-                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                      ORDER BY memory_entry_id, memory_revision DESC) AS latest
-              WHERE state = 'current'",
+            &format!(
+                "SELECT memory_entry_id::text, entry_number::text, version::text, entry_type,
+                        title, description, text, origin, (source_references -> 0)::text,
+                        to_char({LAST_CHANGE} AT TIME ZONE 'UTC', '{TIME_FORM}')
+                   FROM (SELECT DISTINCT ON (memory_entry_id) *
+                           FROM storyos.memory_entry_versions
+                          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                          ORDER BY memory_entry_id, memory_revision DESC) AS latest
+                  WHERE state = 'current'"
+            ),
             &values,
         )
         .await

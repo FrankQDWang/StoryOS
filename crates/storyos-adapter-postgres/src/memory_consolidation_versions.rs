@@ -1,6 +1,7 @@
 //! The current entries of a consolidation pass and the versions that its settlement writes (ADR
 //! 0094 sections 6 and 8): the entries with their sources and the mark `unused`, and the version
-//! of each admitted operation, with the deleted version of each entry that a merge merged.
+//! of each admitted operation, with the deleted version of each entry that a merge merged, or the
+//! flag version of a conflict flag.
 
 use serde_json::{Value, json};
 use storyos_application::{CompleteAgentRunError, ProjectScope};
@@ -11,7 +12,7 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::damaged;
-use crate::memory_entries::{TIME_FORM, VersionSource, write_memory_version};
+use crate::memory_entries::{LAST_CHANGE, TIME_FORM, VersionSource, write_memory_version};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -60,7 +61,7 @@ pub(crate) async fn pass_entries(
         .query(
             &format!(
                 "SELECT memory_entry_id::text, entry_number::text, version::text, entry_type,
-                        title, description, text, origin, to_char(recorded_at AT TIME ZONE 'UTC',
+                        title, description, text, origin, to_char({LAST_CHANGE} AT TIME ZONE 'UTC',
                         '{TIME_FORM}'), source_references::text
                    FROM (SELECT DISTINCT ON (memory_entry_id) *
                            FROM storyos.memory_entry_versions
@@ -97,7 +98,7 @@ pub(crate) async fn pass_entries(
 }
 
 /// Writes the versions of the admitted operation `admitted` from the Memory revision `written`,
-/// and returns the Memory revision after them.
+/// and returns the Memory revision after them. A flag version keeps the sources of its entry.
 pub(crate) async fn write_admitted(
     client: &Client,
     scope: &ProjectScope,
@@ -121,9 +122,14 @@ pub(crate) async fn write_admitted(
             unique.push(source);
         }
     }
+    // A flag version has the cause `conflict_flag` (ADR 0094 section 7).
+    let mut version_cause = cause.clone();
+    if admitted.version.flag.is_some() {
+        version_cause["kind"] = json!("conflict_flag");
+    }
     let source = VersionSource {
         origin: admitted.origin.as_str(),
-        cause: cause.clone(),
+        cause: version_cause,
         source_references: Value::from(unique),
     };
     let new_entry_id = Uuid::now_v7().to_string();

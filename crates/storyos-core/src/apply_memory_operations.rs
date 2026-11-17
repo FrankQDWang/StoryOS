@@ -24,8 +24,9 @@ pub const APPLY_MEMORY_OPERATIONS_TOOL_SPEC: ToolSpec = ToolSpec {
 pub(crate) const DESCRIPTION: &str = "Applies the operations of this consolidation pass to the \
 Memory of the Project. Call it one time. Create an entry from one or more observations. Update an \
 entry with what the observations add. Merge two or more entries of one type into the first of \
-them. Delete an entry that is not true now. Each entry and each observation has its number in \
-the input. Give an empty list when the Memory needs no change.";
+them. Delete an entry that is not true now. Flag an entry of the author that conflicts with the \
+observations, and do not change it. Each entry and each observation has its number in the input. \
+Give an empty list when the Memory needs no change.";
 
 /// The keys of an operation. The strict schema requires each one, also when its value is null.
 const KEYS: [&str; 9] = [
@@ -61,12 +62,12 @@ pub fn parameters() -> Value {
                     "properties": {
                         "action": {
                             "type": "string",
-                            "enum": ["create", "update", "merge", "delete"]
+                            "enum": ["create", "update", "merge", "delete", "flag_conflict"]
                         },
                         "entry": {
                             "type": ["integer", "null"],
-                            "description": "The number of the entry to update or delete. Null \
-                                            for create and merge."
+                            "description": "The number of the entry to update, delete, or \
+                                            flag. Null for create and merge."
                         },
                         "entries": {
                             "type": ["array", "null"],
@@ -76,19 +77,26 @@ pub fn parameters() -> Value {
                                             actions."
                         },
                         "type": value(&types),
-                        "title": value("One line, at most 30 characters. Null for delete."),
-                        "description": value("One line, at most 100 characters. Null for delete."),
+                        "title": value(
+                            "One line, at most 30 characters. Null for delete and flag_conflict."
+                        ),
+                        "description": value(
+                            "One line, at most 100 characters. Null for delete and flag_conflict."
+                        ),
                         "text": value(
                             "Markdown, at most 600 characters, or 1500 for a character. Null for \
-                             delete."
+                             delete and flag_conflict."
                         ),
                         "observations": {
                             "type": "array",
                             "items": { "type": "integer" },
                             "description": "The numbers of the observations that the operation \
-                                            uses. Create needs one or more."
+                                            uses. Create and flag_conflict need one or more."
                         },
-                        "reason": value("Why the entry is deleted, in one line. Null otherwise.")
+                        "reason": value(
+                            "Why the entry is deleted, or the conflict of a flag, in one line of \
+                             at most 100 characters. Null otherwise."
+                        )
                     },
                     "required": KEYS,
                     "additionalProperties": false
@@ -108,6 +116,7 @@ pub enum MemoryOperationAction {
     Update,
     Merge,
     Delete,
+    FlagConflict,
 }
 
 /// One operation as the model gave it. The type is the given text: the validation refuses a type
@@ -219,6 +228,8 @@ pub enum MemoryOperationRefusal {
     /// A create, an update, or a merge gives an entry the type and the title of an entry that the
     /// author deleted.
     DeletedByAuthor,
+    /// A conflict flag names an entry whose origin is not the request of the author.
+    FlagNeedsAuthorEntry,
     /// The write rule of S7-D1a2.
     Write(MemoryWriteRefusal),
 }
@@ -233,6 +244,7 @@ impl MemoryOperationRefusal {
             Self::CreateWithoutSource => "create_without_source",
             Self::MergeTypeMismatch => "merge_type_mismatch",
             Self::DeletedByAuthor => "deleted_by_author",
+            Self::FlagNeedsAuthorEntry => "flag_needs_author_entry",
             Self::Write(refusal) => refusal.label(),
         }
     }
@@ -241,7 +253,8 @@ impl MemoryOperationRefusal {
 /// One operation that Core admitted: the version to write, the origin of the entry, and the
 /// sources of the observations that it uses, each one time. The store adds these sources to the
 /// sources of the earlier version. A merge also gives the `deleted` version of each other entry
-/// that it merged, and the store adds the sources of these entries to the result.
+/// that it merged, and the store adds the sources of these entries to the result. A conflict flag
+/// adds no source: the source of the flag is in its version.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AdmittedOperation {
     pub version: MemoryVersionWrite,
