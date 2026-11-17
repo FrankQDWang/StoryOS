@@ -1,11 +1,11 @@
 //! The manuscript Tool uses of a Run, for the Run read (ADR 0095 section 1). This module reads
-//! the stored `read_chapter` and `search_manuscript` calls of the Run, and the Core rule
-//! `manuscript_uses` decides the entries.
+//! the stored `read_chapter`, `search_manuscript`, and `hybrid_search_manuscript` calls of the
+//! Run, and the Core rule `manuscript_uses` decides the entries.
 
 use storyos_application::{CreateAgentRunError, ProjectScope};
 use storyos_core::{
-    ManuscriptUse, READ_CHAPTER_TOOL_SPEC, SEARCH_MANUSCRIPT_TOOL_SPEC, StoredManuscriptCall,
-    ToolCallState,
+    HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC, ManuscriptUse, READ_CHAPTER_TOOL_SPEC,
+    SEARCH_MANUSCRIPT_TOOL_SPEC, StoredManuscriptCall, ToolCallState,
 };
 
 use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
@@ -22,7 +22,7 @@ pub(crate) async fn load(
             "SELECT tool_spec_revision, state, arguments::text, result_text
                FROM storyos.tool_calls
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND tool_spec_revision IN ($4, $5)
+                AND run_id = $3::text::uuid AND tool_spec_revision IN ($4, $5, $6)
               ORDER BY decision_position, call_position",
             &[
                 &owner_user_id,
@@ -30,6 +30,7 @@ pub(crate) async fn load(
                 &run_id,
                 &READ_CHAPTER_TOOL_SPEC.revision,
                 &SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
+                &HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
             ],
         )
         .await
