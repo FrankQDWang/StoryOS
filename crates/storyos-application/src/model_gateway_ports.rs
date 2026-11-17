@@ -91,16 +91,18 @@ pub enum CreatePurpose {
     /// One RunStep of a capture (ADR 0094 section 5). The request sends the input of the
     /// capture and the Tool outputs of the Run, and it has no author message and no Chapter.
     MemoryCapture,
+    /// The one RunStep of a consolidation pass (ADR 0094 section 6). The request sends the
+    /// current entries and the observations, and it has no author message and no Chapter.
+    MemoryConsolidation,
 }
 
 impl CreatePurpose {
-    /// The purpose of a decision request of a Run of `kind`. The Worker dispatches no
-    /// consolidation yet, so it has none.
-    pub fn of_run(kind: storyos_core::AgentRunKind) -> Option<Self> {
+    /// The purpose of a decision request of a Run of `kind`.
+    pub fn of_run(kind: storyos_core::AgentRunKind) -> Self {
         match kind {
-            storyos_core::AgentRunKind::Author => Some(Self::Decision),
-            storyos_core::AgentRunKind::MemoryCapture => Some(Self::MemoryCapture),
-            storyos_core::AgentRunKind::MemoryConsolidation => None,
+            storyos_core::AgentRunKind::Author => Self::Decision,
+            storyos_core::AgentRunKind::MemoryCapture => Self::MemoryCapture,
+            storyos_core::AgentRunKind::MemoryConsolidation => Self::MemoryConsolidation,
         }
     }
 }

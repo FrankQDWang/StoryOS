@@ -243,11 +243,7 @@ pub(crate) async fn create_request(
         attempt,
         purpose: match probe {
             Some(probe) => CreatePurpose::ToolQualification(probe.request),
-            None => CreatePurpose::of_run(run.kind).ok_or_else(|| {
-                CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
-                    "The Worker does not dispatch a Run of this kind",
-                )))
-            })?,
+            None => CreatePurpose::of_run(run.kind),
         },
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),

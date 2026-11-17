@@ -63,7 +63,8 @@ pub const SKILL_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistrat
 
 /// The current Host Tools: the six Host Tools of the mapping `v7`, `read_chapter`,
 /// `search_manuscript`, `hybrid_search_manuscript`, the Memory Tools `write_memory`, `read_memory_entry`, and `search_memory`,
-/// and the output Tool `record_memory_observations` of a capture. The Stage 7 tickets add their
+/// the output Tool `record_memory_observations` of a capture, and the output Tool
+/// `apply_memory_operations` of a consolidation pass. The Stage 7 tickets add their
 /// Tools before `finish` (ADR 0093 section 3, ADR 0094, ADR 0095).
 /// `ExposureFacts::has_host_tool` decides which of them a RunStep declares.
 pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
@@ -81,6 +82,7 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
         &READ_MEMORY_ENTRY_TOOL_SPEC,
         &SEARCH_MEMORY_TOOL_SPEC,
         &RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
+        &crate::APPLY_MEMORY_OPERATIONS_TOOL_SPEC,
         &FINISH_TOOL_SPEC,
     ],
     ..FIRST_HOST_TOOL_REGISTRATION
@@ -106,7 +108,8 @@ pub fn host_tool_result_class(spec: &ToolSpec) -> ContextSourceClass {
         | ToolOperation::LoadSkill
         | ToolOperation::ReadSkillResource
         | ToolOperation::WriteMemory
-        | ToolOperation::RecordMemoryObservations => ContextSourceClass::ToolResult,
+        | ToolOperation::RecordMemoryObservations
+        | ToolOperation::ApplyMemoryOperations => ContextSourceClass::ToolResult,
     }
 }
 
@@ -167,7 +170,8 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         // they read the manuscript,
         // `write_memory`, because it writes a Memory Entry, `read_memory_entry`, because it
         // reads a Memory Entry and records the read, `search_memory`, because it reads the
-        // Memory Entries, and `record_memory_observations`, because it writes the observations.
+        // Memory Entries, `record_memory_observations`, because it writes the observations, and
+        // `apply_memory_operations`, because it writes the Memory Entries.
         ToolIntake::WebSearch { .. }
         | ToolIntake::WebFetch { .. }
         | ToolIntake::ProposeEdit(_)
@@ -181,7 +185,8 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         | ToolIntake::WriteMemory(_)
         | ToolIntake::ReadMemoryEntry { .. }
         | ToolIntake::SearchMemory { .. }
-        | ToolIntake::RecordMemoryObservations(_) => None,
+        | ToolIntake::RecordMemoryObservations(_)
+        | ToolIntake::ApplyMemoryOperations(_) => None,
     }
 }
 
