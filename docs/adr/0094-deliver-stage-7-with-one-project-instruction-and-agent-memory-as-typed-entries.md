@@ -122,7 +122,7 @@ A model records too many small details when only its instructions limit it. The 
 - **Two steps.** An observation is not an entry. The consolidation pass sees all entries together, and it can drop an observation.
 - **Use.** The pass removes first the background entries that no Run read for a long time.
 - **Delete marks.** The marks of the entries that the author deleted go to each later capture and pass as examples of content that the author does not want.
-- **Calibration.** Before the release, one recorded live run on a sample manuscript measures the number of entries, and the ticket sets the limits from that record.
+- **Calibration.** Before the release, one recorded live run on a sample manuscript measures the number of entries, and the ticket sets the limits from that record. The run of 2026-11-17 ([record](../research/stage7-memory-calibration-2026-11-17.md)) kept each initial value.
 
 ### 9. The settings page
 
