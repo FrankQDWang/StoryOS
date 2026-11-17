@@ -176,7 +176,7 @@ pub(crate) async fn start(
     if inserted != 1 {
         return Ok(Err(MemoryCaptureStartRefusal::SourceNotFound));
     }
-    let record = storyos_core::assemble_memory_capture_context(&MemoryCaptureAssembly {
+    let mut record = storyos_core::assemble_memory_capture_context(&MemoryCaptureAssembly {
         operation_requirement_id: Uuid::now_v7().to_string(),
         input_snapshot_id: Uuid::now_v7().to_string(),
         run_id: run_id.clone(),
@@ -185,6 +185,7 @@ pub(crate) async fn start(
         input: input.to_owned(),
         destination_identity: assistance.processing_destination_identity,
     });
+    add_references(client, scope, &mut record).await?;
     crate::create_agent_run::context::insert_assembly(
         client, scope, &run_id, /*receipt_id*/ None, "0", &record,
     )
@@ -193,8 +194,39 @@ pub(crate) async fn start(
     Ok(Ok(StartedMemoryCapture { capture_id, run_id }))
 }
 
-/// The Context Assembly of the next RunStep of a capture: the input item of the RunStep before,
-/// and one `tool_result` item for each resolved ToolCall of the Run (ADR 0085).
+/// Adds the reference items of the first RunStep: the Memory Index at the current head, the
+/// Chapter list, and the delete marks (ADR 0094 sections 4, 5, and 8).
+async fn add_references(
+    client: &Client,
+    scope: &ProjectScope,
+    record: &mut CurrentPassageAssemblyRecord,
+) -> Result<(), ProjectReadError> {
+    let unavailable = |error| ProjectReadError::unavailable(std::io::Error::other(error));
+    let memory_head = crate::memory_entries::memory_head(client, scope)
+        .await
+        .map_err(unavailable)?;
+    let memory_index = crate::memory_entries::read_memory_index(client, scope, memory_head)
+        .await
+        .map_err(unavailable)?;
+    let chapters = crate::create_agent_run::context::chapter_list_entries(client, scope).await?;
+    let delete_marks = crate::memory_entries::read_delete_marks(client, scope)
+        .await
+        .map_err(unavailable)?;
+    storyos_core::assemble_capture_references(
+        record,
+        &storyos_core::CaptureReferences {
+            memory_head,
+            memory_index: &memory_index,
+            chapters: &chapters,
+            delete_marks: &delete_marks,
+        },
+    );
+    Ok(())
+}
+
+/// The Context Assembly of the next RunStep of a capture. It has the input item and the reference
+/// items of the RunStep before. It also has one `tool_result` item for each resolved ToolCall of
+/// the Run (ADR 0085).
 pub(crate) async fn persist_next_step(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -217,6 +249,7 @@ pub(crate) async fn persist_next_step(
         input: input.content.clone(),
         destination_identity: retained.operation_requirement.destination_identity.clone(),
     });
+    storyos_core::keep_capture_references(&mut record, retained);
     storyos_core::assemble_tool_result_continuation(&mut record, candidates);
     crate::create_agent_run::context::insert_assembly(
         client,
@@ -339,3 +372,7 @@ mod failure_tests;
 #[cfg(test)]
 #[path = "memory_capture_recovery_tests.rs"]
 mod recovery_tests;
+
+#[cfg(test)]
+#[path = "memory_capture_tools_tests.rs"]
+mod tools_tests;

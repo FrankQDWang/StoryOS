@@ -464,21 +464,22 @@ fn only_an_ordinary_response_without_a_decision_and_with_a_complete_call_request
     );
 }
 
-/// A capture exposes only its output Tool and a consolidation pass exposes no Tool, also with an
-/// active research binding, a Skill, and Memory use (ADR 0094 sections 5 and 6).
+/// A capture exposes its three read-only Tools and its output Tool. A consolidation pass exposes
+/// no Tool. This is also true with a research binding, a Skill, and the search by meaning. The
+/// Memory Settings of a Conversation do not control a capture (ADR 0094 sections 4 to 6).
 #[test]
 fn a_background_run_gets_only_the_tools_of_its_kind() {
     let active = [bound(
         ToolRegistrationLifecycle::Active,
         Some(ToolCompatibilityDecision::Compatible),
     )];
-    let names = |run_kind| -> Vec<&str> {
+    let names = |run_kind, memory_use| -> Vec<&str> {
         ToolExposure::compute(&ExposureFacts {
             bound: &active,
             model_registration_revision: HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
             skill_catalog: true,
-            memory_use: true,
-            hybrid_search: false,
+            memory_use,
+            hybrid_search: true,
             run_kind,
         })
         .tools
@@ -486,13 +487,32 @@ fn a_background_run_gets_only_the_tools_of_its_kind() {
         .map(|tool| tool.name)
         .collect()
     };
+    let capture = [
+        "read_chapter",
+        "search_manuscript",
+        "read_memory_entry",
+        "record_memory_observations",
+    ];
+    let author_only = [
+        "web_search",
+        "web_fetch",
+        "propose_edit",
+        "submit_research",
+        "finish",
+        "read_tool_result",
+        "load_skill",
+        "read_skill_resource",
+        "write_memory",
+        "search_memory",
+        "hybrid_search_manuscript",
+    ];
+    let author = names(crate::AgentRunKind::Author, true);
 
     assert_eq!(
-        names(crate::AgentRunKind::MemoryCapture),
-        ["record_memory_observations"]
+        [true, false].map(|memory_use| names(crate::AgentRunKind::MemoryCapture, memory_use)),
+        [capture.to_vec(), capture.to_vec()]
     );
-    assert!(names(crate::AgentRunKind::MemoryConsolidation).is_empty());
-    let author = names(crate::AgentRunKind::Author);
-    assert!(author.contains(&"web_search") && author.contains(&"finish"));
+    assert!(author_only.iter().all(|name| author.contains(name)));
+    assert!(names(crate::AgentRunKind::MemoryConsolidation, true).is_empty());
     assert!(!author.contains(&"record_memory_observations"));
 }

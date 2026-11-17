@@ -127,8 +127,8 @@ impl AgentRunKind {
     }
 
     /// Whether the decision request with `record` is too long for a Run of the kind. A
-    /// background Run does not compact, and each of its requests sends its full input with the
-    /// Tool results of the Run, so the check of ADR 0056 counts each text of the request. The
+    /// background Run does not compact. Each of its requests sends its full input and the Tool
+    /// results of the Run. Thus the check of ADR 0056 counts each text of the request. The
     /// compaction phase checks a request of a Run of the author (ADR 0093).
     pub fn full_request_too_long(
         self,

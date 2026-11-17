@@ -74,9 +74,26 @@ impl ExposureFacts<'_> {
     /// (ADR 0089 section 3).
     fn has_host_tool(&self, operation: ToolOperation) -> bool {
         match self.run_kind {
-            // A capture ends only with its output Tool, and it gets no other Tool until S7-D3d.
+            // A capture reads the manuscript and Memory and ends with its output Tool (ADR 0094
+            // section 5). A Tool that a later ticket adds for the author stays out of a capture.
             AgentRunKind::MemoryCapture => {
-                return operation == ToolOperation::RecordMemoryObservations;
+                return match operation {
+                    ToolOperation::SearchManuscript
+                    | ToolOperation::ReadChapter
+                    | ToolOperation::ReadMemoryEntry
+                    | ToolOperation::RecordMemoryObservations => true,
+                    ToolOperation::ProposeEdit
+                    | ToolOperation::SubmitResearch
+                    | ToolOperation::ReadToolResult
+                    | ToolOperation::Finish
+                    | ToolOperation::LoadSkill
+                    | ToolOperation::ReadSkillResource
+                    | ToolOperation::WriteMemory
+                    | ToolOperation::SearchMemory
+                    | ToolOperation::HybridSearchManuscript
+                    | ToolOperation::WebSearch
+                    | ToolOperation::WebFetch => false,
+                };
             }
             // A consolidation pass sends one request with no Tool (ADR 0094 section 6).
             AgentRunKind::MemoryConsolidation => return false,

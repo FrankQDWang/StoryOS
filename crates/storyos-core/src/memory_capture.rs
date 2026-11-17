@@ -185,6 +185,62 @@ pub fn assemble_memory_capture_context(
     }
 }
 
+/// The reference items of the first RunStep of a capture (ADR 0094 sections 4, 5, and 8).
+#[derive(Clone, Copy, Debug)]
+pub struct CaptureReferences<'a> {
+    /// The Memory revision of the Project head at the start of the capture.
+    pub memory_head: u64,
+    /// The current entries at that revision.
+    pub memory_index: &'a [crate::MemoryIndexEntry],
+    pub chapters: &'a [crate::ChapterListEntry],
+    /// The marks of the entries that the author deleted, newest first.
+    pub delete_marks: &'a [crate::MemoryDeleteMark],
+}
+
+/// The source classes of the reference items of a capture, in their order after the input.
+const CAPTURE_REFERENCE_CLASSES: [ContextSourceClass; 3] = [
+    ContextSourceClass::MemoryIndex,
+    ContextSourceClass::ChapterList,
+    ContextSourceClass::MemoryDeleteMarks,
+];
+
+/// Adds the reference items after the input item. They are the Memory Index at the head revision
+/// of the start, the Chapter list, and the delete marks. A capture always gets the Index. The
+/// Conversation Memory Settings control it only for a Run of a Project Conversation.
+pub fn assemble_capture_references(
+    record: &mut CurrentPassageAssemblyRecord,
+    references: &CaptureReferences<'_>,
+) {
+    let pin = crate::memory_revision_pin(/*use_enabled*/ true, references.memory_head);
+    crate::assemble_memory_index(record, pin, references.memory_index);
+    crate::assemble_chapter_list(record, references.chapters);
+    crate::assemble_memory_delete_marks(record, references.delete_marks);
+}
+
+/// Keeps the reference items and the Memory revision of the RunStep `before` in the Context
+/// Assembly of the next RunStep. Thus they stay a part of the current input (ADR 0085).
+pub fn keep_capture_references(
+    record: &mut CurrentPassageAssemblyRecord,
+    before: &CurrentPassageAssemblyRecord,
+) {
+    record.operation_requirement.memory_revision = before.operation_requirement.memory_revision;
+    let kept = |class: &ContextSourceClass| CAPTURE_REFERENCE_CLASSES.contains(class);
+    record.considered.extend(
+        before
+            .considered
+            .iter()
+            .filter(|source| kept(&source.source_class))
+            .cloned(),
+    );
+    record.selected.extend(
+        before
+            .selected
+            .iter()
+            .filter(|item| kept(&item.source_class))
+            .cloned(),
+    );
+}
+
 #[cfg(test)]
 #[path = "memory_capture_tests.rs"]
 mod tests;
