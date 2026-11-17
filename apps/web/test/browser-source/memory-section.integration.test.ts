@@ -113,7 +113,8 @@ it("shows each entry in the group of its type with its text, its origin line, an
     ["人物", [
       { title: "林舟", text: MARKUP, origin: "来自对话来源已不可用", originKind: "unavailable", links: [],
         time: at(2) },
-      { title: "阿青", text: "内容3。", origin: "来自章节《渡口》", originKind: "chapter", links: [], time: at(3) },
+      { title: "阿青", text: "内容3。", origin: "来自章节《渡口》", originKind: "chapter",
+        links: [`/projects/${PROJECT}?chapter=${CHAPTER}`], time: at(3) },
     ]],
     ["其他", [{ title: "旧事", text: "内容1。", origin: "来源已不可用", originKind: "unavailable", links: [],
       time: at(1) }]],

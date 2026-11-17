@@ -56,6 +56,7 @@ import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
 import { navigateProposal, type ProposalFocus, type ProposalNavigation } from "./proposal-navigation.ts";
 import { ProjectSettingsLink, ProjectSettingsView } from "./project-settings.tsx";
 import { WritingWorkspace } from "./writing-workspace.tsx";
+import { ADDRESS_CHAPTER_NOT_FOUND_SENTENCE, useAddressChapter } from "./address-chapter.ts";
 
 interface Stage1ViewProps {
   state: ControlledProjectState;
@@ -65,6 +66,7 @@ interface Stage1ViewProps {
   /** The timers of the Editor Session writing controller. The default is the global timers. */
   writingTimers?: ChallengeAdmissionTimers | undefined;
 }
+
 
 interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   state: ProjectReadyState;
@@ -237,19 +239,21 @@ function ProjectReadyView({
     })();
   };
 
-  // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026).
-  const selectChapter = (chapterId: string) => {
-    if (structureInFlightRef.current) return;
-    if (chapterId === selectedChapterIdRef.current) return;
+  // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026). The result is true
+  // when the command changed the Current Chapter and the workspace opens again at the Chapter.
+  const selectChapter = (chapterId: string): Promise<boolean> => {
+    if (structureInFlightRef.current) return Promise.resolve(false);
+    if (chapterId === selectedChapterIdRef.current) return Promise.resolve(false);
     if (state.editor.kind !== "editor-ready" || writing === undefined) {
       browseChapter(chapterId);
-      return;
+      return Promise.resolve(false);
     }
     structureInFlightRef.current = true;
     const editorSessionId = state.editor.session.editor_session.editor_session_id;
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
-    void (async () => {
+    return (async () => {
+      let reopened = false;
       try {
         const quiet = await writing.runAfterQuiesce("settled", async () => {
           if (generation !== switchGenerationRef.current) return;
@@ -280,6 +284,7 @@ function ProjectReadyView({
             setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
             return;
           }
+          reopened = switched.effect.kind === "authoritative_applied";
           onReopened(await openControlledProject({
             baseUrl,
             projectId: state.project.project.project_id,
@@ -299,8 +304,13 @@ function ProjectReadyView({
       } finally {
         structureInFlightRef.current = false;
       }
+      return reopened;
     })();
   };
+
+  const holdAddressConversation = useAddressChapter({ tree, currentChapterId, open: selectChapter,
+    canChangeCurrentChapter: state.editor.kind === "editor-ready" && state.editor.session.writer.kind === "current_writer",
+    onNotFound: () => setSwitchRecovery(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
 
   const removeFromTree = (noun: "章节" | "卷", remove: (expectedTreeRevision: string) => Promise<{
     effect: { kind: string };
@@ -394,6 +404,7 @@ function ProjectReadyView({
   return (
     <WritingWorkspace
       writer={writer}
+      holdAddressConversation={holdAddressConversation}
       onNavigateProposal={(destination) => navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
         onOpened: (next, focus, notice) => {
@@ -697,6 +708,7 @@ function EmptyProjectReadyView({
   const [title, setTitle] = useState(project.project.title);
   const [revision, setRevision] = useState<string>();
   const [volumeRemoval, setVolumeRemoval] = useState<string>();
+  const [addressNotice, setAddressNotice] = useState<string>();
   useEffect(() => {
     void listProjects({ baseUrl, fetchImpl }).then((response) => {
       const item = response.projects.find((entry) =>
@@ -705,8 +717,12 @@ function EmptyProjectReadyView({
       setRevision(item.revision);
     }).catch(() => {});
   }, [baseUrl, fetchImpl, project.project.project_id]);
+  // A Project with no Chapter has no Chapter to open from the address.
+  const holdAddressConversation = useAddressChapter({ tree, currentChapterId: undefined, canChangeCurrentChapter: false,
+    open: async () => false, onNotFound: () => setAddressNotice(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
   return (
     <WritingWorkspace
+      holdAddressConversation={holdAddressConversation}
       assistant={{
         scope: project.project_scope,
         canSubmit: false,
@@ -729,8 +745,8 @@ function EmptyProjectReadyView({
             />
           <ManuscriptSearchPanel projectId={project.project.project_id} baseUrl={baseUrl}
             fetchImpl={fetchImpl} chapterTitles={new Map()} />
-          {volumeRemoval === undefined ? null : (
-            <p role="alert">{volumeRemoval}</p>
+          {(volumeRemoval ?? addressNotice) === undefined ? null : (
+            <p role="alert">{volumeRemoval ?? addressNotice}</p>
           )}
           <ManuscriptTree
             projectId={project.project.project_id}
