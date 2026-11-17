@@ -311,8 +311,9 @@ pub use rebuild_expired_reference::{
     ExpiryRebuildDisposition, ExpiryRebuildFacts, decide_confirmed_expiry_rebuild,
 };
 pub use record_memory_observations::{
-    CAPTURE_OBSERVATIONS_MAX, MemoryObservation, ObservationCandidate, ObservationRefusal,
-    RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC, validate_observations,
+    CAPTURE_OBSERVATIONS_MAX, CaptureOutcome, MemoryObservation, ObservationCallSettlement,
+    ObservationCandidate, ObservationRefusal, RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
+    observations_result, settle_observation_call, validate_observations,
 };
 pub use reject_proposal_operations::{
     RejectProposalOperations, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,

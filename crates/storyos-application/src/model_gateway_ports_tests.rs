@@ -3,7 +3,7 @@
 
 use storyos_core::ContextSourceClass;
 
-use super::{CurrentInput, RequestContextItem};
+use super::{CreatePurpose, CurrentInput, RequestContextItem};
 
 fn item(
     source_class: ContextSourceClass,
@@ -43,5 +43,19 @@ fn only_a_full_input_sends_a_skill_of_the_conversation_and_no_digest_counts_it()
             digest(&selected) == digest(std::slice::from_ref(&own)),
         ),
         (selected, vec![own], true)
+    );
+}
+
+/// The purpose of a decision request of each Run kind: the Worker dispatches no consolidation.
+#[test]
+fn each_dispatched_run_kind_has_the_purpose_of_its_requests() {
+    use storyos_core::AgentRunKind;
+    assert_eq!(
+        AgentRunKind::ALL.map(CreatePurpose::of_run),
+        [
+            Some(CreatePurpose::Decision),
+            Some(CreatePurpose::MemoryCapture),
+            None
+        ]
     );
 }
