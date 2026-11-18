@@ -103,9 +103,11 @@ The coordinator examines the evidence against the [merge gate](#merge-gate). The
 
 After the merge of the first ticket that requires `make check-full`, and again before the aggregate pull request, the coordinator runs `make check-full` on the integration branch.
 
+After each 10 merged tickets and after the last one, the coordinator runs one batch round on the new changes of the integration branch. It has no second round: each blocking finding gets a fix issue or an answer.
+
 ### 9. Merge the specification
 
-After the last ticket merges, the coordinator opens the aggregate pull request and puts a Check Evidence Line of its head in the body. The aggregate pull request has the merge gate of a ticket pull request, unless the specification gives another review. The coordinator runs the review and merges.
+After the last ticket merges, the coordinator opens the aggregate pull request and puts a Check Evidence Line of its head in the body. Then it merges by the [merge gate](#merge-gate).
 
 Then the coordinator synchronizes `main`. A closed issue alone does not prove acceptance, so the coordinator evaluates each parent user story on the `main` tree and posts the Resolution on the parent. It closes each issue that passed and is still open. It opens again each issue that GitHub closed and that did not pass. Then it refreshes the current map.
 
@@ -119,11 +121,11 @@ A closed ticket and a historical record keep the workflow of their own commit.
 
 The three tiers of ADR 0070:
 
-| Command | When | Typical time |
-|---|---|---|
-| `make check-fast` | After each edit, with the Web source guards. The GitHub `verify` check runs it. | about 1 minute after a build |
-| `make check` | On the head of each pull request. | about 10 minutes |
-| `make check-full` | Only when the ticket or a request requires it, in place of `make check`. | about 20 minutes |
+| Command | When |
+|---|---|
+| `make check-fast` | After each edit, with the Web source guards. The GitHub `verify` check runs it. |
+| `make check` | On the head of each pull request. |
+| `make check-full` | Only when the ticket or a request requires it, in place of `make check`. |
 
 Each tier prints one line at the end:
 
@@ -179,7 +181,7 @@ A pull request merges only when these three conditions are true:
 
 1. The GitHub `verify` check of the head passes.
 2. A Check Evidence Line of `make check` or `make check-full` with `result=PASS` names the head.
-3. The Codex review passes: the last round passed on the two axes, or a coordinator review comment replaced round 3.
+3. The Codex review passes: the last round passed on the two axes, or a coordinator review comment replaced round 3. For an aggregate pull request: each blocking finding of its batch rounds has a merged fix or an answer.
 
 ## Templates
 
@@ -226,7 +228,6 @@ With more than one chain, each heavy run, also a review round, waits for the `TU
 - `scripts/dev-postgres.sh with <command> ...` runs a command with a new database. The command owns a unique database and gives its environment to the child. It removes the container and its anonymous volume on success, failure, or interruption.
 - For interactive development, use `up --interactive`, then `reload`, `env`, and `down`. These commands use the canonical checkout path. `down` also removes the anonymous data volume.
 - Do not share database environment variables between worktrees.
-- The new commands do not use or remove the old `storyos-dev-postgres` container.
 - The executor names the prefix lead of its store tests after a search for its string, hex, and UUID suffix forms.
 
 ### One exact-dist journey file
