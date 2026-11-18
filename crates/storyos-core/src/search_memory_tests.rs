@@ -36,6 +36,7 @@ fn entry(number: u64, entry_type: MemoryEntryType, fields: [&str; 3]) -> Current
         title,
         description,
         text,
+        flagged: false,
     }
 }
 

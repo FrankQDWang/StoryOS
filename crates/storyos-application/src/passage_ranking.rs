@@ -54,7 +54,7 @@ pub async fn rank_manuscript_passages(
     };
     let exact = exact_term_list(&facts.chapters, terms);
     let vector = vector_list(&facts.chapters, &facts.nearest);
-    let ranked = fuse_passage_lists(&[&exact, &vector]);
+    let ranked = fuse_passage_lists([&exact, &vector]);
     Ok(Some(admit_passage_ranking(
         &facts.chapters,
         &ranked,

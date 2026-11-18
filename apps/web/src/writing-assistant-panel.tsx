@@ -496,7 +496,11 @@ export function WritingAssistantPanel({
         history: runs.slice(0, -1).map(openedExchange), opened, ...selectedSkillNames(newest.run),
       };
       inspectSequence.current += 1;
-      saveReference(next);
+      try {
+        saveReference(next);
+      } catch {
+        // A full browser storage loses only the record for a reload, and the Conversation opens (#1696).
+      }
       setReference(next);
       setRun(newest.run);
       void showProposals(next, newest.run).catch(() => {});

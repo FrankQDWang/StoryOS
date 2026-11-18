@@ -1,6 +1,6 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import challengeFixture from "../../../../generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json";
@@ -243,6 +243,23 @@ it.each([true, false])("opens an earlier Conversation with only its exchanges, t
         reloadRequests: [`GET /agent-runs/${id("f12")}`],
       });
   });
+
+it("opens an earlier Conversation when the browser storage is full, and only the reload record is lost", async () => {
+  const panel = await openPanel({ runs: earlier, stored: current, list: [entry(A, "A first", "2026-11-16T09:45:00.000Z")],
+    truncated: true });
+  const full = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+  });
+  cleanup.push(async () => { full.mockRestore(); });
+  await panel.open(A);
+
+  expect({ opened: panel.exchanges(), status: panel.status(), saves: full.mock.calls.length }).toEqual({
+    opened: [["更早的消息没有显示。", "A first", "$dialogue-style-guide", "Answer to A first"],
+      ["A second", "Answer to A second"]],
+    status: null,
+    saves: 1,
+  });
+});
 
 it("continues the opened Conversation, and `新对话` then starts a new Conversation", async () => {
   const panel = await openPanel({ runs: earlier, stored: current, list: [entry(A, "A first", "2026-11-16T09:45:00.000Z")],

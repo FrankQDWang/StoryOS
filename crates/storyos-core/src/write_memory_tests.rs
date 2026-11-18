@@ -16,6 +16,7 @@ fn entry(number: u64, entry_type: MemoryEntryType, title: &str) -> CurrentMemory
         title: title.to_owned(),
         description: "一句话。".to_owned(),
         text: "正文。".to_owned(),
+        flagged: false,
     }
 }
 
@@ -213,6 +214,34 @@ fn a_write_above_the_index_limits_is_refused_with_memory_index_full() {
             refusal.contains("Memory is full"),
         ),
         (Err(MemoryWriteRefusal::IndexFull), Ok(3), Ok(3), true)
+    );
+}
+
+/// The Index bound counts the conflict flag of each other entry (#1696): a set of entries that
+/// fits with no flag and does not fit with its flags refuses the write with `memory_index_full`.
+#[test]
+fn the_index_bound_of_a_write_counts_the_conflict_flags() {
+    let others = |count: u64, flagged: bool| -> Vec<CurrentMemoryEntry> {
+        (1..=count)
+            .map(|number| CurrentMemoryEntry {
+                description: "长".repeat(MEMORY_DESCRIPTION_MAX_CHARS),
+                flagged,
+                ..entry(number, MemoryEntryType::Other, &format!("条目{number}"))
+            })
+            .collect()
+    };
+    let new = create("other", "新条目", "x");
+    let decide =
+        |count: u64, flagged: bool| decide_memory_write(&new, &others(count, flagged), count + 1);
+    // The largest count of other entries that lets the create fit with no flag.
+    let fits = (1..300)
+        .take_while(|&count| decide(count, false).is_ok())
+        .last()
+        .expect("one entry fits");
+
+    assert_eq!(
+        (decide(fits, false).is_ok(), decide(fits, true)),
+        (true, Err(MemoryWriteRefusal::IndexFull))
     );
 }
 

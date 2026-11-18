@@ -72,6 +72,7 @@ fn the_input_of_a_pass_has_the_mark_unused_and_the_delete_marks() {
                 title: format!("条{number}"),
                 description: "述。".to_owned(),
                 text: "文。".to_owned(),
+                flagged: false,
             },
             origin: MemoryEntryOrigin::Chapter,
         };

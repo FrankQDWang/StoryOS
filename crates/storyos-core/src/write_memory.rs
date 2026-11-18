@@ -167,6 +167,9 @@ pub struct CurrentMemoryEntry {
     pub title: String,
     pub description: String,
     pub text: String,
+    /// The current version has a conflict flag (ADR 0094 section 7). Its line in the Memory Index
+    /// is longer, so the Index bound of a write counts it.
+    pub flagged: bool,
 }
 
 /// The version that one admitted write adds. `memory_entry_id` is `None` for a new entry. Only a
@@ -361,15 +364,15 @@ pub fn decide_memory_write(
     {
         return Err(MemoryWriteRefusal::Exists(other.number));
     }
-    // The written version has no flag. The check counts the other lines with no flag too. Above
-    // the limit, the Index of a Run is an excerpt.
+    // The written version has no flag, and each other line keeps its flag. Above the limit, the
+    // Index of a Run is an excerpt.
     let index: Vec<MemoryIndexEntry> = others
         .map(|entry| MemoryIndexEntry {
             number: entry.number,
             entry_type: entry.entry_type,
             title: entry.title.clone(),
             description: entry.description.clone(),
-            flagged: false,
+            flagged: entry.flagged,
         })
         .chain([MemoryIndexEntry {
             number: version.number,

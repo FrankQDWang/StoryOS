@@ -72,7 +72,7 @@ pub struct EmbeddingRecord<'a> {
 }
 
 /// The result that the caller gets. Only an admitted exchange with a vector of the dimension of
-/// the Registration gives a vector.
+/// the Registration and of finite components gives a vector.
 #[derive(Clone, Debug, PartialEq)]
 pub enum EmbeddingResult {
     Vector(Vec<f32>),
@@ -222,7 +222,9 @@ pub async fn dispatch_embedding(
     ))
 }
 
-/// The record of one observation, and the vector that the caller gets.
+/// The record of one observation, and the vector that the caller gets. A vector settles only
+/// with the count of the dimensions and with finite components; else it is the invalid result,
+/// for each adapter (#1696).
 fn settle<'a>(
     registration: &EmbeddingRegistration,
     observation: &'a EmbeddingObservation,
@@ -234,7 +236,8 @@ fn settle<'a>(
     };
     match observation {
         EmbeddingObservation::Vector { values, usage }
-            if values.len() == registration.dimensions =>
+            if values.len() == registration.dimensions
+                && values.iter().all(|value| value.is_finite()) =>
         {
             (
                 record(EmbeddingSettlement::Vector, *usage, None),
@@ -279,3 +282,7 @@ fn settle<'a>(
         ),
     }
 }
+
+#[cfg(test)]
+#[path = "embedding_gateway_tests.rs"]
+mod tests;

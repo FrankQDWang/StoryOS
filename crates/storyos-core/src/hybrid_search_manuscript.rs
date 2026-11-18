@@ -137,7 +137,7 @@ pub fn hybrid_search_result(
         Some(nearest) => (vector_list(chapters, nearest), None),
         None => (Vec::new(), Some(NO_SEARCH_BY_MEANING)),
     };
-    let ranked = fuse_passage_lists(&[&exact, &vector]);
+    let ranked = fuse_passage_lists([&exact, &vector]);
     admit_passage_ranking(chapters, &ranked, terms, notice, call_id)
 }
 
