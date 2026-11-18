@@ -1,8 +1,9 @@
 use serde_json::{Value, json};
 
 use super::{
-    MemoryConsolidationAssembly, PassObservation, admit_memory_consolidation,
-    assemble_memory_consolidation_context, consolidation_failure, pass_observation_count,
+    MemoryConsolidationAssembly, PassObservation, PassOperationResult, admit_memory_consolidation,
+    assemble_memory_consolidation_context, consolidation_failure, observation_returns,
+    pass_observation_count,
 };
 use crate::assemble_context::{CONTEXT_ITEM_TOKEN_LIMIT, ContextPurpose};
 use crate::{
@@ -57,6 +58,7 @@ fn the_input_of_a_pass_has_one_line_for_each_entry_and_each_observation() {
         source: MemorySourceReference::Chapter {
             chapter_id: "chapter".to_owned(),
         },
+        refused: None,
     };
     let entries = [(entry, "2026-11-17T08:00:00.000Z".to_owned())];
     let observations = [
@@ -178,6 +180,7 @@ fn a_pass_takes_the_oldest_observations_that_fit_the_request() {
             source: MemorySourceReference::Chapter {
                 chapter_id: "chapter".to_owned(),
             },
+            refused: None,
         })
         .collect();
     let input = |observations| MemoryConsolidationAssembly {
@@ -240,6 +243,7 @@ fn the_expected_input_of_a_pass_counts_each_section() {
         source: MemorySourceReference::Chapter {
             chapter_id: "chapter".to_owned(),
         },
+        refused: None,
     }];
     let marks = [crate::MemoryDeleteMark {
         entry_type: MemoryEntryType::Other,
@@ -290,5 +294,70 @@ fn the_expected_input_of_a_pass_counts_each_section() {
             ],
             sections.iter().map(|(_, tokens)| tokens).sum::<u64>()
         )
+    );
+}
+
+/// ADR 0094 section 6: an observation returns when a refused operation of the pass names it, no
+/// applied operation of the pass names it, and no refused operation of an earlier pass names it.
+#[test]
+fn an_observation_returns_one_time_when_only_a_refused_operation_names_it() {
+    let results: Vec<PassOperationResult> = serde_json::from_value(json!([
+        { "operation": { "observations": [1, 2] }, "result": "refused",
+          "refusal": "memory_entry_invalid" },
+        { "operation": { "observations": [2] }, "result": "applied", "refusal": null },
+    ]))
+    .unwrap();
+
+    assert!(observation_returns(&results, 1, false));
+    assert!(!observation_returns(&results, 1, true));
+    assert!(!observation_returns(&results, 2, false));
+    assert!(!observation_returns(&results, 3, false));
+}
+
+/// ADR 0094 section 6: the line of an observation that returned has the key `refused` with the
+/// label of its refusal, and each other line has no such key.
+#[test]
+fn the_line_of_an_observation_that_returned_has_the_label_of_its_refusal() {
+    let observation = |refused: Option<&str>| PassObservation {
+        entry_type: MemoryEntryType::Other,
+        title: "渡口".to_owned(),
+        text: "渡口在河边。".to_owned(),
+        source: MemorySourceReference::Chapter {
+            chapter_id: "chapter".to_owned(),
+        },
+        refused: refused.map(str::to_owned),
+    };
+    let observations = [observation(Some("memory_entry_invalid")), observation(None)];
+    let record = assemble_memory_consolidation_context(&MemoryConsolidationAssembly {
+        operation_requirement_id: "requirement".to_owned(),
+        run_id: "run".to_owned(),
+        owner_user_id: "owner".to_owned(),
+        project_id: "project".to_owned(),
+        destination_identity: "destination".to_owned(),
+        memory_revision: 4,
+        entries: &[],
+        unused: &[],
+        observations: &observations,
+        marks: &[],
+    });
+    let source = json!({ "kind": "chapter", "chapter_id": "chapter" });
+    let lines: Vec<Value> = record.selected[0]
+        .content
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+
+    assert_eq!(
+        lines,
+        [
+            json!({
+                "observation": 1, "type": "other", "title": "渡口", "text": "渡口在河边。",
+                "source": source, "refused": "memory_entry_invalid"
+            }),
+            json!({
+                "observation": 2, "type": "other", "title": "渡口", "text": "渡口在河边。",
+                "source": source
+            }),
+        ]
     );
 }

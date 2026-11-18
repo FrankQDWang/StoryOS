@@ -89,6 +89,12 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
             storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION,
             storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION,
+        ]
+        .contains(&route.mapping_revision.as_str());
+        let memory_work = [
+            storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION,
         ]
         .contains(&route.mapping_revision.as_str());
         if !probe && !tool_loop {
@@ -114,21 +120,14 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             (CreatePurpose::CompactionSummary, _) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
-            // Only the mapping `v8` has the capture form (ADR 0094 section 5). A Run that pinned
-            // an earlier Registration keeps its mapping, so its capture request is refused.
-            (CreatePurpose::MemoryCapture(kind), _)
-                if route.mapping_revision
-                    == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
-                    && create.capture_complete() =>
-            {
+            // Only the mappings `v8` and `v9` have the capture form (ADR 0094 section 5). A Run
+            // that pinned an earlier Registration keeps its mapping, so its capture request is
+            // refused.
+            (CreatePurpose::MemoryCapture(kind), _) if memory_work && create.capture_complete() => {
                 capture_wire::capture_body(create, *kind, &route.provider_model_id, bounds)
             }
-            // Only the mapping `v8` has the pass form (ADR 0094 section 6).
-            (CreatePurpose::MemoryConsolidation, _)
-                if route.mapping_revision
-                    == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
-                    && create.pass_complete() =>
-            {
+            // Only the mappings `v8` and `v9` have the pass form (ADR 0094 section 6).
+            (CreatePurpose::MemoryConsolidation, _) if memory_work && create.pass_complete() => {
                 pass_wire::pass_body(create, &route.provider_model_id, bounds)
             }
             (CreatePurpose::MemoryCapture(_) | CreatePurpose::MemoryConsolidation, _) => {
@@ -410,3 +409,7 @@ mod chapter_list_wire_tests;
 #[cfg(test)]
 #[path = "memory_index_wire_tests.rs"]
 mod memory_index_wire_tests;
+
+#[cfg(test)]
+#[path = "memory_rules_wire_tests.rs"]
+mod memory_rules_wire_tests;

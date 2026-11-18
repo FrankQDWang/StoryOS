@@ -47,6 +47,9 @@ pub struct PassObservation {
     pub title: String,
     pub text: String,
     pub source: MemorySourceReference,
+    /// The refusal label of an observation that returned after a refused operation (ADR 0094
+    /// section 6).
+    pub refused: Option<String>,
 }
 
 impl PassObservation {
@@ -94,7 +97,7 @@ pub struct MemoryConsolidationAssembly<'a> {
 /// `memory_observations` items, and then the `memory_delete_marks` item of S7-D3d. Each line is
 /// one JSON object, and each item holds the lines that fit the Context item limit (ADR 0052), so
 /// a large set is more than one item. The line of an entry with the mark `unused` has the key
-/// `unused`.
+/// `unused`, and the line of an observation that returned has the key `refused`.
 pub fn assemble_memory_consolidation_context(
     input: &MemoryConsolidationAssembly<'_>,
 ) -> CurrentPassageAssemblyRecord {
@@ -115,13 +118,17 @@ pub fn assemble_memory_consolidation_context(
         canonical_json(&line)
     });
     let observation_lines = (1_u64..).zip(input.observations).map(|(number, item)| {
-        canonical_json(&serde_json::json!({
+        let mut line = serde_json::json!({
             "observation": number,
             "type": item.entry_type.as_str(),
             "title": item.title,
             "text": item.text,
             "source": item.source,
-        }))
+        });
+        if let Some(label) = &item.refused {
+            line["refused"] = serde_json::json!(label);
+        }
+        canonical_json(&line)
     });
     let selected: Vec<SelectedProjection> = items(ContextSourceClass::MemoryEntries, entry_lines)
         .chain(items(
@@ -237,6 +244,44 @@ fn items(
         token_count: count_context_item_tokens(&content),
         content,
     })
+}
+
+/// The stored result of one operation of a pass row, in the form that the settlement writes.
+#[derive(Clone, Debug, serde::Deserialize, Eq, PartialEq)]
+pub struct PassOperationResult {
+    operation: StoredOperation,
+    result: String,
+    refusal: Option<String>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, Eq, PartialEq)]
+struct StoredOperation {
+    observations: Vec<i64>,
+}
+
+/// The refusal label that returns the observation `number` of a pass to one more pass (ADR 0094
+/// section 6): the label of the first refused operation that names it. `None`: no refused
+/// operation names it, or an applied operation names it.
+pub fn observation_return_refusal(results: &[PassOperationResult], number: u64) -> Option<&str> {
+    let names = |item: &&PassOperationResult| {
+        (item.operation.observations.iter()).any(|named| u64::try_from(*named) == Ok(number))
+    };
+    let mut named = results.iter().filter(names);
+    if named.clone().any(|item| item.result == "applied") {
+        return None;
+    }
+    named.find_map(|item| item.refusal.as_deref())
+}
+
+/// True when the observation `number` of a pass stays `waiting` at the settlement of the pass (ADR
+/// 0094 section 6): a refused operation of the pass names it, no applied operation of the pass
+/// names it, and no refused operation of an earlier pass names it (`refused_earlier`).
+pub fn observation_returns(
+    results: &[PassOperationResult],
+    number: u64,
+    refused_earlier: bool,
+) -> bool {
+    !refused_earlier && observation_return_refusal(results, number).is_some()
 }
 
 /// The outcome of a pass (ADR 0094 section 6).

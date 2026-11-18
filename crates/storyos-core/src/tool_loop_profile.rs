@@ -31,6 +31,12 @@ pub const AGENT_PLAN_SKILL_MAPPING_REVISION: &str =
 pub const AGENT_PLAN_CONTINUITY_MAPPING_REVISION: &str =
     "storyos.volcengine-agent-plan.responses.create.v8";
 
+/// The mapping `v8` with the Host instructions of the Memory rules of ADR 0094 sections 5 and 6:
+/// the words of the author in an entry, what a Conversation capture records, and the key `refused`
+/// of a pass.
+pub const AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION: &str =
+    "storyos.volcengine-agent-plan.responses.create.v9";
+
 pub const HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
     revision: "storyos.host-fake.capability.v2",
     entries: CapabilityEntries {
@@ -74,10 +80,17 @@ pub const AGENT_PLAN_SKILL_REGISTRATION: ModelRegistration = ModelRegistration {
     ..AGENT_PLAN_READ_RESULT_REGISTRATION
 };
 
-/// The current Agent Plan Registration: Registration `fa21` with the mapping `v8`. Nothing is
-/// pending, so the link authorizes no probe.
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// Registration `fa21` with the mapping `v8`. An AgentRun that pinned it keeps the mapping `v8`.
+pub const AGENT_PLAN_CONTINUITY_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa22",
     mapping_revision: AGENT_PLAN_CONTINUITY_MAPPING_REVISION,
     ..AGENT_PLAN_SKILL_REGISTRATION
+};
+
+/// The current Agent Plan Registration: Registration `fa22` with the mapping `v9`. Nothing is
+/// pending, so the link authorizes no probe.
+pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa23",
+    mapping_revision: AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION,
+    ..AGENT_PLAN_CONTINUITY_REGISTRATION
 };

@@ -176,6 +176,7 @@ mod memory_consolidation;
 mod memory_consolidation_versions;
 mod memory_entries;
 mod memory_entry_list;
+mod memory_observation_return;
 mod memory_work_schedule;
 mod model_registration;
 mod open_block_proposal;

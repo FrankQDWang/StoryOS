@@ -26,7 +26,10 @@ of read_chapter is.";
 fn v8(context: Vec<storyos_application::RequestContextItem>) -> CreateRequest {
     CreateRequest {
         context,
-        ..first(V8, storyos_core::AGENT_PLAN_REGISTRATION.revision)
+        ..first(
+            V8,
+            storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
+        )
     }
 }
 
@@ -171,7 +174,7 @@ async fn the_mapping_v8_declares_the_hybrid_search_after_the_keyword_search() {
     let hybrid = CreateRequest {
         tool_exposure: storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
             bound: &[],
-            model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
+            model_registration_revision: storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
             skill_catalog: false,
             memory_use: false,
             hybrid_search: true,

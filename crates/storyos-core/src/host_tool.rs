@@ -114,12 +114,13 @@ pub fn host_tool_result_class(spec: &ToolSpec) -> ContextSourceClass {
 }
 
 impl ModelRegistration {
-    /// The Host Tools that the request mapping declares. The Agent Plan mapping `v8` and the fake
-    /// tool loop mapping declare the current Host Tools, the mapping `v7` keeps six, the mapping
-    /// `v6` keeps four, and each earlier mapping keeps the first three (ADR 0053).
+    /// The Host Tools that the request mapping declares. The Agent Plan mappings `v8` and `v9` and
+    /// the fake tool loop mapping declare the current Host Tools, the mapping `v7` keeps six, the
+    /// mapping `v6` keeps four, and each earlier mapping keeps the first three (ADR 0053).
     pub fn host_tools(&self) -> &'static HostToolRegistration {
         match self.mapping_revision {
             crate::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+            | crate::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION
             | crate::HOST_FAKE_TOOL_LOOP_MAPPING_REVISION => &HOST_TOOL_REGISTRATION,
             crate::AGENT_PLAN_SKILL_MAPPING_REVISION => &SKILL_HOST_TOOL_REGISTRATION,
             crate::AGENT_PLAN_READ_RESULT_MAPPING_REVISION => &READ_RESULT_HOST_TOOL_REGISTRATION,

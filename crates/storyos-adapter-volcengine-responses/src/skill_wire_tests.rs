@@ -176,7 +176,7 @@ async fn a_v8_request_has_the_bytes_of_the_v7_request_of_the_same_input() {
     for input in &inputs {
         let registration = storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision;
         v7_bodies.push(body(on(V7, registration, input)).await);
-        let registration = storyos_core::AGENT_PLAN_REGISTRATION.revision;
+        let registration = storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision;
         let mut v8_body = body(on(V8, registration, input)).await;
         if let Some(tools) = v8_body
             .get_mut("tools")

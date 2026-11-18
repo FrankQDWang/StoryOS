@@ -22,6 +22,7 @@ use crate::memory_consolidation_versions::{
     PassItem, pass_entries, pass_item, split_items, unused_entries, write_admitted,
 };
 use crate::memory_entries::lock_memory_head;
+use crate::memory_observation_return::{add_return_refusals, returned_observations};
 use crate::update_project_assistance::read_assistance_record;
 use crate::{PostgresProjectReader, read_error};
 
@@ -195,7 +196,7 @@ pub(crate) async fn start(
 }
 
 /// Each observation that waits in the Project, the oldest capture first and in list order, with
-/// its key `[capture, position]`.
+/// its key `[capture, position]`. An observation that returned has the label of its refusal.
 async fn waiting_observations(
     client: &Client,
     scope: &ProjectScope,
@@ -214,7 +215,9 @@ async fn waiting_observations(
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )
         .await?;
-    rows.iter().map(pass_item).collect()
+    let mut items = rows.iter().map(pass_item).collect::<Result<Vec<_>, _>>()?;
+    add_return_refusals(client, scope, &mut items).await?;
+    Ok(items)
 }
 
 /// The running pass of the Run: its identity, its pinned Memory revision, and the observations of
@@ -282,7 +285,7 @@ pub(crate) async fn execute(
         .await
         .map_err(unavailable)?;
     let entries: Vec<PassMemoryEntry> = stored.iter().map(|item| item.entry.clone()).collect();
-    let (_, input, conflicts) = split_items(observations.clone());
+    let (input_keys, input, conflicts) = split_items(observations.clone());
     let conflicts: Vec<PassConflict> = conflicts.into_iter().map(|(_, item)| item).collect();
     let settlement = storyos_core::settle_operations_call(
         candidates,
@@ -319,14 +322,21 @@ pub(crate) async fn execute(
     for flag in &settlement.flags {
         written = write_admitted(client, scope, written, flag, &stored, &cause).await?;
     }
-    let consumed = match settlement.outcome {
+    let keys: Vec<Value> = match settlement.outcome {
         storyos_core::ConsolidationOutcome::Applied
-        | storyos_core::ConsolidationOutcome::NoOperation => observations.as_slice(),
+        | storyos_core::ConsolidationOutcome::NoOperation => {
+            let returned = returned_observations(client, scope, &input_keys, &results)
+                .await
+                .map_err(unavailable)?;
+            (observations.iter())
+                .filter(|(key, _)| !returned.contains(key))
+                .map(|(key, _)| json!(key))
+                .collect()
+        }
         storyos_core::ConsolidationOutcome::Stale | storyos_core::ConsolidationOutcome::Failed => {
-            &[]
+            Vec::new()
         }
     };
-    let keys: Vec<Value> = consumed.iter().map(|(key, _)| json!(key)).collect();
     client
         .execute(
             "WITH consumed AS (
@@ -415,3 +425,7 @@ mod merge_tests;
 #[cfg(test)]
 #[path = "memory_consolidation_schedule_tests.rs"]
 mod schedule_tests;
+
+#[cfg(test)]
+#[path = "memory_observation_return_tests.rs"]
+mod return_tests;

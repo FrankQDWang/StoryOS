@@ -43,6 +43,7 @@ fn observation(source: &str) -> PassObservation {
                 tool_call_id: None,
             },
         },
+        refused: None,
     }
 }
 
