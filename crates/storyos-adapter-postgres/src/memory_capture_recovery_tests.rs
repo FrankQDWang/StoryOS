@@ -6,15 +6,16 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     CacheUse, ContractFaultPoint, CreatePurpose, CreateRequest, DestinationRequest,
-    ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage, NoContractFaults,
-    Observation, PreDispatchRefusal, PreparedRequest, RetrievePurpose, ToolDispatchStore,
-    complete_agent_run,
+    MemoryCaptureSource, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
+    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, ProjectScope,
+    RetrievePurpose, ToolDispatchStore, complete_agent_run,
 };
 use storyos_core::{NativeStreamItem, StreamItemRole, StreamItemState};
 use tokio_postgres::Client;
 
 use super::loop_tests::{record, script, settlement};
 use super::tests::{project, run_capture, start};
+use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
 use crate::agent_run_tool_recovery::tests::{Fault, FaultAt};
 use crate::create_agent_run::context::chapter_list_tests::replace_text;
@@ -141,42 +142,36 @@ async fn attempt_roles(admin: &Client, run_id: &str) -> Vec<String> {
         .collect()
 }
 
-/// When the Worker loses the Run Lease after the response of the capture committed (a Model
-/// Gateway point) or before the Tool Gateway resolves its output call (a Tool Gateway point), its
-/// stale fence stores nothing. The next claim continues the same RunStep, and the capture ends
-/// with one set of observations. A second delivery of the settled output call changes nothing.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_lost_lease_and_a_second_delivery_give_one_set_of_observations() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
+/// A capture of each source of `projects` loses its Run Lease and ends with one set of observations.
+async fn lost_lease_ends(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    projects: [(ProjectScope, MemoryCaptureSource); 2],
+) -> Vec<Value> {
     let item = json!({"type": "foreshadowing", "title": "铜铃", "text": "铜铃会再响。"});
     let points = [
-        ("fe1", ContractFaultPoint::StreamCommitted),
-        ("fe5", ContractFaultPoint::ToolCallsCommitted),
+        ContractFaultPoint::StreamCommitted,
+        ContractFaultPoint::ToolCallsCommitted,
     ];
     let mut ended = Vec::new();
-    for (prefix, point) in points {
-        let (scope, _, source) = project(&store, &admin, prefix).await;
-        let started = start(&store, &scope, &source, &script(&[record(json!([item]))]))
+    for ((scope, source), point) in projects.into_iter().zip(points) {
+        let started = start(store, &scope, &source, &script(&[record(json!([item]))]))
             .await
             .unwrap();
         let run_id = started.run_id.clone();
-        let stale = claim_run(&admin, scope.clone(), run_id.clone()).await;
+        let stale = claim_run(admin, scope.clone(), run_id.clone()).await;
         let fault = Fault::TakeOver {
-            admin: &admin,
+            admin,
             run_id: run_id.clone(),
         };
         let observer = FaultAt::new(point, 1, fault);
         let lost =
-            complete_agent_run(&store, &FakeDestination, &observer, &RuntimeClock, &stale).await;
+            complete_agent_run(store, &FakeDestination, &observer, &RuntimeClock, &stale).await;
         let stale_delivery = store.next_tool_call(&stale).await;
-        let before = settlement(&admin, &run_id).await;
-        let current = claim_run(&admin, scope.clone(), run_id.clone()).await;
+        let before = settlement(admin, &run_id).await;
+        let current = claim_run(admin, scope.clone(), run_id.clone()).await;
         complete_agent_run(
-            &store,
+            store,
             &FakeDestination,
             &NoContractFaults,
             &RuntimeClock,
@@ -189,13 +184,17 @@ async fn a_lost_lease_and_a_second_delivery_give_one_set_of_observations() {
             lost.is_err() && stale_delivery.is_err(),
             before,
             second_delivery.is_none(),
-            settlement(&admin, &run_id).await,
-            attempt_roles(&admin, &run_id).await
+            settlement(admin, &run_id).await,
+            attempt_roles(admin, &run_id).await
         ]));
     }
+    ended
+}
 
+/// The result of `lost_lease_ends` for one point: the capture ends with one set of observations.
+fn one_set() -> Value {
     let observation = json!([1, "foreshadowing", "铜铃", "铜铃会再响。", "waiting"]);
-    let one_set = json!([
+    json!([
         true,
         ["claimed", "running", null, null, []],
         true,
@@ -207,8 +206,67 @@ async fn a_lost_lease_and_a_second_delivery_give_one_set_of_observations() {
             [observation]
         ],
         ["decision:0"]
-    ]);
-    assert_eq!(ended, [one_set.clone(), one_set]);
+    ])
+}
+
+/// When the Worker loses the Run Lease after the response of the capture committed (a Model
+/// Gateway point) or before the Tool Gateway resolves its output call (a Tool Gateway point), its
+/// stale fence stores nothing. The next claim continues the same RunStep, and the capture ends
+/// with one set of observations. A second delivery of the settled output call changes nothing.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_lost_lease_and_a_second_delivery_give_one_set_of_observations() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut projects = Vec::new();
+    for prefix in ["fe1", "fe5"] {
+        let (scope, _, source) = project(&store, &admin, prefix).await;
+        projects.push((scope, source));
+    }
+    let projects: [_; 2] = projects.try_into().unwrap();
+
+    assert_eq!(
+        lost_lease_ends(&store, &admin, projects).await,
+        [one_set(), one_set()]
+    );
+}
+
+/// S7-E1b: the same two lost Run Leases in a capture of a Chapter. A stop in the Run of the capture
+/// leaves no part of a result, and the next claim completes the capture with one set of
+/// observations.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_chapter_capture_that_loses_its_lease_ends_with_one_set_of_observations() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut projects = Vec::new();
+    for prefix in ["a22", "a23"] {
+        let (scope, chapter_id, _) = project(&store, &admin, prefix).await;
+        let revision_id: String = admin
+            .query_one(
+                "SELECT current_revision_id::text FROM storyos.authoritative_heads
+                  WHERE manuscript_object_id = $1::text::uuid",
+                &[&chapter_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        let source = MemoryCaptureSource::Chapter {
+            chapter_id,
+            revision_id,
+        };
+        projects.push((scope, source));
+    }
+    let projects: [_; 2] = projects.try_into().unwrap();
+
+    assert_eq!(
+        lost_lease_ends(&store, &admin, projects).await,
+        [one_set(), one_set()]
+    );
 }
 
 /// A request of a capture with an unknown result recovers by the Retrieve of its reference or by

@@ -857,3 +857,6 @@ async fn the_read_of_waiting_work_sees_only_work_that_a_claim_can_take() {
         (false, true, false, false, false)
     );
 }
+
+#[path = "passage_index_rebuild_tests.rs"]
+mod rebuild;
