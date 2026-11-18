@@ -103,9 +103,11 @@ The coordinator examines the evidence against the [merge gate](#merge-gate). The
 
 After the merge of the first ticket that requires `make check-full`, and again before the aggregate pull request, the coordinator runs `make check-full` on the integration branch.
 
+After each 10 merged tickets and after the last one, the coordinator reviews the new changes of the integration branch in one batch round (ADR 0070).
+
 ### 9. Merge the specification
 
-After the last ticket merges, the coordinator opens the aggregate pull request and puts a Check Evidence Line of its head in the body. The aggregate pull request has the merge gate of a ticket pull request, unless the specification gives another review. The coordinator runs the review and merges.
+After the last ticket merges, the coordinator opens the aggregate pull request and puts a Check Evidence Line of its head in the body. These batch rounds are its review: it merges when each of their blocking findings has a merged fix or an answer.
 
 Then the coordinator synchronizes `main`. A closed issue alone does not prove acceptance, so the coordinator evaluates each parent user story on the `main` tree and posts the Resolution on the parent. It closes each issue that passed and is still open. It opens again each issue that GitHub closed and that did not pass. Then it refreshes the current map.
 
@@ -226,7 +228,6 @@ With more than one chain, each heavy run, also a review round, waits for the `TU
 - `scripts/dev-postgres.sh with <command> ...` runs a command with a new database. The command owns a unique database and gives its environment to the child. It removes the container and its anonymous volume on success, failure, or interruption.
 - For interactive development, use `up --interactive`, then `reload`, `env`, and `down`. These commands use the canonical checkout path. `down` also removes the anonymous data volume.
 - Do not share database environment variables between worktrees.
-- The new commands do not use or remove the old `storyos-dev-postgres` container.
 - The executor names the prefix lead of its store tests after a search for its string, hex, and UUID suffix forms.
 
 ### One exact-dist journey file
