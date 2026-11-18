@@ -124,6 +124,9 @@ export function selectedChapterSurface(options: {
   };
 }
 
+/** The sentence while a Chapter switch waits for the Retry-After of a Command Challenge rate limit (#1689). */
+export const CHAPTER_SWITCH_WAITING_SENTENCE = "操作有些频繁，稍等片刻会自动打开这一章。";
+
 export function chapterSwitchRecoveryMessage(
   reason: QuietRefusal | Exclude<OpenSelectedChapter, { kind: "opened" }>["kind"],
 ): string {
