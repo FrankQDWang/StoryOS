@@ -254,8 +254,9 @@ pub use memory_capture::{
 pub use memory_conflict_flag::MemoryConflictFlag;
 pub use memory_consolidation::{
     ConsolidationOutcome, MEMORY_CONSOLIDATION_MAX_RUN_STEPS, MemoryConsolidationAssembly,
-    PassConflict, PassObservation, admit_memory_consolidation,
-    assemble_memory_consolidation_context, consolidation_failure, pass_observation_count,
+    PassConflict, PassObservation, PassOperationResult, admit_memory_consolidation,
+    assemble_memory_consolidation_context, consolidation_failure, observation_return_refusal,
+    pass_observation_count,
 };
 pub use memory_delete_marks::{
     MEMORY_DELETE_MARK_CAUSES, MemoryDeleteMark, assemble_memory_delete_marks,
@@ -452,7 +453,8 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_CONTINUITY_MAPPING_REVISION, AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
+    AGENT_PLAN_CONTINUITY_MAPPING_REVISION, AGENT_PLAN_CONTINUITY_REGISTRATION,
+    AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION, AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
     AGENT_PLAN_READ_RESULT_REGISTRATION, AGENT_PLAN_REGISTRATION,
     AGENT_PLAN_SKILL_MAPPING_REVISION, AGENT_PLAN_SKILL_REGISTRATION,
     AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION, AGENT_PLAN_TOOL_LOOP_REGISTRATION,

@@ -1,5 +1,5 @@
-//! The request body of the one RunStep of a consolidation pass on the mapping `v8` (ADR 0094
-//! sections 3, 6, 7, and 8). The request has no author message. Its user message has the current
+//! The request body of the one RunStep of a consolidation pass on the mappings `v8` and `v9` (ADR
+//! 0094 sections 3, 6, 7, and 8). The request has no author message. Its user message has the current
 //! entries, the observations, and the delete marks as sections. It declares the one function
 //! `apply_memory_operations` as a strict function with `tool_choice: "required"`, and it continues
 //! no prior response.
@@ -21,8 +21,18 @@ const SECTIONS: [(ContextSourceClass, &str); 3] = [
     ),
 ];
 
-/// The Host instructions of a pass. Each number comes from a Core constant.
-pub(crate) fn pass_instructions() -> String {
+/// The sentences that the mapping `v9` adds for an observation that returned after a refused
+/// operation (ADR 0094 section 6).
+pub(crate) const REFUSED_OBSERVATION_RULE: &str = " An observation with the key refused was in an \
+operation that the Host refused for that reason. Give a correct operation for it, or no \
+operation.";
+
+/// The Host instructions of a pass on `mapping`. Each number comes from a Core constant.
+pub(crate) fn pass_instructions(mapping: &str) -> String {
+    let refused_rule = match mapping {
+        storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION => REFUSED_OBSERVATION_RULE,
+        _ => "",
+    };
     let types = storyos_core::MemoryEntryType::ALL
         .map(storyos_core::MemoryEntryType::as_str)
         .join(", ");
@@ -57,7 +67,8 @@ flag_conflict is the only operation for it, when an observation is against it.
 
 The section Memory observations has the new facts of the captures, one JSON line for each \
 observation, with its number. Keep an uncertainty as an uncertainty, and do not write a guess as a \
-fact. Give each new or changed entry the numbers of the observations that it comes from.
+fact. Give each new or changed entry the numbers of the observations that it comes \
+from.{refused_rule}
 
 The section Deleted Memory entries lists entries that the author deleted. They name content that \
 the author does not want, and the Host refuses to write it again.
@@ -79,7 +90,7 @@ pub(crate) fn pass_body(
 ) -> String {
     let body = serde_json::json!({
         "model": provider_model_id,
-        "instructions": pass_instructions(),
+        "instructions": pass_instructions(&request.route.mapping_revision),
         "input": [{
             "role": "user",
             "content": [{"type": "input_text", "text": pass_text(request)}],

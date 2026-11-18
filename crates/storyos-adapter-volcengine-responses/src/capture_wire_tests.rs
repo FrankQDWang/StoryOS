@@ -53,7 +53,7 @@ fn conversation() -> CreateRequest {
         CaptureInputKind::Conversation,
         "{\"role\":\"author\",\"run_id\":\"run-1\"}\n以后对白少用感叹号。",
         V8,
-        storyos_core::AGENT_PLAN_REGISTRATION.revision,
+        storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
     )
 }
 
@@ -86,7 +86,7 @@ fn search(origin: ToolOutputOrigin) -> ToolOutput {
 #[test]
 fn the_capture_instructions_are_one_text_with_the_limits_of_the_core_constants() {
     assert_eq!(
-        crate::capture_wire::capture_instructions(),
+        crate::capture_wire::capture_instructions(V8),
         "\
 You read material of one novel to find what the writing assistant of the author must remember. \
 The author does not see this work. A Memory entry is for a fact that a later Chapter needs and \
@@ -140,7 +140,7 @@ async fn the_first_request_of_each_input_kind_has_its_sections_and_four_strict_f
         CaptureInputKind::Chapter,
         text,
         V8,
-        storyos_core::AGENT_PLAN_REGISTRATION.revision,
+        storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
     );
     let request = conversation();
     let first_body = body(request.clone()).await;
@@ -174,7 +174,7 @@ async fn the_first_request_of_each_input_kind_has_its_sections_and_four_strict_f
             json!("required"),
             json!(8192),
             true,
-            json!(crate::capture_wire::capture_instructions()),
+            json!(crate::capture_wire::capture_instructions(V8)),
             json!([message(
                 "Conversation messages",
                 &request.context[0].content

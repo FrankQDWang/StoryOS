@@ -77,6 +77,7 @@ pub(crate) fn pass_item(row: &tokio_postgres::Row) -> Result<([String; 2], PassI
             title: row.get(3),
             text: row.get(4),
             source,
+            refused: None,
         }),
     };
     Ok(([row.get(0), row.get(1)], item))

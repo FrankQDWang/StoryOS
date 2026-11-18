@@ -56,7 +56,7 @@ fn full() -> CreateRequest {
             item(ContextSourceClass::MemoryDeleteMarks, MARKS),
         ],
         V8,
-        storyos_core::AGENT_PLAN_REGISTRATION.revision,
+        storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
     )
 }
 
@@ -74,7 +74,7 @@ fn message(text: &str) -> serde_json::Value {
 #[test]
 fn the_pass_instructions_are_one_text_with_the_limits_of_the_core_constants() {
     assert_eq!(
-        crate::pass_wire::pass_instructions(),
+        crate::pass_wire::pass_instructions(V8),
         "\
 You keep the Memory of one novel for the writing assistant of the author. The author does not see \
 this work. A Memory entry is for a fact that a later Chapter needs and that a search of the \
@@ -143,7 +143,7 @@ async fn a_pass_request_has_its_sections_and_one_strict_function() {
             json!("required"),
             json!(8192),
             true,
-            json!(crate::pass_wire::pass_instructions()),
+            json!(crate::pass_wire::pass_instructions(V8)),
             message(&format!(
                 "Memory entries:\n{ENTRY_1}\n{ENTRY_2}\n\nMemory observations:\n{OBSERVATION}\
                  \n\nDeleted Memory entries:\n{MARKS}"
@@ -187,7 +187,7 @@ async fn a_pass_request_with_no_entry_and_no_mark_has_only_the_observations() {
     let request = pass(
         vec![item(ContextSourceClass::MemoryObservations, OBSERVATION)],
         V8,
-        storyos_core::AGENT_PLAN_REGISTRATION.revision,
+        storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
     );
     assert_eq!(
         body(request).await["input"],
@@ -205,7 +205,7 @@ async fn a_pass_request_with_entries_and_no_observation_has_no_observations_sect
             item(ContextSourceClass::MemoryDeleteMarks, MARKS),
         ],
         V8,
-        storyos_core::AGENT_PLAN_REGISTRATION.revision,
+        storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
     );
     assert_eq!(
         body(request).await["input"],

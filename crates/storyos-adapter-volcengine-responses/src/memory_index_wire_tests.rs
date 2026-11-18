@@ -11,7 +11,10 @@ const V8: &str = storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION;
 fn v8(context: Vec<storyos_application::RequestContextItem>) -> CreateRequest {
     CreateRequest {
         context,
-        ..first(V8, storyos_core::AGENT_PLAN_REGISTRATION.revision)
+        ..first(
+            V8,
+            storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
+        )
     }
 }
 
@@ -136,7 +139,7 @@ async fn a_run_with_memory_use_adds_the_read_and_search_sentences_to_the_memory_
     let with_use = |request: CreateRequest| CreateRequest {
         tool_exposure: storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
             bound: &[],
-            model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
+            model_registration_revision: storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
             skill_catalog: false,
             memory_use: true,
             hybrid_search: false,

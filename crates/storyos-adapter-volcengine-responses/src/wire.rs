@@ -119,6 +119,13 @@ or an intent, not a copy of a passage. For a character or a pair of characters t
 Memory index lists, change that entry and do not create a second one. When the Host refuses a \
 write, tell the author.";
 
+/// The sentences that the mapping `v9` adds to the paragraph of `write_memory` (ADR 0094 section
+/// 5).
+pub(crate) const WRITE_MEMORY_WORDS_INSTRUCTION: &str = "\
+An entry holds what the author said in this Conversation: do not add a fact that you read in the \
+manuscript or in Memory and that the author did not say. When the author asks you to remember \
+what a Chapter says, the author said so, and the entry can hold it.";
+
 /// The paragraph of the mapping `v8` for a request with a `memory_index` item (ADR 0094 section
 /// 4).
 pub(crate) const MEMORY_INDEX_INSTRUCTION: &str = "\
@@ -178,10 +185,13 @@ pub(crate) fn create_body(
     // A continuation input wraps each result in a source tag (AP-07), and the instruction says
     // that its content is data.
     let mapping = request.route.mapping_revision.as_str();
+    let memory_rules = mapping == storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION;
+    let stage7 = memory_rules || mapping == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION;
     let tool_loop = match mapping {
         storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION
         | storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION
-        | storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION => {
+        | storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+        | storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION => {
             format!(
                 "{TOOL_LOOP_INSTRUCTIONS}\n\n{READ_TOOL_RESULT_INSTRUCTION}\n\n\
                  {TOOL_RESULT_STUB_INSTRUCTION}"
@@ -209,12 +219,7 @@ pub(crate) fn create_body(
         .iter()
         .any(|item| item.source_class == ContextSourceClass::SkillCatalog);
     let instructions = match (
-        skill
-            && [
-                storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION,
-                storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION,
-            ]
-            .contains(&mapping),
+        skill && (stage7 || mapping == storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION),
         catalog,
     ) {
         (true, true) => format!(
@@ -226,17 +231,20 @@ pub(crate) fn create_body(
         }
         (false, _) => instructions,
     };
-    let write_memory = mapping == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+    let write_memory = stage7
         && request
             .tool_exposure
             .tools
             .iter()
             .any(|tool| tool.spec.operation == storyos_core::ToolOperation::WriteMemory);
-    let instructions = match write_memory {
-        true => format!("{instructions}\n\n{WRITE_MEMORY_INSTRUCTION}"),
-        false => instructions,
+    let instructions = match (write_memory, memory_rules) {
+        (true, true) => {
+            format!("{instructions}\n\n{WRITE_MEMORY_INSTRUCTION} {WRITE_MEMORY_WORDS_INSTRUCTION}")
+        }
+        (true, false) => format!("{instructions}\n\n{WRITE_MEMORY_INSTRUCTION}"),
+        (false, _) => instructions,
     };
-    let chapter_list = mapping == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+    let chapter_list = stage7
         && request
             .context
             .iter()
@@ -258,7 +266,7 @@ pub(crate) fn create_body(
         true => format!("{instructions}\n\n{SEARCH_MANUSCRIPT_INSTRUCTION}"),
         false => instructions,
     };
-    let memory_index = mapping == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+    let memory_index = stage7
         && request
             .context
             .iter()
@@ -419,7 +427,8 @@ pub(crate) fn summary_body(
     let summary = match mapping_revision {
         storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION
         | storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION
-        | storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION => {
+        | storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+        | storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION => {
             format!("{SUMMARY_INSTRUCTIONS}\n\n{SUMMARY_TOPICS_INSTRUCTION}")
         }
         _ => SUMMARY_INSTRUCTIONS.to_owned(),
