@@ -1,4 +1,5 @@
-//! S7-E1b: the store test of a loss of each vector row of a Project. Test prefix lead `a2`.
+//! S7-E1b: the store test of a loss of each vector row of a Project. Test prefixes `a25`, `a26`,
+//! and `a2f`: `damaged_evidence_tests` uses the Projects `a200` and `a210`.
 
 use storyos_application::{PassageIndexWorkStore, ProjectScope};
 use tokio_postgres::Client;
@@ -45,7 +46,7 @@ async fn the_work_makes_each_lost_vector_row_again_and_changes_no_chapter_or_ent
         .lock()
         .await;
     let (store, admin) = configured().await;
-    let chapter = chapter(&store, &admin, ["a20", "a21"], "a2f", &texts()).await;
+    let chapter = chapter(&store, &admin, ["a25", "a26"], "a2f", &texts()).await;
     let scope = chapter.scope.clone();
     let entries = [
         (1, 1, 1, "current", "character", "林舟", "渡口的船夫。"),
