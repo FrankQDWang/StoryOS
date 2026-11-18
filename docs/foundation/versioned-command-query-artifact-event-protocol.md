@@ -2186,13 +2186,11 @@ original acknowledgement even if a Run has since started. The UI shows the
 current values and disables changes while busy; it cannot supply the idle proof.
 Foreground admission captures the settings revision for the whole Run tree.
 
-Use controls new summary, search, and Memory-document intake by that
-conversation's Agent; contribution controls future extraction from its settled
-conversation snapshots. Setting checks still occur before source reads and
-dispatch. Already sent background work retains its Attempt and outcome evidence
-and follows the existing publication gate; changing a setting is not cancellation
-or a revocation of publication permission. Real access and covered-copy
-restrictions still apply. Neither setting deletes published Memory, rewrites
+Use controls the Memory Index and the Memory read Tools in the Runs of that
+conversation (ADR 0094). Contribution controls the captures of its settled
+messages. Setting checks still occur before source reads and dispatch.
+Background work that started keeps its Attempt and its outcome, and a change of
+a setting is not a cancellation. Neither setting deletes a Memory Entry, rewrites
 recorded context, retracts disclosure, or promises semantic forgetting.
 
 `listMemoryEntries` is the author read Query of the Memory section of the
