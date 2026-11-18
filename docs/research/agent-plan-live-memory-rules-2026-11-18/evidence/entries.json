@@ -1,0 +1,52 @@
+{
+  "after part A": [
+    {
+      "entry_number": 1,
+      "version": 1,
+      "state": "current",
+      "entry_type": "foreshadowing",
+      "origin": "author_request",
+      "title": "“东主有事”白纸的伏笔",
+      "length": 97,
+      "text": "## 伏笔\n- 茶馆门板上那张写着“东主有事”的白纸，其实是赵德明替沈怀山写的。\n- 这件事先不点破，留到后面才揭开（具体揭开时机/章节待定）。\n- 作者明确要求：目前不修改正文，只记住此伏笔。",
+      "flag_reason": null
+    }
+  ],
+  "after part B": [
+    {
+      "entry_number": 1,
+      "version": 1,
+      "state": "current",
+      "entry_type": "foreshadowing",
+      "origin": "author_request",
+      "title": "“东主有事”白纸的伏笔",
+      "length": 97,
+      "text": "## 伏笔\n- 茶馆门板上那张写着“东主有事”的白纸，其实是赵德明替沈怀山写的。\n- 这件事先不点破，留到后面才揭开（具体揭开时机/章节待定）。\n- 作者明确要求：目前不修改正文，只记住此伏笔。",
+      "flag_reason": null
+    }
+  ],
+  "after the pass": [
+    {
+      "entry_number": 1,
+      "version": 1,
+      "state": "current",
+      "entry_type": "foreshadowing",
+      "origin": "author_request",
+      "title": "“东主有事”白纸的伏笔",
+      "length": 97,
+      "text": "## 伏笔\n- 茶馆门板上那张写着“东主有事”的白纸，其实是赵德明替沈怀山写的。\n- 这件事先不点破，留到后面才揭开（具体揭开时机/章节待定）。\n- 作者明确要求：目前不修改正文，只记住此伏笔。",
+      "flag_reason": null
+    },
+    {
+      "entry_number": 2,
+      "version": 1,
+      "state": "current",
+      "entry_type": "major_event",
+      "origin": "conversation",
+      "title": "沈明川拒卖临水茶馆",
+      "length": 84,
+      "text": "## 后续剧情方向\n- 沈明川最终不会卖掉临水茶馆。\n- 他将在第十章的镇上会议上当众撕毁出售意向书。\n- 目前手稿仅有第一章，此事尚未写入正文；后续章节按此方向处理。",
+      "flag_reason": null
+    }
+  ]
+}

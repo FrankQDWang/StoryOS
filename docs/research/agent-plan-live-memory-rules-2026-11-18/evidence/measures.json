@@ -1,0 +1,320 @@
+{
+  "statements": [
+    "-- C1 2026-11-18T07:54:50.732Z: 1 rows, planned 1\nUPDATE storyos.memory_work_schedules SET due_at = now() WHERE project_id = '01a1eda5-6c9e-7af0-9aa5-b9147837fbc4'::uuid AND work_kind = 'conversation_capture' AND source_id = '01a1eda6-590c-70a1-904e-6db4f95fb7e3'::uuid;"
+  ],
+  "checks": [
+    {
+      "at": "2026-11-18T07:53:24.212Z",
+      "before": "part A",
+      "requests": 0,
+      "input": null,
+      "background_max": null,
+      "author_max": null,
+      "failed": 0,
+      "embedding": 0,
+      "result": "pass"
+    },
+    {
+      "at": "2026-11-18T07:54:05.599Z",
+      "before": "part B",
+      "requests": 3,
+      "input": 35195,
+      "background_max": null,
+      "author_max": 12145,
+      "failed": 0,
+      "embedding": 0,
+      "result": "pass"
+    },
+    {
+      "at": "2026-11-18T07:54:50.676Z",
+      "before": "statement C1",
+      "requests": 5,
+      "input": 58204,
+      "background_max": null,
+      "author_max": 12145,
+      "failed": 0,
+      "embedding": 0,
+      "result": "pass"
+    },
+    {
+      "at": "2026-11-18T07:55:44.400Z",
+      "before": "the end",
+      "requests": 8,
+      "input": 67604,
+      "background_max": 5295,
+      "author_max": 12145,
+      "failed": 0,
+      "embedding": 0,
+      "result": "pass"
+    }
+  ],
+  "captures": [
+    {
+      "capture_id": "01a1eda6-c023-7f71-8a87-336ac979452a",
+      "run_id": "01a1eda6-c023-7f71-8a87-335a9e5bb1c9",
+      "source_kind": "conversation",
+      "chapter_id": null,
+      "conversation_id": "01a1eda6-590c-70a1-904e-6db4f95fb7e3",
+      "started_at": "2026-11-18T07:54:50.787164+00:00",
+      "ended_at": "2026-11-18T07:55:28.774094+00:00",
+      "outcome": "observations_recorded",
+      "failure_reason": null,
+      "run_steps": 2,
+      "tool_calls": [
+        {
+          "function": "read_chapter",
+          "state": "settled",
+          "refusal": null,
+          "arguments": {
+            "chapter": 1,
+            "last_block": null,
+            "first_block": null
+          }
+        },
+        {
+          "function": "record_memory_observations",
+          "state": "settled",
+          "refusal": null,
+          "arguments": {
+            "observations": [
+              {
+                "kind": "observation",
+                "text": "作者已定：沈明川最终不会卖掉临水茶馆。他将在第十章的镇上会议上当众撕掉那份意向书。目前手稿只有第一章，此事尚未写入正文，后续章节按此方向处理。",
+                "type": "other",
+                "entry": null,
+                "title": "沈明川不会卖掉茶馆",
+                "reason": null
+              }
+            ]
+          }
+        }
+      ],
+      "observations": {
+        "observation:other": 1
+      }
+    }
+  ],
+  "observations": [
+    {
+      "capture_id": "01a1eda6-c023-7f71-8a87-336ac979452a",
+      "position": 1,
+      "kind": "observation",
+      "entry_type": "other",
+      "title": "沈明川不会卖掉茶馆",
+      "text": "作者已定：沈明川最终不会卖掉临水茶馆。他将在第十章的镇上会议上当众撕掉那份意向书。目前手稿只有第一章，此事尚未写入正文，后续章节按此方向处理。",
+      "entry_number": null,
+      "reason": null,
+      "state": "consumed"
+    }
+  ],
+  "passes": [
+    {
+      "pass_id": "01a1eda7-54aa-7d63-95f3-1cb3b03c8bfb",
+      "run_id": "01a1eda7-54aa-7d63-95f3-1ca3ca387d37",
+      "started_at": "2026-11-18T07:55:28.810887+00:00",
+      "ended_at": "2026-11-18T07:55:39.516282+00:00",
+      "outcome": "applied",
+      "failure_reason": null,
+      "operations": [
+        {
+          "entry": 2,
+          "result": "applied",
+          "refusal": null,
+          "operation": {
+            "text": "## 后续剧情方向\n- 沈明川最终不会卖掉临水茶馆。\n- 他将在第十章的镇上会议上当众撕毁出售意向书。\n- 目前手稿仅有第一章，此事尚未写入正文；后续章节按此方向处理。",
+            "type": "major_event",
+            "entry": null,
+            "title": "沈明川拒卖临水茶馆",
+            "action": "create",
+            "reason": null,
+            "entries": null,
+            "description": "已定后续剧情：沈明川不会卖掉临水茶馆，第十章在镇会上撕掉意向书。",
+            "observations": [
+              1
+            ]
+          }
+        }
+      ],
+      "input_items": [
+        [
+          "01a1eda6-c023-7f71-8a87-336ac979452a",
+          "1"
+        ]
+      ]
+    }
+  ],
+  "requests": [
+    {
+      "run_kind": "author",
+      "run_id": "01a1eda5-6dfc-7161-9a29-6ed94d1a17ca",
+      "model_attempt_id": "01a1eda5-6e59-7800-b246-ff8ee23179e3",
+      "decision_position": 0,
+      "dispatch_state": "settled",
+      "response_reference": "resp_0217949884045424d9266badd4680e9e72735e419b86df31548ea",
+      "input_tokens": 10990,
+      "output_tokens": 983,
+      "decision": "tool_request"
+    },
+    {
+      "run_kind": "author",
+      "run_id": "01a1eda5-6dfc-7161-9a29-6ed94d1a17ca",
+      "model_attempt_id": "01a1eda5-cff8-71c2-8fb7-9096a2f7ebbb",
+      "decision_position": 1,
+      "dispatch_state": "settled",
+      "response_reference": "resp_0217949884295244c9833b195a1cac5bbbd18e9e4e5ff8320dbce",
+      "input_tokens": 12060,
+      "output_tokens": 32,
+      "decision": "tool_request"
+    },
+    {
+      "run_kind": "author",
+      "run_id": "01a1eda5-6dfc-7161-9a29-6ed94d1a17ca",
+      "model_attempt_id": "01a1eda5-e4af-79e2-9267-e7ebd00637ae",
+      "decision_position": 2,
+      "dispatch_state": "settled",
+      "response_reference": "resp_021794988434819e0d15f89dc5eb44ad1ad600579228b7917bae7",
+      "input_tokens": 12145,
+      "output_tokens": 187,
+      "decision": "advisory"
+    },
+    {
+      "run_kind": "author",
+      "run_id": "01a1eda6-590c-70a1-904e-6dc79d7646b3",
+      "model_attempt_id": "01a1eda6-5993-72c0-96e4-036050258b4f",
+      "decision_position": 0,
+      "dispatch_state": "settled",
+      "response_reference": "resp_021794988464746ab257ece25bd0fea81c82ca5c15ec8fdc1f2e3",
+      "input_tokens": 11338,
+      "output_tokens": 264,
+      "decision": "tool_request"
+    },
+    {
+      "run_kind": "author",
+      "run_id": "01a1eda6-590c-70a1-904e-6dc79d7646b3",
+      "model_attempt_id": "01a1eda6-8630-7fe0-9adc-1c28b8032348",
+      "decision_position": 1,
+      "dispatch_state": "settled",
+      "response_reference": "resp_02179498847616393e048b1e87f4ca8485d3a0240faade7a6c2a7",
+      "input_tokens": 11671,
+      "output_tokens": 330,
+      "decision": "advisory"
+    },
+    {
+      "run_kind": "memory_capture",
+      "run_id": "01a1eda6-c023-7f71-8a87-335a9e5bb1c9",
+      "model_attempt_id": "01a1eda6-c042-7d83-aba4-6676e0ee5668",
+      "decision_position": 0,
+      "dispatch_state": "settled",
+      "response_reference": "resp_021794988491026f4d7ae5d724d9e41b76430b6d79530bcbb2ddf",
+      "input_tokens": 2258,
+      "output_tokens": 534,
+      "decision": "tool_request"
+    },
+    {
+      "run_kind": "memory_capture",
+      "run_id": "01a1eda6-c023-7f71-8a87-335a9e5bb1c9",
+      "model_attempt_id": "01a1eda7-05d5-7cc2-9df4-86480d03ea0c",
+      "decision_position": 1,
+      "dispatch_state": "settled",
+      "response_reference": "resp_0217949885088554d7552398ca1982f1d8c06d525f58d82c8db04",
+      "input_tokens": 5295,
+      "output_tokens": 761,
+      "decision": "tool_request"
+    },
+    {
+      "run_kind": "memory_consolidation",
+      "run_id": "01a1eda7-54aa-7d63-95f3-1ca3ca387d37",
+      "model_attempt_id": "01a1eda7-54d1-74b0-b7f5-32a3c61ffa06",
+      "decision_position": 0,
+      "dispatch_state": "settled",
+      "response_reference": "resp_021794988529060f4d7ae5d724d9e41b76430b6d79530bc8a5cda",
+      "input_tokens": 1847,
+      "output_tokens": 403,
+      "decision": "tool_request"
+    }
+  ],
+  "author_runs": [
+    {
+      "run_id": "01a1eda5-6dfc-7161-9a29-6ed94d1a17ca",
+      "conversation_id": "01a1eda5-6dfc-7161-9a29-6ec6e1693491",
+      "status": "completed",
+      "author_message": "请帮我记住一个伏笔：茶馆门板上那张写着“东主有事”的白纸，其实是赵德明替沈怀山写的，这件事后面才揭开。先别改正文。",
+      "run_steps": 3,
+      "tool_calls": [
+        {
+          "function": "write_memory",
+          "arguments": {
+            "text": "## 伏笔\n- 茶馆门板上那张写着“东主有事”的白纸，其实是赵德明替沈怀山写的。\n- 这件事先不点破，留到后面才揭开（具体揭开时机/章节待定）。\n- 作者明确要求：目前不修改正文，只记住此伏笔。",
+            "type": "foreshadowing",
+            "entry": null,
+            "title": "“东主有事”白纸的伏笔",
+            "action": "create",
+            "description": "门板上“东主有事”的白纸是赵德明替沈怀山写的，后文才揭开。"
+          },
+          "state": "settled",
+          "refusal": null
+        },
+        {
+          "function": "finish",
+          "arguments": {},
+          "state": "settled",
+          "refusal": null
+        }
+      ]
+    },
+    {
+      "run_id": "01a1eda6-590c-70a1-904e-6dc79d7646b3",
+      "conversation_id": "01a1eda6-590c-70a1-904e-6db4f95fb7e3",
+      "status": "completed",
+      "author_message": "第一章里，顾青禾是怎么跟知遥说爷爷走时的情形的？请引用正文里的原句回答，不要修改正文。另外我定下一件事：沈明川最后不会卖掉茶馆，他会在第十章的镇上会议上当众撕掉那份意向书。",
+      "run_steps": 2,
+      "tool_calls": [
+        {
+          "function": "finish",
+          "arguments": {},
+          "state": "settled",
+          "refusal": null
+        }
+      ]
+    }
+  ],
+  "answers": [
+    {
+      "run_id": "01a1eda5-6dfc-7161-9a29-6ed94d1a17ca",
+      "answer": "好的，已经记下这条伏笔，正文一个字都没动。\n\n记忆内容：\n- 茶馆门板上写着“东主有事”的那张白纸，其实是赵德明替沈怀山写的；\n- 真相暂不揭开，留到后文再点明；\n- 按你的要求，目前不修改正文。\n\n另外提醒一句：第一章里现有的那句“她认得这个字迹，不是爷爷的”正好是这条伏笔很自然的埋设点，将来揭开时可以和赵德明的笔迹呼应上。等你想好在哪一章揭晓，随时告诉我。"
+    },
+    {
+      "run_id": "01a1eda6-590c-70a1-904e-6dc79d7646b3",
+      "answer": "第一章里的原句是：\n\n> “爷爷走的时候……”她开口，又停住了。\n>\n> “走得很安静。”顾青禾说，“那天早上我来开门，他坐在柜台后面那把藤椅上，像是睡着了。手里还拿着账本。”\n\n我没有修改正文。\n\n另外，后续情节按你定下的方向处理：沈明川最终不会卖掉临水茶馆，并会在第十章的镇上会议上当众撕掉那份意向书。目前手稿里只有第一章，所以暂不改动正文。"
+    }
+  ],
+  "embedding": [],
+  "vectors": [],
+  "index_work": [],
+  "schedules": [
+    {
+      "work_kind": "chapter_capture",
+      "source_id": "01a1eda5-6d25-7fc2-a656-2e0f5e950e3a",
+      "due_at": "2026-11-18T08:53:24.091043+00:00",
+      "held": false
+    },
+    {
+      "work_kind": "consolidation",
+      "source_id": "01a1eda5-6c9e-7af0-9aa5-b9147837fbc4",
+      "due_at": null,
+      "held": false
+    },
+    {
+      "work_kind": "conversation_capture",
+      "source_id": "01a1eda5-6dfc-7161-9a29-6ec6e1693491",
+      "due_at": "2026-11-18T08:24:00.838115+00:00",
+      "held": false
+    },
+    {
+      "work_kind": "conversation_capture",
+      "source_id": "01a1eda6-590c-70a1-904e-6db4f95fb7e3",
+      "due_at": null,
+      "held": false
+    }
+  ]
+}
