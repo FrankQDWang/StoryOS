@@ -19,7 +19,7 @@ This file is the operating-rule source for every agent client. Codex reads it di
 - **Delivery:** read [Delivery](docs/agents/delivery.md) before you claim, implement, review, or merge a ticket. It gives the roles, the branches, the ticket life cycle, the Codex review, and the templates.
 - **Issue tracker:** use GitHub. Read [Issue tracker](docs/agents/issue-tracker.md) before you publish a ticket or change the Wayfinder map. Map a triage role with [Triage labels](docs/agents/triage-labels.md).
 - **Live run evidence:** put the raw evidence of a live model run on a Git tag `evidence/<name>-<date>`, and not in `main`. The tag has the request payloads, the ToolCalls, the plan, and the logs. It has no database dump and no Project Export Archive. "Live model requests" in [Delivery](docs/agents/delivery.md) gives the steps.
-- **Merge gate:** merge only when the GitHub `verify` check passes, a Check Evidence Line of `make check` or `make check-full` names the pull request head, and the Codex review of `make review PR=<number>` passes. Only the coordinator merges.
+- **Merge gate:** merge only when the GitHub `verify` check passes, a Check Evidence Line of `make check` or `make check-full` names the pull request head, and the Codex review passes by the merge gate of [Delivery](docs/agents/delivery.md). Only the coordinator merges.
 
 ## Code and references
 
