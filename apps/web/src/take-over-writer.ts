@@ -6,7 +6,7 @@ import {
 import type { TakeOverProjectWriterResponse }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { challengeRefused, forgettingRefusedFlight } from "./refused-command.ts";
+import { challengeRefused, forgetFlight, forgettingRefusedFlight } from "./refused-command.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v3";
@@ -56,20 +56,18 @@ export async function takeOverOwnedProjectWriter(options: {
     };
     inFlight.set(identity, flight);
   }
-  const send = () => forgettingRefusedFlight(
-    () => submitTakeover(options, flight),
-    () => inFlight.delete(identity),
-  );
+  const send = () => forgettingRefusedFlight(inFlight, identity, flight, () =>
+    submitTakeover(options, flight));
   try {
     const takeover = await send();
-    inFlight.delete(identity);
+    forgetFlight(inFlight, identity, flight);
     return takeover;
   } catch (error) {
     if (challengeRefused(error)) {
       throw error;
     }
     const takeover = await send();
-    inFlight.delete(identity);
+    forgetFlight(inFlight, identity, flight);
     return takeover;
   }
 }

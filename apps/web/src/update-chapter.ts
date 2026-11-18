@@ -6,7 +6,7 @@ import {
 import type { UpdateChapterResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
-import { challengeRefused, forgettingRefusedFlight } from "./refused-command.ts";
+import { challengeRefused, forgetFlight, forgettingRefusedFlight } from "./refused-command.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -59,20 +59,18 @@ export async function updateOwnedChapter(options: {
     };
     inFlightUpdates.set(identity, flight);
   }
-  const send = () => forgettingRefusedFlight(
-    () => submitUpdateChapter(options, flight),
-    () => inFlightUpdates.delete(identity),
-  );
+  const send = () => forgettingRefusedFlight(inFlightUpdates, identity, flight, () =>
+    submitUpdateChapter(options, flight));
   try {
     const updated = await send();
-    inFlightUpdates.delete(identity);
+    forgetFlight(inFlightUpdates, identity, flight);
     return updated;
   } catch (error) {
     if (historicalAcknowledgementUnavailable(error) || challengeRefused(error)) {
       throw error;
     }
     const updated = await send();
-    inFlightUpdates.delete(identity);
+    forgetFlight(inFlightUpdates, identity, flight);
     return updated;
   }
 }

@@ -6,7 +6,7 @@ import {
 import type { ExportHumanReadableManuscriptResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
-import { challengeRefused, forgettingRefusedFlight } from "./refused-command.ts";
+import { challengeRefused, forgetFlight, forgettingRefusedFlight } from "./refused-command.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -44,20 +44,18 @@ export async function requestOwnedHumanReadableExport(options: {
     };
     inFlightExports.set(options.projectId, flight);
   }
-  const send = () => forgettingRefusedFlight(
-    () => submitExport(options, flight),
-    () => inFlightExports.delete(options.projectId),
-  );
+  const send = () => forgettingRefusedFlight(inFlightExports, options.projectId, flight, () =>
+    submitExport(options, flight));
   try {
     const accepted = await send();
-    inFlightExports.delete(options.projectId);
+    forgetFlight(inFlightExports, options.projectId, flight);
     return accepted;
   } catch (error) {
     if (historicalAcknowledgementUnavailable(error) || challengeRefused(error)) {
       throw error;
     }
     const accepted = await send();
-    inFlightExports.delete(options.projectId);
+    forgetFlight(inFlightExports, options.projectId, flight);
     return accepted;
   }
 }

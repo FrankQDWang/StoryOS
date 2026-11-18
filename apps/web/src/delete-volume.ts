@@ -5,7 +5,7 @@ import {
   StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
-import { challengeRefused, forgettingRefusedFlight } from "./refused-command.ts";
+import { challengeRefused, forgetFlight, forgettingRefusedFlight } from "./refused-command.ts";
 import type { DeleteVolumeResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 
@@ -56,13 +56,11 @@ export async function deleteOwnedVolume(options: {
     };
     inFlightDeletes.set(identity, flight);
   }
-  const send = () => forgettingRefusedFlight(
-    () => submitDeleteVolume(options, flight),
-    () => inFlightDeletes.delete(identity),
-  );
+  const send = () => forgettingRefusedFlight(inFlightDeletes, identity, flight, () =>
+    submitDeleteVolume(options, flight));
   try {
     const removed = await send();
-    inFlightDeletes.delete(identity);
+    forgetFlight(inFlightDeletes, identity, flight);
     return removed;
   } catch (error) {
     if (historicalAcknowledgementUnavailable(error) || challengeRefused(error)) {
@@ -75,7 +73,7 @@ export async function deleteOwnedVolume(options: {
       });
     }
     const removed = await send();
-    inFlightDeletes.delete(identity);
+    forgetFlight(inFlightDeletes, identity, flight);
     return removed;
   }
 }

@@ -15,21 +15,25 @@ export function refusedWith(error: unknown, code: "instruction_over_item_limit" 
   }
 }
 
-/**
- * Whether the Server refused the Command Challenge of a command. The Server gives the same dead nonce again for the
- * same idempotency key (ADR 0038), so the next try must be a new flight.
- */
+/** Whether the Server refused a Command Challenge. The same idempotency key gets the refused nonce again (ADR 0038). */
 export const challengeRefused = (error: unknown): boolean => refusedWith(error, "challenge_invalid");
 
-/** Gives the result of `send`. When the Server refuses its Command Challenge, `forget` removes the flight. */
-export async function forgettingRefusedFlight<Result>(
+/** Removes `flight` from `flights`. A newer flight of the same intent stays. */
+export function forgetFlight<Flight>(flights: Map<string, Flight>, identity: string, flight: Flight): void {
+  if (flights.get(identity) === flight) flights.delete(identity);
+}
+
+/** Gives the result of `send`. When the Server refuses its Command Challenge, `flight` is forgotten. */
+export async function forgettingRefusedFlight<Flight, Result>(
+  flights: Map<string, Flight>,
+  identity: string,
+  flight: Flight,
   send: () => Promise<Result>,
-  forget: () => void,
 ): Promise<Result> {
   try {
     return await send();
   } catch (error) {
-    if (challengeRefused(error)) forget();
+    if (challengeRefused(error)) forgetFlight(flights, identity, flight);
     throw error;
   }
 }

@@ -126,20 +126,17 @@ async function sendWithdraw(options: Pick<WithdrawTarget, "baseUrl" | "fetchImpl
     await putRecord(options.workspace.database, { ...current, settlement: "settled", response });
     return response;
   } catch (error) {
-    await putRecord(options.workspace.database, challengeRefused(error)
-      ? await newFlight(current, options.cryptoImpl)
-      : { ...current, settlement: "unresolved" });
+    const unresolved: WithdrawRecord = { ...current, settlement: "unresolved" };
+    if (challengeRefused(error)) {
+      delete unresolved.nonce;
+      unresolved.idempotency_key = uuidV7(options.cryptoImpl);
+      unresolved.request = { ...current.request, withdraw_proposal_input: {
+        ...current.request.withdraw_proposal_input, correlation_id: uuidV7(options.cryptoImpl) } };
+      unresolved.digest = await digestWithdrawProposal(unresolved.request, options.cryptoImpl);
+    }
+    await putRecord(options.workspace.database, unresolved);
     throw error;
   }
-}
-
-/** The same withdrawal with a new idempotency key, a new correlation, and no Challenge. */
-async function newFlight(record: WithdrawRecord, cryptoImpl: Crypto): Promise<WithdrawRecord> {
-  const request: WithdrawProposalRequest = { ...record.request, withdraw_proposal_input: {
-    ...record.request.withdraw_proposal_input, correlation_id: uuidV7(cryptoImpl) } };
-  const { nonce: _refused, ...kept } = record;
-  return { ...kept, request, digest: await digestWithdrawProposal(request, cryptoImpl),
-    idempotency_key: uuidV7(cryptoImpl), settlement: "unresolved" };
 }
 
 export async function withdrawDisplayedBlockProposal(options: WithdrawTarget): Promise<WithdrawProposalResponse> {
