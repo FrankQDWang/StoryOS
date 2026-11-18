@@ -43,6 +43,17 @@ The plan was posted on the ticket before the first request ([plan comment](https
 
 - **Planned:** 25 model requests, at most 45. About 270,000 reported input tokens, at most 600,000. About 40 embedding requests, at most 70. No Exa exchange.
 - **Request guard:** the `live_guard` triggers of the [record of S7-D6b](agent-plan-live-memory-conflict-2026-11-17.md), counted at the claim: model 45, Exa 0, embedding 70.
+- **Expected reported input of each request:** a request of a Run of the author 12,000 to 30,000, a capture request 5,000 to 9,000, and a pass request 3,000 to 8,000. These ranges were in the estimate of the executor that the coordinator accepted before the Claim, and the plan comment did not repeat them. The coordinator recorded them on the ticket after the run: [coordinator note](https://github.com/FrankQDWang/StoryOS/issues/1676#issuecomment-6964595253).
+
+Each request against its expected range:
+
+| Kind | Expected | Actual | Requests below the range | Requests above the range |
+| --- | --- | --- | --- | --- |
+| Run of the author | 12,000 to 30,000 | 10,890 to 19,117 | 4 (M1, M2, M3, M17) | 0 |
+| Capture | 5,000 to 9,000 | 2,281 to 7,231 | 6 (M4, M5, M6, M8, M10, M12) | 0 |
+| Pass | 3,000 to 8,000 | 2,486 to 4,993 | 1 (M7) | 0 |
+
+No request was above its range or above its stop. The requests below the range had a shorter input than the estimate expected: the Chapter list had 3 lines, and the Memory Index had at most 14 short lines.
 
 The run did not use the browser. The plan comment said that the text of the Chapters goes in "through the editor". At the start of the run, the coordinator changed that criterion of the ticket: the journey of S7-E1 proves the panel and the editor in the browser on the fake destination, and the records of S7-D5b and S7-D6b show the browser with the real model. So the script sent the same public commands that the editor sends (`createChapter`, `setCurrentChapter`, `applyAuthorEdit` with `replace_selection`, `split_block`, and `replace_block_selection`) through the generated client, as the S7-D7 run did.
 

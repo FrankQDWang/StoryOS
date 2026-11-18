@@ -142,10 +142,7 @@ async fn attempt_roles(admin: &Client, run_id: &str) -> Vec<String> {
         .collect()
 }
 
-/// The Worker loses the Run Lease in a capture of each source of `projects`: the first after the
-/// response committed, the second before the Tool Gateway resolves the output call. Returns, for
-/// each, the stale results, the settlement before and after the next claim, whether a second
-/// delivery of the settled output call found no ToolCall, and the roles of the Model Attempts.
+/// A capture of each source of `projects` loses its Run Lease and ends with one set of observations.
 async fn lost_lease_ends(
     store: &PostgresProjectReader,
     admin: &Client,
