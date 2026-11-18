@@ -122,9 +122,12 @@ write, tell the author.";
 /// The sentences that the mapping `v9` adds to the paragraph of `write_memory` (ADR 0094 section
 /// 5).
 pub(crate) const WRITE_MEMORY_WORDS_INSTRUCTION: &str = "\
-An entry holds what the author said in this Conversation: do not add a fact that you read in the \
-manuscript or in Memory and that the author did not say. When the author asks you to remember \
-what a Chapter says, the author said so, and the entry can hold it.";
+An entry holds only what the author said in this Conversation. Do not add a quotation, a clue, a \
+name, a relation, or another fact that you read in the manuscript or in Memory and that the \
+author did not say. If such a fact can help the author, say it in your answer and do not put it \
+in the entry. When the author asks you to remember what a Chapter says, the author said so, and \
+the entry can hold it. A decision that the author states with no request to remember it is not a \
+request: do not call write_memory for it, because the Memory work of the Host records it later.";
 
 /// The paragraph of the mapping `v8` for a request with a `memory_index` item (ADR 0094 section
 /// 4).
