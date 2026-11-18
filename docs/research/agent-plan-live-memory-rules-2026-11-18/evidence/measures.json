@@ -1,0 +1,248 @@
+{
+  "statements": [
+    "-- C1 2026-11-18T07:30:28.940Z: 1 rows, planned 1\nUPDATE storyos.memory_work_schedules SET due_at = now() WHERE project_id = '01a1ed8f-0a2d-71f1-8492-fdb6e6b2b3c1'::uuid AND work_kind = 'conversation_capture' AND source_id = '01a1ed8f-f694-7dc0-81b3-2b7511851828'::uuid;"
+  ],
+  "checks": [
+    {
+      "at": "2026-11-18T07:28:57.188Z",
+      "before": "part A",
+      "requests": 0,
+      "input": null,
+      "background_max": null,
+      "author_max": null,
+      "failed": 0,
+      "embedding": 0,
+      "result": "pass"
+    },
+    {
+      "at": "2026-11-18T07:29:38.896Z",
+      "before": "part B",
+      "requests": 3,
+      "input": 34721,
+      "background_max": null,
+      "author_max": 11874,
+      "failed": 0,
+      "embedding": 0,
+      "result": "pass"
+    },
+    {
+      "at": "2026-11-18T07:30:28.886Z",
+      "before": "statement C1",
+      "requests": 6,
+      "input": 70049,
+      "background_max": null,
+      "author_max": 11997,
+      "failed": 0,
+      "embedding": 0,
+      "result": "pass"
+    },
+    {
+      "at": "2026-11-18T07:30:45.320Z",
+      "before": "the end",
+      "requests": 7,
+      "input": 72330,
+      "background_max": 2281,
+      "author_max": 11997,
+      "failed": 0,
+      "embedding": 0,
+      "result": "pass"
+    }
+  ],
+  "captures": [
+    {
+      "capture_id": "01a1ed90-71e5-7fe2-88b1-6e099a312430",
+      "run_id": "01a1ed90-71e5-7fe2-88b1-6dff58ce33e8",
+      "source_kind": "conversation",
+      "chapter_id": null,
+      "conversation_id": "01a1ed8f-f694-7dc0-81b3-2b7511851828",
+      "started_at": "2026-11-18T07:30:28.967401+00:00",
+      "ended_at": "2026-11-18T07:30:41.96159+00:00",
+      "outcome": "no_observation",
+      "failure_reason": null,
+      "run_steps": 1,
+      "tool_calls": [
+        {
+          "function": "record_memory_observations",
+          "state": "settled",
+          "refusal": null,
+          "arguments": {
+            "observations": []
+          }
+        }
+      ],
+      "observations": null
+    }
+  ],
+  "observations": [],
+  "passes": [],
+  "requests": [
+    {
+      "run_kind": "author",
+      "run_id": "01a1ed8f-0b6d-7123-ac04-1f49facae4de",
+      "model_attempt_id": "01a1ed8f-0bcc-7d73-b808-e8ba81260d49",
+      "decision_position": 0,
+      "dispatch_state": "settled",
+      "response_reference": "resp_02179498693747372ea91cebe75e8e291705b4c0b59095e8e069b",
+      "input_tokens": 11059,
+      "output_tokens": 649,
+      "decision": "tool_request"
+    },
+    {
+      "run_kind": "author",
+      "run_id": "01a1ed8f-0b6d-7123-ac04-1f49facae4de",
+      "model_attempt_id": "01a1ed8f-5716-7262-befc-4f45ef0ecb96",
+      "decision_position": 1,
+      "dispatch_state": "settled",
+      "response_reference": "resp_02179498695686700000000000000000000ffffac155880e1579e",
+      "input_tokens": 11788,
+      "output_tokens": 36,
+      "decision": "tool_request"
+    },
+    {
+      "run_kind": "author",
+      "run_id": "01a1ed8f-0b6d-7123-ac04-1f49facae4de",
+      "model_attempt_id": "01a1ed8f-711f-7850-b5e2-2aec715c50b6",
+      "decision_position": 2,
+      "dispatch_state": "settled",
+      "response_reference": "resp_0217949869634066863c88f28d563d505635c26ab083df55a6ac6",
+      "input_tokens": 11874,
+      "output_tokens": 156,
+      "decision": "advisory"
+    },
+    {
+      "run_kind": "author",
+      "run_id": "01a1ed8f-f694-7dc0-81b3-2b8090c2ce80",
+      "model_attempt_id": "01a1ed8f-f6ef-7a21-bf20-facd8af842a8",
+      "decision_position": 0,
+      "dispatch_state": "settled",
+      "response_reference": "resp_0217949869977241cb6d3ad1bdd7a7436196dd041d7fa42dceb03",
+      "input_tokens": 11406,
+      "output_tokens": 435,
+      "decision": "tool_request"
+    },
+    {
+      "run_kind": "author",
+      "run_id": "01a1ed8f-f694-7dc0-81b3-2b8090c2ce80",
+      "model_attempt_id": "01a1ed90-2b8f-79e1-90a2-88d85ab98327",
+      "decision_position": 1,
+      "dispatch_state": "settled",
+      "response_reference": "resp_021794987011136dfda270f226adba1bf628b57be6483cf567a32",
+      "input_tokens": 11925,
+      "output_tokens": 24,
+      "decision": "tool_request"
+    },
+    {
+      "run_kind": "author",
+      "run_id": "01a1ed8f-f694-7dc0-81b3-2b8090c2ce80",
+      "model_attempt_id": "01a1ed90-424e-7623-a79e-6f4e70c02cb8",
+      "decision_position": 2,
+      "dispatch_state": "settled",
+      "response_reference": "resp_0217949870169614d9266badd4680e9e72735e419b86df3d83ae1",
+      "input_tokens": 11997,
+      "output_tokens": 113,
+      "decision": "advisory"
+    },
+    {
+      "run_kind": "memory_capture",
+      "run_id": "01a1ed90-71e5-7fe2-88b1-6dff58ce33e8",
+      "model_attempt_id": "01a1ed90-7200-74a3-9d30-9b6c75002456",
+      "decision_position": 0,
+      "dispatch_state": "settled",
+      "response_reference": "resp_0217949870291656fd7a792898c90d4d2724113d22df8fc3efaa4",
+      "input_tokens": 2281,
+      "output_tokens": 250,
+      "decision": "tool_request"
+    }
+  ],
+  "author_runs": [
+    {
+      "run_id": "01a1ed8f-0b6d-7123-ac04-1f49facae4de",
+      "conversation_id": "01a1ed8f-0b6d-7123-ac04-1f39a600d4d8",
+      "status": "completed",
+      "author_message": "请帮我记住一个伏笔：茶馆门板上那张写着“东主有事”的白纸，其实是赵德明替沈怀山写的，这件事后面才揭开。先别改正文。",
+      "run_steps": 3,
+      "tool_calls": [
+        {
+          "function": "write_memory",
+          "arguments": {
+            "text": "伏笔（作者指定，暂不改正文）：临水茶馆门板上写着“东主有事”的白纸，其实是赵德明替沈怀山（知遥的爷爷）写的，此事后面才揭开。\n\n第一章已埋的线索：知遥看清纸上是“东主有事”，并注意到“字是毛笔写的，一笔一画很端正。她认得这个字迹，不是爷爷的”。后文揭晓写字人是赵德明（赵师傅，与沈怀山从小一起长大）。",
+            "type": "foreshadowing",
+            "entry": null,
+            "title": "“东主有事”白纸",
+            "action": "create",
+            "description": "伏笔：茶馆门板“东主有事”纸条是赵德明替沈怀山写的，后文才揭开。"
+          },
+          "state": "settled",
+          "refusal": null
+        },
+        {
+          "function": "finish",
+          "arguments": {},
+          "state": "settled",
+          "refusal": null
+        }
+      ]
+    },
+    {
+      "run_id": "01a1ed8f-f694-7dc0-81b3-2b8090c2ce80",
+      "conversation_id": "01a1ed8f-f694-7dc0-81b3-2b7511851828",
+      "status": "completed",
+      "author_message": "第一章里，顾青禾是怎么跟知遥说爷爷走时的情形的？请引用正文里的原句回答，不要修改正文。另外我定下一件事：沈明川最后不会卖掉茶馆，他会在第十章的镇上会议上当众撕掉那份意向书。",
+      "run_steps": 3,
+      "tool_calls": [
+        {
+          "function": "write_memory",
+          "arguments": {
+            "text": "作者确定的后续情节：沈明川最后不会卖掉临水茶馆。他会在第十章的镇上会议上当众撕掉那份卖茶馆的意向书。",
+            "type": "major_event",
+            "entry": null,
+            "title": "沈明川拒卖茶馆",
+            "action": "create",
+            "description": "作者设定：第十章镇上会议上，沈明川当众撕掉意向书，不卖茶馆。"
+          },
+          "state": "settled",
+          "refusal": null
+        },
+        {
+          "function": "finish",
+          "arguments": {},
+          "state": "settled",
+          "refusal": null
+        }
+      ]
+    }
+  ],
+  "answers": [
+    {
+      "run_id": "01a1ed8f-0b6d-7123-ac04-1f49facae4de",
+      "answer": "已记住，正文未作任何改动。\n\n记下的伏笔内容：\n- **纸条真相**：茶馆门板上“东主有事”的白纸，实为赵德明替沈怀山所写，后文才揭开。\n- **现有铺垫**：第一章里知遥已留意到“字是毛笔写的，一笔一画很端正……不是爷爷的”，正好作为日后揭晓的伏笔。\n\n等你写到揭晓那段，或想让我提前帮你设计呼应方式时，随时告诉我。"
+    },
+    {
+      "run_id": "01a1ed8f-f694-7dc0-81b3-2b8090c2ce80",
+      "answer": "第一章里，知遥问起后，顾青禾这样描述爷爷走时的情形：\n\n> “走得很安静。”顾青禾说，“那天早上我来开门，他坐在柜台后面那把藤椅上，像是睡着了。手里还拿着账本。”\n\n正文未作修改。你定下的后续情节我也已记下：**沈明川最终不会卖掉茶馆，并会在第十章的镇上会议上当众撕掉那份意向书。**"
+    }
+  ],
+  "embedding": [],
+  "vectors": [],
+  "index_work": [],
+  "schedules": [
+    {
+      "work_kind": "chapter_capture",
+      "source_id": "01a1ed8f-0abf-7350-b805-15d8b19553d4",
+      "due_at": "2026-11-18T08:28:57.10714+00:00",
+      "held": false
+    },
+    {
+      "work_kind": "conversation_capture",
+      "source_id": "01a1ed8f-0b6d-7123-ac04-1f39a600d4d8",
+      "due_at": "2026-11-18T07:59:34.94762+00:00",
+      "held": false
+    },
+    {
+      "work_kind": "conversation_capture",
+      "source_id": "01a1ed8f-f694-7dc0-81b3-2b7511851828",
+      "due_at": null,
+      "held": false
+    }
+  ]
+}

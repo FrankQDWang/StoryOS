@@ -1,0 +1,63 @@
+{
+  "after part A": [
+    {
+      "entry_number": 1,
+      "version": 1,
+      "state": "current",
+      "entry_type": "foreshadowing",
+      "origin": "author_request",
+      "title": "“东主有事”白纸",
+      "length": 150,
+      "text": "伏笔（作者指定，暂不改正文）：临水茶馆门板上写着“东主有事”的白纸，其实是赵德明替沈怀山（知遥的爷爷）写的，此事后面才揭开。\n\n第一章已埋的线索：知遥看清纸上是“东主有事”，并注意到“字是毛笔写的，一笔一画很端正。她认得这个字迹，不是爷爷的”。后文揭晓写字人是赵德明（赵师傅，与沈怀山从小一起长大）。",
+      "flag_reason": null
+    }
+  ],
+  "after part B": [
+    {
+      "entry_number": 1,
+      "version": 1,
+      "state": "current",
+      "entry_type": "foreshadowing",
+      "origin": "author_request",
+      "title": "“东主有事”白纸",
+      "length": 150,
+      "text": "伏笔（作者指定，暂不改正文）：临水茶馆门板上写着“东主有事”的白纸，其实是赵德明替沈怀山（知遥的爷爷）写的，此事后面才揭开。\n\n第一章已埋的线索：知遥看清纸上是“东主有事”，并注意到“字是毛笔写的，一笔一画很端正。她认得这个字迹，不是爷爷的”。后文揭晓写字人是赵德明（赵师傅，与沈怀山从小一起长大）。",
+      "flag_reason": null
+    },
+    {
+      "entry_number": 2,
+      "version": 1,
+      "state": "current",
+      "entry_type": "major_event",
+      "origin": "author_request",
+      "title": "沈明川拒卖茶馆",
+      "length": 50,
+      "text": "作者确定的后续情节：沈明川最后不会卖掉临水茶馆。他会在第十章的镇上会议上当众撕掉那份卖茶馆的意向书。",
+      "flag_reason": null
+    }
+  ],
+  "after the pass": [
+    {
+      "entry_number": 1,
+      "version": 1,
+      "state": "current",
+      "entry_type": "foreshadowing",
+      "origin": "author_request",
+      "title": "“东主有事”白纸",
+      "length": 150,
+      "text": "伏笔（作者指定，暂不改正文）：临水茶馆门板上写着“东主有事”的白纸，其实是赵德明替沈怀山（知遥的爷爷）写的，此事后面才揭开。\n\n第一章已埋的线索：知遥看清纸上是“东主有事”，并注意到“字是毛笔写的，一笔一画很端正。她认得这个字迹，不是爷爷的”。后文揭晓写字人是赵德明（赵师傅，与沈怀山从小一起长大）。",
+      "flag_reason": null
+    },
+    {
+      "entry_number": 2,
+      "version": 1,
+      "state": "current",
+      "entry_type": "major_event",
+      "origin": "author_request",
+      "title": "沈明川拒卖茶馆",
+      "length": 50,
+      "text": "作者确定的后续情节：沈明川最后不会卖掉临水茶馆。他会在第十章的镇上会议上当众撕掉那份卖茶馆的意向书。",
+      "flag_reason": null
+    }
+  ]
+}
