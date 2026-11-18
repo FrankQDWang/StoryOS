@@ -38,13 +38,7 @@ The author owns each product default. Before the approval of the ticket graph, t
 
 Show the tracer-bullet breakdown, the test seams, and the real blocking edges to the author for approval. Publish the approved tickets as native children with native blocking edges and the `ready-for-agent` label. Each ticket fits one implementation context and the [change size](../../CODING_STANDARDS.md#change-size) rule.
 
-A ticket body has Parent, What to build, observable acceptance criteria, and its native blockers. Name stable Requirement IDs, authoritative inputs, and interfaces when the parent delegates them. Use an expand-contract sequence only when a wide refactor cannot stay a complete passing vertical slice.
-
-Write each criterion from the code:
-
-- Name an HTTP status, a problem code, or a stored state value only after you read the code that gives it.
-- When a criterion names an earlier Run or an earlier pass, name the outcomes that count.
-- A criterion on an instruction text for the model says which proof it asks for. A wire test proves that the text is in the request. Only a live run shows the effect of the text.
+A ticket body has Parent, What to build, observable acceptance criteria, and its native blockers. Name stable Requirement IDs, authoritative inputs, and interfaces when the parent delegates them. Use an expand-contract sequence only when a wide refactor cannot stay a complete passing vertical slice. A criterion names a status, a problem code, or a state value only from the code that gives it. When it names an earlier Run or pass, it names the outcomes that count.
 
 `make check` does not run the exact-dist browser journeys and the recovery drill. A ticket that changes a browser journey, a file that a journey loads, a panel surface, or a wire form requires `make check-full`, and its body says so.
 
@@ -73,17 +67,16 @@ Ask the coordinator only for a real decision. A product, contract, number, or wa
 - Use the `tdd` skill at the approved public seams.
 - After each product or test edit, run `make check-fast`.
 - Commit on the ticket branch.
-- Wait for `make check`, `make check-full`, and `make review` in the turn that starts the command. Do not end a turn while one of them runs: the end of a turn can stop the Codex jobs of the session.
-- Start a long command in the background, and wait for it in steps of at most 2 minutes. A message of the coordinator arrives only between two steps.
+- Wait for `make check`, `make check-full`, and `make review` in the turn that starts the command. Do not end a turn while one of them runs: the end of a turn can stop the Codex jobs of the session. Wait in steps of at most 2 minutes, because a coordinator message arrives only between steps.
 - When the counted lines will exceed the [change size](../../CODING_STANDARDS.md#change-size) limit, stop and report to the coordinator, which splits the ticket.
 
 ### 5. Open the pull request
 
-When `make check-fast` and the tests that the ticket adds or changes pass, push the branch and open the pull request into the integration branch. Use the `pr` skill for the body. `make review` and Sourcery add their sections at the end of the body. Do not move the attribution line to the end again.
+When `make check-fast` and the tests that the ticket adds or changes pass, push the branch and open the pull request into the integration branch. Use the `pr` skill for the body.
 
 ### 6. Review
 
-Before round 1, complete each evidence record that an acceptance criterion requires. For a criterion that says "each", name one test case for each member. When a test uses a fake of the Server or of an external destination, list each refusal rule of the real route that the test depends on, and give the fake each rule with its own case.
+Before round 1, complete each evidence record that an acceptance criterion requires. For a criterion that says "each", name one test case for each member. Give a fake each refusal rule of the real route that the test depends on.
 
 Run the [Codex review](#codex-review) rounds until a round passes. Handle each Sourcery review thread: fix the finding, or reply with the reason. Then resolve the thread.
 
@@ -116,8 +109,6 @@ After the last ticket merges, the coordinator opens the aggregate pull request a
 
 Then the coordinator synchronizes `main`. A closed issue alone does not prove acceptance, so the coordinator evaluates each parent user story on the `main` tree and posts the Resolution on the parent. It closes each issue that passed and is still open. It opens again each issue that GitHub closed and that did not pass. Then it refreshes the current map.
 
-Before the coordinator names an observation of a record a defect in a report to the author, it reads the code of that observation.
-
 ### 10. Retrospect and clean up
 
 Use the `retro` skill before the work context is cleared. Record each environment finding that you can act on in its owner issue or contract. Remove the worktrees and the temporary branches only after their work and evidence are kept. Keep unrelated work and historical evidence.
@@ -145,7 +136,6 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 - When each changed file is a document under `docs/` or at the root that no code names, `make check` runs only the `make check-fast` steps, and its line ends with `scope=documents`.
 - Copy the line into the pull request body exactly. A review round does not need the line.
 - Each new head, also a merge of the base branch, needs a new line.
-- For a pull request into an integration branch, run each tier with `BASE=origin/<integration branch>`. The base gives the merge base for the document scope of `make check` and for the whitespace check of each tier. The default is `origin/main`.
 - Start a long tier in the background, and wait for the process to exit. The result is the line, its last output, and not a step that passed.
 
 ## Codex review
@@ -178,7 +168,7 @@ Then it sends the [review prompt](review-prompt.md) and the request to one new r
 When round 3 has open blocking findings, do not start a fourth round. Send the findings to the coordinator. The coordinator can accept a small fix:
 
 1. The coordinator reviews the fix in a pull request comment that names the new head.
-2. The fix adds a test that fails before the fix. When the fix is in a test fake, the test is a case that calls the fake directly and that fails when the rule is removed.
+2. The fix adds a test that fails before the fix.
 3. The new head meets the conditions 1 and 2 of the [merge gate](#merge-gate).
 
 Then the coordinator review comment replaces the verdicts of round 3.
@@ -229,14 +219,7 @@ Each worktree owns its source, `target/`, `node_modules/`, release package, and 
 
 Before `make check` or `make check-full`, take one of three slots. Run `mkdir -p <main checkout>/target/verify-slots`, then `mkdir <main checkout>/target/verify-slots/slot-<N>` with N from 1 to 3. When `mkdir` fails, the slot is in use: try the next slot, or wait. Put an owner file with your session and the command in the slot. After the run, remove the slot with `rm <owner file>` and then `rmdir <slot>`, each as one command. A client can refuse `rm -rf`, and then the slot stays.
 
-A review round and a release package build are heavy runs too. A review round runs alone: no `make check-full` runs beside it on the host.
-
-When more than one chain runs, the coordinator gives the turns:
-
-- The executor sends `HEAVY REQUEST <command> head <SHA>` and starts the command after the `TURN` of the coordinator.
-- A `HOLD` stops each heavy run that did not start, also a review round. The executor answers `ACK HOLD`, and the coordinator gives the turn to another chain only after that answer.
-- Each `HOLD` and each `TURN` names the pull request and the head, so that a crossed message is easy to see.
-- A failed test that an executor reports on the integration tip stops each turn until its cause is known.
+With more than one chain, each heavy run, also a review round, waits for the `TURN` of the coordinator to `HEAVY REQUEST <command> head <SHA>`. The answer to a `HOLD` is `ACK HOLD`. Each of these messages names the head.
 
 ### Development PostgreSQL
 
@@ -244,7 +227,7 @@ When more than one chain runs, the coordinator gives the turns:
 - For interactive development, use `up --interactive`, then `reload`, `env`, and `down`. These commands use the canonical checkout path. `down` also removes the anonymous data volume.
 - Do not share database environment variables between worktrees.
 - The new commands do not use or remove the old `storyos-dev-postgres` container.
-- The executor names the prefix lead of its new store tests. Before that, it searches the store tests for the lead in its string form, its hex form, and its UUID suffix form.
+- The executor names the prefix lead of its store tests after a search for its string, hex, and UUID suffix forms.
 
 ### One exact-dist journey file
 
@@ -265,17 +248,13 @@ FILE=test/browser-exact-dist/production-host.integration.test.ts sh -ec '
 [ADR 0049](../adr/0049-admit-an-author-authorized-runtime-qualification.md) gives the contract of a qualification request.
 
 1. Before the run, write the plan: the purpose and the planned number of requests. Automatic requests, for example a recovery `Retrieve`, count. When the ticket names a token limit, the plan also gives the expected reported input of each request and the total. A request with a prior reference has the full conversation as its input. When the total is above the limit, send the plan to the coordinator and wait for the answer.
-   - When a criterion of the ticket names the items of the plan, the plan comment has each item. The coordinator compares the comment with the criterion before it confirms the plan.
-   - A change of a criterion goes into the ticket body before the first request.
-   - When a step of the plan needs a decision of the model in an earlier step, give the step a second source, or say in the plan that the step can have no evidence.
-   - The run script examines each limit of the plan in each wait, and not only after a settlement.
 2. Send the requests.
 3. Log each request: the time, the request ID, and the result.
 4. Keep the raw evidence on a Git tag, as `AGENTS.md` says. The tag has the wire payloads and the Server and Worker logs, and no second copy of a public read. Before the push, examine each file for a key, an e-mail address, and a home path. The record of the run names the tag.
 
 Stop and report to the coordinator only for an anomaly: an unexpected status, more requests than the plan, or an unexpected time or cost.
 
-When a run shows that a new instruction text did not give its effect, send the findings to the coordinator before the review request. The coordinator decides about the text first, so that the review rounds go to the final text. A second run that the ticket does not name needs the answer of the author.
+The plan comment has each item that the plan criterion names. When a new instruction text did not give its effect, send the findings before the review request. A second run that the ticket does not name needs the answer of the author.
 
 ## Cleanup
 
