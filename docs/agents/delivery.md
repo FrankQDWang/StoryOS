@@ -103,7 +103,7 @@ The coordinator examines the evidence against the [merge gate](#merge-gate). The
 
 After the merge of the first ticket that requires `make check-full`, and again before the aggregate pull request, the coordinator runs `make check-full` on the integration branch.
 
-After each 10 merged tickets and after the last one, the coordinator runs one batch round on the new changes of the integration branch, with no second round: each blocking finding gets a fix issue or an answer.
+After each 10 merged tickets and after the last one, the coordinator runs one batch round on the new changes of the integration branch. It has no second round: each blocking finding gets a fix issue or an answer.
 
 ### 9. Merge the specification
 
