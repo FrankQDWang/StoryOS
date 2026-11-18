@@ -1,8 +1,9 @@
 use serde_json::{Value, json};
 
 use super::{
-    MemoryConsolidationAssembly, PassObservation, admit_memory_consolidation,
-    assemble_memory_consolidation_context, consolidation_failure, pass_observation_count,
+    MemoryConsolidationAssembly, PassObservation, PassOperationResult, admit_memory_consolidation,
+    assemble_memory_consolidation_context, consolidation_failure, observation_returns,
+    pass_observation_count,
 };
 use crate::assemble_context::{CONTEXT_ITEM_TOKEN_LIMIT, ContextPurpose};
 use crate::{
@@ -294,6 +295,23 @@ fn the_expected_input_of_a_pass_counts_each_section() {
             sections.iter().map(|(_, tokens)| tokens).sum::<u64>()
         )
     );
+}
+
+/// ADR 0094 section 6: an observation returns when a refused operation of the pass names it, no
+/// applied operation of the pass names it, and no refused operation of an earlier pass names it.
+#[test]
+fn an_observation_returns_one_time_when_only_a_refused_operation_names_it() {
+    let results: Vec<PassOperationResult> = serde_json::from_value(json!([
+        { "operation": { "observations": [1, 2] }, "result": "refused",
+          "refusal": "memory_entry_invalid" },
+        { "operation": { "observations": [2] }, "result": "applied", "refusal": null },
+    ]))
+    .unwrap();
+
+    assert!(observation_returns(&results, 1, false));
+    assert!(!observation_returns(&results, 1, true));
+    assert!(!observation_returns(&results, 2, false));
+    assert!(!observation_returns(&results, 3, false));
 }
 
 /// ADR 0094 section 6: the line of an observation that returned has the key `refused` with the

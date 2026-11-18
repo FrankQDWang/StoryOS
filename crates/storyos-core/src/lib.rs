@@ -256,7 +256,7 @@ pub use memory_consolidation::{
     ConsolidationOutcome, MEMORY_CONSOLIDATION_MAX_RUN_STEPS, MemoryConsolidationAssembly,
     PassConflict, PassObservation, PassOperationResult, admit_memory_consolidation,
     assemble_memory_consolidation_context, consolidation_failure, observation_return_refusal,
-    pass_observation_count,
+    observation_returns, pass_observation_count,
 };
 pub use memory_delete_marks::{
     MEMORY_DELETE_MARK_CAUSES, MemoryDeleteMark, assemble_memory_delete_marks,

@@ -273,6 +273,17 @@ pub fn observation_return_refusal(results: &[PassOperationResult], number: u64) 
     named.find_map(|item| item.refusal.as_deref())
 }
 
+/// True when the observation `number` of a pass stays `waiting` at the settlement of the pass (ADR
+/// 0094 section 6): a refused operation of the pass names it, no applied operation of the pass
+/// names it, and no refused operation of an earlier pass names it (`refused_earlier`).
+pub fn observation_returns(
+    results: &[PassOperationResult],
+    number: u64,
+    refused_earlier: bool,
+) -> bool {
+    !refused_earlier && observation_return_refusal(results, number).is_some()
+}
+
 /// The outcome of a pass (ADR 0094 section 6).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConsolidationOutcome {

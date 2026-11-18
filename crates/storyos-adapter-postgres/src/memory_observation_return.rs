@@ -4,7 +4,7 @@
 
 use serde_json::{Value, json};
 use storyos_application::ProjectScope;
-use storyos_core::{PassOperationResult, observation_return_refusal};
+use storyos_core::{PassOperationResult, observation_return_refusal, observation_returns};
 use tokio_postgres::Client;
 
 use crate::memory_consolidation_versions::PassItem;
@@ -54,10 +54,9 @@ async fn earlier_refusals(
     Ok(refusals)
 }
 
-/// The keys of the observations of `input` that stay `waiting` at the settlement of a pass: a
-/// refused operation of the pass names the observation, no applied operation of the pass names
-/// it, and no refused operation of an earlier pass names it. The number of an observation is its
-/// position in `input`, from 1.
+/// The keys of the observations of `input` that stay `waiting` at the settlement of a pass. This
+/// function gives the stored facts to `observation_returns` of Core. The number of an observation
+/// is its position in `input`, from 1.
 pub(crate) async fn returned_observations(
     client: &Client,
     scope: &ProjectScope,
@@ -65,16 +64,15 @@ pub(crate) async fn returned_observations(
     results: &[Value],
 ) -> Result<Vec<[String; 2]>, BoxError> {
     let results: Vec<PassOperationResult> = serde_json::from_value(Value::from(results.to_vec()))?;
-    let refused: Vec<&[String; 2]> = (1_u64..)
+    let keys: Vec<&[String; 2]> = input.iter().collect();
+    let earlier = earlier_refusals(client, scope, &keys).await?;
+    Ok((1_u64..)
         .zip(input)
-        .filter(|(number, _)| observation_return_refusal(&results, *number).is_some())
-        .map(|(_, key)| key)
-        .collect();
-    let earlier = earlier_refusals(client, scope, &refused).await?;
-    Ok(refused
-        .into_iter()
-        .filter(|key| !earlier.iter().any(|(earlier, _)| earlier == *key))
-        .cloned()
+        .filter(|(number, key)| {
+            let refused_earlier = earlier.iter().any(|(earlier, _)| earlier == *key);
+            observation_returns(&results, *number, refused_earlier)
+        })
+        .map(|(_, key)| key.clone())
         .collect())
 }
 
