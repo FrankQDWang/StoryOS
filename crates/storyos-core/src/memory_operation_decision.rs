@@ -4,16 +4,18 @@
 //! flag has its own module.
 
 use crate::{
-    AdmittedOperation, CurrentMemoryEntry, MemoryDeleteMark, MemoryEntryOrigin, MemoryEntryType,
-    MemoryOperationAction, MemoryOperationCandidate, MemoryOperationRefusal, MemoryWrite,
-    MemoryWriteAction, MemoryWriteRefusal, PassMemoryEntry, PassObservation,
+    AdmittedOperation, CurrentMemoryEntry, MEMORY_DESCRIPTION_MAX_CHARS, MemoryDeleteMark,
+    MemoryEntryOrigin, MemoryEntryType, MemoryOperationAction, MemoryOperationCandidate,
+    MemoryOperationRefusal, MemoryWrite, MemoryWriteAction, MemoryWriteRefusal, PassMemoryEntry,
+    PassObservation,
 };
 
 /// The write of `candidate`, or the refusal of its shape. Create needs a type, update and merge
 /// need no type, and delete needs a reason and no values. An update needs one or more of the
 /// title, the description, and the text, and a null value keeps the current value of the entry. A
 /// merge needs the description and the text, and a null title keeps the title of its first entry.
-/// Only a merge has entries, and the write of a merge is the change of its first entry.
+/// Only a merge has entries, and the write of a merge is the change of its first entry. Only a
+/// delete has a reason, and the reason has the limit of a description (#1696).
 fn memory_write(candidate: &MemoryOperationCandidate) -> Result<MemoryWrite, MemoryWriteRefusal> {
     let action = match candidate.action {
         MemoryOperationAction::Create => MemoryWriteAction::Create,
@@ -26,9 +28,11 @@ fn memory_write(candidate: &MemoryOperationCandidate) -> Result<MemoryWrite, Mem
     let merge = candidate.action == MemoryOperationAction::Merge;
     let shape = candidate.entries.is_some() == merge
         && match candidate.action {
-            MemoryOperationAction::Create => true,
+            MemoryOperationAction::Create => candidate.reason.is_none(),
             MemoryOperationAction::Update => {
-                candidate.entry_type.is_none() && given.iter().any(|value| value.is_some())
+                candidate.entry_type.is_none()
+                    && candidate.reason.is_none()
+                    && given.iter().any(|value| value.is_some())
             }
             MemoryOperationAction::Merge => {
                 candidate.entry.is_none()
@@ -46,6 +50,11 @@ fn memory_write(candidate: &MemoryOperationCandidate) -> Result<MemoryWrite, Mem
                     })
             }
         };
+    let long_reason = (candidate.reason.as_deref())
+        .is_some_and(|reason| reason.chars().count() > MEMORY_DESCRIPTION_MAX_CHARS);
+    if shape && long_reason {
+        return Err(MemoryWriteRefusal::TooLong);
+    }
     let entry_type = match candidate.entry_type.as_deref() {
         Some(token) => Some(MemoryEntryType::parse(token).ok_or(MemoryWriteRefusal::Invalid)?),
         None => None,
@@ -151,6 +160,8 @@ pub(crate) fn decide_with_entries(
                         title: admitted.version.title.clone(),
                         description: admitted.version.description.clone(),
                         text: admitted.version.text.clone(),
+                        // A written version removes the flag.
+                        flagged: false,
                     },
                     origin: admitted.origin,
                 });

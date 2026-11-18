@@ -170,7 +170,7 @@ pub(crate) async fn current_memory(
     let rows = client
         .query(
             "SELECT memory_entry_id::text, entry_number::text, version::text, entry_type, title,
-                    description, text
+                    description, text, flag_reason IS NOT NULL
                FROM (SELECT DISTINCT ON (memory_entry_id) *
                        FROM storyos.memory_entry_versions
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
@@ -191,6 +191,7 @@ pub(crate) async fn current_memory(
                 title: row.get(4),
                 description: row.get(5),
                 text: row.get(6),
+                flagged: row.get(7),
             })
         })
         .collect::<Result<_, Box<dyn std::error::Error + Send + Sync>>>()?;

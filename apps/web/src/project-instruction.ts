@@ -93,19 +93,23 @@ export async function saveProjectInstruction(connection: Connection & {
       : effect.kind === "no_effect" ? { kind: "unchanged" } : { kind: "conflicted" };
     return { outcome, flight: undefined };
   } catch (error) {
-    return overItemLimit(error)
-      ? { outcome: { kind: "over_limit" }, flight: undefined }
-      : { outcome: { kind: "unknown" }, flight };
+    if (refusedWith(error, "instruction_over_item_limit")) return { outcome: { kind: "over_limit" }, flight: undefined };
+    if (refusedWith(error, "challenge_invalid")) delete flight.nonce;
+    return { outcome: { kind: "unknown" }, flight };
   }
 }
 
-/** The refusal before Admission of a text above the Context item limit (ADR 0052). */
-function overItemLimit(error: unknown): boolean {
+/**
+ * Whether `error` is a refusal before Admission (status 422) with the code `code`: a text above the Context item
+ * limit (ADR 0052), or a refused Command Challenge. A refused Challenge is spent, so the next try of the same intent
+ * gets a new Challenge and keeps its idempotency key (#1696).
+ */
+export function refusedWith(error: unknown, code: "instruction_over_item_limit" | "challenge_invalid"): boolean {
   if (!(error instanceof StoryOSProtocolError) || error.status !== 422 || typeof error.responseBody !== "string") {
     return false;
   }
   try {
-    return (JSON.parse(error.responseBody) as { code?: unknown }).code === "instruction_over_item_limit";
+    return (JSON.parse(error.responseBody) as { code?: unknown }).code === code;
   } catch {
     return false;
   }

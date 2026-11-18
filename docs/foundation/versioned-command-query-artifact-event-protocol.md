@@ -645,7 +645,6 @@ operation registry, and the catalog gets it from the registry.
 | `updateConversationMemorySettings` | command | `POST /api/v1/projects/{project_id}/conversations/{conversation_id}/memory-settings` | sync | memory |
 | `importProjectArchive` | command | `POST /api/v1/projects/{project_id}/imports` | async | storage |
 | `getArtifact` | query | `GET /api/v1/projects/{project_id}/artifacts/{artifact_id}` | read | artifact |
-| `listMemoryEntries` | query | `GET /api/v1/projects/{project_id}/memory-entries` | read | memory |
 | `getCommand` | query | `GET /api/v1/projects/{project_id}/commands/{command_id}` | read | admission |
 | `getReceipt` | query | `GET /api/v1/projects/{project_id}/receipts/{receipt_id}` | read | core |
 | `retrieveContext` | query | `POST /api/v1/projects/{project_id}/queries/retrieval` | read | context |
@@ -2216,30 +2215,18 @@ entry that is already deleted gives `no_effect` with `already_deleted`, a stale
 version gives `conflicted` with `entry_changed`, and an entry of no version in
 the Project answers as an unavailable resource. The Web client accepts the
 Activity kind and shows nothing for it.
-`getArtifact` reads exact document/Note revisions; `retrieveContext` provides
-bounded Agent search/read through current publication and use checks. Neither
-index hits nor a latest Artifact alias can replace a published-set identity.
 
-The internal `RecordMemoryNote` Tool operation requires the exact requesting
-author Message and a validated Agent Decision/ToolCall. It records plain-language
-guidance and its source, then exposes `note_recorded` with the exact Note revision.
-Untrusted text cannot supply the author request. Recording a Note does not claim
-that consolidation incorporated it or that a requested forgetting succeeded.
-An explicit change request remains independent from automatic conversation
-contribution; its governed Tool call cannot bypass actual source restrictions.
-
-Internal Memory maintenance records exact permitted inputs, model/prompt
-versions, producer, current publication revision, bounds, and outcome. It
-publishes a complete generated-document set atomically under the storage-owned
-concurrency gate. A stale job cannot overwrite a newer publication. The public
-`memory-maintenance-settled.v1` Event carries the operation, phase, and closed
-outcome `published | no_op | failed | source_unavailable`, plus the exact
-publication reference only for `published`. Failures do not replace the current
-set. `memory-note-recorded.v1` carries the exact Note and source Message; the
-settings Event carries the committed settings revision. All remain scoped
-Project Activity projections after durable commit, not authoritative prose.
-The catalog maps these Events to explicit internal producers without inventing
-a public command that forces immediate Memory generation.
+The Agent reads and writes Memory Entries only through Host Tools (ADR 0094).
+`search_memory` and `read_memory_entry` read the current
+entries. `write_memory` creates, changes, or deletes one entry at once on the
+request of the author. Background work records Memory Observations with
+`record_memory_observations`, and a consolidation pass applies them with
+`apply_memory_operations`. Each written version has its cause, and each applied
+write increases the Memory revision of the Project by one. No Artifact, no
+Memory Note, and no generated document set holds Agent Memory, and no public
+command starts a capture or a consolidation. The
+[Memory owner](fiction-memory-and-research-provenance-semantics.md) and ADR 0094
+give the complete model.
 
 ## 14. Versioning and compatibility
 

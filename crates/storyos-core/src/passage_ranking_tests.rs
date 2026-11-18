@@ -200,6 +200,23 @@ fn the_fusion_sums_the_reciprocal_ranks_and_keeps_manuscript_order_for_equal_sco
     assert_eq!(fuse_passage_lists(&[&[], &[]]), Vec::<PassagePlace>::new());
 }
 
+/// Two exactly equal scores go in manuscript order (#1696). The ranks 6 and 39 and the ranks 12
+/// and 28 both give 5/198, but their floating-point sums are not equal. The passage that is first
+/// in the manuscript is first in the result.
+#[test]
+fn two_exactly_equal_scores_go_in_manuscript_order() {
+    let (first, second) = (place(0, 0), place(0, 1));
+    let filler = |chapter: usize| (0..40).map(move |passage| place(chapter, passage));
+    let mut exact: Vec<PassagePlace> = filler(1).take(11).collect();
+    exact[5] = second;
+    exact.push(first);
+    let mut vector: Vec<PassagePlace> = filler(2).take(39).collect();
+    vector[27] = first;
+    vector[38] = second;
+
+    assert_eq!(fuse_passage_lists(&[&exact, &vector])[..2], [first, second]);
+}
+
 /// One header line, then each passage with the line of its Chapter, the numbers of its Blocks,
 /// and its current text. No rank and no score is in the text.
 #[test]

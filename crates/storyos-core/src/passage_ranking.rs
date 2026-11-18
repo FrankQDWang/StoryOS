@@ -3,7 +3,7 @@
 //! Rank Fusion. The text of each result is the current text of its Chapter, never the index. A
 //! rank or a score gives no authority and is not in the result text.
 
-use std::cmp::Reverse;
+use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::json;
@@ -198,23 +198,77 @@ pub fn vector_list(chapters: &[ChapterPassages], nearest: &[NearestPassage]) -> 
 
 /// Joins `lists` with Reciprocal Rank Fusion. The score of a passage is the sum, over the lists
 /// that hold it, of one divided by `PASSAGE_FUSION_CONSTANT` plus its rank in that list, from 1.
-/// A higher score goes first, and equal scores go in manuscript order. The result has at most
-/// `PASSAGE_RESULT_LIMIT` passages.
+/// A higher score goes first, and equal scores go in manuscript order. The score is an exact
+/// fraction, so two equal sums are equal (#1696). The result has at most `PASSAGE_RESULT_LIMIT`
+/// passages.
 pub fn fuse_passage_lists(lists: &[&[PassagePlace]]) -> Vec<PassagePlace> {
-    let mut scores: BTreeMap<PassagePlace, f64> = BTreeMap::new();
+    let mut scores: BTreeMap<PassagePlace, FusedScore> = BTreeMap::new();
     for list in lists {
         for (index, place) in list.iter().enumerate() {
-            let rank = f64::from(PASSAGE_FUSION_CONSTANT) + (index + 1) as f64;
-            *scores.entry(*place).or_default() += 1.0 / rank;
+            let rank = u128::from(PASSAGE_FUSION_CONSTANT) + (index as u128 + 1);
+            scores.entry(*place).or_default().add_reciprocal(rank);
         }
     }
-    let mut ranked: Vec<(f64, PassagePlace)> = (scores.into_iter())
+    let mut ranked: Vec<(FusedScore, PassagePlace)> = (scores.into_iter())
         .map(|(place, score)| (score, place))
         .collect();
-    ranked.sort_by(|left, right| right.0.total_cmp(&left.0).then(left.1.cmp(&right.1)));
+    ranked.sort_by(|left, right| right.0.cmp(&left.0).then(left.1.cmp(&right.1)));
     (ranked.into_iter().take(PASSAGE_RESULT_LIMIT))
         .map(|(_, place)| place)
         .collect()
+}
+
+/// A fused score as an exact fraction in lowest terms. The default is zero.
+#[derive(Clone, Copy, Debug)]
+struct FusedScore {
+    numerator: u128,
+    denominator: u128,
+}
+
+impl Default for FusedScore {
+    fn default() -> Self {
+        Self {
+            numerator: 0,
+            denominator: 1,
+        }
+    }
+}
+
+impl FusedScore {
+    /// Adds `1 / rank`.
+    fn add_reciprocal(&mut self, rank: u128) {
+        let numerator = self.numerator * rank + self.denominator;
+        let denominator = self.denominator * rank;
+        let divisor = greatest_common_divisor(numerator, denominator);
+        (self.numerator, self.denominator) = (numerator / divisor, denominator / divisor);
+    }
+}
+
+impl PartialEq for FusedScore {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for FusedScore {}
+
+impl PartialOrd for FusedScore {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for FusedScore {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.numerator * other.denominator).cmp(&(other.numerator * self.denominator))
+    }
+}
+
+fn greatest_common_divisor(mut left: u128, mut right: u128) -> u128 {
+    while right != 0 {
+        (left, right) = (right, left % right);
+    }
+    left
 }
 
 /// The result of the ranked passages `ranked` for the native call `call_id`. A `notice` is the

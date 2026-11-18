@@ -46,6 +46,7 @@ fn the_input_of_a_pass_has_one_line_for_each_entry_and_each_observation() {
             title: "林舟".to_owned(),
             description: "船夫。".to_owned(),
             text: "沉默的船夫。".to_owned(),
+            flagged: false,
         },
         origin: MemoryEntryOrigin::Chapter,
     };
@@ -226,6 +227,7 @@ fn the_expected_input_of_a_pass_counts_each_section() {
                 title: "林舟".to_owned(),
                 description: "船夫。".to_owned(),
                 text: "沉默的船夫。".to_owned(),
+                flagged: false,
             },
             origin: MemoryEntryOrigin::Conversation,
         },

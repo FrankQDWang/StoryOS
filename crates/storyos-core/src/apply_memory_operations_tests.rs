@@ -2,9 +2,9 @@ use serde_json::{Value, json};
 
 use super::{MemoryOperationCandidate, PassFacts, PassMemoryEntry, intake, settle_operations_call};
 use crate::{
-    ConsolidationOutcome, CurrentMemoryEntry, IntakeRefusal, MemoryConflictFlag, MemoryDeleteMark,
-    MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference, MemoryWriteAction,
-    PassConflict, PassObservation,
+    ConsolidationOutcome, CurrentMemoryEntry, IntakeRefusal, MEMORY_DESCRIPTION_MAX_CHARS,
+    MemoryConflictFlag, MemoryDeleteMark, MemoryEntryOrigin, MemoryEntryState, MemoryEntryType,
+    MemorySourceReference, MemoryWriteAction, PassConflict, PassObservation,
 };
 
 fn entry(number: u64, origin: MemoryEntryOrigin, title: &str) -> PassMemoryEntry {
@@ -17,6 +17,7 @@ fn entry(number: u64, origin: MemoryEntryOrigin, title: &str) -> PassMemoryEntry
             title: title.to_owned(),
             description: "述。".to_owned(),
             text: "文。".to_owned(),
+            flagged: false,
         },
         origin,
     }
@@ -260,6 +261,43 @@ fn the_shape_of_each_action_and_an_empty_list() {
             ConsolidationOutcome::NoOperation,
             0
         )
+    );
+}
+
+/// The reason obeys the declared schema (#1696): a create or an update with a reason is
+/// `memory_entry_invalid`, and a delete reason above the limit of a description is
+/// `memory_entry_too_long`. A delete reason at the limit is admitted.
+#[test]
+fn the_reason_of_an_operation_obeys_its_declared_form() {
+    let entries =
+        [4, 5, 6].map(|number| entry(number, MemoryEntryOrigin::Chapter, &format!("灯{number}")));
+    let facts = PassFacts {
+        pinned_revision: 1,
+        memory_revision: 1,
+        entries: &entries,
+        next_entry_number: 7,
+        observations: &[observation("conversation")],
+        marks: &[],
+        conflicts: &[],
+    };
+    let mut created = create("other", "桥", "文。", json!([1]));
+    created["reason"] = json!("理由。");
+    let mut updated = update(4, "灯");
+    updated["reason"] = json!("理由。");
+    let mut long = delete(5);
+    long["reason"] = json!("长".repeat(MEMORY_DESCRIPTION_MAX_CHARS + 1));
+    let mut at_limit = delete(6);
+    at_limit["reason"] = json!("长".repeat(MEMORY_DESCRIPTION_MAX_CHARS));
+    let candidates = operations(json!([created, updated, long, at_limit]));
+
+    assert_eq!(
+        decided(&candidates, &facts),
+        vec![
+            "memory_entry_invalid".to_owned(),
+            "memory_entry_invalid".to_owned(),
+            "memory_entry_too_long".to_owned(),
+            format!("{:?} 6 chapter 0", MemoryWriteAction::Delete),
+        ]
     );
 }
 

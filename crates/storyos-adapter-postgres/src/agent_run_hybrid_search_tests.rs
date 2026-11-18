@@ -1,8 +1,9 @@
 //! The Host Tool `hybrid_search_manuscript` (ADR 0095 sections 1 and 4): the fused result with
 //! the vector of the question before a keyword search, the Project Scope, each settlement and
 //! refusal of the question request, the author actions while the request is in progress, a
-//! stopped Worker, the three facts of the Exposure, a compaction, and a term with U+0000. Test
-//! prefix leads `54`, `b5`, `bb`, and `ba`, and the prefixes `a2c`, `a2d`, `a2e`, and `a31`.
+//! stopped Worker, the three facts of the Exposure, a compaction, a term with U+0000, and a
+//! question vector that is not finite. Test prefix leads `54`, `b5`, `bb`, and `ba`, and the
+//! prefixes `a2c`, `a2d`, `a2e`, `a31`, `c7a`, `c7b`, `c7c`, and `c8b`.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -583,7 +584,7 @@ async fn complete_held(
     admin: &Client,
     scope: &ProjectScope,
     run_id: &str,
-    held: &Held<'_>,
+    held: &impl EmbeddingProviderAdapter,
 ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
     let claim = claim_run(admin, scope.clone(), run_id.to_owned()).await;
     let (tools, faults) = (&NoToolDestination, &NoContractFaults);
@@ -597,6 +598,75 @@ async fn complete_held(
         &claim,
     )
     .await
+}
+
+/// The fake embedding destination with one component above the range of `f32` in each vector.
+/// The cast of the adapter makes the component infinite.
+struct NotFinite;
+
+impl EmbeddingProviderAdapter for NotFinite {
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
+    type Prepared = FakeEmbeddingExchange;
+
+    async fn prepare(
+        &self,
+        registration: &'static EmbeddingRegistration,
+        route: &EmbeddingRoute,
+        input: &EmbeddingInput,
+    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
+        FakeEmbeddings.prepare(registration, route, input).await
+    }
+
+    async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
+        match FakeEmbeddings.exchange(prepared).await {
+            EmbeddingObservation::Vector { mut values, usage } => {
+                values[0] = 1e39_f64 as f32;
+                EmbeddingObservation::Vector { values, usage }
+            }
+            other => other,
+        }
+    }
+}
+
+/// A question vector with a component that is not finite is the invalid result of the embedding
+/// gateway (#1696). The call takes the path of a settled request with no vector: it settles with
+/// the exact-term list after the line that says that the search by meaning was not available, and
+/// the Run completes.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_question_vector_that_is_not_finite_gives_the_exact_term_list() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let store = configured(&store);
+    let chapter = chapter(&store, &admin, ["c7a", "c7b"], "c7c", &texts()).await;
+    index(&store, &FakeEmbeddings, &chapter).await;
+    let (scope, chapter_id) = (&chapter.scope, &chapter.chapter_id);
+    let new = ConversationSelection::New;
+    let run_id = admitted(&store, scope, chapter_id, "c8b", &script(&["渔船"]), new).await;
+    complete_held(&store, &admin, scope, &run_id, &NotFinite)
+        .await
+        .unwrap();
+
+    let text = ranked(&store, scope, &["渔船"], false).await;
+    let ids = call_ids(&admin, &run_id, None).await;
+    assert_eq!(
+        (
+            calls(&admin, &run_id).await,
+            question_attempts(&admin, scope).await,
+        ),
+        (
+            json!([
+                "completed",
+                [
+                    ["hybrid_search_manuscript", "settled", null, text, true],
+                    finish()
+                ]
+            ]),
+            json!([["invalid_result", ids[0]]]),
+        )
+    );
 }
 
 async fn conversation(admin: &Client, run_id: &str) -> String {

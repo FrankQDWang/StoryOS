@@ -32,17 +32,19 @@ const SOURCED: MemoryEntryInspect = { memory_entry_id: "018f0000-0000-7001-8000-
   origin: "author_request", source: { kind: "conversation", conversation_id: CONVERSATION, availability: "available" },
   changed_at: "2026-11-17T08:30:00.000Z" };
 
-type Sent = { method: string; path: string; key: string | null; body: unknown };
+type Sent = { method: string; path: string; key: string | null; nonce: string | null; body: unknown };
 /** The answer of the fake Server to each `PUT .../instruction`, in order. */
 type SaveAnswer = Response | Error | Promise<Response>;
 
 /** A fake Server with one Project of the session whose current Revision 1 has the text `Old rule.`. */
 function fakeServer(saves: SaveAnswer[] = [], entries: MemoryEntryInspect[] = []) {
   const sent: Sent[] = [];
+  let challenges = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const method = init?.method ?? "GET";
-    sent.push({ method, path, key: new Headers(init?.headers).get("idempotency-key"),
+    const headers = new Headers(init?.headers);
+    sent.push({ method, path, key: headers.get("idempotency-key"), nonce: headers.get("x-storyos-anti-forgery"),
       body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
     if (path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
     if (path === "/api/v1/projects") {
@@ -66,7 +68,9 @@ function fakeServer(saves: SaveAnswer[] = [], entries: MemoryEntryInspect[] = []
         correlation_id: "018f0000-0000-7001-8000-0000000a2017", project_scope: SCOPE, entries });
     }
     if (path.endsWith("/anti-forgery-challenges")) {
-      return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-11-16T12:05:00.000Z",
+      // Each Challenge has its own nonce: "a" * 64, then "b" * 64.
+      const nonce = String.fromCharCode(97 + challenges++).repeat(64);
+      return jsonResponse({ nonce, expires_at: "2026-11-16T12:05:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
     if (path === INSTRUCTION && method === "PUT") {
@@ -84,6 +88,9 @@ function saved(effect: Record<string, unknown>): Response {
   return jsonResponse({ schema_id: "storyos.command.update-project-instruction.response.v1",
     correlation_id: "018f0000-0000-7001-8000-0000000a2015", project_scope: SCOPE, effect });
 }
+
+const challengeRefused = () => jsonResponse({ schema_id: "storyos.problem.v1", code: "challenge_invalid",
+  message: "The challenge is invalid." }, 422);
 
 const applied = (revision: string) => saved({ kind: "authoritative_applied", revision,
   instruction_revision_id: "018f0000-0000-7001-8000-0000000a2016", project_activity_position: "7" });
@@ -239,6 +246,20 @@ it("keeps the new revision after a save and sends the same idempotency key after
   const [first, lost, retry] = puts(server.sent);
   expect([first?.body, lost?.body, retry?.body, retry?.key === lost?.key, first?.key === lost?.key, navigated])
     .toEqual([saveBody(first, "", "1"), saveBody(lost, "Second rule.", "2"), lost?.body, true, false, []]);
+});
+
+it("gets a new Challenge after a refused Challenge and sends it with the same idempotency key", async () => {
+  const server = fakeServer([challengeRefused(), applied("2")]);
+  await settingsPage(server.fetchImpl);
+  type("New rule.");
+  click("[data-project-instruction-save]");
+  await expect.poll(outcome).toBe(SENTENCE.unknown);
+  click("[data-project-instruction-save]");
+  await expect.poll(outcome).toBe(SENTENCE.applied);
+  const [refused, retry] = puts(server.sent);
+  const challenges = server.sent.filter((request) => request.path.endsWith("/anti-forgery-challenges")).length;
+  expect([refused?.nonce, retry?.nonce, retry?.key === refused?.key, challenges])
+    .toEqual(["a".repeat(64), "b".repeat(64), true, 2]);
 });
 
 it("asks one time before the author leaves with a text that is not saved", async () => {

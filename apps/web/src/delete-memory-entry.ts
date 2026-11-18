@@ -7,7 +7,7 @@ import type { DeleteMemoryEntryRequest, ProjectScope }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { uuidV7 } from "./acceptance-journal.ts";
-import { sameScope } from "./project-instruction.ts";
+import { refusedWith, sameScope } from "./project-instruction.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -62,7 +62,9 @@ export async function deleteMemoryEntryOnce(connection: Connection & {
       idempotencyKey: flight.idempotencyKey, antiForgery: flight.nonce });
     if (!sameScope(deleted.project_scope, connection.scope)) return { outcome: "failed", flight };
     return { outcome: deleted.effect.kind === "conflicted" ? "changed" : "deleted", flight: undefined };
-  } catch {
+  } catch (error) {
+    // A refused Challenge is spent: the next confirm gets a new one with the same idempotency key (#1696).
+    if (refusedWith(error, "challenge_invalid")) delete flight.nonce;
     return { outcome: "failed", flight };
   }
 }

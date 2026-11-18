@@ -50,7 +50,7 @@ function held() {
   return { answer, give };
 }
 
-type Sent = { method: string; path: string; key: string | null; body: unknown };
+type Sent = { method: string; path: string; key: string | null; nonce: string | null; body: unknown };
 
 /**
  * A fake Server whose answer to each read of the Memory Entries is the next item of `reads`, and whose answer to each
@@ -59,16 +59,20 @@ type Sent = { method: string; path: string; key: string | null; body: unknown };
 function fakeServer(reads: (Answer | Promise<Answer>)[], deletes: (Answer | Promise<Answer>)[] = []) {
   const paths: string[] = [];
   const sent: Sent[] = [];
+  let challenges = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const method = init?.method ?? "GET";
     paths.push(path);
     if (method !== "GET") {
-      sent.push({ method, path, key: new Headers(init?.headers).get("idempotency-key"),
+      const headers = new Headers(init?.headers);
+      sent.push({ method, path, key: headers.get("idempotency-key"), nonce: headers.get("x-storyos-anti-forgery"),
         body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
     }
     if (path.endsWith("/anti-forgery-challenges")) {
-      return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-11-17T12:05:00.000Z",
+      // Each Challenge has its own nonce: "a" * 64, then "b" * 64.
+      const nonce = String.fromCharCode(97 + challenges++).repeat(64);
+      return jsonResponse({ nonce, expires_at: "2026-11-17T12:05:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
     if (path.startsWith(`${MEMORY}/`) && method === "DELETE") {
@@ -96,6 +100,9 @@ function deleted(effect: Record<string, unknown>): Response {
   return jsonResponse({ schema_id: "storyos.command.delete-memory-entry.response.v1",
     correlation_id: "018f0000-0000-7001-8000-0000000d2013", project_scope: SCOPE, effect });
 }
+
+const challengeRefused = () => jsonResponse({ schema_id: "storyos.problem.v1", code: "challenge_invalid",
+  message: "The challenge is invalid." }, 422);
 
 const applied = (memoryEntryId: string) => deleted({ kind: "authoritative_applied", memory_entry_id: memoryEntryId,
   version: "2", memory_revision: "9", project_activity_position: "7" });
@@ -259,6 +266,21 @@ it("keeps the entry after a failed delete with one sentence, and the next confir
   const sent = server.sent.map((item) => [item.method, item.key]);
   const key = sent[1]?.[1];
   expect([typeof key, sent]).toEqual(["string", [["POST", null], ["DELETE", key], ["DELETE", key]]]);
+});
+
+it("gets a new Challenge after a refused Challenge and sends it with the same idempotency key", async () => {
+  const first = ENTRIES[0]!.memory_entry_id;
+  const server = fakeServer([listed(ENTRIES)], [challengeRefused(), applied(first)]);
+  await settingsPage(server.fetchImpl);
+  await expect.poll(() => actions(4)).toEqual(["删除"]);
+  await confirmDelete(4);
+  await expect.poll(() => actions(4)).toEqual(["删除", "无法删除这条记忆，请稍后再试。"]);
+  await confirmDelete(4);
+  await expect.poll(titles).toEqual(["林舟", "阿青", "旧事"]);
+  const sent = server.sent.map((item) => [item.method, item.key, item.nonce]);
+  const key = sent[1]?.[1];
+  expect([typeof key, sent]).toEqual(["string", [["POST", null, null], ["DELETE", key, "a".repeat(64)],
+    ["POST", null, null], ["DELETE", key, "b".repeat(64)]]]);
 });
 
 it("keeps the step and the key of each entry apart when the author deletes two entries", async () => {
