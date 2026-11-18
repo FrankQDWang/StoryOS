@@ -38,7 +38,7 @@ The author owns each product default. Before the approval of the ticket graph, t
 
 Show the tracer-bullet breakdown, the test seams, and the real blocking edges to the author for approval. Publish the approved tickets as native children with native blocking edges and the `ready-for-agent` label. Each ticket fits one implementation context and the [change size](../../CODING_STANDARDS.md#change-size) rule.
 
-A ticket body has Parent, What to build, observable acceptance criteria, and its native blockers. Name stable Requirement IDs, authoritative inputs, and interfaces when the parent delegates them. Use an expand-contract sequence only when a wide refactor cannot stay a complete passing vertical slice.
+A ticket body has Parent, What to build, observable acceptance criteria, and its native blockers. Name stable Requirement IDs, authoritative inputs, and interfaces when the parent delegates them. Use an expand-contract sequence only when a wide refactor cannot stay a complete passing vertical slice. A criterion names a status, a problem code, or a state value only from the code that gives it. When it names an earlier Run or pass, it names the outcomes that count.
 
 `make check` does not run the exact-dist browser journeys and the recovery drill. A ticket that changes a browser journey, a file that a journey loads, a panel surface, or a wire form requires `make check-full`, and its body says so.
 
@@ -67,7 +67,7 @@ Ask the coordinator only for a real decision. A product, contract, number, or wa
 - Use the `tdd` skill at the approved public seams.
 - After each product or test edit, run `make check-fast`.
 - Commit on the ticket branch.
-- Wait for `make check`, `make check-full`, and `make review` in the turn that starts the command. Do not end a turn while one of them runs: the end of a turn can stop the Codex jobs of the session.
+- Wait for `make check`, `make check-full`, and `make review` in the turn that starts the command. Do not end a turn while one of them runs: the end of a turn can stop the Codex jobs of the session. Wait in steps of at most 2 minutes, because a coordinator message arrives only between steps.
 - When the counted lines will exceed the [change size](../../CODING_STANDARDS.md#change-size) limit, stop and report to the coordinator, which splits the ticket.
 
 ### 5. Open the pull request
@@ -76,7 +76,7 @@ When `make check-fast` and the tests that the ticket adds or changes pass, push 
 
 ### 6. Review
 
-Before round 1, complete each evidence record that an acceptance criterion requires.
+Before round 1, complete each evidence record that an acceptance criterion requires. For a criterion that says "each", name one test case for each member. Give a fake each refusal rule of the real route that the test depends on.
 
 Run the [Codex review](#codex-review) rounds until a round passes. Handle each Sourcery review thread: fix the finding, or reply with the reason. Then resolve the thread.
 
@@ -219,12 +219,15 @@ Each worktree owns its source, `target/`, `node_modules/`, release package, and 
 
 Before `make check` or `make check-full`, take one of three slots. Run `mkdir -p <main checkout>/target/verify-slots`, then `mkdir <main checkout>/target/verify-slots/slot-<N>` with N from 1 to 3. When `mkdir` fails, the slot is in use: try the next slot, or wait. Put an owner file with your session and the command in the slot. After the run, remove the slot with `rm <owner file>` and then `rmdir <slot>`, each as one command. A client can refuse `rm -rf`, and then the slot stays.
 
+With more than one chain, each heavy run, also a review round, waits for the `TURN` of the coordinator to `HEAVY REQUEST <command> head <SHA>`. The answer to a `HOLD` is `ACK HOLD`. Each of these messages names the head.
+
 ### Development PostgreSQL
 
 - `scripts/dev-postgres.sh with <command> ...` runs a command with a new database. The command owns a unique database and gives its environment to the child. It removes the container and its anonymous volume on success, failure, or interruption.
 - For interactive development, use `up --interactive`, then `reload`, `env`, and `down`. These commands use the canonical checkout path. `down` also removes the anonymous data volume.
 - Do not share database environment variables between worktrees.
 - The new commands do not use or remove the old `storyos-dev-postgres` container.
+- The executor names the prefix lead of its store tests after a search for its string, hex, and UUID suffix forms.
 
 ### One exact-dist journey file
 
@@ -250,6 +253,8 @@ FILE=test/browser-exact-dist/production-host.integration.test.ts sh -ec '
 4. Keep the raw evidence on a Git tag, as `AGENTS.md` says. The tag has the wire payloads and the Server and Worker logs, and no second copy of a public read. Before the push, examine each file for a key, an e-mail address, and a home path. The record of the run names the tag.
 
 Stop and report to the coordinator only for an anomaly: an unexpected status, more requests than the plan, or an unexpected time or cost.
+
+The plan comment has each item that the plan criterion names. When a new instruction text did not give its effect, send the findings before the review request. A second run that the ticket does not name needs the answer of the author.
 
 ## Cleanup
 
