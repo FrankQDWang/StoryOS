@@ -282,12 +282,32 @@ impl PostgresProjectReader {
     }
 }
 
+impl PostgresProjectReader {
+    /// The revisions of `revisions` that are the embedding Registration of the deployment. A Worker
+    /// binary has each Registration, but a deployment with no embedding configuration claims no
+    /// work, and a mark of an earlier configuration stays for a Worker that has it (#1692).
+    fn deployed<'a>(&self, revisions: &[&'a str]) -> Vec<&'a str> {
+        let deployed = self
+            .embedding_registration
+            .map(|registration| registration.revision);
+        revisions
+            .iter()
+            .copied()
+            .filter(|revision| deployed == Some(*revision))
+            .collect()
+    }
+}
+
 impl PassageIndexWorkStore for PostgresProjectReader {
     async fn passage_index_work_waits(
         &self,
         registration_revisions: &[&str],
         cut_revision: &str,
     ) -> Result<bool, ProjectReadError> {
+        let registration_revisions = &self.deployed(registration_revisions)[..];
+        if registration_revisions.is_empty() {
+            return Ok(false);
+        }
         let client = self.connect().await?;
         client.batch_execute("BEGIN").await.map_err(read_error)?;
         set_worker_scope(&*client).await?;
@@ -302,6 +322,10 @@ impl PassageIndexWorkStore for PostgresProjectReader {
         cut_revision: &str,
         lease: Duration,
     ) -> Result<Option<ClaimedPassageIndex>, ProjectReadError> {
+        let registration_revisions = &self.deployed(registration_revisions)[..];
+        if registration_revisions.is_empty() {
+            return Ok(None);
+        }
         self.require_release1_storage_activation_proof()
             .await
             .map_err(ProjectReadError::unavailable)?;

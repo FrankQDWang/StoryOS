@@ -858,5 +858,44 @@ async fn the_read_of_waiting_work_sees_only_work_that_a_claim_can_take() {
     );
 }
 
+/// A Worker of a deployment with no embedding configuration has the two Registrations of the
+/// Worker binary, but the work of an earlier configuration does not wait for it, its claim gives
+/// nothing, and the row stays. A Worker with the configuration then claims it (#1692). Test
+/// prefixes `a29`, `a2a`, and `a2b`.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_deployment_with_no_embedding_configuration_claims_no_work_and_the_mark_stays() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = configured().await;
+    let chapter = chapter(&store, &admin, ["a29", "a2a"], "a2b", &texts()).await;
+    let scope = chapter.scope.clone();
+    park_other_work(&admin, &scope).await;
+    wake(&admin, &scope).await;
+    let marked = work(&admin, &scope).await;
+    let unconfigured = store.clone().with_embedding_registration(None);
+    let binary = [
+        &HOST_FAKE_EMBEDDING_REGISTRATION,
+        &AGENT_PLAN_EMBEDDING_REGISTRATION,
+    ];
+    let revisions = binary.map(|registration| registration.revision);
+    let waiting = waits(&unconfigured, &revisions).await;
+    let refused = claim(&unconfigured, &binary).await;
+    let kept = work(&admin, &scope).await;
+    let claimed = claim(&store, &binary).await.unwrap();
+    steps(&store, &claimed).await;
+
+    assert_eq!(
+        (
+            waiting,
+            refused.is_none(),
+            kept == marked,
+            claimed.chapter_id
+        ),
+        (false, true, true, chapter.chapter_id)
+    );
+}
+
 #[path = "passage_index_rebuild_tests.rs"]
 mod rebuild;

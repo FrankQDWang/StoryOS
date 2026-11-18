@@ -92,9 +92,10 @@ pub(crate) async fn load(
     Ok(storyos_core::run_results(results, answer))
 }
 
-/// The change of each settled `write_memory` call of the Run, from the version row that names the
-/// call. A refused call wrote no version. A version that background work wrote names no ToolCall
-/// of a Run, so no Run gives it.
+/// The change of each settled `write_memory` call of the Run, from the version row that the call
+/// wrote. A refused call wrote no version. A version of background work can keep the source of the
+/// call from its entry, so only a version with the cause kind `author_request` is a write of the
+/// call: `write_memory` is the one writer of that cause (ADR 0091 section 6, #1692).
 async fn memory_writes(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
@@ -108,6 +109,7 @@ async fn memory_writes(
                JOIN storyos.memory_entry_versions AS version
                  ON (version.owner_user_id, version.project_id) =
                     (call.owner_user_id, call.project_id)
+                AND version.cause ->> 'kind' = 'author_request'
                 AND version.source_references @>
                     jsonb_build_array(jsonb_build_object('tool_call_id', call.tool_call_id::text))
               WHERE call.owner_user_id = $1::text::uuid AND call.project_id = $2::text::uuid

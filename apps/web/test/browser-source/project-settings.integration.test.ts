@@ -2,7 +2,9 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
 
-import type { GetProjectResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type {
+  GetProjectResponse, MemoryEntryInspect,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { loadStoryOSWebState } from "../../src/app.ts";
@@ -23,12 +25,19 @@ const PROJECT_VIEW: GetProjectResponse = {
   project: { project_id: PROJECT, title: "Settings Novel", open: { kind: "empty" } },
 };
 
+// An entry whose source is a Conversation, so that its origin line is a link to the workspace (#1692).
+const CONVERSATION = "018f0000-0000-7001-8000-0000000a2019";
+const SOURCED: MemoryEntryInspect = { memory_entry_id: "018f0000-0000-7001-8000-0000000a2018", entry_number: "1",
+  version: "1", entry_type: "other", title: "铜铃", description: "铃声。", text: "铜铃会再响。",
+  origin: "author_request", source: { kind: "conversation", conversation_id: CONVERSATION, availability: "available" },
+  changed_at: "2026-11-17T08:30:00.000Z" };
+
 type Sent = { method: string; path: string; key: string | null; body: unknown };
 /** The answer of the fake Server to each `PUT .../instruction`, in order. */
 type SaveAnswer = Response | Error | Promise<Response>;
 
 /** A fake Server with one Project of the session whose current Revision 1 has the text `Old rule.`. */
-function fakeServer(saves: SaveAnswer[] = []) {
+function fakeServer(saves: SaveAnswer[] = [], entries: MemoryEntryInspect[] = []) {
   const sent: Sent[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
@@ -54,7 +63,7 @@ function fakeServer(saves: SaveAnswer[] = []) {
     }
     if (path === MEMORY) {
       return jsonResponse({ schema_id: "storyos.query.memory-entries.response.v1",
-        correlation_id: "018f0000-0000-7001-8000-0000000a2017", project_scope: SCOPE, entries: [] });
+        correlation_id: "018f0000-0000-7001-8000-0000000a2017", project_scope: SCOPE, entries });
     }
     if (path.endsWith("/anti-forgery-challenges")) {
       return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-11-16T12:05:00.000Z",
@@ -252,4 +261,29 @@ it("asks one time before the author leaves with a text that is not saved", async
   click("[data-settings-leave]");
   expect([navigated, puts(server.sent), leavePrompt()])
     .toEqual([[`/projects/${PROJECT}`, `/projects/${PROJECT}`], [], false]);
+});
+
+it("asks before a source link of a Memory entry leaves with a text that is not saved", async () => {
+  // The test page must not leave, so each click that the page does not take ends here.
+  const hold = (event: Event) => event.preventDefault();
+  document.addEventListener("click", hold);
+  const server = fakeServer([], [SOURCED]);
+  const navigated = await settingsPage(server.fetchImpl);
+  const source = "a[data-memory-entry-origin]";
+  await expect.poll(() => document.querySelector(source)).not.toBeNull();
+  click(source);
+  type("Unsaved rule.");
+  await expect.poll(leavePrompt).toBe(true);
+  click(source);
+  await expect.poll(confirmStep).toBe("项目指令有未保存的修改。确定离开吗？离开留下");
+  click("[data-settings-stay]");
+  await expect.poll(confirmStep).toBe(undefined);
+  const stayed = [field()?.value, navigated.length];
+  click(source);
+  await expect.poll(confirmStep).toBeDefined();
+  click("[data-settings-leave]");
+  document.removeEventListener("click", hold);
+
+  const link = `/projects/${PROJECT}?conversation=${CONVERSATION}`;
+  expect([stayed, navigated, puts(server.sent)]).toEqual([["Unsaved rule.", 1], [link, link], []]);
 });

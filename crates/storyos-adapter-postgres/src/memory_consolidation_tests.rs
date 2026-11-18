@@ -15,7 +15,7 @@ use crate::memory_capture::tests::{project, run_capture, start};
 use crate::memory_entries::tests::{archived_rows, write_versions};
 
 /// Settles one capture of `source` with the observations `observations`.
-pub(super) async fn capture(
+pub(crate) async fn capture(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
@@ -59,7 +59,7 @@ pub(super) fn delete(entry: u64) -> Value {
 }
 
 /// Starts a pass of the Project of `scope` with a direct call and completes its Run.
-pub(super) async fn run_pass(
+pub(crate) async fn run_pass(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
@@ -75,7 +75,7 @@ pub(super) async fn run_pass(
 
 /// The Run status, the outcome, the failure reason, and the result of each operation of the pass
 /// of the Run `run_id`, and the state of each observation of its Project.
-pub(super) async fn settled(admin: &Client, run_id: &str) -> Value {
+pub(crate) async fn settled(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
             "SELECT jsonb_build_array(run.status, pass.outcome, pass.failure_reason,

@@ -25,6 +25,7 @@ pub struct PassageRankingFacts {
     pub nearest: Vec<NearestPassage>,
 }
 
+/// The store side of a ranking of the manuscript passages for `hybrid_search_manuscript`.
 pub trait PassageRankingStore: Sync {
     /// Reads the facts of one ranking in one consistent state of the Project Scope, or `None`
     /// when the Project is not visible. With no question vector, or with no vector store,
