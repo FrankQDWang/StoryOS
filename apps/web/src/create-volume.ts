@@ -6,6 +6,7 @@ import {
 import type { CreateVolumeResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
+import { challengeRefused, forgetFlight, forgettingRefusedFlight } from "./refused-command.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -54,16 +55,18 @@ export async function createOwnedVolume(options: {
     };
     inFlightCreates.set(identity, flight);
   }
+  const send = () => forgettingRefusedFlight(inFlightCreates, identity, flight, () =>
+    submitCreateVolume(options, flight));
   try {
-    const created = await submitCreateVolume(options, flight);
-    inFlightCreates.delete(identity);
+    const created = await send();
+    forgetFlight(inFlightCreates, identity, flight);
     return created;
   } catch (error) {
-    if (historicalAcknowledgementUnavailable(error)) {
+    if (historicalAcknowledgementUnavailable(error) || challengeRefused(error)) {
       throw error;
     }
-    const created = await submitCreateVolume(options, flight);
-    inFlightCreates.delete(identity);
+    const created = await send();
+    forgetFlight(inFlightCreates, identity, flight);
     return created;
   }
 }

@@ -1,5 +1,4 @@
 import {
-  StoryOSProtocolError,
   createProjectCommandChallenge,
   digestUpdateProjectInstruction,
   getProjectInstruction,
@@ -10,6 +9,7 @@ import type { ProjectScope, UpdateProjectInstructionRequest }
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 
 import { uuidV7 } from "./acceptance-journal.ts";
+import { challengeRefused, refusedWith } from "./refused-command.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -96,22 +96,7 @@ export async function saveProjectInstruction(connection: Connection & {
     if (refusedWith(error, "instruction_over_item_limit")) return { outcome: { kind: "over_limit" }, flight: undefined };
     // A refused Challenge admitted nothing under its key, and the Server gives the same dead nonce for that key again.
     // So the next save is a new flight: a new idempotency key, a new correlation, and a new Challenge (#1696).
-    if (refusedWith(error, "challenge_invalid")) return { outcome: { kind: "unknown" }, flight: undefined };
+    if (challengeRefused(error)) return { outcome: { kind: "unknown" }, flight: undefined };
     return { outcome: { kind: "unknown" }, flight };
-  }
-}
-
-/**
- * Whether `error` is a refusal before Admission (status 422) with the code `code`: a text above the Context item
- * limit (ADR 0052), or a refused Command Challenge (#1696). The Server gives both only with the status 422.
- */
-export function refusedWith(error: unknown, code: "instruction_over_item_limit" | "challenge_invalid"): boolean {
-  if (!(error instanceof StoryOSProtocolError) || error.status !== 422 || typeof error.responseBody !== "string") {
-    return false;
-  }
-  try {
-    return (JSON.parse(error.responseBody) as { code?: unknown }).code === code;
-  } catch {
-    return false;
   }
 }

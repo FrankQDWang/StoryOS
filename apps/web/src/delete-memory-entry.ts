@@ -7,7 +7,8 @@ import type { DeleteMemoryEntryRequest, ProjectScope }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { uuidV7 } from "./acceptance-journal.ts";
-import { refusedWith, sameScope } from "./project-instruction.ts";
+import { sameScope } from "./project-instruction.ts";
+import { challengeRefused } from "./refused-command.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -65,6 +66,6 @@ export async function deleteMemoryEntryOnce(connection: Connection & {
   } catch (error) {
     // A refused Challenge admitted nothing under its key, and the delete carries the version of its entry. So the
     // next confirm is a new flight with a new idempotency key and a new Challenge (#1696).
-    return { outcome: "failed", flight: refusedWith(error, "challenge_invalid") ? undefined : flight };
+    return { outcome: "failed", flight: challengeRefused(error) ? undefined : flight };
   }
 }

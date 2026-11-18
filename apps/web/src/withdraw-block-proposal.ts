@@ -6,6 +6,7 @@ import { RELEASE_1_PROTOCOL_PROFILE }
   from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { uuidV7 } from "./acceptance-journal.ts";
 import type { EditorReadyState, EditorWorkspace } from "./editor-types.ts";
+import { challengeRefused } from "./refused-command.ts";
 
 const SCHEMA = "storyos.local-edit-journal.withdraw-proposal.v1";
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
@@ -125,7 +126,15 @@ async function sendWithdraw(options: Pick<WithdrawTarget, "baseUrl" | "fetchImpl
     await putRecord(options.workspace.database, { ...current, settlement: "settled", response });
     return response;
   } catch (error) {
-    await putRecord(options.workspace.database, { ...current, settlement: "unresolved" });
+    const unresolved: WithdrawRecord = { ...current, settlement: "unresolved" };
+    if (challengeRefused(error)) {
+      delete unresolved.nonce;
+      unresolved.idempotency_key = uuidV7(options.cryptoImpl);
+      unresolved.request = { ...current.request, withdraw_proposal_input: {
+        ...current.request.withdraw_proposal_input, correlation_id: uuidV7(options.cryptoImpl) } };
+      unresolved.digest = await digestWithdrawProposal(unresolved.request, options.cryptoImpl);
+    }
+    await putRecord(options.workspace.database, unresolved);
     throw error;
   }
 }

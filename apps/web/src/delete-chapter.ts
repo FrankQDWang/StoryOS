@@ -5,6 +5,7 @@ import {
   StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
+import { challengeRefused, forgetFlight, forgettingRefusedFlight } from "./refused-command.ts";
 import type { DeleteChapterResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 
@@ -55,12 +56,14 @@ export async function deleteOwnedChapter(options: {
     };
     inFlightDeletes.set(identity, flight);
   }
+  const send = () => forgettingRefusedFlight(inFlightDeletes, identity, flight, () =>
+    submitDeleteChapter(options, flight));
   try {
-    const removed = await submitDeleteChapter(options, flight);
-    inFlightDeletes.delete(identity);
+    const removed = await send();
+    forgetFlight(inFlightDeletes, identity, flight);
     return removed;
   } catch (error) {
-    if (historicalAcknowledgementUnavailable(error)) {
+    if (historicalAcknowledgementUnavailable(error) || challengeRefused(error)) {
       throw error;
     }
     if (error instanceof StoryOSProtocolError && error.status === 429) {
@@ -69,8 +72,8 @@ export async function deleteOwnedChapter(options: {
         setTimeout(resolve, ((error.retryAfterSeconds ?? 1) + 1) * 1000);
       });
     }
-    const removed = await submitDeleteChapter(options, flight);
-    inFlightDeletes.delete(identity);
+    const removed = await send();
+    forgetFlight(inFlightDeletes, identity, flight);
     return removed;
   }
 }
