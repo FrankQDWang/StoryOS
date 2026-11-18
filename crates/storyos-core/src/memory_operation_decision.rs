@@ -160,8 +160,8 @@ pub(crate) fn decide_with_entries(
                         title: admitted.version.title.clone(),
                         description: admitted.version.description.clone(),
                         text: admitted.version.text.clone(),
-                        // A written version removes the flag.
-                        flagged: false,
+                        // A flag version has its flag, and each other written version removes it.
+                        flagged: admitted.version.flag.is_some(),
                     },
                     origin: admitted.origin,
                 });

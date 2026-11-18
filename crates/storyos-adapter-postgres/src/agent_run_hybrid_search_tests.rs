@@ -628,10 +628,8 @@ impl EmbeddingProviderAdapter for NotFinite {
     }
 }
 
-/// A question vector with a component that is not finite is the invalid result of the embedding
-/// gateway (#1696). The call takes the path of a settled request with no vector: it settles with
-/// the exact-term list after the line that says that the search by meaning was not available, and
-/// the Run completes.
+/// A question vector that is not finite is an invalid result, so the call takes the exact-term
+/// fallback and the Run completes (#1696).
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_question_vector_that_is_not_finite_gives_the_exact_term_list() {

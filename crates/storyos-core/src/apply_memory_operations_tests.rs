@@ -301,6 +301,49 @@ fn the_reason_of_an_operation_obeys_its_declared_form() {
     );
 }
 
+/// A flag of the pass counts for the Index bound of a later write of the same pass (#1696): a
+/// create that fits after the entries of the input does not fit after a flag of an entry.
+#[test]
+fn a_flag_of_the_pass_counts_for_the_index_bound_of_a_later_create() {
+    let observations = [observation("conversation")];
+    let entries = |count: u64, tail: usize| -> Vec<PassMemoryEntry> {
+        let long = |number: u64, length: usize| PassMemoryEntry {
+            entry: CurrentMemoryEntry {
+                description: "长".repeat(length),
+                ..entry(number, MemoryEntryOrigin::Chapter, &format!("条目{number}")).entry
+            },
+            origin: MemoryEntryOrigin::Chapter,
+        };
+        let mut entries = vec![entry(1, MemoryEntryOrigin::AuthorRequest, "条1")];
+        entries.extend((2..=count).map(|number| long(number, MEMORY_DESCRIPTION_MAX_CHARS)));
+        entries.push(long(count + 1, tail));
+        entries
+    };
+    let create = || create("other", "新条目", "文。", json!([1]));
+    let fits = |count: u64, tail: usize| {
+        let entries = entries(count, tail);
+        let facts = pass(&entries, &observations, &[]);
+        decided(&operations(json!([create()])), &facts)[0] != "memory_index_full"
+    };
+    // The most entries with a full description, and then the longest last description, that let
+    // the create fit.
+    let count = (2..299)
+        .take_while(|&count| fits(count, MEMORY_DESCRIPTION_MAX_CHARS))
+        .last()
+        .expect("the create fits after few entries");
+    let tail = (1..=MEMORY_DESCRIPTION_MAX_CHARS)
+        .take_while(|&tail| fits(count + 1, tail))
+        .last()
+        .expect("the create fits with a short last description");
+    let entries = entries(count + 1, tail);
+    let candidates = operations(json!([flag(1, "不符。", json!([1])), create()]));
+
+    assert_eq!(
+        decided(&candidates, &pass(&entries, &observations, &[])),
+        ["Change 1 author_request 0", "memory_index_full"]
+    );
+}
+
 /// A null title, description, or text of an update keeps the current value of the entry, and a
 /// null title of a merge keeps the title of its first entry. A merge with no text is refused
 /// (#1685).

@@ -2214,15 +2214,17 @@ version gives `conflicted` with `entry_changed`, and an entry of no version in
 the Project answers as an unavailable resource. The Web client accepts the
 Activity kind and shows nothing for it.
 
-The Agent reads and writes Memory Entries only through Host Tools (ADR 0094).
-`search_memory` and `read_memory_entry` read the current
-entries. `write_memory` creates, changes, or deletes one entry at once on the
-request of the author. Background work records Memory Observations with
-`record_memory_observations`, and a consolidation pass applies them with
-`apply_memory_operations`. Each written version has its cause, and each applied
-write increases the Memory revision of the Project by one. No Artifact, no
-Memory Note, and no generated document set holds Agent Memory, and no public
-command starts a capture or a consolidation. The
+In a Run of a Project Conversation, the Agent gets the Memory Index and reads
+Memory Entries only through Host Tools (ADR 0094). `search_memory` and
+`read_memory_entry` read the current entries. `write_memory` creates, changes,
+or deletes one entry at once on the request of the author. Background work has
+its own input. A capture gets the Memory Index in its request and records Memory
+Observations with `record_memory_observations`. A consolidation pass gets each
+current entry with its text and the waiting observations in its request, and it
+applies its operations with `apply_memory_operations`. Each written version has
+its cause, and each applied write increases the Memory revision of the Project
+by one. No Artifact, no Memory Note, and no generated document set holds Agent
+Memory, and no public command starts a capture or a consolidation. The
 [Memory owner](fiction-memory-and-research-provenance-semantics.md) and ADR 0094
 give the complete model.
 

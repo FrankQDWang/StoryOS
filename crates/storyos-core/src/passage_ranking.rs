@@ -196,12 +196,14 @@ pub fn vector_list(chapters: &[ChapterPassages], nearest: &[NearestPassage]) -> 
     places
 }
 
-/// Joins `lists` with Reciprocal Rank Fusion. The score of a passage is the sum, over the lists
-/// that hold it, of one divided by `PASSAGE_FUSION_CONSTANT` plus its rank in that list, from 1.
-/// A higher score goes first, and equal scores go in manuscript order. The score is an exact
-/// fraction, so two equal sums are equal (#1696). The result has at most `PASSAGE_RESULT_LIMIT`
-/// passages.
-pub fn fuse_passage_lists(lists: &[&[PassagePlace]]) -> Vec<PassagePlace> {
+/// Joins the exact-term list and the vector list with Reciprocal Rank Fusion. The score of a
+/// passage is the sum, over the lists that hold it, of one divided by `PASSAGE_FUSION_CONSTANT`
+/// plus its rank in that list, from 1. A higher score goes first, and equal scores go in
+/// manuscript order. The score is an exact fraction, so two equal sums are equal (#1696). With
+/// two lists, its denominator is at most the product of two ranks, so each comparison fits in
+/// `u128` for lists of less than one billion passages. The result has at most
+/// `PASSAGE_RESULT_LIMIT` passages.
+pub fn fuse_passage_lists(lists: [&[PassagePlace]; 2]) -> Vec<PassagePlace> {
     let mut scores: BTreeMap<PassagePlace, FusedScore> = BTreeMap::new();
     for list in lists {
         for (index, place) in list.iter().enumerate() {
