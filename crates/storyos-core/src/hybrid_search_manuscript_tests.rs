@@ -160,6 +160,22 @@ fn the_intake_takes_a_question_and_terms_at_their_bounds() {
     assert!(intake(json!({"question": "灯塔", "terms": most})).is_ok());
 }
 
+/// The ToolCall row cannot hold U+0000, so a term with it refuses the call (#1694).
+#[test]
+fn a_term_with_u0000_refuses_the_call_as_unstorable_text() {
+    let intake = |arguments| HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC.intake(&arguments);
+    assert_eq!(
+        [
+            intake(json!({"question": "灯塔", "terms": ["港\u{0}口"]})),
+            intake(json!({"question": "灯塔", "terms": ["林雪", "\u{0}"]})),
+        ],
+        [
+            Err(IntakeRefusal::UnstorableText),
+            Err(IntakeRefusal::UnstorableText),
+        ],
+    );
+}
+
 /// The refusal table of ADR 0095 section 1: an intake refusal of the field, and
 /// `hybrid_search_unavailable` when the configuration or the vector store is not available, or
 /// when the admission refuses the embedding request of the question.

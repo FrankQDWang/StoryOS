@@ -1,8 +1,8 @@
 //! The Host Tool `hybrid_search_manuscript` (ADR 0095 sections 1 and 4): the fused result with
 //! the vector of the question before a keyword search, the Project Scope, each settlement and
 //! refusal of the question request, the author actions while the request is in progress, a
-//! stopped Worker, the three facts of the Exposure, and a compaction. Test prefix leads `54`,
-//! `b5`, `bb`, and `ba`.
+//! stopped Worker, the three facts of the Exposure, a compaction, and a term with U+0000. Test
+//! prefix leads `54`, `b5`, `bb`, and `ba`, and the prefixes `a2c`, `a2d`, `a2e`, and `a31`.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -21,8 +21,8 @@ use storyos_application::{
 };
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CallValidationRefusal,
-    EmbeddingInput, EmbeddingRegistration, HybridSearchRefusal, IntakeRefusal,
-    NO_SEARCH_BY_MEANING, PassageTerms,
+    EmbeddingInput, EmbeddingRegistration, FINISH_DOES_NOT_COUNT_RESULT, HybridSearchRefusal,
+    IntakeRefusal, NO_SEARCH_BY_MEANING, PassageTerms,
 };
 use tokio_postgres::Client;
 
@@ -367,6 +367,49 @@ async fn each_refused_call_has_its_label_and_the_run_continues() {
             true,
             json!([]),
         )
+    );
+}
+
+/// A term with U+0000 refuses its call with `unstorable_text`. The Decision and its other call are
+/// stored, the `finish` call beside it does not count, and the Run completes (ADR 0091 section 3, #1694).
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_term_with_u0000_refuses_only_its_call_and_the_run_continues() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (plain, admin) = stores().await;
+    let store = configured(&plain);
+    let chapter = chapter(&store, &admin, ["a2c", "a2d"], "a2e", &texts()).await;
+    // The author message keeps the JSON escape, and the call arguments have the character.
+    let arguments = format!(r#"{{"question":"{QUESTION}","terms":["港\u0000口"]}}"#);
+    let message = format!("SCRIPT:refuse hybrid_search_manuscript {arguments}");
+    let run_id = scripted(&store, &admin, &chapter, "a31", &message).await;
+
+    let refusal = CallValidationRefusal::Intake(IntakeRefusal::UnstorableText);
+    let refused = json!([
+        "hybrid_search_manuscript",
+        "refused",
+        refusal.label(),
+        refusal.result_text(),
+        true
+    ]);
+    assert_eq!(
+        calls(&admin, &run_id).await,
+        json!([
+            "completed",
+            [
+                refused,
+                [
+                    "finish",
+                    "settled",
+                    null,
+                    FINISH_DOES_NOT_COUNT_RESULT,
+                    true
+                ],
+                finish()
+            ]
+        ])
     );
 }
 

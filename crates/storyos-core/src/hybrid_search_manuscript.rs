@@ -54,13 +54,17 @@ struct Arguments {
     terms: Vec<String>,
 }
 
-/// The typed intake. The question has the query rule of `web_search`. The terms have the bounds
+/// The typed intake. The question has the query rule of `web_search`. A term with U+0000 does not
+/// fit, because the ToolCall row keeps the validated arguments (#1694). The terms have the bounds
 /// of `PassageTerms`, and a repeated term is removed.
 pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
     let Arguments { question, terms } =
         Arguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
     if !crate::tool_spec::query_fits(&question) {
         return Err(IntakeRefusal::Query);
+    }
+    if terms.iter().any(|term| term.contains('\0')) {
+        return Err(IntakeRefusal::UnstorableText);
     }
     let terms = PassageTerms::new(&terms).map_err(|_| IntakeRefusal::Terms)?;
     Ok(ToolIntake::HybridSearchManuscript {
