@@ -49,8 +49,13 @@ const SECOND_NONCE = "b".repeat(64);
 const CATALOG_URL = new URL("../../../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json",
   import.meta.url);
 const { operations } = await (await fetch(CATALOG_URL)).json() as { operations: {
-  operation_id: string; method: string; path: string; schemas: { request: string } }[] };
+  operation_id: string; kind: string; method: string; path: string; schemas: { request: string } }[] };
+/** The rows of the route catalog that are the Project command targets of the Server. */
+const PROJECT_COMMANDS = operations.filter(({ kind, path }) =>
+  kind === "command" && path.startsWith("/api/v1/projects/{project_id}"));
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const CHALLENGE_ROUTE = /^\/api\/v1\/projects\/([^/]+)\/anti-forgery-challenges$/;
 
 type Exchange = { step: "challenge" | "command"; key: number; nonce: string | null };
 type Accepted = (request: unknown, idempotencyKey: string) => unknown;
@@ -72,8 +77,9 @@ const problem = (code: string, status: number) => jsonResponse({ schema_id: "sto
 const routePattern = (template: string) => new RegExp(`^${template.replace(/\{[^}]+\}/g, "[^/]+")}$`);
 
 /**
- * As the Server: a Challenge names a command target of the route catalog, its digest profile, and a UUID v7 key. Each
- * key has one nonce and one binding, and a command must match the binding of its Challenge.
+ * As the Server: a Challenge comes to the route of one Project and names a Project command target, its digest profile,
+ * and a UUID v7 key. Each key of a Project has one nonce and one binding. A command must have a UUID correlation and
+ * match the binding of its Challenge in the same Project.
  */
 function fakeServer(command: Partial<Command>, script: Script) {
   const issued = new Map<string, { nonce: string; digest: string; challenge: ChallengeRequest }>();
@@ -81,39 +87,47 @@ function fakeServer(command: Partial<Command>, script: Script) {
   const correlations: string[] = [];
   const accepted: unknown[] = [];
   let commands = 0;
-  const number = (key: string) => [...issued.keys()].indexOf(key) + 1;
+  const scoped = (project: string | undefined, key: string) => `${project}\n${key}`;
+  const number = (scopedKey: string) => [...issued.keys()].indexOf(scopedKey) + 1;
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const method = init?.method ?? "GET";
     if (method === "GET") return jsonResponse(command.read);
     const text = String(init?.body);
     if (path.endsWith("/anti-forgery-challenges")) {
+      const project = CHALLENGE_ROUTE.exec(path)?.[1];
+      if (method !== "POST" || project === undefined) return problem("not_found", 404);
       const challenge = JSON.parse(text) as ChallengeRequest;
       const key = challenge.idempotency_key;
-      const target = operations.find((operation) => operation.method === challenge.method
+      const target = PROJECT_COMMANDS.find((operation) => operation.method === challenge.method
         && operation.path === challenge.route_template && operation.schemas.request === challenge.command_schema);
       if (target === undefined) return problem("command_target_refused", 422);
       const { algorithm, profile, value_hex_lowercase: value } = challenge.canonical_command_digest;
       if (algorithm !== "sha256" || profile !== `storyos.command.${target.operation_id}.jcs.v1`
         || !/^[0-9a-f]{64}$/.test(value) || !UUID_V7.test(key)) return problem("invalid_request", 400);
       const digest = JSON.stringify(challenge.canonical_command_digest);
-      const known = issued.get(key) ?? { nonce: String.fromCharCode(97 + issued.size).repeat(64), digest, challenge };
-      issued.set(key, known);
-      sent.push({ step: "challenge", key: number(key), nonce: null });
+      const scopedKey = scoped(project, key);
+      const known = issued.get(scopedKey)
+        ?? { nonce: String.fromCharCode(97 + issued.size).repeat(64), digest, challenge };
+      issued.set(scopedKey, known);
+      sent.push({ step: "challenge", key: number(scopedKey), nonce: null });
       if (known.digest !== digest) return problem("idempotency_binding_conflict", 409);
       return jsonResponse({ nonce: known.nonce, expires_at: "2026-11-18T12:05:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
     const headers = new Headers(init?.headers);
     const key = headers.get("idempotency-key") ?? "";
+    const scopedKey = scoped(/^\/api\/v1\/projects\/([^/]+)/.exec(path)?.[1], key);
     const nonce = headers.get("x-storyos-anti-forgery");
-    sent.push({ step: "command", key: number(key), nonce });
-    correlations.push(/"correlation_id":"([^"]+)"/.exec(text)?.[1] ?? "");
+    sent.push({ step: "command", key: number(scopedKey), nonce });
+    const correlation = /"correlation_id":"([^"]+)"/.exec(text)?.[1] ?? "";
+    correlations.push(correlation);
+    if (!UUID.test(correlation)) return problem("invalid_request", 400);
     commands += 1;
-    const answer = await script(commands, number(key));
+    const answer = await script(commands, number(scopedKey));
     const request = JSON.parse(text) as { command_schema: string };
     const digest = JSON.stringify(await command.digest?.(request as never, crypto));
-    const binding = issued.get(key);
+    const binding = issued.get(scopedKey);
     if (binding?.nonce !== nonce || binding?.digest !== digest || binding?.challenge.method !== method
       || !routePattern(binding.challenge.route_template).test(path)
       || binding.challenge.command_schema !== request.command_schema || answer === "challenge_invalid") {
@@ -202,6 +216,61 @@ async function connected(name: string, script: Script) {
   Object.assign(late, command);
   return { server, command };
 }
+
+describe("the fake Server", () => {
+  const PROJECT = "018f0000-0000-7001-8000-000000169707";
+  const OTHER_PROJECT = "018f0000-0000-7001-8000-000000169708";
+  const KEY = "018f0000-0000-7001-8000-000000169709";
+  const CORRELATION = "018f0000-0000-7001-8000-000000169710";
+  const digest = { algorithm: "sha256", profile: "storyos.command.updateProject.jcs.v1",
+    value_hex_lowercase: "c".repeat(64) };
+  const challenge = { method: "PATCH", route_template: "/api/v1/projects/{project_id}",
+    command_schema: "storyos.command.update-project.request.v1", canonical_command_digest: digest,
+    idempotency_key: KEY };
+  const challengePath = `/api/v1/projects/${PROJECT}/anti-forgery-challenges`;
+  const server = () => fakeServer({ digest: async () => digest }, () => "accepted").fetchImpl;
+  const post = (fetchImpl: typeof fetch, path: string, body: unknown) =>
+    fetchImpl(`${location.origin}${path}`, { method: "POST", body: JSON.stringify(body) });
+  const issue = async (fetchImpl: typeof fetch) =>
+    (await (await post(fetchImpl, challengePath, challenge)).json() as { nonce: string }).nonce;
+  const rename = (fetchImpl: typeof fetch, project: string, nonce: string, correlation: string) =>
+    fetchImpl(`${location.origin}/api/v1/projects/${project}`, { method: "PATCH",
+      headers: { "idempotency-key": KEY, "x-storyos-anti-forgery": nonce },
+      body: JSON.stringify({ command_schema: challenge.command_schema,
+        update_project_input: { correlation_id: correlation } }) });
+  const refusal = async (response: Response) =>
+    ({ status: response.status, code: (await response.json() as { code: string }).code });
+
+  it("accepts a command that matches its Challenge", async () => {
+    const fetchImpl = server();
+    expect((await rename(fetchImpl, PROJECT, await issue(fetchImpl), CORRELATION)).status).toBe(200);
+  });
+
+  it("refuses a nonce in another Project", async () => {
+    const fetchImpl = server();
+    const response = await rename(fetchImpl, OTHER_PROJECT, await issue(fetchImpl), CORRELATION);
+    expect(await refusal(response)).toEqual({ status: 422, code: "challenge_invalid" });
+  });
+
+  it.each(["/api/v1/anti-forgery-challenges", `/api/v1/projects/${PROJECT}/volumes/anti-forgery-challenges`])(
+    "refuses a Challenge at %s", async (path) => {
+      expect(await refusal(await post(server(), path, challenge))).toEqual({ status: 404, code: "not_found" });
+    });
+
+  it.each(["createProject", "searchManuscript", "createProjectChallenge", "createProjectCommandChallenge"])(
+    "refuses a Challenge for %s, which is not a Project command", async (operationId) => {
+      const row = operations.find(({ operation_id: id }) => id === operationId)!;
+      const response = await post(server(), challengePath, { ...challenge, method: row.method,
+        route_template: row.path, command_schema: row.schemas.request });
+      expect(await refusal(response)).toEqual({ status: 422, code: "command_target_refused" });
+    });
+
+  it("refuses a command whose correlation is not a UUID", async () => {
+    const fetchImpl = server();
+    const response = await rename(fetchImpl, PROJECT, await issue(fetchImpl), "correlation-1");
+    expect(await refusal(response)).toEqual({ status: 400, code: "invalid_request" });
+  });
+});
 
 describe.each(Object.keys(COMMANDS))("%s", (name) => {
   it("sends the next try with a new idempotency key and a new Challenge after a refused Challenge", async () => {
