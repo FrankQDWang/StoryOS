@@ -74,7 +74,7 @@ pub(crate) async fn loaded_run(
 }
 
 /// The status of the Run, and each ToolCall as its function name, state, refusal, Host result,
-/// and whether it has no Destination Attempt and pins the Host Tool Registration `…0e0103`.
+/// and whether it has no Destination Attempt and pins the current Host Tool Registration.
 pub(crate) async fn calls(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
@@ -129,12 +129,17 @@ pub(super) async fn record(admin: &Client, run_id: &str, role: &str, position: i
     serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
 }
 
-pub(crate) const TOOLS: [&str; 6] = [
+pub(crate) const TOOLS: [&str; 11] = [
     "propose_edit",
     "submit_research",
     "read_tool_result",
     "load_skill",
     "read_skill_resource",
+    "read_chapter",
+    "search_manuscript",
+    "write_memory",
+    "read_memory_entry",
+    "search_memory",
     "finish",
 ];
 
@@ -333,6 +338,11 @@ async fn each_refused_load_gives_its_reason_and_a_run_with_no_skill_declares_no_
             "propose_edit",
             "submit_research",
             "read_tool_result",
+            "read_chapter",
+            "search_manuscript",
+            "write_memory",
+            "read_memory_entry",
+            "search_memory",
             "finish"
         ])
     );
@@ -414,7 +424,8 @@ async fn the_summary_request_of_a_compaction_at_the_step_of_the_load_sends_the_l
             "conversation_summary",
             "author_instruction",
             "working_target",
-            "skill_catalog"
+            "skill_catalog",
+            "chapter_list"
         ]
     );
     let summary = record(&admin, &run_id, "compaction", 1).await;

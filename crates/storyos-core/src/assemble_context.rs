@@ -42,6 +42,10 @@ pub enum ContextPurpose {
     CurrentPassageAssistance,
     /// The summary request of an active compaction of the current Conversation.
     ActiveContextCompaction,
+    /// The capture of a quiet Project Conversation or a changed Chapter (ADR 0094 section 5).
+    MemoryCapture,
+    /// The consolidation pass of the Memory Observations (ADR 0094 section 6).
+    MemoryConsolidation,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -50,6 +54,9 @@ pub enum ContextCause {
     /// Each ToolCall of the durable function request Decision of the prior RunStep is resolved,
     /// and its result goes to the model (Operation Requirement `tool_result_continuation`).
     ToolResultContinuation,
+    /// The Host starts background work on its schedule, with no request of the author
+    /// (ADR 0094 sections 5 and 6).
+    HostSchedule,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -69,6 +76,27 @@ pub enum ContextSourceClass {
     SkillInstruction,
     /// The text of one resource file of a Skill (ADR 0089 section 3).
     SkillResource,
+    /// The order, the title, and the length of each Chapter of the Project (ADR 0095 section 1).
+    /// Each Stage 7 class is Data-only Context.
+    ChapterList,
+    /// The result of a read of the manuscript (ADR 0095 section 1).
+    ManuscriptReadResult,
+    /// The result of a keyword search or a hybrid search of the manuscript (ADR 0095 section 1).
+    ManuscriptSearchResult,
+    /// The type, the title, and the description of each current Memory Entry (ADR 0094 section 4).
+    MemoryIndex,
+    /// The result of a read of one Memory Entry (ADR 0094 section 4).
+    MemoryReadResult,
+    /// The result of a keyword search of the Memory Entries (ADR 0094 section 4).
+    MemorySearchResult,
+    /// The messages or the Chapter text that one capture reads (ADR 0094 section 5).
+    MemoryCaptureInput,
+    /// The marks of the entries that the author deleted (ADR 0094 section 6).
+    MemoryDeleteMarks,
+    /// The current entries that a consolidation pass gets (ADR 0094 section 6).
+    MemoryEntries,
+    /// The Memory Observations that a consolidation pass gets (ADR 0094 section 6).
+    MemoryObservations,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -124,7 +152,8 @@ pub struct OperationRequirementRecord {
     pub project_id: String,
     pub purpose: ContextPurpose,
     pub cause: ContextCause,
-    pub chapter_id: String,
+    /// The Chapter of a Run of the author. A background Run has no Chapter.
+    pub chapter_id: Option<String>,
     pub chapter_revision_id: Option<String>,
     pub proposal_target_block_ids: Option<Vec<String>>,
     pub passage_targets: Option<Vec<PassageContextTarget>>,
@@ -142,6 +171,9 @@ pub struct OperationRequirementRecord {
     /// The SkillPackage Reference of each Skill of the catalog that the Run pinned, in the order
     /// of the Skill names (ADR 0089 section 3).
     pub skill_catalog: Option<Vec<super::SkillPackageReference>>,
+    /// The Memory revision that the Run pinned. Each RunStep of the Run copies it, and its Memory
+    /// Index lists the entries at this revision (ADR 0094 section 4).
+    pub memory_revision: Option<u64>,
     pub instruction: InstructionBindingInput,
     pub destination_identity: String,
     pub item_token_limit: u64,
@@ -291,7 +323,7 @@ pub fn assemble_current_passage_context(
             project_id: input.project_id.clone(),
             purpose: ContextPurpose::CurrentPassageAssistance,
             cause: ContextCause::AuthorRequest,
-            chapter_id: input.chapter_id.clone(),
+            chapter_id: Some(input.chapter_id.clone()),
             chapter_revision_id: input.chapter_revision_id.clone(),
             proposal_target_block_ids: input.proposal_target_block_ids.clone(),
             passage_targets: None,
@@ -302,6 +334,7 @@ pub fn assemble_current_passage_context(
             earlier_author_messages: None,
             skill_requirements: None,
             skill_catalog: None,
+            memory_revision: None,
             instruction: input.instruction.clone(),
             destination_identity: input.destination_identity.clone(),
             item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,

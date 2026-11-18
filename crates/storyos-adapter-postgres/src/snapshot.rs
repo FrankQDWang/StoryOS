@@ -534,9 +534,14 @@ fn payload_aggregate(
         },
         ProjectActivityKind::ProjectCreated
         | ProjectActivityKind::ProjectUpdated
-        | ProjectActivityKind::ProjectAssistanceUpdated => ActivityAggregateRef {
+        | ProjectActivityKind::ProjectAssistanceUpdated
+        | ProjectActivityKind::ProjectInstructionUpdated => ActivityAggregateRef {
             kind: "project".to_owned(),
             id: project_id.to_owned(),
+        },
+        ProjectActivityKind::MemoryEntryDeleted => ActivityAggregateRef {
+            kind: "memory_entry".to_owned(),
+            id: field("memory_entry_id")?,
         },
         ProjectActivityKind::WriterTakeoverApplied => ActivityAggregateRef {
             kind: "editor_session".to_owned(),

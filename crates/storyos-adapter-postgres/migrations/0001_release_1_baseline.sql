@@ -1,5 +1,5 @@
 -- The Release 1 baseline (ADR 0079): one definition of each object of the squashed migration chain.
--- Until the first database that holds data exists, a change can edit this file. The next migration is 0002.
+-- Until the first database that holds data exists, a change can edit this file. The next migration is 0003.
 
 CREATE SCHEMA storyos AUTHORIZATION storyos_owner;
 SET LOCAL ROLE storyos_owner;
@@ -20,6 +20,7 @@ CREATE DOMAIN storyos.command_kind AS text CHECK (VALUE IN (
     'createProject',
     'createVolume',
     'deleteChapter',
+    'deleteMemoryEntry',
     'deleteVolume',
     'exportHumanReadableManuscript',
     'exportProjectArchive',
@@ -35,6 +36,7 @@ CREATE DOMAIN storyos.command_kind AS text CHECK (VALUE IN (
     'updateChapter',
     'updateProject',
     'updateProjectAssistance',
+    'updateProjectInstruction',
     'updateVolume',
     'withdrawProposal'
 ));
@@ -50,9 +52,11 @@ CREATE DOMAIN storyos.event_kind AS text CHECK (VALUE IN (
     'chapter_updated',
     'current_chapter_set',
     'human_readable_manuscript_export_settled',
+    'memory_entry_deleted',
     'project_assistance_updated',
     'project_created',
     'project_export_settled',
+    'project_instruction_updated',
     'project_updated',
     'volume_created',
     'volume_deleted',
@@ -611,7 +615,7 @@ CREATE TABLE storyos.author_command_admissions (
             AND local_intent_sequence IS NULL
             AND challenge_consumed_at IS NOT NULL
             AND challenge_expires_at IS NOT NULL)
-        OR (command_kind = ANY (ARRAY['deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text])
+        OR (command_kind = ANY (ARRAY['deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text])
             AND action_class = 'explicit_project_command'::text
             AND editor_session_id IS NULL
             AND writer_generation IS NULL
@@ -853,7 +857,7 @@ BEGIN
 END
 $$;
 
-CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN (((new.action_class <> 'agent_run_control'::text) AND (new.command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission();
+CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN (((new.action_class <> 'agent_run_control'::text) AND (new.command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission();
 
 CREATE TABLE storyos.scope_counters (
     owner_user_id uuid NOT NULL,
@@ -974,7 +978,7 @@ CREATE TABLE storyos.domain_receipts (
             AND array_position(draft_artifact_refs, NULL::text) IS NULL
             AND array_position(artifact_lifecycle_event_refs, NULL::text) IS NULL
             AND array_position(condition_refs, NULL::text) IS NULL
-            AND (((command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR ((command_kind = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0))))
+            AND (((command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR ((command_kind = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0))))
         OR (command_kind = 'replanProposal'::text
             AND cardinality(expected_heads) = 1
             AND cardinality(prior_heads) <= 1
@@ -1362,6 +1366,44 @@ CREATE TABLE storyos.domain_receipts (
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
             AND (result_payload ->> 'reason'::text) = 'stale_assistance_revision'::text
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'updateProjectInstruction'::text
+            AND result_kind = 'authoritative_applied'::text
+            AND result_payload = '{}'::jsonb
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'updateProjectInstruction'::text
+            AND result_kind = 'no_effect'::text
+            AND result_payload ? 'reason'::text
+            AND (result_payload - 'reason'::text) = '{}'::jsonb
+            AND (result_payload ->> 'reason'::text) = 'text_unchanged'::text
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'updateProjectInstruction'::text
+            AND result_kind = 'conflicted'::text
+            AND result_payload ? 'reason'::text
+            AND (result_payload - 'reason'::text) = '{}'::jsonb
+            AND (result_payload ->> 'reason'::text) = 'stale_instruction_revision'::text
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'deleteMemoryEntry'::text
+            AND result_kind = 'authoritative_applied'::text
+            AND result_payload = '{}'::jsonb
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'deleteMemoryEntry'::text
+            AND result_kind = 'no_effect'::text
+            AND result_payload ? 'reason'::text
+            AND (result_payload - 'reason'::text) = '{}'::jsonb
+            AND (result_payload ->> 'reason'::text) = 'already_deleted'::text
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'deleteMemoryEntry'::text
+            AND result_kind = 'conflicted'::text
+            AND result_payload ? 'reason'::text
+            AND (result_payload - 'reason'::text) = '{}'::jsonb
+            AND (result_payload ->> 'reason'::text) = 'entry_changed'::text
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'createAgentRun'::text
@@ -1940,6 +1982,21 @@ CREATE TABLE storyos.project_activity_event_payloads (
             AND (payload ->> 'availability'::text) = ANY (ARRAY['available'::text, 'unavailable'::text])
             AND jsonb_typeof((payload -> 'revision'::text)) = 'string'::text
             AND (((payload - 'kind'::text) - 'availability'::text) - 'revision'::text) = '{}'::jsonb)
+        OR (jsonb_typeof(payload) = 'object'::text
+            AND event_kind = 'project_instruction_updated'::text
+            AND receipt_result_kind = 'authoritative_applied'::text
+            AND (payload ->> 'kind'::text) = 'project_instruction_updated'::text
+            AND jsonb_typeof((payload -> 'instruction_revision_id'::text)) = 'string'::text
+            AND jsonb_typeof((payload -> 'revision'::text)) = 'string'::text
+            AND (((payload - 'kind'::text) - 'instruction_revision_id'::text) - 'revision'::text) = '{}'::jsonb)
+        OR (jsonb_typeof(payload) = 'object'::text
+            AND event_kind = 'memory_entry_deleted'::text
+            AND receipt_result_kind = 'authoritative_applied'::text
+            AND (payload ->> 'kind'::text) = 'memory_entry_deleted'::text
+            AND jsonb_typeof((payload -> 'memory_entry_id'::text)) = 'string'::text
+            AND jsonb_typeof((payload -> 'version'::text)) = 'string'::text
+            AND jsonb_typeof((payload -> 'memory_revision'::text)) = 'string'::text
+            AND ((((payload - 'kind'::text) - 'memory_entry_id'::text) - 'version'::text) - 'memory_revision'::text) = '{}'::jsonb)
         OR (jsonb_typeof(payload) = 'object'::text
             AND event_kind = 'agent_run_created'::text
             AND receipt_result_kind = 'authoritative_applied'::text
@@ -2522,6 +2579,54 @@ BEGIN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'updateProjectAssistance with zero availability effect cannot have an authority or Activity relation';
+    END IF;
+
+  ELSIF scoped_command_kind = 'updateProjectInstruction' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF (activity_count, action_count, commit_count, revision_envelope_count,
+          payload_count)
+           <> (0, 0, 0, 0, 1)
+         OR payload_event_kind IS DISTINCT FROM 'project_instruction_updated' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'updateProjectInstruction applied requires one instruction Activity and zero manuscript authority';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'updateProjectInstruction with zero text effect cannot have an authority or Activity relation';
+    END IF;
+
+  ELSIF scoped_command_kind = 'deleteMemoryEntry' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF (activity_count, action_count, commit_count, revision_envelope_count,
+          payload_count)
+           <> (0, 0, 0, 0, 1)
+         OR payload_event_kind IS DISTINCT FROM 'memory_entry_deleted' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'deleteMemoryEntry applied requires one Memory Activity and zero manuscript authority';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'deleteMemoryEntry with zero Memory effect cannot have an authority or Activity relation';
     END IF;
 
   ELSIF scoped_command_kind = 'createAgentRun' THEN
@@ -3686,9 +3791,10 @@ CREATE TABLE storyos.project_destination_grants (
     processing_destination_identity uuid NOT NULL,
     grant_kind text NOT NULL,
     grant_scope text,
-    CONSTRAINT project_destination_grants_grant_scope_check CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'research_tool_v1'::text]))),
-    CONSTRAINT project_destination_grants_kind_check CHECK ((grant_kind = ANY (ARRAY['host_fake_use'::text, 'volcengine_agent_plan_use'::text, 'research_tool_use'::text]))),
+    CONSTRAINT project_destination_grants_grant_scope_check CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'research_tool_v1'::text, 'manuscript_embedding_v1'::text]))),
+    CONSTRAINT project_destination_grants_kind_check CHECK ((grant_kind = ANY (ARRAY['host_fake_use'::text, 'volcengine_agent_plan_use'::text, 'research_tool_use'::text, 'manuscript_embedding_use'::text]))),
     CONSTRAINT project_destination_grants_research_scope CHECK (((grant_kind = 'research_tool_use'::text) = (grant_scope IS NOT DISTINCT FROM 'research_tool_v1'::text))),
+    CONSTRAINT project_destination_grants_embedding_scope CHECK (((grant_kind = 'manuscript_embedding_use'::text) = (grant_scope IS NOT DISTINCT FROM 'manuscript_embedding_v1'::text))),
     CONSTRAINT project_destination_grants_pkey PRIMARY KEY (owner_user_id, project_id, grant_id),
     CONSTRAINT project_destination_grants_owner_user_id_project_id_proces_fkey FOREIGN KEY (owner_user_id, project_id, processing_destination_identity) REFERENCES storyos.processing_destination_identities(owner_user_id, project_id, processing_destination_identity) MATCH FULL
 );
@@ -3712,14 +3818,15 @@ CREATE TABLE storyos.project_external_use_binding_revisions (
     grant_id uuid NOT NULL,
     model_registration_revision uuid,
     tool_registration_revision uuid,
+    embedding_registration_revision uuid,
     credential_source text NOT NULL,
     credential_reference text,
     budget_bounds text NOT NULL,
     CONSTRAINT project_external_use_binding_revisio_credential_reference_check CHECK (((char_length(credential_reference) >= 1) AND (char_length(credential_reference) <= 500))),
-    CONSTRAINT project_external_use_binding_revisions_budget_bounds_check CHECK ((budget_bounds = ANY (ARRAY['not_required'::text, 'unqualified'::text, 'agent_plan_request_v1'::text, 'agent_plan_request_v2'::text, 'agent_plan_request_v3'::text, 'agent_plan_request_v4'::text]))),
+    CONSTRAINT project_external_use_binding_revisions_budget_bounds_check CHECK ((budget_bounds = ANY (ARRAY['not_required'::text, 'unqualified'::text, 'agent_plan_request_v1'::text, 'agent_plan_request_v2'::text, 'agent_plan_request_v3'::text, 'agent_plan_request_v4'::text, 'embedding_request_v1'::text]))),
     CONSTRAINT project_external_use_binding_revisions_credential_shape CHECK (((credential_source = 'none'::text) = (credential_reference IS NULL))),
     CONSTRAINT project_external_use_binding_revisions_credential_source_check CHECK ((credential_source = ANY (ARRAY['none'::text, 'operator_quota'::text]))),
-    CONSTRAINT project_external_use_binding_revisions_registration_shape CHECK ((num_nonnulls(model_registration_revision, tool_registration_revision) = 1)),
+    CONSTRAINT project_external_use_binding_revisions_registration_shape CHECK ((num_nonnulls(model_registration_revision, tool_registration_revision, embedding_registration_revision) = 1)),
     CONSTRAINT project_external_use_binding_revisions_evidence_revision_check CHECK (((evidence_revision >= (1)::numeric) AND (evidence_revision <= '18446744073709551615'::numeric))),
     CONSTRAINT project_external_use_binding_revisions_pkey PRIMARY KEY (owner_user_id, project_id, project_model_use_binding_revision),
     CONSTRAINT project_external_use_binding_revisions_registration_key UNIQUE (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision),
@@ -3793,6 +3900,91 @@ CREATE POLICY project_policy_revisions_exact_scope ON storyos.project_policy_rev
 
 GRANT SELECT,INSERT ON TABLE storyos.project_policy_revisions TO storyos_runtime;
 
+CREATE TABLE storyos.project_instruction_revisions (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    instruction_revision_id uuid NOT NULL,
+    revision numeric(20,0) NOT NULL,
+    text text NOT NULL,
+    receipt_id uuid NOT NULL,
+    CONSTRAINT project_instruction_revisions_revision_check CHECK (((revision >= (1)::numeric) AND (revision <= '18446744073709551615'::numeric))),
+    CONSTRAINT project_instruction_revisions_pkey PRIMARY KEY (owner_user_id, project_id, revision),
+    CONSTRAINT project_instruction_revisions_identity_key UNIQUE (owner_user_id, project_id, instruction_revision_id),
+    CONSTRAINT project_instruction_revisions_receipt_key UNIQUE (owner_user_id, project_id, receipt_id),
+    CONSTRAINT project_instruction_revisions_project_fkey FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL,
+    CONSTRAINT project_instruction_revisions_receipt_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL
+);
+
+ALTER TABLE storyos.project_instruction_revisions ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.project_instruction_revisions FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY project_instruction_revisions_exact_scope ON storyos.project_instruction_revisions USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.project_instruction_revisions TO storyos_runtime;
+
+-- Agent Memory (ADR 0094 sections 3 and 4)
+
+CREATE TABLE storyos.project_memory_heads (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    memory_revision numeric(20,0) NOT NULL,
+    next_entry_number numeric(20,0) NOT NULL,
+    CONSTRAINT project_memory_heads_bounds CHECK (((memory_revision >= (1)::numeric) AND (memory_revision <= '18446744073709551615'::numeric) AND (next_entry_number >= (1)::numeric) AND (next_entry_number <= '18446744073709551615'::numeric))),
+    CONSTRAINT project_memory_heads_pkey PRIMARY KEY (owner_user_id, project_id),
+    CONSTRAINT project_memory_heads_project_fkey FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL
+);
+
+ALTER TABLE storyos.project_memory_heads ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.project_memory_heads FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY project_memory_heads_exact_scope ON storyos.project_memory_heads USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT,UPDATE ON TABLE storyos.project_memory_heads TO storyos_runtime;
+
+CREATE TABLE storyos.memory_entry_versions (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    memory_entry_id uuid NOT NULL,
+    entry_number numeric(20,0) NOT NULL,
+    version numeric(20,0) NOT NULL,
+    memory_revision numeric(20,0) NOT NULL,
+    state text NOT NULL,
+    entry_type text NOT NULL,
+    origin text NOT NULL,
+    title text NOT NULL,
+    description text NOT NULL,
+    text text NOT NULL,
+    cause jsonb NOT NULL,
+    source_references jsonb NOT NULL,
+    recorded_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    flag_reason text,
+    flag_source jsonb,
+    CONSTRAINT memory_entry_versions_bounds CHECK (((entry_number >= (1)::numeric) AND (entry_number <= '18446744073709551615'::numeric) AND (version >= (1)::numeric) AND (version <= '18446744073709551615'::numeric) AND (memory_revision >= (1)::numeric) AND (memory_revision <= '18446744073709551615'::numeric))),
+    CONSTRAINT memory_entry_versions_flag CHECK (((COALESCE((cause ->> 'kind'::text), ''::text) = 'conflict_flag'::text) = (flag_reason IS NOT NULL)) AND ((flag_reason IS NULL) = (flag_source IS NULL)) AND ((flag_reason IS NULL) OR ((char_length(flag_reason) >= 1) AND (state = 'current'::text) AND (jsonb_typeof(flag_source) = 'object'::text)))),
+    CONSTRAINT memory_entry_versions_state_check CHECK ((state = ANY (ARRAY['current'::text, 'deleted'::text]))),
+    CONSTRAINT memory_entry_versions_type_check CHECK ((entry_type = ANY (ARRAY['writing_preference'::text, 'foreshadowing'::text, 'character'::text, 'relationship'::text, 'major_event'::text, 'other'::text]))),
+    CONSTRAINT memory_entry_versions_origin_check CHECK ((origin = ANY (ARRAY['author_request'::text, 'conversation'::text, 'chapter'::text]))),
+    CONSTRAINT memory_entry_versions_shape CHECK (((char_length(title) >= 1) AND (char_length(description) >= 1) AND (jsonb_typeof(cause) = 'object'::text) AND (jsonb_typeof(source_references) = 'array'::text))),
+    CONSTRAINT memory_entry_versions_pkey PRIMARY KEY (owner_user_id, project_id, memory_entry_id, version),
+    CONSTRAINT memory_entry_versions_number_key UNIQUE (owner_user_id, project_id, entry_number, version),
+    CONSTRAINT memory_entry_versions_revision_key UNIQUE (owner_user_id, project_id, memory_entry_id, memory_revision),
+    CONSTRAINT memory_entry_versions_project_fkey FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL
+);
+
+CREATE UNIQUE INDEX memory_entry_versions_one_number ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, entry_number) WHERE (version = (1)::numeric);
+
+CREATE INDEX memory_entry_versions_revision_idx ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, memory_revision);
+
+ALTER TABLE storyos.memory_entry_versions ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_entry_versions FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_entry_versions_exact_scope ON storyos.memory_entry_versions USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.memory_entry_versions TO storyos_runtime;
+
 -- Agents, Conversations, and Agent Runs
 
 CREATE TABLE storyos.project_agents (
@@ -3861,19 +4053,27 @@ CREATE POLICY conversation_memory_settings_exact_scope ON storyos.conversation_m
 
 GRANT SELECT,INSERT ON TABLE storyos.conversation_memory_settings TO storyos_runtime;
 
+-- The kind of an AgentRun (ADR 0094 section 5). A Run of the author has its Project Conversation, its
+-- Conversation Memory Settings revision, its Chapter, its author message, and the Receipt of
+-- `createAgentRun`. A background Run (`memory_capture`, `memory_consolidation`) has none of them, so
+-- the two foreign keys of these columns use `MATCH SIMPLE`, as the current Chapter of a Project does,
+-- and `agent_runs_kind_shape` refuses each other form. For the same reason, the Conversation of
+-- `model_attempts` and the Receipt of `operation_requirements` and of `context_assembly_manifests`
+-- are empty for a background Run.
+
 CREATE TABLE storyos.agent_runs (
     owner_user_id uuid NOT NULL,
     project_id uuid NOT NULL,
     run_id uuid NOT NULL,
     project_agent_id uuid NOT NULL,
-    conversation_id uuid NOT NULL,
-    memory_settings_revision uuid NOT NULL,
+    conversation_id uuid,
+    memory_settings_revision uuid,
     grant_id uuid NOT NULL,
     project_model_use_binding_revision uuid NOT NULL,
-    chapter_id uuid NOT NULL,
-    author_message text NOT NULL,
+    chapter_id uuid,
+    author_message text,
     status storyos.agent_run_status NOT NULL,
-    receipt_id uuid NOT NULL,
+    receipt_id uuid,
     claim_generation bigint DEFAULT 0 NOT NULL,
     fence_token bigint DEFAULT 0 NOT NULL,
     lease_expires_at timestamp with time zone,
@@ -3882,17 +4082,22 @@ CREATE TABLE storyos.agent_runs (
     predecessor_run_id uuid,
     active_decision_position numeric(20,0) DEFAULT 0 NOT NULL,
     model_registration_revision uuid NOT NULL,
+    project_instruction_revision_id uuid,
+    run_kind text NOT NULL,
     CONSTRAINT agent_runs_active_decision_position_check CHECK (((active_decision_position >= (0)::numeric) AND (active_decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT agent_runs_author_message_check CHECK (((char_length(author_message) >= 1) AND (char_length(author_message) <= 8000))),
     CONSTRAINT agent_runs_claim_generation_check CHECK ((claim_generation >= 0)),
     CONSTRAINT agent_runs_fence_token_check CHECK ((fence_token >= 0)),
+    CONSTRAINT agent_runs_kind_shape CHECK (((((run_kind = 'author'::text) AND (conversation_id IS NOT NULL) AND (memory_settings_revision IS NOT NULL) AND (chapter_id IS NOT NULL) AND (author_message IS NOT NULL) AND (receipt_id IS NOT NULL)) OR ((run_kind <> 'author'::text) AND (conversation_id IS NULL) AND (memory_settings_revision IS NULL) AND (chapter_id IS NULL) AND (author_message IS NULL) AND (receipt_id IS NULL))) IS TRUE)),
+    CONSTRAINT agent_runs_run_kind_check CHECK ((run_kind = ANY (ARRAY['author'::text, 'memory_capture'::text, 'memory_consolidation'::text]))),
     CONSTRAINT agent_runs_pkey PRIMARY KEY (owner_user_id, project_id, run_id),
     CONSTRAINT agent_runs_binding_registration_fkey FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) MATCH FULL,
-    CONSTRAINT agent_runs_owner_user_id_project_id_conversation_id_memory_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision) MATCH FULL,
+    CONSTRAINT agent_runs_owner_user_id_project_id_conversation_id_memory_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision),
     CONSTRAINT agent_runs_owner_user_id_project_id_grant_id_fkey FOREIGN KEY (owner_user_id, project_id, grant_id) REFERENCES storyos.project_destination_grants(owner_user_id, project_id, grant_id) MATCH FULL,
     CONSTRAINT agent_runs_owner_user_id_project_id_project_model_use_bind_fkey FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision) MATCH FULL,
-    CONSTRAINT agent_runs_owner_user_id_project_id_receipt_id_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL,
-    CONSTRAINT agent_runs_predecessor_fk FOREIGN KEY (owner_user_id, project_id, predecessor_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)
+    CONSTRAINT agent_runs_owner_user_id_project_id_receipt_id_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id),
+    CONSTRAINT agent_runs_predecessor_fk FOREIGN KEY (owner_user_id, project_id, predecessor_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id),
+    CONSTRAINT agent_runs_project_instruction_revision_fkey FOREIGN KEY (owner_user_id, project_id, project_instruction_revision_id) REFERENCES storyos.project_instruction_revisions(owner_user_id, project_id, instruction_revision_id)
 );
 
 CREATE INDEX agent_runs_binding_idx ON storyos.agent_runs USING btree (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision);
@@ -3927,14 +4132,14 @@ CREATE TABLE storyos.operation_requirements (
     operation_requirement_id uuid NOT NULL,
     run_id uuid NOT NULL,
     input_snapshot_id uuid NOT NULL,
-    receipt_id uuid NOT NULL,
+    receipt_id uuid,
     payload jsonb NOT NULL,
     requirement_role text DEFAULT 'primary'::text NOT NULL,
     decision_position numeric(20,0) DEFAULT 0 NOT NULL,
     CONSTRAINT operation_requirements_decision_position_check CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT operation_requirements_requirement_role_check CHECK ((requirement_role = ANY (ARRAY['primary'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text]))),
     CONSTRAINT operation_requirements_pkey PRIMARY KEY (owner_user_id, project_id, operation_requirement_id),
-    CONSTRAINT operation_requirements_owner_user_id_project_id_receipt_id_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL,
+    CONSTRAINT operation_requirements_owner_user_id_project_id_receipt_id_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id),
     CONSTRAINT operation_requirements_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL
 );
 
@@ -3960,21 +4165,21 @@ CREATE TABLE storyos.context_assembly_manifests (
     destination_context_manifest_id uuid,
     outbound_disclosure_manifest_id uuid,
     payload jsonb NOT NULL,
-    receipt_id uuid NOT NULL,
+    receipt_id uuid,
     manifest_role text DEFAULT 'decision'::text NOT NULL,
     decision_position numeric(20,0) DEFAULT 0 NOT NULL,
     disclosure_grant_id uuid,
     disclosure_grant_scope text,
     CONSTRAINT context_assembly_manifests_decision_position_check CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT context_assembly_manifests_destination_pair CHECK (((((destination_context_manifest_id IS NULL) AND (outbound_disclosure_manifest_id IS NULL)) OR ((destination_context_manifest_id IS NOT NULL) AND (outbound_disclosure_manifest_id IS NOT NULL))) IS TRUE)),
-    CONSTRAINT context_assembly_manifests_disclosure_grant_scope_check CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'research_tool_v1'::text]))),
+    CONSTRAINT context_assembly_manifests_disclosure_grant_scope_check CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'research_tool_v1'::text, 'manuscript_embedding_v1'::text]))),
     CONSTRAINT context_assembly_manifests_disclosure_grant_shape CHECK (((disclosure_grant_id IS NULL) = (disclosure_grant_scope IS NULL))),
     CONSTRAINT context_assembly_manifests_manifest_role_check CHECK ((manifest_role = ANY (ARRAY['decision'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text]))),
     CONSTRAINT context_assembly_manifests_sufficiency_check CHECK ((sufficiency = ANY (ARRAY['complete'::text, 'blocked'::text]))),
     CONSTRAINT context_assembly_manifests_owner_user_id_project_id_operati_key UNIQUE (owner_user_id, project_id, operation_requirement_id),
     CONSTRAINT context_assembly_manifests_pkey PRIMARY KEY (owner_user_id, project_id, context_assembly_manifest_id),
     CONSTRAINT context_assembly_manifests_owner_user_id_project_id_operat_fkey FOREIGN KEY (owner_user_id, project_id, operation_requirement_id) REFERENCES storyos.operation_requirements(owner_user_id, project_id, operation_requirement_id) MATCH FULL,
-    CONSTRAINT context_assembly_manifests_owner_user_id_project_id_receip_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL,
+    CONSTRAINT context_assembly_manifests_owner_user_id_project_id_receip_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id),
     CONSTRAINT context_assembly_manifests_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL
 );
 
@@ -4003,7 +4208,7 @@ CREATE TABLE storyos.model_attempts (
     outbound_disclosure_manifest_id uuid NOT NULL,
     wire_payload_projection_id uuid NOT NULL,
     model_invocation_id uuid NOT NULL,
-    conversation_id uuid NOT NULL,
+    conversation_id uuid,
     decision_id uuid,
     continuation_binding_id uuid,
     dispatch_state text NOT NULL,
@@ -4013,7 +4218,7 @@ CREATE TABLE storyos.model_attempts (
     CONSTRAINT model_attempts_decision_position_check CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT model_attempts_dispatch_state_check CHECK ((dispatch_state = ANY (ARRAY['uncertain'::text, 'settled'::text]))),
     CONSTRAINT model_attempts_pkey PRIMARY KEY (owner_user_id, project_id, model_attempt_id),
-    CONSTRAINT model_attempts_owner_user_id_project_id_conversation_id_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id) MATCH FULL,
+    CONSTRAINT model_attempts_owner_user_id_project_id_conversation_id_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id),
     CONSTRAINT model_attempts_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL
 );
 
@@ -4093,6 +4298,120 @@ GRANT SELECT,INSERT ON TABLE storyos.tool_calls TO storyos_runtime;
 
 GRANT UPDATE(state, refusal, destination_attempt_id, attempt, effect_outcome, result_text, result_digest, result_bytes) ON TABLE storyos.tool_calls TO storyos_runtime;
 
+-- Embedding Attempts (ADR 0095 section 3). One row is one embedding request: the Destination Attempt
+-- Admission Decision, the Operation Input Snapshot, the Wire Payload Projection, the Destination
+-- Attempt, and the Outbound Disclosure Event. A NULL settlement is OutcomeUnknown. The Project Export
+-- Archive does not hold these rows.
+
+CREATE TABLE storyos.embedding_attempts (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    embedding_attempt_id uuid NOT NULL,
+    cause text NOT NULL,
+    grant_id uuid NOT NULL,
+    project_model_use_binding_revision uuid NOT NULL,
+    attempt jsonb NOT NULL,
+    settlement text,
+    CONSTRAINT embedding_attempts_cause_check CHECK ((cause = ANY (ARRAY['passage_index'::text, 'search_question'::text]))),
+    CONSTRAINT embedding_attempts_settlement_check CHECK ((settlement = ANY (ARRAY['vector'::text, 'invalid_result'::text, 'rejected'::text, 'not_submitted'::text, 'outcome_unknown'::text]))),
+    CONSTRAINT embedding_attempts_attempt_check CHECK ((jsonb_typeof(attempt) = 'object'::text)),
+    CONSTRAINT embedding_attempts_pkey PRIMARY KEY (owner_user_id, project_id, embedding_attempt_id),
+    CONSTRAINT embedding_attempts_grant_fkey FOREIGN KEY (owner_user_id, project_id, grant_id) REFERENCES storyos.project_destination_grants(owner_user_id, project_id, grant_id) MATCH FULL,
+    CONSTRAINT embedding_attempts_binding_fkey FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision) MATCH FULL
+);
+
+ALTER TABLE storyos.embedding_attempts ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.embedding_attempts FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY embedding_attempts_exact_scope ON storyos.embedding_attempts USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.embedding_attempts TO storyos_runtime;
+
+GRANT UPDATE(attempt, settlement) ON TABLE storyos.embedding_attempts TO storyos_runtime;
+
+-- The passage index work of one Chapter (ADR 0095 section 4). A change of the Chapter marks the row
+-- in the transaction of the change: the mark generation increases and the quiet time starts again.
+-- The work is not a Run. The Worker claims a row with a lease and a fence token, in the form of the
+-- export work, and the completion records the mark generation that it covered. The row is pending
+-- while its mark generation is higher than its completed generation, or while it has another cut
+-- revision. The Project Export Archive does not hold these rows.
+
+CREATE TABLE storyos.passage_index_work (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    chapter_id uuid NOT NULL,
+    embedding_registration_revision uuid NOT NULL,
+    chapter_order bigint NOT NULL,
+    mark_generation bigint DEFAULT 1 NOT NULL,
+    completed_generation bigint DEFAULT 0 NOT NULL,
+    indexed_cut_revision text,
+    not_before timestamp with time zone NOT NULL,
+    claim_generation bigint DEFAULT 0 NOT NULL,
+    fence_token bigint DEFAULT 0 NOT NULL,
+    lease_expires_at timestamp with time zone,
+    CONSTRAINT passage_index_work_chapter_order_check CHECK ((chapter_order >= 1)),
+    CONSTRAINT passage_index_work_generation_check CHECK (((mark_generation >= 1) AND (completed_generation >= 0) AND (completed_generation <= mark_generation))),
+    CONSTRAINT passage_index_work_indexed_cut_revision_check CHECK (((indexed_cut_revision IS NULL) OR (length(indexed_cut_revision) BETWEEN 1 AND 128))),
+    CONSTRAINT passage_index_work_claim_check CHECK (((claim_generation >= 0) AND (fence_token = claim_generation))),
+    CONSTRAINT passage_index_work_pkey PRIMARY KEY (owner_user_id, project_id, chapter_id),
+    CONSTRAINT passage_index_work_chapter_fkey FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id) MATCH FULL
+);
+
+ALTER TABLE storyos.passage_index_work ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.passage_index_work FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY passage_index_work_exact_scope ON storyos.passage_index_work USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
+
+CREATE POLICY passage_index_work_worker_select ON storyos.passage_index_work FOR SELECT USING (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL)));
+
+CREATE POLICY passage_index_work_worker_update ON storyos.passage_index_work FOR UPDATE USING (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))) WITH CHECK (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL)));
+
+GRANT SELECT,INSERT,UPDATE ON TABLE storyos.passage_index_work TO storyos_runtime;
+
+-- Memory work schedules (ADR 0094 sections 5 and 6). One row for each source of background Memory work:
+-- its kind, its source, and its due time, which can be empty. `source_id` is the identity of the source.
+-- The source of the kind `conversation_capture` is a Project Conversation, and `conversation_id` names it
+-- too. The completion of a Run of the author in the Conversation sets the due time in the transaction of
+-- the settlement. The source of the kind `consolidation` is the Project. The settlement of a capture that
+-- stored observations and the settlement of a pass set its due time. The source of the kind `chapter_capture`
+-- is a Chapter, and `chapter_id` names it too. Each Authoritative Commit that changes the text of the Chapter
+-- sets its due time in the transaction of the commit. A `held` row waits for a Project that cannot do
+-- background work, and it has no due time. A Worker claims a due row with a row lock in the Worker scope,
+-- and the transaction of its decision makes the due time empty. The runtime role can read, insert, and
+-- update a row, and it cannot delete a row.
+
+CREATE TABLE storyos.memory_work_schedules (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    work_kind text NOT NULL,
+    source_id uuid NOT NULL,
+    conversation_id uuid,
+    chapter_id uuid,
+    due_at timestamp with time zone,
+    held boolean DEFAULT false NOT NULL,
+    CONSTRAINT memory_work_schedules_pkey PRIMARY KEY (owner_user_id, project_id, work_kind, source_id),
+    CONSTRAINT memory_work_schedules_source_check CHECK (((((work_kind = 'conversation_capture'::text) AND (conversation_id = source_id) AND (chapter_id IS NULL)) OR ((work_kind = 'consolidation'::text) AND (conversation_id IS NULL) AND (chapter_id IS NULL) AND (source_id = project_id)) OR ((work_kind = 'chapter_capture'::text) AND (conversation_id IS NULL) AND (chapter_id = source_id))) IS TRUE)),
+    CONSTRAINT memory_work_schedules_held_check CHECK (((NOT held) OR ((work_kind = 'chapter_capture'::text) AND (due_at IS NULL)))),
+    CONSTRAINT memory_work_schedules_conversation_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id),
+    CONSTRAINT memory_work_schedules_chapter_fkey FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id)
+);
+
+CREATE INDEX memory_work_schedules_due_idx ON storyos.memory_work_schedules USING btree (due_at) WHERE (due_at IS NOT NULL);
+
+ALTER TABLE storyos.memory_work_schedules ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_work_schedules FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_work_schedules_exact_scope ON storyos.memory_work_schedules USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
+
+CREATE POLICY memory_work_schedules_worker_select ON storyos.memory_work_schedules FOR SELECT USING (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL)));
+
+CREATE POLICY memory_work_schedules_worker_update ON storyos.memory_work_schedules FOR UPDATE USING (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))) WITH CHECK (((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL)));
+
+GRANT SELECT,INSERT,UPDATE ON TABLE storyos.memory_work_schedules TO storyos_runtime;
+
 -- Activity Run Events. An append-only record of the AgentRun: one `tool_call_settled` event for each
 -- resolved ToolCall, one `tool_call_late_result` event when a result arrived after the fence of a
 -- ToolCall, and one `tool_registration_quarantined` event when a dispatch found Tool Contract Drift.
@@ -4122,6 +4441,153 @@ ALTER TABLE storyos.agent_run_events FORCE ROW LEVEL SECURITY;
 CREATE POLICY agent_run_events_exact_scope ON storyos.agent_run_events USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
 
 GRANT SELECT,INSERT ON TABLE storyos.agent_run_events TO storyos_runtime;
+
+-- Memory Entry reads (ADR 0094 sections 4 and 8). A settled `read_memory_entry` call writes one row in
+-- the transaction that settles it: the ToolCall, its Run, and the entry version that StoryOS gave to
+-- the Run. The newest row of an entry is the time of its last read. A refused read writes no row. The
+-- runtime role can only read and insert them.
+
+CREATE TABLE storyos.memory_entry_reads (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    tool_call_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    memory_entry_id uuid NOT NULL,
+    version numeric(20,0) NOT NULL,
+    read_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    CONSTRAINT memory_entry_reads_pkey PRIMARY KEY (owner_user_id, project_id, tool_call_id),
+    CONSTRAINT memory_entry_reads_tool_call_fkey FOREIGN KEY (owner_user_id, project_id, tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL,
+    CONSTRAINT memory_entry_reads_run_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT memory_entry_reads_version_fkey FOREIGN KEY (owner_user_id, project_id, memory_entry_id, version) REFERENCES storyos.memory_entry_versions(owner_user_id, project_id, memory_entry_id, version) MATCH FULL
+);
+
+CREATE INDEX memory_entry_reads_entry_idx ON storyos.memory_entry_reads USING btree (owner_user_id, project_id, memory_entry_id, read_at);
+
+ALTER TABLE storyos.memory_entry_reads ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_entry_reads FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_entry_reads_exact_scope ON storyos.memory_entry_reads USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.memory_entry_reads TO storyos_runtime;
+
+-- Memory captures (ADR 0094 sections 5 and 8). One row for each capture: its source, its background
+-- Run, its start time, its state, and its outcome. The source is a Project Conversation with the first
+-- and the last Run whose messages the capture read and the Conversation Memory Settings revision that
+-- permitted it, or a Chapter with its Revision. The Run pins the Model Registration, and thus the
+-- mapping revision that gives the instruction text. The settled call of `record_memory_observations`
+-- settles the capture in its transaction. The runtime role can read and
+-- insert a row, it can change only the state and the outcome, and it cannot delete a row.
+
+CREATE TABLE storyos.memory_captures (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    capture_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    source_kind text NOT NULL,
+    conversation_id uuid,
+    first_run_id uuid,
+    last_run_id uuid,
+    chapter_id uuid,
+    chapter_revision_id uuid,
+    memory_settings_revision uuid,
+    started_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    state text DEFAULT 'running'::text NOT NULL,
+    outcome text,
+    failure_reason text,
+    CONSTRAINT memory_captures_pkey PRIMARY KEY (owner_user_id, project_id, capture_id),
+    CONSTRAINT memory_captures_run_key UNIQUE (owner_user_id, project_id, run_id),
+    CONSTRAINT memory_captures_source_check CHECK (((((source_kind = 'conversation'::text) AND (conversation_id IS NOT NULL) AND (first_run_id IS NOT NULL) AND (last_run_id IS NOT NULL) AND (memory_settings_revision IS NOT NULL) AND (chapter_id IS NULL) AND (chapter_revision_id IS NULL)) OR ((source_kind = 'chapter'::text) AND (chapter_id IS NOT NULL) AND (chapter_revision_id IS NOT NULL) AND (conversation_id IS NULL) AND (first_run_id IS NULL) AND (last_run_id IS NULL) AND (memory_settings_revision IS NULL))) IS TRUE)),
+    CONSTRAINT memory_captures_state_check CHECK (((((state = 'running'::text) AND (outcome IS NULL)) OR ((state = 'settled'::text) AND (outcome = ANY (ARRAY['observations_recorded'::text, 'no_observation'::text, 'step_limit'::text, 'failed'::text])))) IS TRUE)),
+    CONSTRAINT memory_captures_failure_reason_check CHECK ((((COALESCE((outcome = 'failed'::text), false) = (failure_reason IS NOT NULL)) AND ((failure_reason IS NULL) OR ((char_length(failure_reason) >= 1) AND (char_length(failure_reason) <= 64)))) IS TRUE)),
+    CONSTRAINT memory_captures_run_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT memory_captures_conversation_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id),
+    CONSTRAINT memory_captures_settings_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision),
+    CONSTRAINT memory_captures_first_run_fkey FOREIGN KEY (owner_user_id, project_id, first_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id),
+    CONSTRAINT memory_captures_last_run_fkey FOREIGN KEY (owner_user_id, project_id, last_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id),
+    CONSTRAINT memory_captures_chapter_revision_fkey FOREIGN KEY (owner_user_id, project_id, chapter_id, chapter_revision_id) REFERENCES storyos.authoritative_revisions(owner_user_id, project_id, manuscript_object_id, revision_id)
+);
+
+ALTER TABLE storyos.memory_captures ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_captures FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_captures_exact_scope ON storyos.memory_captures USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.memory_captures TO storyos_runtime;
+
+GRANT UPDATE(state, outcome, failure_reason) ON TABLE storyos.memory_captures TO storyos_runtime;
+
+-- Memory Observations (ADR 0094 sections 5, 7, and 8). One row for each item of the settled list of a
+-- capture, in list order from position 1: its kind, its state, and its type, title, and text, or for a
+-- conflict its entry number and reason. An observation waits until a consolidation pass consumes it,
+-- and it stays as the record of its capture. The runtime
+-- role can read and insert a row, it can change only the state, and it cannot delete a row.
+
+CREATE TABLE storyos.memory_observations (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    capture_id uuid NOT NULL,
+    "position" numeric(20,0) NOT NULL,
+    entry_type text,
+    title text,
+    text text,
+    state text DEFAULT 'waiting'::text NOT NULL,
+    kind text DEFAULT 'observation'::text NOT NULL,
+    entry_number numeric(20,0),
+    reason text,
+    CONSTRAINT memory_observations_kind_shape CHECK ((((kind = 'observation'::text) AND (entry_type IS NOT NULL) AND (title IS NOT NULL) AND (text IS NOT NULL) AND (entry_number IS NULL) AND (reason IS NULL)) OR ((kind = 'conflict'::text) AND (entry_type IS NULL) AND (title IS NULL) AND (text IS NULL) AND (entry_number >= (1)::numeric) AND (char_length(reason) >= 1)))),
+    CONSTRAINT memory_observations_pkey PRIMARY KEY (owner_user_id, project_id, capture_id, "position"),
+    CONSTRAINT memory_observations_position_check CHECK ((("position" >= (1)::numeric) AND ("position" <= '18446744073709551615'::numeric))),
+    CONSTRAINT memory_observations_type_check CHECK ((entry_type = ANY (ARRAY['writing_preference'::text, 'foreshadowing'::text, 'character'::text, 'relationship'::text, 'major_event'::text, 'other'::text]))),
+    CONSTRAINT memory_observations_state_check CHECK ((state = ANY (ARRAY['waiting'::text, 'consumed'::text]))),
+    CONSTRAINT memory_observations_capture_fkey FOREIGN KEY (owner_user_id, project_id, capture_id) REFERENCES storyos.memory_captures(owner_user_id, project_id, capture_id) MATCH FULL
+);
+
+ALTER TABLE storyos.memory_observations ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_observations FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_observations_exact_scope ON storyos.memory_observations USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.memory_observations TO storyos_runtime;
+
+GRANT UPDATE(state) ON TABLE storyos.memory_observations TO storyos_runtime;
+
+-- Memory consolidation passes (ADR 0094 sections 6 and 8). One row for each pass: its background Run,
+-- its start time, the Memory revision that it pinned, and the observations of its input in input
+-- order as [capture, position] pairs. The settled call of `apply_memory_operations` gives the outcome
+-- and each operation of the reply with its result. The runtime role can read and insert a row, it can
+-- change only the outcome, the failure reason, and the operations, and it cannot delete a row.
+
+CREATE TABLE storyos.memory_consolidation_passes (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    pass_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    started_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    memory_revision numeric(20,0) NOT NULL,
+    observations jsonb NOT NULL,
+    outcome text,
+    failure_reason text,
+    operations jsonb,
+    CONSTRAINT memory_consolidation_passes_pkey PRIMARY KEY (owner_user_id, project_id, pass_id),
+    CONSTRAINT memory_consolidation_passes_run_key UNIQUE (owner_user_id, project_id, run_id),
+    CONSTRAINT memory_consolidation_passes_revision_check CHECK (((memory_revision >= (0)::numeric) AND (memory_revision <= '18446744073709551615'::numeric))),
+    CONSTRAINT memory_consolidation_passes_shape CHECK (((jsonb_typeof(observations) = 'array'::text) AND ((operations IS NULL) OR (jsonb_typeof(operations) = 'array'::text)))),
+    CONSTRAINT memory_consolidation_passes_outcome_check CHECK ((((outcome IS NULL) OR (outcome = ANY (ARRAY['applied'::text, 'no_operation'::text, 'stale'::text, 'failed'::text]))) AND (COALESCE((outcome = 'failed'::text), false) = (failure_reason IS NOT NULL)) AND ((failure_reason IS NULL) OR ((char_length(failure_reason) >= 1) AND (char_length(failure_reason) <= 64)))) IS TRUE),
+    CONSTRAINT memory_consolidation_passes_run_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL
+);
+
+ALTER TABLE storyos.memory_consolidation_passes ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.memory_consolidation_passes FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memory_consolidation_passes_exact_scope ON storyos.memory_consolidation_passes USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.memory_consolidation_passes TO storyos_runtime;
+
+GRANT UPDATE(outcome, failure_reason, operations) ON TABLE storyos.memory_consolidation_passes TO storyos_runtime;
 
 -- Source Snapshots and Source Gaps. The settlement of a research ToolCall writes them in its own
 -- transaction: one immutable Snapshot for each captured search entry or page, and one Gap for each

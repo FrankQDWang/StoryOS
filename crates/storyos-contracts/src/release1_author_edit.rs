@@ -169,6 +169,12 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "updateProjectAssistance")]
     #[ts(rename = "updateProjectAssistance")]
     UpdateProjectAssistance,
+    #[serde(rename = "updateProjectInstruction")]
+    #[ts(rename = "updateProjectInstruction")]
+    UpdateProjectInstruction,
+    #[serde(rename = "deleteMemoryEntry")]
+    #[ts(rename = "deleteMemoryEntry")]
+    DeleteMemoryEntry,
     #[serde(rename = "createAgentRun")]
     #[ts(rename = "createAgentRun")]
     CreateAgentRun,

@@ -1,15 +1,27 @@
 //! The Model Provider Adapter of the Contract-Faithful Fake Destination.
 
+mod capture_plan;
+mod consolidation_plan;
 mod create_plan;
+mod embedding;
 mod load_plan;
 mod propose_edit_plan;
 mod prose_changes;
+mod read_chapter_plan;
+mod read_memory_entry_plan;
 mod read_plan;
 mod recovery_plan;
 mod research_plan;
+mod search_manuscript_plan;
+mod search_memory_plan;
 mod skill_resource_plan;
 mod tool_loop_plan;
+mod write_memory_plan;
 
+pub use embedding::{
+    EMBEDDING_INPUT_TOO_LONG, EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER,
+    EMBEDDING_UNKNOWN_MARKER, FakeEmbeddingExchange, FakeEmbeddings, fake_vector,
+};
 pub use load_plan::LOAD_REASON;
 pub use tool_loop_plan::LIMIT_ANSWER;
 
@@ -91,6 +103,15 @@ impl ModelProviderAdapter for FakeDestination {
         if create.route.mapping_revision != HOST_FAKE_TOOL_LOOP_MAPPING_REVISION {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
+        // The real route refuses a capture request with no input item or no output Tool.
+        if matches!(create.purpose, CreatePurpose::MemoryCapture(_)) && !create.capture_complete() {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        }
+        // The real route refuses a pass request with no entries item and no observations item, no
+        // output Tool, or a prior response reference.
+        if create.purpose == CreatePurpose::MemoryConsolidation && !create.pass_complete() {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        }
         let mapping_revision = HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
         let mut wire = current_input(create);
         wire["mapping_revision"] = serde_json::json!(mapping_revision);
@@ -98,6 +119,19 @@ impl ModelProviderAdapter for FakeDestination {
             wire["previous_response_reference"] = serde_json::json!(reference);
         }
         wire["tool_choice"] = serde_json::json!(create.tool_choice.as_str());
+        match create.purpose {
+            CreatePurpose::MemoryCapture(kind) => {
+                wire["purpose"] = serde_json::json!("memory_capture");
+                wire["capture_input"] = serde_json::json!(match kind {
+                    storyos_core::CaptureInputKind::Conversation => "conversation",
+                    storyos_core::CaptureInputKind::Chapter => "chapter",
+                });
+            }
+            CreatePurpose::MemoryConsolidation => {
+                wire["purpose"] = serde_json::json!("memory_consolidation");
+            }
+            _ => {}
+        }
         wire["tools"] = create
             .tool_exposure
             .tools
@@ -152,7 +186,11 @@ impl ModelProviderAdapter for FakeDestination {
             }),
             (None, Some(reference)) => FakePlan::UnknownCreate(reference),
             (None, None) => {
-                let planned = tool_loop_plan::plan(create);
+                let planned = match create.purpose {
+                    CreatePurpose::MemoryCapture(_) => capture_plan::plan(create),
+                    CreatePurpose::MemoryConsolidation => consolidation_plan::plan(create),
+                    _ => tool_loop_plan::plan(create),
+                };
                 let reference = recovery_plan::mint_response_reference(
                     &projection.digest,
                     match create.successor_of {
@@ -374,3 +412,11 @@ fn wire_digest(wire: &serde_json::Value) -> String {
 #[cfg(test)]
 #[path = "stub_rejection_tests.rs"]
 mod stub_rejection_tests;
+
+#[cfg(test)]
+#[path = "capture_refusal_tests.rs"]
+mod capture_refusal_tests;
+
+#[cfg(test)]
+#[path = "pass_refusal_tests.rs"]
+mod pass_refusal_tests;

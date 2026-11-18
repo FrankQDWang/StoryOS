@@ -41,6 +41,14 @@ mod recovery_visibility_proof_tests;
 mod project_settings_tests;
 
 #[cfg(test)]
+#[path = "project_instruction_tests.rs"]
+mod project_instruction_tests;
+
+#[cfg(test)]
+#[path = "instruction_binding_tests.rs"]
+mod instruction_binding_tests;
+
+#[cfg(test)]
 #[path = "create_agent_run_tests.rs"]
 mod create_agent_run_tests;
 
@@ -98,18 +106,26 @@ mod agent_run_current_chapter;
 mod agent_run_dispatch;
 mod agent_run_expiry;
 mod agent_run_finish_rule;
+mod agent_run_give_way;
 mod agent_run_host_tool;
+mod agent_run_hybrid_search;
 mod agent_run_lease;
 mod agent_run_load_skill;
+mod agent_run_manuscript_uses;
 mod agent_run_observation;
 mod agent_run_prior_response;
 mod agent_run_propose_edit;
+mod agent_run_read_chapter;
+mod agent_run_read_memory_entry;
 mod agent_run_read_skill_resource;
 mod agent_run_read_tool_result;
+mod agent_run_record_observations;
 mod agent_run_recovery;
 mod agent_run_results;
 mod agent_run_retrieval;
 mod agent_run_retrieval_dispatch;
+mod agent_run_search_manuscript;
+mod agent_run_search_memory;
 mod agent_run_skill_uses;
 mod agent_run_steering;
 mod agent_run_submit_research;
@@ -124,11 +140,13 @@ mod agent_run_tool_probe;
 mod agent_run_tool_recovery;
 mod agent_run_tool_result;
 mod agent_run_work;
+mod agent_run_write_memory;
 mod author_edit;
 mod author_edit_admission_recovery;
 mod author_edit_outcome;
 mod author_edit_proposal;
 mod cancel_agent_run;
+mod chapter_capture_schedule;
 mod chapter_query;
 mod command_replay;
 mod command_response_assistance;
@@ -142,24 +160,37 @@ mod create_project_challenge;
 mod create_volume;
 mod current_producer_withdrawal;
 mod delete_chapter;
+mod delete_memory_entry;
 mod delete_volume;
 mod editor_session;
 mod editor_session_acknowledgement;
+mod embedding_attempt;
 mod export_work;
 mod get_proposal;
 mod list_projects;
 mod manuscript_block;
 mod manuscript_search;
 mod manuscript_tree;
+mod memory_capture;
+mod memory_consolidation;
+mod memory_consolidation_versions;
+mod memory_entries;
+mod memory_entry_list;
+mod memory_work_schedule;
 mod model_registration;
 mod open_block_proposal;
 mod open_proposal_list;
 mod ordinary_passage_targets;
 mod passage_collection;
+mod passage_index_work;
+mod passage_ranking;
+mod passage_vectors;
 mod pause_agent_run;
 mod pinned_export_source;
 mod project_archive_build;
+mod project_conversations;
 mod project_destination_binding;
+mod project_embedding_binding;
 mod project_export;
 mod project_export_work;
 mod project_research_binding;
@@ -190,6 +221,7 @@ mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
 mod update_project_assistance;
+mod update_project_instruction;
 mod update_volume;
 mod validation_history;
 mod volume_storage_order;
@@ -233,6 +265,9 @@ pub struct PostgresProjectReader {
     pool: Arc<ConnectionPool>,
     challenge_rate_clock_unix_seconds: Option<i64>,
     readable_export_lease_ttl: Duration,
+    /// The Embedding Registration of the deployment, or `None` when the deployment has no
+    /// embedding configuration (ADR 0095 section 4).
+    embedding_registration: Option<&'static storyos_core::EmbeddingRegistration>,
 }
 
 impl ProjectCommandChallengeStore for PostgresProjectReader {
@@ -505,6 +540,7 @@ impl PostgresProjectReader {
             .await
             .map_err(challenge_error)?;
         set_challenge_scope_on_client(&client, scope).await?;
+        self.set_embedding_registration(&client).await?;
         Ok(PostgresProjectCommandTransaction { client })
     }
 
@@ -518,6 +554,7 @@ impl PostgresProjectReader {
             .await
             .map_err(challenge_error)?;
         set_challenge_scope_on_client(&client, scope).await?;
+        self.set_embedding_registration(&client).await?;
         Ok(PostgresProjectCommandTransaction { client })
     }
 
@@ -693,7 +730,38 @@ impl PostgresProjectReader {
             pool: Arc::new(ConnectionPool::new(database_url.into())),
             challenge_rate_clock_unix_seconds: None,
             readable_export_lease_ttl: Duration::from_secs(30),
+            embedding_registration: None,
         }
+    }
+
+    /// The Embedding Registration of the deployment. Each Project command transaction has its
+    /// revision in the transaction setting `storyos.embedding_registration`, and the Tool
+    /// Exposure, the hybrid search, and the marks of the passage index work read it there.
+    pub fn with_embedding_registration(
+        mut self,
+        registration: Option<&'static storyos_core::EmbeddingRegistration>,
+    ) -> Self {
+        self.embedding_registration = registration;
+        self
+    }
+
+    /// Sets the transaction setting of the deployment Embedding Registration. With no
+    /// Registration, the setting stays empty.
+    async fn set_embedding_registration(
+        &self,
+        client: &PooledClient,
+    ) -> Result<(), ProjectCommandChallengeError> {
+        let Some(registration) = self.embedding_registration else {
+            return Ok(());
+        };
+        client
+            .execute(
+                "SELECT set_config('storyos.embedding_registration', $1, true)",
+                &[&registration.revision],
+            )
+            .await
+            .map(|_| ())
+            .map_err(challenge_error)
     }
 
     pub fn with_readable_export_lease_ttl(mut self, ttl: Duration) -> Self {
@@ -830,6 +898,20 @@ impl ProjectReader for PostgresProjectReader {
                 .await?;
         transaction.commit().await.map_err(read_error)?;
         Ok(assistance)
+    }
+
+    async fn read_project_instruction(
+        &self,
+        scope: &ProjectScope,
+    ) -> Result<Option<storyos_application::ProjectInstructionRevision>, ProjectReadError> {
+        let mut client = self.connect().await?;
+        let transaction = client.transaction().await.map_err(read_error)?;
+        set_scope(&transaction, scope).await?;
+        let instruction =
+            crate::update_project_instruction::read_current_revision(transaction.client(), scope)
+                .await?;
+        transaction.commit().await.map_err(read_error)?;
+        Ok(instruction)
     }
 }
 

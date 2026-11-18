@@ -32,6 +32,7 @@ mod create_project;
 mod create_project_challenge;
 mod create_volume;
 mod delete_chapter;
+mod delete_memory_entry;
 mod delete_volume;
 mod editor_session;
 mod get_proposal;
@@ -41,9 +42,11 @@ mod list_skills;
 mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_tree;
+mod memory_entries;
 mod passage_targets;
 mod pause_agent_run;
 mod project_command_challenge;
+mod project_conversations;
 mod project_export;
 mod public_origin;
 mod readable_export;
@@ -67,6 +70,7 @@ mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
 mod update_project_assistance;
+mod update_project_instruction;
 mod update_volume;
 mod web_assets;
 mod web_host;
@@ -100,6 +104,7 @@ use create_project::create_project;
 use create_project_challenge::create_project_challenge;
 use create_volume::create_volume;
 use delete_chapter::delete_chapter;
+use delete_memory_entry::delete_memory_entry;
 use delete_volume::delete_volume;
 use editor_session::{create_editor_session, get_editor_session};
 use get_proposal::get_proposal;
@@ -109,8 +114,10 @@ use list_skills::list_skills;
 use manuscript_search::search_manuscript_query;
 use manuscript_statistics::get_statistics;
 use manuscript_tree::get_manuscript_tree;
+use memory_entries::list_memory_entries;
 use pause_agent_run::pause_agent_run;
 use project_command_challenge::create_project_command_challenge;
+use project_conversations::{get_project_conversation, list_project_conversations};
 use project_export::{export_project_archive, get_export_operation_query};
 use readable_export::{
     export_human_readable_manuscript, get_human_readable_manuscript_export_query,
@@ -129,6 +136,7 @@ use undo_latest_author_action::undo_latest_author_action;
 use update_chapter::update_chapter;
 use update_project::update_project;
 use update_project_assistance::{get_project_assistance, update_project_assistance};
+use update_project_instruction::{get_project_instruction, update_project_instruction};
 use update_volume::update_volume;
 use withdraw_proposal::withdraw_proposal;
 
@@ -158,6 +166,8 @@ pub struct ServerConfig {
     pub session_cookie_secure: SessionCookieSecure,
     /// The one model destination that this deployment offers. `None` offers no assistance.
     pub model_destination: Option<storyos_core::DeploymentDestination>,
+    /// The embedding Registration of the deployment (ADR 0095 section 3). `None` offers none.
+    pub embedding: Option<&'static storyos_core::EmbeddingRegistration>,
     /// The Skills of the deployment, read one time at the start of the Server (ADR 0089).
     pub skills: Arc<storyos_core::SkillSet>,
 }
@@ -201,10 +211,12 @@ impl ServerState {
             .allowed_origin
             .as_deref()
             .and_then(TupleOrigin::from_allowed_origin);
-        let project_store = config
-            .database_url
-            .as_ref()
-            .map(|url| PostgresProjectReader::new(url.expose_secret()));
+        // The Project commands mark the passage index work only with the embedding
+        // configuration of the deployment (ADR 0095 section 4).
+        let project_store = config.database_url.as_ref().map(|url| {
+            PostgresProjectReader::new(url.expose_secret())
+                .with_embedding_registration(config.embedding)
+        });
         let session_allowed_origins = config
             .session_bindings
             .iter()
@@ -333,6 +345,31 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             ),
         )
         .route(
+            contracts::GET_PROJECT_INSTRUCTION_PATH,
+            routing::on(
+                method_filter(contracts::GET_PROJECT_INSTRUCTION_METHOD),
+                get_project_instruction,
+            )
+            .on(
+                method_filter(contracts::UPDATE_PROJECT_INSTRUCTION_METHOD),
+                update_project_instruction,
+            ),
+        )
+        .route(
+            contracts::LIST_MEMORY_ENTRIES_PATH,
+            routing::on(
+                method_filter(contracts::LIST_MEMORY_ENTRIES_METHOD),
+                list_memory_entries,
+            ),
+        )
+        .route(
+            contracts::DELETE_MEMORY_ENTRY_PATH,
+            routing::on(
+                method_filter(contracts::DELETE_MEMORY_ENTRY_METHOD),
+                delete_memory_entry,
+            ),
+        )
+        .route(
             contracts::CREATE_AGENT_RUN_PATH,
             routing::on(
                 method_filter(contracts::CREATE_AGENT_RUN_METHOD),
@@ -362,6 +399,20 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::GET_AGENT_RUN_METHOD),
                 get_agent_run,
+            ),
+        )
+        .route(
+            contracts::LIST_PROJECT_CONVERSATIONS_PATH,
+            routing::on(
+                method_filter(contracts::LIST_PROJECT_CONVERSATIONS_METHOD),
+                list_project_conversations,
+            ),
+        )
+        .route(
+            contracts::GET_PROJECT_CONVERSATION_PATH,
+            routing::on(
+                method_filter(contracts::GET_PROJECT_CONVERSATION_METHOD),
+                get_project_conversation,
             ),
         )
         .route(

@@ -1,108 +1,91 @@
-//! One text embedding request of the multimodal embedding path of the Agent Plan route, for the
-//! embedding probe of ADR 0095 section 5 (ADR 0049 amendment of 2026-11-16). It has no Model
-//! Gateway admission. The probe observation keeps the native reply, because the probe records it.
+//! The embedding adapter of the multimodal embedding path of the Agent Plan route (ADR 0095
+//! section 3). One request has one text, because the route gives one vector for each request.
+//! The request form is the form of the record of S7-C1
+//! (`docs/research/embedding-and-pgvector-probe-2026-11-16.md`).
 
 use std::time::Duration;
 
 use serde_json::{Value, json};
-use storyos_application::{CredentialReference, CredentialResolver, PreDispatchRefusal};
+use storyos_application::{
+    CredentialResolver, EmbeddingObservation, EmbeddingProjection, EmbeddingProviderAdapter,
+    EmbeddingRoute, EmbeddingUsage, PreDispatchRefusal, PreparedEmbeddingRequest,
+    ResolvedCredential,
+};
+use storyos_core::{
+    AGENT_PLAN_EMBEDDING_REGISTRATION, EMBEDDING_REQUEST_BOUNDS, EMBEDDING_REQUEST_TIMEOUT,
+    EmbeddingInput, EmbeddingRegistration,
+};
 
 /// The path of the multimodal embedding operation below the endpoint of the route.
 const EMBEDDING_PATH: &str = "/embeddings/multimodal";
 
-/// The maximum number of characters of a reply that is not JSON that the observation keeps.
-const TEXT_REPLY_LIMIT: usize = 2048;
-
-/// The text items of one request. The route returns the vectors of the items in one reply.
-pub struct EmbeddingRequest {
-    pub endpoint: String,
-    pub model: String,
-    pub instructions: String,
-    pub texts: Vec<String>,
-    /// `None` sends no `dimensions` member, so the route uses its default.
-    pub dimensions: Option<u32>,
-    pub timeout: Duration,
-}
-
 /// Sends each prepared embedding request once, with no retry and no redirect. It resolves the
-/// Credential Reference through `resolver` in `prepare`.
+/// Credential Reference of the route through `resolver` in `prepare`, before the dispatch claim.
 pub struct AgentPlanEmbeddings<R> {
     pub resolver: R,
 }
 
-/// The single-use prepared embedding request.
-pub struct PreparedEmbedding {
+/// The single-use prepared exchange of one embedding request.
+pub struct AgentPlanEmbeddingExchange {
     url: String,
     body: String,
-    credential: storyos_application::ResolvedCredential,
+    credential: ResolvedCredential,
     timeout: Duration,
 }
 
-impl PreparedEmbedding {
-    pub fn url(&self) -> &str {
-        &self.url
-    }
+impl<R: CredentialResolver> EmbeddingProviderAdapter for AgentPlanEmbeddings<R> {
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] =
+        &[&storyos_core::AGENT_PLAN_EMBEDDING_REGISTRATION];
+    type Prepared = AgentPlanEmbeddingExchange;
 
-    /// The canonical JSON body that `exchange` sends.
-    pub fn body(&self) -> &str {
-        &self.body
-    }
-}
-
-/// The result of one embedding exchange. It has no error channel.
-#[derive(Debug, PartialEq)]
-pub enum EmbeddingObservation {
-    /// The request did not leave this process.
-    NotSubmitted,
-    /// The request possibly left this process, and no status came back.
-    OutcomeUnknown,
-    /// The route answered. A body that is not JSON is kept as bounded text.
-    Answered {
-        status: u16,
-        request_id: Option<String>,
-        body: Value,
-    },
-}
-
-impl<R: CredentialResolver> AgentPlanEmbeddings<R> {
-    /// Makes the canonical body and resolves the credential. An empty text list is unsupported.
-    pub async fn prepare(
+    /// Refuses a Registration with another mapping revision or other request bounds, and a route
+    /// with no endpoint, before it resolves the credential.
+    #[tracing::instrument(skip_all, level = "debug")]
+    async fn prepare(
         &self,
-        request: &EmbeddingRequest,
-        reference: &CredentialReference,
-    ) -> Result<PreparedEmbedding, PreDispatchRefusal> {
-        if request.texts.is_empty() {
+        registration: &'static EmbeddingRegistration,
+        route: &EmbeddingRoute,
+        input: &EmbeddingInput,
+    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
+        let known = registration.mapping_revision
+            == AGENT_PLAN_EMBEDDING_REGISTRATION.mapping_revision
+            && registration.request_bounds == EMBEDDING_REQUEST_BOUNDS;
+        let (true, Some(endpoint)) = (known, route.endpoint.as_deref()) else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
-        }
-        let input = request
-            .texts
-            .iter()
-            .map(|text| json!({"type": "text", "text": text}))
-            .collect::<Vec<_>>();
-        let mut body = json!({
-            "model": request.model,
-            "instructions": request.instructions,
-            "input": input,
+        };
+        let body = storyos_core::canonical_json(&json!({
+            "model": registration.provider_model_id,
+            "instructions": input.cause().instructions(),
+            "input": [{"type": "text", "text": input.text()}],
             "encoding_format": "float",
-        });
-        if let Some(dimensions) = request.dimensions {
-            body["dimensions"] = json!(dimensions);
-        }
+            "dimensions": registration.dimensions,
+        }));
+        let reference = route
+            .credential_reference
+            .as_ref()
+            .ok_or(PreDispatchRefusal::CredentialUnavailable)?;
         let credential = self
             .resolver
             .resolve(reference)
             .await
             .ok_or(PreDispatchRefusal::CredentialUnavailable)?;
-        Ok(PreparedEmbedding {
-            url: format!("{}{EMBEDDING_PATH}", request.endpoint.trim_end_matches('/')),
-            body: storyos_core::canonical_json(&body),
-            credential,
-            timeout: request.timeout,
+        Ok(PreparedEmbeddingRequest {
+            projection: EmbeddingProjection {
+                mapping_revision: registration.mapping_revision,
+                digest: format!("sha256:{}", storyos_core::hex_sha256(body.as_bytes())),
+            },
+            prepared: AgentPlanEmbeddingExchange {
+                url: format!("{}{EMBEDDING_PATH}", endpoint.trim_end_matches('/')),
+                body,
+                credential,
+                timeout: EMBEDDING_REQUEST_TIMEOUT,
+            },
         })
     }
 
     /// One POST of the prepared body.
-    pub async fn exchange(&self, prepared: PreparedEmbedding) -> EmbeddingObservation {
+    #[tracing::instrument(skip_all, level = "debug")]
+    async fn exchange(&self, prepared: AgentPlanEmbeddingExchange) -> EmbeddingObservation {
         let Some(client) = crate::single_request_client(prepared.timeout) else {
             return EmbeddingObservation::NotSubmitted;
         };
@@ -121,28 +104,42 @@ impl<R: CredentialResolver> AgentPlanEmbeddings<R> {
             Err(_) => return EmbeddingObservation::OutcomeUnknown,
         };
         let status = response.status().as_u16();
-        let request_id = response
-            .headers()
-            .get("x-request-id")
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned);
         let Ok(bytes) = response.bytes().await else {
             return EmbeddingObservation::OutcomeUnknown;
         };
-        let body = serde_json::from_slice(&bytes).unwrap_or_else(|_| {
-            Value::String(
-                String::from_utf8_lossy(&bytes)
-                    .chars()
-                    .take(TEXT_REPLY_LIMIT)
-                    .collect(),
-            )
-        });
-        EmbeddingObservation::Answered {
-            status,
-            request_id,
-            body,
-        }
+        observation(status, &bytes)
     }
+}
+
+/// The observation of one reply. A refusal keeps the status and the native code, and no text.
+fn observation(status: u16, body: &[u8]) -> EmbeddingObservation {
+    if !(200..300).contains(&status) {
+        return EmbeddingObservation::Rejected {
+            reason: crate::rejection_reason(status, body),
+        };
+    }
+    let Ok(reply) = serde_json::from_slice::<Value>(body) else {
+        return EmbeddingObservation::InvalidResult;
+    };
+    let values = reply
+        .pointer("/data/embedding")
+        .and_then(Value::as_array)
+        .and_then(|values| {
+            values
+                .iter()
+                .map(|value| value.as_f64().map(|value| value as f32))
+                .collect::<Option<Vec<_>>>()
+        });
+    let Some(values) = values else {
+        return EmbeddingObservation::InvalidResult;
+    };
+    let usage = reply
+        .pointer("/usage/prompt_tokens")
+        .and_then(Value::as_u64)
+        .map_or(EmbeddingUsage::Unknown, |input_tokens| {
+            EmbeddingUsage::Reported { input_tokens }
+        });
+    EmbeddingObservation::Vector { values, usage }
 }
 
 #[cfg(test)]

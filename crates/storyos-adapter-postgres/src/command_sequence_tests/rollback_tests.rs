@@ -21,8 +21,10 @@ use super::acceptance::{accept_proposal_call, invalid_acceptance_call};
 use super::agent_run::{
     cancel_agent_run_call, create_agent_run_call, park_run, pause_agent_run_call,
 };
+use super::memory_entry::delete_memory_entry_call;
 use super::project_session::{
     take_over_project_writer_call, update_project_assistance_call, update_project_call,
+    update_project_instruction_call,
 };
 use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
@@ -389,6 +391,18 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
+            &update_project_instruction_call(&store, /*base*/ 0xef10).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &delete_memory_entry_call(&store, /*base*/ 0xad10).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
             &take_over_project_writer_call(&store, /*base*/ 0x5fa0).await,
         )
         .await,
@@ -474,7 +488,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             .collect::<Vec<_>>();
         (failures, result)
     };
-    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 9];
+    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 11];
     expected.push(rolled_back(ReceiptResult::NoEffect));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     expected.push(rolled_back(ReceiptResult::Refused));

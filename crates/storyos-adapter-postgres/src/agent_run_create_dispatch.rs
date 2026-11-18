@@ -188,12 +188,18 @@ pub(crate) async fn create_request(
             "Invalid retained Context",
         )))
     })?;
-    let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
-    let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
+    // A background Run has no Chapter, so it declares no Proposal target, and it is no probe.
+    let (declared_targets, probe) = match run.kind.reads_chapter_work() {
+        true => (
+            declared_targets(client, claim, run.chapter()?).await?,
+            crate::agent_run_tool_probe::probe_request(client, claim, run).await?,
+        ),
+        false => (Vec::new(), None),
+    };
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
     // A Tool qualification probe settles after its one response, so the finish rule does not
     // apply to it, and its probe body sends no `tool_choice` (ADR 0049).
-    let tool_choice = match probe {
+    let tool_choice = match &probe {
         Some(_) => storyos_core::ToolChoice::None,
         None => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
     };
@@ -233,14 +239,20 @@ pub(crate) async fn create_request(
     };
     let input = record_input(record, assembly, &run.author_message);
     let context = RequestContextItem::sent(input.context, previous_response_reference.as_deref());
+    let purpose = match (probe, run.kind) {
+        (Some(probe), _) => CreatePurpose::ToolQualification(probe.request),
+        (None, storyos_core::AgentRunKind::MemoryCapture) => {
+            CreatePurpose::MemoryCapture(crate::memory_capture::input_kind(client, claim).await?)
+        }
+        (None, kind) => CreatePurpose::of_run(kind, /*capture_input*/ None)
+            .ok_or_else(|| crate::agent_run_tool_authority::damaged("The purpose of the Run"))?,
+    };
     Ok(CreateRequest {
         attempt,
-        purpose: probe.map_or(CreatePurpose::Decision, |probe| {
-            CreatePurpose::ToolQualification(probe.request)
-        }),
+        purpose,
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
-        chapter_id: run.chapter_id.clone(),
+        chapter_id: run.chapter_id.clone().unwrap_or_default(),
         passage_resolution: input.passage_resolution,
         passage_input: input.passage_input,
         context,
@@ -296,6 +308,19 @@ pub(crate) fn record_input(
             .operation_requirement
             .selection_references
             .unwrap_or_default(),
+    }
+}
+
+/// The admitted Proposal targets of the Chapter of `run`. A background Run has no Chapter, so
+/// its requests declare no target (ADR 0094 section 5).
+pub(crate) async fn run_declared_targets(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+) -> Result<Vec<DeclaredTarget>, CompleteAgentRunError> {
+    match run.kind.reads_chapter_work() {
+        true => declared_targets(client, claim, run.chapter()?).await,
+        false => Ok(Vec::new()),
     }
 }
 
@@ -358,7 +383,7 @@ async fn previous_response_reference(
                     let wire = crate::agent_run_continuation::decide_continuation(
                         client,
                         claim,
-                        &run.conversation_id,
+                        run.conversation_id.as_deref(),
                         &run.author_message,
                         &assistance,
                         tool_exposure_digest,

@@ -18,6 +18,7 @@ import type {
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { openControlledProject } from "./boot.ts";
 import {
+  CHAPTER_SWITCH_WAITING_SENTENCE,
   chapterSwitchRecoveryMessage,
   openSelectedChapter,
   selectedChapterSurface,
@@ -30,7 +31,8 @@ import type {
   PendingEditProjection,
   ProjectReadyState,
 } from "./editor-types.ts";
-import type { ChallengeAdmissionTimers } from "./challenge-admission-wait.ts";
+import { createChallengeAdmissionWait, type ChallengeAdmissionTimers, type ChallengeAdmissionWait }
+  from "./challenge-admission-wait.ts";
 import { AuthorUndoUnavailableError, InputBoundStopError, createEditorSessionWritingController }
   from "./editor-session-writing.ts";
 import {
@@ -54,7 +56,9 @@ import { renameOwnedProject } from "./rename-project.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
 import { navigateProposal, type ProposalFocus, type ProposalNavigation } from "./proposal-navigation.ts";
+import { ProjectSettingsLink, ProjectSettingsView } from "./project-settings.tsx";
 import { WritingWorkspace } from "./writing-workspace.tsx";
+import { ADDRESS_CHAPTER_NOT_FOUND_SENTENCE, useAddressChapter } from "./address-chapter.ts";
 
 interface Stage1ViewProps {
   state: ControlledProjectState;
@@ -64,6 +68,7 @@ interface Stage1ViewProps {
   /** The timers of the Editor Session writing controller. The default is the global timers. */
   writingTimers?: ChallengeAdmissionTimers | undefined;
 }
+
 
 interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   state: ProjectReadyState;
@@ -137,6 +142,11 @@ function ProjectReadyView({
   const [tree, setTree] = useState<GetManuscriptTreeResponse>();
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
+  // The Chapter whose switch waits for the Retry-After of a Command Challenge rate limit (#1679).
+  const [switchWaiting, setSwitchWaiting] = useState<string>();
+  // The wait of the current switch, from the click to its end. Closing the view ends it.
+  const switchWaitRef = useRef<{ wait: ChallengeAdmissionWait; waiting: boolean } | undefined>(undefined);
+  useEffect(() => () => { switchWaitRef.current?.wait.cancel(); }, []);
   // A locator of the current AgentRun or of a navigation stays in memory and only causes an earlier list read.
   // A Chapter change remounts this view, so the store of the Project keeps the locators for the next view.
   const projectId = state.project.project.project_id;
@@ -236,57 +246,86 @@ function ProjectReadyView({
     })();
   };
 
-  // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026).
-  const selectChapter = (chapterId: string) => {
-    if (structureInFlightRef.current) return;
-    if (chapterId === selectedChapterIdRef.current) return;
+  // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026). The result is true
+  // when the command changed the Current Chapter and the workspace opens again at the Chapter.
+  const selectChapter = (chapterId: string): Promise<boolean> => {
+    // The latest click of the author wins: a click ends the wait of an earlier switch (#1679).
+    const earlier = switchWaitRef.current;
+    if (structureInFlightRef.current && earlier?.waiting !== true) return Promise.resolve(false);
+    if (earlier?.waiting === true) {
+      earlier.wait.cancel();
+      switchWaitRef.current = undefined;
+      setSwitchWaiting(undefined);
+      structureInFlightRef.current = false;
+    }
+    if (chapterId === selectedChapterIdRef.current) return Promise.resolve(false);
     if (state.editor.kind !== "editor-ready" || writing === undefined) {
       browseChapter(chapterId);
-      return;
+      return Promise.resolve(false);
     }
     structureInFlightRef.current = true;
     const editorSessionId = state.editor.session.editor_session.editor_session_id;
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
-    void (async () => {
+    const active = { wait: createChallengeAdmissionWait(writingTimers), waiting: false };
+    switchWaitRef.current = active;
+    return (async () => {
+      let reopened = false;
+      let cancelled = false;
+      // A repeat uses the Chapter of the first read, so the command and its idempotency key stay the same.
+      let target: GetChapterResponse | undefined;
       try {
-        const quiet = await writing.runAfterQuiesce("settled", async () => {
-          if (generation !== switchGenerationRef.current) return;
-          const opened = await openSelectedChapter({
-            baseUrl,
-            projectId: state.project.project.project_id,
-            chapterId,
-            expectedScope: state.project.project_scope,
-            fetchImpl,
+        const quiet = await active.wait.retry(() => {
+          active.waiting = false;
+          setSwitchWaiting(undefined);
+          return writing.runAfterQuiesce("settled", async () => {
+            if (generation !== switchGenerationRef.current) return;
+            if (target === undefined) {
+              const opened = await openSelectedChapter({
+                baseUrl,
+                projectId: state.project.project.project_id,
+                chapterId,
+                expectedScope: state.project.project_scope,
+                fetchImpl,
+              });
+              if (generation !== switchGenerationRef.current) return;
+              if (opened.kind !== "opened") {
+                setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
+                return;
+              }
+              target = opened.chapter;
+            }
+            // A Challenge rate limit propagates to the wait.
+            const switched = await setOwnedCurrentChapter({
+              baseUrl,
+              fetchImpl,
+              cryptoImpl,
+              projectId: state.project.project.project_id,
+              chapterId,
+              expectedCurrentChapterId: currentChapterId,
+              expectedTargetRevisionId: target.chapter.current_revision.revision_id,
+              editorSessionId,
+            });
+            if (switched.effect.kind !== "authoritative_applied"
+              && switched.effect.kind !== "no_effect") {
+              setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
+              return;
+            }
+            reopened = switched.effect.kind === "authoritative_applied";
+            onReopened(await openControlledProject({
+              baseUrl,
+              projectId: state.project.project.project_id,
+              fetchImpl,
+              cryptoImpl,
+            }));
           });
-          if (generation !== switchGenerationRef.current) return;
-          if (opened.kind !== "opened") {
-            setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
-            return;
-          }
-          const switched = await setOwnedCurrentChapter({
-            baseUrl,
-            fetchImpl,
-            cryptoImpl,
-            projectId: state.project.project.project_id,
-            chapterId,
-            expectedCurrentChapterId: currentChapterId,
-            expectedTargetRevisionId: opened.chapter.chapter.current_revision.revision_id,
-            editorSessionId,
-          });
-          if (switched.effect.kind !== "authoritative_applied"
-            && switched.effect.kind !== "no_effect") {
-            setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
-            return;
-          }
-          onReopened(await openControlledProject({
-            baseUrl,
-            projectId: state.project.project.project_id,
-            fetchImpl,
-            cryptoImpl,
-          }));
+        }, () => {
+          active.waiting = true;
+          setSwitchWaiting(chapterId);
         });
-        if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
+        if (quiet === undefined) {
+          cancelled = true;
+        } else if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
           setSwitchRecovery(chapterSwitchRecoveryMessage(quiet.reason));
         }
       } catch (error: unknown) {
@@ -296,10 +335,17 @@ function ProjectReadyView({
             : chapterSwitchRecoveryMessage("unavailable"),
         );
       } finally {
-        structureInFlightRef.current = false;
+        // A cancelled wait belongs to an earlier click or to a view that closed.
+        if (!cancelled) structureInFlightRef.current = false;
+        if (switchWaitRef.current === active) switchWaitRef.current = undefined;
       }
+      return reopened;
     })();
   };
+
+  const holdAddressConversation = useAddressChapter({ tree, currentChapterId, open: selectChapter,
+    canChangeCurrentChapter: state.editor.kind === "editor-ready" && state.editor.session.writer.kind === "current_writer",
+    onNotFound: () => setSwitchRecovery(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
 
   const removeFromTree = (noun: "章节" | "卷", remove: (expectedTreeRevision: string) => Promise<{
     effect: { kind: string };
@@ -393,6 +439,7 @@ function ProjectReadyView({
   return (
     <WritingWorkspace
       writer={writer}
+      holdAddressConversation={holdAddressConversation}
       onNavigateProposal={(destination) => navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
         onOpened: (next, focus, notice) => {
@@ -449,6 +496,7 @@ function ProjectReadyView({
             />
           )}
           <div className="tree-footer">
+          <ProjectSettingsLink projectId={state.project.project.project_id} />
           <ManuscriptReadableExportPanel
             projectId={state.project.project.project_id}
             baseUrl={baseUrl}
@@ -465,9 +513,10 @@ function ProjectReadyView({
       )}
       editor={(
         <>
-          {(switchRecovery ?? proposalNotice) === undefined ? null : (
-            <p role="alert">{switchRecovery ?? proposalNotice}</p>
-          )}
+          {switchWaiting !== undefined ? <p role="status">{CHAPTER_SWITCH_WAITING_SENTENCE}</p>
+            : (switchRecovery ?? proposalNotice) === undefined ? null : (
+              <p role="alert">{switchRecovery ?? proposalNotice}</p>
+            )}
           <h2>{selectedChapter.chapter.title}</h2>
           <BlockProposalDisplay
             key={selectedChapter.chapter.chapter_id}
@@ -542,6 +591,7 @@ function ProjectReadyView({
                 ?? selectedChapter.chapter.current_revision.revision_id
             }
             data-author-undo-frontier={pending?.author_undo_frontier_sequence ?? ""}
+            data-chapter-switch-waiting={switchWaiting ?? ""}
           >
             {saveState === "saved" ? "已保存"
               : saveState === "saving" ? "保存中"
@@ -695,6 +745,7 @@ function EmptyProjectReadyView({
   const [title, setTitle] = useState(project.project.title);
   const [revision, setRevision] = useState<string>();
   const [volumeRemoval, setVolumeRemoval] = useState<string>();
+  const [addressNotice, setAddressNotice] = useState<string>();
   useEffect(() => {
     void listProjects({ baseUrl, fetchImpl }).then((response) => {
       const item = response.projects.find((entry) =>
@@ -703,8 +754,12 @@ function EmptyProjectReadyView({
       setRevision(item.revision);
     }).catch(() => {});
   }, [baseUrl, fetchImpl, project.project.project_id]);
+  // A Project with no Chapter has no Chapter to open from the address.
+  const holdAddressConversation = useAddressChapter({ tree, currentChapterId: undefined, canChangeCurrentChapter: false,
+    open: async () => false, onNotFound: () => setAddressNotice(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
   return (
     <WritingWorkspace
+      holdAddressConversation={holdAddressConversation}
       assistant={{
         scope: project.project_scope,
         canSubmit: false,
@@ -727,8 +782,8 @@ function EmptyProjectReadyView({
             />
           <ManuscriptSearchPanel projectId={project.project.project_id} baseUrl={baseUrl}
             fetchImpl={fetchImpl} chapterTitles={new Map()} />
-          {volumeRemoval === undefined ? null : (
-            <p role="alert">{volumeRemoval}</p>
+          {(volumeRemoval ?? addressNotice) === undefined ? null : (
+            <p role="alert">{volumeRemoval ?? addressNotice}</p>
           )}
           <ManuscriptTree
             projectId={project.project.project_id}
@@ -786,6 +841,9 @@ function EmptyProjectReadyView({
               });
             }}
           />
+          <div className="tree-footer">
+            <ProjectSettingsLink projectId={project.project.project_id} />
+          </div>
         </>
       )}
       editor={<p>空工作区</p>}
@@ -987,6 +1045,9 @@ function Stage1View({
         }}
       />
     );
+  }
+  if (current.kind === "project-settings-ready") {
+    return <ProjectSettingsView state={current} baseUrl={baseUrl} fetchImpl={fetchImpl} cryptoImpl={cryptoImpl} />;
   }
   if (current.kind === "protected-ready") {
     return (

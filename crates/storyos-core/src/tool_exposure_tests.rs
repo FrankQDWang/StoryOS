@@ -27,6 +27,9 @@ fn exposure(bound: &[BoundTool], model_registration_revision: &str) -> ToolExpos
         bound,
         model_registration_revision,
         skill_catalog: false,
+        memory_use: false,
+        hybrid_search: false,
+        run_kind: crate::AgentRunKind::Author,
     })
 }
 
@@ -112,10 +115,18 @@ fn each_other_binding_or_registration_exposes_nothing() {
 
 #[test]
 fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mapping() {
+    // A Run of the author never records Memory Observations and never applies a pass.
     let host = |registration: &'static crate::HostToolRegistration| ToolExposure {
         tools: registration
             .tools
             .iter()
+            .filter(|spec| {
+                !matches!(
+                    spec.operation,
+                    crate::ToolOperation::RecordMemoryObservations
+                        | crate::ToolOperation::ApplyMemoryOperations
+                )
+            })
             .map(|spec| ExposedTool {
                 name: spec.operation.function_name(),
                 registration_id: registration.id,
@@ -132,23 +143,44 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             bound: &[],
             model_registration_revision: revision,
             skill_catalog: true,
+            memory_use: true,
+            hybrid_search: true,
+            run_kind: crate::AgentRunKind::Author,
         })
     };
-    // The mapping `v7` and the fake tool loop mapping declare `load_skill` and
-    // `read_skill_resource` only for a Run whose pinned catalog has a Skill (ADR 0089 section 3).
-    let mut without_skill = host(&HOST_TOOL_REGISTRATION);
-    without_skill.tools.retain(|tool| {
-        !matches!(
-            tool.spec.operation,
-            crate::ToolOperation::LoadSkill | crate::ToolOperation::ReadSkillResource
-        )
-    });
-    for revision in [
-        HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
-        AGENT_PLAN_REGISTRATION.revision,
+    let without_skill = |registration| {
+        let mut exposure = host(registration);
+        exposure.tools.retain(|tool| {
+            !matches!(
+                tool.spec.operation,
+                crate::ToolOperation::LoadSkill
+                    | crate::ToolOperation::ReadSkillResource
+                    | crate::ToolOperation::ReadMemoryEntry
+                    | crate::ToolOperation::SearchMemory
+                    | crate::ToolOperation::HybridSearchManuscript
+            )
+        });
+        exposure
+    };
+    // The mapping `v8` and the fake tool loop mapping declare `…0e0104`, and a Run that pinned
+    // the Registration of the mapping `v7` keeps `…0e0103`. Each declares `load_skill` and
+    // `read_skill_resource` only for a Run whose pinned catalog has a Skill (ADR 0089 section 3),
+    // `read_memory_entry` and `search_memory` only for a Run whose captured settings have use
+    // (ADR 0094 section 4), and `hybrid_search_manuscript` only when the search by meaning is
+    // possible (ADR 0095 section 4).
+    for (revision, registration) in [
+        (
+            HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
+            &HOST_TOOL_REGISTRATION,
+        ),
+        (AGENT_PLAN_REGISTRATION.revision, &HOST_TOOL_REGISTRATION),
+        (
+            crate::AGENT_PLAN_SKILL_REGISTRATION.revision,
+            &crate::SKILL_HOST_TOOL_REGISTRATION,
+        ),
     ] {
-        assert_eq!(with_catalog(revision), host(&HOST_TOOL_REGISTRATION));
-        assert_eq!(exposure(&[], revision), without_skill);
+        assert_eq!(with_catalog(revision), host(registration));
+        assert_eq!(exposure(&[], revision), without_skill(registration));
     }
     // A Run that pinned the Registration of the mapping `v6` keeps four Host Tools, and a Run
     // that pinned the Registration of the mapping `v5` keeps three (ADR 0093).
@@ -181,6 +213,12 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
                 "read_tool_result",
                 "load_skill",
                 "read_skill_resource",
+                "read_chapter",
+                "search_manuscript",
+                "hybrid_search_manuscript",
+                "write_memory",
+                "read_memory_entry",
+                "search_memory",
                 "finish"
             ]
         )
@@ -188,18 +226,22 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
     assert_eq!(
         (
             HOST_TOOL_REGISTRATION.revision,
-            crate::READ_RESULT_HOST_TOOL_REGISTRATION.revision
+            crate::SKILL_HOST_TOOL_REGISTRATION.revision,
+            crate::READ_RESULT_HOST_TOOL_REGISTRATION.revision,
+            HOST_TOOL_REGISTRATION.tools.len(),
         ),
         (
+            "018f0000-0000-7001-8000-0000000e0104",
             "018f0000-0000-7001-8000-0000000e0103",
-            "018f0000-0000-7001-8000-0000000e0102"
+            "018f0000-0000-7001-8000-0000000e0102",
+            14,
         )
     );
     let declared = host(&HOST_TOOL_REGISTRATION);
     assert_eq!(
         (
             declared.tools[4].declaration().parameters,
-            declared.tools[5].declaration().parameters,
+            declared.tools[11].declaration().parameters,
         ),
         (
             json!({
@@ -426,4 +468,61 @@ fn only_an_ordinary_response_without_a_decision_and_with_a_complete_call_request
             ResponseDisposition::Decision,
         ]
     );
+}
+
+/// A capture exposes its three read-only Tools and its output Tool. A consolidation pass exposes
+/// only its output Tool. This is also true with a research binding, a Skill, and the search by meaning. The
+/// Memory Settings of a Conversation do not control a capture (ADR 0094 sections 4 to 6).
+#[test]
+fn a_background_run_gets_only_the_tools_of_its_kind() {
+    let active = [bound(
+        ToolRegistrationLifecycle::Active,
+        Some(ToolCompatibilityDecision::Compatible),
+    )];
+    let names = |run_kind, memory_use| -> Vec<&str> {
+        ToolExposure::compute(&ExposureFacts {
+            bound: &active,
+            model_registration_revision: HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
+            skill_catalog: true,
+            memory_use,
+            hybrid_search: true,
+            run_kind,
+        })
+        .tools
+        .iter()
+        .map(|tool| tool.name)
+        .collect()
+    };
+    let capture = [
+        "read_chapter",
+        "search_manuscript",
+        "read_memory_entry",
+        "record_memory_observations",
+    ];
+    let author_only = [
+        "web_search",
+        "web_fetch",
+        "propose_edit",
+        "submit_research",
+        "finish",
+        "read_tool_result",
+        "load_skill",
+        "read_skill_resource",
+        "write_memory",
+        "search_memory",
+        "hybrid_search_manuscript",
+    ];
+    let author = names(crate::AgentRunKind::Author, true);
+
+    assert_eq!(
+        [true, false].map(|memory_use| names(crate::AgentRunKind::MemoryCapture, memory_use)),
+        [capture.to_vec(), capture.to_vec()]
+    );
+    assert!(author_only.iter().all(|name| author.contains(name)));
+    assert_eq!(
+        names(crate::AgentRunKind::MemoryConsolidation, true),
+        ["apply_memory_operations"]
+    );
+    assert!(!author.contains(&"record_memory_observations"));
+    assert!(!author.contains(&"apply_memory_operations"));
 }

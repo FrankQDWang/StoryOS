@@ -119,7 +119,7 @@ pub(super) async fn install_or_refuse(
         .disclosure_request
         .as_ref()
         .ok_or_else(|| unavailable("Compaction requires the decision Context Assembly"))?;
-    let (revision_id, body) = current_target(client, claim, &run.chapter_id).await?;
+    let (revision_id, body) = current_target(client, claim, run.chapter()?).await?;
     let assembled = assemble_current_passage_context(&assembly_input(
         claim,
         run,
@@ -146,7 +146,7 @@ pub(super) async fn install_or_refuse(
     let Err(refusal) = checked else {
         let mut later = super::stubs::later_record(client, claim, decision, staged).await?;
         let targets: Vec<String> =
-            crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
+            crate::agent_run_create_dispatch::declared_targets(client, claim, run.chapter()?)
                 .await?
                 .into_iter()
                 .map(|target| target.block_text)
@@ -440,7 +440,7 @@ fn assembly_input(
         owner_user_id: claim.project_scope.owner_user_id.as_ref().to_owned(),
         project_id: claim.project_scope.project_id.as_ref().to_owned(),
         author_message: run.author_message.clone(),
-        chapter_id: run.chapter_id.clone(),
+        chapter_id: run.chapter()?.to_owned(),
         chapter_revision_id: Some(chapter_revision_id).filter(|revision| revision != "unavailable"),
         proposal_target_block_ids: requirement
             .get("proposal_target_block_ids")

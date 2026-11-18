@@ -79,7 +79,15 @@ impl ToolEffectRequest {
             | ToolIntake::SubmitResearch { .. }
             | ToolIntake::ReadToolResult { .. }
             | ToolIntake::LoadSkill { .. }
-            | ToolIntake::ReadSkillResource { .. } => Vec::new(),
+            | ToolIntake::ReadSkillResource { .. }
+            | ToolIntake::ReadChapter { .. }
+            | ToolIntake::SearchManuscript { .. }
+            | ToolIntake::HybridSearchManuscript { .. }
+            | ToolIntake::WriteMemory(_)
+            | ToolIntake::ReadMemoryEntry { .. }
+            | ToolIntake::SearchMemory { .. }
+            | ToolIntake::RecordMemoryObservations(_)
+            | ToolIntake::ApplyMemoryOperations(_) => Vec::new(),
         };
         Some(Self {
             external_read: envelope.external_read,
@@ -131,7 +139,9 @@ impl GrantScope {
             Self::ProjectWritingAssistanceV1
             | Self::ProjectWritingAssistanceV2
             | Self::ProjectWritingAssistanceV3
-            | Self::ProjectWritingAssistanceV4 => false,
+            | Self::ProjectWritingAssistanceV4
+            | Self::ProjectWritingAssistanceV5
+            | Self::ManuscriptEmbeddingV1 => false,
         }
     }
 }

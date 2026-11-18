@@ -1,6 +1,8 @@
 //! The Model Provider Adapter of the Volcengine Agent Plan Responses route (ADR 0033, ADR 0039).
 
+mod capture_wire;
 mod embedding;
+mod pass_wire;
 mod probe;
 mod response;
 mod stream;
@@ -8,9 +10,7 @@ mod wire;
 
 use std::time::Duration;
 
-pub use embedding::{
-    AgentPlanEmbeddings, EmbeddingObservation, EmbeddingRequest, PreparedEmbedding,
-};
+pub use embedding::{AgentPlanEmbeddingExchange, AgentPlanEmbeddings};
 
 use storyos_application::{
     CacheSetting, CreatePurpose, CredentialResolver, DestinationRequest, ModelProviderAdapter,
@@ -88,6 +88,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
             storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
             storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION,
         ]
         .contains(&route.mapping_revision.as_str());
         if !probe && !tool_loop {
@@ -111,6 +112,26 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             ),
             // A summary needs the continuation chain of the Conversation.
             (CreatePurpose::CompactionSummary, _) => {
+                return Err(PreDispatchRefusal::UnsupportedRequest);
+            }
+            // Only the mapping `v8` has the capture form (ADR 0094 section 5). A Run that pinned
+            // an earlier Registration keeps its mapping, so its capture request is refused.
+            (CreatePurpose::MemoryCapture(kind), _)
+                if route.mapping_revision
+                    == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+                    && create.capture_complete() =>
+            {
+                capture_wire::capture_body(create, *kind, &route.provider_model_id, bounds)
+            }
+            // Only the mapping `v8` has the pass form (ADR 0094 section 6).
+            (CreatePurpose::MemoryConsolidation, _)
+                if route.mapping_revision
+                    == storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
+                    && create.pass_complete() =>
+            {
+                pass_wire::pass_body(create, &route.provider_model_id, bounds)
+            }
+            (CreatePurpose::MemoryCapture(_) | CreatePurpose::MemoryConsolidation, _) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
         };
@@ -381,3 +402,11 @@ mod tool_loop_wire_tests;
 #[cfg(test)]
 #[path = "skill_wire_tests.rs"]
 mod skill_wire_tests;
+
+#[cfg(test)]
+#[path = "chapter_list_wire_tests.rs"]
+mod chapter_list_wire_tests;
+
+#[cfg(test)]
+#[path = "memory_index_wire_tests.rs"]
+mod memory_index_wire_tests;

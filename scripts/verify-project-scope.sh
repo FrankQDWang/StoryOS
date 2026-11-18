@@ -275,10 +275,12 @@ prove_bound_request_path_activation() {
 container="storyos-issue105-$$"
 oracle_container="storyos-storage-oracle-$$"
 activation_container="storyos-storage-activation-$$"
+legacy_activation_container="storyos-storage-activation-legacy-$$"
 export CARGO_NET_OFFLINE=true
 cleanup() {
   stop_exact_dist_server
-  docker rm -fv "$container" "$oracle_container" "$activation_container" >/dev/null 2>&1 || true
+  docker rm -fv "$container" "$oracle_container" "$activation_container" \
+    "$legacy_activation_container" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -414,6 +416,52 @@ if docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 \
   echo "storyos_runtime ran the storage state machine" >&2
   exit 1
 fi
+# The vector extension is optional (ADR 0095 section 4): a database that does not offer it
+# activates with the same storage identity and has no vector table. This is the one use of the
+# image without pgvector.
+echo "Running packaged storyos-storage against a fresh database without the vector extension"
+start_postgres "$legacy_activation_container" postgres:16-alpine
+legacy_admin=$(postgres_admin_url "$legacy_activation_container")
+STORYOS_STORAGE_ADMIN_URL="$legacy_admin" "$storage_bin"
+activation_facts() {
+  docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT proof.phase || '/' || proof.migration_chain_digest || '/' ||
+            proof.database_schema_identity || '/' ||
+            COALESCE(to_regclass('storyos.passage_vectors')::text, 'absent') || '/' ||
+            COALESCE((SELECT extnamespace::regnamespace::text || ':' || extversion
+                        FROM pg_extension WHERE extname = 'vector'), 'none')
+       FROM storyos.storage_activation_proofs AS proof
+      WHERE proof.proof_id = 'release-1'"
+}
+vector_facts=$(activation_facts "$activation_container")
+legacy_facts=$(activation_facts "$legacy_activation_container")
+case "$vector_facts" in
+  */storyos.passage_vectors/extensions:0.8.7) ;;
+  *)
+    echo "The pgvector database has no vector table: $vector_facts" >&2
+    exit 1
+    ;;
+esac
+if [ "$legacy_facts" != "${vector_facts%/storyos.passage_vectors/extensions:0.8.7}/absent/none" ]; then
+  echo "The database without pgvector did not activate the same identity: $legacy_facts" >&2
+  exit 1
+fi
+set_runtime_password "$legacy_activation_container"
+for vector_container in "$activation_container" "$legacy_activation_container"; do
+  STORYOS_TEST_DATABASE_URL=$(postgres_runtime_url "$vector_container") \
+  STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$vector_container") \
+    cargo test --locked -p storyos-adapter-postgres --all-features --lib -- --ignored --exact \
+      passage_vectors::tests::the_vector_store_is_available_exactly_when_the_database_offers_the_extension
+done
+# The ranked passages need no vector store: on the database without pgvector the result is the
+# exact-term list, and no request declares the hybrid search.
+load_controlled_fixture "$legacy_activation_container"
+STORYOS_TEST_DATABASE_URL=$(postgres_runtime_url "$legacy_activation_container") \
+STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$legacy_activation_container") \
+  cargo test --locked -p storyos-adapter-postgres --all-features --lib -- --ignored --exact \
+    passage_ranking::tests::the_result_with_no_vector_store_is_the_exact_term_list \
+    agent_run_hybrid_search::tests::the_tool_follows_the_vector_store_of_the_database
+docker rm -fv "$legacy_activation_container" >/dev/null
 activation_runtime=$(postgres_runtime_url "$activation_container")
 assert_offline_storage_activation_checks
 echo "Binding packaged Server and Worker only from the Active proof"

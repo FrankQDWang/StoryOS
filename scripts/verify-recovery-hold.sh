@@ -32,6 +32,8 @@ web_root="$repository_root/target/release-package/web"
 
 # shellcheck source=recovery-hold-drill.sh
 . "$repository_root/scripts/recovery-hold-drill.sh"
+# shellcheck source=lib/controlled-postgres.sh
+. "$repository_root/scripts/lib/controlled-postgres.sh"
 echo "Isolated Recovery Copy drill: $recovery_drill"
 
 if [ -n "${STORYOS_RECOVERY_COPY_DIR:-}" ]; then
@@ -77,7 +79,7 @@ if [ "$created_volumes" = "1" ]; then
   docker volume create "$backup_volume" >/dev/null
   docker volume create "$hold_volume" >/dev/null
 fi
-docker run --rm --user root --volume "$archive_volume:/archive" postgres:16-alpine \
+docker run --rm --user root --volume "$archive_volume:/archive" "$storyos_postgres_image" \
   chown postgres:postgres /archive
 
 docker run --detach --name "$primary" \
@@ -85,7 +87,8 @@ docker run --detach --name "$primary" \
   --publish 127.0.0.1::5432 \
   --env POSTGRES_PASSWORD=admin \
   --volume "$archive_volume:/var/lib/postgresql/wal_archive" \
-  postgres:16-alpine \
+  --env POSTGRES_INITDB_ARGS="$storyos_postgres_initdb_args" \
+  "$storyos_postgres_image" \
   -c wal_level=replica \
   -c archive_mode=on \
   -c "archive_command=test ! -f /var/lib/postgresql/wal_archive/%f && cp %p /var/lib/postgresql/wal_archive/%f" \
@@ -202,6 +205,12 @@ STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
     test/browser-exact-dist/skill-journey.integration.test.ts
+# The Stage 7 journey writes each Stage 7 Memory record family before the backup. Its statements of
+# the test administrator connection are then in the restored database too.
+STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
+STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
+  pnpm --dir apps/web exec vitest run --project browser-exact-dist \
+    test/browser-exact-dist/stage7-journey.integration.test.ts
 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
 # Both modes retain two single-Operation conditions and three partial-Acceptance histories.
 # A partial-Acceptance history and a packaged journey Acceptance on an earlier base apply, so
@@ -214,6 +223,8 @@ stage5_before=$(stage5_research_facts "$primary")
 assert_stage5_research_facts_present "$stage5_before"
 stage6_before=$(stage6_skill_facts "$primary")
 assert_stage6_skill_facts_present "$stage6_before"
+stage7_before=$(stage7_memory_facts "$primary")
+assert_stage7_memory_facts_present "$stage7_before"
 stop_recovery_drill_server
 
 role_count=$(docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
@@ -250,13 +261,13 @@ if [ "$wal_level" != "replica" ] || [ "$archive_mode" != "on" ] \
   exit 1
 fi
 
-docker run --rm --user root --volume "$backup_volume:/backup" postgres:16-alpine \
+docker run --rm --user root --volume "$backup_volume:/backup" "$storyos_postgres_image" \
   chown postgres:postgres /backup
 docker run --rm --network "$network" --user postgres \
   --volume "$backup_volume:/backup" \
   --env PGPASSWORD=backup \
   --entrypoint pg_basebackup \
-  postgres:16-alpine \
+  "$storyos_postgres_image" \
   -h "$primary" -U storyos_backup -D /backup -Fp -Xs --checkpoint=fast --no-password >/dev/null
 
 docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
@@ -280,7 +291,7 @@ until docker exec "$primary" test -f "/var/lib/postgresql/wal_archive/$archived_
 done
 rpo_seconds=$(($(date +%s) - rpo_started))
 
-docker run --rm --volume "$backup_volume:/backup" postgres:16-alpine sh -c '
+docker run --rm --volume "$backup_volume:/backup" "$storyos_postgres_image" sh -c '
   set -eu
   test -f /backup/backup_label
   grep -q "START WAL LOCATION" /backup/backup_label
@@ -305,7 +316,7 @@ fi
 chain_manifest=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-chain.XXXXXX")
 saved_wal=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-wal.XXXXXX")
 docker run --rm --volume "$archive_volume:/archive" --volume "$backup_volume:/backup" \
-  postgres:16-alpine sh -c 'find /backup /archive -type f -exec sha256sum {} \; | sort' \
+  "$storyos_postgres_image" sh -c 'find /backup /archive -type f -exec sha256sum {} \; | sort' \
   >"$chain_manifest"
 
 assert_recovery_chain() {
@@ -313,7 +324,7 @@ assert_recovery_chain() {
     --volume "$archive_volume:/archive" \
     --volume "$backup_volume:/backup" \
     --volume "$chain_manifest:/manifest:ro" \
-    postgres:16-alpine sha256sum -c /manifest >/dev/null
+    "$storyos_postgres_image" sha256sum -c /manifest >/dev/null
 }
 
 assert_recovery_chain
@@ -347,7 +358,7 @@ rm -f "$saved_wal"
 docker run --rm --user root \
   --volume "$backup_volume:/backup" \
   --volume "$hold_volume:/hold" \
-  postgres:16-alpine sh -c 'rm -rf /hold/lost+found; find /hold -mindepth 1 -maxdepth 1 -exec rm -rf {} +; cp -a /backup/. /hold/ && chown -R postgres:postgres /hold'
+  "$storyos_postgres_image" sh -c 'rm -rf /hold/lost+found; find /hold -mindepth 1 -maxdepth 1 -exec rm -rf {} +; cp -a /backup/. /hold/ && chown -R postgres:postgres /hold'
 restore_conf=$(mktemp "${TMPDIR:-/tmp}/storyos-restore-conf.XXXXXX")
 cat >"$restore_conf" <<EOF
 restore_command = 'cp /var/lib/postgresql/wal_archive/%f %p'
@@ -359,7 +370,7 @@ EOF
 docker run --rm --user root \
   --volume "$restore_conf:/tmp/restore.conf:ro" \
   --volume "$hold_volume:/hold" \
-  postgres:16-alpine sh -c '
+  "$storyos_postgres_image" sh -c '
     cat /tmp/restore.conf >> /hold/postgresql.auto.conf
     touch /hold/recovery.signal
     rm -f /hold/standby.signal
@@ -373,7 +384,7 @@ docker run --detach --name "$hold" \
   --publish 127.0.0.1::5432 \
   --volume "$hold_volume:/var/lib/postgresql/data" \
   --volume "$archive_volume:/var/lib/postgresql/wal_archive:ro" \
-  postgres:16-alpine >/dev/null
+  "$storyos_postgres_image" >/dev/null
 wait_postgres "$hold" restore
 
 docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \
@@ -704,6 +715,10 @@ if [ "$(stage5_research_facts "$hold")" != "$stage5_before" ]; then
 fi
 if [ "$(stage6_skill_facts "$hold")" != "$stage6_before" ]; then
   echo "Restored Stage 6 Skill records changed" >&2
+  exit 1
+fi
+if [ "$(stage7_memory_facts "$hold")" != "$stage7_before" ]; then
+  echo "Restored Stage 7 Memory records changed" >&2
   exit 1
 fi
 export STORYOS_PHYSICAL_DRILL=1

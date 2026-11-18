@@ -13,12 +13,18 @@ mod agent_run_rows;
 mod author_edit_rows;
 #[path = "release1_operation_rows_chapter.rs"]
 mod chapter_rows;
+#[path = "release1_operation_rows_conversation.rs"]
+mod conversation_rows;
 #[path = "release1_operation_rows_editor_session.rs"]
 mod editor_session_rows;
 #[path = "release1_operation_rows_export.rs"]
 mod export_rows;
 #[path = "release1_operation_rows_generation.rs"]
 mod generation_rows;
+#[path = "release1_operation_rows_memory_entries.rs"]
+mod memory_entries_rows;
+#[path = "release1_operation_rows_project_instruction.rs"]
+mod project_instruction_rows;
 #[path = "release1_operation_rows_project.rs"]
 mod project_rows;
 #[path = "release1_operation_rows_project_settings.rs"]
@@ -336,6 +342,10 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &project_settings_rows::UPDATE_PROJECT_ROW,
     &project_settings_rows::GET_PROJECT_ASSISTANCE_ROW,
     &project_settings_rows::UPDATE_PROJECT_ASSISTANCE_ROW,
+    &project_instruction_rows::GET_PROJECT_INSTRUCTION_ROW,
+    &project_instruction_rows::UPDATE_PROJECT_INSTRUCTION_ROW,
+    &memory_entries_rows::LIST_MEMORY_ENTRIES_ROW,
+    &memory_entries_rows::DELETE_MEMORY_ENTRY_ROW,
     &editor_session_rows::CREATE_EDITOR_SESSION_ROW,
     &editor_session_rows::GET_EDITOR_SESSION_ROW,
     &editor_session_rows::TAKE_OVER_PROJECT_WRITER_ROW,
@@ -356,6 +366,8 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &author_edit_rows::UNDO_LATEST_AUTHOR_ACTION_ROW,
     &agent_run_rows::CREATE_AGENT_RUN_ROW,
     &agent_run_rows::GET_AGENT_RUN_ROW,
+    &conversation_rows::LIST_PROJECT_CONVERSATIONS_ROW,
+    &conversation_rows::GET_PROJECT_CONVERSATION_ROW,
     &run_control_rows::STEER_AGENT_RUN_ROW,
     &run_control_rows::PAUSE_AGENT_RUN_ROW,
     &run_control_rows::CANCEL_AGENT_RUN_ROW,

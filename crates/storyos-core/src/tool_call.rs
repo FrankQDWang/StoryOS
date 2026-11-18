@@ -108,6 +108,26 @@ impl ValidatedToolCall {
             ToolIntake::ReadSkillResource { skill, path } => {
                 json!({ "skill": skill, "path": path })
             }
+            ToolIntake::ReadChapter {
+                chapter,
+                first_block,
+                last_block,
+            } => {
+                json!({ "chapter": chapter, "first_block": first_block, "last_block": last_block })
+            }
+            ToolIntake::SearchManuscript { query } => json!({ "query": query }),
+            ToolIntake::HybridSearchManuscript { question, terms } => {
+                json!({ "question": question, "terms": terms })
+            }
+            ToolIntake::WriteMemory(write) => write.arguments(),
+            ToolIntake::ReadMemoryEntry { entry } => json!({ "entry": entry }),
+            ToolIntake::SearchMemory { query } => json!({ "query": query }),
+            ToolIntake::RecordMemoryObservations(observations) => {
+                crate::record_memory_observations::arguments(observations)
+            }
+            ToolIntake::ApplyMemoryOperations(operations) => {
+                crate::apply_memory_operations::arguments(operations)
+            }
         }
     }
 
@@ -198,6 +218,7 @@ impl CallValidationRefusal {
             Self::Intake(IntakeRefusal::Url) => "intake_url",
             Self::Intake(IntakeRefusal::UnstorableText) => "unstorable_text",
             Self::Intake(IntakeRefusal::Reason) => "intake_reason",
+            Self::Intake(IntakeRefusal::Terms) => "intake_terms",
             Self::ProposeEdit(refusal) => refusal.label(),
         }
     }
@@ -224,6 +245,10 @@ impl CallValidationRefusal {
             }
             Self::Intake(IntakeRefusal::Reason) => {
                 "its reason is empty, has more than 512 characters, or has a control character"
+            }
+            Self::Intake(IntakeRefusal::Terms) => {
+                "it has more than 8 terms, or one of its terms is empty or has more than 64 \
+                 characters"
             }
             Self::ProposeEdit(refusal) => return refusal.result_text(),
         };

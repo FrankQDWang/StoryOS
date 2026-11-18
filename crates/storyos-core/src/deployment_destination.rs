@@ -11,6 +11,10 @@ pub const AGENT_PLAN_ACCOUNT_BOUNDARY: &str =
 pub const AGENT_PLAN_CREDENTIAL_REFERENCE: &str = "settings:STORYOS_AGENT_PLAN_API_KEY";
 pub const AGENT_PLAN_ELIGIBILITY_EVIDENCE: &str =
     "https://github.com/FrankQDWang/StoryOS/issues/392#issuecomment-5978758415";
+/// The time that the Agent Plan route keeps a stored response: the default `expire_at` of the
+/// route, creation plus 259200 seconds (`docs/research/agent-plan-responses-capability-preflight.md`).
+pub const AGENT_PLAN_STORED_RESPONSE_RETENTION: Duration =
+    Duration::from_secs(/*secs*/ 259_200);
 
 /// The destination that the deployment configuration offers. Only a development or test
 /// deployment offers the Contract-Faithful Fake Destination.
@@ -44,6 +48,14 @@ impl DestinationKind {
         [Self::HostFake, Self::VolcengineAgentPlan]
             .into_iter()
             .find(|kind| kind.as_str() == value)
+    }
+
+    /// The Credential Reference of the operator quota. The fake destination needs none.
+    pub fn credential_reference(self) -> Option<&'static str> {
+        match self {
+            Self::HostFake => None,
+            Self::VolcengineAgentPlan => Some(AGENT_PLAN_CREDENTIAL_REFERENCE),
+        }
     }
 }
 
@@ -195,10 +207,7 @@ impl DeploymentDestination {
     }
 
     pub fn credential_reference(&self) -> Option<&'static str> {
-        match self {
-            Self::HostFakeToolLoop => None,
-            Self::VolcengineAgentPlan { .. } => Some(AGENT_PLAN_CREDENTIAL_REFERENCE),
-        }
+        self.kind().credential_reference()
     }
 
     pub fn budget_bounds(&self) -> BudgetBounds {

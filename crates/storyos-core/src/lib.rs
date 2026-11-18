@@ -2,38 +2,63 @@
 
 mod accept_proposal;
 mod agent_run_control;
+mod agent_run_kind;
 mod append_proposal_generation_batch;
+mod apply_memory_operations;
 mod archive_path;
 mod archive_zip;
 mod assemble_context;
+mod chapter_capture_schedule;
+mod chapter_list;
 mod compact_active_context;
 mod continuation_input;
+mod conversation_retention;
 mod create_admission;
 mod create_agent_run;
 mod create_chapter;
 mod create_project;
 mod create_volume;
 mod delete_chapter;
+mod delete_memory_entry;
 mod delete_volume;
 mod deployment_destination;
 mod earlier_author_messages;
+mod embedding_request;
 mod finish_rule;
 mod function_calling;
 mod grant_scope;
 mod host_fake_profile;
 mod host_tool;
+mod hybrid_search_manuscript;
+mod instruction_binding;
 mod load_skill;
 mod manuscript_payload;
+mod manuscript_use;
+mod memory_capture;
+mod memory_conflict_flag;
+mod memory_consolidation;
+mod memory_delete_marks;
+mod memory_entry;
+mod memory_index;
+mod memory_operation_decision;
+mod memory_prune;
+mod memory_work_schedule;
 mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
+mod read_chapter;
+mod read_memory_entry;
 mod read_skill_resource;
 mod read_tool_result;
 mod rebuild_expired_reference;
+mod record_memory_observations;
 mod research_destination;
 mod research_source;
 mod research_synthesis;
 mod retrieve_original_result;
+mod run_result;
+mod search_manuscript;
+mod search_memory;
 mod submit_research;
 mod tool_call;
 mod tool_call_recovery;
@@ -46,11 +71,19 @@ mod tool_result_context;
 mod tool_result_stub;
 mod tool_spec;
 mod unknown_create_successor;
+pub use apply_memory_operations::{
+    APPLY_MEMORY_OPERATIONS_TOOL_SPEC, AdmittedOperation, MemoryOperationAction,
+    MemoryOperationCandidate, MemoryOperationRefusal, PassFacts, PassMemoryEntry, PassSettlement,
+    intake as apply_memory_operations_intake, parameters as apply_memory_operations_parameters,
+    settle_operations_call,
+};
 pub use ordinary_passage_request::{
     HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
     OrdinaryPassageResolution, PASSAGE_REFERENCE_QUESTION, parse_ordinary_passage_request,
 };
 mod open_block_proposal;
+mod passage_cut;
+mod passage_ranking;
 mod project_archive;
 mod project_export;
 mod readable_export;
@@ -71,8 +104,10 @@ mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
 mod update_project_assistance;
+mod update_project_instruction;
 mod update_volume;
 mod withdraw_proposal;
+mod write_memory;
 
 pub use accept_proposal::{
     AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalOutcome,
@@ -85,6 +120,7 @@ pub use agent_run_control::{
     PauseAgentRunNoEffect, SteerAgentRunConflict, SteerAgentRunNoEffect, SteeringReader,
     classify_cancel_agent_run, classify_pause_agent_run, classify_steer_agent_run,
 };
+pub use agent_run_kind::{AgentRunKind, MEMORY_CAPTURE_MAX_RUN_STEPS, yields_to_author};
 pub use append_proposal_generation_batch::{
     AppendProposalGenerationBatch, AppendProposalGenerationBatchConflict,
     AppendProposalGenerationBatchRefusal, AppendProposalGenerationBatchResult,
@@ -98,9 +134,15 @@ pub use assemble_context::{
     CONTEXT_ITEM_TOKEN_LIMIT, ContextBlockReason, ContextCause, ContextSourceClass,
     ContextSufficiency, CurrentPassageAssembly, CurrentPassageAssemblyRecord, DestinationIo,
     InstructionBindingInput, PassageContextTarget, ProjectionMode, RejectionReason,
-    assemble_current_passage_context, assemble_passage_collection, decode_assembly_record,
-    encode_assembly_record,
+    assemble_current_passage_context, assemble_passage_collection, count_context_item_tokens,
+    decode_assembly_record, encode_assembly_record,
 };
+pub use chapter_capture_schedule::{
+    CHAPTER_CAPTURE_INTERVAL, CHAPTER_CAPTURE_RATE, CHAPTER_QUIET_TIME, ChapterCaptureFacts,
+    ChapterCaptureInput, ChapterCaptureSkip, ChapterCaptureTurn, ChapterRowChange,
+    chapter_capture_due, chapter_capture_input, chapter_capture_turn, decide_chapter_capture,
+};
+pub use chapter_list::{ChapterListEntry, assemble_chapter_list};
 pub use compact_active_context::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX,
     AGENT_PLAN_COMPACTION_PRODUCER, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,
@@ -117,6 +159,7 @@ pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput, PriorInput,
     continuation_boundary_matches, continuation_mapping_can_represent, map_continuation_input,
 };
+pub use conversation_retention::earlier_turns_expired;
 pub use create_admission::{
     CreateAdmission, CreateAdmissionFacts, RouteFacts, admit_create, admit_route,
 };
@@ -139,6 +182,10 @@ pub use delete_chapter::{
     DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteChapterResult,
     delete_chapter,
 };
+pub use delete_memory_entry::{
+    DeleteMemoryEntry, DeleteMemoryEntryConflict, DeleteMemoryEntryNoEffect,
+    DeleteMemoryEntryRefusal, DeleteMemoryEntryResult, LastMemoryVersion, delete_memory_entry,
+};
 pub use delete_volume::{
     DeleteVolume, DeleteVolumeApplied, DeleteVolumeConflict, DeleteVolumeNoEffect,
     DeleteVolumeRefusal, DeleteVolumeResult, VolumeChildPolicy, VolumeRemovalLifecycle,
@@ -146,12 +193,19 @@ pub use delete_volume::{
 };
 pub use deployment_destination::{
     AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_CREDENTIAL_REFERENCE, AGENT_PLAN_ELIGIBILITY_EVIDENCE,
-    AGENT_PLAN_ENDPOINT, BudgetBounds, DeploymentDestination, DestinationKind, RequestBounds,
-    RuntimeQualification,
+    AGENT_PLAN_ENDPOINT, AGENT_PLAN_STORED_RESPONSE_RETENTION, BudgetBounds, DeploymentDestination,
+    DestinationKind, RequestBounds, RuntimeQualification,
 };
 pub use earlier_author_messages::{
     EARLIER_AUTHOR_MESSAGES_TOKEN_LIMIT, EarlierAuthorMessage, EarlierAuthorMessageSource,
     is_earlier_author_message, keep_earlier_author_messages,
+};
+pub use embedding_request::{
+    AGENT_PLAN_EMBEDDING_REGISTRATION, EMBEDDING_DIMENSIONS, EMBEDDING_REQUEST_BOUNDS,
+    EMBEDDING_REQUEST_TIMEOUT, EMBEDDING_TEXT_TOKEN_LIMIT, EmbeddingAdapter,
+    EmbeddingAdmissionFacts, EmbeddingBindingFacts, EmbeddingCause, EmbeddingInput,
+    EmbeddingRefusal, EmbeddingRegistration, EmbeddingSettlement, HOST_FAKE_EMBEDDING_REGISTRATION,
+    MANUSCRIPT_EMBEDDING_PURPOSE, admit_embedding, embedding_binding_to_make,
 };
 pub use finish_rule::{
     FinishRuleOutcome, MAX_RUN_STEPS, PriorStepCall, RunStepLimit, ToolChoice,
@@ -171,7 +225,15 @@ pub use host_fake_profile::{
 pub use host_tool::{
     FINISH_DOES_NOT_COUNT_RESULT, FIRST_HOST_TOOL_REGISTRATION, HOST_TOOL_REGISTRATION,
     HOST_TOOL_REGISTRATIONS, HostToolRegistration, READ_RESULT_HOST_TOOL_REGISTRATION,
-    execute_host_tool, host_tool, host_tool_result,
+    SKILL_HOST_TOOL_REGISTRATION, execute_host_tool, host_tool, host_tool_result,
+    host_tool_result_class,
+};
+pub use hybrid_search_manuscript::{
+    HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC, HybridSearchRefusal, NO_SEARCH_BY_MEANING,
+    admit_hybrid_search, hybrid_search_result,
+};
+pub use instruction_binding::{
+    BoundInstruction, assemble_instruction_binding, project_instruction_binding,
 };
 pub use load_skill::{
     LOAD_SKILL_TOOL_SPEC, LoadSkillRefusal, SKILL_LOAD_LIMIT, SkillLoadFacts, admit_skill_load,
@@ -182,6 +244,38 @@ pub use manuscript_payload::{
     COORDINATE_VERSION, MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind,
     ManuscriptPayload, VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
     upgrade_legacy_manuscript,
+};
+pub use manuscript_use::{ManuscriptUse, StoredManuscriptCall, manuscript_uses};
+pub use memory_capture::{
+    CaptureAdmissionFacts, CaptureEnd, CaptureInputKind, CaptureReferences, CaptureRefusal,
+    CaptureRunEnd, MemoryCaptureAssembly, admit_memory_capture, assemble_capture_references,
+    assemble_memory_capture_context, capture_end, keep_capture_references,
+};
+pub use memory_conflict_flag::MemoryConflictFlag;
+pub use memory_consolidation::{
+    ConsolidationOutcome, MEMORY_CONSOLIDATION_MAX_RUN_STEPS, MemoryConsolidationAssembly,
+    PassConflict, PassObservation, admit_memory_consolidation,
+    assemble_memory_consolidation_context, consolidation_failure, pass_observation_count,
+};
+pub use memory_delete_marks::{
+    MEMORY_DELETE_MARK_CAUSES, MemoryDeleteMark, assemble_memory_delete_marks,
+    memory_delete_marks_text,
+};
+pub use memory_entry::{
+    MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference,
+    MemorySourceReferenceRead, memory_revision_pin, read_memory_source_references,
+};
+pub use memory_index::{
+    MEMORY_INDEX_MAX_ENTRIES, MEMORY_INDEX_TOKEN_LIMIT, MemoryIndexEntry, assemble_memory_index,
+    memory_index_text,
+};
+pub use memory_operation_decision::decide_memory_operations;
+pub use memory_prune::{MEMORY_UNUSED_AFTER_DAYS, memory_entry_unused};
+pub use memory_work_schedule::{
+    CONSOLIDATION_INTERVAL, CONVERSATION_QUIET_TIME, ConsolidationFacts, ConsolidationSkip,
+    ConversationCaptureFacts, ConversationCaptureInput, ConversationCaptureSkip, ConversationRole,
+    ConversationRunMessages, capture_settlement_due, consolidation_due, conversation_capture_due,
+    conversation_capture_input, decide_consolidation, decide_conversation_capture,
 };
 pub use model_output::{
     AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, StreamItemRole, StreamItemState,
@@ -212,6 +306,16 @@ pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,
     OpenBlockProposalResult, open_block_proposal,
 };
+pub use passage_cut::{
+    PASSAGE_CHARACTER_LIMIT, PASSAGE_CUT_REVISION, Passage, PassageBlock, cut_passages,
+    passage_embedding_text,
+};
+pub use passage_ranking::{
+    ChapterPassages, LocatedPassage, NearestPassage, PASSAGE_FUSION_CONSTANT, PASSAGE_LIST_LIMIT,
+    PASSAGE_RESULT_LIMIT, PASSAGE_TERM_LIMIT, PASSAGE_TERM_MAX_CHARS, PassagePlace, PassageTerms,
+    PassageTermsRefusal, RankingBlock, RankingChapter, admit_passage_ranking, current_passages,
+    exact_term_list, fuse_passage_lists, vector_list,
+};
 pub use project_archive::{
     ARCHIVE_ENTRY_DIGEST_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
     ArchiveEntryDescriptor, ArchiveEntrySource, BuiltProjectArchive,
@@ -223,6 +327,13 @@ pub use project_archive::{
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
     export_project_archive,
+};
+pub use read_chapter::{
+    BlockRange, ChapterReadRefusal, READ_CHAPTER_TOOL_SPEC, ReadableChapter, admit_chapter_read,
+};
+pub use read_memory_entry::{
+    MEMORY_READ_NOT_FOUND, MemoryEntryRead, MemoryFlagSource, MemoryReadFlag,
+    READ_MEMORY_ENTRY_TOOL_SPEC, memory_read_not_found,
 };
 pub use read_skill_resource::{
     READ_SKILL_RESOURCE_TOOL_SPEC, SKILL_RESOURCE_READ_LIMIT, SkillResourceReadFacts,
@@ -242,6 +353,12 @@ pub use readable_export_command::{
 pub use rebuild_expired_reference::{
     ContinuationReferenceCondition, ExpiryRebuildBlock, ExpiryRebuildDecision,
     ExpiryRebuildDisposition, ExpiryRebuildFacts, decide_confirmed_expiry_rebuild,
+};
+pub use record_memory_observations::{
+    CAPTURE_OBSERVATIONS_MAX, CaptureOutcome, MemoryObservation, ObservationCallSettlement,
+    ObservationCandidate, ObservationKind, ObservationRefusal,
+    RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC, observations_result, settle_observation_call,
+    validate_observations,
 };
 pub use reject_proposal_operations::{
     RejectProposalOperations, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
@@ -281,6 +398,12 @@ pub use revision_comparison::{
     ExactRevisionTexts, RangeMapping, ReplacementSpan, RevisionComparison,
     RevisionComparisonAccess, inspect_revision_comparison, map_unchanged_range, utf16_slice,
 };
+pub use run_result::{RunCallPosition, run_results};
+pub use search_manuscript::{
+    MANUSCRIPT_SEARCH_MATCH_LIMIT, SEARCH_MANUSCRIPT_TOOL_SPEC, admit_manuscript_search,
+    exact_matches,
+};
+pub use search_memory::{SEARCH_MEMORY_TOOL_SPEC, search_memory};
 pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
     SetCurrentChapterRefusal, SetCurrentChapterResult, set_current_chapter,
@@ -329,8 +452,9 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_READ_RESULT_MAPPING_REVISION, AGENT_PLAN_READ_RESULT_REGISTRATION,
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_SKILL_MAPPING_REVISION,
+    AGENT_PLAN_CONTINUITY_MAPPING_REVISION, AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
+    AGENT_PLAN_READ_RESULT_REGISTRATION, AGENT_PLAN_REGISTRATION,
+    AGENT_PLAN_SKILL_MAPPING_REVISION, AGENT_PLAN_SKILL_REGISTRATION,
     AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION, AGENT_PLAN_TOOL_LOOP_REGISTRATION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
@@ -378,6 +502,11 @@ pub use update_project_assistance::{
     UpdateProjectAssistanceApplied, UpdateProjectAssistanceConflict,
     UpdateProjectAssistanceNoEffect, UpdateProjectAssistanceResult, update_project_assistance,
 };
+pub use update_project_instruction::{
+    UpdateProjectInstruction, UpdateProjectInstructionApplied, UpdateProjectInstructionConflict,
+    UpdateProjectInstructionNoEffect, UpdateProjectInstructionRefusal,
+    UpdateProjectInstructionResult, update_project_instruction,
+};
 pub use update_volume::{
     UpdateVolume, UpdateVolumeApplied, UpdateVolumeConflict, UpdateVolumeNoEffect,
     UpdateVolumeRefusal, UpdateVolumeResult, update_volume,
@@ -385,6 +514,11 @@ pub use update_volume::{
 pub use withdraw_proposal::{
     WithdrawProposal, WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal,
     WithdrawProposalResult, WithdrawalCause, withdraw_proposal,
+};
+pub use write_memory::{
+    CurrentMemoryEntry, MEMORY_CHARACTER_TEXT_MAX_CHARS, MEMORY_DESCRIPTION_MAX_CHARS,
+    MEMORY_TEXT_MAX_CHARS, MEMORY_TITLE_MAX_CHARS, MemoryVersionWrite, MemoryWrite,
+    MemoryWriteAction, MemoryWriteRefusal, WRITE_MEMORY_TOOL_SPEC, decide_memory_write,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]

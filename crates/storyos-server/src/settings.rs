@@ -14,6 +14,7 @@ const KEYS: &[&str] = &[
     "challenge_secret",
     "model_destination",
     "model_qualification_authorization",
+    "embedding_destination",
     "worker",
     "export_lease_ttl_secs",
     "test_allow_multiple_bootstrap_sessions",
@@ -31,6 +32,8 @@ pub struct ServerSettings {
     pub model_destination: Option<String>,
     /// The `https` link to the author authorization of the runtime qualification (ADR 0049).
     pub model_qualification_authorization: Option<String>,
+    /// `host_fake` or `volcengine_agent_plan`. An absent value offers no embedding (ADR 0095).
+    pub embedding_destination: Option<String>,
     /// `0` turns off the in-process Worker loop.
     pub worker: Option<String>,
     #[serde(default, deserialize_with = "optional_number")]
@@ -82,7 +85,40 @@ impl ServerSettings {
         }
     }
 
+    /// The embedding Registration of the deployment. An absent value gives none. The Agent Plan
+    /// embedding needs the Agent Plan model destination.
+    pub fn embedding_registration(
+        &self,
+        model: Option<&storyos_core::DeploymentDestination>,
+    ) -> Result<Option<&'static storyos_core::EmbeddingRegistration>, SettingsError> {
+        use storyos_core::DestinationKind;
+        let Some(value) = self.embedding_destination.as_deref() else {
+            return Ok(None);
+        };
+        match DestinationKind::parse(value) {
+            Some(DestinationKind::HostFake) => Ok(Some(storyos_core::EmbeddingRegistration::of(
+                DestinationKind::HostFake,
+            ))),
+            Some(DestinationKind::VolcengineAgentPlan)
+                if model.map(storyos_core::DeploymentDestination::kind)
+                    == Some(DestinationKind::VolcengineAgentPlan) =>
+            {
+                Ok(Some(storyos_core::EmbeddingRegistration::of(
+                    DestinationKind::VolcengineAgentPlan,
+                )))
+            }
+            _ => Err(SettingsError::new(
+                "STORYOS_EMBEDDING_DESTINATION",
+                /*env_file*/ None,
+            )),
+        }
+    }
+
     pub fn in_process_worker(&self) -> bool {
         self.worker.as_deref() != Some("0")
     }
 }
+
+#[cfg(test)]
+#[path = "settings_tests.rs"]
+mod tests;

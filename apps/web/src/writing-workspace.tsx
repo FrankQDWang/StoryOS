@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { EditorWriterProjection } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { WritingAssistantPanel, type AssistantContext } from "./writing-assistant-panel.tsx";
@@ -12,12 +12,24 @@ function writerGeneration(writer: EditorWriterProjection | undefined): string | 
     : writer.observed_writer_generation;
 }
 
+/** The value of one parameter of the workspace address, for example `?conversation={conversation_id}`. */
+export function addressParameter(name: "conversation" | "chapter"): string | undefined {
+  return new URLSearchParams(globalThis.location?.search ?? "").get(name) ?? undefined;
+}
+
+/** Removes one parameter from the address, so that a reload does not use it again. */
+export function removeAddressParameter(name: "conversation" | "chapter"): void {
+  const address = new URL(globalThis.location.href);
+  address.searchParams.delete(name);
+  globalThis.history.replaceState(globalThis.history.state, "", address);
+}
+
 export function WritingWorkspace({
   tree,
   editor,
   writer,
   assistant,
-  onOpenedProposal, onNavigateProposal,
+  onOpenedProposal, onNavigateProposal, holdAddressConversation = false,
 }: {
   tree: ReactNode;
   editor: ReactNode;
@@ -25,8 +37,20 @@ export function WritingWorkspace({
   assistant?: AssistantContext;
   onNavigateProposal?: (destination: ProposalDestination) => void;
   onOpenedProposal?: (locator: ProposalLocator) => void;
+  /**
+   * True while the workspace opens the Chapter of its address. A Chapter change mounts a new workspace, so the
+   * Conversation of the address waits for the workspace of that Chapter.
+   */
+  holdAddressConversation?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [requestedConversation] = useState(() => addressParameter("conversation"));
+  // The panel opens the Conversation of the address one time. A reload then shows the Conversation that the panel
+  // records, and not the Conversation of the address again.
+  useEffect(() => {
+    if (requestedConversation === undefined || holdAddressConversation) return;
+    removeAddressParameter("conversation");
+  }, [holdAddressConversation]);
   return (
     <section
       className={collapsed ? "workspace agent-is-collapsed" : "workspace"}
@@ -40,6 +64,7 @@ export function WritingWorkspace({
         key={assistant === undefined ? "unbound" : `${assistant.scope.owner_user_id}:${assistant.scope.project_id}`}
         collapsed={collapsed}
         context={assistant}
+        requestedConversationId={holdAddressConversation ? undefined : requestedConversation}
         onOpenedProposal={onOpenedProposal}
         onNavigateProposal={onNavigateProposal}
       />

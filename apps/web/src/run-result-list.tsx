@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 import type {
   AgentRunResultInspect, GetAgentRunResponse, GetManuscriptTreeResponse,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { RESEARCH_SYNTHESIS_SENTENCE, proposalSentence } from "./assistant-run-outcome.ts";
+import { RESEARCH_SYNTHESIS_SENTENCE, memoryWriteSentence, proposalSentence } from "./assistant-run-outcome.ts";
+import { ManuscriptUseList } from "./manuscript-use-list.tsx";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import type { ProposalDestination } from "./proposal-navigation.ts";
 import { ResearchTurn } from "./research-turn.tsx";
@@ -17,6 +18,8 @@ function resultLine(result: AgentRunResultInspect): string {
       return proposalSentence(result.locations);
     case "research_artifact":
       return RESEARCH_SYNTHESIS_SENTENCE;
+    case "memory_write":
+      return memoryWriteSentence(result.action, result.title);
     case "answer":
       return result.text;
   }
@@ -24,8 +27,9 @@ function resultLine(result: AgentRunResultInspect): string {
 
 /**
  * Each result of a settled Run in the order in which the model made them (ADR 0091 section 6): a Proposal with its
- * change sentence and locations, a Research Artifact with its research turn, and the final answer text. A Run with
- * one result shows it as the decision of that kind did before. The Skills of the Run go after its first result. The
+ * change sentence and locations, a Research Artifact with its research turn, one line for each Memory write with no
+ * control, and the final answer text. A Run with
+ * one result shows it as the decision of that kind did before. The Skills of the Run and then its manuscript Tool uses go after its first result. The
  * current turn also shows the sources of a Run with no Research Artifact after its first result, and `children` go
  * with the Research Artifact.
  */
@@ -42,7 +46,7 @@ export function RunResultList({ run, results, context, history, tree, sourceChap
   const researched = results.some(result => result.kind === "research_artifact");
   return <>{results.map((result, index) => <Fragment key={index}>
     <p className="assistant-result" data-assistant-result={history ? undefined : ""}>{resultLine(result)}</p>
-    {index === 0 ? <SkillUseList run={run} /> : null}
+    {index === 0 ? <><SkillUseList run={run} /><ManuscriptUseList run={run} /></> : null}
     {context !== undefined && (result.kind === "research_artifact" || (!history && !researched && index === 0))
       ? <ResearchTurn context={context} run={run} history={history}
         artifactId={result.kind === "research_artifact" ? result.research_artifact_id : undefined}>{children}</ResearchTurn>

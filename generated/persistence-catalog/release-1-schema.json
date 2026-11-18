@@ -27,7 +27,7 @@
     },
     "command_kind": {
       "constraints": {
-        "command_kind_check": "CHECK ((VALUE = ANY (ARRAY['acceptProposal'::text, 'applyAuthorEdit'::text, 'cancelAgentRun'::text, 'createAgentRun'::text, 'createChapter'::text, 'createEditorSession'::text, 'createProject'::text, 'createVolume'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'pauseAgentRun'::text, 'rejectProposalOperations'::text, 'reopenRejectedOperations'::text, 'reopenWithdrawnProposal'::text, 'replanProposal'::text, 'setCurrentChapter'::text, 'steerAgentRun'::text, 'takeOverProjectWriter'::text, 'undoLatestAuthorAction'::text, 'updateChapter'::text, 'updateProject'::text, 'updateProjectAssistance'::text, 'updateVolume'::text, 'withdrawProposal'::text])))"
+        "command_kind_check": "CHECK ((VALUE = ANY (ARRAY['acceptProposal'::text, 'applyAuthorEdit'::text, 'cancelAgentRun'::text, 'createAgentRun'::text, 'createChapter'::text, 'createEditorSession'::text, 'createProject'::text, 'createVolume'::text, 'deleteChapter'::text, 'deleteMemoryEntry'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'pauseAgentRun'::text, 'rejectProposalOperations'::text, 'reopenRejectedOperations'::text, 'reopenWithdrawnProposal'::text, 'replanProposal'::text, 'setCurrentChapter'::text, 'steerAgentRun'::text, 'takeOverProjectWriter'::text, 'undoLatestAuthorAction'::text, 'updateChapter'::text, 'updateProject'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'updateVolume'::text, 'withdrawProposal'::text])))"
       },
       "default": null,
       "nullable": true,
@@ -35,7 +35,7 @@
     },
     "event_kind": {
       "constraints": {
-        "event_kind_check": "CHECK ((VALUE = ANY (ARRAY['agent_run_cancelled'::text, 'agent_run_created'::text, 'agent_run_paused'::text, 'agent_run_steering_retained'::text, 'authoritative_author_edit_applied'::text, 'chapter_created'::text, 'chapter_deleted'::text, 'chapter_updated'::text, 'current_chapter_set'::text, 'human_readable_manuscript_export_settled'::text, 'project_assistance_updated'::text, 'project_created'::text, 'project_export_settled'::text, 'project_updated'::text, 'volume_created'::text, 'volume_deleted'::text, 'volume_updated'::text, 'writer_takeover_applied'::text, 'writer_takeover_compare_failed'::text])))"
+        "event_kind_check": "CHECK ((VALUE = ANY (ARRAY['agent_run_cancelled'::text, 'agent_run_created'::text, 'agent_run_paused'::text, 'agent_run_steering_retained'::text, 'authoritative_author_edit_applied'::text, 'chapter_created'::text, 'chapter_deleted'::text, 'chapter_updated'::text, 'current_chapter_set'::text, 'human_readable_manuscript_export_settled'::text, 'memory_entry_deleted'::text, 'project_assistance_updated'::text, 'project_created'::text, 'project_export_settled'::text, 'project_instruction_updated'::text, 'project_updated'::text, 'volume_created'::text, 'volume_deleted'::text, 'volume_updated'::text, 'writer_takeover_applied'::text, 'writer_takeover_compare_failed'::text])))"
       },
       "default": null,
       "nullable": true,
@@ -623,12 +623,12 @@
         },
         "author_message": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "text"
         },
         "chapter_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "claim_generation": {
@@ -638,7 +638,7 @@
         },
         "conversation_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "fence_token": {
@@ -658,7 +658,7 @@
         },
         "memory_settings_revision": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "model_registration_revision": {
@@ -686,6 +686,11 @@
           "nullable": false,
           "type": "uuid"
         },
+        "project_instruction_revision_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
         "project_model_use_binding_revision": {
           "default": null,
           "nullable": false,
@@ -693,13 +698,18 @@
         },
         "receipt_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "run_id": {
           "default": null,
           "nullable": false,
           "type": "uuid"
+        },
+        "run_kind": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
         },
         "settlement": {
           "default": null,
@@ -723,12 +733,15 @@
         "agent_runs_binding_registration_fkey": "FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) MATCH FULL",
         "agent_runs_claim_generation_check": "CHECK ((claim_generation >= 0))",
         "agent_runs_fence_token_check": "CHECK ((fence_token >= 0))",
-        "agent_runs_owner_user_id_project_id_conversation_id_memory_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision) MATCH FULL",
+        "agent_runs_kind_shape": "CHECK (((((run_kind = 'author'::text) AND (conversation_id IS NOT NULL) AND (memory_settings_revision IS NOT NULL) AND (chapter_id IS NOT NULL) AND (author_message IS NOT NULL) AND (receipt_id IS NOT NULL)) OR ((run_kind <> 'author'::text) AND (conversation_id IS NULL) AND (memory_settings_revision IS NULL) AND (chapter_id IS NULL) AND (author_message IS NULL) AND (receipt_id IS NULL))) IS TRUE))",
+        "agent_runs_owner_user_id_project_id_conversation_id_memory_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision)",
         "agent_runs_owner_user_id_project_id_grant_id_fkey": "FOREIGN KEY (owner_user_id, project_id, grant_id) REFERENCES storyos.project_destination_grants(owner_user_id, project_id, grant_id) MATCH FULL",
         "agent_runs_owner_user_id_project_id_project_model_use_bind_fkey": "FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision) MATCH FULL",
-        "agent_runs_owner_user_id_project_id_receipt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL",
+        "agent_runs_owner_user_id_project_id_receipt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id)",
         "agent_runs_pkey": "PRIMARY KEY (owner_user_id, project_id, run_id)",
-        "agent_runs_predecessor_fk": "FOREIGN KEY (owner_user_id, project_id, predecessor_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)"
+        "agent_runs_predecessor_fk": "FOREIGN KEY (owner_user_id, project_id, predecessor_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)",
+        "agent_runs_project_instruction_revision_fkey": "FOREIGN KEY (owner_user_id, project_id, project_instruction_revision_id) REFERENCES storyos.project_instruction_revisions(owner_user_id, project_id, instruction_revision_id)",
+        "agent_runs_run_kind_check": "CHECK ((run_kind = ANY (ARRAY['author'::text, 'memory_capture'::text, 'memory_consolidation'::text])))"
       },
       "indexes": {
         "agent_runs_binding_idx": "CREATE INDEX agent_runs_binding_idx ON storyos.agent_runs USING btree (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision)",
@@ -1262,7 +1275,7 @@
       "constraints": {
         "author_command_admissions_client_session_generation_check": "CHECK (((client_session_generation >= (0)::numeric) AND (client_session_generation <= '18446744073709551615'::numeric)))",
         "author_command_admissions_command_payload_check": "CHECK ((jsonb_typeof(command_payload) = 'object'::text))",
-        "author_command_admissions_command_shape": "CHECK ((((((command_kind)::text = 'applyAuthorEdit'::text) AND ((action_class)::text = 'direct_editor_action'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (observed_ownership_partition = ANY (ARRAY['authoritative'::text, 'mixed'::text])) AND (((observed_ownership_partition = 'authoritative'::text) AND (expected_proposal_head_revision_ids = '{}'::uuid[])) OR ((observed_ownership_partition = 'mixed'::text) AND (cardinality(expected_proposal_head_revision_ids) >= 1))) AND (undo_group_id IS NOT NULL) AND (completed_intent_record_id IS NOT NULL) AND (local_intent_sequence IS NOT NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'takeOverProjectWriter'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'createProject'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NULL) AND (challenge_expires_at IS NULL)) OR (((command_kind)::text = 'updateProject'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'createVolume'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'createChapter'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'updateVolume'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'updateChapter'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = ANY (ARRAY['deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text])) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'setCurrentChapter'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (((chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL)) OR ((chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL))) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'undoLatestAuthorAction'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (((chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL)) OR ((chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL))) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'createAgentRun'::text) AND ((action_class)::text = 'agent_run_start'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = ANY (ARRAY['pauseAgentRun'::text, 'cancelAgentRun'::text])) AND ((action_class)::text = 'agent_run_control'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'acceptProposal'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'rejectProposalOperations'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'reopenRejectedOperations'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'replanProposal'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'withdrawProposal'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'reopenWithdrawnProposal'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'steerAgentRun'::text) AND ((action_class)::text = 'agent_run_control'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL))) IS TRUE))",
+        "author_command_admissions_command_shape": "CHECK ((((((command_kind)::text = 'applyAuthorEdit'::text) AND ((action_class)::text = 'direct_editor_action'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (observed_ownership_partition = ANY (ARRAY['authoritative'::text, 'mixed'::text])) AND (((observed_ownership_partition = 'authoritative'::text) AND (expected_proposal_head_revision_ids = '{}'::uuid[])) OR ((observed_ownership_partition = 'mixed'::text) AND (cardinality(expected_proposal_head_revision_ids) >= 1))) AND (undo_group_id IS NOT NULL) AND (completed_intent_record_id IS NOT NULL) AND (local_intent_sequence IS NOT NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'takeOverProjectWriter'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'createProject'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NULL) AND (challenge_expires_at IS NULL)) OR (((command_kind)::text = 'updateProject'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'createVolume'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'createChapter'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'updateVolume'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'updateChapter'::text) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = ANY (ARRAY['deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text])) AND ((action_class)::text = 'explicit_project_command'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'setCurrentChapter'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (((chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL)) OR ((chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL))) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'undoLatestAuthorAction'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (((chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL)) OR ((chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL))) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'createAgentRun'::text) AND ((action_class)::text = 'agent_run_start'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = ANY (ARRAY['pauseAgentRun'::text, 'cancelAgentRun'::text])) AND ((action_class)::text = 'agent_run_control'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'acceptProposal'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'rejectProposalOperations'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'reopenRejectedOperations'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'replanProposal'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'withdrawProposal'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'reopenWithdrawnProposal'::text) AND ((action_class)::text = 'explicit_editor_command'::text) AND (editor_session_id IS NOT NULL) AND (writer_generation IS NOT NULL) AND (chapter_object_id IS NOT NULL) AND (expected_authoritative_revision_id IS NOT NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL)) OR (((command_kind)::text = 'steerAgentRun'::text) AND ((action_class)::text = 'agent_run_control'::text) AND (editor_session_id IS NULL) AND (writer_generation IS NULL) AND (chapter_object_id IS NULL) AND (expected_authoritative_revision_id IS NULL) AND (expected_proposal_head_revision_ids = '{}'::uuid[]) AND (target_refs = '{}'::text[]) AND (observed_ownership_partition IS NULL) AND (undo_group_id IS NULL) AND (completed_intent_record_id IS NULL) AND (local_intent_sequence IS NULL) AND (challenge_consumed_at IS NOT NULL) AND (challenge_expires_at IS NOT NULL))) IS TRUE))",
         "author_command_admissions_editor_session_fkey": "FOREIGN KEY (owner_user_id, project_id, editor_session_id) REFERENCES storyos.editor_sessions(owner_user_id, project_id, editor_session_id)",
         "author_command_admissions_local_intent_sequence_check": "CHECK (((local_intent_sequence >= (1)::numeric) AND (local_intent_sequence <= '18446744073709551615'::numeric)))",
         "author_command_admissions_no_draft_retry_source": "CHECK ((NOT (command_payload ? 'retry_source'::text)))",
@@ -1308,7 +1321,7 @@
       },
       "triggers": {
         "author_command_admissions_create_project_challenge": "CREATE TRIGGER author_command_admissions_create_project_challenge BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW EXECUTE FUNCTION storyos.require_create_project_challenge_admission()",
-        "author_command_admissions_writer_generation": "CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN ((((new.action_class)::text <> 'agent_run_control'::text) AND ((new.command_kind)::text <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission()"
+        "author_command_admissions_writer_generation": "CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN ((((new.action_class)::text <> 'agent_run_control'::text) AND ((new.command_kind)::text <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission()"
       }
     },
     "authoritative_commits": {
@@ -2051,7 +2064,7 @@
         },
         "receipt_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "run_id": {
@@ -2068,12 +2081,12 @@
       "constraints": {
         "context_assembly_manifests_decision_position_check": "CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric)))",
         "context_assembly_manifests_destination_pair": "CHECK (((((destination_context_manifest_id IS NULL) AND (outbound_disclosure_manifest_id IS NULL)) OR ((destination_context_manifest_id IS NOT NULL) AND (outbound_disclosure_manifest_id IS NOT NULL))) IS TRUE))",
-        "context_assembly_manifests_disclosure_grant_scope_check": "CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'research_tool_v1'::text])))",
+        "context_assembly_manifests_disclosure_grant_scope_check": "CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'research_tool_v1'::text, 'manuscript_embedding_v1'::text])))",
         "context_assembly_manifests_disclosure_grant_shape": "CHECK (((disclosure_grant_id IS NULL) = (disclosure_grant_scope IS NULL)))",
         "context_assembly_manifests_manifest_role_check": "CHECK ((manifest_role = ANY (ARRAY['decision'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text])))",
         "context_assembly_manifests_owner_user_id_project_id_operat_fkey": "FOREIGN KEY (owner_user_id, project_id, operation_requirement_id) REFERENCES storyos.operation_requirements(owner_user_id, project_id, operation_requirement_id) MATCH FULL",
         "context_assembly_manifests_owner_user_id_project_id_operati_key": "UNIQUE (owner_user_id, project_id, operation_requirement_id)",
-        "context_assembly_manifests_owner_user_id_project_id_receip_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL",
+        "context_assembly_manifests_owner_user_id_project_id_receip_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id)",
         "context_assembly_manifests_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
         "context_assembly_manifests_pkey": "PRIMARY KEY (owner_user_id, project_id, context_assembly_manifest_id)",
         "context_assembly_manifests_sufficiency_check": "CHECK ((sufficiency = ANY (ARRAY['complete'::text, 'blocked'::text])))"
@@ -2625,7 +2638,7 @@
       "constraints": {
         "domain_receipts_author_admission_fk": "FOREIGN KEY (owner_user_id, project_id, author_command_admission_id, command_id, command_kind, command_digest, idempotency_key) REFERENCES storyos.author_command_admissions(owner_user_id, project_id, author_command_admission_id, command_id, command_kind, canonical_command_digest, idempotency_key)",
         "domain_receipts_author_edit_relation_complete": "TRIGGER DEFERRABLE INITIALLY DEFERRED",
-        "domain_receipts_common_shape": "CHECK ((((((((result_kind)::text <> 'proposal_revised'::text) AND (cardinality(proposal_revision_ids) = 0)) OR (((result_kind)::text = 'proposal_revised'::text) AND (cardinality(proposal_revision_ids) = 1) AND (array_dims(proposal_revision_ids) = '[1:1]'::text))) AND (cardinality(draft_artifact_refs) = 0) AND (cardinality(artifact_lifecycle_event_refs) = 0) AND ((cardinality(condition_refs) = 0) OR (((command_kind)::text = 'acceptProposal'::text) AND ((result_kind)::text = 'conflicted'::text) AND (cardinality(condition_refs) = 1))) AND (array_position(expected_heads, NULL::uuid) IS NULL) AND (array_position(prior_heads, NULL::uuid) IS NULL) AND (array_position(resulting_heads, NULL::uuid) IS NULL) AND (array_position(authoritative_revision_ids, NULL::uuid) IS NULL) AND (array_position(proposal_revision_ids, NULL::uuid) IS NULL) AND (array_position(authoritative_commit_ids, NULL::uuid) IS NULL) AND (array_position(draft_artifact_refs, NULL::text) IS NULL) AND (array_position(artifact_lifecycle_event_refs, NULL::text) IS NULL) AND (array_position(condition_refs, NULL::text) IS NULL) AND ((((command_kind)::text <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR (((command_kind)::text = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0)))) OR (((command_kind)::text = 'replanProposal'::text) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) <= 1) AND (resulting_heads = prior_heads) AND (authoritative_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (condition_refs = '{}'::text[]) AND (draft_artifact_refs = '{}'::text[]) AND (artifact_lifecycle_event_refs = '{}'::text[]) AND ((((result_kind)::text = 'proposal_revised'::text) AND (expected_heads = prior_heads) AND (cardinality(proposal_revision_ids) = 1) AND (array_position(proposal_revision_ids, NULL::uuid) IS NULL)) OR (((result_kind)::text = ANY (ARRAY['refused'::text, 'conflicted'::text])) AND (proposal_revision_ids = '{}'::uuid[])))) OR (((command_kind)::text = 'withdrawProposal'::text) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) <= 1) AND (resulting_heads = prior_heads) AND (authoritative_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (condition_refs = '{}'::text[]) AND (draft_artifact_refs = '{}'::text[]) AND (artifact_lifecycle_event_refs = '{}'::text[]) AND (proposal_revision_ids = '{}'::uuid[]) AND ((((result_kind)::text = 'proposal_closure_changed'::text) AND (expected_heads = prior_heads)) OR ((result_kind)::text = ANY (ARRAY['refused'::text, 'conflicted'::text, 'no_effect'::text])))) OR (((command_kind)::text = 'reopenWithdrawnProposal'::text) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) <= 1) AND (resulting_heads = prior_heads) AND (authoritative_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (condition_refs = '{}'::text[]) AND (draft_artifact_refs = '{}'::text[]) AND (artifact_lifecycle_event_refs = '{}'::text[]) AND ((((result_kind)::text = 'proposal_revised'::text) AND (expected_heads = prior_heads) AND (cardinality(proposal_revision_ids) = 1) AND (array_position(proposal_revision_ids, NULL::uuid) IS NULL)) OR (((result_kind)::text = ANY (ARRAY['refused'::text, 'conflicted'::text, 'no_effect'::text])) AND (proposal_revision_ids = '{}'::uuid[])))) OR (((command_kind)::text = 'steerAgentRun'::text) AND (expected_heads = '{}'::uuid[]) AND (prior_heads = '{}'::uuid[]) AND (resulting_heads = '{}'::uuid[]) AND (authoritative_revision_ids = '{}'::uuid[]) AND (proposal_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (draft_artifact_refs = '{}'::text[]) AND (artifact_lifecycle_event_refs = '{}'::text[]) AND (condition_refs = '{}'::text[]))) IS TRUE))",
+        "domain_receipts_common_shape": "CHECK ((((((((result_kind)::text <> 'proposal_revised'::text) AND (cardinality(proposal_revision_ids) = 0)) OR (((result_kind)::text = 'proposal_revised'::text) AND (cardinality(proposal_revision_ids) = 1) AND (array_dims(proposal_revision_ids) = '[1:1]'::text))) AND (cardinality(draft_artifact_refs) = 0) AND (cardinality(artifact_lifecycle_event_refs) = 0) AND ((cardinality(condition_refs) = 0) OR (((command_kind)::text = 'acceptProposal'::text) AND ((result_kind)::text = 'conflicted'::text) AND (cardinality(condition_refs) = 1))) AND (array_position(expected_heads, NULL::uuid) IS NULL) AND (array_position(prior_heads, NULL::uuid) IS NULL) AND (array_position(resulting_heads, NULL::uuid) IS NULL) AND (array_position(authoritative_revision_ids, NULL::uuid) IS NULL) AND (array_position(proposal_revision_ids, NULL::uuid) IS NULL) AND (array_position(authoritative_commit_ids, NULL::uuid) IS NULL) AND (array_position(draft_artifact_refs, NULL::text) IS NULL) AND (array_position(artifact_lifecycle_event_refs, NULL::text) IS NULL) AND (array_position(condition_refs, NULL::text) IS NULL) AND ((((command_kind)::text <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR (((command_kind)::text = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0)))) OR (((command_kind)::text = 'replanProposal'::text) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) <= 1) AND (resulting_heads = prior_heads) AND (authoritative_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (condition_refs = '{}'::text[]) AND (draft_artifact_refs = '{}'::text[]) AND (artifact_lifecycle_event_refs = '{}'::text[]) AND ((((result_kind)::text = 'proposal_revised'::text) AND (expected_heads = prior_heads) AND (cardinality(proposal_revision_ids) = 1) AND (array_position(proposal_revision_ids, NULL::uuid) IS NULL)) OR (((result_kind)::text = ANY (ARRAY['refused'::text, 'conflicted'::text])) AND (proposal_revision_ids = '{}'::uuid[])))) OR (((command_kind)::text = 'withdrawProposal'::text) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) <= 1) AND (resulting_heads = prior_heads) AND (authoritative_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (condition_refs = '{}'::text[]) AND (draft_artifact_refs = '{}'::text[]) AND (artifact_lifecycle_event_refs = '{}'::text[]) AND (proposal_revision_ids = '{}'::uuid[]) AND ((((result_kind)::text = 'proposal_closure_changed'::text) AND (expected_heads = prior_heads)) OR ((result_kind)::text = ANY (ARRAY['refused'::text, 'conflicted'::text, 'no_effect'::text])))) OR (((command_kind)::text = 'reopenWithdrawnProposal'::text) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) <= 1) AND (resulting_heads = prior_heads) AND (authoritative_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (condition_refs = '{}'::text[]) AND (draft_artifact_refs = '{}'::text[]) AND (artifact_lifecycle_event_refs = '{}'::text[]) AND ((((result_kind)::text = 'proposal_revised'::text) AND (expected_heads = prior_heads) AND (cardinality(proposal_revision_ids) = 1) AND (array_position(proposal_revision_ids, NULL::uuid) IS NULL)) OR (((result_kind)::text = ANY (ARRAY['refused'::text, 'conflicted'::text, 'no_effect'::text])) AND (proposal_revision_ids = '{}'::uuid[])))) OR (((command_kind)::text = 'steerAgentRun'::text) AND (expected_heads = '{}'::uuid[]) AND (prior_heads = '{}'::uuid[]) AND (resulting_heads = '{}'::uuid[]) AND (authoritative_revision_ids = '{}'::uuid[]) AND (proposal_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (draft_artifact_refs = '{}'::text[]) AND (artifact_lifecycle_event_refs = '{}'::text[]) AND (condition_refs = '{}'::text[]))) IS TRUE))",
         "domain_receipts_owner_user_id_project_id_author_command_ad_key1": "UNIQUE (owner_user_id, project_id, author_command_admission_id, receipt_id)",
         "domain_receipts_owner_user_id_project_id_author_command_ad_key2": "UNIQUE (owner_user_id, project_id, author_command_admission_id, receipt_id, result_kind)",
         "domain_receipts_owner_user_id_project_id_author_command_adm_key": "UNIQUE (owner_user_id, project_id, author_command_admission_id)",
@@ -2634,7 +2647,7 @@
         "domain_receipts_producer_admission_pair": "CHECK (((producer_cause = 'author_command_admission'::text) = (author_command_admission_id IS NOT NULL)))",
         "domain_receipts_producer_cause_check": "CHECK ((producer_cause = ANY (ARRAY['author_command_admission'::text, 'agent_run_decision'::text])))",
         "domain_receipts_result_payload_check": "CHECK ((jsonb_typeof(result_payload) = 'object'::text))",
-        "domain_receipts_result_shape": "CHECK ((((((command_kind)::text = 'applyAuthorEdit'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 1) AND (cardinality(authoritative_commit_ids) = 1) AND (array_dims(authoritative_revision_ids) = '[1:1]'::text) AND (array_dims(authoritative_commit_ids) = '[1:1]'::text) AND (resulting_heads = authoritative_revision_ids)) OR (((command_kind)::text = 'applyAuthorEdit'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'content_unchanged'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'takeOverProjectWriter'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['writer_takeover_applied'::text, 'writer_takeover_compare_failed'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'createProject'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProject'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProject'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'title_unchanged'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProject'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_project_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'createVolume'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'createVolume'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload ? 'order'::text) AND ((result_payload - 'order'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'order'::text)) = 'string'::text) AND ((result_payload ->> 'order'::text) ~ '^[1-9][0-9]*$'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'createVolume'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'createVolume'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'createChapter'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'createChapter'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload ? 'order'::text) AND ((result_payload - 'order'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'order'::text)) = 'string'::text) AND ((result_payload ->> 'order'::text) ~ '^[1-9][0-9]*$'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'createChapter'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'createChapter'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text, 'invalid_volume_join'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateVolume'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'updateVolume'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'unchanged'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateVolume'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateVolume'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text, 'invalid_order'::text, 'invalid_volume_join'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateChapter'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'updateChapter'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'unchanged'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateChapter'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateChapter'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text, 'invalid_order'::text, 'invalid_chapter_join'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteChapter'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'deleteChapter'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'already_removed'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteChapter'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteChapter'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_chapter_join'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteVolume'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'deleteVolume'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'already_removed'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteVolume'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteVolume'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_volume_join'::text, 'nonempty_volume'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'setCurrentChapter'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads)) OR (((command_kind)::text = 'setCurrentChapter'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'already_current'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'setCurrentChapter'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['stale_current_chapter'::text, 'wrong_target_head'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads)) OR (((command_kind)::text = 'setCurrentChapter'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_chapter_join'::text, 'empty_project'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads)) OR (((command_kind)::text = 'applyAuthorEdit'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND (result_payload ? 'current_authoritative_revision_id'::text) AND (((result_payload - 'reason'::text) - 'current_authoritative_revision_id'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text) AND (jsonb_typeof((result_payload -> 'current_authoritative_revision_id'::text)) = 'string'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['stale_authoritative_head'::text, 'proposal_head_present'::text, 'ownership_changed'::text])) AND ((result_payload ->> 'current_authoritative_revision_id'::text) = (resulting_heads[1])::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (((result_payload ->> 'reason'::text) <> 'stale_authoritative_head'::text) OR (expected_heads <> resulting_heads))) OR (((command_kind)::text = 'applyAuthorEdit'::text) AND ((result_kind)::text = 'proposal_revised'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (cardinality(proposal_revision_ids) = 1) AND (array_dims(proposal_revision_ids) = '[1:1]'::text) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'applyAuthorEdit'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['unsupported_intent_shape'::text, 'invalid_selection'::text, 'target_mismatch'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'exportHumanReadableManuscript'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'exportHumanReadableManuscript'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['pinned_export_source_unavailable'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'exportProjectArchive'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'exportProjectArchive'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['pinned_export_source_unavailable'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'undoLatestAuthorAction'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND (((cardinality(authoritative_commit_ids) = 1) AND (array_dims(authoritative_commit_ids) = '[1:1]'::text) AND (((cardinality(authoritative_revision_ids) = 1) AND (array_dims(authoritative_revision_ids) = '[1:1]'::text) AND (resulting_heads = authoritative_revision_ids)) OR ((cardinality(authoritative_revision_ids) = 0) AND (prior_heads = resulting_heads)))) OR ((cardinality(authoritative_commit_ids) = 0) AND (cardinality(authoritative_revision_ids) = 0) AND (prior_heads = resulting_heads)))) OR (((command_kind)::text = 'undoLatestAuthorAction'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['frontier_mismatch'::text, 'wrong_target_head'::text, 'source_binding_changed'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads)) OR (((command_kind)::text = 'undoLatestAuthorAction'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['no_frontier'::text, 'barrier'::text, 'source_unavailable'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads)) OR (((command_kind)::text = 'updateProjectAssistance'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProjectAssistance'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'availability_unchanged'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProjectAssistance'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_assistance_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'createAgentRun'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = ANY (ARRAY['pauseAgentRun'::text, 'cancelAgentRun'::text])) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'pauseAgentRun'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'already_paused'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'cancelAgentRun'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'already_cancelled'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = ANY (ARRAY['pauseAgentRun'::text, 'cancelAgentRun'::text])) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'terminal_run'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'acceptProposal'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 1) AND (cardinality(authoritative_commit_ids) = 1) AND (array_dims(authoritative_revision_ids) = '[1:1]'::text) AND (array_dims(authoritative_commit_ids) = '[1:1]'::text) AND (resulting_heads = authoritative_revision_ids)) OR (((command_kind)::text = 'acceptProposal'::text) AND ((result_kind)::text = ANY (ARRAY['invalid'::text, 'conflicted'::text, 'refused'::text])) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'rejectProposalOperations'::text) AND ((result_kind)::text = 'proposal_operations_resolved'::text) AND (result_payload ? 'rejection_reason'::text) AND ((result_payload - 'rejection_reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'rejection_reason'::text) = 'author_declined'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'rejectProposalOperations'::text) AND ((result_kind)::text = ANY (ARRAY['conflicted'::text, 'refused'::text])) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'reopenRejectedOperations'::text) AND ((result_kind)::text = 'proposal_revised'::text) AND (result_payload = '{\"transition\": \"reopen_rejected\"}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (cardinality(proposal_revision_ids) = 1) AND (array_dims(proposal_revision_ids) = '[1:1]'::text) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'reopenRejectedOperations'::text) AND ((result_kind)::text = ANY (ARRAY['conflicted'::text, 'refused'::text])) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'undoLatestAuthorAction'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (jsonb_typeof(result_payload) = 'object'::text) AND (result_payload ?& ARRAY['proposal_revision_id'::text, 'source_proposal_revision_id'::text, 'project_activity_position'::text]) AND ((result_payload - ARRAY['proposal_revision_id'::text, 'source_proposal_revision_id'::text, 'project_activity_position'::text]) = '{}'::jsonb) AND ((result_payload ->> 'proposal_revision_id'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND ((result_payload ->> 'source_proposal_revision_id'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND\nCASE\n    WHEN ((jsonb_typeof((result_payload -> 'project_activity_position'::text)) = 'string'::text) AND ((result_payload ->> 'project_activity_position'::text) ~ '^(0|[1-9][0-9]{0,19})$'::text)) THEN (((result_payload ->> 'project_activity_position'::text))::numeric <= '18446744073709551615'::numeric)\n    ELSE false\nEND AND (authoritative_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (proposal_revision_ids = '{}'::uuid[]) AND (prior_heads = expected_heads) AND (resulting_heads = expected_heads)) OR (((command_kind)::text = 'replanProposal'::text) AND (jsonb_typeof(result_payload) = 'object'::text) AND ((((result_kind)::text = 'proposal_revised'::text) AND ((result_payload ->> 'transition'::text) = 'replan'::text) AND ((result_payload - ARRAY['transition'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'conflicted'::text) AND ((result_payload ->> 'reason'::text) = 'changed_head'::text) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'refused'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['wrong_scope'::text, 'wrong_admission'::text, 'stale_proposal_revision'::text, 'not_eligible'::text, 'unavailable_proof'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)))) OR (((command_kind)::text = 'withdrawProposal'::text) AND (jsonb_typeof(result_payload) = 'object'::text) AND ((((result_kind)::text = 'proposal_closure_changed'::text) AND ((result_payload ->> 'transition'::text) = 'withdraw'::text) AND ((result_payload - ARRAY['transition'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'conflicted'::text) AND ((result_payload ->> 'reason'::text) = 'changed_head'::text) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'refused'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['wrong_scope'::text, 'wrong_admission'::text, 'stale_proposal_revision'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'no_effect'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['unsupported_cause'::text, 'terminal_supersession'::text, 'closure_not_open'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)))) OR (((command_kind)::text = 'reopenWithdrawnProposal'::text) AND (jsonb_typeof(result_payload) = 'object'::text) AND ((((result_kind)::text = 'proposal_revised'::text) AND ((result_payload ->> 'transition'::text) = 'reopen_withdrawn'::text) AND ((result_payload - ARRAY['transition'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'conflicted'::text) AND ((result_payload ->> 'reason'::text) = 'changed_head'::text) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'refused'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['wrong_scope'::text, 'wrong_admission'::text, 'stale_proposal_revision'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'no_effect'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['terminal_supersession'::text, 'closure_not_withdrawn'::text, 'withdrawal_event_mismatch'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)))) OR (((command_kind)::text = 'steerAgentRun'::text) AND (jsonb_typeof(result_payload) = 'object'::text) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb) AND ((((result_kind)::text = 'no_effect'::text) AND ((result_payload ->> 'reason'::text) = 'steering_retained'::text)) OR (((result_kind)::text = 'conflicted'::text) AND ((result_payload ->> 'reason'::text) = 'terminal_run'::text)))) OR (((command_kind)::text = 'createChapter'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload = '{\"reason\": \"invalid_placement\"}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0))) IS TRUE))",
+        "domain_receipts_result_shape": "CHECK ((((((command_kind)::text = 'applyAuthorEdit'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 1) AND (cardinality(authoritative_commit_ids) = 1) AND (array_dims(authoritative_revision_ids) = '[1:1]'::text) AND (array_dims(authoritative_commit_ids) = '[1:1]'::text) AND (resulting_heads = authoritative_revision_ids)) OR (((command_kind)::text = 'applyAuthorEdit'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'content_unchanged'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'takeOverProjectWriter'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['writer_takeover_applied'::text, 'writer_takeover_compare_failed'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'createProject'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProject'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProject'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'title_unchanged'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProject'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_project_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'createVolume'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'createVolume'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload ? 'order'::text) AND ((result_payload - 'order'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'order'::text)) = 'string'::text) AND ((result_payload ->> 'order'::text) ~ '^[1-9][0-9]*$'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'createVolume'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'createVolume'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'createChapter'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'createChapter'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload ? 'order'::text) AND ((result_payload - 'order'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'order'::text)) = 'string'::text) AND ((result_payload ->> 'order'::text) ~ '^[1-9][0-9]*$'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'createChapter'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'createChapter'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text, 'invalid_volume_join'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateVolume'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'updateVolume'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'unchanged'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateVolume'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateVolume'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text, 'invalid_order'::text, 'invalid_volume_join'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateChapter'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'updateChapter'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'unchanged'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateChapter'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateChapter'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text, 'invalid_order'::text, 'invalid_chapter_join'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteChapter'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'deleteChapter'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'already_removed'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteChapter'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteChapter'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_chapter_join'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteVolume'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND ((cardinality(authoritative_commit_ids) = 0) OR (array_dims(authoritative_commit_ids) = '[1:1]'::text))) OR (((command_kind)::text = 'deleteVolume'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'already_removed'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteVolume'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_tree_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteVolume'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_volume_join'::text, 'nonempty_volume'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'setCurrentChapter'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads)) OR (((command_kind)::text = 'setCurrentChapter'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'already_current'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'setCurrentChapter'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['stale_current_chapter'::text, 'wrong_target_head'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads)) OR (((command_kind)::text = 'setCurrentChapter'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_chapter_join'::text, 'empty_project'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads)) OR (((command_kind)::text = 'applyAuthorEdit'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND (result_payload ? 'current_authoritative_revision_id'::text) AND (((result_payload - 'reason'::text) - 'current_authoritative_revision_id'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text) AND (jsonb_typeof((result_payload -> 'current_authoritative_revision_id'::text)) = 'string'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['stale_authoritative_head'::text, 'proposal_head_present'::text, 'ownership_changed'::text])) AND ((result_payload ->> 'current_authoritative_revision_id'::text) = (resulting_heads[1])::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (((result_payload ->> 'reason'::text) <> 'stale_authoritative_head'::text) OR (expected_heads <> resulting_heads))) OR (((command_kind)::text = 'applyAuthorEdit'::text) AND ((result_kind)::text = 'proposal_revised'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (cardinality(proposal_revision_ids) = 1) AND (array_dims(proposal_revision_ids) = '[1:1]'::text) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'applyAuthorEdit'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['unsupported_intent_shape'::text, 'invalid_selection'::text, 'target_mismatch'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'exportHumanReadableManuscript'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'exportHumanReadableManuscript'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['pinned_export_source_unavailable'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'exportProjectArchive'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'exportProjectArchive'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['pinned_export_source_unavailable'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'undoLatestAuthorAction'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_commit_ids) = ANY (ARRAY[0, 1])) AND (((cardinality(authoritative_commit_ids) = 1) AND (array_dims(authoritative_commit_ids) = '[1:1]'::text) AND (((cardinality(authoritative_revision_ids) = 1) AND (array_dims(authoritative_revision_ids) = '[1:1]'::text) AND (resulting_heads = authoritative_revision_ids)) OR ((cardinality(authoritative_revision_ids) = 0) AND (prior_heads = resulting_heads)))) OR ((cardinality(authoritative_commit_ids) = 0) AND (cardinality(authoritative_revision_ids) = 0) AND (prior_heads = resulting_heads)))) OR (((command_kind)::text = 'undoLatestAuthorAction'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['frontier_mismatch'::text, 'wrong_target_head'::text, 'source_binding_changed'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads)) OR (((command_kind)::text = 'undoLatestAuthorAction'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['no_frontier'::text, 'barrier'::text, 'source_unavailable'::text])) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads)) OR (((command_kind)::text = 'updateProjectAssistance'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProjectAssistance'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'availability_unchanged'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProjectAssistance'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_assistance_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProjectInstruction'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProjectInstruction'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'text_unchanged'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'updateProjectInstruction'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'stale_instruction_revision'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteMemoryEntry'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteMemoryEntry'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'already_deleted'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'deleteMemoryEntry'::text) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'entry_changed'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'createAgentRun'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = ANY (ARRAY['pauseAgentRun'::text, 'cancelAgentRun'::text])) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'pauseAgentRun'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'already_paused'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'cancelAgentRun'::text) AND ((result_kind)::text = 'no_effect'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'already_cancelled'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = ANY (ARRAY['pauseAgentRun'::text, 'cancelAgentRun'::text])) AND ((result_kind)::text = 'conflicted'::text) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'reason'::text) = 'terminal_run'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0)) OR (((command_kind)::text = 'acceptProposal'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (result_payload = '{}'::jsonb) AND (cardinality(authoritative_revision_ids) = 1) AND (cardinality(authoritative_commit_ids) = 1) AND (array_dims(authoritative_revision_ids) = '[1:1]'::text) AND (array_dims(authoritative_commit_ids) = '[1:1]'::text) AND (resulting_heads = authoritative_revision_ids)) OR (((command_kind)::text = 'acceptProposal'::text) AND ((result_kind)::text = ANY (ARRAY['invalid'::text, 'conflicted'::text, 'refused'::text])) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'rejectProposalOperations'::text) AND ((result_kind)::text = 'proposal_operations_resolved'::text) AND (result_payload ? 'rejection_reason'::text) AND ((result_payload - 'rejection_reason'::text) = '{}'::jsonb) AND ((result_payload ->> 'rejection_reason'::text) = 'author_declined'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'rejectProposalOperations'::text) AND ((result_kind)::text = ANY (ARRAY['conflicted'::text, 'refused'::text])) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'reopenRejectedOperations'::text) AND ((result_kind)::text = 'proposal_revised'::text) AND (result_payload = '{\"transition\": \"reopen_rejected\"}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (cardinality(proposal_revision_ids) = 1) AND (array_dims(proposal_revision_ids) = '[1:1]'::text) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'reopenRejectedOperations'::text) AND ((result_kind)::text = ANY (ARRAY['conflicted'::text, 'refused'::text])) AND (result_payload ? 'reason'::text) AND ((result_payload - 'reason'::text) = '{}'::jsonb) AND (jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0) AND (prior_heads = resulting_heads) AND (expected_heads = resulting_heads)) OR (((command_kind)::text = 'undoLatestAuthorAction'::text) AND ((result_kind)::text = 'authoritative_applied'::text) AND (jsonb_typeof(result_payload) = 'object'::text) AND (result_payload ?& ARRAY['proposal_revision_id'::text, 'source_proposal_revision_id'::text, 'project_activity_position'::text]) AND ((result_payload - ARRAY['proposal_revision_id'::text, 'source_proposal_revision_id'::text, 'project_activity_position'::text]) = '{}'::jsonb) AND ((result_payload ->> 'proposal_revision_id'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND ((result_payload ->> 'source_proposal_revision_id'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND\nCASE\n    WHEN ((jsonb_typeof((result_payload -> 'project_activity_position'::text)) = 'string'::text) AND ((result_payload ->> 'project_activity_position'::text) ~ '^(0|[1-9][0-9]{0,19})$'::text)) THEN (((result_payload ->> 'project_activity_position'::text))::numeric <= '18446744073709551615'::numeric)\n    ELSE false\nEND AND (authoritative_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (proposal_revision_ids = '{}'::uuid[]) AND (prior_heads = expected_heads) AND (resulting_heads = expected_heads)) OR (((command_kind)::text = 'replanProposal'::text) AND (jsonb_typeof(result_payload) = 'object'::text) AND ((((result_kind)::text = 'proposal_revised'::text) AND ((result_payload ->> 'transition'::text) = 'replan'::text) AND ((result_payload - ARRAY['transition'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'conflicted'::text) AND ((result_payload ->> 'reason'::text) = 'changed_head'::text) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'refused'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['wrong_scope'::text, 'wrong_admission'::text, 'stale_proposal_revision'::text, 'not_eligible'::text, 'unavailable_proof'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)))) OR (((command_kind)::text = 'withdrawProposal'::text) AND (jsonb_typeof(result_payload) = 'object'::text) AND ((((result_kind)::text = 'proposal_closure_changed'::text) AND ((result_payload ->> 'transition'::text) = 'withdraw'::text) AND ((result_payload - ARRAY['transition'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'conflicted'::text) AND ((result_payload ->> 'reason'::text) = 'changed_head'::text) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'refused'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['wrong_scope'::text, 'wrong_admission'::text, 'stale_proposal_revision'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'no_effect'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['unsupported_cause'::text, 'terminal_supersession'::text, 'closure_not_open'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)))) OR (((command_kind)::text = 'reopenWithdrawnProposal'::text) AND (jsonb_typeof(result_payload) = 'object'::text) AND ((((result_kind)::text = 'proposal_revised'::text) AND ((result_payload ->> 'transition'::text) = 'reopen_withdrawn'::text) AND ((result_payload - ARRAY['transition'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'conflicted'::text) AND ((result_payload ->> 'reason'::text) = 'changed_head'::text) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'refused'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['wrong_scope'::text, 'wrong_admission'::text, 'stale_proposal_revision'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR (((result_kind)::text = 'no_effect'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['terminal_supersession'::text, 'closure_not_withdrawn'::text, 'withdrawal_event_mismatch'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)))) OR (((command_kind)::text = 'steerAgentRun'::text) AND (jsonb_typeof(result_payload) = 'object'::text) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb) AND ((((result_kind)::text = 'no_effect'::text) AND ((result_payload ->> 'reason'::text) = 'steering_retained'::text)) OR (((result_kind)::text = 'conflicted'::text) AND ((result_payload ->> 'reason'::text) = 'terminal_run'::text)))) OR (((command_kind)::text = 'createChapter'::text) AND ((result_kind)::text = 'refused'::text) AND (result_payload = '{\"reason\": \"invalid_placement\"}'::jsonb) AND (cardinality(authoritative_revision_ids) = 0) AND (cardinality(authoritative_commit_ids) = 0))) IS TRUE))",
         "proposal_compensation_receipt_complete": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
       },
       "indexes": {
@@ -2808,6 +2821,82 @@
       "owner": "storyos_owner",
       "policies": {
         "editor_sessions_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "embedding_attempts": {
+      "columns": {
+        "attempt": {
+          "default": null,
+          "nullable": false,
+          "type": "jsonb"
+        },
+        "cause": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "embedding_attempt_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "grant_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_model_use_binding_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "settlement": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "embedding_attempts_attempt_check": "CHECK ((jsonb_typeof(attempt) = 'object'::text))",
+        "embedding_attempts_binding_fkey": "FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision) MATCH FULL",
+        "embedding_attempts_cause_check": "CHECK ((cause = ANY (ARRAY['passage_index'::text, 'search_question'::text])))",
+        "embedding_attempts_grant_fkey": "FOREIGN KEY (owner_user_id, project_id, grant_id) REFERENCES storyos.project_destination_grants(owner_user_id, project_id, grant_id) MATCH FULL",
+        "embedding_attempts_pkey": "PRIMARY KEY (owner_user_id, project_id, embedding_attempt_id)",
+        "embedding_attempts_settlement_check": "CHECK ((settlement = ANY (ARRAY['vector'::text, 'invalid_result'::text, 'rejected'::text, 'not_submitted'::text, 'outcome_unknown'::text])))"
+      },
+      "indexes": {
+        "embedding_attempts_pkey": "CREATE UNIQUE INDEX embedding_attempts_pkey ON storyos.embedding_attempts USING btree (owner_user_id, project_id, embedding_attempt_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "embedding_attempts_exact_scope": {
           "command": "ALL",
           "permissive": "PERMISSIVE",
           "roles": [
@@ -3335,6 +3424,594 @@
       },
       "triggers": {}
     },
+    "memory_captures": {
+      "columns": {
+        "capture_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "chapter_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "chapter_revision_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "conversation_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "failure_reason": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "first_run_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "last_run_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "memory_settings_revision": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "outcome": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "run_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "source_kind": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "started_at": {
+          "default": "statement_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "state": {
+          "default": "'running'::text",
+          "nullable": false,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "memory_captures_chapter_revision_fkey": "FOREIGN KEY (owner_user_id, project_id, chapter_id, chapter_revision_id) REFERENCES storyos.authoritative_revisions(owner_user_id, project_id, manuscript_object_id, revision_id)",
+        "memory_captures_conversation_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id)",
+        "memory_captures_failure_reason_check": "CHECK ((((COALESCE((outcome = 'failed'::text), false) = (failure_reason IS NOT NULL)) AND ((failure_reason IS NULL) OR ((char_length(failure_reason) >= 1) AND (char_length(failure_reason) <= 64)))) IS TRUE))",
+        "memory_captures_first_run_fkey": "FOREIGN KEY (owner_user_id, project_id, first_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)",
+        "memory_captures_last_run_fkey": "FOREIGN KEY (owner_user_id, project_id, last_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)",
+        "memory_captures_pkey": "PRIMARY KEY (owner_user_id, project_id, capture_id)",
+        "memory_captures_run_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
+        "memory_captures_run_key": "UNIQUE (owner_user_id, project_id, run_id)",
+        "memory_captures_settings_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision)",
+        "memory_captures_source_check": "CHECK (((((source_kind = 'conversation'::text) AND (conversation_id IS NOT NULL) AND (first_run_id IS NOT NULL) AND (last_run_id IS NOT NULL) AND (memory_settings_revision IS NOT NULL) AND (chapter_id IS NULL) AND (chapter_revision_id IS NULL)) OR ((source_kind = 'chapter'::text) AND (chapter_id IS NOT NULL) AND (chapter_revision_id IS NOT NULL) AND (conversation_id IS NULL) AND (first_run_id IS NULL) AND (last_run_id IS NULL) AND (memory_settings_revision IS NULL))) IS TRUE))",
+        "memory_captures_state_check": "CHECK (((((state = 'running'::text) AND (outcome IS NULL)) OR ((state = 'settled'::text) AND (outcome = ANY (ARRAY['observations_recorded'::text, 'no_observation'::text, 'step_limit'::text, 'failed'::text])))) IS TRUE))"
+      },
+      "indexes": {
+        "memory_captures_pkey": "CREATE UNIQUE INDEX memory_captures_pkey ON storyos.memory_captures USING btree (owner_user_id, project_id, capture_id)",
+        "memory_captures_run_key": "CREATE UNIQUE INDEX memory_captures_run_key ON storyos.memory_captures USING btree (owner_user_id, project_id, run_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_captures_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "memory_consolidation_passes": {
+      "columns": {
+        "failure_reason": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "memory_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "observations": {
+          "default": null,
+          "nullable": false,
+          "type": "jsonb"
+        },
+        "operations": {
+          "default": null,
+          "nullable": true,
+          "type": "jsonb"
+        },
+        "outcome": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "pass_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "run_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "started_at": {
+          "default": "statement_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        }
+      },
+      "constraints": {
+        "memory_consolidation_passes_outcome_check": "CHECK (((((outcome IS NULL) OR (outcome = ANY (ARRAY['applied'::text, 'no_operation'::text, 'stale'::text, 'failed'::text]))) AND (COALESCE((outcome = 'failed'::text), false) = (failure_reason IS NOT NULL)) AND ((failure_reason IS NULL) OR ((char_length(failure_reason) >= 1) AND (char_length(failure_reason) <= 64)))) IS TRUE))",
+        "memory_consolidation_passes_pkey": "PRIMARY KEY (owner_user_id, project_id, pass_id)",
+        "memory_consolidation_passes_revision_check": "CHECK (((memory_revision >= (0)::numeric) AND (memory_revision <= '18446744073709551615'::numeric)))",
+        "memory_consolidation_passes_run_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
+        "memory_consolidation_passes_run_key": "UNIQUE (owner_user_id, project_id, run_id)",
+        "memory_consolidation_passes_shape": "CHECK (((jsonb_typeof(observations) = 'array'::text) AND ((operations IS NULL) OR (jsonb_typeof(operations) = 'array'::text))))"
+      },
+      "indexes": {
+        "memory_consolidation_passes_pkey": "CREATE UNIQUE INDEX memory_consolidation_passes_pkey ON storyos.memory_consolidation_passes USING btree (owner_user_id, project_id, pass_id)",
+        "memory_consolidation_passes_run_key": "CREATE UNIQUE INDEX memory_consolidation_passes_run_key ON storyos.memory_consolidation_passes USING btree (owner_user_id, project_id, run_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_consolidation_passes_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "memory_entry_reads": {
+      "columns": {
+        "memory_entry_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "read_at": {
+          "default": "statement_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "run_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "tool_call_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "version": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        }
+      },
+      "constraints": {
+        "memory_entry_reads_pkey": "PRIMARY KEY (owner_user_id, project_id, tool_call_id)",
+        "memory_entry_reads_run_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
+        "memory_entry_reads_tool_call_fkey": "FOREIGN KEY (owner_user_id, project_id, tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL",
+        "memory_entry_reads_version_fkey": "FOREIGN KEY (owner_user_id, project_id, memory_entry_id, version) REFERENCES storyos.memory_entry_versions(owner_user_id, project_id, memory_entry_id, version) MATCH FULL"
+      },
+      "indexes": {
+        "memory_entry_reads_entry_idx": "CREATE INDEX memory_entry_reads_entry_idx ON storyos.memory_entry_reads USING btree (owner_user_id, project_id, memory_entry_id, read_at)",
+        "memory_entry_reads_pkey": "CREATE UNIQUE INDEX memory_entry_reads_pkey ON storyos.memory_entry_reads USING btree (owner_user_id, project_id, tool_call_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_entry_reads_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "memory_entry_versions": {
+      "columns": {
+        "cause": {
+          "default": null,
+          "nullable": false,
+          "type": "jsonb"
+        },
+        "description": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "entry_number": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "entry_type": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "flag_reason": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "flag_source": {
+          "default": null,
+          "nullable": true,
+          "type": "jsonb"
+        },
+        "memory_entry_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "memory_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "origin": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "recorded_at": {
+          "default": "statement_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "source_references": {
+          "default": null,
+          "nullable": false,
+          "type": "jsonb"
+        },
+        "state": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "text": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "title": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "version": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        }
+      },
+      "constraints": {
+        "memory_entry_versions_bounds": "CHECK (((entry_number >= (1)::numeric) AND (entry_number <= '18446744073709551615'::numeric) AND (version >= (1)::numeric) AND (version <= '18446744073709551615'::numeric) AND (memory_revision >= (1)::numeric) AND (memory_revision <= '18446744073709551615'::numeric)))",
+        "memory_entry_versions_flag": "CHECK ((((COALESCE((cause ->> 'kind'::text), ''::text) = 'conflict_flag'::text) = (flag_reason IS NOT NULL)) AND ((flag_reason IS NULL) = (flag_source IS NULL)) AND ((flag_reason IS NULL) OR ((char_length(flag_reason) >= 1) AND (state = 'current'::text) AND (jsonb_typeof(flag_source) = 'object'::text)))))",
+        "memory_entry_versions_number_key": "UNIQUE (owner_user_id, project_id, entry_number, version)",
+        "memory_entry_versions_origin_check": "CHECK ((origin = ANY (ARRAY['author_request'::text, 'conversation'::text, 'chapter'::text])))",
+        "memory_entry_versions_pkey": "PRIMARY KEY (owner_user_id, project_id, memory_entry_id, version)",
+        "memory_entry_versions_project_fkey": "FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL",
+        "memory_entry_versions_revision_key": "UNIQUE (owner_user_id, project_id, memory_entry_id, memory_revision)",
+        "memory_entry_versions_shape": "CHECK (((char_length(title) >= 1) AND (char_length(description) >= 1) AND (jsonb_typeof(cause) = 'object'::text) AND (jsonb_typeof(source_references) = 'array'::text)))",
+        "memory_entry_versions_state_check": "CHECK ((state = ANY (ARRAY['current'::text, 'deleted'::text])))",
+        "memory_entry_versions_type_check": "CHECK ((entry_type = ANY (ARRAY['writing_preference'::text, 'foreshadowing'::text, 'character'::text, 'relationship'::text, 'major_event'::text, 'other'::text])))"
+      },
+      "indexes": {
+        "memory_entry_versions_number_key": "CREATE UNIQUE INDEX memory_entry_versions_number_key ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, entry_number, version)",
+        "memory_entry_versions_one_number": "CREATE UNIQUE INDEX memory_entry_versions_one_number ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, entry_number) WHERE (version = (1)::numeric)",
+        "memory_entry_versions_pkey": "CREATE UNIQUE INDEX memory_entry_versions_pkey ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, memory_entry_id, version)",
+        "memory_entry_versions_revision_idx": "CREATE INDEX memory_entry_versions_revision_idx ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, memory_revision)",
+        "memory_entry_versions_revision_key": "CREATE UNIQUE INDEX memory_entry_versions_revision_key ON storyos.memory_entry_versions USING btree (owner_user_id, project_id, memory_entry_id, memory_revision)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_entry_versions_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "memory_observations": {
+      "columns": {
+        "capture_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "entry_number": {
+          "default": null,
+          "nullable": true,
+          "type": "numeric(20,0)"
+        },
+        "entry_type": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "kind": {
+          "default": "'observation'::text",
+          "nullable": false,
+          "type": "text"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "position": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "reason": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "state": {
+          "default": "'waiting'::text",
+          "nullable": false,
+          "type": "text"
+        },
+        "text": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "title": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "memory_observations_capture_fkey": "FOREIGN KEY (owner_user_id, project_id, capture_id) REFERENCES storyos.memory_captures(owner_user_id, project_id, capture_id) MATCH FULL",
+        "memory_observations_kind_shape": "CHECK ((((kind = 'observation'::text) AND (entry_type IS NOT NULL) AND (title IS NOT NULL) AND (text IS NOT NULL) AND (entry_number IS NULL) AND (reason IS NULL)) OR ((kind = 'conflict'::text) AND (entry_type IS NULL) AND (title IS NULL) AND (text IS NULL) AND (entry_number >= (1)::numeric) AND (char_length(reason) >= 1))))",
+        "memory_observations_pkey": "PRIMARY KEY (owner_user_id, project_id, capture_id, \"position\")",
+        "memory_observations_position_check": "CHECK (((\"position\" >= (1)::numeric) AND (\"position\" <= '18446744073709551615'::numeric)))",
+        "memory_observations_state_check": "CHECK ((state = ANY (ARRAY['waiting'::text, 'consumed'::text])))",
+        "memory_observations_type_check": "CHECK ((entry_type = ANY (ARRAY['writing_preference'::text, 'foreshadowing'::text, 'character'::text, 'relationship'::text, 'major_event'::text, 'other'::text])))"
+      },
+      "indexes": {
+        "memory_observations_pkey": "CREATE UNIQUE INDEX memory_observations_pkey ON storyos.memory_observations USING btree (owner_user_id, project_id, capture_id, \"position\")"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_observations_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "memory_work_schedules": {
+      "columns": {
+        "chapter_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "conversation_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "due_at": {
+          "default": null,
+          "nullable": true,
+          "type": "timestamp with time zone"
+        },
+        "held": {
+          "default": "false",
+          "nullable": false,
+          "type": "boolean"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "source_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "work_kind": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "memory_work_schedules_chapter_fkey": "FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id)",
+        "memory_work_schedules_conversation_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id)",
+        "memory_work_schedules_held_check": "CHECK (((NOT held) OR ((work_kind = 'chapter_capture'::text) AND (due_at IS NULL))))",
+        "memory_work_schedules_pkey": "PRIMARY KEY (owner_user_id, project_id, work_kind, source_id)",
+        "memory_work_schedules_source_check": "CHECK (((((work_kind = 'conversation_capture'::text) AND (conversation_id = source_id) AND (chapter_id IS NULL)) OR ((work_kind = 'consolidation'::text) AND (conversation_id IS NULL) AND (chapter_id IS NULL) AND (source_id = project_id)) OR ((work_kind = 'chapter_capture'::text) AND (conversation_id IS NULL) AND (chapter_id = source_id))) IS TRUE))"
+      },
+      "indexes": {
+        "memory_work_schedules_due_idx": "CREATE INDEX memory_work_schedules_due_idx ON storyos.memory_work_schedules USING btree (due_at) WHERE (due_at IS NOT NULL)",
+        "memory_work_schedules_pkey": "CREATE UNIQUE INDEX memory_work_schedules_pkey ON storyos.memory_work_schedules USING btree (owner_user_id, project_id, work_kind, source_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "memory_work_schedules_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))",
+          "with_check": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))"
+        },
+        "memory_work_schedules_worker_select": {
+          "command": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))",
+          "with_check": null
+        },
+        "memory_work_schedules_worker_update": {
+          "command": "UPDATE",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))",
+          "with_check": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=arw/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "migration_phase_checksums": {
       "columns": {
         "attempt_id": {
@@ -3433,7 +4110,7 @@
         },
         "conversation_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "decision_id": {
@@ -3510,7 +4187,7 @@
       "constraints": {
         "model_attempts_decision_position_check": "CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric)))",
         "model_attempts_dispatch_state_check": "CHECK ((dispatch_state = ANY (ARRAY['uncertain'::text, 'settled'::text])))",
-        "model_attempts_owner_user_id_project_id_conversation_id_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id) MATCH FULL",
+        "model_attempts_owner_user_id_project_id_conversation_id_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id)",
         "model_attempts_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
         "model_attempts_pkey": "PRIMARY KEY (owner_user_id, project_id, model_attempt_id)"
       },
@@ -3691,7 +4368,7 @@
         },
         "receipt_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "requirement_role": {
@@ -3707,7 +4384,7 @@
       },
       "constraints": {
         "operation_requirements_decision_position_check": "CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric)))",
-        "operation_requirements_owner_user_id_project_id_receipt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL",
+        "operation_requirements_owner_user_id_project_id_receipt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id)",
         "operation_requirements_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
         "operation_requirements_pkey": "PRIMARY KEY (owner_user_id, project_id, operation_requirement_id)",
         "operation_requirements_requirement_role_check": "CHECK ((requirement_role = ANY (ARRAY['primary'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text])))"
@@ -3732,6 +4409,194 @@
       "privileges": [
         "storyos_owner=arwdDxt/storyos_owner",
         "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "passage_index_work": {
+      "columns": {
+        "chapter_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "chapter_order": {
+          "default": null,
+          "nullable": false,
+          "type": "bigint"
+        },
+        "claim_generation": {
+          "default": "0",
+          "nullable": false,
+          "type": "bigint"
+        },
+        "completed_generation": {
+          "default": "0",
+          "nullable": false,
+          "type": "bigint"
+        },
+        "embedding_registration_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "fence_token": {
+          "default": "0",
+          "nullable": false,
+          "type": "bigint"
+        },
+        "indexed_cut_revision": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "lease_expires_at": {
+          "default": null,
+          "nullable": true,
+          "type": "timestamp with time zone"
+        },
+        "mark_generation": {
+          "default": "1",
+          "nullable": false,
+          "type": "bigint"
+        },
+        "not_before": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        }
+      },
+      "constraints": {
+        "passage_index_work_chapter_fkey": "FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id) MATCH FULL",
+        "passage_index_work_chapter_order_check": "CHECK ((chapter_order >= 1))",
+        "passage_index_work_claim_check": "CHECK (((claim_generation >= 0) AND (fence_token = claim_generation)))",
+        "passage_index_work_generation_check": "CHECK (((mark_generation >= 1) AND (completed_generation >= 0) AND (completed_generation <= mark_generation)))",
+        "passage_index_work_indexed_cut_revision_check": "CHECK (((indexed_cut_revision IS NULL) OR ((length(indexed_cut_revision) >= 1) AND (length(indexed_cut_revision) <= 128))))",
+        "passage_index_work_pkey": "PRIMARY KEY (owner_user_id, project_id, chapter_id)"
+      },
+      "indexes": {
+        "passage_index_work_pkey": "CREATE UNIQUE INDEX passage_index_work_pkey ON storyos.passage_index_work USING btree (owner_user_id, project_id, chapter_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "passage_index_work_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))",
+          "with_check": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))"
+        },
+        "passage_index_work_worker_select": {
+          "command": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))",
+          "with_check": null
+        },
+        "passage_index_work_worker_update": {
+          "command": "UPDATE",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))",
+          "with_check": "((current_setting('storyos.scope_mode'::text, true) = 'worker'::text) AND (storyos.uuid_setting('storyos.project_id'::text) IS NULL) AND (storyos.uuid_setting('storyos.owner_user_id'::text) IS NULL))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=arw/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "passage_vectors": {
+      "columns": {
+        "chapter_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "created_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "cut_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "embedding": {
+          "default": null,
+          "nullable": false,
+          "type": "extensions.vector(1024)"
+        },
+        "embedding_registration_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "passage_digest": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        }
+      },
+      "constraints": {
+        "passage_vectors_chapter_fkey": "FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id) MATCH FULL",
+        "passage_vectors_cut_revision_check": "CHECK (((length(cut_revision) >= 1) AND (length(cut_revision) <= 128)))",
+        "passage_vectors_passage_digest_check": "CHECK ((passage_digest ~ '^sha256:[0-9a-f]{64}$'::text))",
+        "passage_vectors_pkey": "PRIMARY KEY (owner_user_id, project_id, chapter_id, embedding_registration_revision, cut_revision, passage_digest)"
+      },
+      "indexes": {
+        "passage_vectors_pkey": "CREATE UNIQUE INDEX passage_vectors_pkey ON storyos.passage_vectors USING btree (owner_user_id, project_id, chapter_id, embedding_registration_revision, cut_revision, passage_digest)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "passage_vectors_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))",
+          "with_check": "((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ard/storyos_owner"
       ],
       "row_level_security": {
         "enabled": true,
@@ -4026,7 +4891,7 @@
         "project_activity_event_payloads_project_activity_position_check": "CHECK (((project_activity_position >= (1)::numeric) AND (project_activity_position <= '18446744073709551615'::numeric)))",
         "project_activity_event_payloads_receipt_relation_complete": "TRIGGER DEFERRABLE INITIALLY DEFERRED",
         "project_activity_event_payloads_receipt_result_kind_check": "CHECK ((receipt_result_kind = ANY (ARRAY['no_effect'::text, 'authoritative_applied'::text])))",
-        "project_activity_event_payloads_shape": "CHECK (((((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'writer_takeover_applied'::text) AND (receipt_result_kind = 'no_effect'::text) AND ((payload ->> 'kind'::text) = 'takeover_applied'::text) AND (jsonb_typeof((payload -> 'prior_editor_session_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'prior_writer_generation'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'resulting_editor_session_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'resulting_writer_generation'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'resulting_snapshot_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'resulting_snapshot_activity_position'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'resulting_heads'::text)) = 'array'::text) AND (((((((((payload - 'kind'::text) - 'prior_editor_session_id'::text) - 'prior_writer_generation'::text) - 'resulting_editor_session_id'::text) - 'resulting_writer_generation'::text) - 'resulting_snapshot_id'::text) - 'resulting_snapshot_activity_position'::text) - 'resulting_heads'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'writer_takeover_compare_failed'::text) AND (receipt_result_kind = 'no_effect'::text) AND ((payload ->> 'kind'::text) = 'takeover_compare_failed'::text) AND (jsonb_typeof((payload -> 'observed_writer_generation'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_writer_generation'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_writer_projection'::text)) = 'object'::text) AND (jsonb_typeof((payload -> 'current_snapshot_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_snapshot_activity_position'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_heads'::text)) = 'array'::text) AND (jsonb_typeof((payload -> 'reason'::text)) = 'string'::text) AND ((payload ->> 'reason'::text) = ANY (ARRAY['writer_generation_advanced_after_admission'::text, 'requester_became_current_after_admission'::text])) AND (((((((((payload - 'kind'::text) - 'observed_writer_generation'::text) - 'current_writer_generation'::text) - 'current_writer_projection'::text) - 'current_snapshot_id'::text) - 'current_snapshot_activity_position'::text) - 'current_heads'::text) - 'reason'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'project_created'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'project_created'::text) AND ((payload ->> 'open_kind'::text) = 'empty'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'open_kind'::text) - 'title'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'project_updated'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'project_updated'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'revision'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'title'::text) - 'revision'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'volume_created'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'volume_created'::text) AND (jsonb_typeof((payload -> 'volume_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'order'::text)) = 'string'::text) AND ((((((payload - 'kind'::text) - 'volume_id'::text) - 'title'::text) - 'tree_revision'::text) - 'order'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'volume_updated'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'volume_updated'::text) AND (jsonb_typeof((payload -> 'volume_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'order'::text)) = 'string'::text) AND ((((((((payload - 'kind'::text) - 'volume_id'::text) - 'title'::text) - 'tree_revision'::text) - 'order'::text) - 'prior_title'::text) - 'prior_order'::text) = '{}'::jsonb) AND (((NOT (payload ? 'prior_title'::text)) AND (NOT (payload ? 'prior_order'::text))) OR ((payload ? 'prior_title'::text) AND (payload ? 'prior_order'::text) AND (jsonb_typeof((payload -> 'prior_title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'prior_order'::text)) = 'string'::text) AND ((payload ->> 'prior_order'::text) ~ '^[1-9][0-9]*$'::text)))) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'chapter_updated'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'chapter_updated'::text) AND (jsonb_typeof((payload -> 'chapter_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'order'::text)) = 'string'::text) AND ((((((((payload - 'kind'::text) - 'chapter_id'::text) - 'title'::text) - 'tree_revision'::text) - 'order'::text) - 'prior_title'::text) - 'prior_order'::text) = '{}'::jsonb) AND (((NOT (payload ? 'prior_title'::text)) AND (NOT (payload ? 'prior_order'::text))) OR ((payload ? 'prior_title'::text) AND (payload ? 'prior_order'::text) AND (jsonb_typeof((payload -> 'prior_title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'prior_order'::text)) = 'string'::text) AND ((payload ->> 'prior_order'::text) ~ '^[1-9][0-9]*$'::text)))) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'chapter_created'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'chapter_created'::text) AND (jsonb_typeof((payload -> 'volume_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'chapter_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'order'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_chapter_id'::text)) = 'string'::text) AND ((((((((payload - 'kind'::text) - 'volume_id'::text) - 'chapter_id'::text) - 'title'::text) - 'tree_revision'::text) - 'order'::text) - 'current_chapter_id'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'current_chapter_set'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'current_chapter_set'::text) AND (jsonb_typeof((payload -> 'prior_chapter_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_chapter_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'base_snapshot_id'::text)) = 'string'::text) AND (((((payload - 'kind'::text) - 'prior_chapter_id'::text) - 'current_chapter_id'::text) - 'base_snapshot_id'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'chapter_deleted'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'chapter_deleted'::text) AND (jsonb_typeof((payload -> 'chapter_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'volume_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND (payload ? 'current_chapter_id'::text) AND (jsonb_typeof((payload -> 'current_chapter_id'::text)) = ANY (ARRAY['string'::text, 'null'::text])) AND (((((((payload - 'kind'::text) - 'chapter_id'::text) - 'volume_id'::text) - 'tree_revision'::text) - 'current_chapter_id'::text) - 'prior_current_chapter_id'::text) = '{}'::jsonb) AND ((NOT (payload ? 'prior_current_chapter_id'::text)) OR (jsonb_typeof((payload -> 'prior_current_chapter_id'::text)) = ANY (ARRAY['string'::text, 'null'::text])))) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'volume_deleted'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'volume_deleted'::text) AND (jsonb_typeof((payload -> 'volume_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'volume_id'::text) - 'tree_revision'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'human_readable_manuscript_export_settled'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'human_readable_manuscript_export_settled'::text) AND (jsonb_typeof((payload -> 'export_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'content_sha256'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'export_id'::text) - 'content_sha256'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'project_export_settled'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'project_export_settled'::text) AND (jsonb_typeof((payload -> 'export_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'archive_profile'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'archive_path_profile'::text)) = 'string'::text) AND (((((payload - 'kind'::text) - 'export_id'::text) - 'archive_profile'::text) - 'archive_path_profile'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'project_assistance_updated'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'project_assistance_updated'::text) AND ((payload ->> 'availability'::text) = ANY (ARRAY['available'::text, 'unavailable'::text])) AND (jsonb_typeof((payload -> 'revision'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'availability'::text) - 'revision'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'agent_run_created'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'agent_run_created'::text) AND (jsonb_typeof((payload -> 'project_agent_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'conversation_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'memory_settings_revision'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'run_id'::text)) = 'string'::text) AND ((((((payload - 'kind'::text) - 'project_agent_id'::text) - 'conversation_id'::text) - 'memory_settings_revision'::text) - 'run_id'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'agent_run_paused'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'agent_run_paused'::text) AND (jsonb_typeof((payload -> 'run_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'fence_generation'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'run_id'::text) - 'fence_generation'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'agent_run_cancelled'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'agent_run_cancelled'::text) AND (jsonb_typeof((payload -> 'run_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'fence_generation'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'run_id'::text) - 'fence_generation'::text) = '{}'::jsonb)) OR (((event_kind)::text = 'agent_run_steering_retained'::text) AND (receipt_result_kind = 'no_effect'::text) AND ((payload ->> 'kind'::text) = (event_kind)::text) AND (jsonb_typeof((payload -> 'run_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'conversation_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'steering_input_id'::text)) = 'string'::text) AND ((payload ->> 'input_position'::text) ~ '^[1-9][0-9]*$'::text) AND (((payload ->> 'input_position'::text))::numeric <= '18446744073709551615'::numeric) AND (char_length((payload ->> 'author_message'::text)) >= 1) AND (char_length((payload ->> 'author_message'::text)) <= 8000) AND ((payload - ARRAY['kind'::text, 'run_id'::text, 'conversation_id'::text, 'steering_input_id'::text, 'input_position'::text, 'author_message'::text]) = '{}'::jsonb)) OR (((event_kind)::text = 'agent_run_steering_retained'::text) AND (receipt_result_kind = 'no_effect'::text) AND ((payload ->> 'kind'::text) = (event_kind)::text) AND (jsonb_typeof((payload -> 'run_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'conversation_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'steering_input_id'::text)) = 'string'::text) AND ((payload ->> 'input_position'::text) ~ '^[1-9][0-9]*$'::text) AND (((payload ->> 'input_position'::text))::numeric <= '18446744073709551615'::numeric) AND (char_length((payload ->> 'author_message'::text)) >= 1) AND (char_length((payload ->> 'author_message'::text)) <= 8000) AND (jsonb_typeof((payload -> 'selection_references'::text)) = 'array'::text) AND (jsonb_array_length((payload -> 'selection_references'::text)) >= 1) AND (jsonb_array_length((payload -> 'selection_references'::text)) <= 8) AND ((payload - ARRAY['kind'::text, 'run_id'::text, 'conversation_id'::text, 'steering_input_id'::text, 'input_position'::text, 'author_message'::text, 'selection_references'::text]) = '{}'::jsonb))) IS TRUE))"
+        "project_activity_event_payloads_shape": "CHECK (((((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'writer_takeover_applied'::text) AND (receipt_result_kind = 'no_effect'::text) AND ((payload ->> 'kind'::text) = 'takeover_applied'::text) AND (jsonb_typeof((payload -> 'prior_editor_session_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'prior_writer_generation'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'resulting_editor_session_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'resulting_writer_generation'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'resulting_snapshot_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'resulting_snapshot_activity_position'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'resulting_heads'::text)) = 'array'::text) AND (((((((((payload - 'kind'::text) - 'prior_editor_session_id'::text) - 'prior_writer_generation'::text) - 'resulting_editor_session_id'::text) - 'resulting_writer_generation'::text) - 'resulting_snapshot_id'::text) - 'resulting_snapshot_activity_position'::text) - 'resulting_heads'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'writer_takeover_compare_failed'::text) AND (receipt_result_kind = 'no_effect'::text) AND ((payload ->> 'kind'::text) = 'takeover_compare_failed'::text) AND (jsonb_typeof((payload -> 'observed_writer_generation'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_writer_generation'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_writer_projection'::text)) = 'object'::text) AND (jsonb_typeof((payload -> 'current_snapshot_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_snapshot_activity_position'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_heads'::text)) = 'array'::text) AND (jsonb_typeof((payload -> 'reason'::text)) = 'string'::text) AND ((payload ->> 'reason'::text) = ANY (ARRAY['writer_generation_advanced_after_admission'::text, 'requester_became_current_after_admission'::text])) AND (((((((((payload - 'kind'::text) - 'observed_writer_generation'::text) - 'current_writer_generation'::text) - 'current_writer_projection'::text) - 'current_snapshot_id'::text) - 'current_snapshot_activity_position'::text) - 'current_heads'::text) - 'reason'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'project_created'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'project_created'::text) AND ((payload ->> 'open_kind'::text) = 'empty'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'open_kind'::text) - 'title'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'project_updated'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'project_updated'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'revision'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'title'::text) - 'revision'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'volume_created'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'volume_created'::text) AND (jsonb_typeof((payload -> 'volume_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'order'::text)) = 'string'::text) AND ((((((payload - 'kind'::text) - 'volume_id'::text) - 'title'::text) - 'tree_revision'::text) - 'order'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'volume_updated'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'volume_updated'::text) AND (jsonb_typeof((payload -> 'volume_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'order'::text)) = 'string'::text) AND ((((((((payload - 'kind'::text) - 'volume_id'::text) - 'title'::text) - 'tree_revision'::text) - 'order'::text) - 'prior_title'::text) - 'prior_order'::text) = '{}'::jsonb) AND (((NOT (payload ? 'prior_title'::text)) AND (NOT (payload ? 'prior_order'::text))) OR ((payload ? 'prior_title'::text) AND (payload ? 'prior_order'::text) AND (jsonb_typeof((payload -> 'prior_title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'prior_order'::text)) = 'string'::text) AND ((payload ->> 'prior_order'::text) ~ '^[1-9][0-9]*$'::text)))) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'chapter_updated'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'chapter_updated'::text) AND (jsonb_typeof((payload -> 'chapter_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'order'::text)) = 'string'::text) AND ((((((((payload - 'kind'::text) - 'chapter_id'::text) - 'title'::text) - 'tree_revision'::text) - 'order'::text) - 'prior_title'::text) - 'prior_order'::text) = '{}'::jsonb) AND (((NOT (payload ? 'prior_title'::text)) AND (NOT (payload ? 'prior_order'::text))) OR ((payload ? 'prior_title'::text) AND (payload ? 'prior_order'::text) AND (jsonb_typeof((payload -> 'prior_title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'prior_order'::text)) = 'string'::text) AND ((payload ->> 'prior_order'::text) ~ '^[1-9][0-9]*$'::text)))) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'chapter_created'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'chapter_created'::text) AND (jsonb_typeof((payload -> 'volume_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'chapter_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'title'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'order'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_chapter_id'::text)) = 'string'::text) AND ((((((((payload - 'kind'::text) - 'volume_id'::text) - 'chapter_id'::text) - 'title'::text) - 'tree_revision'::text) - 'order'::text) - 'current_chapter_id'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'current_chapter_set'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'current_chapter_set'::text) AND (jsonb_typeof((payload -> 'prior_chapter_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'current_chapter_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'base_snapshot_id'::text)) = 'string'::text) AND (((((payload - 'kind'::text) - 'prior_chapter_id'::text) - 'current_chapter_id'::text) - 'base_snapshot_id'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'chapter_deleted'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'chapter_deleted'::text) AND (jsonb_typeof((payload -> 'chapter_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'volume_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND (payload ? 'current_chapter_id'::text) AND (jsonb_typeof((payload -> 'current_chapter_id'::text)) = ANY (ARRAY['string'::text, 'null'::text])) AND (((((((payload - 'kind'::text) - 'chapter_id'::text) - 'volume_id'::text) - 'tree_revision'::text) - 'current_chapter_id'::text) - 'prior_current_chapter_id'::text) = '{}'::jsonb) AND ((NOT (payload ? 'prior_current_chapter_id'::text)) OR (jsonb_typeof((payload -> 'prior_current_chapter_id'::text)) = ANY (ARRAY['string'::text, 'null'::text])))) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'volume_deleted'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'volume_deleted'::text) AND (jsonb_typeof((payload -> 'volume_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'tree_revision'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'volume_id'::text) - 'tree_revision'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'human_readable_manuscript_export_settled'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'human_readable_manuscript_export_settled'::text) AND (jsonb_typeof((payload -> 'export_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'content_sha256'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'export_id'::text) - 'content_sha256'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'project_export_settled'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'project_export_settled'::text) AND (jsonb_typeof((payload -> 'export_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'archive_profile'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'archive_path_profile'::text)) = 'string'::text) AND (((((payload - 'kind'::text) - 'export_id'::text) - 'archive_profile'::text) - 'archive_path_profile'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'project_assistance_updated'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'project_assistance_updated'::text) AND ((payload ->> 'availability'::text) = ANY (ARRAY['available'::text, 'unavailable'::text])) AND (jsonb_typeof((payload -> 'revision'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'availability'::text) - 'revision'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'project_instruction_updated'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'project_instruction_updated'::text) AND (jsonb_typeof((payload -> 'instruction_revision_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'revision'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'instruction_revision_id'::text) - 'revision'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'memory_entry_deleted'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'memory_entry_deleted'::text) AND (jsonb_typeof((payload -> 'memory_entry_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'version'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'memory_revision'::text)) = 'string'::text) AND (((((payload - 'kind'::text) - 'memory_entry_id'::text) - 'version'::text) - 'memory_revision'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'agent_run_created'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'agent_run_created'::text) AND (jsonb_typeof((payload -> 'project_agent_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'conversation_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'memory_settings_revision'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'run_id'::text)) = 'string'::text) AND ((((((payload - 'kind'::text) - 'project_agent_id'::text) - 'conversation_id'::text) - 'memory_settings_revision'::text) - 'run_id'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'agent_run_paused'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'agent_run_paused'::text) AND (jsonb_typeof((payload -> 'run_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'fence_generation'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'run_id'::text) - 'fence_generation'::text) = '{}'::jsonb)) OR ((jsonb_typeof(payload) = 'object'::text) AND ((event_kind)::text = 'agent_run_cancelled'::text) AND (receipt_result_kind = 'authoritative_applied'::text) AND ((payload ->> 'kind'::text) = 'agent_run_cancelled'::text) AND (jsonb_typeof((payload -> 'run_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'fence_generation'::text)) = 'string'::text) AND ((((payload - 'kind'::text) - 'run_id'::text) - 'fence_generation'::text) = '{}'::jsonb)) OR (((event_kind)::text = 'agent_run_steering_retained'::text) AND (receipt_result_kind = 'no_effect'::text) AND ((payload ->> 'kind'::text) = (event_kind)::text) AND (jsonb_typeof((payload -> 'run_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'conversation_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'steering_input_id'::text)) = 'string'::text) AND ((payload ->> 'input_position'::text) ~ '^[1-9][0-9]*$'::text) AND (((payload ->> 'input_position'::text))::numeric <= '18446744073709551615'::numeric) AND (char_length((payload ->> 'author_message'::text)) >= 1) AND (char_length((payload ->> 'author_message'::text)) <= 8000) AND ((payload - ARRAY['kind'::text, 'run_id'::text, 'conversation_id'::text, 'steering_input_id'::text, 'input_position'::text, 'author_message'::text]) = '{}'::jsonb)) OR (((event_kind)::text = 'agent_run_steering_retained'::text) AND (receipt_result_kind = 'no_effect'::text) AND ((payload ->> 'kind'::text) = (event_kind)::text) AND (jsonb_typeof((payload -> 'run_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'conversation_id'::text)) = 'string'::text) AND (jsonb_typeof((payload -> 'steering_input_id'::text)) = 'string'::text) AND ((payload ->> 'input_position'::text) ~ '^[1-9][0-9]*$'::text) AND (((payload ->> 'input_position'::text))::numeric <= '18446744073709551615'::numeric) AND (char_length((payload ->> 'author_message'::text)) >= 1) AND (char_length((payload ->> 'author_message'::text)) <= 8000) AND (jsonb_typeof((payload -> 'selection_references'::text)) = 'array'::text) AND (jsonb_array_length((payload -> 'selection_references'::text)) >= 1) AND (jsonb_array_length((payload -> 'selection_references'::text)) <= 8) AND ((payload - ARRAY['kind'::text, 'run_id'::text, 'conversation_id'::text, 'steering_input_id'::text, 'input_position'::text, 'author_message'::text, 'selection_references'::text]) = '{}'::jsonb))) IS TRUE))"
       },
       "indexes": {
         "project_activity_event_payloa_owner_user_id_project_id_proj_key": "CREATE UNIQUE INDEX project_activity_event_payloa_owner_user_id_project_id_proj_key ON storyos.project_activity_event_payloads USING btree (owner_user_id, project_id, project_activity_event_id)",
@@ -4553,8 +5418,9 @@
         }
       },
       "constraints": {
-        "project_destination_grants_grant_scope_check": "CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'research_tool_v1'::text])))",
-        "project_destination_grants_kind_check": "CHECK ((grant_kind = ANY (ARRAY['host_fake_use'::text, 'volcengine_agent_plan_use'::text, 'research_tool_use'::text])))",
+        "project_destination_grants_embedding_scope": "CHECK (((grant_kind = 'manuscript_embedding_use'::text) = (NOT (grant_scope IS DISTINCT FROM 'manuscript_embedding_v1'::text))))",
+        "project_destination_grants_grant_scope_check": "CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'research_tool_v1'::text, 'manuscript_embedding_v1'::text])))",
+        "project_destination_grants_kind_check": "CHECK ((grant_kind = ANY (ARRAY['host_fake_use'::text, 'volcengine_agent_plan_use'::text, 'research_tool_use'::text, 'manuscript_embedding_use'::text])))",
         "project_destination_grants_owner_user_id_project_id_proces_fkey": "FOREIGN KEY (owner_user_id, project_id, processing_destination_identity) REFERENCES storyos.processing_destination_identities(owner_user_id, project_id, processing_destination_identity) MATCH FULL",
         "project_destination_grants_pkey": "PRIMARY KEY (owner_user_id, project_id, grant_id)",
         "project_destination_grants_research_scope": "CHECK (((grant_kind = 'research_tool_use'::text) = (NOT (grant_scope IS DISTINCT FROM 'research_tool_v1'::text))))"
@@ -4923,6 +5789,11 @@
           "nullable": false,
           "type": "text"
         },
+        "embedding_registration_revision": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
         "evidence_revision": {
           "default": null,
           "nullable": false,
@@ -4970,13 +5841,13 @@
         "project_external_use_binding_r_model_registration_revision_fkey": "FOREIGN KEY (model_registration_revision) REFERENCES storyos.model_registration_revisions(model_registration_revision)",
         "project_external_use_binding_r_tool_registration_revision_fkey": "FOREIGN KEY (tool_registration_revision) REFERENCES storyos.tool_registration_revisions(tool_registration_revision)",
         "project_external_use_binding_revisio_credential_reference_check": "CHECK (((char_length(credential_reference) >= 1) AND (char_length(credential_reference) <= 500)))",
-        "project_external_use_binding_revisions_budget_bounds_check": "CHECK ((budget_bounds = ANY (ARRAY['not_required'::text, 'unqualified'::text, 'agent_plan_request_v1'::text, 'agent_plan_request_v2'::text, 'agent_plan_request_v3'::text, 'agent_plan_request_v4'::text])))",
+        "project_external_use_binding_revisions_budget_bounds_check": "CHECK ((budget_bounds = ANY (ARRAY['not_required'::text, 'unqualified'::text, 'agent_plan_request_v1'::text, 'agent_plan_request_v2'::text, 'agent_plan_request_v3'::text, 'agent_plan_request_v4'::text, 'embedding_request_v1'::text])))",
         "project_external_use_binding_revisions_credential_shape": "CHECK (((credential_source = 'none'::text) = (credential_reference IS NULL)))",
         "project_external_use_binding_revisions_credential_source_check": "CHECK ((credential_source = ANY (ARRAY['none'::text, 'operator_quota'::text])))",
         "project_external_use_binding_revisions_evidence_revision_check": "CHECK (((evidence_revision >= (1)::numeric) AND (evidence_revision <= '18446744073709551615'::numeric)))",
         "project_external_use_binding_revisions_pkey": "PRIMARY KEY (owner_user_id, project_id, project_model_use_binding_revision)",
         "project_external_use_binding_revisions_registration_key": "UNIQUE (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision)",
-        "project_external_use_binding_revisions_registration_shape": "CHECK ((num_nonnulls(model_registration_revision, tool_registration_revision) = 1))"
+        "project_external_use_binding_revisions_registration_shape": "CHECK ((num_nonnulls(model_registration_revision, tool_registration_revision, embedding_registration_revision) = 1))"
       },
       "indexes": {
         "project_external_use_binding_revisions_grant_idx": "CREATE INDEX project_external_use_binding_revisions_grant_idx ON storyos.project_external_use_binding_revisions USING btree (owner_user_id, project_id, grant_id)",
@@ -4999,6 +5870,127 @@
       "privileges": [
         "storyos_owner=arwdDxt/storyos_owner",
         "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "project_instruction_revisions": {
+      "columns": {
+        "instruction_revision_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "receipt_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "revision": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "text": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "project_instruction_revisions_identity_key": "UNIQUE (owner_user_id, project_id, instruction_revision_id)",
+        "project_instruction_revisions_pkey": "PRIMARY KEY (owner_user_id, project_id, revision)",
+        "project_instruction_revisions_project_fkey": "FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL",
+        "project_instruction_revisions_receipt_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL",
+        "project_instruction_revisions_receipt_key": "UNIQUE (owner_user_id, project_id, receipt_id)",
+        "project_instruction_revisions_revision_check": "CHECK (((revision >= (1)::numeric) AND (revision <= '18446744073709551615'::numeric)))"
+      },
+      "indexes": {
+        "project_instruction_revisions_identity_key": "CREATE UNIQUE INDEX project_instruction_revisions_identity_key ON storyos.project_instruction_revisions USING btree (owner_user_id, project_id, instruction_revision_id)",
+        "project_instruction_revisions_pkey": "CREATE UNIQUE INDEX project_instruction_revisions_pkey ON storyos.project_instruction_revisions USING btree (owner_user_id, project_id, revision)",
+        "project_instruction_revisions_receipt_key": "CREATE UNIQUE INDEX project_instruction_revisions_receipt_key ON storyos.project_instruction_revisions USING btree (owner_user_id, project_id, receipt_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "project_instruction_revisions_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "project_memory_heads": {
+      "columns": {
+        "memory_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "next_entry_number": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        }
+      },
+      "constraints": {
+        "project_memory_heads_bounds": "CHECK (((memory_revision >= (1)::numeric) AND (memory_revision <= '18446744073709551615'::numeric) AND (next_entry_number >= (1)::numeric) AND (next_entry_number <= '18446744073709551615'::numeric)))",
+        "project_memory_heads_pkey": "PRIMARY KEY (owner_user_id, project_id)",
+        "project_memory_heads_project_fkey": "FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL"
+      },
+      "indexes": {
+        "project_memory_heads_pkey": "CREATE UNIQUE INDEX project_memory_heads_pkey ON storyos.project_memory_heads USING btree (owner_user_id, project_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "project_memory_heads_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=arw/storyos_owner"
       ],
       "row_level_security": {
         "enabled": true,

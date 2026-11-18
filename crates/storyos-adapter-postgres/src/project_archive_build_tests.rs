@@ -131,6 +131,29 @@ async fn each_project_export_table_is_a_live_table() {
     for global in ["tool_registration_revisions", "tool_registration_tools"] {
         assert!(live.contains(global) && !PROJECT_EXPORT_TABLES.contains(&global));
     }
+    // The archive does not hold the Embedding Attempts of the Project (ADR 0095 section 3).
+    assert!(
+        live.contains("embedding_attempts")
+            && !super::EXPORT_TABLES
+                .iter()
+                .any(|(table, _)| *table == "embedding_attempts")
+    );
+    // StoryOS builds the passage vectors again from the Chapters, so the archive does not hold
+    // them or their index work (ADR 0095 sections 2 and 4).
+    assert!(
+        live.contains("passage_index_work")
+            && !PROJECT_EXPORT_TABLES.contains(&"passage_index_work")
+            && !super::EXPORT_TABLES
+                .iter()
+                .any(|(table, _)| *table == "passage_index_work")
+    );
+    assert!(
+        live.contains("passage_vectors")
+            && !PROJECT_EXPORT_TABLES.contains(&"passage_vectors")
+            && !super::EXPORT_TABLES
+                .iter()
+                .any(|(table, _)| *table == "passage_vectors")
+    );
 }
 
 #[tokio::test]

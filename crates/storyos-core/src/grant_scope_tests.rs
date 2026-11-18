@@ -246,14 +246,85 @@ fn only_the_fourth_scope_covers_the_skill_source_classes_and_it_keeps_the_third_
             [false, true, true, true, false]
         ]
     );
+}
+
+/// The Stage 7 source classes (ADR 0095 section 1; ADR 0094 sections 4, 5, and 6).
+const STAGE_7_CLASSES: [ContextSourceClass; 10] = [
+    ContextSourceClass::ChapterList,
+    ContextSourceClass::ManuscriptReadResult,
+    ContextSourceClass::ManuscriptSearchResult,
+    ContextSourceClass::MemoryIndex,
+    ContextSourceClass::MemoryReadResult,
+    ContextSourceClass::MemorySearchResult,
+    ContextSourceClass::MemoryCaptureInput,
+    ContextSourceClass::MemoryDeleteMarks,
+    ContextSourceClass::MemoryEntries,
+    ContextSourceClass::MemoryObservations,
+];
+
+/// ADR 0075: this test is the one owner of the refusal of a Stage 7 item or Purpose under an
+/// earlier scope.
+#[test]
+fn only_the_fifth_scope_covers_the_stage_7_classes_and_purposes_and_it_keeps_the_fourth_scope() {
+    let request = assemble_current_passage_context(&passage("ch-1", "The tide turned."));
+    let scopes = [
+        "project_writing_assistance_v1",
+        "project_writing_assistance_v2",
+        "project_writing_assistance_v3",
+        "project_writing_assistance_v4",
+        "project_writing_assistance_v5",
+        "research_tool_v1",
+    ];
+    let admitted = |request: &CurrentPassageAssemblyRecord| {
+        scopes.map(|scope| {
+            admit_disclosure(&GrantFacts {
+                grant_scope: Some(scope),
+                ..facts(request)
+            })
+            .is_ok()
+        })
+    };
+    let with_purpose = |purpose| {
+        let mut request = request.clone();
+        request.operation_requirement.purpose = purpose;
+        request
+    };
+    let fourth_scope = SKILL_CLASSES.into_iter().fold(
+        with_item(
+            with_item(request.clone(), ContextSourceClass::ConversationSummary),
+            ContextSourceClass::ToolResult,
+        ),
+        with_item,
+    );
+    let summary = crate::compaction_assembly_record(&request, &[]);
+
+    assert_eq!(
+        STAGE_7_CLASSES.map(|class| admitted(&with_item(request.clone(), class))),
+        [[false, false, false, false, true, false]; 10]
+    );
+    assert_eq!(
+        [
+            crate::assemble_context::ContextPurpose::MemoryCapture,
+            crate::assemble_context::ContextPurpose::MemoryConsolidation,
+        ]
+        .map(|purpose| admitted(&with_purpose(purpose))),
+        [[false, false, false, false, true, false]; 2]
+    );
+    assert_eq!(
+        [admitted(&fourth_scope), admitted(&summary)],
+        [
+            [false, false, false, true, true, false],
+            [false, true, true, true, true, false]
+        ]
+    );
     assert_eq!(
         (
             GrantScope::CURRENT,
-            GrantScope::parse("project_writing_assistance_v4").map(GrantScope::as_str),
+            GrantScope::parse("project_writing_assistance_v5").map(GrantScope::as_str),
         ),
         (
-            GrantScope::ProjectWritingAssistanceV4,
-            Some("project_writing_assistance_v4"),
+            GrantScope::ProjectWritingAssistanceV5,
+            Some("project_writing_assistance_v5"),
         )
     );
 }

@@ -39,8 +39,8 @@ impl<'a> RetrievalAdvance<'a> {
     pub(crate) fn of(run: &'a RunPhaseRow) -> Self {
         Self {
             attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
-            conversation_id: &run.conversation_id,
-            chapter_id: &run.chapter_id,
+            conversation_id: run.conversation_id.as_deref().unwrap_or_default(),
+            chapter_id: run.chapter_id.as_deref().unwrap_or_default(),
             run_status: &run.status,
             grant_admitted: crate::agent_run_work::grant_admitted(run),
             mapping_revision: storyos_core::model_registration(&run.model_registration_revision)
@@ -483,7 +483,9 @@ fn facts(
         scope_permitted: text(subject, "owner_user_id")
             == Some(claim.project_scope.owner_user_id.as_ref())
             && text(subject, "project_id") == Some(claim.project_scope.project_id.as_ref()),
-        conversation_permitted: text(subject, "conversation_id") == Some(advance.conversation_id),
+        // A background Run and its subject have no Conversation (ADR 0094 section 5).
+        conversation_permitted: text(subject, "conversation_id").unwrap_or_default()
+            == advance.conversation_id,
         destination_permitted: advance.grant_admitted
             && route_admitted
             && text(subject, "destination_identity") == Some(destination_identity),

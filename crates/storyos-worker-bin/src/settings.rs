@@ -9,6 +9,7 @@ const KEYS: &[&str] = &[
     "agent_plan_api_key",
     "exa_api_key",
     "model_destination",
+    "embedding_destination",
 ];
 
 /// The `STORYOS_` settings of the Worker (ADR 0050). Each secret is a `SecretString`.
@@ -24,6 +25,8 @@ pub(crate) struct WorkerSettings {
     pub(crate) exa_api_key: Option<SecretString>,
     /// `volcengine_agent_plan` marks a real-route run, which needs the key.
     pub(crate) model_destination: Option<String>,
+    /// `host_fake`, or `volcengine_agent_plan` with the same model destination (ADR 0095).
+    pub(crate) embedding_destination: Option<String>,
 }
 
 impl WorkerSettings {
@@ -45,6 +48,14 @@ impl WorkerSettings {
             (None | Some("host_fake" | "volcengine_agent_plan"), _) => {}
             (Some(_), _) => return refused("STORYOS_MODEL_DESTINATION"),
         }
+        match (
+            loaded.settings.embedding_destination.as_deref(),
+            loaded.settings.model_destination.as_deref(),
+        ) {
+            (None | Some("host_fake"), _)
+            | (Some("volcengine_agent_plan"), Some("volcengine_agent_plan")) => {}
+            (Some(_), _) => return refused("STORYOS_EMBEDDING_DESTINATION"),
+        }
         if loaded
             .settings
             .exa_api_key
@@ -62,5 +73,14 @@ impl WorkerSettings {
             return refused("STORYOS_DATABASE_URL");
         }
         Ok(loaded)
+    }
+    /// The Embedding Registration of the deployment, or `None` when the deployment has no
+    /// embedding configuration. `load` refused each other value.
+    pub(crate) fn embedding_registration(
+        &self,
+    ) -> Option<&'static storyos_core::EmbeddingRegistration> {
+        let destination =
+            storyos_core::DestinationKind::parse(self.embedding_destination.as_deref()?)?;
+        Some(storyos_core::EmbeddingRegistration::of(destination))
     }
 }

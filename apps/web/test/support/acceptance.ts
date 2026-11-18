@@ -75,6 +75,21 @@ export async function drainLeftoverWork() {
   throw new Error("leftover AgentRun or export work did not drain");
 }
 
+/**
+ * Settles each due row of the background Memory work and each queued AgentRun, of each Project. The Worker claims a due
+ * row only when no Run waits, so a row of an earlier file cannot take the place of the work of a journey.
+ */
+export async function drainDueMemoryWork(extraEnv?: Readonly<Record<string, string>>) {
+  for (let attempt = 0; attempt < 64; attempt += 1) {
+    const leftover = await queryPostgres(`
+      SELECT ((SELECT count(*) FROM storyos.memory_work_schedules WHERE due_at <= clock_timestamp())
+       + (SELECT count(*) FROM storyos.agent_runs WHERE status IN ('queued', 'claimed')))::text`);
+    if (leftover === "0") return;
+    await settleOnce(extraEnv);
+  }
+  throw new Error("leftover background Memory work did not drain");
+}
+
 /** Issues one Command Challenge for this command inside the Challenge rate budget. */
 export function issueChallenge(
   baseUrl: string,
@@ -519,9 +534,10 @@ type AuthorEditContext = {
   session: { editor_session: { editor_session_id: string } };
 };
 
-/** Builds one author edit from the current editor session base of the writer. */
+/** Builds one author edit from the current editor session base of the writer, with one unit for each primitive. */
 export async function authorEditRequest(started: Started, context: AuthorEditContext,
-  primitive: AuthorEditPrimitive, ownership: EditOwnership, sequence: string, ns: string): Promise<ApplyAuthorEditRequest> {
+  primitives: AuthorEditPrimitive | readonly AuthorEditPrimitive[], ownership: EditOwnership, sequence: string,
+  ns: string): Promise<ApplyAuthorEditRequest> {
   const { projectId, fetchImpl } = context.prepared;
   const session = await getEditorSession({ baseUrl: started.baseUrl, projectId, fetchImpl,
     editorSessionId: context.session.editor_session.editor_session_id });
@@ -540,10 +556,11 @@ export async function authorEditRequest(started: Started, context: AuthorEditCon
     observed_ownership_partition: proposal ? "mixed" : "authoritative",
     editor_contract_revision: "storyos.editor-contract.release-1.v3",
     undo_group_id: id(`${ns}2`), completed_intent_record_id: id(`${ns}3`), local_intent_sequence: sequence,
-    author_edit_units: [{ normalized_primitives: [primitive], selection_snapshot: {
-      coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-      from: "from" in primitive ? primitive.from : "offset" in primitive ? primitive.offset : 0,
-      to: "to" in primitive ? primitive.to : "offset" in primitive ? primitive.offset : 0 } }],
+    author_edit_units: (Array.isArray(primitives) ? primitives : [primitives]).map((primitive: AuthorEditPrimitive) => ({
+      normalized_primitives: [primitive], selection_snapshot: {
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+        from: "from" in primitive ? primitive.from : "offset" in primitive ? primitive.offset : 0,
+        to: "to" in primitive ? primitive.to : "offset" in primitive ? primitive.offset : 0 } })),
   };
   return request;
 }

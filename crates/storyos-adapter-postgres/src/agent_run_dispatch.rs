@@ -18,15 +18,19 @@ impl ModelDispatchStore for PostgresProjectReader {
     async fn next_dispatch_work(
         &self,
         claim: &ClaimedAgentRun,
+        adapters: &'static [storyos_core::ModelAdapter],
     ) -> Result<NextDispatchWork, CompleteAgentRunError> {
         let lease_seconds = self.agent_run_lease_seconds()?;
+        let mut checked_step = None;
         loop {
             let transaction = self
                 .begin_serializable_project_command_transaction(&claim.project_scope)
                 .await
                 .map_err(complete_challenge_error)?;
             let phase = async {
-                let phase = settle_one_phase(&transaction.client, claim, lease_seconds).await?;
+                let phase =
+                    settle_one_phase(&transaction.client, claim, lease_seconds, checked_step)
+                        .await?;
                 advance_steering(&transaction.client, claim, lease_seconds, phase).await
             }
             .await;
@@ -49,6 +53,14 @@ impl ModelDispatchStore for PostgresProjectReader {
                     return Ok(NextDispatchWork::Abort(cancellation));
                 }
                 WorkPhase::ToolCalls => return Ok(NextDispatchWork::ToolCalls),
+                WorkPhase::BetweenSteps(position) => {
+                    checked_step = Some(position);
+                    let queued = self.author_run_queued(adapters).await?;
+                    if storyos_core::yields_to_author(position, queued) {
+                        self.give_back(claim).await?;
+                        return Ok(NextDispatchWork::Settled(CompleteAgentRun::Settled));
+                    }
+                }
             }
         }
     }
@@ -128,7 +140,7 @@ impl ModelDispatchStore for PostgresProjectReader {
             if run.settled()
                 || run.attempt_id.is_some()
                 || run.author_message != request.author_message
-                || run.chapter_id != request.chapter_id
+                || run.chapter_id.as_deref().unwrap_or_default() != request.chapter_id
                 || crate::agent_run_steering::advance_before_request(
                     client,
                     claim,
@@ -186,7 +198,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                 crate::agent_run_expiry::insert_recovery(
                     client,
                     claim,
-                    &run.conversation_id,
+                    run.conversation()?,
                     &dispatch.row,
                     Some(model_attempt_id.as_str()),
                 )

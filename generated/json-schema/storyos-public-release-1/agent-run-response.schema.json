@@ -246,6 +246,34 @@
         },
         {
           "additionalProperties": false,
+          "description": "The Memory Entry change that one settled `write_memory` call wrote, with the title of the\nversion that it wrote (ADR 0094 section 5). It has no entry identity and no entry text\n(ADR 0040).",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/MemoryWriteActionInspect"
+            },
+            "decision_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "memory_write",
+              "type": "string"
+            },
+            "title": {
+              "maxLength": 30,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "decision_id",
+            "action",
+            "title"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "The final answer text of a completed Run. A final answer with no text is no result.",
           "properties": {
             "decision_id": {
@@ -787,7 +815,17 @@
         "tool_result",
         "skill_catalog",
         "skill_instruction",
-        "skill_resource"
+        "skill_resource",
+        "chapter_list",
+        "manuscript_read_result",
+        "manuscript_search_result",
+        "memory_index",
+        "memory_read_result",
+        "memory_search_result",
+        "memory_capture_input",
+        "memory_delete_marks",
+        "memory_entries",
+        "memory_observations"
       ],
       "type": "string"
     },
@@ -975,6 +1013,83 @@
         "destination_visible"
       ],
       "type": "object"
+    },
+    "ManuscriptUseInspect": {
+      "description": "One manuscript Tool use of a Run (ADR 0095 section 1). No entry has a result text or a\nToolCall identity.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "The Agent read the Chapter with a settled `read_chapter` call. The title is the title at\nthe time of the read.",
+          "properties": {
+            "chapter_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "chapter_read",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "chapter_id",
+            "title"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The Agent searched the manuscript for the exact text `query` with a settled\n`search_manuscript` call.",
+          "properties": {
+            "kind": {
+              "const": "keyword_search",
+              "type": "string"
+            },
+            "query": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "query"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The Agent searched the manuscript by meaning for the question `question` with a settled\n`hybrid_search_manuscript` call. The entry has no passage text, no vector, and no score.",
+          "properties": {
+            "kind": {
+              "const": "hybrid_search",
+              "type": "string"
+            },
+            "question": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "question"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "MemoryWriteActionInspect": {
+      "description": "The action of one `write_memory` call.",
+      "enum": [
+        "create",
+        "change",
+        "delete"
+      ],
+      "type": "string"
     },
     "OptionalActiveCompactionInspect": {
       "oneOf": [
@@ -2473,6 +2588,15 @@
         "$ref": "#/$defs/AgentRunStreamItemInspect"
       },
       "type": "array"
+    },
+    "manuscript_uses": {
+      "items": {
+        "$ref": "#/$defs/ManuscriptUseInspect"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
     },
     "memory_settings_revision": {
       "format": "uuid",

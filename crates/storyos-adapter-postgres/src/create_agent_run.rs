@@ -100,6 +100,7 @@ impl ProjectCommand for CreateAgentRunInput {
     type Plan = (
         AssistancePlan,
         ResearchPlan,
+        Option<&'static storyos_core::EmbeddingRegistration>,
         Vec<storyos_core::SkillRequirement>,
     );
     type Settlement = CreateAgentRunSettlement;
@@ -174,8 +175,11 @@ impl ProjectCommand for CreateAgentRunInput {
             },
         };
         let research = research_plan(client, scope, self.research).await?;
+        let embedding =
+            crate::project_embedding_binding::embedding_plan(client, scope, self.embedding).await?;
         Ok(Classification {
-            outcome: outcome.map_applied(|()| ((), (assistance, research, skill_requirements))),
+            outcome: outcome
+                .map_applied(|()| ((), (assistance, research, embedding, skill_requirements))),
             admission: Admission::Project(ProjectActionClass::AgentRunStart),
             heads: ReceiptHeads::default(),
             zero_receipt: ZeroReceipt::Reason,
@@ -188,9 +192,10 @@ impl ProjectCommand for CreateAgentRunInput {
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
         _sequences: &ActivitySequences,
-        (assistance, research, skill_requirements): (
+        (assistance, research, embedding, skill_requirements): (
             AssistancePlan,
             ResearchPlan,
+            Option<&'static storyos_core::EmbeddingRegistration>,
             Vec<storyos_core::SkillRequirement>,
         ),
         _applied: (),
@@ -200,6 +205,15 @@ impl ProjectCommand for CreateAgentRunInput {
                 .await
                 .map_err(unavailable)?;
         }
+        if let Some(registration) = embedding {
+            crate::project_embedding_binding::insert_embedding_binding(
+                client,
+                &envelope.project_scope,
+                registration,
+            )
+            .await
+            .map_err(unavailable)?;
+        }
         let assistance = match assistance {
             AssistancePlan::Current(record) => record,
             AssistancePlan::Bind {
@@ -207,12 +221,14 @@ impl ProjectCommand for CreateAgentRunInput {
                 destination,
             } => bind_deployment_destination(client, envelope, &destination, revision).await?,
         };
+        let instruction = project_instruction_binding(client, envelope).await?;
         let applied = write::persist_conversation_and_run(
             client,
             envelope,
             self,
             &assistance.grant_id,
             &assistance.project_model_use_binding_revision,
+            instruction.as_deref(),
         )
         .await
         .map_err(sequence_error)?;
@@ -223,6 +239,13 @@ impl ProjectCommand for CreateAgentRunInput {
             &self.skills,
         )
         .await?;
+        let memory_revision = crate::memory_entries::memory_revision_pin(
+            client,
+            &envelope.project_scope,
+            &applied.run_id,
+        )
+        .await
+        .map_err(|error| sequence_error(CreateAgentRunError::Unavailable(error)))?;
         context::persist_current_passage_assembly(
             client,
             &context::PassageContextInput {
@@ -236,6 +259,7 @@ impl ProjectCommand for CreateAgentRunInput {
                 candidate_target: None,
                 selection_references: self.selection_references.as_deref(),
                 skill_requirements: &skill_requirements,
+                memory_revision,
                 tool_results: None,
             },
             &assistance.processing_destination_identity,
@@ -390,6 +414,26 @@ async fn earlier_skill_requirements(
     rows.iter()
         .map(|row| serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).map_err(unavailable))
         .collect()
+}
+
+/// The Project Instruction Binding of the new Run: the current Revision of the Project, or
+/// `None` for "none configured" (ADR 0094 section 2).
+async fn project_instruction_binding(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+) -> Result<Option<String>, ProjectCommandError> {
+    let current =
+        crate::update_project_instruction::read_current_revision(client, &envelope.project_scope)
+            .await
+            .map_err(|error| unavailable(format!("{error:?}")))?;
+    Ok(storyos_core::project_instruction_binding(
+        current
+            .map(|revision| storyos_core::BoundInstruction {
+                revision_id: revision.instruction_revision_id,
+                text: revision.text,
+            })
+            .as_ref(),
+    ))
 }
 
 fn sequence_error(error: CreateAgentRunError) -> ProjectCommandError {

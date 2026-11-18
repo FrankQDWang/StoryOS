@@ -56,6 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into());
     }
     let model_destination = settings.model_destination()?;
+    let embedding = settings.embedding_registration(model_destination.as_ref())?;
     let skills = storyos_server::read_skill_directory(settings.skills_dir.as_deref())?;
     let assets = storyos_server::WebAssetSet::load(web_root)?;
     or_exit(
@@ -124,6 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         model_destination,
+        embedding,
         skills: std::sync::Arc::new(skills),
     };
     println!("STORYOS_SERVER_URL={printed_server_url}");
@@ -134,11 +136,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let store = PostgresProjectReader::new(database_url.expose_secret())
             .with_readable_export_lease_ttl(storyos_worker::readable_export_lease_ttl(
                 settings.export_lease_ttl_secs,
-            ));
+            ))
+            .with_embedding_registration(embedding);
         let destination = storyos_worker::ModelDestination {
             adapter: storyos_adapter_fake_destination::FakeDestination,
             observer: storyos_application::NoContractFaults,
             tools: storyos_application::NoToolDestination,
+            // The in-process Worker takes only the fake embedding adapter (ADR 0039).
+            embeddings: storyos_adapter_fake_destination::FakeEmbeddings,
         };
         let worker = tokio::spawn(storyos_worker::run(store, destination));
         tokio::spawn(async move {

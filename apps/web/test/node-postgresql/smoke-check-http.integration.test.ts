@@ -6,8 +6,8 @@ import { afterAll, test } from "vitest";
 import * as client from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateEditorSessionResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { bootProtectedWebClient } from "../../src/boot.ts";
-import { BINDING, USER_A, addVolume, createProject, createStory, drainLeftoverWork, freshNamespace, id, openProposal,
-  problemOf, serverForFile, settleOnce,
+import { BINDING, USER_A, addVolume, createProject, createStory, deleteMemoryEntryInput, drainLeftoverWork,
+  freshNamespace, id, openProposal, problemOf, seedMemoryEntry, serverForFile, settleOnce,
 } from "../support/http-harness.ts";
 import type { CommandInput, ProjectCommandId, TestProject, TestStory } from "../support/http-harness.ts";
 import { queryStoryOSPostgres } from "../support/node-integration.ts";
@@ -114,7 +114,9 @@ async function buildReadFixture() {
   await settleOnce();
   const tree = await client.getManuscriptTree({ baseUrl: story.baseUrl, projectId: story.projectId,
     fetchImpl: story.fetchImpl });
-  return { story, proposal, edit, session, snapshotId: tree.snapshot.snapshot_id,
+  const { conversation_id: conversationId } = await client.getAgentRun({ baseUrl: story.baseUrl,
+    projectId: story.projectId, runId: proposal.source.run_id, fetchImpl: story.fetchImpl });
+  return { story, proposal, edit, session, snapshotId: tree.snapshot.snapshot_id, conversationId,
     archiveId: archive.response.effect.export_id, readableId: readable.response.effect.export_id,
     ...await researchSource(proposal.source.run_id) };
 }
@@ -219,6 +221,24 @@ const COMMANDS: CommandRows = {
       } } };
     },
     expected: { effect: { kind: "initialized", availability: "available", revision: "1" } },  },
+  updateProjectInstruction: {
+    arrange: async () => {
+      const project = await createProject(server, { title: "Smoke Instruction Novel" });
+      return { project, input: { request: {
+        command_schema: "storyos.command.update-project-instruction.request.v1",
+        update_project_instruction_input: { text: "Smoke instruction.", expected_instruction_revision: "0",
+          ...project.binding() },
+      } } };
+    },
+    expected: { effect: { kind: "authoritative_applied", revision: "1" } },
+  },
+  deleteMemoryEntry: {
+    arrange: async () => {
+      const project = await createStory(server, { title: "Smoke Memory Delete Novel" });
+      return { project, input: deleteMemoryEntryInput(project, await seedMemoryEntry(project.projectId), "1") };
+    },
+    expected: { effect: { kind: "authoritative_applied", version: "2", memory_revision: "2" } },
+  },
   createEditorSession: {
     arrange: async () => {
       const project = await createStory(server, { title: "Smoke Session Novel" });
@@ -537,6 +557,12 @@ const READS: Record<string, ReadRow> = {
   getProjectAssistance: {
     call: ({ story }, fetchImpl) => client.getProjectAssistance({ ...scope(story), fetchImpl }),
   },
+  getProjectInstruction: {
+    call: ({ story }, fetchImpl) => client.getProjectInstruction({ ...scope(story), fetchImpl }),
+  },
+  listMemoryEntries: {
+    call: ({ story }, fetchImpl) => client.listMemoryEntries({ ...scope(story), fetchImpl }),
+  },
   listSkills: { call: ({ story }, fetchImpl) => client.listSkills({ ...scope(story), fetchImpl }) },
   getEditorSession: {
     call: ({ story, session }, fetchImpl) => client.getEditorSession({ ...scope(story), fetchImpl,
@@ -545,6 +571,13 @@ const READS: Record<string, ReadRow> = {
   getAgentRun: {
     call: ({ story, proposal }, fetchImpl) => client.getAgentRun({ ...scope(story), fetchImpl,
       runId: proposal.source.run_id }),
+  },
+  listProjectConversations: {
+    call: ({ story }, fetchImpl) => client.listProjectConversations({ ...scope(story), fetchImpl }),
+  },
+  getProjectConversation: {
+    call: ({ story, conversationId }, fetchImpl) => client.getProjectConversation({ ...scope(story), fetchImpl,
+      conversationId }),
   },
   listResearchSources: {
     call: ({ story, proposal }, fetchImpl) => client.listResearchSources({ ...scope(story), fetchImpl,

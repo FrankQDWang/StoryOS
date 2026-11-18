@@ -273,6 +273,24 @@
       "wire_profile": "storyos.project-activity.v1"
     },
     {
+      "description": "",
+      "event_kind": "project_instruction_updated",
+      "negative_fixture": "storyos.golden.storyos.event.project-instruction-updated.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.project-instruction-updated.v1.positive.v1",
+      "schema_id": "storyos.event.project-instruction-updated.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "memory_entry_deleted",
+      "negative_fixture": "storyos.golden.storyos.event.memory-entry-deleted.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.memory-entry-deleted.v1.positive.v1",
+      "schema_id": "storyos.event.memory-entry-deleted.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
       "description": "Historical create Activity. The order field is the stored storage key.",
       "event_kind": "volume_created",
       "negative_fixture": "storyos.golden.storyos.event.volume-created.v1.negative.v1",
@@ -442,9 +460,9 @@
       "source": "context"
     },
     {
-      "name": "RecordMemoryNote",
+      "name": "WriteMemory",
       "public_route": null,
-      "reason": "Author-requested ToolCall records a Note Artifact, not an immediate Memory publication.",
+      "reason": "The Host Tool write_memory of an AgentRun writes one Memory Entry version in the Tool Gateway transaction when the author asks for it (ADR 0094 section 5); no public route writes an entry.",
       "source": "memory"
     },
     {
@@ -1001,6 +1019,255 @@
         "settlement_query": null
       },
       "shape": "project:assistance",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "positive": "storyos.golden.getProjectInstruction.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getProjectInstruction",
+      "path": "/api/v1/projects/{project_id}/instruction",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_visibility"
+      ],
+      "schemas": {
+        "request": "storyos.query.project-instruction.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.project-instruction.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:instruction",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.project-instruction-updated.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "positive": "storyos.golden.updateProjectInstruction.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "PUT",
+      "operation_id": "updateProjectInstruction",
+      "path": "/api/v1/projects/{project_id}/instruction",
+      "preconditions": [
+        "server_derived_project_scope",
+        "expected_instruction_revision",
+        "project_active"
+      ],
+      "schemas": {
+        "request": "storyos.command.update-project-instruction.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.update-project-instruction.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:instruction",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "positive": "storyos.golden.listMemoryEntries.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "listMemoryEntries",
+      "path": "/api/v1/projects/{project_id}/memory-entries",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_visibility"
+      ],
+      "schemas": {
+        "request": "storyos.query.memory-entries.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.memory-entries.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:memory",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.memory-entry-deleted.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "positive": "storyos.golden.deleteMemoryEntry.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "DELETE",
+      "operation_id": "deleteMemoryEntry",
+      "path": "/api/v1/projects/{project_id}/memory-entries/{memory_entry_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "memory_entry_in_project",
+        "expected_memory_entry_version",
+        "project_active"
+      ],
+      "schemas": {
+        "request": "storyos.command.delete-memory-entry.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.delete-memory-entry.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:memory",
       "wire_owner": "protocol"
     },
     {
@@ -2557,6 +2824,123 @@
       "wire_owner": "protocol"
     },
     {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "positive": "storyos.golden.listProjectConversations.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "listProjectConversations",
+      "path": "/api/v1/projects/{project_id}/conversations",
+      "preconditions": [
+        "server_derived_project_scope",
+        "bounded_project_conversation_list"
+      ],
+      "schemas": {
+        "request": "storyos.query.project-conversations.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.project-conversations.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "conversation:list",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "positive": "storyos.golden.getProjectConversation.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getProjectConversation",
+      "path": "/api/v1/projects/{project_id}/conversations/{conversation_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "conversation_scope_join",
+        "bounded_project_conversation_runs"
+      ],
+      "schemas": {
+        "request": "storyos.query.project-conversation.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.project-conversation.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "conversation:read",
+      "wire_owner": "protocol"
+    },
+    {
       "action_class": "agent_run_control",
       "activity": {
         "no_effect": [],
@@ -3819,7 +4203,11 @@
           "getProject",
           "updateProject",
           "getProjectAssistance",
-          "updateProjectAssistance"
+          "updateProjectAssistance",
+          "getProjectInstruction",
+          "updateProjectInstruction",
+          "listMemoryEntries",
+          "deleteMemoryEntry"
         ]
       },
       {

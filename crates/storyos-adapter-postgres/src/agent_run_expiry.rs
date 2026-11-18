@@ -44,12 +44,16 @@ pub(crate) async fn plan_expiry_rebuild(
     tool_exposure_digest: &str,
 ) -> Result<ExpiryAdmission, CompleteAgentRunError> {
     let RunPhaseRow {
-        conversation_id,
         author_message,
         sufficiency,
         assembly_manifest_id,
         ..
     } = run;
+    // A background Run has no Conversation, so it has no prior response to rebuild.
+    if !run.kind.rebuilds_expired_reference() {
+        return Ok(ExpiryAdmission::Dispatch(None));
+    }
+    let conversation_id = run.conversation()?;
     // A later RunStep continues from a Model Attempt of this Run, not from the prior Run (ADR 0091).
     if run_has_decision_attempt(client, claim).await? {
         return Ok(ExpiryAdmission::Dispatch(None));

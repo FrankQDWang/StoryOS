@@ -51,7 +51,7 @@ pub(crate) async fn load_admitted_targets(
         return Ok(Vec::new());
     };
     if let Some(collection) = &record.operation_requirement.passage_targets {
-        if record.operation_requirement.chapter_id != chapter_id {
+        if record.operation_requirement.chapter_id.as_deref() != Some(chapter_id) {
             return Ok(Vec::new());
         }
         let mut admitted = Vec::new();
@@ -74,8 +74,11 @@ pub(crate) async fn load_admitted_targets(
         return Ok(admitted);
     }
     let requirement = &record.operation_requirement;
+    let Some(record_chapter_id) = requirement.chapter_id.as_deref() else {
+        return Ok(Vec::new());
+    };
     let binding = TargetBinding {
-        chapter_id: &requirement.chapter_id,
+        chapter_id: record_chapter_id,
         revision_id: requirement.chapter_revision_id.as_deref(),
         block_ids: requirement.proposal_target_block_ids.as_deref(),
     };

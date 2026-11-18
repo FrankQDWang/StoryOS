@@ -4,11 +4,11 @@
 use std::future::Future;
 
 use serde_json::{Map, Value};
-use storyos_core::{RegisteredTool, ToolObservation, ToolRegistration};
+use storyos_core::{EmbeddingRegistration, RegisteredTool, ToolObservation, ToolRegistration};
 
 use crate::{
-    ClaimedAgentRun, CompleteAgentRunError, CredentialReference, PreDispatchRefusal,
-    PreparedRequest, WirePayloadProjection,
+    ClaimedAgentRun, CompleteAgentRunError, CredentialReference, EmbeddingResult,
+    PreDispatchRefusal, PreparedRequest, WirePayloadProjection,
 };
 
 /// One pending ToolCall of the durable Decision, in item order, with its pinned contract.
@@ -26,6 +26,24 @@ pub struct ToolCallRequest {
     /// The Context Assembly Manifest that the store committed for this preparation (ADR 0005
     /// gate six). The dispatch claim refers to it.
     pub context_assembly_manifest_id: String,
+}
+
+/// The next work of the ToolDispatch phase.
+pub enum ToolWork {
+    /// A ToolCall to a Tool destination.
+    Dispatch(ToolCallRequest),
+    /// A pending `hybrid_search_manuscript` call that needs the vector of its question (ADR 0095
+    /// section 1).
+    QuestionSearch(QuestionSearch),
+}
+
+/// The embedding request of the question of one pending `hybrid_search_manuscript` call. It has
+/// no `Debug`, so that no diagnostic shows the question.
+pub struct QuestionSearch {
+    pub tool_call_id: String,
+    pub question: String,
+    /// The Embedding Registration of the deployment.
+    pub registration: &'static EmbeddingRegistration,
 }
 
 /// The committed dispatch claim of one Tool Destination Attempt.
@@ -50,12 +68,21 @@ pub enum ToolDispatchRecord<'a> {
 /// Persistence for the Tool Gateway sequence. Each operation is one committed transaction with a
 /// check of the Run Lease fence.
 pub trait ToolDispatchStore: Sync {
-    /// The next pending ToolCall of the durable Decision of the AgentRun, or `None` when each
-    /// ToolCall is resolved.
+    /// The work of the next pending ToolCall of the durable Decision of the AgentRun, or `None`
+    /// when each ToolCall is resolved.
     fn next_tool_call(
         &self,
         claim: &ClaimedAgentRun,
-    ) -> impl Future<Output = Result<Option<ToolCallRequest>, CompleteAgentRunError>> + Send;
+    ) -> impl Future<Output = Result<Option<ToolWork>, CompleteAgentRunError>> + Send;
+
+    /// Checks the Run Lease fence, ranks the passages with the result of the embedding request
+    /// of the question, and settles the call when it is still pending.
+    fn record_question_search(
+        &self,
+        claim: &ClaimedAgentRun,
+        search: &QuestionSearch,
+        result: EmbeddingResult,
+    ) -> impl Future<Output = Result<(), CompleteAgentRunError>> + Send;
 
     /// Checks the current authority again, then commits the Destination Attempt Admission
     /// Decision, the Wire Payload Projection, the Destination Attempt, and the Outbound
@@ -119,8 +146,17 @@ macro_rules! no_tool_calls {
             async fn next_tool_call(
                 &self,
                 _claim: &$crate::ClaimedAgentRun,
-            ) -> Result<Option<$crate::ToolCallRequest>, $crate::CompleteAgentRunError> {
+            ) -> Result<Option<$crate::ToolWork>, $crate::CompleteAgentRunError> {
                 Ok(None)
+            }
+
+            async fn record_question_search(
+                &self,
+                _claim: &$crate::ClaimedAgentRun,
+                _search: &$crate::QuestionSearch,
+                _result: $crate::EmbeddingResult,
+            ) -> Result<(), $crate::CompleteAgentRunError> {
+                unreachable!("the test Run has no ToolCall")
             }
 
             async fn commit_tool_dispatch_claim(

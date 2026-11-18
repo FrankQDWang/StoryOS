@@ -75,6 +75,27 @@ pub(crate) async fn open_next_step(
         .disclosure_request
         .as_ref()
         .ok_or_else(|| damaged("The Context Assembly of the function request is damaged"))?;
+    // A background Run has no steering input, no Chapter, and no Receipt. After its last
+    // RunStep, the Run completes, and Core gives the outcome of its capture.
+    if !run.kind.reads_steering() {
+        if crate::agent_run_finish_rule::run_step_limit(run)? == storyos_core::RunStepLimit::Last {
+            let end = storyos_core::CaptureRunEnd::LastRunStepEnded;
+            crate::memory_capture::settle_end(client, claim, end).await?;
+            crate::memory_consolidation::settle_end(client, claim, end).await?;
+            return crate::agent_run_work::complete(client, claim).await;
+        }
+        let results = RunToolResults::load(client, claim).await?;
+        let next_position = crate::agent_run_steering::next_position(&run.decision_position)?;
+        crate::memory_capture::persist_next_step(
+            client,
+            claim,
+            retained,
+            &next_position,
+            &results.candidates(),
+        )
+        .await?;
+        return activate_step(client, claim, &next_position).await;
+    }
     let mut retained = retained.clone();
     let steering =
         crate::agent_run_steering::read_next(client, claim, &run.decision_position, &mut retained)
@@ -117,7 +138,7 @@ pub(crate) async fn open_next_step(
         &PassageContextInput {
             project_scope: &claim.project_scope,
             run_id: &claim.run_id,
-            chapter_id: &run.chapter_id,
+            chapter_id: run.chapter()?,
             author_message: &author_message,
             receipt_id: &receipt_id,
             decision_position: &next_position,
@@ -127,6 +148,7 @@ pub(crate) async fn open_next_step(
                 .skill_requirements
                 .as_deref()
                 .unwrap_or_default(),
+            memory_revision: requirement.memory_revision,
             selection_references: references.as_deref(),
             tool_results: Some(&candidates),
         },
@@ -134,6 +156,15 @@ pub(crate) async fn open_next_step(
     )
     .await
     .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    activate_step(client, claim, &next_position).await
+}
+
+/// Makes the RunStep at `next_position` the active RunStep of the Run.
+async fn activate_step(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    next_position: &str,
+) -> Result<WorkPhase, CompleteAgentRunError> {
     client
         .execute(
             "UPDATE storyos.agent_runs SET active_decision_position = $4::text::numeric
@@ -270,18 +301,7 @@ async fn stored_tool_calls(
                 state: ToolCallState::parse(row.get(/*idx*/ 7))
                     .ok_or_else(|| damaged("The ToolCall is damaged"))?,
                 result_text: row.get(/*idx*/ 8),
-                output: match row.get::<_, Option<&str>>(/*idx*/ 9) {
-                    Some(spec) if spec == storyos_core::READ_TOOL_RESULT_TOOL_SPEC.revision => {
-                        ToolResultOutput::StoredRead
-                    }
-                    Some(spec)
-                        if storyos_core::tool_spec(spec)
-                            .is_some_and(|spec| spec.envelope.is_some()) =>
-                    {
-                        ToolResultOutput::Research
-                    }
-                    Some(_) | None => ToolResultOutput::HostTool,
-                },
+                output: ToolResultOutput::of_spec(row.get(/*idx*/ 9)),
                 function_name: row.get(/*idx*/ 10),
                 arguments: canonical_arguments(row.get(/*idx*/ 11))?,
                 installed_stub: row.get(/*idx*/ 12),

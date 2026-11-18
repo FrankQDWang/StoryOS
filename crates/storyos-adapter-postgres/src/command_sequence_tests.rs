@@ -25,6 +25,9 @@ mod admit;
 #[path = "command_sequence_tests/steer_agent_run_tests.rs"]
 mod steer_agent_run;
 
+#[path = "command_sequence_tests/background_run_tests.rs"]
+pub(crate) mod background_run;
+
 #[path = "command_sequence_tests/replay_tests.rs"]
 mod replay;
 
@@ -70,9 +73,18 @@ mod author_edit;
 #[path = "command_sequence_tests/secondary_operation_tests.rs"]
 mod secondary_operation;
 
+#[path = "command_sequence_tests/memory_entry_tests.rs"]
+mod memory_entry;
+
+#[path = "command_sequence_tests/chapter_capture_due_tests.rs"]
+mod chapter_capture_due;
+
 pub(crate) use acceptance::ACCEPT_PROPOSAL;
 pub(crate) use agent_run::{CANCEL_AGENT_RUN, CREATE_AGENT_RUN, PAUSE_AGENT_RUN};
-pub(crate) use project_session::{UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE};
+pub(crate) use memory_entry::DELETE_MEMORY_ENTRY;
+pub(crate) use project_session::{
+    UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE, UPDATE_PROJECT_INSTRUCTION,
+};
 pub(crate) use proposal_decision::{REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL};
 pub(crate) use steer_agent_run::STEER_AGENT_RUN;
 pub(crate) use structure::{

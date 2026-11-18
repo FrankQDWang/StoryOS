@@ -704,3 +704,41 @@ async fn a_drifted_acceptance_undo_places_a_derived_or_a_reversal_proposal() {
         )
     );
 }
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_acceptance_marks_the_passage_index_work_of_its_chapter() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = crate::passage_index_work::tests::configured().await;
+    let mut proposal = derivable_proposal(&store, &admin, 0xf3e0).await;
+    let (scope, accepted) = (proposal.scope.clone(), proposal.chapter_id.clone());
+    let work = || crate::passage_index_work::tests::work(&admin, &scope);
+    // The Project has no embedding use binding, so its edits marked nothing.
+    assert_eq!(work().await, Vec::new());
+    admin.batch_execute("BEGIN").await.unwrap();
+    crate::passage_index_work::tests::deploy(&admin).await;
+    crate::project_embedding_binding::insert_embedding_binding(
+        &admin,
+        &scope,
+        &storyos_core::HOST_FAKE_EMBEDDING_REGISTRATION,
+    )
+    .await
+    .unwrap();
+    admin.batch_execute("COMMIT").await.unwrap();
+    // The binding marks each live Chapter, and the work can start at once.
+    let bound = work().await;
+    let live: Vec<_> = bound.iter().map(|row| (row.2, row.3, row.4)).collect();
+    assert_eq!(live, [(1, 0, false), (1, 0, false)]);
+
+    accept(&store, &admin, &mut proposal, &[0], 0xf3f0).await;
+    let expected: Vec<_> = bound
+        .into_iter()
+        .map(|(id, order, ..)| match id == accepted {
+            true => (id, order, 2, 0, true),
+            false => (id, order, 1, 0, false),
+        })
+        .collect();
+    assert_eq!(work().await, expected);
+}

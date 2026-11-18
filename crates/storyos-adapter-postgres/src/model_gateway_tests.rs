@@ -263,6 +263,27 @@ pub(crate) async fn queued_run_offering(
     destination: DeploymentDestination,
     research: Option<&'static ResearchToolOffer>,
 ) -> (ProjectScope, String, String) {
+    let (scope, chapter_id) = assisted_chapter(store, prefix).await;
+    let run_id = admit_run_in(
+        store,
+        &scope,
+        &chapter_id,
+        prefix,
+        destination,
+        "Help with this passage.",
+        ConversationSelection::New,
+        research,
+    )
+    .await;
+    (scope, chapter_id, run_id)
+}
+
+/// A Project of `prefix` with the available assistance on `host_fake_tool_loop`, Volume A, and
+/// Chapter A, and no Run. `prefix` gives the identities of the commands.
+pub(crate) async fn assisted_chapter(
+    store: &PostgresProjectReader,
+    prefix: &str,
+) -> (ProjectScope, String) {
     let scope: ProjectScope = seed_project(store, &format!("{prefix}0")).await;
     let assistance = command_issue(
         &scope,
@@ -308,18 +329,7 @@ pub(crate) async fn queued_run_offering(
         /*expected_tree_revision*/ 2,
     )
     .await;
-    let run_id = admit_run_in(
-        store,
-        &scope,
-        &chapter_id,
-        prefix,
-        destination,
-        "Help with this passage.",
-        ConversationSelection::New,
-        research,
-    )
-    .await;
-    (scope, chapter_id, run_id)
+    (scope, chapter_id)
 }
 
 /// Admits one queued AgentRun of a new conversation on `chapter_id`, in a deployment that offers
@@ -362,7 +372,7 @@ pub(crate) async fn admit_run_in(
     conversation: ConversationSelection,
     research: Option<&'static ResearchToolOffer>,
 ) -> String {
-    let input = (conversation, research, None);
+    let input = (conversation, research, None, None);
     admit_with(
         store,
         scope,
@@ -371,6 +381,28 @@ pub(crate) async fn admit_run_in(
         destination,
         author_message,
         input,
+        Default::default(),
+    )
+    .await
+}
+
+/// Admits one queued AgentRun of a new conversation of the tool loop profile, as `admit_run`
+/// does, in a deployment with the embedding configuration `embedding`.
+pub(crate) async fn admit_embedding_run(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    embedding: Option<&'static storyos_core::EmbeddingRegistration>,
+) -> String {
+    admit_with(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        DeploymentDestination::HostFakeToolLoop,
+        "Help with this passage.",
+        (ConversationSelection::New, None, None, embedding),
         Default::default(),
     )
     .await
@@ -387,7 +419,7 @@ pub(crate) async fn admit_referenced_run(
     author_message: &str,
     references: Vec<SelectionReference>,
 ) -> String {
-    let input = (ConversationSelection::New, None, Some(references));
+    let input = (ConversationSelection::New, None, Some(references), None);
     admit_with(
         store,
         scope,
@@ -419,7 +451,7 @@ pub(crate) async fn admit_selected_run(
         prefix,
         DeploymentDestination::HostFakeToolLoop,
         author_message,
-        (conversation, None, None),
+        (conversation, None, None, None),
         skills,
     )
     .await
@@ -436,10 +468,67 @@ async fn admit_with(
     prefix: &str,
     destination: DeploymentDestination,
     author_message: &str,
-    (conversation, research, selection_references): (
+    conversation: (
         ConversationSelection,
         Option<&'static ResearchToolOffer>,
         Option<Vec<SelectionReference>>,
+        Option<&'static storyos_core::EmbeddingRegistration>,
+    ),
+    skills: (std::sync::Arc<SkillSet>, Vec<SkillPackageReference>),
+) -> String {
+    let run_id = format!("018f0000-0000-7001-8000-00000004{prefix}6");
+    let inputs = (destination, author_message, run_id);
+    admit_with_run_id(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        inputs,
+        conversation,
+        skills,
+    )
+    .await
+}
+
+/// Admits one queued AgentRun of a new Conversation of the tool loop profile with the identity
+/// `run_id`, as `admit_run` does.
+pub(crate) async fn admit_run_with_id(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    author_message: &str,
+    run_id: String,
+) -> String {
+    let inputs = (
+        DeploymentDestination::HostFakeToolLoop,
+        author_message,
+        run_id,
+    );
+    let conversation = (ConversationSelection::New, None, None, None);
+    admit_with_run_id(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        inputs,
+        conversation,
+        Default::default(),
+    )
+    .await
+}
+
+async fn admit_with_run_id(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    (destination, author_message, run_id): (DeploymentDestination, &str, String),
+    (conversation, research, selection_references, embedding): (
+        ConversationSelection,
+        Option<&'static ResearchToolOffer>,
+        Option<Vec<SelectionReference>>,
+        Option<&'static storyos_core::EmbeddingRegistration>,
     ),
     (skills, skill_selections): (std::sync::Arc<SkillSet>, Vec<SkillPackageReference>),
 ) -> String {
@@ -461,11 +550,12 @@ async fn admit_with(
             conversation,
             author_message: author_message.to_owned(),
             chapter_id: chapter_id.to_owned(),
-            run_id: format!("018f0000-0000-7001-8000-00000004{prefix}6"),
+            run_id,
             conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
             destination: Some(destination),
             research,
+            embedding,
             skills,
             skill_selections,
         },
@@ -596,11 +686,13 @@ async fn dispatch_claim_commits_before_an_exchange_with_no_open_transaction() {
                 };
                 2
             ],
-            [
+            vec![
+                ContractFaultPoint::DispatchClaimed,
+                ContractFaultPoint::StreamCommitted,
+                ContractFaultPoint::ToolCallsCommitted,
                 ContractFaultPoint::DispatchClaimed,
                 ContractFaultPoint::StreamCommitted
-            ]
-            .repeat(2),
+            ],
         )
     );
     let evidence = dispatch_evidence(&admin, &claim.run_id).await;
@@ -811,6 +903,7 @@ async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
                 ContractFaultPoint::StreamCommitted,
                 ContractFaultPoint::DispatchClaimed,
                 ContractFaultPoint::StreamCommitted,
+                ContractFaultPoint::ToolCallsCommitted,
                 ContractFaultPoint::DispatchClaimed,
                 ContractFaultPoint::StreamCommitted,
             ],

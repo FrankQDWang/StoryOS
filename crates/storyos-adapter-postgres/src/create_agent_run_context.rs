@@ -20,6 +20,9 @@ pub(crate) struct PassageContextInput<'a> {
     pub selection_references: Option<&'a [storyos_core::SelectionReference]>,
     /// The Skill requirements of the Run, in the order of the Skill names (ADR 0089 section 5).
     pub skill_requirements: &'a [storyos_core::SkillRequirement],
+    /// The Memory revision that the Run pinned. Each RunStep of the Run copies it (ADR 0094
+    /// section 4).
+    pub memory_revision: Option<u64>,
     /// The resolved ToolCalls of a `tool_result_continuation`, in item order.
     pub tool_results: Option<&'a [storyos_core::ToolResultCandidate<'a>]>,
 }
@@ -127,6 +130,8 @@ pub(crate) async fn persist_current_passage_assembly(
         }
     };
     let mut record = record;
+    let bound = bound_instruction(client, command.project_scope, command.run_id).await?;
+    storyos_core::assemble_instruction_binding(&mut record, bound.as_ref());
     let sources = crate::skill_package_snapshot::skill_instruction_sources(
         client,
         command.project_scope,
@@ -149,61 +154,31 @@ pub(crate) async fn persist_current_passage_assembly(
     .await
     .map_err(agent_run_database_error)?;
     storyos_core::assemble_skill_catalog(&mut record, &catalog);
+    let chapters = chapter_list_entries(client, command.project_scope)
+        .await
+        .map_err(|error| CreateAgentRunError::Unavailable(Box::new(error)))?;
+    storyos_core::assemble_chapter_list(&mut record, &chapters);
+    let memory = match command.memory_revision {
+        Some(revision) => {
+            crate::memory_entries::read_memory_index(client, command.project_scope, revision)
+                .await
+                .map_err(CreateAgentRunError::Unavailable)?
+        }
+        None => Vec::new(),
+    };
+    storyos_core::assemble_memory_index(&mut record, command.memory_revision, &memory);
     if let Some(candidates) = command.tool_results {
         storyos_core::assemble_tool_result_continuation(&mut record, candidates);
     }
-    let payload = encode_assembly_record(&record).to_string();
-    client
-        .execute(
-            "INSERT INTO storyos.operation_requirements
-               (owner_user_id, project_id, operation_requirement_id, run_id,
-                input_snapshot_id, receipt_id, payload, decision_position)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7::text::jsonb, $8::text::numeric)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &operation_requirement_id,
-                &command.run_id,
-                &input_snapshot_id,
-                &command.receipt_id,
-                &payload,
-                &command.decision_position,
-            ],
-        )
-        .await
-        .map_err(agent_run_database_error)?;
-    let assembly_manifest_id = uuid::Uuid::now_v7().to_string();
-    let sufficiency = match record.sufficiency {
-        storyos_core::ContextSufficiency::Complete => "complete",
-        storyos_core::ContextSufficiency::Blocked { .. } => "blocked",
-    };
-    client
-        .execute(
-            "INSERT INTO storyos.context_assembly_manifests
-               (owner_user_id, project_id, context_assembly_manifest_id,
-                operation_requirement_id, run_id, sufficiency,
-                destination_context_manifest_id, outbound_disclosure_manifest_id,
-                payload, receipt_id, decision_position)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
-                     $4::text::uuid, $5::text::uuid, $6,
-                     $7::text::uuid, $8::text::uuid, $9::text::jsonb, $10::text::uuid, $11::text::numeric)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &assembly_manifest_id,
-                &operation_requirement_id,
-                &command.run_id,
-                &sufficiency,
-                &None::<&str>,
-                &None::<&str>,
-                &payload,
-                &command.receipt_id,
-                &command.decision_position,
-            ],
-        )
-        .await
-        .map_err(agent_run_database_error)?;
+    let assembly_manifest_id = insert_assembly(
+        client,
+        command.project_scope,
+        command.run_id,
+        Some(command.receipt_id),
+        command.decision_position,
+        &record,
+    )
+    .await?;
     Ok(AgentRunContext {
         assembly_manifest_id,
         destination_context_manifest_id: None,
@@ -225,6 +200,37 @@ pub(crate) async fn persist_current_passage_assembly(
         joinable_block_ids: Vec::new(),
         record,
     })
+}
+
+/// The Project Instruction Revision that the Run `run_id` bound at its admission, with its exact
+/// text, or `None` for "none configured". A later save does not change it (ADR 0094 section 2).
+async fn bound_instruction(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    run_id: &str,
+) -> Result<Option<storyos_core::BoundInstruction>, CreateAgentRunError> {
+    let row = client
+        .query_opt(
+            "SELECT revision.instruction_revision_id::text, revision.text
+               FROM storyos.agent_runs AS run
+               JOIN storyos.project_instruction_revisions AS revision
+                 ON (revision.owner_user_id, revision.project_id,
+                     revision.instruction_revision_id) =
+                    (run.owner_user_id, run.project_id, run.project_instruction_revision_id)
+              WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
+                AND run.run_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &run_id,
+            ],
+        )
+        .await
+        .map_err(agent_run_database_error)?;
+    Ok(row.map(|row| storyos_core::BoundInstruction {
+        revision_id: row.get(/*idx*/ 0),
+        text: row.get(/*idx*/ 1),
+    }))
 }
 
 pub(super) async fn load_assembled_context(
@@ -270,10 +276,12 @@ pub(super) async fn load_assembled_context(
             "The Context Assembly Manifest is damaged",
         )))
     })?;
-    let current_revision =
-        current_chapter_payload(client, scope, &record.operation_requirement.chapter_id)
+    let current_revision = match record.operation_requirement.chapter_id.as_deref() {
+        Some(chapter_id) => current_chapter_payload(client, scope, chapter_id)
             .await?
-            .map(|(revision_id, _)| revision_id);
+            .map(|(revision_id, _)| revision_id),
+        None => None,
+    };
     let working_target_availability = match (
         record.operation_requirement.chapter_revision_id.as_deref(),
         current_revision.as_deref(),
@@ -373,6 +381,106 @@ pub(crate) async fn current_chapter_payload(
     Ok(row.map(|row| (row.get(0), row.get(1))))
 }
 
+/// Writes the Operation Requirement and the Context Assembly Manifest of one RunStep, and gives
+/// the manifest identifier. A background Run has no Receipt (ADR 0094 section 5).
+pub(crate) async fn insert_assembly(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    run_id: &str,
+    receipt_id: Option<&str>,
+    decision_position: &str,
+    record: &storyos_core::CurrentPassageAssemblyRecord,
+) -> Result<String, CreateAgentRunError> {
+    let payload = encode_assembly_record(record).to_string();
+    client
+        .execute(
+            "INSERT INTO storyos.operation_requirements
+               (owner_user_id, project_id, operation_requirement_id, run_id,
+                input_snapshot_id, receipt_id, payload, decision_position)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                     $5::text::uuid, $6::text::uuid, $7::text::jsonb, $8::text::numeric)",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &record.operation_requirement.operation_requirement_id,
+                &run_id,
+                &record.operation_requirement.input_snapshot_id,
+                &receipt_id,
+                &payload,
+                &decision_position,
+            ],
+        )
+        .await
+        .map_err(agent_run_database_error)?;
+    let assembly_manifest_id = uuid::Uuid::now_v7().to_string();
+    let sufficiency = match record.sufficiency {
+        storyos_core::ContextSufficiency::Complete => "complete",
+        storyos_core::ContextSufficiency::Blocked { .. } => "blocked",
+    };
+    client
+        .execute(
+            "INSERT INTO storyos.context_assembly_manifests
+               (owner_user_id, project_id, context_assembly_manifest_id,
+                operation_requirement_id, run_id, sufficiency,
+                destination_context_manifest_id, outbound_disclosure_manifest_id,
+                payload, receipt_id, decision_position)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
+                     $4::text::uuid, $5::text::uuid, $6,
+                     $7::text::uuid, $8::text::uuid, $9::text::jsonb, $10::text::uuid, $11::text::numeric)",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &assembly_manifest_id,
+                &record.operation_requirement.operation_requirement_id,
+                &run_id,
+                &sufficiency,
+                &None::<&str>,
+                &None::<&str>,
+                &payload,
+                &receipt_id,
+                &decision_position,
+            ],
+        )
+        .await
+        .map_err(agent_run_database_error)?;
+    Ok(assembly_manifest_id)
+}
+
+/// The entries of the Chapter list of the Project: each live Chapter in manuscript order with the
+/// character count of its authoritative head text.
+pub(crate) async fn chapter_list_entries(
+    client: &impl tokio_postgres::GenericClient,
+    scope: &ProjectScope,
+) -> Result<Vec<storyos_core::ChapterListEntry>, storyos_application::ProjectReadError> {
+    let chapters = crate::manuscript_search::read_live_chapter_blocks(
+        client,
+        scope,
+        crate::manuscript_search::LiveChapterReadExtent::AllChapters,
+    )
+    .await?;
+    Ok(chapters
+        .into_iter()
+        .map(|chapter| storyos_core::ChapterListEntry {
+            volume_order: chapter.volume_order,
+            volume_title: chapter.volume_title,
+            chapter_id: chapter.chapter_id.as_ref().to_owned(),
+            title: chapter.title,
+            length: storyos_core::count_stored_texts(
+                chapter.blocks.iter().map(|block| block.text.as_str()),
+            )
+            .character_count,
+        })
+        .collect())
+}
+
 #[cfg(test)]
 #[path = "create_agent_run_context_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "chapter_list_context_tests.rs"]
+pub(crate) mod chapter_list_tests;
+
+#[cfg(test)]
+#[path = "memory_index_context_tests.rs"]
+mod memory_index_tests;

@@ -296,6 +296,37 @@ input:focus-visible {
 
 .agent-header button:disabled { opacity: .45; }
 
+.agent-header button + button { margin-left: 4px; }
+
+.assistant-conversation-list {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  font: 13px/1.6 "PingFang SC", sans-serif;
+}
+
+.assistant-conversation-list ul { margin: 0; padding: 0; list-style: none; }
+
+.assistant-conversation-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  padding: 6px 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.assistant-conversation-list button[aria-current="true"] { background: var(--line); }
+
+.assistant-conversation-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.assistant-conversation-list time,
+.assistant-conversation-current { color: var(--muted); font-size: 12px; }
+
+.assistant-conversation-list .assistant-status { padding: 6px 8px; }
+
 .assistant-conversation-boundary {
   color: var(--muted);
   font-size: 12px;
@@ -484,3 +515,32 @@ li[data-chapter-id] { position: relative; }
 .skill-picker .skill-description { overflow: hidden; color: #8a8780; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .assistant-reference-labels { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; }
 .assistant-reference-labels li { overflow: hidden; max-width: 100%; padding: 1px 8px; border-radius: 10px; background: #efede9; color: #6f6c66; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The gear control and the settings page of a Project (ADR 0094 section 9). */
+.tree-footer { align-items: center; gap: 12px; }
+.project-settings-link { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; color: var(--muted); }
+.project-settings-link:hover { background: var(--hover); color: var(--ink); }
+.project-settings-link svg { width: 18px; height: 18px; }
+.project-settings { width: min(100%, 720px); margin: 0 auto; padding: 32px 40px 64px; }
+.project-settings header { display: flex; align-items: center; gap: 16px; color: var(--muted); }
+.project-settings header a { color: var(--ink); text-decoration: none; }
+.project-settings header p { margin: 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.project-settings h1 { margin: 40px 0 28px; font-family: "Noto Serif SC", "Songti SC", serif; font-size: 26px; font-weight: 600; }
+.settings-section { padding: 20px 0; border-top: 1px solid var(--line); }
+.settings-section h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+.settings-section textarea { display: block; width: 100%; min-height: 220px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); line-height: 1.8; resize: vertical; }
+.settings-hint { margin: 8px 0 12px; color: var(--muted); }
+.settings-section button { padding: 5px 16px; border: 1px solid #d9d6d0; border-radius: 6px; background: white; cursor: pointer; }
+.settings-section button:disabled { cursor: default; opacity: 0.6; }
+.settings-section [role="status"], .settings-section [role="alert"] { margin: 12px 0 0; }
+.memory-group h3 { margin: 16px 0 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.memory-group ul { margin: 0; padding: 0; list-style: none; }
+.memory-entry { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.memory-entry h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.memory-entry-text { margin: 6px 0; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memory-entry-origin { display: flex; flex-wrap: wrap; gap: 12px; margin: 0; color: var(--muted); font-size: 13px; }
+.memory-entry-origin a { color: var(--ink); }
+.memory-entry-origin > span { display: inline-flex; gap: 8px; }
+.settings-leave-confirm { position: fixed; z-index: 10; top: 96px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 8px; background: white; box-shadow: 0 6px 24px rgba(54, 51, 46, 0.14); }
+.settings-leave-confirm p { margin: 0; }
+.settings-leave-confirm button { padding: 4px 14px; border: 1px solid #d9d6d0; border-radius: 6px; background: white; cursor: pointer; }

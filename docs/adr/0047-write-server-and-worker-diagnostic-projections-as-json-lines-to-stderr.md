@@ -46,7 +46,7 @@ Only these async functions get `#[tracing::instrument(skip_all, ...)]`:
 1. **HTTP request.** One axum middleware function makes one span for each request. It records the route template from `MatchedPath`, or `unmatched`. It never records the raw path or the query, because a search query can contain author text.
 2. **Command sequence.** The entry functions of `command_sequence` in `storyos-adapter-postgres`: settle, admit, settle the admitted command, and replay.
 3. **Worker claims.** The Worker step, the completion of a readable export and of an archive export, and `complete_agent_run`.
-4. **Model Gateway.** `Gateway::dispatch` at `info`. At `debug`, the implementations of `prepare`, `exchange`, `commit_dispatch_claim`, `record`, and the append of Model Stream Events.
+4. **Model Gateway.** `Gateway::dispatch` at `info`. At `debug`, the implementations of `prepare`, `exchange`, `commit_dispatch_claim`, `record`, and the append of Model Stream Events. The embedding request has `dispatch_embedding` at `info` with the Model Gateway fields and no `run_id`. At `debug`, the implementations of its `prepare`, `exchange`, `commit_embedding_claim`, and `record_embedding` ([ADR 0095](0095-give-the-agent-the-whole-manuscript-through-host-tools-and-add-a-hybrid-search-with-pgvector-and-a-volcengine-embedding-model.md) section 3).
 5. **MCP client.** `prepare` and `exchange` of `storyos-adapter-mcp-client` at `debug` ([ADR 0083](0083-use-exa-as-the-first-mcp-research-destination-and-admit-it-through-project-tool-enablement.md)). One `info` event closes each exchange, one `debug` event records each JSON-RPC message, and one `warn` event records each server message that the client refuses.
 
 The other async functions get no span. The 466 internal functions of `storyos-adapter-postgres` are in this group.
@@ -59,11 +59,12 @@ Each layer records only the fields in this table:
 | --- | --- |
 | HTTP request | `method`, `route`, `status` |
 | Command sequence | `command_kind`, `project_id`, `command_id`, `author_command_admission_id`, `correlation_id`, `outcome` |
-| Worker claim | `project_id`, `run_id` or `export_id`, `fence_token`, `attempt`, `outcome` |
+| Worker claim | `project_id`, `run_id`, `export_id`, or `chapter_id`, `kind`, `fence_token`, `attempt`, `outcome` |
 | Model Gateway | `project_id`, `run_id`, `request_kind`, `adapter`, `observation`, usage counters |
 | MCP client | `server_url`, `method`, `session_tag`, `request_bytes`, `response_bytes`, `observation`, `refused_method` |
 
 - `outcome` is a static category: the name of the applied variant, `replayed`, or a refusal reason code.
+- `kind` is the static kind of a claimed schedule row of background Memory work: `conversation_capture` or `consolidation` (ADR 0094).
 - `correlation_id` is the client UUID that the Server validates.
 - No span records `owner_user_id`. `project_id` identifies the Project Scope.
 - No span records a digest, an idempotency key, a nonce, a Credential Reference, or a credential value.

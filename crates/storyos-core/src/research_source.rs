@@ -136,7 +136,15 @@ pub fn capture_research_sources(
         | ToolIntake::SubmitResearch { .. }
         | ToolIntake::ReadToolResult { .. }
         | ToolIntake::LoadSkill { .. }
-        | ToolIntake::ReadSkillResource { .. } => &[],
+        | ToolIntake::ReadSkillResource { .. }
+        | ToolIntake::ReadChapter { .. }
+        | ToolIntake::SearchManuscript { .. }
+        | ToolIntake::HybridSearchManuscript { .. }
+        | ToolIntake::WriteMemory(_)
+        | ToolIntake::ReadMemoryEntry { .. }
+        | ToolIntake::SearchMemory { .. }
+        | ToolIntake::RecordMemoryObservations(_)
+        | ToolIntake::ApplyMemoryOperations(_) => &[],
     };
     match (settlement.state, &settlement.result) {
         (ToolCallState::Settled, Some(result)) => match format {

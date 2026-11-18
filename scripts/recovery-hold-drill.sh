@@ -231,3 +231,39 @@ assert_stage6_skill_facts_present() {
     exit 1
   fi
 }
+
+# Stage 7 Memory records: the Project Instruction Revisions, the Memory Entry versions and the
+# Project Memory heads, the delete marks, the conflict flags, the observations that wait, and the
+# schedule rows of the background work. Each line is a count and a digest of the ordered complete rows.
+stage7_memory_facts() {
+  facts_container=$1
+  for facts_set in \
+    "project_instruction_revisions|project_instruction_revisions|true" \
+    "memory_entry_versions|memory_entry_versions|true" \
+    "project_memory_heads|project_memory_heads|true" \
+    "memory_delete_marks|memory_entry_versions|record.state = 'deleted'" \
+    "memory_conflict_flags|memory_entry_versions|record.flag_reason IS NOT NULL" \
+    "memory_waiting_observations|memory_observations|record.state = 'waiting'" \
+    "memory_work_schedules|memory_work_schedules|true"; do
+    facts_name=${facts_set%%|*}
+    facts_rest=${facts_set#*|}
+    facts_table=${facts_rest%%|*}
+    facts_filter=${facts_rest#*|}
+    docker exec "$facts_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+      "SELECT '$facts_name|' || count(*) || '|' ||
+              md5(coalesce(string_agg(row_to_json(record)::text, ';'
+                ORDER BY row_to_json(record)::text), ''))
+         FROM storyos.$facts_table AS record
+        WHERE $facts_filter"
+  done
+}
+
+# The Stage 7 journey consumes each observation in a later pass, so the line of the observations
+# that wait can have the count 0. Each other line must have rows.
+assert_stage7_memory_facts_present() {
+  if [ "$(printf '%s\n' "$1" | grep -v '^memory_waiting_observations|' | grep -c '|0|')" != "0" ] \
+    || [ "$(printf '%s\n' "$1" | wc -l | tr -d ' ')" != "7" ]; then
+    echo "The recovery seed did not create each Stage 7 Memory record family: $1" >&2
+    exit 1
+  fi
+}

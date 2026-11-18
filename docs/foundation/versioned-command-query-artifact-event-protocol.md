@@ -645,7 +645,6 @@ operation registry, and the catalog gets it from the registry.
 | `updateConversationMemorySettings` | command | `POST /api/v1/projects/{project_id}/conversations/{conversation_id}/memory-settings` | sync | memory |
 | `importProjectArchive` | command | `POST /api/v1/projects/{project_id}/imports` | async | storage |
 | `getArtifact` | query | `GET /api/v1/projects/{project_id}/artifacts/{artifact_id}` | read | artifact |
-| `getConversationMemory` | query | `GET /api/v1/projects/{project_id}/conversations/{conversation_id}/memory` | read | memory |
 | `getCommand` | query | `GET /api/v1/projects/{project_id}/commands/{command_id}` | read | admission |
 | `getReceipt` | query | `GET /api/v1/projects/{project_id}/receipts/{receipt_id}` | read | core |
 | `retrieveContext` | query | `POST /api/v1/projects/{project_id}/queries/retrieval` | read | context |
@@ -2160,15 +2159,9 @@ capabilities; Agent Plan entitlement is not proof of every Ark capability.
 ### 13.10 Conversation Memory protocol
 
 The [Memory owner](fiction-memory-and-research-provenance-semantics.md) defines
-the documents and maintenance mechanism. Memory Documents and Memory Notes use
-versioned content roles within the existing Tool Artifact family, not new
-top-level Artifact kinds or per-claim Admission/Suppression records.
-`storyos.artifact.memory-document.v1` contains a closed content role
-`conversation_summary | consolidated_notes | navigation_summary`, bounded
-Markdown payload/reference, and exact known input/source references.
-`storyos.artifact.memory-note.v1` contains bounded plain-language guidance and
-its requesting Message revision. Both retain the existing Artifact envelope,
-Creator, revision, digest, payload availability, and Project Scope contract.
+the maintenance mechanism. ADR 0094 section 3 defines the records of Agent
+Memory: Memory Entries with versions in their own tables in the Project Scope.
+They are not a part of the Tool Artifact family.
 
 `ConversationMemorySettings` binds exact Project Scope, Project Conversation,
 an opaque UUIDv7 settings revision, `use_enabled`, and `contribution_enabled`. Both values are
@@ -2193,46 +2186,47 @@ original acknowledgement even if a Run has since started. The UI shows the
 current values and disables changes while busy; it cannot supply the idle proof.
 Foreground admission captures the settings revision for the whole Run tree.
 
-Use controls new summary, search, and Memory-document intake by that
-conversation's Agent; contribution controls future extraction from its settled
-conversation snapshots. Setting checks still occur before source reads and
-dispatch. Already sent background work retains its Attempt and outcome evidence
-and follows the existing publication gate; changing a setting is not cancellation
-or a revocation of publication permission. Real access and covered-copy
-restrictions still apply. Neither setting deletes published Memory, rewrites
+Use controls the Memory Index and the Memory read Tools in the Runs of that
+conversation (ADR 0094). Contribution controls the captures of its settled
+messages. Setting checks still occur before source reads and dispatch.
+Background work that started keeps its Attempt and its outcome, and a change of
+a setting is not a cancellation. Neither setting deletes a Memory Entry, rewrites
 recorded context, retracts disclosure, or promises semantic forgetting.
 
-`getConversationMemory` is an author inspection Query at a canonical Snapshot.
-It returns settings and change eligibility, the current published-set identity,
-bounded navigation summary reference, document/Note revision references, known
-source availability, and bounded maintenance outcome references. Empty,
-unavailable, and no-publication-yet are explicit states, not an empty success
-for a failed read. Pagination uses the existing Snapshot contract. Author
-inspection remains available when Agent use is disabled, under current access.
-`getArtifact` reads exact document/Note revisions; `retrieveContext` provides
-bounded Agent search/read through current publication and use checks. Neither
-index hits nor a latest Artifact alias can replace a published-set identity.
+`listMemoryEntries` is the author read Query of the Memory section of the
+settings page (ADR 0094 section 9). It returns each current Memory Entry of the
+Project in Memory Index order: the identity, the version, the type, the title,
+the description, the text, the origin, the first source reference, and the time
+of the last change. A source record that is not available gives the mark
+`unavailable` and does not fail the read. The read has no pages and writes no
+row. It does not read the Conversation Memory Settings, so the author sees each
+entry that the Agent can read.
 
-The internal `RecordMemoryNote` Tool operation requires the exact requesting
-author Message and a validated Agent Decision/ToolCall. It records plain-language
-guidance and its source, then exposes `note_recorded` with the exact Note revision.
-Untrusted text cannot supply the author request. Recording a Note does not claim
-that consolidation incorporated it or that a requested forgetting succeeded.
-An explicit change request remains independent from automatic conversation
-contribution; its governed Tool call cannot bypass actual source restrictions.
+`deleteMemoryEntry` is the author command of the delete control of the Memory
+section (ADR 0094 sections 6 and 9). Its path names the entry, and its body
+gives the version that the page showed. It settles through the command sequence
+with the profile `ActivityOnly` and writes no Author Action, so it is outside
+Author Undo. An applied delete writes the `deleted` version of the entry, keeps
+each earlier version, and records one Project Activity Event of the kind
+`memory_entry_deleted` with the entry, the version, and the Memory revision. An
+entry that is already deleted gives `no_effect` with `already_deleted`, a stale
+version gives `conflicted` with `entry_changed`, and an entry of no version in
+the Project answers as an unavailable resource. The Web client accepts the
+Activity kind and shows nothing for it.
 
-Internal Memory maintenance records exact permitted inputs, model/prompt
-versions, producer, current publication revision, bounds, and outcome. It
-publishes a complete generated-document set atomically under the storage-owned
-concurrency gate. A stale job cannot overwrite a newer publication. The public
-`memory-maintenance-settled.v1` Event carries the operation, phase, and closed
-outcome `published | no_op | failed | source_unavailable`, plus the exact
-publication reference only for `published`. Failures do not replace the current
-set. `memory-note-recorded.v1` carries the exact Note and source Message; the
-settings Event carries the committed settings revision. All remain scoped
-Project Activity projections after durable commit, not authoritative prose.
-The catalog maps these Events to explicit internal producers without inventing
-a public command that forces immediate Memory generation.
+In a Run of a Project Conversation, the Agent gets the Memory Index and reads
+Memory Entries only through Host Tools (ADR 0094). `search_memory` and
+`read_memory_entry` read the current entries. `write_memory` creates, changes,
+or deletes one entry at once on the request of the author. Background work has
+its own input. A capture gets the Memory Index in its request and records Memory
+Observations with `record_memory_observations`. A consolidation pass gets each
+current entry with its text and the waiting observations in its request, and it
+applies its operations with `apply_memory_operations`. Each written version has
+its cause, and each applied write increases the Memory revision of the Project
+by one. No Artifact, no Memory Note, and no generated document set holds Agent
+Memory, and no public command starts a capture or a consolidation. The
+[Memory owner](fiction-memory-and-research-provenance-semantics.md) and ADR 0094
+give the complete model.
 
 ## 14. Versioning and compatibility
 

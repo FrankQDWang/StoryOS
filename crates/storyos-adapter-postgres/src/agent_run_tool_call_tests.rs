@@ -103,6 +103,9 @@ fn validated_search_call() -> storyos_core::RequestedToolCall {
         }],
         model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
         skill_catalog: false,
+        memory_use: false,
+        hybrid_search: false,
+        run_kind: storyos_core::AgentRunKind::Author,
     });
     let item = NativeStreamItem {
         item_id: "fc_01".to_owned(),

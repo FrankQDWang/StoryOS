@@ -72,10 +72,36 @@ pub(crate) async fn tool_exposure(
         .await
         .map_err(complete_database_error)?
         .get(/*idx*/ 0);
+    // The captured Conversation Memory Settings of the Run decide the Memory read (ADR 0094
+    // section 4). A background Run has no settings.
+    let memory_use: bool = client
+        .query_one(
+            "SELECT EXISTS (SELECT 1 FROM storyos.agent_runs AS run
+                              JOIN storyos.conversation_memory_settings AS settings
+                                ON (settings.owner_user_id, settings.project_id,
+                                    settings.conversation_id, settings.memory_settings_revision) =
+                                   (run.owner_user_id, run.project_id, run.conversation_id,
+                                    run.memory_settings_revision)
+                             WHERE run.owner_user_id = $1::text::uuid
+                               AND run.project_id = $2::text::uuid AND run.run_id = $3::text::uuid
+                               AND settings.use_enabled)",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?
+        .get(/*idx*/ 0);
+    let hybrid_search = crate::agent_run_hybrid_search::possible(client, claim).await?;
     Ok(ToolExposure::compute(&ExposureFacts {
         bound: &bound,
         model_registration_revision: &run.model_registration_revision,
         skill_catalog,
+        memory_use,
+        hybrid_search,
+        run_kind: run.kind,
     }))
 }
 

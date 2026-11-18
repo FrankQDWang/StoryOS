@@ -572,6 +572,101 @@ fn the_full_input_of_a_later_request_counts_each_stub_and_not_its_exact_result()
     );
 }
 
+/// ADR 0056 and ADR 0095 section 1: the expected input counts the `chapter_list` item when the
+/// request sends the current input.
+#[test]
+fn the_expected_input_counts_the_chapter_list_with_the_current_input() {
+    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
+        operation_requirement_id: "requirement-1".to_owned(),
+        input_snapshot_id: "snapshot-1".to_owned(),
+        run_id: "run-1".to_owned(),
+        owner_user_id: "owner-1".to_owned(),
+        project_id: "project-1".to_owned(),
+        author_message: "Write the quarrel.".to_owned(),
+        chapter_id: "chapter-1".to_owned(),
+        chapter_revision_id: Some("rev-1".to_owned()),
+        proposal_target_block_ids: None,
+        chapter_body: "Rain.".to_owned(),
+        instruction: crate::InstructionBindingInput::Absent,
+        destination_identity: "destination-1".to_owned(),
+    });
+    let without_list: u64 = decision.selected.iter().map(|item| item.token_count).sum();
+    crate::assemble_chapter_list(
+        &mut decision,
+        &[crate::ChapterListEntry {
+            volume_order: 1,
+            volume_title: "Volume 1".to_owned(),
+            chapter_id: "chapter-1".to_owned(),
+            title: "The Harbor".to_owned(),
+            length: 5,
+        }],
+    );
+    let list_tokens = decision.selected.last().map(|item| item.token_count);
+    let sent = CompactionTrigger::from_facts(&super::CompactionRequestFacts {
+        model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
+        budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+        author_message: "Write the quarrel.",
+        decision: Some(&decision),
+        declared_target_texts: &[],
+        prior_reported_tokens: Some(0),
+        prior_decision_id: None,
+        prior_input: crate::PriorInput::Current,
+        decision_position: "0",
+        compacted_earlier: false,
+    })
+    .sent_input_tokens;
+
+    assert_eq!((sent, list_tokens), (without_list + 50, Some(50)));
+}
+
+/// ADR 0056 and ADR 0094 section 4: the expected input counts the `memory_index` item when the
+/// request sends the current input.
+#[test]
+fn the_expected_input_counts_the_memory_index_with_the_current_input() {
+    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
+        operation_requirement_id: "requirement-1".to_owned(),
+        input_snapshot_id: "snapshot-1".to_owned(),
+        run_id: "run-1".to_owned(),
+        owner_user_id: "owner-1".to_owned(),
+        project_id: "project-1".to_owned(),
+        author_message: "Write the quarrel.".to_owned(),
+        chapter_id: "chapter-1".to_owned(),
+        chapter_revision_id: Some("rev-1".to_owned()),
+        proposal_target_block_ids: None,
+        chapter_body: "Rain.".to_owned(),
+        instruction: crate::InstructionBindingInput::Absent,
+        destination_identity: "destination-1".to_owned(),
+    });
+    let without_index: u64 = decision.selected.iter().map(|item| item.token_count).sum();
+    crate::assemble_memory_index(
+        &mut decision,
+        Some(1),
+        &[crate::MemoryIndexEntry {
+            number: 1,
+            entry_type: crate::MemoryEntryType::Character,
+            title: "Lin".to_owned(),
+            description: "A quiet ferryman.".to_owned(),
+            flagged: false,
+        }],
+    );
+    let index_tokens = decision.selected.last().map(|item| item.token_count);
+    let sent = CompactionTrigger::from_facts(&super::CompactionRequestFacts {
+        model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
+        budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+        author_message: "Write the quarrel.",
+        decision: Some(&decision),
+        declared_target_texts: &[],
+        prior_reported_tokens: Some(0),
+        prior_decision_id: None,
+        prior_input: crate::PriorInput::Current,
+        decision_position: "0",
+        compacted_earlier: false,
+    })
+    .sent_input_tokens;
+
+    assert_eq!((sent, index_tokens), (without_index + 77, Some(77)));
+}
+
 /// ADR 0056 and ADR 0089 section 3: the expected input counts the catalog item with the current
 /// input and each load output and read output of the prior response. A later full input counts
 /// each such output in its exact form, because a load output and a read output have no stub.
@@ -643,7 +738,7 @@ fn the_expected_input_counts_the_skill_catalog_and_each_exact_load_and_read_outp
                 state: crate::ToolCallState::Settled,
                 result_text: Some(text),
                 sources: &[],
-                output: crate::ToolResultOutput::HostTool,
+                output: crate::ToolResultOutput::HostTool(crate::ContextSourceClass::ToolResult),
                 function_name: "load_skill",
                 arguments: "{}",
                 form,
@@ -693,5 +788,109 @@ fn the_expected_input_counts_the_skill_catalog_and_each_exact_load_and_read_outp
             current + loads,
             [true, false]
         )
+    );
+}
+
+/// ADR 0056 and ADR 0095 section 1: the expected input counts each `read_chapter` and
+/// `search_manuscript` output of the prior response, with its boundary. A later full input counts
+/// each such output in its exact form, because a read or a search of the manuscript has no stub.
+#[test]
+fn the_expected_input_counts_each_exact_chapter_read_and_search_output() {
+    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
+        operation_requirement_id: "requirement-1".to_owned(),
+        input_snapshot_id: "snapshot-1".to_owned(),
+        run_id: "run-1".to_owned(),
+        owner_user_id: "owner-1".to_owned(),
+        project_id: "project-1".to_owned(),
+        author_message: "Write the quarrel.".to_owned(),
+        chapter_id: "chapter-1".to_owned(),
+        chapter_revision_id: Some("rev-1".to_owned()),
+        proposal_target_block_ids: None,
+        chapter_body: "Rain.".to_owned(),
+        instruction: crate::InstructionBindingInput::Absent,
+        destination_identity: "destination-1".to_owned(),
+    });
+    let current: u64 = decision.selected.iter().map(|item| item.token_count).sum();
+    let sent = |decision: &crate::CurrentPassageAssemblyRecord, prior_input| {
+        CompactionTrigger::from_facts(&super::CompactionRequestFacts {
+            model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
+            budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+            author_message: "Write the quarrel.",
+            decision: Some(decision),
+            declared_target_texts: &[],
+            prior_reported_tokens: Some(0),
+            prior_decision_id: Some("decision-1"),
+            prior_input,
+            decision_position: "1",
+            compacted_earlier: false,
+        })
+        .sent_input_tokens
+    };
+    // A long read and a long search of the prior response, above the stub limit.
+    let texts = ["Rain fell. ".repeat(1_400), "The quay. ".repeat(1_800)];
+    let specs = [
+        crate::READ_CHAPTER_TOOL_SPEC,
+        crate::SEARCH_MANUSCRIPT_TOOL_SPEC,
+    ];
+    let candidates = |form| -> Vec<crate::ToolResultCandidate<'_>> {
+        (["read-1", "search-1"].iter().zip(&texts).zip(&specs))
+            .map(|((id, text), spec)| crate::ToolResultCandidate {
+                tool_call_id: id,
+                call_id: id,
+                owner_user_id: "owner-1",
+                project_id: "project-1",
+                run_id: "run-1",
+                model_attempt_id: "attempt-1",
+                decision_id: "decision-1",
+                state: crate::ToolCallState::Settled,
+                result_text: Some(text),
+                sources: &[],
+                output: crate::ToolResultOutput::of_spec(Some(spec.revision)),
+                function_name: spec.operation.function_name(),
+                arguments: "{}",
+                form,
+                skill: None,
+                resource_path: None,
+            })
+            .collect()
+    };
+    crate::assemble_tool_result_continuation(
+        &mut decision,
+        &candidates(crate::ToolResultForm::Exact),
+    );
+    let reads: u64 = texts
+        .iter()
+        .zip(["read-1", "search-1"])
+        .map(|(text, id)| {
+            crate::assemble_context::count_context_item_tokens(
+                &crate::ToolResultProjection::Ok(text).continuation_text(id),
+            )
+        })
+        .sum();
+    // The window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens.
+    let too_long = |summary_tokens| {
+        let mut later = later_request_record(
+            &decision,
+            "compaction-1",
+            "Summary.",
+            &candidates(crate::ToolResultForm::Stub),
+        );
+        later.selected[0].token_count = summary_tokens;
+        super::later_request_too_long(
+            crate::AGENT_PLAN_REGISTRATION.revision,
+            crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+            &later,
+            &[],
+        )
+    };
+    let at_window = 1_015_808 - current - reads;
+
+    assert_eq!(
+        (
+            sent(&decision, crate::PriorInput::Current),
+            sent(&decision, crate::PriorInput::Replaced),
+            [too_long(at_window), too_long(at_window - 1)],
+        ),
+        (reads, current + reads, [true, false])
     );
 }

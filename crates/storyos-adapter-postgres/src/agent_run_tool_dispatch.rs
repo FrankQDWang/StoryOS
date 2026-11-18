@@ -7,9 +7,9 @@
 
 use serde_json::{Value, json};
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRunError, CredentialReference, PreDispatchRefusal,
-    ToolCallRequest, ToolDispatchClaim, ToolDispatchRecord, ToolDispatchStore,
-    WirePayloadProjection,
+    ClaimedAgentRun, CompleteAgentRunError, CredentialReference, EmbeddingResult,
+    PreDispatchRefusal, QuestionSearch, ToolCallRequest, ToolDispatchClaim, ToolDispatchRecord,
+    ToolDispatchStore, ToolWork, WirePayloadProjection,
 };
 use storyos_core::{ToolCallState, ToolObservation};
 use uuid::Uuid;
@@ -29,11 +29,13 @@ impl ToolDispatchStore for PostgresProjectReader {
     async fn next_tool_call(
         &self,
         claim: &ClaimedAgentRun,
-    ) -> Result<Option<ToolCallRequest>, CompleteAgentRunError> {
+    ) -> Result<Option<ToolWork>, CompleteAgentRunError> {
         self.in_tool_transaction(claim, async |client| {
-            if load_run_phase(client, claim).await?.settled() {
+            let run = load_run_phase(client, claim).await?;
+            if run.settled() {
                 return Ok(None);
             }
+            let limit = crate::agent_run_finish_rule::run_step_limit(&run)?;
             while let Some(row) = next_unresolved(client, claim).await? {
                 if row.state == ToolCallState::Dispatched {
                     let fence = ToolCallFence::Restart {
@@ -42,10 +44,46 @@ impl ToolDispatchStore for PostgresProjectReader {
                     settle_interrupted(client, claim, &row, fence).await?;
                     continue;
                 }
+                // In the last RunStep, the Host executes only the call that the kind of the Run
+                // allows there (ADR 0091 section 5, ADR 0094 section 5).
+                let operation =
+                    storyos_core::tool_spec(&row.spec_revision).map(|spec| spec.operation);
+                if operation.is_some_and(|operation| !run.kind.executes_call(limit, operation)) {
+                    refuse(
+                        client,
+                        claim,
+                        &row,
+                        ToolCallState::Refused,
+                        "run_step_limit",
+                    )
+                    .await?;
+                    continue;
+                }
                 if let Some(spec) =
                     storyos_core::host_tool(&row.registration_revision, &row.spec_revision)
                 {
+                    // A `hybrid_search_manuscript` call needs the vector of its question.
+                    if let Some(search) = crate::agent_run_hybrid_search::question_search(
+                        client,
+                        &row,
+                        spec,
+                        self.embedding_registration,
+                    )
+                    .await?
+                    {
+                        return Ok(Some(ToolWork::QuestionSearch(search)));
+                    }
                     crate::agent_run_host_tool::execute(client, claim, &row, spec).await?;
+                    // The settled output call of a background Run completed its Run (ADR 0094
+                    // sections 5 and 6).
+                    if matches!(
+                        spec.operation,
+                        storyos_core::ToolOperation::RecordMemoryObservations
+                            | storyos_core::ToolOperation::ApplyMemoryOperations
+                    ) && load_run_phase(client, claim).await?.settled()
+                    {
+                        return Ok(None);
+                    }
                     continue;
                 }
                 let plan = row.plan()?;
@@ -68,7 +106,7 @@ impl ToolDispatchStore for PostgresProjectReader {
                     },
                 )
                 .await?;
-                return Ok(Some(ToolCallRequest {
+                return Ok(Some(ToolWork::Dispatch(ToolCallRequest {
                     tool_call_id: row.tool_call_id,
                     registration: plan.registration,
                     tool: plan.tool,
@@ -76,9 +114,24 @@ impl ToolDispatchStore for PostgresProjectReader {
                     endpoint,
                     credential_reference: authority.credential_reference.map(CredentialReference),
                     context_assembly_manifest_id: manifest,
-                }));
+                })));
             }
             Ok(None)
+        })
+        .await
+    }
+
+    async fn record_question_search(
+        &self,
+        claim: &ClaimedAgentRun,
+        search: &QuestionSearch,
+        result: EmbeddingResult,
+    ) -> Result<(), CompleteAgentRunError> {
+        self.in_tool_transaction(claim, async |client| {
+            if load_run_phase(client, claim).await?.settled() {
+                return Ok(());
+            }
+            crate::agent_run_hybrid_search::record(client, claim, search, result).await
         })
         .await
     }

@@ -75,6 +75,48 @@ export type UpdateProjectAssistanceEffect = { "kind": "initialized", availabilit
 
 export type UpdateProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, assistance: ProjectAssistanceBinding, effect: UpdateProjectAssistanceEffect, };
 
+export type ProjectInstruction = { instruction_revision_id: string, revision: string, text: string, };
+
+export type GetProjectInstructionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, instruction: ProjectInstruction | null, };
+
+export type UpdateProjectInstructionInput = { text: string, expected_instruction_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type UpdateProjectInstructionRequest = { command_schema: string, update_project_instruction_input: UpdateProjectInstructionInput, };
+
+export type UpdateProjectInstructionNoEffectReason = "text_unchanged";
+
+export type UpdateProjectInstructionConflictReason = "stale_instruction_revision";
+
+export type UpdateProjectInstructionEffect = { "kind": "authoritative_applied", instruction_revision_id: string, revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: UpdateProjectInstructionNoEffectReason, } | { "kind": "conflicted", reason: UpdateProjectInstructionConflictReason, };
+
+export type UpdateProjectInstructionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UpdateProjectInstructionEffect, };
+
+export type MemoryEntryTypeInspect = "writing_preference" | "foreshadowing" | "character" | "relationship" | "major_event" | "other";
+
+export type MemoryEntryOriginInspect = "author_request" | "conversation" | "chapter";
+
+export type MemorySourceAvailability = "available" | "unavailable";
+
+export type MemoryEntrySourceInspect = { "kind": "conversation", conversation_id: string, availability: MemorySourceAvailability, } | { "kind": "chapter", chapter_id: string, title: string | null, availability: MemorySourceAvailability, };
+
+export type MemoryEntryFlagInspect = { reason: string, source: MemoryEntrySourceInspect, flagged_at: string, };
+
+export type MemoryEntryInspect = { memory_entry_id: string, entry_number: string, version: string, entry_type: MemoryEntryTypeInspect, title: string, description: string, text: string, origin: MemoryEntryOriginInspect, source: MemoryEntrySourceInspect | null, changed_at: string, flag?: MemoryEntryFlagInspect, };
+
+export type ListMemoryEntriesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, entries: Array<MemoryEntryInspect>, };
+
+export type DeleteMemoryEntryInput = { expected_version: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type DeleteMemoryEntryRequest = { command_schema: string, delete_memory_entry_input: DeleteMemoryEntryInput, };
+
+export type DeleteMemoryEntryNoEffectReason = "already_deleted";
+
+export type DeleteMemoryEntryConflictReason = "entry_changed";
+
+export type DeleteMemoryEntryEffect = { "kind": "authoritative_applied", memory_entry_id: string, version: string, memory_revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: DeleteMemoryEntryNoEffectReason, } | { "kind": "conflicted", reason: DeleteMemoryEntryConflictReason, };
+
+export type DeleteMemoryEntryResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: DeleteMemoryEntryEffect, };
+
 export type CreateEditorSessionRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type EditorReadOnlyReason = "secondary_session" | "superseded_by_takeover" | "binding_invalid";
@@ -203,7 +245,7 @@ export type AuthorEditProposalTarget = { proposal_id: string, operation_id: stri
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, proposal_target?: AuthorEditProposalTarget | null, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "updateProjectInstruction" | "deleteMemoryEntry" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -391,7 +433,7 @@ export type AgentRunStatus = "queued" | "claimed" | "waiting" | "paused" | "comp
 
 export type ContextPurpose = "current_passage_assistance";
 
-export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result" | "skill_catalog" | "skill_instruction" | "skill_resource";
+export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result" | "skill_catalog" | "skill_instruction" | "skill_resource" | "chapter_list" | "manuscript_read_result" | "manuscript_search_result" | "memory_index" | "memory_read_result" | "memory_search_result" | "memory_capture_input" | "memory_delete_marks" | "memory_entries" | "memory_observations";
 
 export type ProjectionMode = "exact_required" | "derived_summary" | "deterministic_excerpt" | "tool_result_stub";
 
@@ -443,9 +485,13 @@ export type ToolCallInspect = { "kind": "search", query: string, outcome: ToolCa
 
 export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, locations?: Array<ProseChangeLocationInspect>, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "tool_request", decision_id: string, calls: Array<ToolCallInspect>, } | { "kind": "research_synthesis", decision_id: string, selected: boolean, research_artifact_id: string, continuation: OptionalContinuationInspect, };
 
-export type AgentRunResultInspect = { "kind": "proposal", decision_id: string, proposal_id: string, locations: Array<ProseChangeLocationInspect>, } | { "kind": "research_artifact", decision_id: string, research_artifact_id: string, } | { "kind": "answer", decision_id: string, text: string, };
+export type AgentRunResultInspect = { "kind": "proposal", decision_id: string, proposal_id: string, locations: Array<ProseChangeLocationInspect>, } | { "kind": "research_artifact", decision_id: string, research_artifact_id: string, } | { "kind": "memory_write", decision_id: string, action: MemoryWriteActionInspect, title: string, } | { "kind": "answer", decision_id: string, text: string, };
+
+export type MemoryWriteActionInspect = "create" | "change" | "delete";
 
 export type SkillUseInspect = { "provenance": "author_selected", name: string, } | { "provenance": "agent_selected", name: string, reason: string, };
+
+export type ManuscriptUseInspect = { "kind": "chapter_read", chapter_id: string, title: string, } | { "kind": "keyword_search", query: string, } | { "kind": "hybrid_search", question: string, };
 
 export type ContinuationInputMappingInspect = "none" | "incremental" | "full" | "new_transport";
 
@@ -479,7 +525,7 @@ export type CapturedMemorySettingsInspect = { "kind": "available", memory_settin
 
 export type AgentRunSteeringInspect = { steering_input_id: string, input_position: string, author_message: string, input_snapshot_id: string | null, model_attempt_id: string | null, };
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, results?: Array<AgentRunResultInspect>, skill_uses?: Array<SkillUseInspect>, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, compactions?: Array<OptionalActiveCompactionInspect>, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, cache: AttemptCacheInspect, redaction_profile: string, };
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, results?: Array<AgentRunResultInspect>, skill_uses?: Array<SkillUseInspect>, manuscript_uses?: Array<ManuscriptUseInspect>, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, compactions?: Array<OptionalActiveCompactionInspect>, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, cache: AttemptCacheInspect, redaction_profile: string, };
 
 export type OriginalResultRetrievalDisposition = "kept_unknown" | "evidence_only" | "settled";
 
@@ -488,6 +534,16 @@ export type OptionalOriginalResultRetrievalInspect = { "kind": "absent" } | { "k
 export type UnknownCreateSuccessorDisposition = "fenced" | "dispatched" | "paused" | "prohibited";
 
 export type OptionalUnknownCreateSuccessorInspect = { "kind": "absent" } | { "kind": "present", recovery_id: string, disposition: UnknownCreateSuccessorDisposition, pause_reason?: string | null, lookup_unavailable_reason?: string | null, predecessor_model_attempt_id: string, successor_model_attempt_id?: string | null, model_invocation_id: string, predecessor_fenced: boolean, allowance_consumed: boolean, predecessor_usage_kind: string, predecessor_reservation_released: boolean, successor_settles_predecessor: boolean, supplies_tool_call: boolean, advances_predecessor_continuation: boolean, reuses_changed_context: boolean, };
+
+export type ProjectConversationCompleteness = "complete" | "truncated";
+
+export type ProjectConversationEntry = { conversation_id: string, label: string, first_run_created_at: string, newest_run_created_at: string, newest_run_status: AgentRunStatus, };
+
+export type ListProjectConversationsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, completeness: ProjectConversationCompleteness, conversations: Array<ProjectConversationEntry>, };
+
+export type ProjectConversationRun = { run_id: string, author_message: string, chapter_id: string, status: AgentRunStatus, created_at: string, };
+
+export type GetProjectConversationResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, conversation_id: string, completeness: ProjectConversationCompleteness, earlier_turns_expired: boolean, runs: Array<ProjectConversationRun>, };
 
 export type SteerAgentRunInput = { conversation_id: string, author_message: AuthorMessage, selection_references?: Array<SelectionReference>, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
@@ -680,6 +736,12 @@ export declare function updateProject(options: StoryOSQueryOptions & { projectId
 export declare function getProjectAssistance(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectAssistanceResponse>;
 export declare function digestUpdateProjectAssistance(request: UpdateProjectAssistanceRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function updateProjectAssistance(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectAssistanceRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectAssistanceResponse>;
+export declare function getProjectInstruction(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectInstructionResponse>;
+export declare function digestUpdateProjectInstruction(request: UpdateProjectInstructionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function updateProjectInstruction(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectInstructionRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectInstructionResponse>;
+export declare function listMemoryEntries(options: StoryOSQueryOptions & { projectId: string }): Promise<ListMemoryEntriesResponse>;
+export declare function digestDeleteMemoryEntry(request: DeleteMemoryEntryRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function deleteMemoryEntry(options: StoryOSQueryOptions & { projectId: string; memoryEntryId: string; request: DeleteMemoryEntryRequest; idempotencyKey: string; antiForgery: string }): Promise<DeleteMemoryEntryResponse>;
 export declare function digestCreateEditorSession(request: CreateEditorSessionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;
@@ -718,6 +780,8 @@ export declare function undoLatestAuthorAction(options: StoryOSQueryOptions & { 
 export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createAgentRun(options: StoryOSQueryOptions & { projectId: string; request: CreateAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateAgentRunResponse>;
 export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; modelAttemptId?: string | null }): Promise<GetAgentRunResponse>;
+export declare function listProjectConversations(options: StoryOSQueryOptions & { projectId: string }): Promise<ListProjectConversationsResponse>;
+export declare function getProjectConversation(options: StoryOSQueryOptions & { projectId: string; conversationId: string }): Promise<GetProjectConversationResponse>;
 export declare function digestSteerAgentRun(request: SteerAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function steerAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: SteerAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<SteerAgentRunResponse>;
 export declare function digestPauseAgentRun(request: PauseAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

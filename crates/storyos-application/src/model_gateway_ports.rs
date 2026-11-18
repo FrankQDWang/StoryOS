@@ -88,6 +88,28 @@ pub enum CreatePurpose {
     /// sends the constant author message or a constant function output, and no project content.
     /// Its response makes no Agent Decision.
     ToolQualification(ToolProbeRequest),
+    /// One RunStep of a capture (ADR 0094 section 5), with the kind of its input. The request
+    /// sends the input of the capture and the Tool outputs of the Run, and it has no author
+    /// message and no Chapter.
+    MemoryCapture(storyos_core::CaptureInputKind),
+    /// The one RunStep of a consolidation pass (ADR 0094 section 6). The request sends the
+    /// current entries and the observations, and it has no author message and no Chapter.
+    MemoryConsolidation,
+}
+
+impl CreatePurpose {
+    /// The purpose of a decision request of a Run of `kind`. A capture also needs the kind of
+    /// its input `capture_input`, so a capture with no kind has no purpose.
+    pub fn of_run(
+        kind: storyos_core::AgentRunKind,
+        capture_input: Option<storyos_core::CaptureInputKind>,
+    ) -> Option<Self> {
+        match kind {
+            storyos_core::AgentRunKind::Author => Some(Self::Decision),
+            storyos_core::AgentRunKind::MemoryCapture => capture_input.map(Self::MemoryCapture),
+            storyos_core::AgentRunKind::MemoryConsolidation => Some(Self::MemoryConsolidation),
+        }
+    }
 }
 
 /// The probe of one Tool qualification request.
@@ -117,7 +139,9 @@ pub struct CreateRequest {
     pub attempt: RequestAttempt,
     pub purpose: CreatePurpose,
     pub route: RequestRoute,
+    /// The author message of a Run of the author. A capture has none, so it is empty.
     pub author_message: String,
+    /// The Chapter of a Run of the author. A capture has none, so it is empty.
     pub chapter_id: String,
     pub passage_resolution: Option<OrdinaryPassageResolution>,
     pub passage_input: Option<serde_json::Value>,
@@ -226,6 +250,34 @@ impl CreateRequest {
             declared_targets: &self.declared_targets,
             selection_references: &self.selection_references,
         }
+    }
+
+    /// Whether a capture request has the parts that each capture mapping sends: its input item
+    /// and its output Tool. An adapter refuses a capture request without them before dispatch.
+    pub fn capture_complete(&self) -> bool {
+        let input = (self.context.iter())
+            .any(|item| item.source_class == ContextSourceClass::MemoryCaptureInput);
+        let output = (self.tool_exposure.tools.iter()).any(|tool| {
+            tool.spec.operation == storyos_core::ToolOperation::RecordMemoryObservations
+        });
+        input && output
+    }
+
+    /// Whether a pass request has the form of each pass mapping (ADR 0094 section 6). It has an
+    /// entries item or an observations item, the output Tool, and no prior response reference. A
+    /// pass with only conflict items sends the entries and no observation (ADR 0094 section 7). A
+    /// pass has one RunStep, so it continues no response. An adapter refuses a pass request
+    /// without this form before dispatch.
+    pub fn pass_complete(&self) -> bool {
+        let observations = (self.context.iter()).any(|item| {
+            matches!(
+                item.source_class,
+                ContextSourceClass::MemoryEntries | ContextSourceClass::MemoryObservations
+            )
+        });
+        let output = (self.tool_exposure.tools.iter())
+            .any(|tool| tool.spec.operation == storyos_core::ToolOperation::ApplyMemoryOperations);
+        observations && output && self.previous_response_reference.is_none()
     }
 }
 
@@ -531,9 +583,12 @@ pub enum DispatchRecord<'a> {
 /// with a check of the Run Lease fence.
 pub trait ModelDispatchStore: Sync {
     /// Settles the phases that need no destination I/O, then returns the next request.
+    /// `adapters` are the adapters of this Worker: background work gives way only to a queued
+    /// Run of the author that this Worker can claim.
     fn next_dispatch_work(
         &self,
         claim: &ClaimedAgentRun,
+        adapters: &'static [storyos_core::ModelAdapter],
     ) -> impl Future<Output = Result<NextDispatchWork, CompleteAgentRunError>> + Send;
 
     /// Commits the Destination Attempt, its Wire Payload Projection, and its Outbound
@@ -640,6 +695,9 @@ pub enum ContractFaultPoint {
     StreamCommitted,
     /// The store recorded the result of a compaction summary request.
     CompactionStaged,
+    /// The durable Decision committed its ToolCalls, before the Tool Gateway resolves them. The
+    /// store executes an in-process Host Tool call in that resolution.
+    ToolCallsCommitted,
     /// The store committed the Context Assembly of one ToolCall, before its dispatch claim.
     ToolContextCommitted,
     /// The dispatch claim of one ToolCall committed, before its exchange.

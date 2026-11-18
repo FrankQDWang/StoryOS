@@ -2,7 +2,7 @@ use storyos_application::{
     AgentRunDecisionInspect, AgentRunEvidence, AgentRunModelInspect, AgentRunRecord,
     AgentRunStreamItem, CreateAgentRunError, EvidenceAvailability, ProjectScope,
 };
-use storyos_core::AgentRunStatus;
+use storyos_core::{AgentRunKind, AgentRunStatus};
 
 use super::{agent_run_database_error, agent_run_parse_error};
 
@@ -42,12 +42,15 @@ pub(super) async fn load_agent_run(
                 AND (($4::text IS NULL AND attempt.decision_position=run.active_decision_position) OR attempt.model_attempt_id=$4::text::uuid)
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
-                AND run.run_id = $3::text::uuid",
+                AND run.run_id = $3::text::uuid
+                -- A background Run is not a Run of the author (ADR 0094 section 5).
+                AND run.run_kind = $5",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &run_id,
                 &requested_attempt,
+                &AgentRunKind::Author.name(),
             ],
         )
         .await
@@ -165,6 +168,7 @@ pub(super) async fn load_agent_run(
         ),
         results: None,
         skill_uses: None,
+        manuscript_uses: None,
         model,
         compactions: crate::agent_run_compaction::load_compactions(client, scope, run_id).await?,
         reference_recovery: crate::agent_run_expiry::load_reference_recovery(client, scope, run_id)
@@ -211,6 +215,8 @@ pub(super) async fn load_agent_run(
             crate::agent_run_results::load(client, scope, run_id, status, &record.decision).await?,
         );
         record.skill_uses = Some(crate::agent_run_skill_uses::load(client, scope, run_id).await?);
+        record.manuscript_uses =
+            Some(crate::agent_run_manuscript_uses::load(client, scope, run_id).await?);
         crate::agent_run_propose_edit::public_decision(client, scope, run_id, &mut record.decision)
             .await?;
     }

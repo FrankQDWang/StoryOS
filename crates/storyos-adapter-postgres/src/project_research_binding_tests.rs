@@ -42,7 +42,7 @@ async fn project_facts(admin: &Client, scope: &ProjectScope) -> (Vec<String>, i6
 }
 
 /// Pauses the queued Runs of the Project, because later HTTP files drain all queued work.
-async fn park_queued_runs(admin: &Client, scope: &ProjectScope) {
+pub(crate) async fn park_queued_runs(admin: &Client, scope: &ProjectScope) {
     admin
         .execute(
             "UPDATE storyos.agent_runs
@@ -136,6 +136,11 @@ async fn the_first_run_of_a_project_binds_research_and_its_tool_call_dispatches(
                 "propose_edit",
                 "submit_research",
                 "read_tool_result",
+                "read_chapter",
+                "search_manuscript",
+                "write_memory",
+                "read_memory_entry",
+                "search_memory",
                 "finish"
             ]),
             "settled".to_owned(),

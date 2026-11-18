@@ -9,9 +9,9 @@
 use serde_json::{Value, json};
 
 use crate::{
-    AgentDecisionOutcome, CapabilityEvidence, IntakeField, NativeStreamItem, StreamItemRole,
-    StreamItemState, ToolOperation, ToolRegistrationLifecycle, ToolSpec, model_registration,
-    tool_registration,
+    AgentDecisionOutcome, AgentRunKind, CapabilityEvidence, IntakeField, NativeStreamItem,
+    StreamItemRole, StreamItemState, ToolOperation, ToolRegistrationLifecycle, ToolSpec,
+    model_registration, tool_registration,
 };
 
 /// The native type of the function call item of the Agent Plan route.
@@ -56,6 +56,72 @@ pub struct ExposureFacts<'a> {
     pub model_registration_revision: &'a str,
     /// Whether the pinned catalog of the Run has a Skill (ADR 0089 section 3).
     pub skill_catalog: bool,
+    /// Whether the Conversation Memory Settings that the Run captured have `use_enabled`. A Run
+    /// with no settings, as a background Run, has no use (ADR 0094 section 4).
+    pub memory_use: bool,
+    /// Whether the search by meaning is possible for the Run: the deployment has an embedding
+    /// configuration, the vector store is available, and the Project of the Run has the
+    /// embedding use binding of that configuration (ADR 0095 section 4).
+    pub hybrid_search: bool,
+    /// The kind of the Run. A background Run gets only the Tools of its kind (ADR 0094 section 5).
+    pub run_kind: AgentRunKind,
+}
+
+impl ExposureFacts<'_> {
+    /// Whether the Tool Exposure of the RunStep has the Host Tool `operation`. Each Host Tool has
+    /// one rule of the facts of the RunStep. `load_skill` and `read_skill_resource` need a Skill
+    /// in the pinned catalog of the Run, so a Run with no Skill declares the Tools of before
+    /// (ADR 0089 section 3).
+    fn has_host_tool(&self, operation: ToolOperation) -> bool {
+        match self.run_kind {
+            // A capture reads the manuscript and Memory and ends with its output Tool (ADR 0094
+            // section 5). A Tool that a later ticket adds for the author stays out of a capture.
+            AgentRunKind::MemoryCapture => {
+                return match operation {
+                    ToolOperation::SearchManuscript
+                    | ToolOperation::ReadChapter
+                    | ToolOperation::ReadMemoryEntry
+                    | ToolOperation::RecordMemoryObservations => true,
+                    ToolOperation::ApplyMemoryOperations
+                    | ToolOperation::ProposeEdit
+                    | ToolOperation::SubmitResearch
+                    | ToolOperation::ReadToolResult
+                    | ToolOperation::Finish
+                    | ToolOperation::LoadSkill
+                    | ToolOperation::ReadSkillResource
+                    | ToolOperation::WriteMemory
+                    | ToolOperation::SearchMemory
+                    | ToolOperation::HybridSearchManuscript
+                    | ToolOperation::WebSearch
+                    | ToolOperation::WebFetch => false,
+                };
+            }
+            // A consolidation pass sends one request, and it declares only its output Tool (ADR
+            // 0094 section 6).
+            AgentRunKind::MemoryConsolidation => {
+                return operation == ToolOperation::ApplyMemoryOperations;
+            }
+            AgentRunKind::Author => {}
+        }
+        match operation {
+            ToolOperation::LoadSkill | ToolOperation::ReadSkillResource => self.skill_catalog,
+            ToolOperation::ProposeEdit
+            | ToolOperation::SubmitResearch
+            | ToolOperation::ReadToolResult
+            | ToolOperation::ReadChapter
+            | ToolOperation::SearchManuscript
+            | ToolOperation::Finish => true,
+            // A request of the author is not a read and not a capture of Memory, so the Tool does
+            // not depend on the Conversation Memory Settings (ADR 0094 section 5).
+            ToolOperation::WriteMemory => true,
+            ToolOperation::ReadMemoryEntry | ToolOperation::SearchMemory => self.memory_use,
+            ToolOperation::HybridSearchManuscript => self.hybrid_search,
+            // Only a capture records observations, and only a pass applies operations.
+            ToolOperation::RecordMemoryObservations | ToolOperation::ApplyMemoryOperations => false,
+            // The web research Tools are Tools of the research binding, not Host Tools.
+            ToolOperation::WebSearch | ToolOperation::WebFetch => false,
+        }
+    }
 }
 
 /// One Tool that the request declares.
@@ -95,6 +161,14 @@ impl ToolOperation {
             Self::ReadToolResult => "read_tool_result",
             Self::LoadSkill => "load_skill",
             Self::ReadSkillResource => "read_skill_resource",
+            Self::ReadChapter => "read_chapter",
+            Self::SearchManuscript => "search_manuscript",
+            Self::HybridSearchManuscript => "hybrid_search_manuscript",
+            Self::WriteMemory => "write_memory",
+            Self::ReadMemoryEntry => "read_memory_entry",
+            Self::SearchMemory => "search_memory",
+            Self::RecordMemoryObservations => "record_memory_observations",
+            Self::ApplyMemoryOperations => "apply_memory_operations",
         }
     }
 
@@ -118,6 +192,14 @@ impl ToolOperation {
             Self::ReadToolResult => crate::read_tool_result::DESCRIPTION,
             Self::LoadSkill => crate::load_skill::DESCRIPTION,
             Self::ReadSkillResource => crate::read_skill_resource::DESCRIPTION,
+            Self::ReadChapter => crate::read_chapter::DESCRIPTION,
+            Self::SearchManuscript => crate::search_manuscript::DESCRIPTION,
+            Self::HybridSearchManuscript => crate::hybrid_search_manuscript::DESCRIPTION,
+            Self::WriteMemory => crate::write_memory::DESCRIPTION,
+            Self::ReadMemoryEntry => crate::read_memory_entry::DESCRIPTION,
+            Self::SearchMemory => crate::search_memory::DESCRIPTION,
+            Self::RecordMemoryObservations => crate::record_memory_observations::DESCRIPTION,
+            Self::ApplyMemoryOperations => crate::apply_memory_operations::DESCRIPTION,
         }
     }
 }
@@ -166,6 +248,16 @@ impl ExposedTool {
             ToolOperation::ReadToolResult => crate::read_tool_result::parameters(),
             ToolOperation::LoadSkill => crate::load_skill::parameters(),
             ToolOperation::ReadSkillResource => crate::read_skill_resource::parameters(),
+            ToolOperation::ReadChapter => crate::read_chapter::parameters(),
+            ToolOperation::SearchManuscript => crate::search_manuscript::parameters(),
+            ToolOperation::HybridSearchManuscript => crate::hybrid_search_manuscript::parameters(),
+            ToolOperation::WriteMemory => crate::write_memory::parameters(),
+            ToolOperation::ReadMemoryEntry => crate::read_memory_entry::parameters(),
+            ToolOperation::SearchMemory => crate::search_memory::parameters(),
+            ToolOperation::RecordMemoryObservations => {
+                crate::record_memory_observations::parameters()
+            }
+            ToolOperation::ApplyMemoryOperations => crate::apply_memory_operations::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,
@@ -206,9 +298,7 @@ impl ToolExposure {
     /// The Exposure of the facts. A binding exposes its Tools only when the Registration
     /// revision is active and known, the Decision is compatible, and the pinned Model
     /// Registration has qualified function calling. Each other binding exposes nothing, and a
-    /// second Tool of one function name stays out. The Host Tools follow. `load_skill` and
-    /// `read_skill_resource` are Host Tools only of a Run whose pinned catalog has a Skill, so a
-    /// Run with no Skill declares the Tools of before (ADR 0089 section 3).
+    /// second Tool of one function name stays out. The Host Tools that the facts permit follow.
     pub fn compute(facts: &ExposureFacts<'_>) -> Self {
         let Some(registration) =
             model_registration(facts.model_registration_revision).filter(|registration| {
@@ -221,7 +311,12 @@ impl ToolExposure {
             return Self::empty();
         };
         let mut tools: Vec<ExposedTool> = Vec::new();
-        for bound in facts.bound {
+        // A background Run gets no research Tool.
+        let bound = match facts.run_kind {
+            AgentRunKind::Author => facts.bound,
+            AgentRunKind::MemoryCapture | AgentRunKind::MemoryConsolidation => &[],
+        };
+        for bound in bound {
             if bound.lifecycle != ToolRegistrationLifecycle::Active
                 || bound.compatibility != Some(ToolCompatibilityDecision::Compatible)
             {
@@ -247,13 +342,7 @@ impl ToolExposure {
         tools.extend(
             host.tools
                 .iter()
-                .filter(|spec| {
-                    facts.skill_catalog
-                        || !matches!(
-                            spec.operation,
-                            ToolOperation::LoadSkill | ToolOperation::ReadSkillResource
-                        )
-                })
+                .filter(|spec| facts.has_host_tool(spec.operation))
                 .map(|spec| ExposedTool {
                     name: spec.operation.function_name(),
                     registration_id: host.id,

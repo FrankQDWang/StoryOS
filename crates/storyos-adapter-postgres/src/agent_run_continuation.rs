@@ -21,13 +21,23 @@ pub(crate) struct ContinuationWire {
 pub(crate) async fn decide_continuation(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    conversation_id: &str,
+    conversation_id: Option<&str>,
     author_message: &str,
     assistance: &ProjectAssistanceRecord,
     tool_exposure_digest: &str,
 ) -> Result<ContinuationWire, CompleteAgentRunError> {
-    let admission = current_identity(claim, conversation_id, assistance, tool_exposure_digest);
-    let prior = load_prior_binding(client, claim, conversation_id).await?;
+    let admission = current_identity(
+        claim,
+        conversation_id.unwrap_or_default(),
+        assistance,
+        tool_exposure_digest,
+    );
+    // A background Run has no Conversation, so it has no prior binding, and each of its requests
+    // sends the full input with the Tool outputs of the Run (ADR 0085).
+    let prior = match conversation_id {
+        Some(conversation_id) => load_prior_binding(client, claim, conversation_id).await?,
+        None => None,
+    };
     let known_prior_binding_id = prior.as_ref().map(|loaded| loaded.binding_id.clone());
     let mapping = map_continuation_input(&ContinuationMappingInput {
         current: admission.clone(),

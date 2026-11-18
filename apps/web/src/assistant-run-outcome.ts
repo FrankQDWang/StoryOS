@@ -1,6 +1,6 @@
 import type {
-  AgentRunResultInspect, GetAgentRunResponse, ListResearchSourcesResponse, ProseChangeLocationInspect,
-  ResearchArtifactInspect, SourceGapInspect, SourceGapReason, ToolCallInspect,
+  AgentRunResultInspect, GetAgentRunResponse, ListResearchSourcesResponse, MemoryWriteActionInspect,
+  ProseChangeLocationInspect, ResearchArtifactInspect, SourceGapInspect, SourceGapReason, ToolCallInspect,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 
 /** The sentence for a request whose result did not arrive. The author approved it (ADR 0057). */
@@ -77,6 +77,11 @@ export function researchSourceLines(
 
 /** The result sentence of a research synthesis. The claims and their sources follow it. */
 export const RESEARCH_SYNTHESIS_SENTENCE = "研究结果如下。每条结论后的编号对应下方的来源。";
+
+/** The line of one Memory write of a Run (ADR 0094 section 5). The author approved the delete line on 2026-11-16. */
+export function memoryWriteSentence(action: MemoryWriteActionInspect, title: string): string {
+  return action === "delete" ? `已删除记忆：${title}` : `已记住：${title}`;
+}
 
 /** The result sentence of a Proposal: the count of its Chapters and of its changes, or a sentence with no count. */
 export function proposalSentence(locations: readonly ProseChangeLocationInspect[]): string {

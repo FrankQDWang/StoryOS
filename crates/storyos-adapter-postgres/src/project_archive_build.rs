@@ -151,6 +151,25 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "canonical/agent_run_skill_catalog_entries.json",
     ),
     (
+        "project_memory_heads",
+        "canonical/project_memory_heads.json",
+    ),
+    (
+        "memory_entry_versions",
+        "canonical/memory_entry_versions.json",
+    ),
+    ("memory_entry_reads", "canonical/memory_entry_reads.json"),
+    ("memory_captures", "canonical/memory_captures.json"),
+    ("memory_observations", "canonical/memory_observations.json"),
+    (
+        "memory_consolidation_passes",
+        "canonical/memory_consolidation_passes.json",
+    ),
+    (
+        "memory_work_schedules",
+        "canonical/memory_work_schedules.json",
+    ),
+    (
         "operation_requirements",
         "canonical/operation_requirements.json",
     ),
@@ -190,6 +209,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     (
         "project_external_use_binding_revisions",
         "canonical/project_external_use_binding_revisions.json",
+    ),
+    (
+        "project_instruction_revisions",
+        "canonical/project_instruction_revisions.json",
     ),
     (
         "project_policy_revisions",

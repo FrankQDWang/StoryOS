@@ -5,34 +5,49 @@ use std::time::Duration;
 
 use storyos_application::{
     AgentRunWorkStore, ClaimedAgentRun, ClaimedArchiveExport, ClaimedExportWork,
-    ClaimedReadableExport, CompleteAgentRun, CompleteAgentRunError, CompleteArchiveExport,
-    CompleteArchiveExportError, CompleteReadableExport, CompleteReadableExportError,
-    ContractFaultObserver, DiagnosticField, DiagnosticId, ExportWorkStore, GatewayClock,
-    ModelDispatchStore, ModelProviderAdapter, ProjectReadError, SqlState, ToolDestinationAdapter,
-    ToolDispatchStore, claim_next_agent_run, claim_next_export_work, complete_agent_run_with_tools,
-    complete_archive_export, complete_readable_export,
+    ClaimedPassageIndex, ClaimedReadableExport, CompleteAgentRun, CompleteAgentRunError,
+    CompleteArchiveExport, CompleteArchiveExportError, CompleteReadableExport,
+    CompleteReadableExportError, ContractFaultObserver, DiagnosticField, DiagnosticId,
+    EmbeddingProviderAdapter, ExportWorkStore, GatewayClock, MemoryWorkOutcome,
+    MemoryWorkScheduleStore, ModelDispatchStore, ModelProviderAdapter, PassageIndexStep,
+    PassageIndexWorkStore, ProjectReadError, SqlState, ToolDestinationAdapter, ToolDispatchStore,
+    claim_next_agent_run, claim_next_export_work, claim_next_passage_index_work,
+    complete_agent_run_with_destinations, complete_archive_export, complete_readable_export,
+    step_passage_index_work,
 };
 
 const ATTEMPTS: u64 = 4;
 const SERIALIZATION_FAILURE: &str = "40001";
 
-/// Combined persistence port for the packaged Worker loop.
+/// Combined persistence port for the packaged Worker loop. The index work store has the embedding
+/// dispatch store.
 pub trait WorkerStore:
-    ExportWorkStore + AgentRunWorkStore + ModelDispatchStore + ToolDispatchStore
+    ExportWorkStore
+    + AgentRunWorkStore
+    + ModelDispatchStore
+    + ToolDispatchStore
+    + MemoryWorkScheduleStore
+    + PassageIndexWorkStore
 {
 }
 
 impl<T> WorkerStore for T where
-    T: ExportWorkStore + AgentRunWorkStore + ModelDispatchStore + ToolDispatchStore
+    T: ExportWorkStore
+        + AgentRunWorkStore
+        + ModelDispatchStore
+        + ToolDispatchStore
+        + MemoryWorkScheduleStore
+        + PassageIndexWorkStore
 {
 }
 
-/// The destination side of the Worker loop: one Model Provider Adapter, its fault observer, and
-/// the Tool destination of the ToolDispatch phase.
-pub struct ModelDestination<A, O, T> {
+/// The destination side of the Worker loop: one Model Provider Adapter, its fault observer, the
+/// Tool destination of the ToolDispatch phase, and the embedding adapter (ADR 0095 section 3).
+pub struct ModelDestination<A, O, T, E> {
     pub adapter: A,
     pub observer: O,
     pub tools: T,
+    pub embeddings: E,
 }
 
 /// The lease of a readable export claim: the `STORYOS_EXPORT_LEASE_TTL_SECS` setting, or 30
@@ -41,12 +56,18 @@ pub fn readable_export_lease_ttl(seconds: Option<u64>) -> Duration {
     Duration::from_secs(seconds.unwrap_or(/*default*/ 30))
 }
 
-pub async fn run<A: ModelProviderAdapter, O: ContractFaultObserver, T: ToolDestinationAdapter>(
+pub async fn run<
+    A: ModelProviderAdapter,
+    O: ContractFaultObserver,
+    T: ToolDestinationAdapter,
+    E: EmbeddingProviderAdapter,
+>(
     store: impl WorkerStore,
-    destination: ModelDestination<A, O, T>,
+    destination: ModelDestination<A, O, T, E>,
 ) {
+    let mut index = None;
     loop {
-        if !step(&store, &destination).await {
+        if !step(&store, &destination, &mut index).await {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
@@ -56,9 +77,10 @@ pub async fn run_once<
     A: ModelProviderAdapter,
     O: ContractFaultObserver,
     T: ToolDestinationAdapter,
+    E: EmbeddingProviderAdapter,
 >(
     store: &impl WorkerStore,
-    destination: &ModelDestination<A, O, T>,
+    destination: &ModelDestination<A, O, T, E>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match claim_after_contention(|| claim_next_export_work(store)).await? {
         Some(ClaimedExportWork::Readable(claim)) => {
@@ -77,24 +99,43 @@ pub async fn run_once<
                     Err(error) => Err(error.into()),
                 }
             }
-            None => Ok(()),
+            None => {
+                if claim_after_contention(|| memory_work_claim(store)).await? {
+                    return Ok(());
+                }
+                let mut index = None;
+                passage_index_step(store, &destination.embeddings, &mut index).await?;
+                while index.is_some() {
+                    passage_index_step(store, &destination.embeddings, &mut index).await?;
+                }
+                Ok(())
+            }
         },
     }
 }
 
-pub async fn claim_only<A: ModelProviderAdapter>(
+pub async fn claim_only<A: ModelProviderAdapter, E: EmbeddingProviderAdapter>(
     store: &impl WorkerStore,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if claim_next_export_work(store).await?.is_some() {
+    if claim_next_export_work(store).await?.is_some()
+        || claim_next_agent_run(store, A::ADAPTERS).await?.is_some()
+        || memory_work_claim(store).await?
+    {
         return Ok(());
     }
-    claim_next_agent_run(store, A::ADAPTERS).await?;
+    claim_next_passage_index_work(store, E::REGISTRATIONS).await?;
     Ok(())
 }
 
-async fn step<A: ModelProviderAdapter, O: ContractFaultObserver, T: ToolDestinationAdapter>(
+async fn step<
+    A: ModelProviderAdapter,
+    O: ContractFaultObserver,
+    T: ToolDestinationAdapter,
+    E: EmbeddingProviderAdapter,
+>(
     store: &impl WorkerStore,
-    destination: &ModelDestination<A, O, T>,
+    destination: &ModelDestination<A, O, T, E>,
+    index: &mut Option<ClaimedPassageIndex>,
 ) -> bool {
     match claim_next_export_work(store).await {
         Ok(Some(ClaimedExportWork::Readable(claim))) => matches!(
@@ -110,11 +151,91 @@ async fn step<A: ModelProviderAdapter, O: ContractFaultObserver, T: ToolDestinat
                 agent_run_claim(store, destination, &claim, Retry::EachFailure).await,
                 Ok(_) | Err(CompleteAgentRunError::StaleFence)
             ),
-            Ok(None) => false,
+            Ok(None) => match memory_work_claim(store).await {
+                Ok(true) => true,
+                Ok(false) => {
+                    match passage_index_step(store, &destination.embeddings, index).await {
+                        Ok(worked) => worked,
+                        Err(error) => claim_failed(&error),
+                    }
+                }
+                Err(error) => claim_failed(&error),
+            },
             Err(error) => claim_failed(&error),
         },
         Err(error) => claim_failed(&error),
     }
+}
+
+/// The index work comes after each other claim, also after a schedule row of background Memory
+/// work (ADR 0095 section 4). The step does the next step of the held claim, or it claims the next
+/// work and does its first step. The claim stays held while its steps write rows, so each turn of
+/// the loop sends at most one embedding request, and the next turn claims the other work first.
+/// Returns whether it did a step.
+async fn passage_index_step<E: EmbeddingProviderAdapter>(
+    store: &impl WorkerStore,
+    embeddings: &E,
+    held: &mut Option<ClaimedPassageIndex>,
+) -> Result<bool, ProjectReadError> {
+    let claim = match held.take() {
+        Some(claim) => claim,
+        None => match claim_next_passage_index_work(store, E::REGISTRATIONS).await? {
+            Some(claim) => claim,
+            None => return Ok(false),
+        },
+    };
+    let step = step_passage_index_work(store, embeddings, E::REGISTRATIONS, &claim).await?;
+    if step == PassageIndexStep::Written {
+        *held = Some(claim);
+    }
+    Ok(true)
+}
+
+/// Claims one due schedule row of background Memory work after the AgentRun claim found no Run
+/// (ADR 0094 section 5). The step asks for a due row first, so that an idle step makes no claim
+/// span. `true`: a row was claimed.
+async fn memory_work_claim(store: &impl WorkerStore) -> Result<bool, ProjectReadError> {
+    if !store.memory_work_due().await? {
+        return Ok(false);
+    }
+    memory_work_claim_span(store).await
+}
+
+/// The claim span of one schedule row (ADR 0047). The store decides and starts the capture or the
+/// pass in the transaction of the claim, so the span has no completion attempt and no fence token.
+#[tracing::instrument(skip_all, fields(
+    project_id = tracing::field::Empty,
+    kind = tracing::field::Empty,
+    run_id = tracing::field::Empty,
+    outcome = tracing::field::Empty,
+))]
+async fn memory_work_claim_span(store: &impl WorkerStore) -> Result<bool, ProjectReadError> {
+    let span = tracing::Span::current();
+    let claimed = match store.claim_due_memory_work().await {
+        Ok(Some(claimed)) => claimed,
+        Ok(None) => {
+            span.record("outcome", "no_due_row");
+            return Ok(false);
+        }
+        Err(error) => {
+            span.record("outcome", error.diagnostic());
+            return Err(error);
+        }
+    };
+    span.record("project_id", claimed.project_scope.project_id.diagnostic());
+    span.record("kind", claimed.source.kind());
+    let run_id = match &claimed.outcome {
+        MemoryWorkOutcome::Started(started) => Some(&started.run_id),
+        MemoryWorkOutcome::PassStarted(started) => Some(&started.run_id),
+        MemoryWorkOutcome::Skipped(_)
+        | MemoryWorkOutcome::PassSkipped(_)
+        | MemoryWorkOutcome::ChapterSkipped(_) => None,
+    };
+    if let Some(run_id) = run_id {
+        span.record("run_id", DiagnosticId(run_id).diagnostic());
+    }
+    span.record("outcome", claimed.outcome.diagnostic());
+    Ok(true)
 }
 
 /// Runs one claim again after a serialization failure, as the loop does, for at most `ATTEMPTS`
@@ -199,19 +320,21 @@ async fn agent_run_claim<
     A: ModelProviderAdapter,
     O: ContractFaultObserver,
     T: ToolDestinationAdapter,
+    E: EmbeddingProviderAdapter,
 >(
     store: &impl WorkerStore,
-    destination: &ModelDestination<A, O, T>,
+    destination: &ModelDestination<A, O, T, E>,
     claim: &ClaimedAgentRun,
     policy: Retry,
 ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
     retry(
         policy,
         || {
-            complete_agent_run_with_tools(
+            complete_agent_run_with_destinations(
                 store,
                 &destination.adapter,
                 &destination.tools,
+                &destination.embeddings,
                 &destination.observer,
                 &RuntimeClock,
                 claim,

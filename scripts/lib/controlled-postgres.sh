@@ -1,16 +1,32 @@
 # Source after setting repository_root.
 
+# The PostgreSQL image with pgvector of the record of S7-C1 (ADR 0095), with its exact tag and
+# digest. Each script that starts PostgreSQL reads this variable.
+storyos_postgres_image=pgvector/pgvector:0.8.7-pg16-bookworm@sha256:484e838076e04939d27d3e176e91c86eea96236126023be8d3059761122e579f
+# The C.UTF-8 locale keeps the text order of the earlier Alpine image (the record, "Text order").
+storyos_postgres_initdb_args=--locale=C.UTF-8
+
 # Earlier stages use the 10-per-minute Command Challenge budget of the fixture Project.
 reset_command_challenge_rate_windows() {
   docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres \
     -c "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0" >/dev/null
 }
 
+# The PostgreSQL tests of the Rust phase leave due schedule rows of background Memory work: a capture
+# that stores observations makes a consolidation pass due at once. The shared Web phases start no
+# capture, so their Worker steps must not start a pass for these rows.
+clear_memory_work_due_times() {
+  docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres \
+    -c "UPDATE storyos.memory_work_schedules SET due_at = NULL WHERE due_at IS NOT NULL" >/dev/null
+}
+
+# Starts the container $1 from the image $2, or from storyos_postgres_image.
 start_postgres() {
   name=$1
   docker run --detach --name "$name" \
     --env POSTGRES_PASSWORD=admin \
-    --publish 127.0.0.1::5432 postgres:16-alpine >/dev/null
+    --env POSTGRES_INITDB_ARGS="$storyos_postgres_initdb_args" \
+    --publish 127.0.0.1::5432 "${2:-$storyos_postgres_image}" >/dev/null
   attempt=0
   until docker logs "$name" 2>&1 | grep -q "PostgreSQL init process complete" \
     && docker exec "$name" pg_isready -U postgres >/dev/null 2>&1; do

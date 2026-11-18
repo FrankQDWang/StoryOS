@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -181,12 +181,15 @@ export class TestProject {
   readonly projectId: string;
   readonly session: string;
   private readonly keys: Keys;
+  /** False keeps the challenge rate window of the Project as the Server wrote it (a live run). */
+  readonly resetChallengeBudget: boolean;
 
-  constructor(server: TestServer, projectId: string, session: string, keys = new Keys()) {
+  constructor(server: TestServer, projectId: string, session: string, keys = new Keys(), resetChallengeBudget = true) {
     this.server = server;
     this.projectId = projectId;
     this.session = session;
     this.keys = keys;
+    this.resetChallengeBudget = resetChallengeBudget;
   }
 
   get baseUrl(): string {
@@ -209,7 +212,7 @@ export class TestProject {
 
   /** The same Project as another session sees it. */
   as(session: string): TestProject {
-    return new TestProject(this.server, this.projectId, session);
+    return new TestProject(this.server, this.projectId, session, undefined, this.resetChallengeBudget);
   }
 
   async challenge<Op extends ProjectCommandId>(operation: Op, input: CommandInput<Op>): Promise<Challenged<Op>> {
@@ -220,7 +223,7 @@ export class TestProject {
     const { request } = input;
     const key = input.key ?? this.key();
     const digested = await digest(request);
-    const challenge = await withChallengeBudget(this.projectId, () => client.createProjectCommandChallenge({
+    const issue = () => client.createProjectCommandChallenge({
       baseUrl: this.baseUrl,
       projectId: this.projectId,
       fetchImpl: this.fetchImpl,
@@ -231,7 +234,8 @@ export class TestProject {
         canonical_command_digest: digested,
         idempotency_key: key,
       },
-    }));
+    });
+    const challenge = this.resetChallengeBudget ? await withChallengeBudget(this.projectId, issue) : await issue();
     const send = clientFunction<(options: object) => Promise<CommandResponse<Op>>>(operation);
     return {
       key,
@@ -306,7 +310,8 @@ export async function createEmpty(baseUrl: string, session: string, idempotencyK
   return { fetchImpl, projectId };
 }
 
-export async function createProject(server: TestServer, options: { title: string; session?: string }): Promise<TestProject> {
+export async function createProject(server: TestServer,
+  options: { title: string; session?: string; resetChallengeBudget?: boolean }): Promise<TestProject> {
   const session = options.session ?? "session-a";
   const keys = new Keys();
   const projectId = await createEmptyProject({
@@ -316,7 +321,7 @@ export async function createProject(server: TestServer, options: { title: string
     correlationId: keys.next(),
     title: options.title,
   });
-  return new TestProject(server, projectId, session, keys);
+  return new TestProject(server, projectId, session, keys, options.resetChallengeBudget ?? true);
 }
 
 /** Creates a Project with one Volume and one Chapter for each title. The first Chapter is the Current Chapter. */
@@ -476,6 +481,45 @@ export function deleteChapterInput(project: TestProject, chapterId: string,
     command_schema: "storyos.command.delete-chapter.request.v1",
     delete_chapter_input: { expected_tree_revision: expectedTreeRevision, ...project.binding() },
   }, path: { chapterId } };
+}
+
+/** The input of `deleteMemoryEntry`. */
+export function deleteMemoryEntryInput(project: TestProject, memoryEntryId: string,
+  expectedVersion: string): CommandInput<"deleteMemoryEntry"> {
+  return { request: {
+    command_schema: "storyos.command.delete-memory-entry.request.v1",
+    delete_memory_entry_input: { expected_version: expectedVersion, ...project.binding() },
+  }, path: { memoryEntryId } };
+}
+
+/** Writes the entry 1 of the Project of User A with SQL as its version 1 with a new identity, and gives the
+ * identity. The values are test constants. */
+export async function seedMemoryEntry(projectId: string): Promise<string> {
+  const memoryEntryId = randomUUID();
+  await queryStoryOSPostgres(`
+    WITH head AS (INSERT INTO storyos.project_memory_heads VALUES ('${USER_A}', '${projectId}', 1, 2))
+    INSERT INTO storyos.memory_entry_versions (owner_user_id, project_id, memory_entry_id, entry_number, version,
+      memory_revision, state, entry_type, origin, title, description, text, cause, source_references)
+    VALUES ('${USER_A}', '${projectId}', '${memoryEntryId}', 1, 1, 1, 'current', 'character',
+      'author_request', '阿青', '渡口的船夫。', '阿青在渡口撑船。', '{"kind": "author_request"}', '[]')`);
+  return memoryEntryId;
+}
+
+/**
+ * Writes the flag version 2 of the entry that `seedMemoryEntry` wrote, at the Memory revision 2, with the reason
+ * `reason` and the source reference `source` (ADR 0094 section 7). A consolidation pass writes such a version.
+ */
+export async function flagMemoryEntry(projectId: string, memoryEntryId: string, reason: string,
+  source: Readonly<Record<string, string>>): Promise<void> {
+  await queryStoryOSPostgres(`
+    WITH head AS (UPDATE storyos.project_memory_heads SET memory_revision = 2
+                   WHERE owner_user_id = '${USER_A}' AND project_id = '${projectId}')
+    INSERT INTO storyos.memory_entry_versions (owner_user_id, project_id, memory_entry_id, entry_number, version,
+      memory_revision, state, entry_type, origin, title, description, text, cause, source_references, flag_reason,
+      flag_source)
+    SELECT owner_user_id, project_id, memory_entry_id, entry_number, 2, 2, state, entry_type, origin, title,
+      description, text, '{"kind": "conflict_flag"}', '[]', '${reason}', '${JSON.stringify(source)}'
+      FROM storyos.memory_entry_versions WHERE project_id = '${projectId}' AND memory_entry_id = '${memoryEntryId}'`);
 }
 
 /** The applied effect of `createVolume`. It throws when the command did not apply. */

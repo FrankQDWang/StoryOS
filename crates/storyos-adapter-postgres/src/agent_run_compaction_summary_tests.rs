@@ -57,7 +57,7 @@ async fn compaction_facts(admin: &Client, run_id: &str) -> [Option<String>; 6] {
                       WHERE summary.run_id = run.run_id AND summary.attempt_role = 'compaction'),
                     record.install_state, record.producer, record.output_text
                FROM storyos.agent_runs AS run
-               JOIN storyos.model_attempts AS decision
+               LEFT JOIN storyos.model_attempts AS decision
                  ON decision.run_id = run.run_id AND decision.attempt_role = 'decision'
                 AND decision.decision_position = 0
                LEFT JOIN storyos.active_context_compactions AS record
@@ -95,11 +95,11 @@ async fn a_summary_outside_the_pinned_grant_scope_leaves_the_ordinary_continuati
     assert_eq!(
         compaction_facts(&admin, &run_id).await,
         [
-            // The closing request sends the output of the `finish` call, a `tool_result` source
-            // that the first scope does not name, so the Run refuses after its decision. A
-            // binding on the tool loop head always records a grant with the third scope.
+            // The first request sends the `chapter_list` item, a source that the first scope
+            // does not name, so the Run refuses before its first decision (ADR 0095). A binding
+            // on the tool loop head always records a grant with the current scope.
             Some("refused".to_owned()),
-            Some("incremental".to_owned()),
+            None,
             Some("0".to_owned()),
             None,
             None,

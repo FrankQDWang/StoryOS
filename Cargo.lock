@@ -1906,6 +1906,7 @@ dependencies = [
  "storyos-application",
  "storyos-contracts",
  "storyos-core",
+ "storyos-worker",
  "tokio",
  "tokio-postgres",
  "tracing",
@@ -2008,6 +2009,7 @@ dependencies = [
 name = "storyos-worker"
 version = "0.1.0"
 dependencies = [
+ "storyos-adapter-fake-destination",
  "storyos-application",
  "storyos-core",
  "tokio",

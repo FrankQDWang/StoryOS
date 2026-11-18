@@ -31,6 +31,7 @@ pub(super) async fn create_agent_run(
     request: Request,
 ) -> Result<(StatusCode, Json<contracts::CreateAgentRunResponse>), ApiError> {
     let destination = state.config.model_destination.clone();
+    let embedding = state.config.embedding;
     let skills = Arc::clone(&state.config.skills);
     let admitted = admit(
         &state,
@@ -38,7 +39,9 @@ pub(super) async fn create_agent_run(
         &[],
         request,
         &CREATE_AGENT_RUN,
-        |body: &contracts::CreateAgentRunRequest| create_agent_run_input(body, destination, skills),
+        |body: &contracts::CreateAgentRunRequest| {
+            create_agent_run_input(body, destination, embedding, skills)
+        },
     )
     .await?;
     let message = &admitted.input.author_message;
@@ -92,6 +95,7 @@ pub(super) async fn create_agent_run(
 fn create_agent_run_input(
     body: &contracts::CreateAgentRunRequest,
     destination: Option<storyos_core::DeploymentDestination>,
+    embedding: Option<&'static storyos_core::EmbeddingRegistration>,
     skills: Arc<storyos_core::SkillSet>,
 ) -> Result<CreateAgentRunInput, ApiError> {
     let input = &body.create_agent_run_input;
@@ -144,6 +148,7 @@ fn create_agent_run_input(
             .as_ref()
             .map(|_| &storyos_core::RESEARCH_TOOL_OFFER),
         destination,
+        embedding,
         skills,
         skill_selections,
     })
@@ -218,6 +223,24 @@ pub(super) async fn get_agent_run(
                         }
                         storyos_core::SkillUse::AgentSelected { name, reason } => {
                             contracts::SkillUseInspect::AgentSelected { name, reason }
+                        }
+                    })
+                    .collect()
+            }),
+        manuscript_uses: record
+            .manuscript_uses
+            .filter(|uses| !uses.is_empty())
+            .map(|uses| {
+                uses.into_iter()
+                    .map(|manuscript_use| match manuscript_use {
+                        storyos_core::ManuscriptUse::ChapterRead { chapter_id, title } => {
+                            contracts::ManuscriptUseInspect::ChapterRead { chapter_id, title }
+                        }
+                        storyos_core::ManuscriptUse::KeywordSearch { query } => {
+                            contracts::ManuscriptUseInspect::KeywordSearch { query }
+                        }
+                        storyos_core::ManuscriptUse::HybridSearch { question } => {
+                            contracts::ManuscriptUseInspect::HybridSearch { question }
                         }
                     })
                     .collect()
@@ -923,6 +946,32 @@ fn inspect_source_class(class: storyos_core::ContextSourceClass) -> contracts::C
         }
         storyos_core::ContextSourceClass::SkillResource => {
             contracts::ContextSourceClass::SkillResource
+        }
+        storyos_core::ContextSourceClass::ChapterList => contracts::ContextSourceClass::ChapterList,
+        storyos_core::ContextSourceClass::ManuscriptReadResult => {
+            contracts::ContextSourceClass::ManuscriptReadResult
+        }
+        storyos_core::ContextSourceClass::ManuscriptSearchResult => {
+            contracts::ContextSourceClass::ManuscriptSearchResult
+        }
+        storyos_core::ContextSourceClass::MemoryIndex => contracts::ContextSourceClass::MemoryIndex,
+        storyos_core::ContextSourceClass::MemoryReadResult => {
+            contracts::ContextSourceClass::MemoryReadResult
+        }
+        storyos_core::ContextSourceClass::MemorySearchResult => {
+            contracts::ContextSourceClass::MemorySearchResult
+        }
+        storyos_core::ContextSourceClass::MemoryCaptureInput => {
+            contracts::ContextSourceClass::MemoryCaptureInput
+        }
+        storyos_core::ContextSourceClass::MemoryDeleteMarks => {
+            contracts::ContextSourceClass::MemoryDeleteMarks
+        }
+        storyos_core::ContextSourceClass::MemoryEntries => {
+            contracts::ContextSourceClass::MemoryEntries
+        }
+        storyos_core::ContextSourceClass::MemoryObservations => {
+            contracts::ContextSourceClass::MemoryObservations
         }
     }
 }

@@ -13,7 +13,7 @@ use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::set_current_chapter_authority_tests::seed_two_chapters;
 
 use super::damaged_evidence::{ReplayError, damaged_replay};
-use super::project_session::UPDATE_PROJECT_ASSISTANCE;
+use super::project_session::{UPDATE_PROJECT_ASSISTANCE, UPDATE_PROJECT_INSTRUCTION};
 use super::support::{CommandCall, Route, SequenceError, issued, seed_project, stores};
 
 pub(crate) const PAUSE_AGENT_RUN: Route = Route {
@@ -60,6 +60,7 @@ fn run_input(chapter_id: String) -> CreateAgentRunInput {
         project_agent_id: Uuid::now_v7().to_string(),
         destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
         research: Some(&storyos_core::RESEARCH_TOOL_OFFER),
+        embedding: None,
         skills: Default::default(),
         skill_selections: Vec::new(),
     }
@@ -95,6 +96,23 @@ pub(super) async fn create_agent_run_call(
     .await;
     store
         .update_project_assistance(&call.envelope, &call.input)
+        .await
+        .unwrap();
+    // The Run binds this Project Instruction Revision (ADR 0094 section 2).
+    let instruction = storyos_application::UpdateProjectInstructionInput {
+        text: "Write in the past tense.".to_owned(),
+        expected_revision: 0,
+    };
+    let call = issued(
+        store,
+        &scope,
+        base + 5,
+        &UPDATE_PROJECT_INSTRUCTION,
+        instruction,
+    )
+    .await;
+    store
+        .update_project_instruction(&call.envelope, &call.input)
         .await
         .unwrap();
     issued(
@@ -172,11 +190,11 @@ pub(super) async fn seed_run(admin: &Client, scope: &ProjectScope, run_id: &str,
                (owner_user_id, project_id, run_id, project_agent_id, conversation_id,
                 memory_settings_revision, grant_id, project_model_use_binding_revision,
                 chapter_id, author_message, status, receipt_id, lease_expires_at,
-                wakeup_pending, model_registration_revision)
+                wakeup_pending, model_registration_revision, run_kind)
              VALUES ('{owner}', '{project}', '{run_id}', '{agent}', '{conversation}',
                      '{memory}', '{grant}', '{binding}', '{chapter}', 'Continue',
                      '{status}', '{receipt}', now() + interval '1 minute', true,
-                     gen_random_uuid());
+                     gen_random_uuid(), 'author');
              COMMIT;",
             owner = scope.owner_user_id.as_ref(),
             project = scope.project_id.as_ref(),

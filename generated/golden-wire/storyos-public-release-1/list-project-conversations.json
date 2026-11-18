@@ -1,0 +1,18 @@
+{
+  "completeness": "complete",
+  "conversations": [
+    {
+      "conversation_id": "018f0000-0000-7001-8000-000000000d02",
+      "first_run_created_at": "2026-11-16T09:30:00.000Z",
+      "label": "Help with this passage.",
+      "newest_run_created_at": "2026-11-16T10:15:00.000Z",
+      "newest_run_status": "completed"
+    }
+  ],
+  "correlation_id": "018f0000-0000-7001-8000-000000000d01",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "schema_id": "storyos.query.project-conversations.response.v1"
+}

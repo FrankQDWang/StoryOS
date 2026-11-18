@@ -3,9 +3,12 @@
 //! Outbound Disclosure Event, and it gives the Agent no authority.
 
 use crate::{
-    FINISH_TOOL_SPEC, LOAD_SKILL_TOOL_SPEC, ModelRegistration, PROPOSE_EDIT_TOOL_SPEC,
-    READ_SKILL_RESOURCE_TOOL_SPEC, READ_TOOL_RESULT_TOOL_SPEC, SUBMIT_RESEARCH_TOOL_SPEC,
-    ToolIntake, ToolRegistrationKind, ToolResultText, ToolSpec,
+    ContextSourceClass, FINISH_TOOL_SPEC, HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC, LOAD_SKILL_TOOL_SPEC,
+    ModelRegistration, PROPOSE_EDIT_TOOL_SPEC, READ_CHAPTER_TOOL_SPEC, READ_MEMORY_ENTRY_TOOL_SPEC,
+    READ_SKILL_RESOURCE_TOOL_SPEC, READ_TOOL_RESULT_TOOL_SPEC,
+    RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC, SEARCH_MANUSCRIPT_TOOL_SPEC, SEARCH_MEMORY_TOOL_SPEC,
+    SUBMIT_RESEARCH_TOOL_SPEC, ToolIntake, ToolOperation, ToolRegistrationKind, ToolResultText,
+    ToolSpec, WRITE_MEMORY_TOOL_SPEC,
 };
 
 /// The Tool Registration of the Host Tools. It has no server, credential, or destination.
@@ -43,10 +46,9 @@ pub const READ_RESULT_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolReg
     ..FIRST_HOST_TOOL_REGISTRATION
 };
 
-/// The current Host Tools: the four Host Tools of the mapping `v6`, `load_skill`, and
-/// `read_skill_resource` (ADR 0089 section 3). The Tool Exposure has the two Skill Tools only for
-/// a Run whose pinned catalog has a Skill.
-pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
+/// The four Host Tools of the mapping `v6`, `load_skill`, and `read_skill_resource` (ADR 0089
+/// section 3). The mapping `v7` keeps them.
+pub const SKILL_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     revision: "018f0000-0000-7001-8000-0000000e0103",
     tools: &[
         &PROPOSE_EDIT_TOOL_SPEC,
@@ -59,14 +61,67 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     ..FIRST_HOST_TOOL_REGISTRATION
 };
 
+/// The current Host Tools: the six Host Tools of the mapping `v7`, `read_chapter`,
+/// `search_manuscript`, `hybrid_search_manuscript`, the Memory Tools `write_memory`, `read_memory_entry`, and `search_memory`,
+/// the output Tool `record_memory_observations` of a capture, and the output Tool
+/// `apply_memory_operations` of a consolidation pass. The Stage 7 tickets add their
+/// Tools before `finish` (ADR 0093 section 3, ADR 0094, ADR 0095).
+/// `ExposureFacts::has_host_tool` decides which of them a RunStep declares.
+pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
+    revision: "018f0000-0000-7001-8000-0000000e0104",
+    tools: &[
+        &PROPOSE_EDIT_TOOL_SPEC,
+        &SUBMIT_RESEARCH_TOOL_SPEC,
+        &READ_TOOL_RESULT_TOOL_SPEC,
+        &LOAD_SKILL_TOOL_SPEC,
+        &READ_SKILL_RESOURCE_TOOL_SPEC,
+        &READ_CHAPTER_TOOL_SPEC,
+        &SEARCH_MANUSCRIPT_TOOL_SPEC,
+        &HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC,
+        &WRITE_MEMORY_TOOL_SPEC,
+        &READ_MEMORY_ENTRY_TOOL_SPEC,
+        &SEARCH_MEMORY_TOOL_SPEC,
+        &RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
+        &crate::APPLY_MEMORY_OPERATIONS_TOOL_SPEC,
+        &FINISH_TOOL_SPEC,
+    ],
+    ..FIRST_HOST_TOOL_REGISTRATION
+};
+
+/// The Context source class of the settled result of the Host Tool `spec` (ADR 0095 section 1).
+/// Each Host Tool of the manuscript or of the Memory has its own class, and each other Host Tool
+/// gives a `tool_result` item. The output of a refused call is a `tool_result` item.
+pub fn host_tool_result_class(spec: &ToolSpec) -> ContextSourceClass {
+    match spec.operation {
+        ToolOperation::ReadChapter => ContextSourceClass::ManuscriptReadResult,
+        ToolOperation::SearchManuscript | ToolOperation::HybridSearchManuscript => {
+            ContextSourceClass::ManuscriptSearchResult
+        }
+        ToolOperation::ReadMemoryEntry => ContextSourceClass::MemoryReadResult,
+        ToolOperation::SearchMemory => ContextSourceClass::MemorySearchResult,
+        ToolOperation::WebSearch
+        | ToolOperation::WebFetch
+        | ToolOperation::Finish
+        | ToolOperation::ProposeEdit
+        | ToolOperation::SubmitResearch
+        | ToolOperation::ReadToolResult
+        | ToolOperation::LoadSkill
+        | ToolOperation::ReadSkillResource
+        | ToolOperation::WriteMemory
+        | ToolOperation::RecordMemoryObservations
+        | ToolOperation::ApplyMemoryOperations => ContextSourceClass::ToolResult,
+    }
+}
+
 impl ModelRegistration {
-    /// The Host Tools that the request mapping declares. The Agent Plan mapping `v7` and the fake
-    /// tool loop mapping declare the current Host Tools, the mapping `v6` keeps four, and each
-    /// earlier mapping keeps the first three (ADR 0053).
+    /// The Host Tools that the request mapping declares. The Agent Plan mapping `v8` and the fake
+    /// tool loop mapping declare the current Host Tools, the mapping `v7` keeps six, the mapping
+    /// `v6` keeps four, and each earlier mapping keeps the first three (ADR 0053).
     pub fn host_tools(&self) -> &'static HostToolRegistration {
         match self.mapping_revision {
-            crate::AGENT_PLAN_SKILL_MAPPING_REVISION
+            crate::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
             | crate::HOST_FAKE_TOOL_LOOP_MAPPING_REVISION => &HOST_TOOL_REGISTRATION,
+            crate::AGENT_PLAN_SKILL_MAPPING_REVISION => &SKILL_HOST_TOOL_REGISTRATION,
             crate::AGENT_PLAN_READ_RESULT_MAPPING_REVISION => &READ_RESULT_HOST_TOOL_REGISTRATION,
             _ => &FIRST_HOST_TOOL_REGISTRATION,
         }
@@ -74,9 +129,10 @@ impl ModelRegistration {
 }
 
 /// Each Host Tool Registration revision of this build.
-pub const HOST_TOOL_REGISTRATIONS: [&HostToolRegistration; 3] = [
+pub const HOST_TOOL_REGISTRATIONS: [&HostToolRegistration; 4] = [
     &FIRST_HOST_TOOL_REGISTRATION,
     &READ_RESULT_HOST_TOOL_REGISTRATION,
+    &SKILL_HOST_TOOL_REGISTRATION,
     &HOST_TOOL_REGISTRATION,
 ];
 
@@ -110,14 +166,27 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         // The store executes `propose_edit`, because it opens a Proposal, `submit_research`,
         // because it records a Research Artifact, `read_tool_result`, because it reads a stored
         // ToolCall, and `load_skill` and `read_skill_resource`, because they read a SkillPackage
-        // Snapshot.
+        // Snapshot, `read_chapter`, `search_manuscript`, and `hybrid_search_manuscript`, because
+        // they read the manuscript,
+        // `write_memory`, because it writes a Memory Entry, `read_memory_entry`, because it
+        // reads a Memory Entry and records the read, `search_memory`, because it reads the
+        // Memory Entries, `record_memory_observations`, because it writes the observations, and
+        // `apply_memory_operations`, because it writes the Memory Entries.
         ToolIntake::WebSearch { .. }
         | ToolIntake::WebFetch { .. }
         | ToolIntake::ProposeEdit(_)
         | ToolIntake::SubmitResearch { .. }
         | ToolIntake::ReadToolResult { .. }
         | ToolIntake::LoadSkill { .. }
-        | ToolIntake::ReadSkillResource { .. } => None,
+        | ToolIntake::ReadSkillResource { .. }
+        | ToolIntake::ReadChapter { .. }
+        | ToolIntake::SearchManuscript { .. }
+        | ToolIntake::HybridSearchManuscript { .. }
+        | ToolIntake::WriteMemory(_)
+        | ToolIntake::ReadMemoryEntry { .. }
+        | ToolIntake::SearchMemory { .. }
+        | ToolIntake::RecordMemoryObservations(_)
+        | ToolIntake::ApplyMemoryOperations(_) => None,
     }
 }
 

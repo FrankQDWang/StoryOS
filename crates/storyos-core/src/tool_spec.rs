@@ -36,6 +36,26 @@ pub enum ToolOperation {
     LoadSkill,
     /// The Host Tool with which the Agent reads one file of a Skill that its Run has (ADR 0089).
     ReadSkillResource,
+    /// The Host Tool with which the Agent reads the text of one Chapter (ADR 0095).
+    ReadChapter,
+    /// The Host Tool with which the Agent finds an exact term in the manuscript (ADR 0095).
+    SearchManuscript,
+    /// The Host Tool with which the Agent finds the passages that answer a question (ADR 0095).
+    HybridSearchManuscript,
+    /// The Host Tool with which the Agent writes one Memory Entry on the request of the author
+    /// (ADR 0094 section 5).
+    WriteMemory,
+    /// The Host Tool with which the Agent reads one Memory Entry (ADR 0094 section 4).
+    ReadMemoryEntry,
+    /// The Host Tool with which the Agent finds the Memory Entries that hold an exact term (ADR
+    /// 0094 section 4).
+    SearchMemory,
+    /// The Host Tool with which a capture gives its Memory Observations and ends (ADR 0094
+    /// section 5).
+    RecordMemoryObservations,
+    /// The Host Tool with which a consolidation pass gives its operations and ends (ADR 0094
+    /// section 6).
+    ApplyMemoryOperations,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -136,6 +156,14 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::READ_TOOL_RESULT_TOOL_SPEC,
         &crate::LOAD_SKILL_TOOL_SPEC,
         &crate::READ_SKILL_RESOURCE_TOOL_SPEC,
+        &crate::READ_CHAPTER_TOOL_SPEC,
+        &crate::SEARCH_MANUSCRIPT_TOOL_SPEC,
+        &crate::HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC,
+        &crate::WRITE_MEMORY_TOOL_SPEC,
+        &crate::READ_MEMORY_ENTRY_TOOL_SPEC,
+        &crate::SEARCH_MEMORY_TOOL_SPEC,
+        &crate::RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
+        &crate::APPLY_MEMORY_OPERATIONS_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -168,6 +196,27 @@ pub enum ToolIntake {
         skill: String,
         path: String,
     },
+    ReadChapter {
+        chapter: i64,
+        first_block: Option<i64>,
+        last_block: Option<i64>,
+    },
+    SearchManuscript {
+        query: String,
+    },
+    HybridSearchManuscript {
+        question: String,
+        terms: Vec<String>,
+    },
+    WriteMemory(crate::MemoryWrite),
+    ReadMemoryEntry {
+        entry: i64,
+    },
+    SearchMemory {
+        query: String,
+    },
+    RecordMemoryObservations(Vec<crate::ObservationCandidate>),
+    ApplyMemoryOperations(Vec<crate::MemoryOperationCandidate>),
 }
 
 /// Why the arguments of a function call do not fit the typed intake.
@@ -183,6 +232,9 @@ pub enum IntakeRefusal {
     UnstorableText,
     /// The `reason` of a load is empty, has more than 512 characters, or has a control character.
     Reason,
+    /// The `terms` of a passage search are more than 8, or a term is empty or has more than 64
+    /// characters.
+    Terms,
 }
 
 #[derive(Deserialize)]
@@ -203,6 +255,14 @@ struct FetchArguments {
 #[serde(deny_unknown_fields)]
 struct NoArguments {}
 
+/// Whether `query` fits the query rule: 1 to 512 characters, not only white space, and no
+/// control character.
+pub(crate) fn query_fits(query: &str) -> bool {
+    !query.trim().is_empty()
+        && query.chars().count() <= QUERY_MAX_CHARS
+        && !query.chars().any(char::is_control)
+}
+
 impl ToolSpec {
     /// Validates the complete arguments of one function call against the typed intake. A search
     /// takes a query of 1 to 512 characters and an optional result count of 1 to 10. A fetch
@@ -218,10 +278,7 @@ impl ToolSpec {
                     result_count,
                 } = SearchArguments::deserialize(arguments)
                     .map_err(|_| IntakeRefusal::Malformed)?;
-                if query.trim().is_empty()
-                    || query.chars().count() > QUERY_MAX_CHARS
-                    || query.chars().any(char::is_control)
-                {
+                if !query_fits(&query) {
                     return Err(IntakeRefusal::Query);
                 }
                 if result_count.is_some_and(|count| count == 0 || count > RESULT_COUNT_MAX) {
@@ -254,6 +311,20 @@ impl ToolSpec {
             ToolOperation::ReadToolResult => crate::read_tool_result::intake(arguments),
             ToolOperation::LoadSkill => crate::load_skill::intake(arguments),
             ToolOperation::ReadSkillResource => crate::read_skill_resource::intake(arguments),
+            ToolOperation::ReadChapter => crate::read_chapter::intake(arguments),
+            ToolOperation::SearchManuscript => crate::search_manuscript::intake(arguments),
+            ToolOperation::HybridSearchManuscript => {
+                crate::hybrid_search_manuscript::intake(arguments)
+            }
+            ToolOperation::WriteMemory => crate::write_memory::intake(arguments),
+            ToolOperation::ReadMemoryEntry => crate::read_memory_entry::intake(arguments),
+            ToolOperation::SearchMemory => crate::search_memory::intake(arguments),
+            ToolOperation::RecordMemoryObservations => {
+                crate::record_memory_observations::intake(arguments)
+            }
+            ToolOperation::ApplyMemoryOperations => {
+                crate::apply_memory_operations::tool_intake(arguments)
+            }
         }
     }
 }
@@ -311,7 +382,15 @@ impl ServerArguments {
                 | ToolIntake::SubmitResearch { .. }
                 | ToolIntake::ReadToolResult { .. }
                 | ToolIntake::LoadSkill { .. }
-                | ToolIntake::ReadSkillResource { .. },
+                | ToolIntake::ReadSkillResource { .. }
+                | ToolIntake::ReadChapter { .. }
+                | ToolIntake::SearchManuscript { .. }
+                | ToolIntake::HybridSearchManuscript { .. }
+                | ToolIntake::WriteMemory(_)
+                | ToolIntake::ReadMemoryEntry { .. }
+                | ToolIntake::SearchMemory { .. }
+                | ToolIntake::RecordMemoryObservations(_)
+                | ToolIntake::ApplyMemoryOperations(_),
             )
             | (
                 Self::Fetch { .. },
@@ -321,7 +400,15 @@ impl ServerArguments {
                 | ToolIntake::SubmitResearch { .. }
                 | ToolIntake::ReadToolResult { .. }
                 | ToolIntake::LoadSkill { .. }
-                | ToolIntake::ReadSkillResource { .. },
+                | ToolIntake::ReadSkillResource { .. }
+                | ToolIntake::ReadChapter { .. }
+                | ToolIntake::SearchManuscript { .. }
+                | ToolIntake::HybridSearchManuscript { .. }
+                | ToolIntake::WriteMemory(_)
+                | ToolIntake::ReadMemoryEntry { .. }
+                | ToolIntake::SearchMemory { .. }
+                | ToolIntake::RecordMemoryObservations(_)
+                | ToolIntake::ApplyMemoryOperations(_),
             ) => {
                 return None;
             }

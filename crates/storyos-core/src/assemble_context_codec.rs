@@ -55,6 +55,9 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
         payload["operation_requirement"]["cause"] = serde_json::json!("tool_result_continuation");
         payload["operation_requirement"]["tool_results"] = serde_json::json!(sources);
     }
+    if record.operation_requirement.cause == ContextCause::HostSchedule {
+        payload["operation_requirement"]["cause"] = serde_json::json!("host_schedule");
+    }
     if let Some(sources) = &record.operation_requirement.earlier_author_messages {
         payload["operation_requirement"]["earlier_author_messages"] = serde_json::json!(sources);
     }
@@ -63,6 +66,9 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
     }
     if let Some(catalog) = &record.operation_requirement.skill_catalog {
         payload["operation_requirement"]["skill_catalog"] = serde_json::json!(catalog);
+    }
+    if let Some(revision) = record.operation_requirement.memory_revision {
+        payload["operation_requirement"]["memory_revision"] = serde_json::json!(revision);
     }
     if let Some(resolution) = record.operation_requirement.ordinary_resolution {
         payload["operation_requirement"]["ordinary_resolution"] = serde_json::json!({
@@ -115,9 +121,13 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
             cause: match requirement.get("cause").map(serde_json::Value::as_str) {
                 None => ContextCause::AuthorRequest,
                 Some(Some("tool_result_continuation")) => ContextCause::ToolResultContinuation,
+                Some(Some("host_schedule")) => ContextCause::HostSchedule,
                 Some(_) => return None,
             },
-            chapter_id: requirement.get("chapter_id")?.as_str()?.to_owned(),
+            chapter_id: match requirement.get("chapter_id")? {
+                serde_json::Value::Null => None,
+                value => Some(value.as_str()?.to_owned()),
+            },
             chapter_revision_id: match requirement.get("chapter_revision_id")? {
                 serde_json::Value::Null => None,
                 value => Some(value.as_str()?.to_owned()),
@@ -165,6 +175,10 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 .map(|value| serde_json::from_value(value.clone()))
                 .transpose()
                 .ok()?,
+            memory_revision: match requirement.get("memory_revision") {
+                Some(value) => Some(value.as_u64()?),
+                None => None,
+            },
             ordinary_resolution: match requirement.get("ordinary_resolution") {
                 Some(value) if value["profile_revision"] == crate::ORDINARY_PASSAGE_PROFILE => {
                     Some(serde_json::from_value(value["disposition"].clone()).ok()?)
@@ -379,6 +393,8 @@ fn encode_purpose(purpose: ContextPurpose) -> &'static str {
     match purpose {
         ContextPurpose::CurrentPassageAssistance => "current_passage_assistance",
         ContextPurpose::ActiveContextCompaction => "active_context_compaction",
+        ContextPurpose::MemoryCapture => "memory_capture",
+        ContextPurpose::MemoryConsolidation => "memory_consolidation",
     }
 }
 
@@ -386,6 +402,8 @@ fn decode_purpose(value: &str) -> Option<ContextPurpose> {
     match value {
         "current_passage_assistance" => Some(ContextPurpose::CurrentPassageAssistance),
         "active_context_compaction" => Some(ContextPurpose::ActiveContextCompaction),
+        "memory_capture" => Some(ContextPurpose::MemoryCapture),
+        "memory_consolidation" => Some(ContextPurpose::MemoryConsolidation),
         _ => None,
     }
 }
@@ -408,6 +426,16 @@ fn encode_source_class(class: ContextSourceClass) -> &'static str {
         ContextSourceClass::SkillCatalog => "skill_catalog",
         ContextSourceClass::SkillInstruction => "skill_instruction",
         ContextSourceClass::SkillResource => "skill_resource",
+        ContextSourceClass::ChapterList => "chapter_list",
+        ContextSourceClass::ManuscriptReadResult => "manuscript_read_result",
+        ContextSourceClass::ManuscriptSearchResult => "manuscript_search_result",
+        ContextSourceClass::MemoryIndex => "memory_index",
+        ContextSourceClass::MemoryReadResult => "memory_read_result",
+        ContextSourceClass::MemorySearchResult => "memory_search_result",
+        ContextSourceClass::MemoryCaptureInput => "memory_capture_input",
+        ContextSourceClass::MemoryDeleteMarks => "memory_delete_marks",
+        ContextSourceClass::MemoryEntries => "memory_entries",
+        ContextSourceClass::MemoryObservations => "memory_observations",
     }
 }
 
@@ -422,6 +450,16 @@ fn decode_source_class(value: &str) -> Option<ContextSourceClass> {
         "skill_catalog" => Some(ContextSourceClass::SkillCatalog),
         "skill_instruction" => Some(ContextSourceClass::SkillInstruction),
         "skill_resource" => Some(ContextSourceClass::SkillResource),
+        "chapter_list" => Some(ContextSourceClass::ChapterList),
+        "manuscript_read_result" => Some(ContextSourceClass::ManuscriptReadResult),
+        "manuscript_search_result" => Some(ContextSourceClass::ManuscriptSearchResult),
+        "memory_index" => Some(ContextSourceClass::MemoryIndex),
+        "memory_read_result" => Some(ContextSourceClass::MemoryReadResult),
+        "memory_search_result" => Some(ContextSourceClass::MemorySearchResult),
+        "memory_capture_input" => Some(ContextSourceClass::MemoryCaptureInput),
+        "memory_delete_marks" => Some(ContextSourceClass::MemoryDeleteMarks),
+        "memory_entries" => Some(ContextSourceClass::MemoryEntries),
+        "memory_observations" => Some(ContextSourceClass::MemoryObservations),
         _ => None,
     }
 }

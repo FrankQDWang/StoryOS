@@ -36,6 +36,7 @@ mod agent_run_control;
 mod agent_run_work;
 mod author_edit;
 mod author_edit_wire;
+mod embedding_gateway;
 mod model_gateway;
 mod model_gateway_ports;
 mod model_lease_renewal;
@@ -54,6 +55,7 @@ mod chapter_query;
 mod create_agent_run;
 mod create_project;
 mod create_project_challenge;
+mod delete_memory_entry;
 mod editor_session;
 mod export_work;
 mod get_proposal;
@@ -62,10 +64,18 @@ mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_structure;
 mod manuscript_tree;
+mod memory_capture;
+mod memory_consolidation;
+mod memory_entries;
+mod memory_work_schedule;
 mod open_proposal_list;
+mod passage_index;
+mod passage_index_work;
+mod passage_ranking;
 mod pinned_export_source;
 mod project_activity;
 mod project_command;
+mod project_conversations;
 mod project_export;
 mod project_export_work;
 mod project_settings;
@@ -81,6 +91,7 @@ mod snapshot;
 mod takeover;
 mod undo_latest_author_action;
 mod update_project_assistance;
+mod update_project_instruction;
 mod withdraw_proposal;
 
 pub use author_edit::{
@@ -128,6 +139,14 @@ pub use create_project_challenge::{
     CreateProjectChallenge, CreateProjectChallengeBinding, CreateProjectChallengeStore,
     IssueCreateProjectChallenge, issue_create_project_challenge,
 };
+pub use delete_memory_entry::{
+    DeleteMemoryEntryError, DeleteMemoryEntryInput, DeleteMemoryEntrySettlement, MemoryEntryDeleted,
+};
+pub use embedding_gateway::{
+    EmbeddingClaim, EmbeddingDispatchStore, EmbeddingObservation, EmbeddingProjection,
+    EmbeddingProviderAdapter, EmbeddingRecord, EmbeddingResult, EmbeddingRoute, EmbeddingUsage,
+    NoEmbeddingDestination, PreparedEmbeddingRequest, dispatch_embedding,
+};
 pub use export_work::{ClaimedExportWork, ExportWorkStore, claim_next_export_work};
 pub use get_proposal::{
     BlockProposalRecord, ProposalOperationRecord, ProposalReader, open_proposal,
@@ -156,7 +175,20 @@ pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterNode,
     GetManuscriptTree, ManuscriptTreeReader, VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
 };
-pub use model_gateway::{complete_agent_run, complete_agent_run_with_tools};
+pub use memory_capture::{
+    MemoryCaptureSource, MemoryCaptureStartRefusal, MemoryCaptureStore, StartedMemoryCapture,
+};
+pub use memory_consolidation::{MemoryConsolidationStore, StartedMemoryConsolidation};
+pub use memory_entries::{
+    MemoryEntryFlagItem, MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem,
+    list_memory_entries,
+};
+pub use memory_work_schedule::{
+    ClaimedMemoryWork, MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource,
+};
+pub use model_gateway::{
+    complete_agent_run, complete_agent_run_with_destinations, complete_agent_run_with_tools,
+};
 pub use model_gateway_ports::{
     AbortRequest, AbortTicket, CacheSetting, CacheUse, CommittedCancellation,
     ContractFaultObserver, ContractFaultPoint, CreatePurpose, CreateRequest, CredentialReference,
@@ -172,6 +204,18 @@ pub use model_gateway_ports::{
 pub use open_proposal_list::{
     OpenProposalList, OpenProposalListItem, OpenProposalListReader, list_open_proposals,
 };
+pub use passage_index::{
+    ChapterPassageSource, PassageIndexFacts, PassageIndexFailure, PassageIndexReport,
+    PassageIndexResult, PassageVectorKey, PassageVectorRow, PassageVectorStore,
+    index_chapter_passages,
+};
+pub use passage_index_work::{
+    ClaimedPassageIndex, PASSAGE_INDEX_LEASE, PASSAGE_INDEX_QUIET_TIME, PassageIndexStep,
+    PassageIndexWorkStore, claim_next_passage_index_work, step_passage_index_work,
+};
+pub use passage_ranking::{
+    PassageRankingFacts, PassageRankingStore, QuestionVector, rank_manuscript_passages,
+};
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,
     render_readable_manuscript_from_pinned_source,
@@ -181,6 +225,11 @@ pub use project_command::{
     ChapterSelectionApplied, ChapterSelectionAuthority, ProjectCommandEnvelope,
     ProjectCommandError, ProjectCommandSettlement, RefusableCommandError, RevisionApplied,
     StructureApplied, StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
+};
+pub use project_conversations::{
+    ProjectConversationList, ProjectConversationListItem, ProjectConversationRead,
+    ProjectConversationReader, ProjectConversationRunItem, StoredProjectConversationRuns,
+    list_project_conversations, project_conversation_label, read_project_conversation,
 };
 pub use project_export::{
     ArchiveExportOperation, ArchiveExportRefusal, ExportOperationPage, ExportOperationProgress,
@@ -227,8 +276,8 @@ pub use set_current_chapter::{
     CurrentChapterSelected, SetCurrentChapterInput, SetCurrentChapterSettlement,
 };
 pub use tool_gateway_ports::{
-    NoToolDestination, ToolCallRequest, ToolDestinationAdapter, ToolDispatchClaim,
-    ToolDispatchRecord, ToolDispatchStore,
+    NoToolDestination, QuestionSearch, ToolCallRequest, ToolDestinationAdapter, ToolDispatchClaim,
+    ToolDispatchRecord, ToolDispatchStore, ToolWork,
 };
 pub use undo_latest_author_action::{
     AuthorUndoFrontierPosition, UndoApplied, UndoLatestAuthorActionInput,
@@ -237,6 +286,10 @@ pub use undo_latest_author_action::{
 pub use update_project_assistance::{
     ProjectAssistanceAcknowledgement, ProjectAssistanceRecord, UpdateProjectAssistanceInput,
     UpdateProjectAssistanceSettlement,
+};
+pub use update_project_instruction::{
+    ProjectInstructionRevision, ProjectInstructionSaved, UpdateProjectInstructionError,
+    UpdateProjectInstructionInput, UpdateProjectInstructionSettlement,
 };
 pub use withdraw_proposal::{
     CurrentProducerWithdrawal, CurrentProducerWithdrawalSettlement, ProposalWithdrawn,
@@ -517,6 +570,12 @@ pub trait ProjectReader: Sync {
         &self,
         scope: &ProjectScope,
     ) -> impl Future<Output = Result<Option<ProjectAssistanceRecord>, ProjectReadError>> + Send;
+
+    /// The current Revision of the Project Instruction, or `None` when the Project has none.
+    fn read_project_instruction(
+        &self,
+        scope: &ProjectScope,
+    ) -> impl Future<Output = Result<Option<ProjectInstructionRevision>, ProjectReadError>> + Send;
 }
 
 pub async fn open_project(
@@ -531,6 +590,13 @@ pub async fn open_project_assistance(
     scope: &ProjectScope,
 ) -> Result<Option<ProjectAssistanceRecord>, ProjectReadError> {
     reader.read_project_assistance(scope).await
+}
+
+pub async fn open_project_instruction(
+    reader: &impl ProjectReader,
+    scope: &ProjectScope,
+) -> Result<Option<ProjectInstructionRevision>, ProjectReadError> {
+    reader.read_project_instruction(scope).await
 }
 
 pub async fn open_current_chapter(

@@ -236,6 +236,16 @@ pub enum ContextSourceClass {
     SkillCatalog,
     SkillInstruction,
     SkillResource,
+    ChapterList,
+    ManuscriptReadResult,
+    ManuscriptSearchResult,
+    MemoryIndex,
+    MemoryReadResult,
+    MemorySearchResult,
+    MemoryCaptureInput,
+    MemoryDeleteMarks,
+    MemoryEntries,
+    MemoryObservations,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -521,8 +531,25 @@ pub enum AgentRunResultInspect {
         decision_id: String,
         research_artifact_id: String,
     },
+    /// The Memory Entry change that one settled `write_memory` call wrote, with the title of the
+    /// version that it wrote (ADR 0094 section 5). It has no entry identity and no entry text
+    /// (ADR 0040).
+    MemoryWrite {
+        decision_id: String,
+        action: MemoryWriteActionInspect,
+        title: String,
+    },
     /// The final answer text of a completed Run. A final answer with no text is no result.
     Answer { decision_id: String, text: String },
+}
+
+/// The action of one `write_memory` call.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryWriteActionInspect {
+    Create,
+    Change,
+    Delete,
 }
 
 /// What one ToolCall asked for, from its validated arguments, and how it settled.
@@ -862,6 +889,12 @@ pub struct GetAgentRunResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub skill_uses: Option<Vec<crate::SkillUseInspect>>,
+    // Only the Run read has it: one entry for each Chapter that a settled `read_chapter` call
+    // gave and one for each query of a settled `search_manuscript` call, in the order of the first
+    // use. No field when the Run has no entry (ADR 0095 section 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub manuscript_uses: Option<Vec<crate::ManuscriptUseInspect>>,
     pub model_attempt: OptionalModelAttemptInspect,
     // The last compaction record of the Run.
     pub active_compaction: OptionalActiveCompactionInspect,

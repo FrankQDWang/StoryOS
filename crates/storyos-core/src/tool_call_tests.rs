@@ -21,6 +21,9 @@ fn pinned() -> ExposureSnapshot {
         }],
         model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
         skill_catalog: false,
+        memory_use: false,
+        hybrid_search: false,
+        run_kind: crate::AgentRunKind::Author,
     });
     ExposureSnapshot::decode(Some(&exposure.snapshot())).unwrap()
 }
@@ -367,7 +370,8 @@ fn the_snapshot_record_decodes_to_the_pinned_exposure() {
             ExposureSnapshot::decode(Some(&damaged)),
         ),
         (
-            6,
+            // Two research Tools and seven Host Tools (ADR 0095 section 1, ADR 0094 section 5).
+            9,
             Some(ExposureSnapshot::empty()),
             Some(ExposureSnapshot::empty()),
             None

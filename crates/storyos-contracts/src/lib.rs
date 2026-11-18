@@ -20,13 +20,17 @@ mod release1_list_skills;
 mod release1_manuscript_search;
 mod release1_manuscript_statistics;
 mod release1_manuscript_tree;
+mod release1_manuscript_use;
+mod release1_memory_entries;
 mod release1_open_proposal_list;
 mod release1_operation_registry;
 mod release1_operation_table;
 mod release1_project_activity;
 mod release1_project_assistance;
+mod release1_project_conversation;
 mod release1_project_export;
 mod release1_project_export_query;
+mod release1_project_instruction;
 mod release1_proposal;
 mod release1_readable_export;
 mod release1_readable_export_query;
@@ -91,16 +95,16 @@ pub use release1_agent_run::{
     CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect, DestinationIo,
     EvidenceAvailability, GET_AGENT_RUN_METHOD, GET_AGENT_RUN_PATH,
     GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest, GetAgentRunResponse, HostControlInspect,
-    OptionalActiveCompactionInspect, OptionalCompactionInstallInspect, OptionalContinuationInspect,
-    OptionalDecisionInspect, OptionalManifestRef, OptionalModelAttemptInspect,
-    OptionalOpenedProposalInspect, OptionalOriginalResultRetrievalInspect,
-    OptionalReferenceRecoveryInspect, OptionalUnknownCreateSuccessorInspect,
-    OriginalResultRetrievalDisposition, PassageTarget, ProjectionMode, ProposalCandidateTarget,
-    ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
-    ReferenceRecoveryDisposition, SelectionCoordinateProfile, SelectionPoint, SelectionReference,
-    SelectionReferenceInspect, SkillPackageReference, SourceAvailability,
-    TokenCountingProfileInspect, ToolCallInspect, ToolCallOutcomeInspect,
-    UnknownCreateSuccessorDisposition,
+    MemoryWriteActionInspect, OptionalActiveCompactionInspect, OptionalCompactionInstallInspect,
+    OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
+    OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
+    OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
+    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
+    ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
+    ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
+    SelectionCoordinateProfile, SelectionPoint, SelectionReference, SelectionReferenceInspect,
+    SkillPackageReference, SourceAvailability, TokenCountingProfileInspect, ToolCallInspect,
+    ToolCallOutcomeInspect, UnknownCreateSuccessorDisposition,
 };
 pub use release1_agent_run_control::{
     CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_METHOD, CANCEL_AGENT_RUN_PATH,
@@ -181,6 +185,17 @@ pub use release1_manuscript_tree::{
     GET_MANUSCRIPT_TREE_METHOD, GET_MANUSCRIPT_TREE_PATH, GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID,
     GetManuscriptTreeResponse, ManuscriptChapterNode, ManuscriptVolumeNode,
 };
+pub use release1_manuscript_use::ManuscriptUseInspect;
+pub use release1_memory_entries::{
+    DELETE_MEMORY_ENTRY_DIGEST_PROFILE, DELETE_MEMORY_ENTRY_METHOD, DELETE_MEMORY_ENTRY_PATH,
+    DELETE_MEMORY_ENTRY_REQUEST_SCHEMA_ID, DELETE_MEMORY_ENTRY_RESPONSE_SCHEMA_ID,
+    DeleteMemoryEntryConflictReason, DeleteMemoryEntryEffect, DeleteMemoryEntryInput,
+    DeleteMemoryEntryNoEffectReason, DeleteMemoryEntryRequest, DeleteMemoryEntryResponse,
+    LIST_MEMORY_ENTRIES_METHOD, LIST_MEMORY_ENTRIES_PATH, LIST_MEMORY_ENTRIES_RESPONSE_SCHEMA_ID,
+    ListMemoryEntriesResponse, MemoryEntryFlagInspect, MemoryEntryInspect,
+    MemoryEntryOriginInspect, MemoryEntrySourceInspect, MemoryEntryTypeInspect,
+    MemorySourceAvailability,
+};
 pub use release1_open_proposal_list::{
     LIST_CHAPTER_OPEN_PROPOSALS_METHOD, LIST_CHAPTER_OPEN_PROPOSALS_PATH,
     LIST_CHAPTER_OPEN_PROPOSALS_RESPONSE_SCHEMA_ID, ListChapterOpenProposalsResponse,
@@ -198,6 +213,15 @@ pub use release1_project_assistance::{
     UpdateProjectAssistanceNoEffectReason, UpdateProjectAssistanceRequest,
     UpdateProjectAssistanceResponse,
 };
+pub use release1_project_conversation::{
+    GET_PROJECT_CONVERSATION_METHOD, GET_PROJECT_CONVERSATION_PATH,
+    GET_PROJECT_CONVERSATION_RESPONSE_SCHEMA_ID, GetProjectConversationResponse,
+    LIST_PROJECT_CONVERSATIONS_METHOD, LIST_PROJECT_CONVERSATIONS_PATH,
+    LIST_PROJECT_CONVERSATIONS_RESPONSE_SCHEMA_ID, ListProjectConversationsResponse,
+    PROJECT_CONVERSATION_LABEL_MAX_CHARACTERS, PROJECT_CONVERSATION_LIST_MAX_ENTRIES,
+    PROJECT_CONVERSATION_RUNS_MAX_ENTRIES, ProjectConversationCompleteness,
+    ProjectConversationEntry, ProjectConversationRun,
+};
 pub use release1_project_export::{
     EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE, EXPORT_PROJECT_ARCHIVE_METHOD,
     EXPORT_PROJECT_ARCHIVE_PATH, EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,
@@ -207,6 +231,16 @@ pub use release1_project_export::{
 pub use release1_project_export_query::{
     GET_EXPORT_OPERATION_METHOD, GET_EXPORT_OPERATION_PATH,
     GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID, GetExportOperationResponse,
+};
+pub use release1_project_instruction::{
+    GET_PROJECT_INSTRUCTION_METHOD, GET_PROJECT_INSTRUCTION_PATH,
+    GET_PROJECT_INSTRUCTION_RESPONSE_SCHEMA_ID, GetProjectInstructionResponse, ProjectInstruction,
+    UPDATE_PROJECT_INSTRUCTION_DIGEST_PROFILE, UPDATE_PROJECT_INSTRUCTION_METHOD,
+    UPDATE_PROJECT_INSTRUCTION_PATH, UPDATE_PROJECT_INSTRUCTION_REQUEST_SCHEMA_ID,
+    UPDATE_PROJECT_INSTRUCTION_RESPONSE_SCHEMA_ID, UpdateProjectInstructionConflictReason,
+    UpdateProjectInstructionEffect, UpdateProjectInstructionInput,
+    UpdateProjectInstructionNoEffectReason, UpdateProjectInstructionRequest,
+    UpdateProjectInstructionResponse,
 };
 pub use release1_proposal::{
     AcceptanceRefusalBoundary, AcceptanceRefusalInspect, AcceptanceRefusalReason,

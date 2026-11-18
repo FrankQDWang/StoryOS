@@ -273,6 +273,16 @@ pub(crate) async fn write_revision<E>(
     if head_updates != 1 {
         return Err(ProjectCommandError::BindingConflict);
     }
+    crate::passage_index_work::mark_passage_index_work(
+        client,
+        scope,
+        crate::passage_index_work::MarkedChapters::Changed(&[&write.chapter_id]),
+    )
+    .await
+    .map_err(unavailable)?;
+    crate::chapter_capture_schedule::mark_chapter_due(client, scope, &write.chapter_id)
+        .await
+        .map_err(unavailable)?;
     client
         .execute(
             "INSERT INTO storyos.authoritative_commits
