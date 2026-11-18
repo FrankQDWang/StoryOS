@@ -8,6 +8,7 @@ This file adds the subtree rules for the `storyos_runtime` store. The root `AGEN
 
 - Get a runtime connection only through `connect()` or `connect_challenge()`. Do not call `tokio_postgres::connect` outside `connection_pool.rs` and `storage_activation.rs`. The startup gate in `storage_activation_proof.rs` is the one caller of `connection_pool::open`; it runs before a pool exists.
 - Run `BEGIN`, `START TRANSACTION`, `COMMIT`, `END`, `ROLLBACK`, and `ABORT` only through `batch_execute` on a `PooledClient`. That method records the transaction state; a `BEGIN` through `execute`, `query`, or `simple_query` is not recorded, so the pool can hand an open transaction to the next request.
+- `Client::transaction()` stays valid on a `PooledClient`, because its guard rolls back on drop before the pooled client returns ([ADR 0031](../../docs/adr/0031-reuse-runtime-connections-with-statement-tracked-transaction-state.md)).
 - A helper that runs transaction control takes `client: &PooledClient`. A helper that takes `&tokio_postgres::Client` or `impl GenericClient` does not run transaction control. It runs inside a transaction that its caller owns, or it runs one autocommit read such as the Storage Activation proof read.
 - Pass `&*client` when a `PooledClient` goes to a helper that takes `impl GenericClient`.
 - Set scope only with transaction-local `set_config(..., true)`. Session-level state would survive a settled transaction and reach the next checkout.

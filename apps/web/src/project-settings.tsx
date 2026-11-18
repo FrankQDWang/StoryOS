@@ -73,17 +73,21 @@ export function ProjectSettingsView({
     globalThis.addEventListener("beforeunload", prompt);
     return () => globalThis.removeEventListener("beforeunload", prompt);
   }, [hasUnsaved]);
-  const follow = (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+  // Each link of the page into the application goes through the confirm step: `返回写作` and each source link of a
+  // Memory entry (#1692).
+  const follow = (event: MouseEvent<HTMLElement>) => {
+    const href = (event.target as Element).closest("a[href]")?.getAttribute("href");
     // A new tab or window does not leave this page.
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (href?.startsWith("/") !== true || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey
+      || event.altKey) return;
     event.preventDefault();
     if (hasUnsaved) setLeaving(href); else navigate(href);
   };
   const workspace = `/projects/${project.project_id}`;
   return (
-    <section className="project-settings" data-project-settings="">
+    <section className="project-settings" data-project-settings="" onClick={follow}>
       <header>
-        <a href={workspace} onClick={follow(workspace)} data-return-to-writing="">返回写作</a>
+        <a href={workspace} data-return-to-writing="">返回写作</a>
         <p>{project.title}</p>
       </header>
       <h1>项目设置</h1>
