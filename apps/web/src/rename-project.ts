@@ -6,6 +6,7 @@ import {
 import type { UpdateProjectResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
+import { challengeRefused, forgettingRefusedFlight } from "./refused-command.ts";
 
 export {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
@@ -59,15 +60,19 @@ export async function renameOwnedProject(options: {
     };
     inFlightRenames.set(identity, flight);
   }
+  const send = () => forgettingRefusedFlight(
+    () => submitRename(options, flight),
+    () => inFlightRenames.delete(identity),
+  );
   try {
-    const updated = await submitRename(options, flight);
+    const updated = await send();
     inFlightRenames.delete(identity);
     return updated;
   } catch (error) {
-    if (historicalAcknowledgementUnavailable(error)) {
+    if (historicalAcknowledgementUnavailable(error) || challengeRefused(error)) {
       throw error;
     }
-    const updated = await submitRename(options, flight);
+    const updated = await send();
     inFlightRenames.delete(identity);
     return updated;
   }
