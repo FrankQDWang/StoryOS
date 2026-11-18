@@ -18,6 +18,8 @@ const VOLUME = "018f0000-0000-7001-8000-000000000815";
 const EMPTY_BODY_DIGEST = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 const CURRENT_CHAPTER = `PUT /api/v1/projects/${PROJECT}/current-chapter`;
 const SET_CURRENT_CHAPTER = "storyos.command.set-current-chapter.request.v1";
+// The sentence of the wait is the text of the author (#1689). The test gives it literally, so a changed character fails.
+const WAITING = "操作有些频繁，稍等片刻会自动打开这一章。";
 
 type Timer = { callback: () => void; timeout: number; cleared: boolean };
 
@@ -38,7 +40,7 @@ function fakeServer() {
   const scope = scenario.project.project_scope;
   let current = CHAPTER;
   const server = { requests: [] as string[], challengeKeys: [] as string[], limited: undefined as string | undefined,
-    held: false, release: undefined as (() => void) | undefined };
+    held: false, release: undefined as (() => void) | undefined, switchRefused: false };
   const session = () => current === CHAPTER ? scenario.session : { ...scenario.session,
     base_snapshot: { ...scenario.session.base_snapshot, chapter_id: current,
       authoritative_head_revision_id: REVISIONS[current]!, target_refs: [`manuscript:${current}`],
@@ -94,7 +96,7 @@ function fakeServer() {
       return jsonResponse({ ...session(), schema_id: "storyos.query.editor-session.response.v1" });
     }
     if (path.endsWith("/activity")) return emptyActivityStream();
-    if (`${method} ${path}` === CURRENT_CHAPTER) {
+    if (`${method} ${path}` === CURRENT_CHAPTER && !server.switchRefused) {
       current = (JSON.parse(String(init?.body)) as { set_current_chapter_input: { chapter_id: string } })
         .set_current_chapter_input.chapter_id;
       return jsonResponse(setCurrentChapterFixture);
@@ -141,6 +143,7 @@ async function clickWhileLimited(limited: string, held = false) {
   await expect.poll(() => timers.filter((timer) => timer.timeout === 7_000).length).toBe(1);
   const shown = () => ({ title: loaded.root.querySelector(".editor-panel h2")?.textContent,
     alert: loaded.root.querySelector('[role="alert"]')?.textContent,
+    status: loaded.root.querySelector('.editor-panel > [role="status"]')?.textContent,
     waiting: loaded.root.querySelector("[data-chapter-switch-waiting]")?.getAttribute("data-chapter-switch-waiting") });
   return { server, timers, view, click, shown, waited: shown(), switches: () =>
     server.requests.filter((entry) => entry === CURRENT_CHAPTER).length };
@@ -153,13 +156,13 @@ it("keeps the switch in progress through a Challenge rate limit and opens the Ch
 
   opened.timers.find((timer) => timer.timeout === 7_000)!.callback();
 
-  await expect.poll(opened.shown).toEqual({ title: "Chapter B", alert: undefined, waiting: "" });
+  await expect.poll(opened.shown).toEqual({ title: "Chapter B", alert: undefined, status: undefined, waiting: "" });
   expect({ waited: opened.waited, switchesBefore, switches: opened.switches(),
     challenges: opened.server.challengeKeys.length, keys: new Set(opened.server.challengeKeys).size,
     // The repeat does not read Chapter B again, so its Revision and the idempotency key stay the same.
     chapterB: opened.server.requests.filter((entry) => entry.endsWith(`/chapters/${CHAPTER_B}`)).length,
     sessions: opened.server.requests.filter((entry) => entry.endsWith("/editor-sessions")).length }).toEqual({
-    waited: { title: "Chapter A", alert: undefined, waiting: CHAPTER_B },
+    waited: { title: "Chapter A", alert: undefined, status: WAITING, waiting: CHAPTER_B },
     switchesBefore: 0,
     switches: 1,
     challenges: 2,
@@ -173,15 +176,43 @@ it("ends the wait of a switch when the author clicks another Chapter, and opens 
   const opened = await clickWhileLimited(SET_CURRENT_CHAPTER);
 
   opened.click(CHAPTER_C);
-  await expect.poll(opened.shown).toEqual({ title: "Chapter C", alert: undefined, waiting: "" });
+  await expect.poll(opened.shown).toEqual({ title: "Chapter C", alert: undefined, status: undefined, waiting: "" });
   opened.timers.find((timer) => timer.timeout === 7_000)!.callback();
   await drainMicrotasks();
 
   expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared, switches: opened.switches(),
     chapterB: opened.server.requests.filter((entry) => entry.endsWith(`/chapters/${CHAPTER_B}`)).length,
     shown: opened.shown() }).toEqual({
-    cleared: true, switches: 1, chapterB: 1, shown: { title: "Chapter C", alert: undefined, waiting: "" },
+    cleared: true, switches: 1, chapterB: 1,
+    shown: { title: "Chapter C", alert: undefined, status: undefined, waiting: "" },
   });
+});
+
+it("shows the sentence of the wait only while the later switch also waits", async () => {
+  const opened = await clickWhileLimited(SET_CURRENT_CHAPTER);
+
+  opened.server.limited = SET_CURRENT_CHAPTER;
+  opened.click(CHAPTER_C);
+  await expect.poll(() => opened.timers.filter((timer) => timer.timeout === 7_000).length).toBe(2);
+  const laterWait = opened.shown();
+  opened.timers.filter((timer) => timer.timeout === 7_000 && !timer.cleared).at(-1)!.callback();
+
+  await expect.poll(opened.shown).toEqual({ title: "Chapter C", alert: undefined, status: undefined, waiting: "" });
+  expect(laterWait).toEqual({ title: "Chapter A", alert: undefined, status: WAITING, waiting: CHAPTER_C });
+});
+
+it("ends the sentence of the wait when the repeat gets a refusal that is not a rate limit", async () => {
+  const opened = await clickWhileLimited(SET_CURRENT_CHAPTER);
+
+  opened.server.switchRefused = true;
+  opened.timers.find((timer) => timer.timeout === 7_000)!.callback();
+
+  await expect.poll(opened.shown).toEqual({ title: "Chapter A", alert: "无法打开这一章。", status: undefined,
+    waiting: "" });
+  // A later click completes the command of the same key, so the next test starts with no command in flight.
+  opened.server.switchRefused = false;
+  opened.click(CHAPTER_B);
+  await expect.poll(opened.shown).toEqual({ title: "Chapter B", alert: undefined, status: undefined, waiting: "" });
 });
 
 it("ends the wait of a switch when the author leaves the Project, and sends no request later", async () => {
@@ -192,8 +223,9 @@ it("ends the wait of a switch when the author leaves the Project, and sends no r
   opened.timers.find((timer) => timer.timeout === 7_000)!.callback();
   await drainMicrotasks();
 
-  expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared,
-    later: opened.server.requests.slice(requests) }).toEqual({ cleared: true, later: [] });
+  expect({ waited: opened.waited.status, cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared,
+    later: opened.server.requests.slice(requests), shown: opened.shown().status }).toEqual({
+    waited: WAITING, cleared: true, later: [], shown: undefined });
 });
 
 it("ends a repeat in progress when the author leaves the Project, and starts no later wait", async () => {

@@ -18,6 +18,7 @@ import type {
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { openControlledProject } from "./boot.ts";
 import {
+  CHAPTER_SWITCH_WAITING_SENTENCE,
   chapterSwitchRecoveryMessage,
   openSelectedChapter,
   selectedChapterSurface,
@@ -512,9 +513,10 @@ function ProjectReadyView({
       )}
       editor={(
         <>
-          {(switchRecovery ?? proposalNotice) === undefined ? null : (
-            <p role="alert">{switchRecovery ?? proposalNotice}</p>
-          )}
+          {switchWaiting !== undefined ? <p role="status">{CHAPTER_SWITCH_WAITING_SENTENCE}</p>
+            : (switchRecovery ?? proposalNotice) === undefined ? null : (
+              <p role="alert">{switchRecovery ?? proposalNotice}</p>
+            )}
           <h2>{selectedChapter.chapter.title}</h2>
           <BlockProposalDisplay
             key={selectedChapter.chapter.chapter_id}
