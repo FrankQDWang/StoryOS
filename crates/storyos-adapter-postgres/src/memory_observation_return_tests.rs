@@ -2,13 +2,14 @@
 //! a pass on the fake destination. The lead of these tests is `51`.
 
 use serde_json::{Value, json};
-use storyos_application::ProjectScope;
+use storyos_application::{MemoryConsolidationStore, ProjectScope};
 use tokio_postgres::Client;
 
 use super::schedule_tests::pass_due;
 use super::tests::{capture, create, run_pass, scripted, settled, update};
 use crate::agent_run_dispatch::tests::stores;
-use crate::memory_capture::tests::project;
+use crate::memory_capture::tests::{project, run_capture};
+use crate::memory_entries::tests::write_versions;
 
 /// The state of each observation of the Project, from the settlement of the pass of `run_id`.
 async fn states(admin: &Client, run_id: &str) -> Value {
@@ -163,5 +164,64 @@ async fn an_observation_that_an_applied_operation_also_names_is_consumed() {
             ],
             ["consumed"]
         ])
+    );
+}
+
+/// A stale pass refuses no operation, so it does not use the one return. The observation of a
+/// stale pass that the next pass refuses still returns one time, and the second refusal consumes
+/// it.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_observation_of_a_stale_pass_still_returns_one_time() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let observations = json!([scripted("桥", &[refused_update(999)])]);
+    let (store, admin, scope) = captured("513", observations).await;
+    write_versions(
+        &admin,
+        &scope,
+        &[(1, 1, 1, "current", "other", "阿青", "船夫")],
+    )
+    .await;
+    let stale = store
+        .start_memory_consolidation(&scope)
+        .await
+        .unwrap()
+        .unwrap();
+    let id: String = admin
+        .query_one(
+            "SELECT memory_entry_id::text FROM storyos.memory_entry_versions
+              WHERE project_id = $1::text::uuid AND entry_number = 1",
+            &[&scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let deleted = crate::delete_memory_entry::tests::delete(&store, &scope, 0x513a, &id, 1).await;
+    run_capture(&store, &admin, &scope, &stale.run_id).await;
+    let stale_pass = settled(&admin, &stale.run_id).await;
+
+    let refused = run_pass(&store, &admin, &scope).await;
+    let refused_pass = settled(&admin, &refused.run_id).await;
+    let again = run_pass(&store, &admin, &scope).await;
+
+    assert_eq!(
+        (
+            deleted.is_ok(),
+            [&stale_pass[1], &stale_pass[4]],
+            [&refused_pass[1], &refused_pass[4]],
+            refused_keys(&admin, &refused.run_id).await,
+            refused_keys(&admin, &again.run_id).await,
+            states(&admin, &again.run_id).await,
+        ),
+        (
+            true,
+            [&json!("stale"), &json!(["waiting"])],
+            [&json!("no_operation"), &json!(["waiting"])],
+            vec![Value::Null],
+            vec![json!("memory_entry_not_found")],
+            json!(["consumed"]),
+        )
     );
 }

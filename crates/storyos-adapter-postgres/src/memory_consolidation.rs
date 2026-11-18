@@ -325,7 +325,7 @@ pub(crate) async fn execute(
     let keys: Vec<Value> = match settlement.outcome {
         storyos_core::ConsolidationOutcome::Applied
         | storyos_core::ConsolidationOutcome::NoOperation => {
-            let returned = returned_observations(client, scope, &pass_id, &input_keys, &results)
+            let returned = returned_observations(client, scope, &input_keys, &results)
                 .await
                 .map_err(unavailable)?;
             (observations.iter())
