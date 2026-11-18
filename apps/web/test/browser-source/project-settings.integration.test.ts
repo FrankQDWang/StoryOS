@@ -39,7 +39,7 @@ type SaveAnswer = Response | Error | Promise<Response>;
 /** A fake Server with one Project of the session whose current Revision 1 has the text `Old rule.`. */
 function fakeServer(saves: SaveAnswer[] = [], entries: MemoryEntryInspect[] = []) {
   const sent: Sent[] = [];
-  let challenges = 0;
+  const nonces = new Map<string, string>();
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const method = init?.method ?? "GET";
@@ -68,8 +68,10 @@ function fakeServer(saves: SaveAnswer[] = [], entries: MemoryEntryInspect[] = []
         correlation_id: "018f0000-0000-7001-8000-0000000a2017", project_scope: SCOPE, entries });
     }
     if (path.endsWith("/anti-forgery-challenges")) {
-      // Each Challenge has its own nonce: "a" * 64, then "b" * 64.
-      const nonce = String.fromCharCode(97 + challenges++).repeat(64);
+      // As the Server, one nonce for each idempotency key: "a" * 64 for the first key, then "b" * 64.
+      const key = (JSON.parse(String(init?.body)) as { idempotency_key: string }).idempotency_key;
+      if (!nonces.has(key)) nonces.set(key, String.fromCharCode(97 + nonces.size).repeat(64));
+      const nonce = nonces.get(key)!;
       return jsonResponse({ nonce, expires_at: "2026-11-16T12:05:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
@@ -248,7 +250,7 @@ it("keeps the new revision after a save and sends the same idempotency key after
     .toEqual([saveBody(first, "", "1"), saveBody(lost, "Second rule.", "2"), lost?.body, true, false, []]);
 });
 
-it("gets a new Challenge after a refused Challenge and sends it with the same idempotency key", async () => {
+it("sends the next save with a new idempotency key and a new Challenge after a refused Challenge", async () => {
   const server = fakeServer([challengeRefused(), applied("2")]);
   await settingsPage(server.fetchImpl);
   type("New rule.");
@@ -258,8 +260,8 @@ it("gets a new Challenge after a refused Challenge and sends it with the same id
   await expect.poll(outcome).toBe(SENTENCE.applied);
   const [refused, retry] = puts(server.sent);
   const challenges = server.sent.filter((request) => request.path.endsWith("/anti-forgery-challenges")).length;
-  expect([refused?.nonce, retry?.nonce, retry?.key === refused?.key, challenges])
-    .toEqual(["a".repeat(64), "b".repeat(64), true, 2]);
+  expect([refused?.nonce, retry?.nonce, typeof retry?.key, retry?.key === refused?.key, challenges])
+    .toEqual(["a".repeat(64), "b".repeat(64), "string", false, 2]);
 });
 
 it("asks one time before the author leaves with a text that is not saved", async () => {

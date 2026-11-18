@@ -63,8 +63,8 @@ export async function deleteMemoryEntryOnce(connection: Connection & {
     if (!sameScope(deleted.project_scope, connection.scope)) return { outcome: "failed", flight };
     return { outcome: deleted.effect.kind === "conflicted" ? "changed" : "deleted", flight: undefined };
   } catch (error) {
-    // A refused Challenge is spent: the next confirm gets a new one with the same idempotency key (#1696).
-    if (refusedWith(error, "challenge_invalid")) delete flight.nonce;
-    return { outcome: "failed", flight };
+    // A refused Challenge admitted nothing under its key, and the delete carries the version of its entry. So the
+    // next confirm is a new flight with a new idempotency key and a new Challenge (#1696).
+    return { outcome: "failed", flight: refusedWith(error, "challenge_invalid") ? undefined : flight };
   }
 }

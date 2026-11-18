@@ -59,7 +59,7 @@ type Sent = { method: string; path: string; key: string | null; nonce: string | 
 function fakeServer(reads: (Answer | Promise<Answer>)[], deletes: (Answer | Promise<Answer>)[] = []) {
   const paths: string[] = [];
   const sent: Sent[] = [];
-  let challenges = 0;
+  const nonces = new Map<string, string>();
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const method = init?.method ?? "GET";
@@ -70,8 +70,10 @@ function fakeServer(reads: (Answer | Promise<Answer>)[], deletes: (Answer | Prom
         body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
     }
     if (path.endsWith("/anti-forgery-challenges")) {
-      // Each Challenge has its own nonce: "a" * 64, then "b" * 64.
-      const nonce = String.fromCharCode(97 + challenges++).repeat(64);
+      // As the Server, one nonce for each idempotency key: "a" * 64 for the first key, then "b" * 64.
+      const key = (JSON.parse(String(init?.body)) as { idempotency_key: string }).idempotency_key;
+      if (!nonces.has(key)) nonces.set(key, String.fromCharCode(97 + nonces.size).repeat(64));
+      const nonce = nonces.get(key)!;
       return jsonResponse({ nonce, expires_at: "2026-11-17T12:05:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
@@ -268,7 +270,7 @@ it("keeps the entry after a failed delete with one sentence, and the next confir
   expect([typeof key, sent]).toEqual(["string", [["POST", null], ["DELETE", key], ["DELETE", key]]]);
 });
 
-it("gets a new Challenge after a refused Challenge and sends it with the same idempotency key", async () => {
+it("sends the next delete with a new idempotency key and a new Challenge after a refused Challenge", async () => {
   const first = ENTRIES[0]!.memory_entry_id;
   const server = fakeServer([listed(ENTRIES)], [challengeRefused(), applied(first)]);
   await settingsPage(server.fetchImpl);
@@ -278,9 +280,10 @@ it("gets a new Challenge after a refused Challenge and sends it with the same id
   await confirmDelete(4);
   await expect.poll(titles).toEqual(["林舟", "阿青", "旧事"]);
   const sent = server.sent.map((item) => [item.method, item.key, item.nonce]);
-  const key = sent[1]?.[1];
-  expect([typeof key, sent]).toEqual(["string", [["POST", null, null], ["DELETE", key, "a".repeat(64)],
-    ["POST", null, null], ["DELETE", key, "b".repeat(64)]]]);
+  const [refusedKey, retryKey] = [sent[1]?.[1], sent[3]?.[1]];
+  expect([typeof refusedKey, typeof retryKey, refusedKey === retryKey, sent]).toEqual(["string", "string", false,
+    [["POST", null, null], ["DELETE", refusedKey, "a".repeat(64)], ["POST", null, null],
+      ["DELETE", retryKey, "b".repeat(64)]]]);
 });
 
 it("keeps the step and the key of each entry apart when the author deletes two entries", async () => {
