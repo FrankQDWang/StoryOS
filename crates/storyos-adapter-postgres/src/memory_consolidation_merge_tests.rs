@@ -359,7 +359,12 @@ async fn no_pass_changes_an_entry_of_the_author_and_its_entries_fill_the_index()
         let observations = json!([scripted("脚本", &[kind])]);
         capture(&store, &admin, &scope, &source, observations).await;
         let started = run_pass(&store, &admin, &scope).await;
-        results.push(settled(&admin, &started.run_id).await[3][0].clone());
+        let pass = settled(&admin, &started.run_id).await;
+        results.push(pass[3][0].clone());
+        // A refused observation returns one time, and the second refusal consumes it.
+        if pass[4].as_array().unwrap().contains(&json!("waiting")) {
+            run_pass(&store, &admin, &scope).await;
+        }
     }
     let refused = |label: &str| json!(["refused", label, null]);
 
