@@ -6,6 +6,7 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ChallengeAdmissionWait } from "./challenge-admission-wait.ts";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
+import { challengeRefused } from "./refused-command.ts";
 import type {
   EditorBaseSnapshot,
   UndoLatestAuthorActionRequest,
@@ -112,7 +113,7 @@ export async function undoOwnedLatestAuthorAction(options: {
     }
     return settled;
   } catch (error) {
-    if (!options.isCurrent() || historicalAcknowledgementUnavailable(error)) throw error;
+    if (!options.isCurrent() || historicalAcknowledgementUnavailable(error) || challengeRefused(error)) throw error;
     const settled = await submitUndo(options, frontier, expectedHead, flight);
     if (settled.effect.kind === "compensated" || settled.effect.kind === "reversal_required") {
       await refreshSessionAfterCompensation(options);

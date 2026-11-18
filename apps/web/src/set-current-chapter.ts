@@ -7,6 +7,7 @@ import {
 import type { SetCurrentChapterResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
+import { challengeRefused, forgetFlight, forgettingRefusedFlight } from "./refused-command.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -58,18 +59,20 @@ export async function setOwnedCurrentChapter(options: {
     };
     inFlight.set(identity, flight);
   }
+  const send = () => forgettingRefusedFlight(inFlight, identity, flight, () =>
+    submitSetCurrentChapter(options, flight));
   try {
-    const switched = await submitSetCurrentChapter(options, flight);
-    inFlight.delete(identity);
+    const switched = await send();
+    forgetFlight(inFlight, identity, flight);
     return switched;
   } catch (error) {
     // The caller waits for the Retry-After of a Challenge rate limit and repeats with the same key (#1679).
-    if (historicalAcknowledgementUnavailable(error)
+    if (historicalAcknowledgementUnavailable(error) || challengeRefused(error)
       || (error instanceof StoryOSProtocolError && error.status === 429)) {
       throw error;
     }
-    const switched = await submitSetCurrentChapter(options, flight);
-    inFlight.delete(identity);
+    const switched = await send();
+    forgetFlight(inFlight, identity, flight);
     return switched;
   }
 }
