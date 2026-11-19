@@ -217,7 +217,7 @@ class FunctionTests(unittest.TestCase):
         lanes = runner_module().project_scope_lanes(ROOT)
         self.assertTrue(lanes)
         for lane in lanes:
-            self.assertIn("build", lane.after, lane.name)
+            self.assertEqual(sorted(lane.after), ["build", "package"], lane.name)
 
     def test_a_failed_container_removal_does_not_stop_the_removal_of_networks_and_volumes(self):
         module, removed = runner_module(), []
