@@ -20,6 +20,7 @@ CHECK_FAST_STEPS = scripts/verify-web-source-guards.sh; \
 	cargo run --quiet --locked -p storyos-literal-guard -- --tracing; \
 	git diff --check "$$(git merge-base $(BASE) HEAD)" --
 CHECK_LANES = \
+	--lane "lanes-tests=python3 scripts/check-lanes-tests.py" \
 	--lane "package=python3 scripts/package-release.py; \
 		pnpm --dir apps/web exec vitest run --project node-contract $(CHECK_PACKAGE_CONTRACT_FILES)" \
 	--lane "build=cargo test --workspace --all-targets --all-features; cargo test --workspace --doc --all-features" \
