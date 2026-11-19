@@ -40,9 +40,13 @@ def wait_for(path):
     return f"i=0; while [ ! -e {path} ] && [ $i -lt 600 ]; do sleep 0.1; i=$((i + 1)); done"
 
 
-def containers():
-    return subprocess.run(["docker", "ps", "-a", "--format", "{{.Names}}"], capture_output=True, text=True,
+def docker_names(command, field="{{.Name}}"):
+    return subprocess.run(["docker", *command, "--format", field], capture_output=True, text=True,
                           check=True).stdout.split()
+
+
+def containers():
+    return docker_names(["ps", "-a"], "{{.Names}}")
 
 
 def alive(pid):
@@ -93,27 +97,35 @@ class StopTests(unittest.TestCase):
         self.assertIn("check-lanes: interrupted. The lanes are stopped.", output)
         return output
 
-    def test_the_stop_removes_only_the_containers_of_its_own_run(self):
+    def test_the_stop_removes_only_the_docker_resources_of_its_own_run(self):
         own, unlabelled, other_run = (f"storyos-check-{CHECKOUT_ID}-{kind}-{self.marker}"
                                       for kind in ("own", "unlabelled", "other-run"))
+        label = "--label \"storyos.check-run=$STORYOS_CHECK_RUN\""
         try:
             subprocess.run(["docker", "create", "--name", unlabelled, IMAGE], capture_output=True, check=True)
             subprocess.run(["docker", "create", "--name", other_run, "--label", "storyos.check-run=another-run",
                             IMAGE], capture_output=True, check=True)
             created = self.directory / "created"
+            # The container uses the network and the volume, as a container of the recovery drill.
             process = runner(
-                f"lanes-test-container=docker create --name {own} "
-                f"--label \"storyos.check-run=$STORYOS_CHECK_RUN\" {IMAGE} >/dev/null; touch {created}; {self.sleep}",
+                f"lanes-test-container=docker network create {label} {own} >/dev/null; "
+                f"docker volume create {label} {own} >/dev/null; "
+                f"docker create --name {own} {label} --network {own} --volume {own}:/data {IMAGE} >/dev/null; "
+                f"touch {created}; {self.sleep}",
                 f"lanes-test-container-fails={wait_for(created)}; exit 1")
             output, _ = process.communicate(timeout=120)
             self.assertEqual(process.returncode, 1, output)
             remaining = containers()
             self.assertNotIn(own, remaining, output)
+            self.assertNotIn(own, docker_names(["network", "ls"]), output)
+            self.assertNotIn(own, docker_names(["volume", "ls"]), output)
             self.assertIn(unlabelled, remaining, output)
             self.assertIn(other_run, remaining, output)
             self.assertEqual(pids_of(self.sleep), [], output)
         finally:
             subprocess.run(["docker", "rm", "-fv", own, unlabelled, other_run], capture_output=True)
+            subprocess.run(["docker", "network", "rm", own], capture_output=True)
+            subprocess.run(["docker", "volume", "rm", "-f", own], capture_output=True)
 
     def test_an_interruption_stops_a_lane_of_only_sleep(self):
         process = runner(f"lanes-test-sleep={self.sleep}", start_new_session=True)
@@ -173,10 +185,14 @@ class BrowserStartTests(unittest.TestCase):
     def test_two_starts_of_chrome_have_the_gap(self):
         # The gap of scripts/check-lanes.py BROWSER_START_GAP_SECONDS.
         gap = float(re.search(r"^BROWSER_START_GAP_SECONDS = (\d+)$", Path(RUNNER).read_text(), re.MULTILINE).group(1))
-        began = time.monotonic()
+        # Its own record, so that the test does not change the gap of the browser lanes of a run.
+        record = Path(tempfile.mkdtemp(prefix="storyos-browser-start-")) / "browser-start"
+        starts = []
         for _ in range(2):
-            subprocess.run([sys.executable, RUNNER, "--browser-start"], cwd=ROOT, check=True, timeout=60)
-        self.assertGreaterEqual(time.monotonic() - began, gap - 0.5)
+            subprocess.run([sys.executable, RUNNER, "--browser-start"], cwd=ROOT, check=True, timeout=60,
+                           env={**os.environ, "STORYOS_BROWSER_START_FILE": str(record)})
+            starts.append(float(record.read_text()))
+        self.assertGreaterEqual(starts[1] - starts[0], gap)
 
 
 if __name__ == "__main__":

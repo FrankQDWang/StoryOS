@@ -54,10 +54,12 @@ else
   created_volumes=1
 fi
 
-# In a run of scripts/check-lanes.py, each container gets the label of the run, so that the stop of the runner
-# removes it.
+# In a run of scripts/check-lanes.py, each container, network, and volume gets the label of the run, so that the
+# stop of the runner removes it. The token of the run is hexadecimal, so the label is one word.
+run_label=${STORYOS_CHECK_RUN:+--label=storyos.check-run=$STORYOS_CHECK_RUN}
 drill_docker_run() {
-  docker run ${STORYOS_CHECK_RUN:+--label "storyos.check-run=$STORYOS_CHECK_RUN"} "$@"
+  # shellcheck disable=SC2086
+  docker run $run_label "$@"
 }
 
 cleanup() {
@@ -79,11 +81,15 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 cleanup
 
-docker network create "$network" >/dev/null
+# shellcheck disable=SC2086
+docker network create $run_label "$network" >/dev/null
 if [ "$created_volumes" = "1" ]; then
-  docker volume create "$archive_volume" >/dev/null
-  docker volume create "$backup_volume" >/dev/null
-  docker volume create "$hold_volume" >/dev/null
+  # shellcheck disable=SC2086
+  docker volume create $run_label "$archive_volume" >/dev/null
+  # shellcheck disable=SC2086
+  docker volume create $run_label "$backup_volume" >/dev/null
+  # shellcheck disable=SC2086
+  docker volume create $run_label "$hold_volume" >/dev/null
 fi
 drill_docker_run --rm --user root --volume "$archive_volume:/archive" "$storyos_postgres_image" \
   chown postgres:postgres /archive

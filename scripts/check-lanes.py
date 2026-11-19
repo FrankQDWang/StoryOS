@@ -36,6 +36,8 @@ BROWSER_START_GAP_SECONDS = 8
 # This file has the time of the last start. A journey lane and a drill lane start Chrome after their database
 # is ready, so the gap is for each start of Chrome, and not only for each start of a lane (issue 1712).
 BROWSER_START_FILE = "target/check/browser-start"
+# A test gives another file in this variable, so that it does not change the gap of a run.
+BROWSER_START_VARIABLE = "STORYOS_BROWSER_START_FILE"
 # The count of the exact-dist journey shards. Each shard has its own database and its own packaged Servers.
 JOURNEY_SHARDS = 3
 # The time of the longest journey files in a run of `make check-full` on 2026-11-20 (issue 1712). The other files
@@ -84,7 +86,7 @@ def claim_browser_start(root, wait):
 
     Return False when the gap is not complete and wait is false.
     """
-    path = root / BROWSER_START_FILE
+    path = Path(os.environ.get(BROWSER_START_VARIABLE) or root / BROWSER_START_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a+") as file:
         while True:
@@ -191,8 +193,11 @@ def recovery_drill_lane(root, mode):
             raise ValueError(f"recovery-{mode}: the log has no line '{RECOVERY_DRILL_END}'")
         return []
 
+    # An empty STORYOS_RECOVERY_COPY_DIR gives each drill its own Docker volumes, also when the environment of
+    # the run names an operator directory, so that the two drills do not use the same files.
     return Lane(f"recovery-{mode}", [str(root / "scripts/verify-recovery-hold.sh")], after=("package",),
-                env={"STORYOS_RECOVERY_DRILL": mode}, passed=passed, browser=True, browser_at_start=False)
+                env={"STORYOS_RECOVERY_DRILL": mode, "STORYOS_RECOVERY_COPY_DIR": ""}, passed=passed,
+                browser=True, browser_at_start=False)
 
 
 def project_scope_lanes(root):
@@ -344,18 +349,47 @@ def signal_processes(pids, stop_signal, kill=os.kill):
             pass
 
 
-def run_containers(token):
-    return tool_output(["docker", "ps", "-a", "-q", "--filter", f"label={RUN_LABEL}={token}"]).split()
+# The Docker resources of a run: the list command and the remove command of each kind, in the order of removal.
+# A network or a volume is removed after the containers that use it.
+RUN_RESOURCES = (
+    ("container", ["docker", "ps", "-a", "-q"], ["docker", "rm", "-fv"]),
+    ("network", ["docker", "network", "ls", "-q"], ["docker", "network", "rm"]),
+    ("volume", ["docker", "volume", "ls", "-q"], ["docker", "volume", "rm", "-f"]),
+)
+
+
+def run_resources(token, list_command):
+    return tool_output([*list_command, "--filter", f"label={RUN_LABEL}={token}"]).split()
+
+
+def remove_run_resources(token):
+    """Remove each Docker resource of the run. Return False when a resource remains or is not verified."""
+    remaining = []
+    try:
+        for kind, list_command, remove_command in RUN_RESOURCES:
+            found = run_resources(token, list_command)
+            if found:
+                tool_output([*remove_command, *found])
+                found = run_resources(token, list_command)
+            remaining += [f"{kind} {name}" for name in found]
+    except (OSError, subprocess.CalledProcessError) as error:
+        print(f"check-lanes: the Docker resources of the run are not verified: {error}", flush=True)
+        return False
+    if remaining:
+        print(f"check-lanes: these Docker resources of the run remain: {', '.join(remaining)}", flush=True)
+        return False
+    return True
 
 
 def stop(lanes, token):
-    """Stop each lane whose leader the runner did not reap, then remove the containers of the run that remain.
+    """Stop each lane whose leader the runner did not reap, then remove the Docker resources of the run that remain.
 
     The runner reaps a leader only at the end of the stop, so a leader keeps its ID, also as a zombie, and the
     system cannot give the ID of its process group to another process. A descendant in another process group or
     session, such as Google Chrome, is in a snapshot from before the first signal, and it gets a signal only while
     it runs with the same ID and start time. A lane that ended and passed before the stop is out of the scope of
-    the stop: the runner reaped its leader. Return False when a process or a container is not verified as ended.
+    the stop: the runner reaped its leader. Return False when a process or a Docker resource is not verified as
+    ended.
     """
     for stop_signal in STOP_SIGNALS:
         signal.signal(stop_signal, signal.SIG_IGN)
@@ -394,19 +428,8 @@ def stop(lanes, token):
     finally:
         for lane in lanes:
             lane.process.poll()
-    # A killed lane cannot remove its container, so the runner removes each container of the run that remains.
-    try:
-        remaining = run_containers(token)
-        if remaining:
-            tool_output(["docker", "rm", "-fv", *remaining])
-            remaining = run_containers(token)
-    except (OSError, subprocess.CalledProcessError) as error:
-        print(f"check-lanes: the containers of the run are not verified: {error}", flush=True)
-        return False
-    if remaining:
-        print(f"check-lanes: these containers of the run remain: {' '.join(remaining)}", flush=True)
-        return False
-    return stopped
+    # A killed lane cannot remove its containers, networks, and volumes, so the runner removes them.
+    return remove_run_resources(token) and stopped
 
 
 def exit_code(lane):
