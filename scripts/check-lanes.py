@@ -29,15 +29,10 @@ SEPARATE_BROWSER_SOURCE_FILES = ("test/browser-source/journal-working-set.integr
 BROWSER_START_GAP_SECONDS = 8
 # A stopped lane removes its database container in this time.
 STOP_SECONDS = 30
-FAILED_LOG_LINES = 400
 USAGE = ("usage: scripts/check-lanes.py "
          "[--lane NAME[:AFTER,...]=COMMAND | --browser-source | --postgres-shards AFTER,...]...")
 STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 LANE_ARGUMENT = re.compile(r"([a-z0-9-]+)(?::([a-z0-9,-]+))?=(.+)", re.DOTALL)
-
-
-class Interrupted(Exception):
-    pass
 
 
 class Lane:
@@ -68,7 +63,7 @@ def vitest_lane(root, name, project, files, port):
 
     def passed(_log):
         suites = json.loads(output.read_text()).get("testResults", [])
-        if ({suite["name"] for suite in suites} != {str(web / file) for file in files}
+        if (sorted(suite["name"] for suite in suites) != sorted(str(web / file) for file in files)
                 or any(not any(test["status"] == "passed" for test in suite["assertionResults"])
                        for suite in suites)):
             raise ValueError(f"{name}: a listed file did not run or has no passing test")
@@ -172,10 +167,6 @@ def parse(root, arguments, final_checks):
     return lanes
 
 
-def interrupt(_signal, _frame):
-    raise Interrupted
-
-
 def start(root, lane):
     lane.log = open(root / "target/check" / f"{lane.name}.log", "w")
     lane.started = time.monotonic()
@@ -195,13 +186,19 @@ def group_exists(lane):
         return True
 
 
+def signal_group(lane, stop_signal):
+    try:
+        os.killpg(lane.process.pid, stop_signal)
+    except ProcessLookupError:
+        pass
+
+
 def stop(lanes):
-    """Stop each process group, and give its traps the time to remove their containers."""
+    """Stop the process group of each started lane, and give its traps the time to remove their containers."""
     for stop_signal in STOP_SIGNALS:
         signal.signal(stop_signal, signal.SIG_IGN)
     for lane in lanes:
-        if group_exists(lane):
-            os.killpg(lane.process.pid, signal.SIGTERM)
+        signal_group(lane, signal.SIGTERM)
     deadline = time.monotonic() + STOP_SECONDS
     while time.monotonic() < deadline:
         for lane in lanes:
@@ -212,36 +209,32 @@ def stop(lanes):
     for lane in lanes:
         if group_exists(lane):
             print(f"Lane {lane.name}: killed after {STOP_SECONDS} s", flush=True)
-            os.killpg(lane.process.pid, signal.SIGKILL)
+            signal_group(lane, signal.SIGKILL)
 
 
 def print_failure(lane, reason):
-    path = lane.log.name
-    lines = Path(path).read_text(errors="replace").splitlines()
-    print(f"Lane {lane.name}: FAIL after {round(lane.duration)} s ({reason}). The other lanes are stopped.",
-          flush=True)
-    if len(lines) > FAILED_LOG_LINES:
-        print(f"The last {FAILED_LOG_LINES} of {len(lines)} lines of {path}:")
-    else:
-        print(f"The log {path}:")
-    print("\n".join(lines[-FAILED_LOG_LINES:]), flush=True)
+    print(f"Lane {lane.name}: FAIL after {round(lane.duration)} s ({reason}). The other lanes are stopped.")
+    print(f"The log {lane.log.name}:")
+    print(Path(lane.log.name).read_text(errors="replace"), flush=True)
 
 
 def run(root, lanes, final_checks):
     (root / "target/check").mkdir(parents=True, exist_ok=True)
-    pending, running, finished = list(lanes), [], []
+    pending, running, finished, started = list(lanes), [], [], []
     began = time.monotonic()
     last_browser_start = began - BROWSER_START_GAP_SECONDS
+    # A signal only sets the flag, so that each started lane is in `started` when the runner stops the lanes.
+    interrupted = []
     for stop_signal in STOP_SIGNALS:
-        signal.signal(stop_signal, interrupt)
+        signal.signal(stop_signal, lambda number, _frame: interrupted.append(number))
     try:
-        while pending or running:
+        while (pending or running) and not interrupted:
             ready = [lane for lane in pending
                      if all(dependency in {done.name for done in finished} for dependency in lane.after)]
             if not running and not ready:
                 raise ValueError("no lane can start")
             for lane in ready:
-                if len(running) >= LANE_LIMIT:
+                if len(running) >= LANE_LIMIT or interrupted:
                     break
                 if lane.browser and time.monotonic() - last_browser_start < BROWSER_START_GAP_SECONDS:
                     continue
@@ -249,9 +242,10 @@ def run(root, lanes, final_checks):
                     last_browser_start = time.monotonic()
                 pending.remove(lane)
                 start(root, lane)
+                started.append(lane)
                 running.append(lane)
             time.sleep(0.2)
-            for lane in [lane for lane in running if lane.process.poll() is not None]:
+            for lane in [lane for lane in running if not interrupted and lane.process.poll() is not None]:
                 running.remove(lane)
                 lane.duration = time.monotonic() - lane.started
                 lane.log.close()
@@ -264,17 +258,17 @@ def run(root, lanes, final_checks):
                         continue
                     except (ValueError, OSError, KeyError, TypeError, subprocess.CalledProcessError) as error:
                         reason = str(error)
-                stop(running)
+                stop(started)
                 print_failure(lane, reason)
                 return 1
+        if interrupted:
+            stop(started)
+            print("check-lanes: interrupted. The lanes are stopped.", flush=True)
+            return 130
         for check in final_checks:
             check()
-    except Interrupted:
-        stop(running)
-        print("check-lanes: interrupted. The lanes are stopped.", flush=True)
-        return 130
     except (ValueError, OSError, KeyError, TypeError) as error:
-        stop(running)
+        stop(started)
         print(f"check-lanes: {error}", file=sys.stderr, flush=True)
         return 1
     for lane in finished:
