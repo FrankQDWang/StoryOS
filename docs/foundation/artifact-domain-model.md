@@ -69,6 +69,7 @@ Operational Records explain execution rather than product content. They include:
 - `RunPlan`;
 - `ContextAssemblyManifest`;
 - `ToolCall`;
+- the External Source Snapshots and the Source Gaps of a research `ToolCall`;
 - `Approval`;
 - usage and cost records;
 - `ArtifactLifecycleEvent`;
@@ -154,11 +155,14 @@ DraftKind
 └── PlanDraft
 
 ResearchArtifactKind
-├── ExternalSourceSnapshot
 ├── ImportedSourceSnapshot
 ├── ResearchNote
 └── ResearchSynthesis
 ```
+
+An External Source Snapshot is not a Research Artifact kind. It is an
+Operational Record of its research ToolCall, and a `ResearchSynthesis` cites it
+(section 5.3).
 
 The manuscript editor recovery flow has no Draft kind.
 [ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md) removes the Refused Edit Draft and `InlineEditProposal`, and
@@ -327,7 +331,9 @@ Targets pin an exact Artifact Revision, Authoritative Revision, selection snapsh
 
 ### 5.3 Source snapshots and structured conclusions
 
-An external source is preserved as an immutable `ExternalSourceSnapshot` Research Artifact rather than a live URL. It records the original URL, title and source identity, retrieval time, MIME type, parser version where applicable, content digest, content-addressed payload, and available page or section locators. Re-fetching creates a new Snapshot; annotations and corrections create a derived Research Note or Synthesis. An imported file becomes an immutable `ImportedSourceSnapshot` with corresponding import provenance.
+An external source is preserved as an immutable External Source Snapshot rather than a live URL. The Snapshot is an Operational Record that one research ToolCall owns. The settlement of that ToolCall writes it, and no update path changes it. It has the lifecycle and the retention of its owning ToolCall record, and it has no Artifact revision, derivation, lifecycle, or Tombstone. It records its source identity (the locator, and the title when the source gives one), its capture time, its immutable captured content, and the digest of that content. Re-fetching creates a new Snapshot. A requested source that a settled research ToolCall did not capture is a Source Gap, for each reason that the glossary entry **Source Gap** gives, and it is also an Operational Record of that ToolCall. An unknown or unsent ToolCall gives no Snapshot and no Gap. A research ToolCall creates no Core Artifact for its Snapshots and Gaps.
+
+A `ResearchSynthesis` is the Research Artifact that cites the Snapshots and the Gaps. Each of its claims cites one or more exact Snapshots or Gaps of the same AgentRun. A claim that cites only Gaps is also valid ([ADR 0087](../adr/0087-record-a-research-synthesis-as-one-immutable-research-artifact.md) sections 1 and 5). Annotations and corrections create a derived Research Note or Synthesis, and never change a Snapshot. The glossary entries **External Source Snapshot** and **Source Gap** ([Artifact and provenance](../glossary/artifact-and-provenance.md)) give the terms. An imported file becomes an immutable `ImportedSourceSnapshot` with corresponding import provenance.
 
 A `ResearchSynthesis` combines a human-readable document with stable `claims[]`. An `AnalysisReport` combines a human-readable document with stable `findings[]`. Claim and Finding IDs remain mappable across revisions and expose category, summary, target references, evidence references, and suggested Candidate references. A single Claim or Finding may independently derive a Candidate or Proposal, but remains non-authoritative.
 
@@ -660,7 +666,7 @@ Host state.
 
 `ArchiveArtifact` is reversible and excludes the Artifact from normal retrieval and model context while retaining its payload.
 
-`TombstoneArtifact` is terminal. It removes the Artifact's owned payload, indexes, and derived caches, including captured source content when the Artifact is itself a Source Snapshot. It never deletes separately referenced source Artifacts or a content-addressed blob still referenced by another logical Artifact. It retains a minimum tombstone for every former Revision: Project Scope, artifact ID, revision ID, parent revision ID, kind, creation time, digest, deletion actor/time/reason, and necessary relationship structure.
+`TombstoneArtifact` is terminal. It removes the Artifact's owned payload, indexes, and derived caches, including captured source content when the Artifact is itself an `ImportedSourceSnapshot`. An External Source Snapshot is not an Artifact, so this transition does not apply to it. It never deletes separately referenced source Artifacts or a content-addressed blob still referenced by another logical Artifact. It retains a minimum tombstone for every former Revision: Project Scope, artifact ID, revision ID, parent revision ID, kind, creation time, digest, deletion actor/time/reason, and necessary relationship structure.
 
 Immutable inbound Provenance Edges never change. When an edge resolves to a Revision Tombstone, the read projection renders a `PurgedSourceRef` and states that the source was removed and can no longer be verified. Tombstoning a source does not automatically change or delete Authoritative State. Reversing authoritative effects requires Undo Acceptance or a new Proposal.
 

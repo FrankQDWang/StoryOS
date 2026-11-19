@@ -597,7 +597,7 @@ reach Tool Gateway, a Provider, or Authoritative State.
 **Affected assets.** Author authority, Project Isolation, context,
 credentials, disclosures, and creative state.
 
-**Accepted controls.** These sources are Data-only Context. Instruction
+**Accepted controls.** These sources are Data-only Context. A settled output of `load_skill` or `read_skill_resource` is not in this set: [ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 3 and the glossary entry **Tool Result Continuation** give its class and trust, and the glossary entry **Instruction Precedence** gives its rank. Instruction
 Authority is a closed independent trust axis. Eligibility precedes ranking;
 model output and Tool requests are provisional until the Host validates and
 persists an Agent Decision; Tools and Apps cannot mutate Authoritative State;

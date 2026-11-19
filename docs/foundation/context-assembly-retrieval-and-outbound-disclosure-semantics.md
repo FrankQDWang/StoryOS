@@ -839,22 +839,42 @@ ordinary Purposes, outbound data categories, and hard bounds under one Project
 Scope.
 
 Each grant records its standing scope, and a request outside it refuses
-before the dispatch claim. A new grant records the current scope
-`project_writing_assistance_v3`
-([ADR 0085](../adr/0085-reenter-each-settled-tool-result-through-context-assembly.md)).
-It names all items of the second scope and the source class `tool_result`.
-The second scope `project_writing_assistance_v2`
-([ADR 0055](../adr/0055-install-a-host-managed-compaction-summary-for-the-decision-request.md))
-names all items of the first scope, the Purpose `active_context_compaction`,
-and the source class `conversation_summary`. A stored grant with the second
-scope keeps this meaning, and it refuses a Tool result continuation.
+before the dispatch claim with `disclosure_outside_grant`. A new grant of the
+model destination records the current scope `project_writing_assistance_v5`.
 
-[ADR 0051](../adr/0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md)
-records the first scope `project_writing_assistance_v1`: all current content of
-the Project for writing assistance on the grant destination, with no length
-bound. A stored grant with the first scope keeps this meaning. It refuses the
-compaction summary request, and the decision request keeps the ordinary
-continuation.
+Each writing assistance scope names each Purpose and each source class of the
+scope before it, and it adds the items of this table:
+
+| Scope | Items that the scope adds | Owner |
+|---|---|---|
+| `project_writing_assistance_v1` | All current content of the Project for writing assistance on the grant destination, with no length bound: the Purpose `current_passage_assistance` and the source classes `author_instruction`, `working_target`, and `instruction_binding` | [ADR 0051](../adr/0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md) |
+| `project_writing_assistance_v2` | The Purpose `active_context_compaction` and the source class `conversation_summary` | [ADR 0055](../adr/0055-install-a-host-managed-compaction-summary-for-the-decision-request.md) |
+| `project_writing_assistance_v3` | The source class `tool_result` | [ADR 0085](../adr/0085-reenter-each-settled-tool-result-through-context-assembly.md) section 4 |
+| `project_writing_assistance_v4` | The Skill source classes `skill_catalog`, `skill_instruction`, and `skill_resource` | [ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 4, [ADR 0051](../adr/0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md) amendment of 2026-11-15 |
+| `project_writing_assistance_v5` | The manuscript source classes `chapter_list`, `manuscript_read_result`, and `manuscript_search_result`, the Agent Memory source classes `memory_index`, `memory_read_result`, `memory_search_result`, `memory_capture_input`, `memory_delete_marks`, `memory_entries`, and `memory_observations`, and the Purposes `memory_capture` and `memory_consolidation` | [ADR 0095](../adr/0095-give-the-agent-the-whole-manuscript-through-host-tools-and-add-a-hybrid-search-with-pgvector-and-a-volcengine-embedding-model.md) section 6, [ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md), [ADR 0051](../adr/0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md) amendment of 2026-11-16 |
+
+Each scope before the current scope is a stored value. A stored grant keeps
+the exact meaning of its scope, and a request with a Purpose or a source class
+that the scope does not name refuses. For example, a grant with the first
+scope refuses the compaction summary request, and the decision request keeps
+the ordinary continuation. A grant with the second scope refuses a Tool result
+continuation. A grant with the third scope refuses a request with a Skill
+item. A stored grant never gets a new scope, and a scope value never gets a
+new meaning. When the current grant of a Project has an earlier scope, the
+next `createAgentRun` makes new binding records with the current scope, and
+each earlier record stays unchanged.
+
+Two more scopes are not writing assistance scopes and cover no model request.
+`createAgentRun` binds them to their own destinations. The research scope
+`research_tool_v1` names the Purpose `research` and the source classes
+`agent_query` and `agent_url_selection`, with no Ambient Context and no
+author-private content
+([ADR 0090](../adr/0090-make-web-research-available-in-each-project-without-an-enablement-switch.md)).
+The embedding scope `manuscript_embedding_v1` names the Purpose
+`manuscript_embedding` and the classes `chapter_passage` and `search_question`,
+which are not Context values
+([ADR 0095](../adr/0095-give-the-agent-the-whole-manuscript-through-host-tools-and-add-a-hybrid-search-with-pgvector-and-a-volcengine-embedding-model.md)
+section 3).
 
 Destination Attempts for ordinary model and embedding operations inside the
 effective Grant proceed without individual confirmation. They still require
@@ -940,10 +960,17 @@ Instruction Authority, Authoritative State, or disclosure permission to its
 output.
 
 Tool and MCP outputs are Data-only Context. Imperative text inside a result is
-quoted data and cannot direct Agent behavior. A Skill may provide Instruction
-Authority only when its exact SkillPackage Snapshot is separately selected and
-loaded through the Skill contract; a Tool result cannot self-promote into Skill
-instructions.
+quoted data and cannot direct Agent behavior. The settled output of a
+`load_skill` or `read_skill_resource` call is the one exception: it is the exact
+text of a Skill file with the class `skill_instruction` or `skill_resource`,
+and it is not Data-only Context
+([ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 3).
+A refused Skill call stays Data-only Context. A Skill provides Instruction
+Authority only through the exact `SKILL.md` of its SkillPackage Snapshot: a
+Skill that the author selects, or the settled output of a `load_skill` call
+for a Skill of the pinned catalog of the Run
+([ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) sections 3 and 5).
+No other Tool result can self-promote into Skill instructions.
 
 When a Tool or MCP result may enter a subsequent model step:
 
@@ -1073,9 +1100,11 @@ Instruction precedence is:
    and Acceptance boundaries;
 2. current exact author instruction, Steering, Approval, and Wait response;
 3. bound Project Instruction Revision;
-4. selected Skill Instruction Context;
+4. selected or loaded Skill Instruction Context;
 5. Tool and MCP results, Research, prose, Artifacts, Agent Memory, outlines, and
-   all other Data-only Context.
+   all other Data-only Context. A settled output of `load_skill` or
+   `read_skill_resource` is not in this item: section 10 and
+   [ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 3 give its class and trust.
 
 Project Instruction is mandatory for model context when configured. It is not
 automatically disclosed to Tools, MCP servers, embedding services, telemetry,
@@ -1184,7 +1213,9 @@ Downstream implementation and verification must cover at least:
 9. Real permission or retained-copy restrictions prevent an otherwise valid
    cache or opaque reference from bypassing current admission.
 10. A Tool or MCP result becomes Data-only Context Candidate content for a later step
-    and crosses all seven gates again.
+    and crosses all seven gates again. The settled output of a Skill Tool also
+    crosses all seven gates again, but it has its Skill class and is not
+    Data-only Context (section 10).
 11. Ordinary non-use guidance appends a Message without creating an exclusion
     registry, mutating past input, or automatically resetting continuation.
 12. Updating Project Instruction does not change an active AgentRun binding;

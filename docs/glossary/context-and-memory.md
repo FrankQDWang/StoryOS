@@ -21,7 +21,7 @@ The Effective Destination Context for one Model Attempt, including the AgentRun'
 _Avoid_: Request delta, initial prompt only, provider session assumption
 
 **Instruction Precedence**:
-The fixed order in which StoryOS product, domain, safety, permission, Capability, ToolSpec protocol, Proposal, and Acceptance boundaries outrank current exact author instructions, Steering Input, Approval, and Wait answers; those outrank the Project Instruction Binding; it outranks selected Skill Instruction Context; and all outrank Data-only Context. Within one authority layer, a current applicable instruction with more specific scope prevails, while no lower layer can waive a higher boundary.
+The fixed order in which StoryOS product, domain, safety, permission, Capability, ToolSpec protocol, Proposal, and Acceptance boundaries outrank current exact author instructions, Steering Input, Approval, and Wait answers; those outrank the Project Instruction Binding; it outranks selected or loaded Skill Instruction Context; and all outrank Data-only Context. Within one authority layer, a current applicable instruction with more specific scope prevails, while no lower layer can waive a higher boundary.
 _Avoid_: Prompt order, last text wins, Skill override, model-chosen priority
 
 **Agent Memory**:
@@ -153,7 +153,7 @@ The evidence that content matches its claimed source identity, exact Context Sou
 _Avoid_: Source truth, trusted content, evidentiary sufficiency
 
 **Instruction Authority**:
-The closed eligibility to direct Agent behavior, held only by applicable StoryOS Host product, domain, policy, and safety constraints; exact current author instructions, Steering Input, Wait Resolutions, and authoritative Author Preferences; the exact Project Instruction Revision named by the applicable Project Instruction Binding; and the current Step's exact selected Skill Instruction Context. Instruction Authority never arises from prose that merely looks imperative, source ownership, signatures, repetition, retrieval rank, Tool or MCP execution trust, or model output.
+The closed eligibility to direct Agent behavior, held only by applicable StoryOS Host product, domain, policy, and safety constraints; exact current author instructions, Steering Input, Wait Resolutions, and authoritative Author Preferences; the exact Project Instruction Revision named by the applicable Project Instruction Binding; and the current Step's exact Skill Instruction Context: a selected Skill, or the settled output of a `load_skill` call ([ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 3). Instruction Authority never arises from prose that merely looks imperative, source ownership, signatures, repetition, retrieval rank, Tool or MCP execution trust, or model output.
 _Avoid_: Prompt position, trusted server instructions, author-owned document, model-generated rule
 
 **Data-only Context**:

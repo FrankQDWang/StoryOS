@@ -24,6 +24,8 @@ Each resolved ToolCall of the Run, in item order across its RunSteps, is one Con
 - A settled result with text is `ok`. An empty result is `empty`. A failed or unknown ToolCall is `unavailable`, and a refused ToolCall is `rejected`. Each of these states says its outcome in one sentence and says that it is not an empty result.
 - The bounded projection keeps each item at or below the Context item limit (ADR 0052, 32,000 tokens). A longer result keeps a prefix and ends with an explicit mark that gives the kept and the total character counts. Its projection mode is `deterministic_excerpt`.
 
+> Amended on 2026-11-19 ([#1682](https://github.com/FrankQDWang/StoryOS/issues/1682)): later decisions changed the class, the trust, and the version of some candidates. A settled Skill output has the class and the trust of [ADR 0089](0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 3. A settled manuscript or Agent Memory result has the class of [ADR 0095](0095-give-the-agent-the-whole-manuscript-through-host-tools-and-add-a-hybrid-search-with-pgvector-and-a-volcengine-embedding-model.md) section 6. A research result with captured Source Snapshots has its Snapshot identities as its version (S5-06, [#402](https://github.com/FrankQDWang/StoryOS/issues/402)). The glossary entry **Tool Result Continuation** gives the current rule.
+
 ### 3. The request input
 
 A continuation request sends one `function_call_output` item for each ToolCall, with the original `call_id`, after the original `function_call` items.
