@@ -20,8 +20,11 @@ ROOT = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], tex
 RUNNER = os.environ.get("CHECK_LANES_SCRIPT", str(ROOT / "scripts/check-lanes.py"))
 # scripts/dev-postgres.sh names each container of a `with` run storyos-check-<checkout id>-<pid>.
 CHECKOUT_ID = hashlib.sha256(os.path.realpath(ROOT).encode()).hexdigest()[:20]
-IMAGE = re.search(r"^storyos_postgres_image=(\S+)$", (ROOT / "scripts/lib/controlled-postgres.sh").read_text(),
-                  re.MULTILINE).group(1)
+IMAGE_LINE = re.search(r"^storyos_postgres_image=(\S+)$",
+                       (ROOT / "scripts/lib/controlled-postgres.sh").read_text(), re.MULTILINE)
+if IMAGE_LINE is None:
+    raise SystemExit("scripts/lib/controlled-postgres.sh does not set storyos_postgres_image")
+IMAGE = IMAGE_LINE.group(1)
 
 
 def runner(*lanes, **options):
@@ -91,6 +94,27 @@ class StopTests(unittest.TestCase):
             while alive(pid) and time.monotonic() < deadline:
                 time.sleep(0.1)
             self.assertFalse(alive(pid), f"the detached child {pid} of the ended lane still runs\n{output}")
+        finally:
+            if alive(pid):
+                os.kill(pid, signal.SIGKILL)
+
+    def test_the_stop_reaches_a_detached_child_with_no_environment_after_its_lane_ended(self):
+        # ps shows no environment of Google Chrome, so this child has no token, as Chrome under Vitest.
+        child_pid = self.directory / "child-pid"
+        spawn = ("import subprocess, sys, time; child = subprocess.Popen([sys.executable, '-c', "
+                 "'import time; time.sleep(300)'], start_new_session=True, env={}); "
+                 f"open('{child_pid}', 'w').write(str(child.pid)); time.sleep(2)")
+        process = runner(f"lanes-test-no-environment={sys.executable} -c \"{spawn}\"",
+                         f"lanes-test-no-environment-fails={wait_for(child_pid)}; sleep 3.5; exit 1")
+        output, _ = process.communicate(timeout=120)
+        pid = int(child_pid.read_text())
+        try:
+            self.assertEqual(process.returncode, 1, output)
+            self.assertIn("Lane lanes-test-no-environment: PASS", output)
+            deadline = time.monotonic() + 5
+            while alive(pid) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertFalse(alive(pid), f"the detached child {pid} with no environment still runs\n{output}")
         finally:
             if alive(pid):
                 os.kill(pid, signal.SIGKILL)

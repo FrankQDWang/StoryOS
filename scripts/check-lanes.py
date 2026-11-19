@@ -36,6 +36,8 @@ STOP_SECONDS = 30
 # parent or a new process group. scripts/lib/controlled-postgres.sh puts the token on each container as a label.
 RUN_VARIABLE = "STORYOS_CHECK_RUN"
 RUN_LABEL = "storyos.check-run"
+# The runner records the processes of the run at this interval.
+RECORD_SECONDS = 1
 USAGE = ("usage: scripts/check-lanes.py "
          "[--lane NAME[:AFTER,...]=COMMAND | --browser-source | --postgres-shards AFTER,...]...")
 STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
@@ -192,19 +194,41 @@ def tool_output(command):
     return subprocess.run(command, capture_output=True, text=True, check=True, start_new_session=True).stdout
 
 
-def run_processes(token):
-    """Return the IDs of the processes that have the token of the run in their environment.
+def token_processes(token):
+    """Return the IDs of the processes that show the token of the run in their environment.
 
     `ps -E` also shows the environment of the other processes of the user, with their secrets. This function
     reads only the lines with the token, and nothing prints or logs the output.
     """
     marker = f"{RUN_VARIABLE}={token}"
-    pids = set()
-    for line in tool_output(["ps", "-A", "-E", "-o", "pid=,command="]).splitlines():
-        if marker in line.split():
-            pids.add(int(line.split(None, 1)[0]))
-    pids.discard(os.getpid())
-    return pids
+    return {int(line.split(None, 1)[0])
+            for line in tool_output(["ps", "-A", "-E", "-o", "pid=,command="]).splitlines() if marker in line.split()}
+
+
+def run_processes(token, known):
+    """Record the processes of the run in `known` ({pid: start time}), and return the IDs of those that run now.
+
+    A process of the run shows the token, or it is a descendant of such a process. `ps` does not show the
+    environment of Google Chrome, so Chrome is found as a child of Vitest. A recorded process stays in the run
+    after its parent ends. An ID counts only while its start time is the recorded one: a reused ID has another.
+    """
+    table = {}
+    for line in tool_output(["ps", "-A", "-o", "pid=,ppid=,lstart="]).splitlines():
+        pid, parent, started = line.split(None, 2)
+        table[int(pid)] = (int(parent), started.strip())
+    children = {}
+    for pid, (parent, _) in table.items():
+        children.setdefault(parent, []).append(pid)
+    running = {pid for pid, started in known.items() if pid in table and table[pid][1] == started}
+    waiting, seen = [pid for pid in token_processes(token) | running if pid in table], set()
+    while waiting:
+        pid = waiting.pop()
+        if pid in seen or pid == os.getpid():
+            continue
+        seen.add(pid)
+        known[pid] = table[pid][1]
+        waiting.extend(children.get(pid, []))
+    return seen
 
 
 def signal_processes(pids, stop_signal):
@@ -219,29 +243,28 @@ def run_containers(token):
     return tool_output(["docker", "ps", "-a", "-q", "--filter", f"label={RUN_LABEL}={token}"]).split()
 
 
-def stop(lanes, token):
+def stop(lanes, token, known):
     """Stop each process of the run, then remove the containers of the run that remain. Return False on a failure.
 
-    A signal goes only to a process that a scan just before showed with the token, so the signal cannot reach
-    an unrelated process that the system gave a reused ID: that process does not have the token.
+    A signal goes only to a process that a scan just before showed as a process of the run (see run_processes).
     """
     for stop_signal in STOP_SIGNALS:
         signal.signal(stop_signal, signal.SIG_IGN)
     stopped = True
     try:
         # Only the processes of the first scan get SIGTERM, so that the cleanup of a trap can run to its end.
-        signal_processes(run_processes(token), signal.SIGTERM)
+        signal_processes(run_processes(token, known), signal.SIGTERM)
         deadline = time.monotonic() + STOP_SECONDS
         while time.monotonic() < deadline:
             for lane in lanes:
                 lane.process.poll()
-            if not run_processes(token):
+            if not run_processes(token, known):
                 break
             time.sleep(0.2)
         else:
             print(f"check-lanes: the processes of the run are killed after {STOP_SECONDS} s", flush=True)
             for _ in range(10):
-                remaining = run_processes(token)
+                remaining = run_processes(token, known)
                 if not remaining:
                     break
                 signal_processes(remaining, signal.SIGKILL)
@@ -281,6 +304,8 @@ def run(root, lanes, final_checks):
     began = time.monotonic()
     last_browser_start = began - BROWSER_START_GAP_SECONDS
     token = uuid.uuid4().hex
+    # The processes of the run with their start times (see run_processes), recorded at RECORD_SECONDS.
+    known, last_record = {}, began
     # A signal only sets the flag, so that each started lane is in `started` when the runner stops the lanes.
     interrupted = []
     for stop_signal in STOP_SIGNALS:
@@ -303,6 +328,12 @@ def run(root, lanes, final_checks):
                 started.append(lane)
                 running.append(lane)
             time.sleep(0.2)
+            if time.monotonic() - last_record >= RECORD_SECONDS:
+                last_record = time.monotonic()
+                try:
+                    run_processes(token, known)
+                except (OSError, subprocess.CalledProcessError):
+                    pass
             for lane in [lane for lane in running if not interrupted and lane.process.poll() is not None]:
                 running.remove(lane)
                 lane.duration = time.monotonic() - lane.started
@@ -316,17 +347,17 @@ def run(root, lanes, final_checks):
                         continue
                     except (ValueError, OSError, KeyError, TypeError, subprocess.CalledProcessError) as error:
                         reason = str(error)
-                stop(started, token)
+                stop(started, token, known)
                 print_failure(lane, reason)
                 return 1
         if interrupted:
-            stopped = stop(started, token)
+            stopped = stop(started, token, known)
             print("check-lanes: interrupted. The lanes are stopped.", flush=True)
             return 130 if stopped else 1
         for check in final_checks:
             check()
     except (ValueError, OSError, KeyError, TypeError) as error:
-        stop(started, token)
+        stop(started, token, known)
         print(f"check-lanes: {error}", file=sys.stderr, flush=True)
         return 1
     for lane in finished:
