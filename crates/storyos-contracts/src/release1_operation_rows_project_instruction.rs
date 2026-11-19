@@ -16,7 +16,6 @@ use crate::release1_project_instruction::{
     UpdateProjectInstructionResponse,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
-use crate::release1_wire::U64_WIRE;
 
 pub(super) const GET_PROJECT_INSTRUCTION_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::query(
@@ -189,10 +188,6 @@ const UPDATE_PROJECT_INSTRUCTION_RESPONSE: &[Patch] = &[
             "/properties/command_id",
             "/properties/correlation_id",
         ],
-    ),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
 ];

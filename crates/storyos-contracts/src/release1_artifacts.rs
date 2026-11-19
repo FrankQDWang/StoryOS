@@ -482,6 +482,10 @@ mod create_project_tests;
 mod agent_run_tests;
 
 #[cfg(test)]
+#[path = "release1_receipt_sequence_artifacts_tests.rs"]
+mod receipt_sequence_tests;
+
+#[cfg(test)]
 #[path = "release1_fixture_corpus_tests.rs"]
 mod fixture_corpus_tests;
 

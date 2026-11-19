@@ -16,7 +16,6 @@ use crate::release1_agent_run_control::{
 use crate::release1_operation_registry::RegisteredOperation;
 use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
-use crate::release1_wire::U64_WIRE;
 
 pub(super) const STEER_AGENT_RUN_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::command(
@@ -338,10 +337,6 @@ const STEER_AGENT_RUN_RESPONSE: &[Patch] = &[
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
 ];
 
 const PAUSE_AGENT_RUN_REQUEST: &[Patch] = &[
@@ -365,10 +360,6 @@ const PAUSE_AGENT_RUN_RESPONSE: &[Patch] = &[
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
 ];
 
 const CANCEL_AGENT_RUN_REQUEST: &[Patch] = &[
@@ -392,8 +383,4 @@ const CANCEL_AGENT_RUN_RESPONSE: &[Patch] = &[
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
 ];
