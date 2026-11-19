@@ -33,9 +33,9 @@ CHECK_LANES = \
 	--postgres-shards build,package
 CHECK_STEPS = $(CHECK_FAST_STEPS); \
 	python3 scripts/check-lanes.py $(CHECK_LANES)
-# STORYOS_WEB_TYPECHECKED=1 tells the project-scope script that the release package exists.
-CHECK_FULL_STEPS = $(CHECK_STEPS); \
-	STORYOS_WEB_TYPECHECKED=1 scripts/verify-project-scope.sh
+# make check-full runs the lanes of make check and the project-scope lanes in one run of the lane runner.
+CHECK_FULL_STEPS = $(CHECK_FAST_STEPS); \
+	python3 scripts/check-lanes.py $(CHECK_LANES) --project-scope
 
 check-fast:
 	@scripts/check-evidence.sh $@ sh -exc '$(CHECK_FAST_STEPS)'

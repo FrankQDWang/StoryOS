@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Tests of the stop of scripts/check-lanes.py (issue 1711). Each test runs the runner with lanes of its own.
+"""Tests of scripts/check-lanes.py (issues 1711, 1712): the stop, the Chrome start gap, and some functions.
 
 CHECK_LANES_SCRIPT gives another runner to test, for example the runner of an earlier commit.
 """
 
 import hashlib
+import importlib.util
 import os
 from pathlib import Path
 import re
@@ -40,9 +41,13 @@ def wait_for(path):
     return f"i=0; while [ ! -e {path} ] && [ $i -lt 600 ]; do sleep 0.1; i=$((i + 1)); done"
 
 
-def containers():
-    return subprocess.run(["docker", "ps", "-a", "--format", "{{.Names}}"], capture_output=True, text=True,
+def docker_names(command, field="{{.Name}}"):
+    return subprocess.run(["docker", *command, "--format", field], capture_output=True, text=True,
                           check=True).stdout.split()
+
+
+def containers():
+    return docker_names(["ps", "-a"], "{{.Names}}")
 
 
 def alive(pid):
@@ -93,27 +98,35 @@ class StopTests(unittest.TestCase):
         self.assertIn("check-lanes: interrupted. The lanes are stopped.", output)
         return output
 
-    def test_the_stop_removes_only_the_containers_of_its_own_run(self):
+    def test_the_stop_removes_only_the_docker_resources_of_its_own_run(self):
         own, unlabelled, other_run = (f"storyos-check-{CHECKOUT_ID}-{kind}-{self.marker}"
                                       for kind in ("own", "unlabelled", "other-run"))
+        label = "--label \"storyos.check-run=$STORYOS_CHECK_RUN\""
         try:
             subprocess.run(["docker", "create", "--name", unlabelled, IMAGE], capture_output=True, check=True)
             subprocess.run(["docker", "create", "--name", other_run, "--label", "storyos.check-run=another-run",
                             IMAGE], capture_output=True, check=True)
             created = self.directory / "created"
+            # The container uses the network and the volume, as a container of the recovery drill.
             process = runner(
-                f"lanes-test-container=docker create --name {own} "
-                f"--label \"storyos.check-run=$STORYOS_CHECK_RUN\" {IMAGE} >/dev/null; touch {created}; {self.sleep}",
+                f"lanes-test-container=docker network create {label} {own} >/dev/null; "
+                f"docker volume create {label} {own} >/dev/null; "
+                f"docker create --name {own} {label} --network {own} --volume {own}:/data {IMAGE} >/dev/null; "
+                f"touch {created}; {self.sleep}",
                 f"lanes-test-container-fails={wait_for(created)}; exit 1")
             output, _ = process.communicate(timeout=120)
             self.assertEqual(process.returncode, 1, output)
             remaining = containers()
             self.assertNotIn(own, remaining, output)
+            self.assertNotIn(own, docker_names(["network", "ls"]), output)
+            self.assertNotIn(own, docker_names(["volume", "ls"]), output)
             self.assertIn(unlabelled, remaining, output)
             self.assertIn(other_run, remaining, output)
             self.assertEqual(pids_of(self.sleep), [], output)
         finally:
             subprocess.run(["docker", "rm", "-fv", own, unlabelled, other_run], capture_output=True)
+            subprocess.run(["docker", "network", "rm", own], capture_output=True)
+            subprocess.run(["docker", "volume", "rm", "-f", own], capture_output=True)
 
     def test_an_interruption_stops_a_lane_of_only_sleep(self):
         process = runner(f"lanes-test-sleep={self.sleep}", start_new_session=True)
@@ -167,6 +180,78 @@ class StopTests(unittest.TestCase):
         self.assertNotIn("Traceback", output)
         for pid in self.watched:
             self.assert_gone(pid, output)
+
+
+class BrowserStartTests(unittest.TestCase):
+    def test_two_starts_of_chrome_have_the_gap(self):
+        # The gap of scripts/check-lanes.py BROWSER_START_GAP_SECONDS.
+        gap = float(re.search(r"^BROWSER_START_GAP_SECONDS = (\d+)$", Path(RUNNER).read_text(), re.MULTILINE).group(1))
+        # Its own record, so that the test does not change the gap of the browser lanes of a run.
+        record = Path(tempfile.mkdtemp(prefix="storyos-browser-start-")) / "browser-start"
+        starts = []
+        for _ in range(2):
+            subprocess.run([sys.executable, RUNNER, "--browser-start"], cwd=ROOT, check=True, timeout=60,
+                           env={**os.environ, "STORYOS_BROWSER_START_FILE": str(record)})
+            starts.append(float(record.read_text()))
+        self.assertGreaterEqual(starts[1] - starts[0], gap)
+
+
+def runner_module():
+    """Load the runner as a module, for the tests of its functions."""
+    spec = importlib.util.spec_from_file_location("check_lanes", RUNNER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class FunctionTests(unittest.TestCase):
+    def test_a_screenshot_directory_is_not_a_test_file(self):
+        web = Path(tempfile.mkdtemp(prefix="storyos-test-files-"))
+        (web / "test/journeys/__screenshots__/a.integration.test.ts").mkdir(parents=True)
+        (web / "test/journeys/a.integration.test.ts").write_text("")
+        self.assertEqual(runner_module().test_files(web, "test/journeys"), ["test/journeys/a.integration.test.ts"])
+
+    def test_the_project_scope_lanes_wait_for_the_build_lane(self):
+        # The PostgreSQL shards come from the build lane. When the release package is up to date, a project-scope
+        # lane that waits only for the package lane takes a lane before them.
+        lanes = runner_module().project_scope_lanes(ROOT)
+        self.assertTrue(lanes)
+        for lane in lanes:
+            self.assertEqual(sorted(lane.after), ["build", "package"], lane.name)
+
+    def test_at_most_two_browser_lanes_run_at_the_same_time(self):
+        module = runner_module()
+        lanes = [module.Lane(f"lanes-test-browser-{index}", ["sleep", "2"], browser=True, browser_at_start=False)
+                 for index in range(3)]
+        lanes.append(module.Lane("lanes-test-no-browser", ["sleep", "2"]))
+        handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
+        try:
+            self.assertEqual(module.run(ROOT, lanes, []), 0)
+        finally:
+            for number, handler in handlers.items():
+                signal.signal(number, handler)
+        browsers = lanes[:3]
+        for lane in browsers:
+            running = [other for other in browsers
+                       if other.started <= lane.started < other.started + other.duration]
+            self.assertLessEqual(len(running), 2, lane.name)
+        # The lane without a browser starts while the third browser lane waits.
+        self.assertLess(lanes[3].started, lanes[2].started)
+
+    def test_a_failed_container_removal_does_not_stop_the_removal_of_networks_and_volumes(self):
+        module, removed = runner_module(), []
+
+        def tool_output(command):
+            if command[:2] == ["docker", "rm"]:
+                raise subprocess.CalledProcessError(1, command)
+            if "ls" in command or "ps" in command:
+                return f"{command[1]}-of-the-run\n"
+            removed.append(command[1])
+            return ""
+
+        module.tool_output = tool_output
+        self.assertFalse(module.remove_run_resources("token"))
+        self.assertEqual(removed, ["network", "volume"])
 
 
 if __name__ == "__main__":

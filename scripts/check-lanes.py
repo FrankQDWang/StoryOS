@@ -4,9 +4,14 @@
 A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -ec` in the repository root.
 --browser-source adds the lanes of the browser-source Vitest project, one browser process for each lane.
 --postgres-shards adds the ignored tests of the library test binaries in shards, each with its own database.
+--project-scope adds the parts of `make check-full` after the lanes `build` and `package`: the storage activation
+checks, the exact-dist journeys in shards, and the two modes of the recovery drill.
+`scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; a script runs it before each
+browser Vitest run that does not start at the start of its lane.
 When a lane fails, the runner stops the other lanes, prints the log of the failed lane, and exits with 1.
 """
 
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -22,12 +27,41 @@ import uuid
 # Selected from measured runs of `make check` on an Apple M4 with 10 cores and 32 GB (issue 1711).
 LANE_LIMIT = 6
 POSTGRES_SHARDS = 4
+# At most this count of browser lanes runs at the same time (issue 1712). In two runs of `make check-full` on
+# 2026-11-20, a journey wait did not succeed in time when three or four browser lanes ran at the same time.
+BROWSER_LANE_LIMIT = 2
 # This file takes approximately 204 s, so it gets its own browser process, and the other files share one.
 # Four browser processes did not connect within the Vitest timeout in 3 of 6 runs of `make check` on 2026-11-19.
 SEPARATE_BROWSER_SOURCE_FILES = ("test/browser-source/journal-working-set.integration.test.ts",)
-# Google Chrome can fail to start when two instances start at the same time, so the browser lanes start
-# with this gap: in a test on 2026-11-19, 1 of 20 starts at the same time failed, and 0 of 40 with a gap.
+# Google Chrome can fail to start when two instances start at the same time, so the starts of a run have
+# this gap: in a test on 2026-11-19, 1 of 20 starts at the same time failed, and 0 of 40 with a gap.
 BROWSER_START_GAP_SECONDS = 8
+# This file has the time of the last start. A journey lane and a drill lane start Chrome after their database
+# is ready, so the gap is for each start of Chrome, and not only for each start of a lane (issue 1712).
+BROWSER_START_FILE = "target/check/browser-start"
+# A test gives another file in this variable, so that it does not change the gap of a run.
+BROWSER_START_VARIABLE = "STORYOS_BROWSER_START_FILE"
+# The count of the exact-dist journey shards. Each shard has its own database and its own packaged Servers.
+JOURNEY_SHARDS = 3
+# The time of the longest journey files in a run of `make check-full` on 2026-11-20 (issue 1712). The other files
+# take approximately this time each. The runner puts each file into the shard with the shortest sum of times.
+LONG_JOURNEY_SECONDS = {
+    "test/browser-exact-dist/s2-long-session.integration.test.ts": 99,
+    "test/browser-exact-dist/production-host.integration.test.ts": 66,
+    "test/browser-exact-dist/stage7-journey.integration.test.ts": 36,
+    "test/browser-exact-dist/production-run-evidence.integration.test.ts": 27,
+}
+OTHER_JOURNEY_SECONDS = 3
+# scripts/verify-recovery-hold.sh runs this file after its restore
+# (STORYOS_PHYSICAL_DRILL in apps/web/vitest.config.ts).
+PHYSICAL_DRILL_FILE = "test/browser-exact-dist/s2-physical-drill.integration.test.ts"
+RECOVERY_DRILLS = ("mixed", "fixture-only")
+RECOVERY_DRILL_END = "Isolated restore continued writing after Recovery Visibility Proof"
+# The project-scope lanes also wait for the build lane, which gives the PostgreSQL shards. Thus the shards get the
+# lanes first also when the release package is up to date and its lane ends after 4 s. Without this wait, in a run
+# on 2026-11-20 the drills and a journey shard started first, the first shard started after 150 s, and a journey
+# poll did not succeed in time beside four browser lanes.
+PROJECT_SCOPE_AFTER = ("build", "package")
 # Each browser lane gets its own port for its Vite server (STORYOS_BROWSER_API_PORT in apps/web/vitest.config.ts).
 BROWSER_PORTS = range(41000, 41100)
 # A stopped lane removes its database container in this time.
@@ -39,7 +73,7 @@ RUN_LABEL = "storyos.check-run"
 # After SIGKILL, the runner waits this time for the processes to end.
 KILL_SECONDS = 5
 USAGE = ("usage: scripts/check-lanes.py "
-         "[--lane NAME[:AFTER,...]=COMMAND | --browser-source | --postgres-shards AFTER,...]...")
+         "[--lane NAME[:AFTER,...]=COMMAND | --browser-source | --postgres-shards AFTER,...| --project-scope]...")
 STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 LANE_ARGUMENT = re.compile(r"([a-z0-9-]+)(?::([a-z0-9,-]+))?=(.+)", re.DOTALL)
 
@@ -47,11 +81,38 @@ LANE_ARGUMENT = re.compile(r"([a-z0-9-]+)(?::([a-z0-9,-]+))?=(.+)", re.DOTALL)
 class Lane:
     """A command with its own log. `passed` reads the log of a passed lane and returns more lanes."""
 
-    def __init__(self, name, command, after=(), env=None, passed=None, browser=False):
+    def __init__(self, name, command, after=(), env=None, passed=None, browser=False, browser_at_start=None):
         self.name, self.command, self.after, self.env, self.passed = name, command, tuple(after), env, passed
+        # A browser lane gets its own port. A lane that starts Chrome at its start gets the start gap from the runner.
         self.browser = browser
+        self.browser_at_start = browser if browser_at_start is None else browser_at_start
         self.process = self.log = None
         self.started = self.duration = None
+
+
+def claim_browser_start(root, wait):
+    """Record a start of Chrome when the last start is BROWSER_START_GAP_SECONDS ago. With wait, wait for that time.
+
+    Return False when the gap is not complete and wait is false.
+    """
+    path = Path(os.environ.get(BROWSER_START_VARIABLE) or root / BROWSER_START_FILE)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a+") as file:
+        while True:
+            fcntl.flock(file, fcntl.LOCK_EX)
+            file.seek(0)
+            text = file.read().strip()
+            remaining = (float(text) if text else 0.0) + BROWSER_START_GAP_SECONDS - time.time()
+            if remaining <= 0:
+                file.seek(0)
+                file.truncate()
+                file.write(str(time.time()))
+                file.flush()
+                return True
+            fcntl.flock(file, fcntl.LOCK_UN)
+            if not wait:
+                return False
+            time.sleep(remaining)
 
 
 def free_browser_port(taken):
@@ -85,9 +146,18 @@ def vitest_lane(root, name, project, files):
                        f"--outputFile={output}"], passed=passed, browser=True)
 
 
+def test_files(web, directory):
+    """The test files of a Vitest project, as its include `**/*.test.ts` selects them.
+
+    A failed browser test writes a screenshot directory with the name of its file, for example
+    `__screenshots__/s2-editor.integration.test.ts/`, so only files count.
+    """
+    return sorted(str(path.relative_to(web)) for path in (web / directory).rglob("*.test.ts") if path.is_file())
+
+
 def browser_source_lanes(root):
     web = root / "apps/web"
-    files = sorted(str(path.relative_to(web)) for path in (web / "test/browser-source").rglob("*.test.ts"))
+    files = test_files(web, "test/browser-source")
     missing = [file for file in SEPARATE_BROWSER_SOURCE_FILES if file not in files]
     if missing:
         raise ValueError(f"browser-source: a separate file does not exist: {', '.join(missing)}")
@@ -98,6 +168,64 @@ def browser_source_lanes(root):
     names = [f"browser-{Path(file).name.removesuffix('.test.ts').removesuffix('.integration')}"
              for file in SEPARATE_BROWSER_SOURCE_FILES]
     return [vitest_lane(root, name, "browser-source", group) for name, group in zip([*names, "browser-source"], groups)]
+
+
+def journey_shards(root):
+    """Give each exact-dist journey file to exactly one shard. Each shard has its files in the order of their names."""
+    web = root / "apps/web"
+    files = test_files(web, "test/browser-exact-dist")
+    missing = [file for file in [PHYSICAL_DRILL_FILE, *LONG_JOURNEY_SECONDS] if file not in files]
+    if missing:
+        raise ValueError(f"journeys: a named file does not exist: {', '.join(missing)}")
+    files.remove(PHYSICAL_DRILL_FILE)
+    shards, totals = [[] for _ in range(JOURNEY_SHARDS)], [0] * JOURNEY_SHARDS
+    for file in sorted(files, key=lambda file: (-LONG_JOURNEY_SECONDS.get(file, OTHER_JOURNEY_SECONDS), file)):
+        index = totals.index(min(totals))
+        shards[index].append(file)
+        totals[index] += LONG_JOURNEY_SECONDS.get(file, OTHER_JOURNEY_SECONDS)
+    if sorted(file for shard in shards for file in shard) != files:
+        raise ValueError("journeys: a journey file is in no shard or in more than one shard")
+    return [sorted(shard) for shard in shards]
+
+
+def journey_lane(root, name, files):
+    web, report = root / "apps/web", root / "target/check" / name
+
+    def passed(_log):
+        suites = [suite for output in sorted(report.parent.glob(f"{name}-*.json"))
+                  for suite in json.loads(output.read_text()).get("testResults", [])]
+        if (sorted(suite["name"] for suite in suites) != sorted(str(web / file) for file in files)
+                or any(not any(test["status"] == "passed" for test in suite["assertionResults"])
+                       for suite in suites)):
+            raise ValueError(f"{name}: a journey file did not run one time or has no passing test")
+        return []
+
+    # scripts/verify-project-scope.sh writes the Vitest report of each of its runs to <report>-<run>.json.
+    return Lane(name, [str(root / "scripts/verify-project-scope.sh"), "journeys", *files], after=PROJECT_SCOPE_AFTER,
+                env={"STORYOS_JOURNEY_REPORT": str(report)}, passed=passed, browser=True, browser_at_start=False)
+
+
+def recovery_drill_lane(root, mode):
+    def passed(log):
+        if RECOVERY_DRILL_END not in log:
+            raise ValueError(f"recovery-{mode}: the log has no line '{RECOVERY_DRILL_END}'")
+        return []
+
+    # An empty STORYOS_RECOVERY_COPY_DIR gives each drill its own Docker volumes, also when the environment of
+    # the run names an operator directory, so that the two drills do not use the same files.
+    return Lane(f"recovery-{mode}", [str(root / "scripts/verify-recovery-hold.sh")], after=PROJECT_SCOPE_AFTER,
+                env={"STORYOS_RECOVERY_DRILL": mode, "STORYOS_RECOVERY_COPY_DIR": ""}, passed=passed,
+                browser=True, browser_at_start=False)
+
+
+def project_scope_lanes(root):
+    # The lanes that take more time start first: the drills, then the journey shards.
+    lanes = [recovery_drill_lane(root, mode) for mode in RECOVERY_DRILLS]
+    lanes += [journey_lane(root, f"journeys-{index + 1}", files) for index, files in enumerate(journey_shards(root))]
+    # The activation checks run ignored tests of the library test binary of the build lane.
+    lanes.append(Lane("activation", [str(root / "scripts/verify-project-scope.sh"), "activation"],
+                      after=PROJECT_SCOPE_AFTER))
+    return lanes
 
 
 def postgres_lanes(root, after, final_checks):
@@ -156,6 +284,8 @@ def parse(root, arguments, final_checks):
         option = arguments.pop(0)
         if option == "--browser-source":
             lanes.extend(browser_source_lanes(root))
+        elif option == "--project-scope":
+            lanes.extend(project_scope_lanes(root))
         elif option in ("--lane", "--postgres-shards") and arguments:
             value = arguments.pop(0)
             if option == "--postgres-shards":
@@ -179,7 +309,7 @@ def parse(root, arguments, final_checks):
 def start(root, lane, running, token):
     if lane.browser:
         port = free_browser_port({int(other.env["STORYOS_BROWSER_API_PORT"]) for other in running if other.browser})
-        lane.env = {"STORYOS_BROWSER_API_PORT": str(port)}
+        lane.env = {**(lane.env or {}), "STORYOS_BROWSER_API_PORT": str(port)}
     lane.log = open(root / "target/check" / f"{lane.name}.log", "w")
     lane.started = time.monotonic()
     lane.process = subprocess.Popen(lane.command, cwd=root,
@@ -237,18 +367,49 @@ def signal_processes(pids, stop_signal, kill=os.kill):
             pass
 
 
-def run_containers(token):
-    return tool_output(["docker", "ps", "-a", "-q", "--filter", f"label={RUN_LABEL}={token}"]).split()
+# The Docker resources of a run: the list command and the remove command of each kind, in the order of removal.
+# A network or a volume is removed after the containers that use it.
+RUN_RESOURCES = (
+    ("container", ["docker", "ps", "-a", "-q"], ["docker", "rm", "-fv"]),
+    ("network", ["docker", "network", "ls", "-q"], ["docker", "network", "rm"]),
+    ("volume", ["docker", "volume", "ls", "-q"], ["docker", "volume", "rm", "-f"]),
+)
+
+
+def run_resources(token, list_command):
+    return tool_output([*list_command, "--filter", f"label={RUN_LABEL}={token}"]).split()
+
+
+def remove_run_resources(token):
+    """Remove each Docker resource of the run. Return False when a resource remains or is not verified."""
+    remaining, verified = [], True
+    # An error of one kind does not stop the removal of the other kinds.
+    for kind, list_command, remove_command in RUN_RESOURCES:
+        try:
+            found = run_resources(token, list_command)
+            if found:
+                tool_output([*remove_command, *found])
+        except (OSError, subprocess.CalledProcessError) as error:
+            print(f"check-lanes: the removal of the {kind}s of the run failed: {error}", flush=True)
+        try:
+            remaining += [f"{kind} {name}" for name in run_resources(token, list_command)]
+        except (OSError, subprocess.CalledProcessError) as error:
+            print(f"check-lanes: the {kind}s of the run are not verified: {error}", flush=True)
+            verified = False
+    if remaining:
+        print(f"check-lanes: these Docker resources of the run remain: {', '.join(remaining)}", flush=True)
+    return verified and not remaining
 
 
 def stop(lanes, token):
-    """Stop each lane whose leader the runner did not reap, then remove the containers of the run that remain.
+    """Stop each lane whose leader the runner did not reap, then remove the Docker resources of the run that remain.
 
     The runner reaps a leader only at the end of the stop, so a leader keeps its ID, also as a zombie, and the
     system cannot give the ID of its process group to another process. A descendant in another process group or
     session, such as Google Chrome, is in a snapshot from before the first signal, and it gets a signal only while
     it runs with the same ID and start time. A lane that ended and passed before the stop is out of the scope of
-    the stop: the runner reaped its leader. Return False when a process or a container is not verified as ended.
+    the stop: the runner reaped its leader. Return False when a process or a Docker resource is not verified as
+    ended.
     """
     for stop_signal in STOP_SIGNALS:
         signal.signal(stop_signal, signal.SIG_IGN)
@@ -287,19 +448,8 @@ def stop(lanes, token):
     finally:
         for lane in lanes:
             lane.process.poll()
-    # A killed lane cannot remove its container, so the runner removes each container of the run that remains.
-    try:
-        remaining = run_containers(token)
-        if remaining:
-            tool_output(["docker", "rm", "-fv", *remaining])
-            remaining = run_containers(token)
-    except (OSError, subprocess.CalledProcessError) as error:
-        print(f"check-lanes: the containers of the run are not verified: {error}", flush=True)
-        return False
-    if remaining:
-        print(f"check-lanes: these containers of the run remain: {' '.join(remaining)}", flush=True)
-        return False
-    return stopped
+    # A killed lane cannot remove its containers, networks, and volumes, so the runner removes them.
+    return remove_run_resources(token) and stopped
 
 
 def exit_code(lane):
@@ -320,7 +470,6 @@ def run(root, lanes, final_checks):
     (root / "target/check").mkdir(parents=True, exist_ok=True)
     pending, running, finished, started = list(lanes), [], [], []
     began = time.monotonic()
-    last_browser_start = began - BROWSER_START_GAP_SECONDS
     token = uuid.uuid4().hex
     # A signal only sets the flag, so that each started lane is in `started` when the runner stops the lanes.
     interrupted = []
@@ -335,10 +484,11 @@ def run(root, lanes, final_checks):
             for lane in ready:
                 if len(running) >= LANE_LIMIT or interrupted:
                     break
-                if lane.browser and time.monotonic() - last_browser_start < BROWSER_START_GAP_SECONDS:
+                # A lane without a browser can take a free lane while the browser lanes wait.
+                if lane.browser and sum(other.browser for other in running) >= BROWSER_LANE_LIMIT:
                     continue
-                if lane.browser:
-                    last_browser_start = time.monotonic()
+                if lane.browser_at_start and not claim_browser_start(root, wait=False):
+                    continue
                 pending.remove(lane)
                 start(root, lane, running, token)
                 started.append(lane)
@@ -365,6 +515,8 @@ def run(root, lanes, final_checks):
                         reason = str(error)
                 stop(started, token)
                 print_failure(lane, reason)
+                for other in started:
+                    print(f"Lane {other.name}: started at {round(other.started - began)} s", flush=True)
                 return 1
         if interrupted:
             stopped = stop(started, token)
@@ -383,6 +535,9 @@ def run(root, lanes, final_checks):
 
 def main():
     root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
+    if sys.argv[1:] == ["--browser-start"]:
+        claim_browser_start(root, wait=True)
+        return 0
     final_checks = []
     try:
         lanes = parse(root, sys.argv[1:], final_checks)

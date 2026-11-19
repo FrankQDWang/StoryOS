@@ -54,6 +54,14 @@ else
   created_volumes=1
 fi
 
+# In a run of scripts/check-lanes.py, each container, network, and volume gets the label of the run, so that the
+# stop of the runner removes it. The token of the run is hexadecimal, so the label is one word.
+run_label=${STORYOS_CHECK_RUN:+--label=storyos.check-run=$STORYOS_CHECK_RUN}
+drill_docker_run() {
+  # shellcheck disable=SC2086
+  docker run $run_label "$@"
+}
+
 cleanup() {
   if [ -n "$drill_server_pid" ]; then
     kill "$drill_server_pid" >/dev/null 2>&1 || true
@@ -73,16 +81,20 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 cleanup
 
-docker network create "$network" >/dev/null
+# shellcheck disable=SC2086
+docker network create $run_label "$network" >/dev/null
 if [ "$created_volumes" = "1" ]; then
-  docker volume create "$archive_volume" >/dev/null
-  docker volume create "$backup_volume" >/dev/null
-  docker volume create "$hold_volume" >/dev/null
+  # shellcheck disable=SC2086
+  docker volume create $run_label "$archive_volume" >/dev/null
+  # shellcheck disable=SC2086
+  docker volume create $run_label "$backup_volume" >/dev/null
+  # shellcheck disable=SC2086
+  docker volume create $run_label "$hold_volume" >/dev/null
 fi
-docker run --rm --user root --volume "$archive_volume:/archive" "$storyos_postgres_image" \
+drill_docker_run --rm --user root --volume "$archive_volume:/archive" "$storyos_postgres_image" \
   chown postgres:postgres /archive
 
-docker run --detach --name "$primary" \
+drill_docker_run --detach --name "$primary" \
   --network "$network" \
   --publish 127.0.0.1::5432 \
   --env POSTGRES_PASSWORD=admin \
@@ -176,6 +188,7 @@ if [ "$recovery_drill" = "mixed" ]; then
   pnpm --dir apps/web exec vitest run --project node-postgresql \
     test/node-postgresql/recovery-exports-http.integration.test.ts
   STORYOS_WORKER=0 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
+  python3 "$repository_root/scripts/check-lanes.py" --browser-start
   STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
   STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
@@ -195,18 +208,22 @@ docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
 STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   sh "$repository_root/scripts/seed-recovery-acceptance.sh"
-# The research journey writes each Stage 5 research record family before the backup.
+# The research journey writes each Stage 5 research record family before the backup. Each browser run waits for
+# the start gap of Google Chrome of scripts/check-lanes.py.
+python3 "$repository_root/scripts/check-lanes.py" --browser-start
 STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
     test/browser-exact-dist/research-journey.integration.test.ts
 # The Skill journey writes each Stage 6 Skill record family before the backup.
+python3 "$repository_root/scripts/check-lanes.py" --browser-start
 STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
     test/browser-exact-dist/skill-journey.integration.test.ts
 # The Stage 7 journey writes each Stage 7 Memory record family before the backup. Its statements of
 # the test administrator connection are then in the restored database too.
+python3 "$repository_root/scripts/check-lanes.py" --browser-start
 STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
@@ -261,9 +278,9 @@ if [ "$wal_level" != "replica" ] || [ "$archive_mode" != "on" ] \
   exit 1
 fi
 
-docker run --rm --user root --volume "$backup_volume:/backup" "$storyos_postgres_image" \
+drill_docker_run --rm --user root --volume "$backup_volume:/backup" "$storyos_postgres_image" \
   chown postgres:postgres /backup
-docker run --rm --network "$network" --user postgres \
+drill_docker_run --rm --network "$network" --user postgres \
   --volume "$backup_volume:/backup" \
   --env PGPASSWORD=backup \
   --entrypoint pg_basebackup \
@@ -291,7 +308,7 @@ until docker exec "$primary" test -f "/var/lib/postgresql/wal_archive/$archived_
 done
 rpo_seconds=$(($(date +%s) - rpo_started))
 
-docker run --rm --volume "$backup_volume:/backup" "$storyos_postgres_image" sh -c '
+drill_docker_run --rm --volume "$backup_volume:/backup" "$storyos_postgres_image" sh -c '
   set -eu
   test -f /backup/backup_label
   grep -q "START WAL LOCATION" /backup/backup_label
@@ -315,12 +332,12 @@ fi
 
 chain_manifest=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-chain.XXXXXX")
 saved_wal=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-wal.XXXXXX")
-docker run --rm --volume "$archive_volume:/archive" --volume "$backup_volume:/backup" \
+drill_docker_run --rm --volume "$archive_volume:/archive" --volume "$backup_volume:/backup" \
   "$storyos_postgres_image" sh -c 'find /backup /archive -type f -exec sha256sum {} \; | sort' \
   >"$chain_manifest"
 
 assert_recovery_chain() {
-  docker run --rm \
+  drill_docker_run --rm \
     --volume "$archive_volume:/archive" \
     --volume "$backup_volume:/backup" \
     --volume "$chain_manifest:/manifest:ro" \
@@ -355,7 +372,7 @@ chown_archive
 assert_recovery_chain
 rm -f "$saved_wal"
 
-docker run --rm --user root \
+drill_docker_run --rm --user root \
   --volume "$backup_volume:/backup" \
   --volume "$hold_volume:/hold" \
   "$storyos_postgres_image" sh -c 'rm -rf /hold/lost+found; find /hold -mindepth 1 -maxdepth 1 -exec rm -rf {} +; cp -a /backup/. /hold/ && chown -R postgres:postgres /hold'
@@ -367,7 +384,7 @@ recovery_target_inclusive = on
 recovery_target_action = 'promote'
 default_transaction_read_only = on
 EOF
-docker run --rm --user root \
+drill_docker_run --rm --user root \
   --volume "$restore_conf:/tmp/restore.conf:ro" \
   --volume "$hold_volume:/hold" \
   "$storyos_postgres_image" sh -c '
@@ -379,7 +396,7 @@ docker run --rm --user root \
 rm -f "$restore_conf"
 
 restore_started=$(date +%s)
-docker run --detach --name "$hold" \
+drill_docker_run --detach --name "$hold" \
   --network "$network" \
   --publish 127.0.0.1::5432 \
   --volume "$hold_volume:/var/lib/postgresql/data" \
@@ -723,6 +740,7 @@ if [ "$(stage7_memory_facts "$hold")" != "$stage7_before" ]; then
 fi
 export STORYOS_PHYSICAL_DRILL=1
 echo "Running exact-dist continued writing after restore"
+python3 "$repository_root/scripts/check-lanes.py" --browser-start
 pnpm --dir apps/web exec vitest run --project browser-exact-dist
 stop_recovery_drill_server
 assert_mixed_empty_projects "$hold"

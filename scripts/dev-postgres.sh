@@ -27,7 +27,9 @@ case "${1:-}" in
     trap 'docker rm -fv "$container" >/dev/null 2>&1 || true' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
-    start_postgres "$container"
+    # The database is disposable, so it does not write its changes safely to the disk. In four runs of the ignored
+    # library tests at the same time, this changed the time of each run from 548 s to 440 s (issue 1712).
+    start_postgres "$container" "" -c fsync=off -c synchronous_commit=off -c full_page_writes=off
     STORYOS_STORAGE_ADMIN_URL="$(postgres_admin_url "$container")" "$storage_bin" >/dev/null
     set_runtime_password "$container"
     load_controlled_fixture "$container"

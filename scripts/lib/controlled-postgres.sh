@@ -12,14 +12,20 @@ reset_command_challenge_rate_windows() {
     -c "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0" >/dev/null
 }
 
-# Starts the container $1 from the image $2, or from storyos_postgres_image. In a run of scripts/check-lanes.py,
-# the container gets the label of the run, so that the runner removes only the containers of its own run.
+# Starts the container $1 from the image $2, or from storyos_postgres_image when $2 is empty. The arguments after $2
+# go to the PostgreSQL server, for example "-c fsync=off". In a run of scripts/check-lanes.py, the container gets
+# the label of the run, so that the runner removes only the containers of its own run.
 start_postgres() {
   name=$1
+  postgres_image=${2:-$storyos_postgres_image}
+  shift
+  if [ "$#" -gt 0 ]; then
+    shift
+  fi
   docker run --detach --name "$name" ${STORYOS_CHECK_RUN:+--label "storyos.check-run=$STORYOS_CHECK_RUN"} \
     --env POSTGRES_PASSWORD=admin \
     --env POSTGRES_INITDB_ARGS="$storyos_postgres_initdb_args" \
-    --publish 127.0.0.1::5432 "${2:-$storyos_postgres_image}" >/dev/null
+    --publish 127.0.0.1::5432 "$postgres_image" "$@" >/dev/null
   attempt=0
   until docker logs "$name" 2>&1 | grep -q "PostgreSQL init process complete" \
     && docker exec "$name" pg_isready -U postgres >/dev/null 2>&1; do
