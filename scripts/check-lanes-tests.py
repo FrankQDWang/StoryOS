@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests of the stop and of the Chrome start gap of scripts/check-lanes.py (issues 1711, 1712). Each test runs the runner.
+"""Tests of scripts/check-lanes.py (issues 1711, 1712): the stop, the Chrome start gap, and some functions.
 
 CHECK_LANES_SCRIPT gives another runner to test, for example the runner of an earlier commit.
 """

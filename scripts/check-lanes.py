@@ -4,8 +4,8 @@
 A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -ec` in the repository root.
 --browser-source adds the lanes of the browser-source Vitest project, one browser process for each lane.
 --postgres-shards adds the ignored tests of the library test binaries in shards, each with its own database.
---project-scope adds the parts of `make check-full` after the build and the release package: the storage activation checks, the
-exact-dist journeys in shards, and the two modes of the recovery drill. It needs the lanes `build` and `package`.
+--project-scope adds the parts of `make check-full` after the lanes `build` and `package`: the storage activation
+checks, the exact-dist journeys in shards, and the two modes of the recovery drill.
 `scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; a script runs it before each
 browser Vitest run that does not start at the start of its lane.
 When a lane fails, the runner stops the other lanes, prints the log of the failed lane, and exits with 1.
@@ -49,7 +49,8 @@ LONG_JOURNEY_SECONDS = {
     "test/browser-exact-dist/production-run-evidence.integration.test.ts": 27,
 }
 OTHER_JOURNEY_SECONDS = 3
-# scripts/verify-recovery-hold.sh runs this file after its restore (STORYOS_PHYSICAL_DRILL in apps/web/vitest.config.ts).
+# scripts/verify-recovery-hold.sh runs this file after its restore
+# (STORYOS_PHYSICAL_DRILL in apps/web/vitest.config.ts).
 PHYSICAL_DRILL_FILE = "test/browser-exact-dist/s2-physical-drill.integration.test.ts"
 RECOVERY_DRILLS = ("mixed", "fixture-only")
 RECOVERY_DRILL_END = "Isolated restore continued writing after Recovery Visibility Proof"
