@@ -199,6 +199,15 @@ pub enum DomainReceiptResult {
     Refused,
 }
 
+/// The one owner of the Receipt sequence shape: a canonical unsigned 64-bit string, or null when the
+/// command creates no Author Action.
+fn nullable_author_action_sequence_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({"anyOf": [
+        {"type": "string", "pattern": crate::release1_wire::U64_WIRE},
+        {"type": "null"},
+    ]})
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct DomainReceipt {
@@ -215,7 +224,7 @@ pub struct DomainReceipt {
     pub authoritative_revision_ids: Vec<String>,
     pub proposal_revision_ids: Vec<String>,
     pub authoritative_commit_ids: Vec<String>,
-    #[schemars(required)]
+    #[schemars(required, schema_with = "nullable_author_action_sequence_schema")]
     pub author_action_sequence: Option<String>,
     pub draft_artifact_refs: Vec<String>,
     pub artifact_lifecycle_event_refs: Vec<String>,

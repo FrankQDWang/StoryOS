@@ -1,5 +1,6 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts"]}
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "vitest";
 
 import { getChapter, getEditorSession, getProject, getProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -9,6 +10,27 @@ import type { CommandInput, TestProject, TestStory } from "../support/http-harne
 
 // The Profile Probe of the Author Undo compensation (ADR 0075).
 const server = serverForFile();
+
+interface SequenceAlternative { readonly type: string; readonly pattern?: string }
+const publishedReceipt = (JSON.parse(readFileSync(new URL(
+  "../../../../generated/json-schema/storyos-public-release-1/undo-latest-author-action-response.schema.json",
+  import.meta.url), "utf8")) as { $defs: { DomainReceipt: { required: string[];
+  properties: { author_action_sequence: SequenceAlternative & { anyOf?: SequenceAlternative[] } } } } }).$defs.DomainReceipt;
+
+/** Checks the Receipt sequence of one response body against the published Undo response schema. */
+function assertPublishedReceiptSequence(body: string, expected: string | null) {
+  const receipt = (JSON.parse(body) as { receipt: Record<string, unknown> }).receipt;
+  assert.ok(Object.hasOwn(receipt, "author_action_sequence"));
+  assert.ok(publishedReceipt.required.includes("author_action_sequence"));
+  const sequence = receipt["author_action_sequence"];
+  assert.equal(sequence, expected);
+  const field = publishedReceipt.properties.author_action_sequence;
+  const accepted = (field.anyOf ?? [field]).some((alternative) =>
+    sequence === null ? alternative.type === "null"
+      : alternative.type === "string" && typeof sequence === "string"
+        && new RegExp(alternative.pattern ?? "").test(sequence));
+  assert.ok(accepted, `the published schema refuses the Receipt sequence ${String(sequence)}`);
+}
 
 function undo(project: TestProject, options: {
   expectedFrontier: string; expectedRevisionId: string; editorSessionId: string;
@@ -74,6 +96,8 @@ test("undoLatestAuthorAction compensates, replays, refuses, and conflicts", asyn
   assert.deepEqual(stale.response.effect,
     { kind: "conflicted", reason: "frontier_mismatch", current_author_undo_frontier_sequence: "2" });
   assert.deepEqual(stale.response.receipt.authoritative_commit_ids, []);
+  assertPublishedReceiptSequence(compensated.body, effect.author_action_sequence);
+  assertPublishedReceiptSequence(stale.body, null);
   await assertForeignRefused(story, "undoLatestAuthorAction", undo(story, options));
 });
 
@@ -144,6 +168,7 @@ test("undoLatestAuthorAction of an Operation rejection is a Barrier and keeps th
   const blocked = await story.send("undoLatestAuthorAction", undo(story, {
     expectedFrontier: rejected.response.effect.author_action_sequence, expectedRevisionId: head, editorSessionId }));
   assert.deepEqual(blocked.response.effect, { kind: "unavailable", reason: "barrier" });
+  assertPublishedReceiptSequence(blocked.body, null);
   assert.deepEqual(await blocked.command.send(), { response: blocked.response, body: blocked.body });
   assert.deepEqual(await inspect(), beforeUndo);
 });

@@ -17,7 +17,6 @@ use crate::release1_memory_entries::{
 use crate::release1_operation_registry::RegisteredOperation;
 use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
-use crate::release1_wire::U64_WIRE;
 
 pub(super) const LIST_MEMORY_ENTRIES_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::query(
@@ -225,10 +224,6 @@ const DELETE_MEMORY_ENTRY_RESPONSE: &[Patch] = &[
             "/$defs/DeleteMemoryEntryEffect/oneOf/0/properties/memory_revision",
             "/$defs/DeleteMemoryEntryEffect/oneOf/0/properties/version",
         ],
-    ),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
 ];
