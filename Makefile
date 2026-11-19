@@ -23,7 +23,7 @@ CHECK_LANES = \
 	--lane "package=python3 scripts/package-release.py; \
 		pnpm --dir apps/web exec vitest run --project node-contract $(CHECK_PACKAGE_CONTRACT_FILES)" \
 	--lane "build=cargo test --workspace --all-targets --all-features; cargo test --workspace --doc --all-features" \
-	--browser-source \
+	--browser-source build \
 	--lane "phases:package=scripts/dev-postgres.sh with python3 scripts/check-phases.py" \
 	--lane "postgres-project-scope:build,package=scripts/dev-postgres.sh with \
 		cargo test --workspace --all-features --test project_scope -- --ignored --nocapture" \

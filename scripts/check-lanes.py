@@ -3,6 +3,8 @@
 
 A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -ec` in the repository root.
 --browser-source adds the lanes of the browser-source Vitest project, one browser process for each lane.
+In the measured runs, Google Chrome did not connect within its timeout when it started beside two cargo
+builds, so `make check` starts these lanes after the test build.
 --postgres-shards adds the ignored tests of the library test binaries in shards, each with its own database.
 When a lane fails, the runner stops the other lanes, prints the log of the failed lane, and exits with 1.
 """
@@ -34,7 +36,7 @@ BROWSER_START_GAP_SECONDS = 8
 STOP_SECONDS = 30
 FAILED_LOG_LINES = 400
 USAGE = ("usage: scripts/check-lanes.py "
-         "[--lane NAME[:AFTER,...]=COMMAND | --browser-source | --postgres-shards AFTER,...]...")
+         "[--lane NAME[:AFTER,...]=COMMAND | --browser-source AFTER,... | --postgres-shards AFTER,...]...")
 STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 LANE_ARGUMENT = re.compile(r"([a-z0-9-]+)(?::([a-z0-9,-]+))?=(.+)", re.DOTALL)
 
@@ -65,7 +67,7 @@ def free_ports(count):
             each.close()
 
 
-def vitest_lane(root, name, project, files, port):
+def vitest_lane(root, name, project, files, port, after):
     web = root / "apps/web"
     output = root / "target/check" / f"{name}.json"
 
@@ -79,11 +81,11 @@ def vitest_lane(root, name, project, files, port):
 
     return Lane(name, ["pnpm", "--dir", "apps/web", "exec", "vitest", "run", "--project", project, *files,
                        "--passWithNoTests=false", "--allowOnly=false", "--reporter=default", "--reporter=json",
-                       f"--outputFile={output}"], env={"STORYOS_BROWSER_API_PORT": str(port)}, passed=passed,
-                browser=True)
+                       f"--outputFile={output}"], after=after, env={"STORYOS_BROWSER_API_PORT": str(port)},
+                passed=passed, browser=True)
 
 
-def browser_source_lanes(root):
+def browser_source_lanes(root, after):
     web = root / "apps/web"
     files = sorted(str(path.relative_to(web)) for path in (web / "test/browser-source").rglob("*.test.ts"))
     missing = [file for file in SEPARATE_BROWSER_SOURCE_FILES if file not in files]
@@ -95,7 +97,7 @@ def browser_source_lanes(root):
         raise ValueError("browser-source: a file of the project is in no lane or in more than one lane")
     names = [f"browser-{Path(file).name.removesuffix('.test.ts').removesuffix('.integration')}"
              for file in SEPARATE_BROWSER_SOURCE_FILES]
-    return [vitest_lane(root, name, "browser-source", group, port)
+    return [vitest_lane(root, name, "browser-source", group, port, after)
             for name, group, port in zip([*names, "browser-source"], groups, free_ports(len(groups)))]
 
 
@@ -153,10 +155,11 @@ def parse(root, arguments, final_checks):
     arguments = list(arguments)
     while arguments:
         option = arguments.pop(0)
-        if option == "--browser-source":
-            lanes.extend(browser_source_lanes(root))
-        elif option in ("--lane", "--postgres-shards") and arguments:
+        if option in ("--lane", "--browser-source", "--postgres-shards") and arguments:
             value = arguments.pop(0)
+            if option == "--browser-source":
+                lanes.extend(browser_source_lanes(root, value.split(",")))
+                continue
             if option == "--postgres-shards":
                 lanes.extend(postgres_lanes(root, value.split(","), final_checks))
                 continue
