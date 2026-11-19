@@ -211,6 +211,14 @@ class FunctionTests(unittest.TestCase):
         (web / "test/journeys/a.integration.test.ts").write_text("")
         self.assertEqual(runner_module().test_files(web, "test/journeys"), ["test/journeys/a.integration.test.ts"])
 
+    def test_the_project_scope_lanes_wait_for_the_build_lane(self):
+        # The PostgreSQL shards come from the build lane. When the release package is up to date, a project-scope
+        # lane that waits only for the package lane takes a lane before them.
+        lanes = runner_module().project_scope_lanes(ROOT)
+        self.assertTrue(lanes)
+        for lane in lanes:
+            self.assertIn("build", lane.after, lane.name)
+
     def test_a_failed_container_removal_does_not_stop_the_removal_of_networks_and_volumes(self):
         module, removed = runner_module(), []
 
