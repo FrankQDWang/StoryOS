@@ -1,7 +1,9 @@
 .DEFAULT_GOAL := check
 
-# The three check tiers of ADR 0070. Each tier runs its steps in one shell, which stops at the first failure,
-# and scripts/check-evidence.sh prints the Check Evidence Line at the end.
+# The three check tiers of ADR 0070. The make check-fast steps run in one shell, which stops at the first failure.
+# Then scripts/check-lanes.py runs the heavy steps as lanes at the same time, and a failed lane stops the other
+# lanes. A lane with names after the colon starts when those lanes passed. scripts/check-evidence.sh prints the
+# Check Evidence Line at the end.
 .PHONY: check-fast check check-full
 BASE ?= origin/main
 # These node-contract files need the release package, so make check runs them after it builds the package.
@@ -17,17 +19,19 @@ CHECK_FAST_STEPS = scripts/verify-web-source-guards.sh; \
 	python3 scripts/verify-transaction-control-receivers.py; \
 	cargo run --quiet --locked -p storyos-literal-guard -- --tracing; \
 	git diff --check "$$(git merge-base $(BASE) HEAD)" --
+CHECK_LANES = \
+	--lane "package=python3 scripts/package-release.py; \
+		pnpm --dir apps/web exec vitest run --project node-contract $(CHECK_PACKAGE_CONTRACT_FILES)" \
+	--lane "build=cargo test --workspace --all-targets --all-features; cargo test --workspace --doc --all-features" \
+	--browser-source \
+	--lane "phases:package=scripts/dev-postgres.sh with python3 scripts/check-phases.py" \
+	--lane "postgres-project-scope:build,package=scripts/dev-postgres.sh with \
+		cargo test --workspace --all-features --test project_scope -- --ignored --nocapture" \
+	--lane "postgres-command-challenge:build,package=scripts/dev-postgres.sh with \
+		cargo test --workspace --all-features --test project_command_challenge -- --ignored --nocapture" \
+	--postgres-shards build,package
 CHECK_STEPS = $(CHECK_FAST_STEPS); \
-	cargo test --workspace --all-targets --all-features; \
-	cargo test --workspace --doc --all-features; \
-	pnpm --dir apps/web exec vitest run --project browser-source; \
-	python3 scripts/package-release.py; \
-	pnpm --dir apps/web exec vitest run --project node-contract $(CHECK_PACKAGE_CONTRACT_FILES); \
-	scripts/dev-postgres.sh with sh -exc " \
-		cargo test --workspace --all-features --test project_scope -- --ignored --nocapture; \
-		cargo test --workspace --all-features --test project_command_challenge -- --ignored --nocapture; \
-		cargo test --workspace --all-features --lib -- --ignored --nocapture; \
-		python3 scripts/check-phases.py"
+	python3 scripts/check-lanes.py $(CHECK_LANES)
 # STORYOS_WEB_TYPECHECKED=1 tells the project-scope script that the release package exists.
 CHECK_FULL_STEPS = $(CHECK_STEPS); \
 	STORYOS_WEB_TYPECHECKED=1 scripts/verify-project-scope.sh

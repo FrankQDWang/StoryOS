@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 PHASES = [
-    ("http-bootstrap", "node-postgresql", "clear_memory_work_due_times"),
+    ("http-bootstrap", "node-postgresql", None),
     ("author-edit-process-cut", "node-process-cut", "reset_command_challenge_rate_windows"),
     ("http-main", "node-postgresql", "reset_command_challenge_rate_windows"),
     ("readable-export-process-cut", "node-process-cut", "reload_controlled_fixture"),
