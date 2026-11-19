@@ -7,6 +7,7 @@ A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -e
 When a lane fails, the runner stops the other lanes, prints the log of the failed lane, and exits with 1.
 """
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -31,6 +32,10 @@ BROWSER_START_GAP_SECONDS = 8
 BROWSER_PORTS = range(41000, 41100)
 # A stopped lane removes its database container in this time.
 STOP_SECONDS = 30
+# scripts/dev-postgres.sh names each container of a `with` run storyos-check-<checkout id>-<pid>.
+CHECK_CONTAINER_PREFIX = "storyos-check-"
+# The runner records the process groups of the running lanes at this interval.
+GROUP_RECORD_SECONDS = 1
 USAGE = ("usage: scripts/check-lanes.py "
          "[--lane NAME[:AFTER,...]=COMMAND | --browser-source | --postgres-shards AFTER,...]...")
 STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
@@ -45,6 +50,8 @@ class Lane:
         self.browser = browser
         self.process = self.log = None
         self.started = self.duration = None
+        # The process groups of the running lane, also a group that a descendant made (see process_groups).
+        self.groups = set()
 
 
 def free_browser_port(taken):
@@ -181,9 +188,30 @@ def start(root, lane, running):
     print(f"Lane {lane.name}: started", flush=True)
 
 
-def group_exists(lane):
+def process_groups(lanes):
+    """Return the process group of each running lane and of each descendant process.
+
+    Playwright starts Chrome in a process group of its own, so a signal to the group of the lane does not reach it.
+    Only a running lane is read: the system can give the process ID of an ended lane to another process.
+    """
+    table = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,pgid="], capture_output=True, text=True, check=True).stdout
+    children, groups_of = {}, {}
+    for line in table.splitlines():
+        pid, parent, group = (int(field) for field in line.split())
+        children.setdefault(parent, []).append(pid)
+        groups_of[pid] = group
+    groups, waiting = set(), [lane.process.pid for lane in lanes if lane.process.poll() is None]
+    while waiting:
+        pid = waiting.pop()
+        groups.add(groups_of.get(pid, pid))
+        waiting.extend(children.get(pid, []))
+    groups.discard(os.getpgrp())
+    return groups
+
+
+def group_exists(group):
     try:
-        os.killpg(lane.process.pid, 0)
+        os.killpg(group, 0)
         return True
     except ProcessLookupError:
         return False
@@ -191,30 +219,52 @@ def group_exists(lane):
         return True
 
 
-def signal_group(lane, stop_signal):
+def signal_group(group, stop_signal):
     try:
-        os.killpg(lane.process.pid, stop_signal)
+        os.killpg(group, stop_signal)
     except ProcessLookupError:
         pass
 
 
-def stop(lanes):
-    """Stop the process group of each started lane, and give its traps the time to remove their containers."""
+def check_containers(root):
+    """Return the containers of this checkout that `scripts/dev-postgres.sh with` started."""
+    checkout_id = hashlib.sha256(os.path.realpath(root).encode()).hexdigest()[:20]
+    names = subprocess.run(["docker", "ps", "-a", "--format", "{{.Names}}"],
+                           capture_output=True, text=True, check=True).stdout.split()
+    return [name for name in names if name.startswith(f"{CHECK_CONTAINER_PREFIX}{checkout_id}-")]
+
+
+def stop(root, lanes):
+    """Stop each process of the started lanes, then remove the containers that remain. Return False on a failure."""
     for stop_signal in STOP_SIGNALS:
         signal.signal(stop_signal, signal.SIG_IGN)
-    for lane in lanes:
-        signal_group(lane, signal.SIGTERM)
+    # The groups are recorded before the signal, because a process whose parent stops is no longer a descendant.
+    groups = process_groups(lanes).union({lane.process.pid for lane in lanes}, *(lane.groups for lane in lanes))
+    for group in groups:
+        signal_group(group, signal.SIGTERM)
     deadline = time.monotonic() + STOP_SECONDS
     while time.monotonic() < deadline:
-        for lane in lanes:
-            lane.process.poll()
-        if not any(group_exists(lane) for lane in lanes):
-            return
+        groups |= process_groups(lanes)
+        if not any(group_exists(group) for group in groups):
+            break
         time.sleep(0.2)
-    for lane in lanes:
-        if group_exists(lane):
-            print(f"Lane {lane.name}: killed after {STOP_SECONDS} s", flush=True)
-            signal_group(lane, signal.SIGKILL)
+    for group in groups:
+        if group_exists(group):
+            print(f"check-lanes: process group {group} killed after {STOP_SECONDS} s", flush=True)
+            signal_group(group, signal.SIGKILL)
+    # A killed lane cannot remove its container, so the runner removes each container that remains.
+    try:
+        remaining = check_containers(root)
+        if remaining:
+            subprocess.run(["docker", "rm", "-fv", *remaining], capture_output=True, check=False)
+            remaining = check_containers(root)
+    except (OSError, subprocess.CalledProcessError) as error:
+        print(f"check-lanes: the containers of the run are not verified: {error}", flush=True)
+        return False
+    if remaining:
+        print(f"check-lanes: these containers of the run remain: {' '.join(remaining)}", flush=True)
+        return False
+    return True
 
 
 def print_failure(lane, reason):
@@ -228,6 +278,7 @@ def run(root, lanes, final_checks):
     pending, running, finished, started = list(lanes), [], [], []
     began = time.monotonic()
     last_browser_start = began - BROWSER_START_GAP_SECONDS
+    last_group_record = began
     # A signal only sets the flag, so that each started lane is in `started` when the runner stops the lanes.
     interrupted = []
     for stop_signal in STOP_SIGNALS:
@@ -250,6 +301,11 @@ def run(root, lanes, final_checks):
                 started.append(lane)
                 running.append(lane)
             time.sleep(0.2)
+            if time.monotonic() - last_group_record >= GROUP_RECORD_SECONDS:
+                last_group_record = time.monotonic()
+                for lane in running:
+                    # A group that ended is dropped, so that the runner never signals a new group with its ID.
+                    lane.groups = {group for group in lane.groups if group_exists(group)} | process_groups([lane])
             for lane in [lane for lane in running if not interrupted and lane.process.poll() is not None]:
                 running.remove(lane)
                 lane.duration = time.monotonic() - lane.started
@@ -259,21 +315,22 @@ def run(root, lanes, final_checks):
                     try:
                         pending[:0] = lane.passed(Path(lane.log.name).read_text()) if lane.passed else []
                         finished.append(lane)
+                        lane.groups = set()
                         print(f"Lane {lane.name}: PASS {round(lane.duration)} s", flush=True)
                         continue
                     except (ValueError, OSError, KeyError, TypeError, subprocess.CalledProcessError) as error:
                         reason = str(error)
-                stop(started)
+                stop(root, started)
                 print_failure(lane, reason)
                 return 1
         if interrupted:
-            stop(started)
+            stopped = stop(root, started)
             print("check-lanes: interrupted. The lanes are stopped.", flush=True)
-            return 130
+            return 130 if stopped else 1
         for check in final_checks:
             check()
     except (ValueError, OSError, KeyError, TypeError) as error:
-        stop(started)
+        stop(root, started)
         print(f"check-lanes: {error}", file=sys.stderr, flush=True)
         return 1
     for lane in finished:
