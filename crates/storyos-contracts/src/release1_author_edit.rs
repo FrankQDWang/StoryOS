@@ -200,7 +200,7 @@ pub enum DomainReceiptResult {
 }
 
 /// The one owner of the Receipt sequence shape: a canonical unsigned 64-bit string, or null when the
-/// command admitted no Author Action.
+/// command creates no Author Action.
 fn nullable_author_action_sequence_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
     schemars::json_schema!({"anyOf": [
         {"type": "string", "pattern": crate::release1_wire::U64_WIRE},
