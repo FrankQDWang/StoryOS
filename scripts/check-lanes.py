@@ -4,6 +4,8 @@
 A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -ec` in the repository root.
 --browser-source adds the lanes of the browser-source Vitest project, one browser process for each lane.
 --postgres-shards adds the ignored tests of the library test binaries in shards, each with its own database.
+--project-scope adds the parts of `make check-full` after the release package: the storage activation checks, the
+exact-dist journeys in shards, and the two modes of the recovery drill. It needs the lanes `build` and `package`.
 When a lane fails, the runner stops the other lanes, prints the log of the failed lane, and exits with 1.
 """
 
@@ -28,6 +30,20 @@ SEPARATE_BROWSER_SOURCE_FILES = ("test/browser-source/journal-working-set.integr
 # Google Chrome can fail to start when two instances start at the same time, so the browser lanes start
 # with this gap: in a test on 2026-11-19, 1 of 20 starts at the same time failed, and 0 of 40 with a gap.
 BROWSER_START_GAP_SECONDS = 8
+# The count of the exact-dist journey shards. Each shard has its own database and its own packaged Servers.
+JOURNEY_SHARDS = 3
+# The time of the longest journey files in a run alone on 2026-11-19 (issue 1712). The other files take
+# approximately this time each. The runner puts each file into the shard with the shortest sum of times.
+LONG_JOURNEY_SECONDS = {
+    "test/browser-exact-dist/s2-long-session.integration.test.ts": 85,
+    "test/browser-exact-dist/production-host.integration.test.ts": 45,
+    "test/browser-exact-dist/stage7-journey.integration.test.ts": 31,
+}
+OTHER_JOURNEY_SECONDS = 3
+# scripts/verify-recovery-hold.sh runs this file after its restore (STORYOS_PHYSICAL_DRILL in apps/web/vitest.config.ts).
+PHYSICAL_DRILL_FILE = "test/browser-exact-dist/s2-physical-drill.integration.test.ts"
+RECOVERY_DRILLS = ("fixture-only", "mixed")
+RECOVERY_DRILL_END = "Isolated restore continued writing after Recovery Visibility Proof"
 # Each browser lane gets its own port for its Vite server (STORYOS_BROWSER_API_PORT in apps/web/vitest.config.ts).
 BROWSER_PORTS = range(41000, 41100)
 # A stopped lane removes its database container in this time.
@@ -39,7 +55,7 @@ RUN_LABEL = "storyos.check-run"
 # After SIGKILL, the runner waits this time for the processes to end.
 KILL_SECONDS = 5
 USAGE = ("usage: scripts/check-lanes.py "
-         "[--lane NAME[:AFTER,...]=COMMAND | --browser-source | --postgres-shards AFTER,...]...")
+         "[--lane NAME[:AFTER,...]=COMMAND | --browser-source | --postgres-shards AFTER,...| --project-scope]...")
 STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 LANE_ARGUMENT = re.compile(r"([a-z0-9-]+)(?::([a-z0-9,-]+))?=(.+)", re.DOTALL)
 
@@ -100,6 +116,60 @@ def browser_source_lanes(root):
     return [vitest_lane(root, name, "browser-source", group) for name, group in zip([*names, "browser-source"], groups)]
 
 
+def journey_shards(root):
+    """Give each exact-dist journey file to exactly one shard. Each shard has its files in the order of their names."""
+    web = root / "apps/web"
+    files = sorted(str(path.relative_to(web)) for path in (web / "test/browser-exact-dist").rglob("*.test.ts"))
+    missing = [file for file in [PHYSICAL_DRILL_FILE, *LONG_JOURNEY_SECONDS] if file not in files]
+    if missing:
+        raise ValueError(f"journeys: a named file does not exist: {', '.join(missing)}")
+    files.remove(PHYSICAL_DRILL_FILE)
+    shards, totals = [[] for _ in range(JOURNEY_SHARDS)], [0] * JOURNEY_SHARDS
+    for file in sorted(files, key=lambda file: (-LONG_JOURNEY_SECONDS.get(file, OTHER_JOURNEY_SECONDS), file)):
+        index = totals.index(min(totals))
+        shards[index].append(file)
+        totals[index] += LONG_JOURNEY_SECONDS.get(file, OTHER_JOURNEY_SECONDS)
+    if sorted(file for shard in shards for file in shard) != files:
+        raise ValueError("journeys: a journey file is in no shard or in more than one shard")
+    return [sorted(shard) for shard in shards]
+
+
+def journey_lane(root, name, files):
+    web, report = root / "apps/web", root / "target/check" / name
+
+    def passed(_log):
+        suites = [suite for output in sorted(report.parent.glob(f"{name}-*.json"))
+                  for suite in json.loads(output.read_text()).get("testResults", [])]
+        if (sorted(suite["name"] for suite in suites) != sorted(str(web / file) for file in files)
+                or any(not any(test["status"] == "passed" for test in suite["assertionResults"])
+                       for suite in suites)):
+            raise ValueError(f"{name}: a journey file did not run one time or has no passing test")
+        return []
+
+    # scripts/verify-project-scope.sh writes the Vitest report of each of its runs to <report>-<run>.json.
+    return Lane(name, [str(root / "scripts/verify-project-scope.sh"), "journeys", *files], after=("package",),
+                env={"STORYOS_JOURNEY_REPORT": str(report)}, passed=passed, browser=True)
+
+
+def recovery_drill_lane(root, mode):
+    def passed(log):
+        if RECOVERY_DRILL_END not in log:
+            raise ValueError(f"recovery-{mode}: the log has no line '{RECOVERY_DRILL_END}'")
+        return []
+
+    return Lane(f"recovery-{mode}", [str(root / "scripts/verify-recovery-hold.sh")], after=("package",),
+                env={"STORYOS_RECOVERY_DRILL": mode}, passed=passed, browser=True)
+
+
+def project_scope_lanes(root):
+    lanes = [journey_lane(root, f"journeys-{index + 1}", files) for index, files in enumerate(journey_shards(root))]
+    lanes += [recovery_drill_lane(root, mode) for mode in RECOVERY_DRILLS]
+    # The activation checks run ignored tests of the library test binary of the build lane.
+    lanes.append(Lane("activation", [str(root / "scripts/verify-project-scope.sh"), "activation"],
+                      after=("build", "package")))
+    return lanes
+
+
 def postgres_lanes(root, after, final_checks):
     """A plan lane builds the list of the ignored tests; then one lane for each shard runs its part."""
     shards = []
@@ -156,6 +226,8 @@ def parse(root, arguments, final_checks):
         option = arguments.pop(0)
         if option == "--browser-source":
             lanes.extend(browser_source_lanes(root))
+        elif option == "--project-scope":
+            lanes.extend(project_scope_lanes(root))
         elif option in ("--lane", "--postgres-shards") and arguments:
             value = arguments.pop(0)
             if option == "--postgres-shards":
@@ -179,7 +251,7 @@ def parse(root, arguments, final_checks):
 def start(root, lane, running, token):
     if lane.browser:
         port = free_browser_port({int(other.env["STORYOS_BROWSER_API_PORT"]) for other in running if other.browser})
-        lane.env = {"STORYOS_BROWSER_API_PORT": str(port)}
+        lane.env = {**(lane.env or {}), "STORYOS_BROWSER_API_PORT": str(port)}
     lane.log = open(root / "target/check" / f"{lane.name}.log", "w")
     lane.started = time.monotonic()
     lane.process = subprocess.Popen(lane.command, cwd=root,

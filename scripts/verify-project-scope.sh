@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+# The parts of make check-full after the steps of make check. scripts/check-lanes.py --project-scope runs each
+# part in a lane after the release package:
+#   scripts/verify-project-scope.sh activation      The storage activation checks.
+#   scripts/verify-project-scope.sh journeys FILE...  The exact-dist journeys FILE, paths relative to apps/web.
+# The two modes of the recovery drill are scripts/verify-recovery-hold.sh.
+
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository_root"
 
@@ -26,11 +32,6 @@ record_google_chrome_version() {
   esac
   printf 'Google Chrome Stable: %s\n' "$chrome_version"
 }
-
-record_google_chrome_version
-if [ "${STORYOS_WEB_TYPECHECKED:-}" != "1" ]; then
-  python3 scripts/package-release.py
-fi
 
 . "$repository_root/scripts/lib/exact-dist.sh"
 
@@ -272,6 +273,253 @@ prove_bound_request_path_activation() {
   rm -f "$log" "$headers" "$body"
 }
 
+# The activation checks run ignored tests of the library test binary of the workspace build. A cargo test of one
+# package would build a second binary, because the features of one package are not the features of the workspace.
+find_postgres_test_binary() {
+  cargo test --locked --workspace --all-targets --all-features --no-run --message-format=json | python3 -c '
+import json, sys
+paths = {message["executable"] for message in map(json.loads, sys.stdin)
+         if message.get("reason") == "compiler-artifact" and message["target"]["name"] == "storyos_adapter_postgres"
+         and message["target"]["kind"] == ["lib"] and message["profile"]["test"] and message.get("executable")}
+if len(paths) != 1:
+    raise SystemExit(f"The workspace build has not one library test binary of storyos-adapter-postgres: {paths}")
+print(paths.pop())'
+}
+
+run_postgres_tests() {
+  (cd "$repository_root/crates/storyos-adapter-postgres" && "$postgres_test_binary" --ignored --exact "$@")
+}
+
+run_activation_checks() {
+  postgres_test_binary=$(find_postgres_test_binary)
+  echo "Running migrations SQL apply and faulted rollback without Server or Worker"
+  start_postgres "$oracle_container"
+  copy_migrations_sql "$oracle_container"
+  if apply_migrations_sql "$oracle_container" fault; then
+    echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
+    exit 1
+  fi
+  rollback_state=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT (SELECT count(*) FROM pg_roles
+              WHERE rolname IN ('storyos_owner', 'storyos_runtime'))::text
+            || '/' || COALESCE(to_regnamespace('storyos')::text, 'absent')")
+  if [ "$rollback_state" != "0/absent" ]; then
+    echo "The faulted Release 1 bootstrap exposed partial state: $rollback_state" >&2
+    exit 1
+  fi
+  apply_migrations_sql "$oracle_container"
+  oracle_secret=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
+       FROM pg_authid WHERE rolname = 'storyos_runtime'")
+  if [ "$oracle_secret" != "absent" ]; then
+    echo "The tracked Release 1 bootstrap installed a runtime password" >&2
+    exit 1
+  fi
+  oracle_active=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT count(*)::text FROM storyos.storage_activation_proofs")
+  if [ "$oracle_active" != "0" ]; then
+    echo "The SQL apply oracle wrote Activation rows" >&2
+    exit 1
+  fi
+  set_runtime_password "$oracle_container"
+  oracle_runtime=$(postgres_runtime_url "$oracle_container")
+  echo "Refusing Server bind and Worker claim without an Active proof"
+  assert_packaged_server_refuses_bind "sql-apply-without-active" "$oracle_runtime"
+  assert_packaged_worker_refuses_claim "sql-apply-without-active" "$oracle_runtime"
+  load_controlled_fixture "$oracle_container"
+  oracle_admin=$(postgres_admin_url "$oracle_container")
+  if STORYOS_STORAGE_ADMIN_URL="$oracle_admin" "$storage_bin"; then
+    echo "storyos-storage adopted a non-empty database without a ledger" >&2
+    exit 1
+  fi
+  oracle_title=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT title FROM storyos.projects
+      WHERE project_id = '018f0000-0000-7001-8000-000000000002'")
+  if [ "$oracle_title" != "Project A" ]; then
+    echo "A refused Preflight changed domain rows: $oracle_title" >&2
+    exit 1
+  fi
+  docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
+    "INSERT INTO storyos.storage_activation_proofs (
+       proof_id, phase, catalog_id, catalog_checksum, migration_chain_id,
+       migration_chain_digest, database_schema_identity, active_schema_version,
+       public_release, route_catalog_id, route_catalog_sha256, activated_at
+     ) VALUES (
+       'release-1', 'active', 'wrong.catalog',
+       'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+       'wrong.chain',
+       'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+       'wrong.schema', 'wrong.version', 'wrong.release', 'wrong.route',
+       'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+       clock_timestamp()
+     )" >/dev/null
+  if STORYOS_STORAGE_ADMIN_URL="$oracle_admin" "$storage_bin"; then
+    echo "storyos-storage Activated over a mismatched identity" >&2
+    exit 1
+  fi
+  mismatch_state=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT catalog_id || '/' || title
+       FROM storyos.storage_activation_proofs, storyos.projects
+      WHERE proof_id = 'release-1'
+        AND project_id = '018f0000-0000-7001-8000-000000000002'")
+  if [ "$mismatch_state" != "wrong.catalog/Project A" ]; then
+    echo "An identity mismatch changed stored proof or domain rows: $mismatch_state" >&2
+    exit 1
+  fi
+  echo "Refusing Server bind and Worker claim on an identity mismatch"
+  assert_packaged_server_refuses_bind "identity-mismatch" "$oracle_runtime"
+  assert_packaged_worker_refuses_claim "identity-mismatch" "$oracle_runtime"
+
+  echo "Running packaged storyos-storage against a fresh empty database"
+  start_postgres "$activation_container"
+  activation_admin=$(postgres_admin_url "$activation_container")
+  if STORYOS_DATABASE_URL="$activation_admin" "$storage_bin"; then
+    echo "storyos-storage reused STORYOS_DATABASE_URL" >&2
+    exit 1
+  fi
+  STORYOS_DATABASE_URL="postgres://storyos_runtime:wrong@127.0.0.1:1/postgres" \
+  STORYOS_STORAGE_ADMIN_URL="$activation_admin" \
+    "$storage_bin"
+  STORYOS_STORAGE_ADMIN_URL="$activation_admin" \
+    "$storage_bin"
+  expected_sources=$(find crates/storyos-adapter-postgres/migrations -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
+  activation_state=$(docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT proof.phase || '/' ||
+            CASE WHEN owner.rolcanlogin THEN 'login' ELSE 'nologin' END || '/' ||
+            CASE WHEN runtime.rolpassword IS NULL THEN 'absent' ELSE 'present' END || '/' ||
+            (SELECT count(*) FROM storyos.schema_migrations)::text || '/' ||
+            (SELECT count(*) FROM storyos.migration_phases)::text || '/' ||
+            (SELECT count(*) FROM storyos.migration_phase_checksums)::text
+       FROM storyos.storage_activation_proofs AS proof,
+            pg_roles AS owner,
+            pg_authid AS runtime
+      WHERE proof.proof_id = 'release-1'
+        AND owner.rolname = 'storyos_owner'
+        AND runtime.rolname = 'storyos_runtime'")
+  if [ "$activation_state" != "active/nologin/absent/1/4/$expected_sources" ]; then
+    echo "storyos-storage did not persist the Active proof: $activation_state" >&2
+    exit 1
+  fi
+  docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 -U postgres \
+    -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
+  runtime_select=$(docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 \
+    -U storyos_runtime -d postgres -Atc \
+    "SELECT phase FROM storyos.storage_activation_proofs WHERE proof_id = 'release-1'")
+  if [ "$runtime_select" != "active" ]; then
+    echo "storyos_runtime cannot SELECT the activation proof" >&2
+    exit 1
+  fi
+  if docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 \
+    -U storyos_runtime -d postgres -c \
+    "INSERT INTO storyos.schema_migrations (
+       schema_version, migration_id, checksum, release_identity, runner_revision,
+       started_at, status
+     ) VALUES (
+       'forged', 'forged', 'sha256:3333333333333333333333333333333333333333333333333333333333333333',
+       'forged', 'forged', clock_timestamp(), 'applied'
+     )" >/dev/null 2>&1; then
+    echo "storyos_runtime ran the storage state machine" >&2
+    exit 1
+  fi
+  # The vector extension is optional (ADR 0095 section 4): a database that does not offer it
+  # activates with the same storage identity and has no vector table. This is the one use of the
+  # image without pgvector.
+  echo "Running packaged storyos-storage against a fresh database without the vector extension"
+  start_postgres "$legacy_activation_container" postgres:16-alpine
+  legacy_admin=$(postgres_admin_url "$legacy_activation_container")
+  STORYOS_STORAGE_ADMIN_URL="$legacy_admin" "$storage_bin"
+  activation_facts() {
+    docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+      "SELECT proof.phase || '/' || proof.migration_chain_digest || '/' ||
+              proof.database_schema_identity || '/' ||
+              COALESCE(to_regclass('storyos.passage_vectors')::text, 'absent') || '/' ||
+              COALESCE((SELECT extnamespace::regnamespace::text || ':' || extversion
+                          FROM pg_extension WHERE extname = 'vector'), 'none')
+         FROM storyos.storage_activation_proofs AS proof
+        WHERE proof.proof_id = 'release-1'"
+  }
+  vector_facts=$(activation_facts "$activation_container")
+  legacy_facts=$(activation_facts "$legacy_activation_container")
+  case "$vector_facts" in
+    */storyos.passage_vectors/extensions:0.8.7) ;;
+    *)
+      echo "The pgvector database has no vector table: $vector_facts" >&2
+      exit 1
+      ;;
+  esac
+  if [ "$legacy_facts" != "${vector_facts%/storyos.passage_vectors/extensions:0.8.7}/absent/none" ]; then
+    echo "The database without pgvector did not activate the same identity: $legacy_facts" >&2
+    exit 1
+  fi
+  set_runtime_password "$legacy_activation_container"
+  for vector_container in "$activation_container" "$legacy_activation_container"; do
+    STORYOS_TEST_DATABASE_URL=$(postgres_runtime_url "$vector_container") \
+    STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$vector_container") \
+      run_postgres_tests \
+        passage_vectors::tests::the_vector_store_is_available_exactly_when_the_database_offers_the_extension
+  done
+  # The ranked passages need no vector store: on the database without pgvector the result is the
+  # exact-term list, and no request declares the hybrid search.
+  load_controlled_fixture "$legacy_activation_container"
+  STORYOS_TEST_DATABASE_URL=$(postgres_runtime_url "$legacy_activation_container") \
+  STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$legacy_activation_container") \
+    run_postgres_tests \
+      passage_ranking::tests::the_result_with_no_vector_store_is_the_exact_term_list \
+      agent_run_hybrid_search::tests::the_tool_follows_the_vector_store_of_the_database
+  docker rm -fv "$legacy_activation_container" >/dev/null
+  activation_runtime=$(postgres_runtime_url "$activation_container")
+  assert_offline_storage_activation_checks
+  echo "Binding packaged Server and Worker only from the Active proof"
+  assert_packaged_server_binds "active-proof" "$activation_runtime"
+  STORYOS_DATABASE_URL="$activation_runtime" \
+  STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
+    "$worker_bin" --claim-only
+
+  prepare_server_database "$container"
+  prove_bound_request_path_activation
+}
+
+# Runs the exact-dist journeys $1... with the order of the arguments, each file one time. The Stage 2
+# AI-independent journeys run first, with a Server without a model destination. Vitest writes its report of each
+# run to $STORYOS_JOURNEY_REPORT-<run>.json, which scripts/check-lanes.py reads.
+run_journeys() {
+  record_google_chrome_version
+  report=${STORYOS_JOURNEY_REPORT:-$repository_root/target/check/journeys-$$}
+  rm -f "$report"-*.json
+  ai_disabled_files=""
+  model_files=""
+  for journey in "$@"; do
+    if exact_dist_ai_disabled_journey "$journey"; then
+      ai_disabled_files="$ai_disabled_files $journey"
+    else
+      model_files="$model_files $journey"
+    fi
+  done
+  prepare_server_database "$container"
+  reset_exact_dist_fixture "$container"
+  journey_run=0
+  if [ -n "$ai_disabled_files" ]; then
+    start_ai_disabled_exact_dist_server
+    # shellcheck disable=SC2086
+    run_journey_files "$STORYOS_AI_DISABLED_SERVER" $ai_disabled_files
+  fi
+  if [ -n "$model_files" ]; then
+    start_exact_dist_server
+    # shellcheck disable=SC2086
+    run_journey_files "$STORYOS_DEV_SERVER" $model_files
+  fi
+  stop_exact_dist_server
+}
+
+run_journey_files() {
+  journey_server=$1
+  shift
+  journey_run=$((journey_run + 1))
+  STORYOS_DEV_SERVER="$journey_server" STORYOS_VITEST_FILE_ORDER=$(printf '%s:' "$@") \
+    pnpm --dir apps/web exec vitest run --project browser-exact-dist "$@" --passWithNoTests=false \
+      --allowOnly=false --reporter=default --reporter=json --outputFile="$report-$journey_run.json"
+}
+
 container="storyos-issue105-$$"
 oracle_container="storyos-storage-oracle-$$"
 activation_container="storyos-storage-activation-$$"
@@ -287,214 +535,20 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 cleanup
 
-echo "Running migrations SQL apply and faulted rollback without Server or Worker"
-start_postgres "$oracle_container"
-copy_migrations_sql "$oracle_container"
-if apply_migrations_sql "$oracle_container" fault; then
-  echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
-  exit 1
-fi
-rollback_state=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-  "SELECT (SELECT count(*) FROM pg_roles
-            WHERE rolname IN ('storyos_owner', 'storyos_runtime'))::text
-          || '/' || COALESCE(to_regnamespace('storyos')::text, 'absent')")
-if [ "$rollback_state" != "0/absent" ]; then
-  echo "The faulted Release 1 bootstrap exposed partial state: $rollback_state" >&2
-  exit 1
-fi
-apply_migrations_sql "$oracle_container"
-oracle_secret=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-  "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
-     FROM pg_authid WHERE rolname = 'storyos_runtime'")
-if [ "$oracle_secret" != "absent" ]; then
-  echo "The tracked Release 1 bootstrap installed a runtime password" >&2
-  exit 1
-fi
-oracle_active=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-  "SELECT count(*)::text FROM storyos.storage_activation_proofs")
-if [ "$oracle_active" != "0" ]; then
-  echo "The SQL apply oracle wrote Activation rows" >&2
-  exit 1
-fi
-set_runtime_password "$oracle_container"
-oracle_runtime=$(postgres_runtime_url "$oracle_container")
-echo "Refusing Server bind and Worker claim without an Active proof"
-assert_packaged_server_refuses_bind "sql-apply-without-active" "$oracle_runtime"
-assert_packaged_worker_refuses_claim "sql-apply-without-active" "$oracle_runtime"
-load_controlled_fixture "$oracle_container"
-oracle_admin=$(postgres_admin_url "$oracle_container")
-if STORYOS_STORAGE_ADMIN_URL="$oracle_admin" "$storage_bin"; then
-  echo "storyos-storage adopted a non-empty database without a ledger" >&2
-  exit 1
-fi
-oracle_title=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-  "SELECT title FROM storyos.projects
-    WHERE project_id = '018f0000-0000-7001-8000-000000000002'")
-if [ "$oracle_title" != "Project A" ]; then
-  echo "A refused Preflight changed domain rows: $oracle_title" >&2
-  exit 1
-fi
-docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
-  "INSERT INTO storyos.storage_activation_proofs (
-     proof_id, phase, catalog_id, catalog_checksum, migration_chain_id,
-     migration_chain_digest, database_schema_identity, active_schema_version,
-     public_release, route_catalog_id, route_catalog_sha256, activated_at
-   ) VALUES (
-     'release-1', 'active', 'wrong.catalog',
-     'sha256:0000000000000000000000000000000000000000000000000000000000000000',
-     'wrong.chain',
-     'sha256:1111111111111111111111111111111111111111111111111111111111111111',
-     'wrong.schema', 'wrong.version', 'wrong.release', 'wrong.route',
-     'sha256:2222222222222222222222222222222222222222222222222222222222222222',
-     clock_timestamp()
-   )" >/dev/null
-if STORYOS_STORAGE_ADMIN_URL="$oracle_admin" "$storage_bin"; then
-  echo "storyos-storage Activated over a mismatched identity" >&2
-  exit 1
-fi
-mismatch_state=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-  "SELECT catalog_id || '/' || title
-     FROM storyos.storage_activation_proofs, storyos.projects
-    WHERE proof_id = 'release-1'
-      AND project_id = '018f0000-0000-7001-8000-000000000002'")
-if [ "$mismatch_state" != "wrong.catalog/Project A" ]; then
-  echo "An identity mismatch changed stored proof or domain rows: $mismatch_state" >&2
-  exit 1
-fi
-echo "Refusing Server bind and Worker claim on an identity mismatch"
-assert_packaged_server_refuses_bind "identity-mismatch" "$oracle_runtime"
-assert_packaged_worker_refuses_claim "identity-mismatch" "$oracle_runtime"
-
-echo "Running packaged storyos-storage against a fresh empty database"
-start_postgres "$activation_container"
-activation_admin=$(postgres_admin_url "$activation_container")
-if STORYOS_DATABASE_URL="$activation_admin" "$storage_bin"; then
-  echo "storyos-storage reused STORYOS_DATABASE_URL" >&2
-  exit 1
-fi
-STORYOS_DATABASE_URL="postgres://storyos_runtime:wrong@127.0.0.1:1/postgres" \
-STORYOS_STORAGE_ADMIN_URL="$activation_admin" \
-  "$storage_bin"
-STORYOS_STORAGE_ADMIN_URL="$activation_admin" \
-  "$storage_bin"
-expected_sources=$(find crates/storyos-adapter-postgres/migrations -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
-activation_state=$(docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-  "SELECT proof.phase || '/' ||
-          CASE WHEN owner.rolcanlogin THEN 'login' ELSE 'nologin' END || '/' ||
-          CASE WHEN runtime.rolpassword IS NULL THEN 'absent' ELSE 'present' END || '/' ||
-          (SELECT count(*) FROM storyos.schema_migrations)::text || '/' ||
-          (SELECT count(*) FROM storyos.migration_phases)::text || '/' ||
-          (SELECT count(*) FROM storyos.migration_phase_checksums)::text
-     FROM storyos.storage_activation_proofs AS proof,
-          pg_roles AS owner,
-          pg_authid AS runtime
-    WHERE proof.proof_id = 'release-1'
-      AND owner.rolname = 'storyos_owner'
-      AND runtime.rolname = 'storyos_runtime'")
-if [ "$activation_state" != "active/nologin/absent/1/4/$expected_sources" ]; then
-  echo "storyos-storage did not persist the Active proof: $activation_state" >&2
-  exit 1
-fi
-docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 -U postgres \
-  -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
-runtime_select=$(docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 \
-  -U storyos_runtime -d postgres -Atc \
-  "SELECT phase FROM storyos.storage_activation_proofs WHERE proof_id = 'release-1'")
-if [ "$runtime_select" != "active" ]; then
-  echo "storyos_runtime cannot SELECT the activation proof" >&2
-  exit 1
-fi
-if docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 \
-  -U storyos_runtime -d postgres -c \
-  "INSERT INTO storyos.schema_migrations (
-     schema_version, migration_id, checksum, release_identity, runner_revision,
-     started_at, status
-   ) VALUES (
-     'forged', 'forged', 'sha256:3333333333333333333333333333333333333333333333333333333333333333',
-     'forged', 'forged', clock_timestamp(), 'applied'
-   )" >/dev/null 2>&1; then
-  echo "storyos_runtime ran the storage state machine" >&2
-  exit 1
-fi
-# The vector extension is optional (ADR 0095 section 4): a database that does not offer it
-# activates with the same storage identity and has no vector table. This is the one use of the
-# image without pgvector.
-echo "Running packaged storyos-storage against a fresh database without the vector extension"
-start_postgres "$legacy_activation_container" postgres:16-alpine
-legacy_admin=$(postgres_admin_url "$legacy_activation_container")
-STORYOS_STORAGE_ADMIN_URL="$legacy_admin" "$storage_bin"
-activation_facts() {
-  docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-    "SELECT proof.phase || '/' || proof.migration_chain_digest || '/' ||
-            proof.database_schema_identity || '/' ||
-            COALESCE(to_regclass('storyos.passage_vectors')::text, 'absent') || '/' ||
-            COALESCE((SELECT extnamespace::regnamespace::text || ':' || extversion
-                        FROM pg_extension WHERE extname = 'vector'), 'none')
-       FROM storyos.storage_activation_proofs AS proof
-      WHERE proof.proof_id = 'release-1'"
-}
-vector_facts=$(activation_facts "$activation_container")
-legacy_facts=$(activation_facts "$legacy_activation_container")
-case "$vector_facts" in
-  */storyos.passage_vectors/extensions:0.8.7) ;;
+case "${1:-}" in
+  activation)
+    run_activation_checks
+    ;;
+  journeys)
+    shift
+    if [ "$#" -eq 0 ]; then
+      echo "usage: scripts/verify-project-scope.sh journeys FILE..." >&2
+      exit 2
+    fi
+    run_journeys "$@"
+    ;;
   *)
-    echo "The pgvector database has no vector table: $vector_facts" >&2
-    exit 1
+    echo "usage: scripts/verify-project-scope.sh activation | journeys FILE..." >&2
+    exit 2
     ;;
 esac
-if [ "$legacy_facts" != "${vector_facts%/storyos.passage_vectors/extensions:0.8.7}/absent/none" ]; then
-  echo "The database without pgvector did not activate the same identity: $legacy_facts" >&2
-  exit 1
-fi
-set_runtime_password "$legacy_activation_container"
-for vector_container in "$activation_container" "$legacy_activation_container"; do
-  STORYOS_TEST_DATABASE_URL=$(postgres_runtime_url "$vector_container") \
-  STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$vector_container") \
-    cargo test --locked -p storyos-adapter-postgres --all-features --lib -- --ignored --exact \
-      passage_vectors::tests::the_vector_store_is_available_exactly_when_the_database_offers_the_extension
-done
-# The ranked passages need no vector store: on the database without pgvector the result is the
-# exact-term list, and no request declares the hybrid search.
-load_controlled_fixture "$legacy_activation_container"
-STORYOS_TEST_DATABASE_URL=$(postgres_runtime_url "$legacy_activation_container") \
-STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$legacy_activation_container") \
-  cargo test --locked -p storyos-adapter-postgres --all-features --lib -- --ignored --exact \
-    passage_ranking::tests::the_result_with_no_vector_store_is_the_exact_term_list \
-    agent_run_hybrid_search::tests::the_tool_follows_the_vector_store_of_the_database
-docker rm -fv "$legacy_activation_container" >/dev/null
-activation_runtime=$(postgres_runtime_url "$activation_container")
-assert_offline_storage_activation_checks
-echo "Binding packaged Server and Worker only from the Active proof"
-assert_packaged_server_binds "active-proof" "$activation_runtime"
-STORYOS_DATABASE_URL="$activation_runtime" \
-STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
-  "$worker_bin" --claim-only
-
-prepare_server_database "$container"
-prove_bound_request_path_activation
-# make check runs the ignored PostgreSQL tests and the shared Web test phases one time before this script.
-echo "Restoring the controlled Project fixture for S1-JRN-001"
-reset_exact_dist_fixture "$container"
-echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
-start_exact_dist_server
-start_ai_disabled_exact_dist_server
-# The Stage 2 AI-independent journeys run first, without a model destination.
-# The vitest --exclude option does not apply to a workspace project, so the second run names its files.
-journeys=""
-for path in apps/web/test/browser-exact-dist/*.test.ts; do
-  journey=${path#apps/web/}
-  exact_dist_ai_disabled_journey "$journey" || journeys="$journeys $journey"
-done
-# shellcheck disable=SC2086
-sh -c '
-  ai_disabled=$1
-  shift
-  STORYOS_DEV_SERVER="$STORYOS_AI_DISABLED_SERVER" \
-    pnpm --dir apps/web exec vitest run --project browser-exact-dist $ai_disabled &&
-    pnpm --dir apps/web exec vitest run --project browser-exact-dist "$@"
-' exact-dist "$exact_dist_ai_disabled_journeys" $journeys
-stop_exact_dist_server
-echo "Running isolated Recovery Copy restore and Recovery Visibility Proof"
-STORYOS_RECOVERY_DRILL=fixture-only "$repository_root/scripts/verify-recovery-hold.sh"
-echo "Running mixed empty and populated isolated Recovery Copy restore"
-STORYOS_RECOVERY_DRILL=mixed "$repository_root/scripts/verify-recovery-hold.sh"

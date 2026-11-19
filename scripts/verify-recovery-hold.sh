@@ -54,6 +54,12 @@ else
   created_volumes=1
 fi
 
+# In a run of scripts/check-lanes.py, each container gets the label of the run, so that the stop of the runner
+# removes it.
+drill_docker_run() {
+  docker run ${STORYOS_CHECK_RUN:+--label "storyos.check-run=$STORYOS_CHECK_RUN"} "$@"
+}
+
 cleanup() {
   if [ -n "$drill_server_pid" ]; then
     kill "$drill_server_pid" >/dev/null 2>&1 || true
@@ -79,10 +85,10 @@ if [ "$created_volumes" = "1" ]; then
   docker volume create "$backup_volume" >/dev/null
   docker volume create "$hold_volume" >/dev/null
 fi
-docker run --rm --user root --volume "$archive_volume:/archive" "$storyos_postgres_image" \
+drill_docker_run --rm --user root --volume "$archive_volume:/archive" "$storyos_postgres_image" \
   chown postgres:postgres /archive
 
-docker run --detach --name "$primary" \
+drill_docker_run --detach --name "$primary" \
   --network "$network" \
   --publish 127.0.0.1::5432 \
   --env POSTGRES_PASSWORD=admin \
@@ -261,9 +267,9 @@ if [ "$wal_level" != "replica" ] || [ "$archive_mode" != "on" ] \
   exit 1
 fi
 
-docker run --rm --user root --volume "$backup_volume:/backup" "$storyos_postgres_image" \
+drill_docker_run --rm --user root --volume "$backup_volume:/backup" "$storyos_postgres_image" \
   chown postgres:postgres /backup
-docker run --rm --network "$network" --user postgres \
+drill_docker_run --rm --network "$network" --user postgres \
   --volume "$backup_volume:/backup" \
   --env PGPASSWORD=backup \
   --entrypoint pg_basebackup \
@@ -291,7 +297,7 @@ until docker exec "$primary" test -f "/var/lib/postgresql/wal_archive/$archived_
 done
 rpo_seconds=$(($(date +%s) - rpo_started))
 
-docker run --rm --volume "$backup_volume:/backup" "$storyos_postgres_image" sh -c '
+drill_docker_run --rm --volume "$backup_volume:/backup" "$storyos_postgres_image" sh -c '
   set -eu
   test -f /backup/backup_label
   grep -q "START WAL LOCATION" /backup/backup_label
@@ -315,12 +321,12 @@ fi
 
 chain_manifest=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-chain.XXXXXX")
 saved_wal=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-wal.XXXXXX")
-docker run --rm --volume "$archive_volume:/archive" --volume "$backup_volume:/backup" \
+drill_docker_run --rm --volume "$archive_volume:/archive" --volume "$backup_volume:/backup" \
   "$storyos_postgres_image" sh -c 'find /backup /archive -type f -exec sha256sum {} \; | sort' \
   >"$chain_manifest"
 
 assert_recovery_chain() {
-  docker run --rm \
+  drill_docker_run --rm \
     --volume "$archive_volume:/archive" \
     --volume "$backup_volume:/backup" \
     --volume "$chain_manifest:/manifest:ro" \
@@ -355,7 +361,7 @@ chown_archive
 assert_recovery_chain
 rm -f "$saved_wal"
 
-docker run --rm --user root \
+drill_docker_run --rm --user root \
   --volume "$backup_volume:/backup" \
   --volume "$hold_volume:/hold" \
   "$storyos_postgres_image" sh -c 'rm -rf /hold/lost+found; find /hold -mindepth 1 -maxdepth 1 -exec rm -rf {} +; cp -a /backup/. /hold/ && chown -R postgres:postgres /hold'
@@ -367,7 +373,7 @@ recovery_target_inclusive = on
 recovery_target_action = 'promote'
 default_transaction_read_only = on
 EOF
-docker run --rm --user root \
+drill_docker_run --rm --user root \
   --volume "$restore_conf:/tmp/restore.conf:ro" \
   --volume "$hold_volume:/hold" \
   "$storyos_postgres_image" sh -c '
@@ -379,7 +385,7 @@ docker run --rm --user root \
 rm -f "$restore_conf"
 
 restore_started=$(date +%s)
-docker run --detach --name "$hold" \
+drill_docker_run --detach --name "$hold" \
   --network "$network" \
   --publish 127.0.0.1::5432 \
   --volume "$hold_volume:/var/lib/postgresql/data" \
