@@ -515,6 +515,7 @@ run_journey_files() {
   journey_server=$1
   shift
   journey_run=$((journey_run + 1))
+  python3 "$repository_root/scripts/check-lanes.py" --browser-start
   STORYOS_DEV_SERVER="$journey_server" STORYOS_VITEST_FILE_ORDER=$(printf '%s:' "$@") \
     pnpm --dir apps/web exec vitest run --project browser-exact-dist "$@" --passWithNoTests=false \
       --allowOnly=false --reporter=default --reporter=json --outputFile="$report-$journey_run.json"

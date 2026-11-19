@@ -6,9 +6,12 @@ A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -e
 --postgres-shards adds the ignored tests of the library test binaries in shards, each with its own database.
 --project-scope adds the parts of `make check-full` after the release package: the storage activation checks, the
 exact-dist journeys in shards, and the two modes of the recovery drill. It needs the lanes `build` and `package`.
+`scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; a script runs it before each
+browser Vitest run that does not start at the start of its lane.
 When a lane fails, the runner stops the other lanes, prints the log of the failed lane, and exits with 1.
 """
 
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -27,9 +30,12 @@ POSTGRES_SHARDS = 4
 # This file takes approximately 204 s, so it gets its own browser process, and the other files share one.
 # Four browser processes did not connect within the Vitest timeout in 3 of 6 runs of `make check` on 2026-11-19.
 SEPARATE_BROWSER_SOURCE_FILES = ("test/browser-source/journal-working-set.integration.test.ts",)
-# Google Chrome can fail to start when two instances start at the same time, so the browser lanes start
-# with this gap: in a test on 2026-11-19, 1 of 20 starts at the same time failed, and 0 of 40 with a gap.
+# Google Chrome can fail to start when two instances start at the same time, so the starts of a run have
+# this gap: in a test on 2026-11-19, 1 of 20 starts at the same time failed, and 0 of 40 with a gap.
 BROWSER_START_GAP_SECONDS = 8
+# This file has the time of the last start. A journey lane and a drill lane start Chrome after their database
+# is ready, so the gap is for each start of Chrome, and not only for each start of a lane (issue 1712).
+BROWSER_START_FILE = "target/check/browser-start"
 # The count of the exact-dist journey shards. Each shard has its own database and its own packaged Servers.
 JOURNEY_SHARDS = 3
 # The time of the longest journey files in a run of `make check-full` on 2026-11-20 (issue 1712). The other files
@@ -64,11 +70,38 @@ LANE_ARGUMENT = re.compile(r"([a-z0-9-]+)(?::([a-z0-9,-]+))?=(.+)", re.DOTALL)
 class Lane:
     """A command with its own log. `passed` reads the log of a passed lane and returns more lanes."""
 
-    def __init__(self, name, command, after=(), env=None, passed=None, browser=False):
+    def __init__(self, name, command, after=(), env=None, passed=None, browser=False, browser_at_start=None):
         self.name, self.command, self.after, self.env, self.passed = name, command, tuple(after), env, passed
+        # A browser lane gets its own port. A lane that starts Chrome at its start gets the start gap from the runner.
         self.browser = browser
+        self.browser_at_start = browser if browser_at_start is None else browser_at_start
         self.process = self.log = None
         self.started = self.duration = None
+
+
+def claim_browser_start(root, wait):
+    """Record a start of Chrome when the last start is BROWSER_START_GAP_SECONDS ago. With wait, wait for that time.
+
+    Return False when the gap is not complete and wait is false.
+    """
+    path = root / BROWSER_START_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a+") as file:
+        while True:
+            fcntl.flock(file, fcntl.LOCK_EX)
+            file.seek(0)
+            text = file.read().strip()
+            remaining = (float(text) if text else 0.0) + BROWSER_START_GAP_SECONDS - time.time()
+            if remaining <= 0:
+                file.seek(0)
+                file.truncate()
+                file.write(str(time.time()))
+                file.flush()
+                return True
+            fcntl.flock(file, fcntl.LOCK_UN)
+            if not wait:
+                return False
+            time.sleep(remaining)
 
 
 def free_browser_port(taken):
@@ -149,7 +182,7 @@ def journey_lane(root, name, files):
 
     # scripts/verify-project-scope.sh writes the Vitest report of each of its runs to <report>-<run>.json.
     return Lane(name, [str(root / "scripts/verify-project-scope.sh"), "journeys", *files], after=("package",),
-                env={"STORYOS_JOURNEY_REPORT": str(report)}, passed=passed, browser=True)
+                env={"STORYOS_JOURNEY_REPORT": str(report)}, passed=passed, browser=True, browser_at_start=False)
 
 
 def recovery_drill_lane(root, mode):
@@ -159,7 +192,7 @@ def recovery_drill_lane(root, mode):
         return []
 
     return Lane(f"recovery-{mode}", [str(root / "scripts/verify-recovery-hold.sh")], after=("package",),
-                env={"STORYOS_RECOVERY_DRILL": mode}, passed=passed, browser=True)
+                env={"STORYOS_RECOVERY_DRILL": mode}, passed=passed, browser=True, browser_at_start=False)
 
 
 def project_scope_lanes(root):
@@ -394,7 +427,6 @@ def run(root, lanes, final_checks):
     (root / "target/check").mkdir(parents=True, exist_ok=True)
     pending, running, finished, started = list(lanes), [], [], []
     began = time.monotonic()
-    last_browser_start = began - BROWSER_START_GAP_SECONDS
     token = uuid.uuid4().hex
     # A signal only sets the flag, so that each started lane is in `started` when the runner stops the lanes.
     interrupted = []
@@ -409,10 +441,8 @@ def run(root, lanes, final_checks):
             for lane in ready:
                 if len(running) >= LANE_LIMIT or interrupted:
                     break
-                if lane.browser and time.monotonic() - last_browser_start < BROWSER_START_GAP_SECONDS:
+                if lane.browser_at_start and not claim_browser_start(root, wait=False):
                     continue
-                if lane.browser:
-                    last_browser_start = time.monotonic()
                 pending.remove(lane)
                 start(root, lane, running, token)
                 started.append(lane)
@@ -457,6 +487,9 @@ def run(root, lanes, final_checks):
 
 def main():
     root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
+    if sys.argv[1:] == ["--browser-start"]:
+        claim_browser_start(root, wait=True)
+        return 0
     final_checks = []
     try:
         lanes = parse(root, sys.argv[1:], final_checks)

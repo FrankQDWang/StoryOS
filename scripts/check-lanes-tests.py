@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests of the stop of scripts/check-lanes.py (issue 1711). Each test runs the runner with lanes of its own.
+"""Tests of the stop and of the Chrome start gap of scripts/check-lanes.py (issues 1711, 1712). Each test runs the runner.
 
 CHECK_LANES_SCRIPT gives another runner to test, for example the runner of an earlier commit.
 """
@@ -167,6 +167,16 @@ class StopTests(unittest.TestCase):
         self.assertNotIn("Traceback", output)
         for pid in self.watched:
             self.assert_gone(pid, output)
+
+
+class BrowserStartTests(unittest.TestCase):
+    def test_two_starts_of_chrome_have_the_gap(self):
+        # The gap of scripts/check-lanes.py BROWSER_START_GAP_SECONDS.
+        gap = float(re.search(r"^BROWSER_START_GAP_SECONDS = (\d+)$", Path(RUNNER).read_text(), re.MULTILINE).group(1))
+        began = time.monotonic()
+        for _ in range(2):
+            subprocess.run([sys.executable, RUNNER, "--browser-start"], cwd=ROOT, check=True, timeout=60)
+        self.assertGreaterEqual(time.monotonic() - began, gap - 0.5)
 
 
 if __name__ == "__main__":

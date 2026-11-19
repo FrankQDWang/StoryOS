@@ -182,6 +182,7 @@ if [ "$recovery_drill" = "mixed" ]; then
   pnpm --dir apps/web exec vitest run --project node-postgresql \
     test/node-postgresql/recovery-exports-http.integration.test.ts
   STORYOS_WORKER=0 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
+  python3 "$repository_root/scripts/check-lanes.py" --browser-start
   STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
   STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
@@ -201,18 +202,22 @@ docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
 STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   sh "$repository_root/scripts/seed-recovery-acceptance.sh"
-# The research journey writes each Stage 5 research record family before the backup.
+# The research journey writes each Stage 5 research record family before the backup. Each browser run waits for
+# the start gap of Google Chrome of scripts/check-lanes.py.
+python3 "$repository_root/scripts/check-lanes.py" --browser-start
 STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
     test/browser-exact-dist/research-journey.integration.test.ts
 # The Skill journey writes each Stage 6 Skill record family before the backup.
+python3 "$repository_root/scripts/check-lanes.py" --browser-start
 STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
     test/browser-exact-dist/skill-journey.integration.test.ts
 # The Stage 7 journey writes each Stage 7 Memory record family before the backup. Its statements of
 # the test administrator connection are then in the restored database too.
+python3 "$repository_root/scripts/check-lanes.py" --browser-start
 STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
@@ -729,6 +734,7 @@ if [ "$(stage7_memory_facts "$hold")" != "$stage7_before" ]; then
 fi
 export STORYOS_PHYSICAL_DRILL=1
 echo "Running exact-dist continued writing after restore"
+python3 "$repository_root/scripts/check-lanes.py" --browser-start
 pnpm --dir apps/web exec vitest run --project browser-exact-dist
 stop_recovery_drill_server
 assert_mixed_empty_projects "$hold"
