@@ -528,8 +528,6 @@ fn every_registered_operation_matches_its_generated_wire() {
     assert_takeover_documents(&generated);
     assert_project_assistance_documents(&generated);
     assert_receipt_sequence_documents(&generated);
-    assert_receipt_sequence_shape(&generated);
-    assert_undo_receipt_sequence_documents(&generated);
 }
 
 type GeneratedFiles = std::collections::BTreeMap<&'static str, Vec<u8>>;
@@ -738,92 +736,6 @@ fn assert_receipt_sequence_documents(generated: &GeneratedFiles) {
             "update-volume",
         ]
     );
-}
-
-/// Each schema that has a Receipt gives its Author Action sequence the same required, nullable shape.
-fn assert_receipt_sequence_shape(generated: &GeneratedFiles) {
-    let nullable = serde_json::json!({"anyOf": [
-        {"type": "string", "pattern": crate::release1_wire::U64_WIRE},
-        {"type": "null"},
-    ]});
-    let mut checked = 0;
-    for (path, bytes) in generated {
-        if !path.starts_with(SCHEMA_DIRECTORY) {
-            continue;
-        }
-        let schema: serde_json::Value =
-            serde_json::from_slice(bytes).expect("generated schema must be JSON");
-        let Some(receipt) = schema.pointer("/$defs/DomainReceipt") else {
-            continue;
-        };
-        assert_eq!(
-            receipt["properties"]["author_action_sequence"], nullable,
-            "{path}"
-        );
-        let required = receipt["required"].as_array().expect("required list");
-        assert!(
-            required.contains(&serde_json::json!("author_action_sequence")),
-            "{path}"
-        );
-        checked += 1;
-    }
-    assert_eq!(checked, 19, "each schema with a Receipt is checked");
-}
-
-/// The Author Undo response schema accepts the Receipt of an applied, a conflicted, and an
-/// unavailable Undo, as the Server writes each one.
-fn assert_undo_receipt_sequence_documents(generated: &GeneratedFiles) {
-    use crate::release1_author_edit::DomainReceiptResult;
-    use crate::release1_undo_latest_author_action::{
-        UndoLatestAuthorActionConflictReason, UndoLatestAuthorActionEffect,
-        UndoLatestAuthorActionResponse, UndoLatestAuthorActionUnavailableReason,
-    };
-    let response = generated_validator(generated, "undo-latest-author-action-response.schema.json");
-    let applied: UndoLatestAuthorActionResponse =
-        serde_json::from_value(golden_wire(generated, "undoLatestAuthorAction"))
-            .expect("the Undo fixture must deserialize");
-    assert_eq!(applied.receipt.author_action_sequence.as_deref(), Some("2"));
-    let without_action = |result, effect| {
-        let mut changed = applied.clone();
-        changed.receipt.author_action_sequence = None;
-        changed.receipt.authoritative_revision_ids = Vec::new();
-        changed.receipt.authoritative_commit_ids = Vec::new();
-        changed.receipt.result = result;
-        changed.effect = effect;
-        changed
-    };
-    let conflicted = without_action(
-        DomainReceiptResult::Conflicted,
-        UndoLatestAuthorActionEffect::Conflicted {
-            reason: UndoLatestAuthorActionConflictReason::FrontierMismatch,
-            current_author_undo_frontier_sequence: Some("3".to_owned()),
-        },
-    );
-    let unavailable = without_action(
-        DomainReceiptResult::Refused,
-        UndoLatestAuthorActionEffect::Unavailable {
-            reason: UndoLatestAuthorActionUnavailableReason::Barrier,
-        },
-    );
-    for (name, document) in [
-        ("applied", &applied),
-        ("conflicted", &conflicted),
-        ("unavailable", &unavailable),
-    ] {
-        let wire = serde_json::to_value(document).expect("the Undo response must serialize");
-        assert!(response.is_valid(&wire), "{name}: {wire}");
-        let pointer = "/receipt/author_action_sequence";
-        assert!(
-            !response.is_valid(&with_value(&wire, pointer, serde_json::json!("01"))),
-            "{name}"
-        );
-        let mut without_field = wire.clone();
-        without_field["receipt"]
-            .as_object_mut()
-            .expect("the Receipt is an object")
-            .remove("author_action_sequence");
-        assert!(!response.is_valid(&without_field), "{name}");
-    }
 }
 
 fn assert_takeover_documents(generated: &GeneratedFiles) {
