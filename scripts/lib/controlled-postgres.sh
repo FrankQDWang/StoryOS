@@ -12,18 +12,11 @@ reset_command_challenge_rate_windows() {
     -c "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0" >/dev/null
 }
 
-# The PostgreSQL tests of the Rust phase leave due schedule rows of background Memory work: a capture
-# that stores observations makes a consolidation pass due at once. The shared Web phases start no
-# capture, so their Worker steps must not start a pass for these rows.
-clear_memory_work_due_times() {
-  docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres \
-    -c "UPDATE storyos.memory_work_schedules SET due_at = NULL WHERE due_at IS NOT NULL" >/dev/null
-}
-
-# Starts the container $1 from the image $2, or from storyos_postgres_image.
+# Starts the container $1 from the image $2, or from storyos_postgres_image. In a run of scripts/check-lanes.py,
+# the container gets the label of the run, so that the runner removes only the containers of its own run.
 start_postgres() {
   name=$1
-  docker run --detach --name "$name" \
+  docker run --detach --name "$name" ${STORYOS_CHECK_RUN:+--label "storyos.check-run=$STORYOS_CHECK_RUN"} \
     --env POSTGRES_PASSWORD=admin \
     --env POSTGRES_INITDB_ARGS="$storyos_postgres_initdb_args" \
     --publish 127.0.0.1::5432 "${2:-$storyos_postgres_image}" >/dev/null

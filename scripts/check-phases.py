@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 PHASES = [
-    ("http-bootstrap", "node-postgresql", "clear_memory_work_due_times"),
+    ("http-bootstrap", "node-postgresql", None),
     ("author-edit-process-cut", "node-process-cut", "reset_command_challenge_rate_windows"),
     ("http-main", "node-postgresql", "reset_command_challenge_rate_windows"),
     ("readable-export-process-cut", "node-process-cut", "reload_controlled_fixture"),
@@ -68,7 +68,7 @@ def run(root, phase):
                     f"--outputFile={output}"],
                    env={**environment, "STORYOS_VITEST_FILE_ORDER": ":".join(files)}, check=True)
     suites = json.loads(output.read_text()).get("testResults", [])
-    if ({suite["name"] for suite in suites} != {str(root / path) for path in phase["files"]}
+    if (sorted(suite["name"] for suite in suites) != sorted(str(root / path) for path in phase["files"])
             or any(not any(test["status"] == "passed" for test in suite["assertionResults"]) for suite in suites)):
         raise ValueError(f"{phase['name']}: a listed file did not run or has no passing test")
 

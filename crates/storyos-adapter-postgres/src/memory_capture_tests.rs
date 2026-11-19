@@ -21,14 +21,9 @@ use crate::create_agent_run::context::chapter_list_tests::admitted;
 use crate::memory_entries::tests::{archived_rows, as_runtime};
 use crate::project_research_binding::tests::park_queued_runs;
 
-/// A Project of `prefix` with one completed author Run, its Chapter, and the source of that Run.
-pub(crate) async fn project(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    prefix: &str,
-) -> (ProjectScope, String, MemoryCaptureSource) {
-    // A capture gives way to each queued Run of the author, and earlier tests leave queued Runs
-    // in the shared database. Park them, so that only the Runs of this test are queued.
+/// A capture gives way to each queued Run of the author, and earlier tests leave queued Runs in
+/// the shared database. Park them, so that only the Runs of this test are queued.
+pub(crate) async fn park_queued_author_runs(admin: &Client) {
     admin
         .execute(
             "UPDATE storyos.agent_runs
@@ -38,6 +33,15 @@ pub(crate) async fn project(
         )
         .await
         .unwrap();
+}
+
+/// A Project of `prefix` with one completed author Run, its Chapter, and the source of that Run.
+pub(crate) async fn project(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    prefix: &str,
+) -> (ProjectScope, String, MemoryCaptureSource) {
+    park_queued_author_runs(admin).await;
     let (scope, chapter_id, run_id) = queued(store, prefix).await;
     complete(store, admin, &scope, &run_id).await;
     let conversation_id: String = admin
