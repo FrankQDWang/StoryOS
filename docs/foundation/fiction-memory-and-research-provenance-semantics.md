@@ -195,6 +195,14 @@ entries in a universal memory taxonomy.
 
 ## 7. Research Claims and exact evidence
 
+In Release 1, a claim of a Research Synthesis follows
+[ADR 0087](../adr/0087-record-a-research-synthesis-as-one-immutable-research-artifact.md).
+It cites one or more exact External Source Snapshots or Source Gaps of its
+AgentRun, and a claim that cites only Source Gaps is valid. A citation has no
+Evidence Locator and no support, opposition, or qualification class. The other
+rules of this section give the Evidence Relation model, which Release 1 does
+not record.
+
 Every `Research Claim` binds through an Evidence Relation to one or more exact,
 immutable Source Snapshot Revisions and to an Evidence Locator that can re-find
 the relevant content inside each referenced revision.
