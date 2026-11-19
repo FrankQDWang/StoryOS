@@ -5,6 +5,7 @@ CHECK_LANES_SCRIPT gives another runner to test, for example the runner of an ea
 """
 
 import hashlib
+import importlib.util
 import os
 from pathlib import Path
 import re
@@ -193,6 +194,37 @@ class BrowserStartTests(unittest.TestCase):
                            env={**os.environ, "STORYOS_BROWSER_START_FILE": str(record)})
             starts.append(float(record.read_text()))
         self.assertGreaterEqual(starts[1] - starts[0], gap)
+
+
+def runner_module():
+    """Load the runner as a module, for the tests of its functions."""
+    spec = importlib.util.spec_from_file_location("check_lanes", RUNNER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class FunctionTests(unittest.TestCase):
+    def test_a_screenshot_directory_is_not_a_test_file(self):
+        web = Path(tempfile.mkdtemp(prefix="storyos-test-files-"))
+        (web / "test/journeys/__screenshots__/a.integration.test.ts").mkdir(parents=True)
+        (web / "test/journeys/a.integration.test.ts").write_text("")
+        self.assertEqual(runner_module().test_files(web, "test/journeys"), ["test/journeys/a.integration.test.ts"])
+
+    def test_a_failed_container_removal_does_not_stop_the_removal_of_networks_and_volumes(self):
+        module, removed = runner_module(), []
+
+        def tool_output(command):
+            if command[:2] == ["docker", "rm"]:
+                raise subprocess.CalledProcessError(1, command)
+            if "ls" in command or "ps" in command:
+                return f"{command[1]}-of-the-run\n"
+            removed.append(command[1])
+            return ""
+
+        module.tool_output = tool_output
+        self.assertFalse(module.remove_run_resources("token"))
+        self.assertEqual(removed, ["network", "volume"])
 
 
 if __name__ == "__main__":

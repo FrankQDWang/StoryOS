@@ -137,9 +137,18 @@ def vitest_lane(root, name, project, files):
                        f"--outputFile={output}"], passed=passed, browser=True)
 
 
+def test_files(web, directory):
+    """The test files of a Vitest project, as its include `**/*.test.ts` selects them.
+
+    A failed browser test writes a screenshot directory with the name of its file, for example
+    `__screenshots__/s2-editor.integration.test.ts/`, so only files count.
+    """
+    return sorted(str(path.relative_to(web)) for path in (web / directory).rglob("*.test.ts") if path.is_file())
+
+
 def browser_source_lanes(root):
     web = root / "apps/web"
-    files = sorted(str(path.relative_to(web)) for path in (web / "test/browser-source").rglob("*.test.ts"))
+    files = test_files(web, "test/browser-source")
     missing = [file for file in SEPARATE_BROWSER_SOURCE_FILES if file not in files]
     if missing:
         raise ValueError(f"browser-source: a separate file does not exist: {', '.join(missing)}")
@@ -155,7 +164,7 @@ def browser_source_lanes(root):
 def journey_shards(root):
     """Give each exact-dist journey file to exactly one shard. Each shard has its files in the order of their names."""
     web = root / "apps/web"
-    files = sorted(str(path.relative_to(web)) for path in (web / "test/browser-exact-dist").rglob("*.test.ts"))
+    files = test_files(web, "test/browser-exact-dist")
     missing = [file for file in [PHYSICAL_DRILL_FILE, *LONG_JOURNEY_SECONDS] if file not in files]
     if missing:
         raise ValueError(f"journeys: a named file does not exist: {', '.join(missing)}")
@@ -364,21 +373,23 @@ def run_resources(token, list_command):
 
 def remove_run_resources(token):
     """Remove each Docker resource of the run. Return False when a resource remains or is not verified."""
-    remaining = []
-    try:
-        for kind, list_command, remove_command in RUN_RESOURCES:
+    remaining, verified = [], True
+    # An error of one kind does not stop the removal of the other kinds.
+    for kind, list_command, remove_command in RUN_RESOURCES:
+        try:
             found = run_resources(token, list_command)
             if found:
                 tool_output([*remove_command, *found])
-                found = run_resources(token, list_command)
-            remaining += [f"{kind} {name}" for name in found]
-    except (OSError, subprocess.CalledProcessError) as error:
-        print(f"check-lanes: the Docker resources of the run are not verified: {error}", flush=True)
-        return False
+        except (OSError, subprocess.CalledProcessError) as error:
+            print(f"check-lanes: the removal of the {kind}s of the run failed: {error}", flush=True)
+        try:
+            remaining += [f"{kind} {name}" for name in run_resources(token, list_command)]
+        except (OSError, subprocess.CalledProcessError) as error:
+            print(f"check-lanes: the {kind}s of the run are not verified: {error}", flush=True)
+            verified = False
     if remaining:
         print(f"check-lanes: these Docker resources of the run remain: {', '.join(remaining)}", flush=True)
-        return False
-    return True
+    return verified and not remaining
 
 
 def stop(lanes, token):
