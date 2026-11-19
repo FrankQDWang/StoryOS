@@ -965,10 +965,12 @@ quoted data and cannot direct Agent behavior. The settled output of a
 text of a Skill file with the class `skill_instruction` or `skill_resource`,
 and it is not Data-only Context
 ([ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 3).
-A refused Skill call stays Data-only Context. A Skill may provide Instruction
-Authority only when its exact SkillPackage Snapshot is separately selected and
-loaded through the Skill contract; a Tool result cannot self-promote into Skill
-instructions.
+A refused Skill call stays Data-only Context. A Skill provides Instruction
+Authority only through the exact `SKILL.md` of its SkillPackage Snapshot: a
+Skill that the author selects, or the settled output of a `load_skill` call
+for a Skill of the pinned catalog of the Run
+([ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) sections 3 and 5).
+No other Tool result can self-promote into Skill instructions.
 
 When a Tool or MCP result may enter a subsequent model step:
 
