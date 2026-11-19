@@ -19,8 +19,8 @@ import sys
 import time
 
 # Selected from measured runs of `make check` on an Apple M4 with 10 cores and 32 GB (issue 1711).
-LANE_LIMIT = 8
-POSTGRES_SHARDS = 6
+LANE_LIMIT = 6
+POSTGRES_SHARDS = 4
 # This file takes approximately 204 s, so it gets its own browser process, and the other files share one.
 # Four browser processes did not connect within the Vitest timeout in 3 of 6 runs of `make check` on 2026-11-19.
 SEPARATE_BROWSER_SOURCE_FILES = ("test/browser-source/journal-working-set.integration.test.ts",)
