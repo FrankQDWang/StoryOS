@@ -3,8 +3,8 @@
 use ts_rs::TS;
 
 use super::{
-    DATE_TIME, Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources,
-    U64, UUID, raw_schema,
+    DATE_TIME, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources, U64,
+    UUID, raw_schema,
 };
 use crate::release1_author_edit::{
     APPLY_AUTHOR_EDIT, ApplyAuthorEditEffect, ApplyAuthorEditRequest, ApplyAuthorEditResponse,
@@ -28,7 +28,6 @@ use crate::release1_undo_latest_author_action::{
     UndoLatestAuthorActionInput, UndoLatestAuthorActionRequest, UndoLatestAuthorActionResponse,
     UndoLatestAuthorActionUnavailableReason,
 };
-use crate::release1_wire::U64_WIRE;
 
 pub(super) const APPLY_AUTHOR_EDIT_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::command(
@@ -399,21 +398,15 @@ const APPLY_AUTHOR_EDIT_REQUEST: &[Patch] = &[Patch(
     ],
 )];
 
-const APPLY_AUTHOR_EDIT_RESPONSE: &[Patch] = &[
-    Patch(
-        U64,
-        &[
-            "/$defs/ApplyAuthorEditEffect/oneOf/0/properties/author_action_sequence",
-            "/$defs/ApplyAuthorEditEffect/oneOf/0/properties/project_activity_position",
-            "/$defs/ApplyAuthorEditEffect/oneOf/1/properties/author_action_sequence",
-            "/properties/local_intent_sequence",
-        ],
-    ),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
-];
+const APPLY_AUTHOR_EDIT_RESPONSE: &[Patch] = &[Patch(
+    U64,
+    &[
+        "/$defs/ApplyAuthorEditEffect/oneOf/0/properties/author_action_sequence",
+        "/$defs/ApplyAuthorEditEffect/oneOf/0/properties/project_activity_position",
+        "/$defs/ApplyAuthorEditEffect/oneOf/1/properties/author_action_sequence",
+        "/properties/local_intent_sequence",
+    ],
+)];
 
 const UNDO_LATEST_AUTHOR_ACTION_REQUEST: &[Patch] = &[
     Patch(
@@ -452,9 +445,5 @@ const GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE: &[Patch] = &[
     Patch(
         DATE_TIME,
         &["/$defs/ApplyAuthorEditUnknownObservation/oneOf/0/properties/expires_at"],
-    ),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
     ),
 ];

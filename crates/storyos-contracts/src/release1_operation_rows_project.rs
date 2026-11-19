@@ -383,10 +383,6 @@ const CREATE_PROJECT_REQUEST: &[Patch] = &[
 
 const CREATE_PROJECT_RESPONSE: &[Patch] = &[
     Patch(
-        Edit::NullablePattern("^(0|[1-9][0-9]{0,19})$"),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
-    Patch(
         UUID,
         &[
             "/$defs/DomainReceipt/properties/author_command_admission_id",

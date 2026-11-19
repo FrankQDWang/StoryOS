@@ -24,7 +24,6 @@ use crate::release1_update_chapter::{
     UpdateChapterNoEffectReason, UpdateChapterRefusalReason, UpdateChapterRequest,
     UpdateChapterResponse,
 };
-use crate::release1_wire::U64_WIRE;
 
 pub(super) const CREATE_CHAPTER_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::command(
@@ -346,10 +345,6 @@ const CREATE_CHAPTER_RESPONSE: &[Patch] = &[
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
 ];
 
 const UPDATE_CHAPTER_REQUEST: &[Patch] = &[
@@ -385,10 +380,6 @@ const UPDATE_CHAPTER_RESPONSE: &[Patch] = &[
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
 ];
 
 const DELETE_CHAPTER_REQUEST: &[Patch] = &[
@@ -413,8 +404,4 @@ const DELETE_CHAPTER_RESPONSE: &[Patch] = &[
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
 ];

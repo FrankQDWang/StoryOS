@@ -23,7 +23,6 @@ use crate::release1_update_volume::{
     UpdateVolumeNoEffectReason, UpdateVolumeRefusalReason, UpdateVolumeRequest,
     UpdateVolumeResponse,
 };
-use crate::release1_wire::U64_WIRE;
 
 pub(super) const CREATE_VOLUME_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::command(
@@ -330,10 +329,6 @@ const CREATE_VOLUME_RESPONSE: &[Patch] = &[
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
 ];
 
 const UPDATE_VOLUME_REQUEST: &[Patch] = &[
@@ -369,10 +364,6 @@ const UPDATE_VOLUME_RESPONSE: &[Patch] = &[
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
 ];
 
 const DELETE_VOLUME_REQUEST: &[Patch] = &[
@@ -397,8 +388,4 @@ const DELETE_VOLUME_RESPONSE: &[Patch] = &[
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
 ];

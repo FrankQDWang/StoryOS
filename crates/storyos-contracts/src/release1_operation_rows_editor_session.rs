@@ -3,8 +3,7 @@
 use ts_rs::TS;
 
 use super::{
-    Edit, Fixture, Headers, NO_PATCHES, OperationRow, Patch, SchemaSource, SchemaSources, U64,
-    raw_schema,
+    Fixture, Headers, NO_PATCHES, OperationRow, Patch, SchemaSource, SchemaSources, U64, raw_schema,
 };
 use crate::release1::{
     CREATE_EDITOR_SESSION, CreateEditorSessionRequest, CreateEditorSessionResponse,
@@ -23,7 +22,6 @@ use crate::release1_takeover::{
     TAKE_OVER_PROJECT_WRITER, TakeOverProjectWriterRequest, TakeOverProjectWriterResponse,
     TakeOverProjectWriterResult, TakeoverCompareFailedReason,
 };
-use crate::release1_wire::U64_WIRE;
 
 pub(super) const CREATE_EDITOR_SESSION_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::command(
@@ -334,22 +332,16 @@ const GET_EDITOR_SESSION_RESPONSE: &[Patch] = &[Patch(
 const TAKE_OVER_PROJECT_WRITER_REQUEST: &[Patch] =
     &[Patch(U64, &["/properties/observed_writer_generation"])];
 
-const TAKE_OVER_PROJECT_WRITER_RESPONSE: &[Patch] = &[
-    Patch(
-        Edit::NullablePattern(U64_WIRE),
-        &["/$defs/DomainReceipt/properties/author_action_sequence"],
-    ),
-    Patch(
-        U64,
-        &[
-            "/$defs/EditorWriterProjection/oneOf/0/properties/writer_generation",
-            "/$defs/EditorWriterProjection/oneOf/1/properties/observed_writer_generation",
-            "/$defs/TakeOverProjectWriterResult/oneOf/0/properties/prior_writer_generation",
-            "/$defs/TakeOverProjectWriterResult/oneOf/0/properties/resulting_snapshot_activity_position",
-            "/$defs/TakeOverProjectWriterResult/oneOf/0/properties/resulting_writer_generation",
-            "/$defs/TakeOverProjectWriterResult/oneOf/1/properties/current_snapshot_activity_position",
-            "/$defs/TakeOverProjectWriterResult/oneOf/1/properties/current_writer_generation",
-            "/$defs/TakeOverProjectWriterResult/oneOf/1/properties/observed_writer_generation",
-        ],
-    ),
-];
+const TAKE_OVER_PROJECT_WRITER_RESPONSE: &[Patch] = &[Patch(
+    U64,
+    &[
+        "/$defs/EditorWriterProjection/oneOf/0/properties/writer_generation",
+        "/$defs/EditorWriterProjection/oneOf/1/properties/observed_writer_generation",
+        "/$defs/TakeOverProjectWriterResult/oneOf/0/properties/prior_writer_generation",
+        "/$defs/TakeOverProjectWriterResult/oneOf/0/properties/resulting_snapshot_activity_position",
+        "/$defs/TakeOverProjectWriterResult/oneOf/0/properties/resulting_writer_generation",
+        "/$defs/TakeOverProjectWriterResult/oneOf/1/properties/current_snapshot_activity_position",
+        "/$defs/TakeOverProjectWriterResult/oneOf/1/properties/current_writer_generation",
+        "/$defs/TakeOverProjectWriterResult/oneOf/1/properties/observed_writer_generation",
+    ],
+)];
