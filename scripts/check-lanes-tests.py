@@ -219,6 +219,25 @@ class FunctionTests(unittest.TestCase):
         for lane in lanes:
             self.assertEqual(sorted(lane.after), ["build", "package"], lane.name)
 
+    def test_at_most_two_browser_lanes_run_at_the_same_time(self):
+        module = runner_module()
+        lanes = [module.Lane(f"lanes-test-browser-{index}", ["sleep", "2"], browser=True, browser_at_start=False)
+                 for index in range(3)]
+        lanes.append(module.Lane("lanes-test-no-browser", ["sleep", "2"]))
+        handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
+        try:
+            self.assertEqual(module.run(ROOT, lanes, []), 0)
+        finally:
+            for number, handler in handlers.items():
+                signal.signal(number, handler)
+        browsers = lanes[:3]
+        for lane in browsers:
+            running = [other for other in browsers
+                       if other.started <= lane.started < other.started + other.duration]
+            self.assertLessEqual(len(running), 2, lane.name)
+        # The lane without a browser starts while the third browser lane waits.
+        self.assertLess(lanes[3].started, lanes[2].started)
+
     def test_a_failed_container_removal_does_not_stop_the_removal_of_networks_and_volumes(self):
         module, removed = runner_module(), []
 

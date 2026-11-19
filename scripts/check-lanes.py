@@ -27,6 +27,9 @@ import uuid
 # Selected from measured runs of `make check` on an Apple M4 with 10 cores and 32 GB (issue 1711).
 LANE_LIMIT = 6
 POSTGRES_SHARDS = 4
+# At most this count of browser lanes runs at the same time (issue 1712). In two runs of `make check-full` on
+# 2026-11-20, a journey wait did not succeed in time when three or four browser lanes ran at the same time.
+BROWSER_LANE_LIMIT = 2
 # This file takes approximately 204 s, so it gets its own browser process, and the other files share one.
 # Four browser processes did not connect within the Vitest timeout in 3 of 6 runs of `make check` on 2026-11-19.
 SEPARATE_BROWSER_SOURCE_FILES = ("test/browser-source/journal-working-set.integration.test.ts",)
@@ -481,6 +484,9 @@ def run(root, lanes, final_checks):
             for lane in ready:
                 if len(running) >= LANE_LIMIT or interrupted:
                     break
+                # A lane without a browser can take a free lane while the browser lanes wait.
+                if lane.browser and sum(other.browser for other in running) >= BROWSER_LANE_LIMIT:
+                    continue
                 if lane.browser_at_start and not claim_browser_start(root, wait=False):
                     continue
                 pending.remove(lane)
@@ -509,6 +515,8 @@ def run(root, lanes, final_checks):
                         reason = str(error)
                 stop(started, token)
                 print_failure(lane, reason)
+                for other in started:
+                    print(f"Lane {other.name}: started at {round(other.started - began)} s", flush=True)
                 return 1
         if interrupted:
             stopped = stop(started, token)
