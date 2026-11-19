@@ -4,7 +4,7 @@
 A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -ec` in the repository root.
 --browser-source adds the lanes of the browser-source Vitest project, one browser process for each lane.
 --postgres-shards adds the ignored tests of the library test binaries in shards, each with its own database.
---project-scope adds the parts of `make check-full` after the release package: the storage activation checks, the
+--project-scope adds the parts of `make check-full` after the build and the release package: the storage activation checks, the
 exact-dist journeys in shards, and the two modes of the recovery drill. It needs the lanes `build` and `package`.
 `scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; a script runs it before each
 browser Vitest run that does not start at the start of its lane.
@@ -53,6 +53,11 @@ OTHER_JOURNEY_SECONDS = 3
 PHYSICAL_DRILL_FILE = "test/browser-exact-dist/s2-physical-drill.integration.test.ts"
 RECOVERY_DRILLS = ("mixed", "fixture-only")
 RECOVERY_DRILL_END = "Isolated restore continued writing after Recovery Visibility Proof"
+# The project-scope lanes also wait for the build lane, which gives the PostgreSQL shards. Thus the shards get the
+# lanes first also when the release package is up to date and its lane ends after 4 s. Without this wait, in a run
+# on 2026-11-20 the drills and a journey shard started first, the first shard started after 150 s, and a journey
+# poll did not succeed in time beside four browser lanes.
+PROJECT_SCOPE_AFTER = ("build", "package")
 # Each browser lane gets its own port for its Vite server (STORYOS_BROWSER_API_PORT in apps/web/vitest.config.ts).
 BROWSER_PORTS = range(41000, 41100)
 # A stopped lane removes its database container in this time.
@@ -192,7 +197,7 @@ def journey_lane(root, name, files):
         return []
 
     # scripts/verify-project-scope.sh writes the Vitest report of each of its runs to <report>-<run>.json.
-    return Lane(name, [str(root / "scripts/verify-project-scope.sh"), "journeys", *files], after=("package",),
+    return Lane(name, [str(root / "scripts/verify-project-scope.sh"), "journeys", *files], after=PROJECT_SCOPE_AFTER,
                 env={"STORYOS_JOURNEY_REPORT": str(report)}, passed=passed, browser=True, browser_at_start=False)
 
 
@@ -204,7 +209,7 @@ def recovery_drill_lane(root, mode):
 
     # An empty STORYOS_RECOVERY_COPY_DIR gives each drill its own Docker volumes, also when the environment of
     # the run names an operator directory, so that the two drills do not use the same files.
-    return Lane(f"recovery-{mode}", [str(root / "scripts/verify-recovery-hold.sh")], after=("package",),
+    return Lane(f"recovery-{mode}", [str(root / "scripts/verify-recovery-hold.sh")], after=PROJECT_SCOPE_AFTER,
                 env={"STORYOS_RECOVERY_DRILL": mode, "STORYOS_RECOVERY_COPY_DIR": ""}, passed=passed,
                 browser=True, browser_at_start=False)
 
@@ -215,7 +220,7 @@ def project_scope_lanes(root):
     lanes += [journey_lane(root, f"journeys-{index + 1}", files) for index, files in enumerate(journey_shards(root))]
     # The activation checks run ignored tests of the library test binary of the build lane.
     lanes.append(Lane("activation", [str(root / "scripts/verify-project-scope.sh"), "activation"],
-                      after=("build", "package")))
+                      after=PROJECT_SCOPE_AFTER))
     return lanes
 
 
