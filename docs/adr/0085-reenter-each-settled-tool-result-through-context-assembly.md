@@ -49,8 +49,6 @@ A continuation request sends one `function_call_output` item for each ToolCall, 
 
 A new Project Destination Grant records the current scope `project_writing_assistance_v3`. It names all items of the second scope and the source class `tool_result`. The first and the second scope do not name `tool_result`. A continuation under a grant with one of them refuses before the dispatch claim with `disclosure_outside_grant`. The next `createAgentRun` makes new binding records with the current scope, as ADR 0051 and ADR 0048 say.
 
-> Amended on 2026-11-19 ([#1683](https://github.com/FrankQDWang/StoryOS/issues/1683)): `project_writing_assistance_v3` is now a stored scope and not the current scope. The amendments of [ADR 0051](0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md) give each later scope, and section 9.4 of the [Context contract](../foundation/context-assembly-retrieval-and-outbound-disclosure-semantics.md) gives the current scope.
-
 ### 5. The lineage of a Proposal
 
 A Proposal that a `tool_result_continuation` RunStep opens records `source_lineage` on its source: the Run, the RunStep position and its Operation Requirement, the Model Attempt, and the ToolCall identities. The lineage names the Run of the Proposal source. A Proposal of another RunStep has no lineage. The continuation Decision can be an Advisory, a clarification, or a prose change.

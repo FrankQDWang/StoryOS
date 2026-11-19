@@ -1102,7 +1102,9 @@ Instruction precedence is:
 3. bound Project Instruction Revision;
 4. selected or loaded Skill Instruction Context;
 5. Tool and MCP results, Research, prose, Artifacts, Agent Memory, outlines, and
-   all other Data-only Context.
+   all other Data-only Context. A settled output of `load_skill` or
+   `read_skill_resource` is not in this item: section 10 and
+   [ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 3 give its class and trust.
 
 Project Instruction is mandatory for model context when configured. It is not
 automatically disclosed to Tools, MCP servers, embedding services, telemetry,
