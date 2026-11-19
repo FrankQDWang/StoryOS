@@ -27,6 +27,8 @@ SEPARATE_BROWSER_SOURCE_FILES = ("test/browser-source/journal-working-set.integr
 # Google Chrome can fail to start when two instances start at the same time, so the browser lanes start
 # with this gap: in a test on 2026-11-19, 1 of 20 starts at the same time failed, and 0 of 40 with a gap.
 BROWSER_START_GAP_SECONDS = 8
+# Each browser lane gets its own port for its Vite server (STORYOS_BROWSER_API_PORT in apps/web/vitest.config.ts).
+BROWSER_PORTS = range(41000, 41100)
 # A stopped lane removes its database container in this time.
 STOP_SECONDS = 30
 USAGE = ("usage: scripts/check-lanes.py "
@@ -45,19 +47,21 @@ class Lane:
         self.started = self.duration = None
 
 
-def free_ports(count):
-    """Ports of 127.0.0.1 that no process uses now, each one different."""
-    sockets = [socket.socket() for _ in range(count)]
-    try:
-        for each in sockets:
-            each.bind(("127.0.0.1", 0))
-        return [each.getsockname()[1] for each in sockets]
-    finally:
-        for each in sockets:
-            each.close()
+def free_browser_port(taken):
+    """A port of 127.0.0.1 below the ephemeral range, so that no outgoing connection takes it before Vite."""
+    for port in BROWSER_PORTS:
+        if port in taken:
+            continue
+        with socket.socket() as candidate:
+            try:
+                candidate.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+        return port
+    raise ValueError(f"no free browser port from {BROWSER_PORTS.start} to {BROWSER_PORTS.stop - 1}")
 
 
-def vitest_lane(root, name, project, files, port):
+def vitest_lane(root, name, project, files):
     web = root / "apps/web"
     output = root / "target/check" / f"{name}.json"
 
@@ -71,8 +75,7 @@ def vitest_lane(root, name, project, files, port):
 
     return Lane(name, ["pnpm", "--dir", "apps/web", "exec", "vitest", "run", "--project", project, *files,
                        "--passWithNoTests=false", "--allowOnly=false", "--reporter=default", "--reporter=json",
-                       f"--outputFile={output}"], env={"STORYOS_BROWSER_API_PORT": str(port)}, passed=passed,
-                browser=True)
+                       f"--outputFile={output}"], passed=passed, browser=True)
 
 
 def browser_source_lanes(root):
@@ -87,8 +90,7 @@ def browser_source_lanes(root):
         raise ValueError("browser-source: a file of the project is in no lane or in more than one lane")
     names = [f"browser-{Path(file).name.removesuffix('.test.ts').removesuffix('.integration')}"
              for file in SEPARATE_BROWSER_SOURCE_FILES]
-    return [vitest_lane(root, name, "browser-source", group, port)
-            for name, group, port in zip([*names, "browser-source"], groups, free_ports(len(groups)))]
+    return [vitest_lane(root, name, "browser-source", group) for name, group in zip([*names, "browser-source"], groups)]
 
 
 def postgres_lanes(root, after, final_checks):
@@ -167,7 +169,10 @@ def parse(root, arguments, final_checks):
     return lanes
 
 
-def start(root, lane):
+def start(root, lane, running):
+    if lane.browser:
+        port = free_browser_port({int(other.env["STORYOS_BROWSER_API_PORT"]) for other in running if other.browser})
+        lane.env = {"STORYOS_BROWSER_API_PORT": str(port)}
     lane.log = open(root / "target/check" / f"{lane.name}.log", "w")
     lane.started = time.monotonic()
     lane.process = subprocess.Popen(lane.command, cwd=root, env={**os.environ, **(lane.env or {})},
@@ -241,7 +246,7 @@ def run(root, lanes, final_checks):
                 if lane.browser:
                     last_browser_start = time.monotonic()
                 pending.remove(lane)
-                start(root, lane)
+                start(root, lane, running)
                 started.append(lane)
                 running.append(lane)
             time.sleep(0.2)
