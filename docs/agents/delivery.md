@@ -219,7 +219,7 @@ Each worktree owns its source, `target/`, `node_modules/`, release package, and 
 
 ### Heavy runs on a shared host
 
-Before `make check` or `make check-full`, take one of three slots. Run `mkdir -p <main checkout>/target/verify-slots`, then `mkdir <main checkout>/target/verify-slots/slot-<N>` with N from 1 to 3. When `mkdir` fails, the slot is in use: try the next slot, or wait. Put an owner file with your session and the command in the slot. After the run, remove the slot with `rm <owner file>` and then `rmdir <slot>`, each as one command. A client can refuse `rm -rf`, and then the slot stays.
+One heavy run uses most of the host, so before `make check` or `make check-full`, take the one slot. Run `mkdir -p <main checkout>/target/verify-slots`, then `mkdir <main checkout>/target/verify-slots/slot-1`. When `mkdir` fails, the slot is in use: wait. Put an owner file with your session and the command in the slot. After the run, remove the slot with `rm <owner file>` and then `rmdir <slot>`, each as one command. A client can refuse `rm -rf`, and then the slot stays.
 
 With more than one chain, each heavy run, also a review round, waits for the `TURN` of the coordinator to `HEAVY REQUEST <command> head <SHA>`. The answer to a `HOLD` is `ACK HOLD`. Each of these messages names the head.
 
