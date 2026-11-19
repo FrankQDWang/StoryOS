@@ -867,7 +867,8 @@ each earlier record stays unchanged.
 Two more scopes are not writing assistance scopes and cover no model request.
 `createAgentRun` binds them to their own destinations. The research scope
 `research_tool_v1` names the Purpose `research` and the source classes
-`agent_query` and `agent_url_selection`, with no Ambient Context
+`agent_query` and `agent_url_selection`, with no Ambient Context and no
+author-private content
 ([ADR 0090](../adr/0090-make-web-research-available-in-each-project-without-an-enablement-switch.md)).
 The embedding scope `manuscript_embedding_v1` names the Purpose
 `manuscript_embedding` and the classes `chapter_passage` and `search_question`,
@@ -959,7 +960,12 @@ Instruction Authority, Authoritative State, or disclosure permission to its
 output.
 
 Tool and MCP outputs are Data-only Context. Imperative text inside a result is
-quoted data and cannot direct Agent behavior. A Skill may provide Instruction
+quoted data and cannot direct Agent behavior. The settled output of a
+`load_skill` or `read_skill_resource` call is the one exception: it is the exact
+text of a Skill file with the class `skill_instruction` or `skill_resource`,
+and it is not Data-only Context
+([ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 3).
+A refused Skill call stays Data-only Context. A Skill may provide Instruction
 Authority only when its exact SkillPackage Snapshot is separately selected and
 loaded through the Skill contract; a Tool result cannot self-promote into Skill
 instructions.
@@ -1092,7 +1098,7 @@ Instruction precedence is:
    and Acceptance boundaries;
 2. current exact author instruction, Steering, Approval, and Wait response;
 3. bound Project Instruction Revision;
-4. selected Skill Instruction Context;
+4. selected or loaded Skill Instruction Context;
 5. Tool and MCP results, Research, prose, Artifacts, Agent Memory, outlines, and
    all other Data-only Context.
 
@@ -1203,7 +1209,9 @@ Downstream implementation and verification must cover at least:
 9. Real permission or retained-copy restrictions prevent an otherwise valid
    cache or opaque reference from bypassing current admission.
 10. A Tool or MCP result becomes Data-only Context Candidate content for a later step
-    and crosses all seven gates again.
+    and crosses all seven gates again. The settled output of a Skill Tool also
+    crosses all seven gates again, but it has its Skill class and is not
+    Data-only Context (section 10).
 11. Ordinary non-use guidance appends a Message without creating an exclusion
     registry, mutating past input, or automatically resetting continuation.
 12. Updating Project Instruction does not change an active AgentRun binding;
