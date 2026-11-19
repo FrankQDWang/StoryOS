@@ -18,8 +18,8 @@ import sys
 import time
 
 # Selected from measured runs of `make check` on an Apple M4 with 10 cores and 32 GB (issue 1711).
-LANE_LIMIT = 6
-POSTGRES_SHARDS = 4
+LANE_LIMIT = 8
+POSTGRES_SHARDS = 6
 # Each of these files takes 60 s to 73 s, so each one gets its own browser process.
 SEPARATE_BROWSER_SOURCE_FILES = (
     "test/browser-source/journal-working-set.integration.test.ts",
@@ -214,6 +214,7 @@ def print_failure(lane, reason):
 def run(root, lanes, final_checks):
     (root / "target/check").mkdir(parents=True, exist_ok=True)
     pending, running, finished = list(lanes), [], []
+    began = time.monotonic()
     for stop_signal in STOP_SIGNALS:
         signal.signal(stop_signal, interrupt)
     try:
@@ -255,7 +256,7 @@ def run(root, lanes, final_checks):
         print(f"check-lanes: {error}", file=sys.stderr, flush=True)
         return 1
     for lane in finished:
-        print(f"Lane {lane.name}: {round(lane.duration)} s")
+        print(f"Lane {lane.name}: {round(lane.duration)} s, started at {round(lane.started - began)} s")
     return 0
 
 
