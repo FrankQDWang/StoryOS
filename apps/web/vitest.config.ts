@@ -15,9 +15,16 @@ const repositoryRoot = resolve(webRoot, "../..");
 const proxy = storyOSApiProxy(process.env.STORYOS_DEV_SERVER);
 const physicalDrill = process.env.STORYOS_PHYSICAL_DRILL === "1";
 const serialTest = { fileParallelism: false, isolate: true, retry: 0 } as const;
+// scripts/check-lanes.py gives each browser lane its own port. Two Vite servers that try the same free
+// port at the same time can both listen on it, one on ::1 and one on 127.0.0.1, and then a browser
+// connects to the server of the other lane.
+const browserApiPort = process.env.STORYOS_BROWSER_API_PORT;
 function browserTest() {
   return {
     browser: {
+      ...(browserApiPort === undefined
+        ? {}
+        : { api: { host: "127.0.0.1", port: Number(browserApiPort), strictPort: true } }),
       commands: storyOSBrowserCommands,
       enabled: true,
       headless: true,

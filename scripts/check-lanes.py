@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import shlex
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -26,6 +27,9 @@ SEPARATE_BROWSER_SOURCE_FILES = (
     "test/browser-source/journal-working-set-retirement.integration.test.ts",
     "test/browser-source/journal-working-set-removed-draft-path.integration.test.ts",
 )
+# Google Chrome can fail to start when two instances start at the same time, so the browser lanes start
+# with this gap: in a test on 2026-11-19, 1 of 20 starts at the same time failed, and 0 of 40 with a gap.
+BROWSER_START_GAP_SECONDS = 8
 # A stopped lane removes its database container in this time.
 STOP_SECONDS = 30
 FAILED_LOG_LINES = 400
@@ -42,13 +46,26 @@ class Interrupted(Exception):
 class Lane:
     """A command with its own log. `passed` reads the log of a passed lane and returns more lanes."""
 
-    def __init__(self, name, command, after=(), cwd=None, passed=None):
-        self.name, self.command, self.after, self.cwd, self.passed = name, command, tuple(after), cwd, passed
+    def __init__(self, name, command, after=(), env=None, passed=None, browser=False):
+        self.name, self.command, self.after, self.env, self.passed = name, command, tuple(after), env, passed
+        self.browser = browser
         self.process = self.log = None
         self.started = self.duration = None
 
 
-def vitest_lane(root, name, project, files):
+def free_ports(count):
+    """Ports of 127.0.0.1 that no process uses now, each one different."""
+    sockets = [socket.socket() for _ in range(count)]
+    try:
+        for each in sockets:
+            each.bind(("127.0.0.1", 0))
+        return [each.getsockname()[1] for each in sockets]
+    finally:
+        for each in sockets:
+            each.close()
+
+
+def vitest_lane(root, name, project, files, port):
     web = root / "apps/web"
     output = root / "target/check" / f"{name}.json"
 
@@ -62,7 +79,8 @@ def vitest_lane(root, name, project, files):
 
     return Lane(name, ["pnpm", "--dir", "apps/web", "exec", "vitest", "run", "--project", project, *files,
                        "--passWithNoTests=false", "--allowOnly=false", "--reporter=default", "--reporter=json",
-                       f"--outputFile={output}"], passed=passed)
+                       f"--outputFile={output}"], env={"STORYOS_BROWSER_API_PORT": str(port)}, passed=passed,
+                browser=True)
 
 
 def browser_source_lanes(root):
@@ -77,8 +95,8 @@ def browser_source_lanes(root):
         raise ValueError("browser-source: a file of the project is in no lane or in more than one lane")
     names = [f"browser-{Path(file).name.removesuffix('.test.ts').removesuffix('.integration')}"
              for file in SEPARATE_BROWSER_SOURCE_FILES]
-    return [vitest_lane(root, name, "browser-source", group)
-            for name, group in zip([*names, "browser-source"], groups)]
+    return [vitest_lane(root, name, "browser-source", group, port)
+            for name, group, port in zip([*names, "browser-source"], groups, free_ports(len(groups)))]
 
 
 def postgres_lanes(root, after, final_checks):
@@ -164,7 +182,8 @@ def interrupt(_signal, _frame):
 def start(root, lane):
     lane.log = open(root / "target/check" / f"{lane.name}.log", "w")
     lane.started = time.monotonic()
-    lane.process = subprocess.Popen(lane.command, cwd=lane.cwd or root, stdin=subprocess.DEVNULL,
+    lane.process = subprocess.Popen(lane.command, cwd=root, env={**os.environ, **(lane.env or {})},
+                                    stdin=subprocess.DEVNULL,
                                     stdout=lane.log, stderr=subprocess.STDOUT, start_new_session=True)
     print(f"Lane {lane.name}: started", flush=True)
 
@@ -215,19 +234,25 @@ def run(root, lanes, final_checks):
     (root / "target/check").mkdir(parents=True, exist_ok=True)
     pending, running, finished = list(lanes), [], []
     began = time.monotonic()
+    last_browser_start = began - BROWSER_START_GAP_SECONDS
     for stop_signal in STOP_SIGNALS:
         signal.signal(stop_signal, interrupt)
     try:
         while pending or running:
-            for lane in list(pending):
+            ready = [lane for lane in pending
+                     if all(dependency in {done.name for done in finished} for dependency in lane.after)]
+            if not running and not ready:
+                raise ValueError("no lane can start")
+            for lane in ready:
                 if len(running) >= LANE_LIMIT:
                     break
-                if all(dependency in {done.name for done in finished} for dependency in lane.after):
-                    pending.remove(lane)
-                    start(root, lane)
-                    running.append(lane)
-            if not running:
-                raise ValueError("no lane can start")
+                if lane.browser and time.monotonic() - last_browser_start < BROWSER_START_GAP_SECONDS:
+                    continue
+                if lane.browser:
+                    last_browser_start = time.monotonic()
+                pending.remove(lane)
+                start(root, lane)
+                running.append(lane)
             time.sleep(0.2)
             for lane in [lane for lane in running if lane.process.poll() is not None]:
                 running.remove(lane)
