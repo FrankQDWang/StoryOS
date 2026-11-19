@@ -7,7 +7,7 @@ use storyos_application::{ConversationSelection, MemoryCaptureSource, ProjectSco
 use storyos_core::{DeploymentDestination, ObservationRefusal, RESEARCH_TOOL_OFFER};
 use tokio_postgres::Client;
 
-use super::tests::{project, run_capture, start};
+use super::tests::{park_queued_author_runs, project, run_capture, start};
 use crate::agent_run_dispatch::tests::{admit_selected_run, queued_run_offering, stores};
 use crate::agent_run_finish_rule::tests::{calls, complete};
 use crate::create_agent_run_tests::skill_tests::{fixture, set};
@@ -122,6 +122,7 @@ async fn bound_project(
     store: &crate::PostgresProjectReader,
     admin: &Client,
 ) -> (ProjectScope, MemoryCaptureSource) {
+    park_queued_author_runs(admin).await;
     let destination = DeploymentDestination::HostFakeToolLoop;
     let research = Some(&RESEARCH_TOOL_OFFER);
     let (scope, chapter_id, first) = queued_run_offering(store, "fd8", destination, research).await;
