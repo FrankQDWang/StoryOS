@@ -32,17 +32,18 @@ SEPARATE_BROWSER_SOURCE_FILES = ("test/browser-source/journal-working-set.integr
 BROWSER_START_GAP_SECONDS = 8
 # The count of the exact-dist journey shards. Each shard has its own database and its own packaged Servers.
 JOURNEY_SHARDS = 3
-# The time of the longest journey files in a run alone on 2026-11-19 (issue 1712). The other files take
-# approximately this time each. The runner puts each file into the shard with the shortest sum of times.
+# The time of the longest journey files in a run of `make check-full` on 2026-11-20 (issue 1712). The other files
+# take approximately this time each. The runner puts each file into the shard with the shortest sum of times.
 LONG_JOURNEY_SECONDS = {
-    "test/browser-exact-dist/s2-long-session.integration.test.ts": 85,
-    "test/browser-exact-dist/production-host.integration.test.ts": 45,
-    "test/browser-exact-dist/stage7-journey.integration.test.ts": 31,
+    "test/browser-exact-dist/s2-long-session.integration.test.ts": 99,
+    "test/browser-exact-dist/production-host.integration.test.ts": 66,
+    "test/browser-exact-dist/stage7-journey.integration.test.ts": 36,
+    "test/browser-exact-dist/production-run-evidence.integration.test.ts": 27,
 }
 OTHER_JOURNEY_SECONDS = 3
 # scripts/verify-recovery-hold.sh runs this file after its restore (STORYOS_PHYSICAL_DRILL in apps/web/vitest.config.ts).
 PHYSICAL_DRILL_FILE = "test/browser-exact-dist/s2-physical-drill.integration.test.ts"
-RECOVERY_DRILLS = ("fixture-only", "mixed")
+RECOVERY_DRILLS = ("mixed", "fixture-only")
 RECOVERY_DRILL_END = "Isolated restore continued writing after Recovery Visibility Proof"
 # Each browser lane gets its own port for its Vite server (STORYOS_BROWSER_API_PORT in apps/web/vitest.config.ts).
 BROWSER_PORTS = range(41000, 41100)
@@ -162,8 +163,9 @@ def recovery_drill_lane(root, mode):
 
 
 def project_scope_lanes(root):
-    lanes = [journey_lane(root, f"journeys-{index + 1}", files) for index, files in enumerate(journey_shards(root))]
-    lanes += [recovery_drill_lane(root, mode) for mode in RECOVERY_DRILLS]
+    # The lanes that take more time start first: the drills, then the journey shards.
+    lanes = [recovery_drill_lane(root, mode) for mode in RECOVERY_DRILLS]
+    lanes += [journey_lane(root, f"journeys-{index + 1}", files) for index, files in enumerate(journey_shards(root))]
     # The activation checks run ignored tests of the library test binary of the build lane.
     lanes.append(Lane("activation", [str(root / "scripts/verify-project-scope.sh"), "activation"],
                       after=("build", "package")))
