@@ -249,11 +249,11 @@ impl ExposedTool {
             ToolOperation::LoadSkill => crate::load_skill::parameters(),
             ToolOperation::ReadSkillResource => crate::read_skill_resource::parameters(),
             ToolOperation::ReadChapter => crate::read_chapter::parameters(),
-            ToolOperation::SearchManuscript => crate::search_manuscript::parameters(),
+            ToolOperation::SearchManuscript => crate::tool_spec::exact_search_parameters(),
             ToolOperation::HybridSearchManuscript => crate::hybrid_search_manuscript::parameters(),
             ToolOperation::WriteMemory => crate::write_memory::parameters(),
             ToolOperation::ReadMemoryEntry => crate::read_memory_entry::parameters(),
-            ToolOperation::SearchMemory => crate::search_memory::parameters(),
+            ToolOperation::SearchMemory => crate::tool_spec::exact_search_parameters(),
             ToolOperation::RecordMemoryObservations => {
                 crate::record_memory_observations::parameters()
             }

@@ -254,6 +254,40 @@ struct FetchArguments {
 #[serde(deny_unknown_fields)]
 struct NoArguments {}
 
+/// The strict JSON Schema of the arguments of an exact search (`search_manuscript` and
+/// `search_memory`).
+pub(crate) fn exact_search_parameters() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "The exact text to find, with the same letter case. It is not a \
+                                question."
+            }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+    })
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExactSearchArguments {
+    query: String,
+}
+
+/// The query of the arguments of an exact search, by the query rule of `web_search`. An empty
+/// query, a query above 512 characters, and a query with a control character do not fit.
+fn exact_search_query(arguments: &Value) -> Result<String, IntakeRefusal> {
+    let ExactSearchArguments { query } =
+        ExactSearchArguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
+    match query_fits(&query) {
+        true => Ok(query),
+        false => Err(IntakeRefusal::Query),
+    }
+}
+
 /// Whether `query` fits the query rule: 1 to 512 characters, not only white space, and no
 /// control character.
 pub(crate) fn query_fits(query: &str) -> bool {
@@ -311,13 +345,17 @@ impl ToolSpec {
             ToolOperation::LoadSkill => crate::load_skill::intake(arguments),
             ToolOperation::ReadSkillResource => crate::read_skill_resource::intake(arguments),
             ToolOperation::ReadChapter => crate::read_chapter::intake(arguments),
-            ToolOperation::SearchManuscript => crate::search_manuscript::intake(arguments),
+            ToolOperation::SearchManuscript => {
+                exact_search_query(arguments).map(|query| ToolIntake::SearchManuscript { query })
+            }
             ToolOperation::HybridSearchManuscript => {
                 crate::hybrid_search_manuscript::intake(arguments)
             }
             ToolOperation::WriteMemory => crate::write_memory::intake(arguments),
             ToolOperation::ReadMemoryEntry => crate::read_memory_entry::intake(arguments),
-            ToolOperation::SearchMemory => crate::search_memory::intake(arguments),
+            ToolOperation::SearchMemory => {
+                exact_search_query(arguments).map(|query| ToolIntake::SearchMemory { query })
+            }
             ToolOperation::RecordMemoryObservations => {
                 crate::record_memory_observations::intake(arguments)
             }

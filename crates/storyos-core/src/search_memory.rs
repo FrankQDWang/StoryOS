@@ -4,13 +4,11 @@
 //! index. The result has the form of the Memory Index with no text of an entry, in the bounds of
 //! one Context item. The call has no external effect and gives the Agent no target.
 
-use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::json;
 
-use crate::read_chapter::{kept_prefix, text_cost};
+use crate::read_chapter::bounded_result;
 use crate::{
-    CurrentMemoryEntry, IntakeRefusal, TOOL_RESULT_TEXT_MAX_BYTES, ToolIntake, ToolOperation,
-    ToolResultText, ToolSpec,
+    CurrentMemoryEntry, TOOL_RESULT_TEXT_MAX_BYTES, ToolOperation, ToolResultText, ToolSpec,
 };
 
 pub const SEARCH_MEMORY_TOOL_SPEC: ToolSpec = ToolSpec {
@@ -28,39 +26,6 @@ that matches, with no text. Then read an entry with read_memory_entry.";
 
 const NO_MATCH: &str = "No current entry of the Memory has this exact text, and this is not a \
 failure.";
-
-/// The strict JSON Schema of the arguments.
-pub(crate) fn parameters() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "query": {
-                "type": "string",
-                "description": "The exact text to find, with the same letter case. It is not a \
-                                question."
-            }
-        },
-        "required": ["query"],
-        "additionalProperties": false
-    })
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Arguments {
-    query: String,
-}
-
-/// The typed intake: the query rule of `web_search`. An empty query, a query above 512
-/// characters, and a query with a control character do not fit.
-pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
-    let Arguments { query } =
-        Arguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
-    match crate::tool_spec::query_fits(&query) {
-        true => Ok(ToolIntake::SearchMemory { query }),
-        false => Err(IntakeRefusal::Query),
-    }
-}
 
 /// The result of a search of `query` in the current entries `entries`, for the native call
 /// `call_id`. Each entry whose title, description, or text holds `query` as an exact sequence of
@@ -120,20 +85,8 @@ pub fn search_memory(entries: &[CurrentMemoryEntry], query: &str, call_id: &str)
             count - kept
         )
     };
-    let costs: Vec<u64> = parts.iter().map(|part| text_cost(part)).collect();
-    let kept = kept_prefix(
-        &costs,
-        |kept| match kept < count {
-            true => text_cost(&more(kept)),
-            false => 0,
-        },
-        call_id,
-    );
-    let tail = match kept < count {
-        true => more(kept),
-        false => String::new(),
-    };
-    crate::host_tool_result(&format!("{}{tail}", parts[..kept].concat()))
+    // A memory search result has no head line. The cost of an empty text is 0.
+    bounded_result(&parts, |_| String::new(), more, call_id)
 }
 
 #[cfg(test)]

@@ -4,14 +4,10 @@
 //! call, in the bounds of one Context item. The call has no external effect and gives the Agent
 //! no target.
 
-use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::json;
 
-use crate::read_chapter::{kept_prefix, text_cost};
-use crate::{
-    IntakeRefusal, ReadableChapter, TOOL_RESULT_TEXT_MAX_BYTES, ToolIntake, ToolOperation,
-    ToolResultText, ToolSpec,
-};
+use crate::read_chapter::bounded_result;
+use crate::{ReadableChapter, TOOL_RESULT_TEXT_MAX_BYTES, ToolOperation, ToolResultText, ToolSpec};
 
 /// The count of matches at which a search stops. The author search and the Tool have this one
 /// limit.
@@ -31,38 +27,6 @@ the manuscript, for example a name. The result gives each Block that has the tex
 Blocks near a match with read_chapter.";
 
 const NO_MATCH: &str = "No Block of the manuscript has this exact text, and this is not a failure.";
-
-/// The strict JSON Schema of the arguments.
-pub(crate) fn parameters() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "query": {
-                "type": "string",
-                "description": "The exact text to find, with the same letter case. It is not a \
-                                question."
-            }
-        },
-        "required": ["query"],
-        "additionalProperties": false
-    })
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Arguments {
-    query: String,
-}
-
-/// The typed intake: the query rule of `web_search`.
-pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
-    let Arguments { query } =
-        Arguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
-    match crate::tool_spec::query_fits(&query) {
-        true => Ok(ToolIntake::SearchManuscript { query }),
-        false => Err(IntakeRefusal::Query),
-    }
-}
 
 /// The byte position of the start of each exact match of `query` in the text `text` of one Block:
 /// the same text with the same letter case, from the start of the Block, with no overlap. An
@@ -153,21 +117,7 @@ pub fn admit_manuscript_search(
             count - kept
         )
     };
-    let costs: Vec<u64> = parts.iter().map(|part| text_cost(part)).collect();
-    let kept = kept_prefix(
-        &costs,
-        |kept| match kept < count {
-            true => text_cost(&header(kept)) + text_cost(&more(kept)),
-            false => text_cost(&header(kept)),
-        },
-        call_id,
-    );
-    let tail = match kept < count {
-        true => more(kept),
-        false => String::new(),
-    };
-    let text = format!("{}{}{tail}", header(kept), parts[..kept].concat());
-    crate::host_tool_result(&text)
+    bounded_result(&parts, header, more, call_id)
 }
 
 #[cfg(test)]
