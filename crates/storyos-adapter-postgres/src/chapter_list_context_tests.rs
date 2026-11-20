@@ -26,6 +26,7 @@ use crate::shared_tests::command_sequence_structure::{
 use crate::shared_tests::command_sequence_support::issued;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::sent_context;
 use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
@@ -36,19 +37,7 @@ const FIXTURE_LIST: &str = "{\"volume\":\"Volume A\"}\n[1,0,\"Chapter A\",\"curr
 /// text of each `chapter_list` item that the fake destination received, and the replaced input
 /// label.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    json_of(
-        admin,
-        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
-                      jsonb_path_query_array(wire,
-                        '$.context[*] ? (@.source_class == \"chapter_list\").content'),
-                      wire->'replaces_earlier_input')
-                      ORDER BY model_attempt_id)::text
-               FROM storyos.model_attempts,
-                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
-              WHERE run_id = $1::text::uuid",
-        &[&run_id],
-    )
-    .await
+    sent_context(admin, run_id, &["chapter_list"], true).await
 }
 
 /// For each decision Context Assembly of the Run in RunStep order: its RunStep and its selected

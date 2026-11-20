@@ -17,6 +17,7 @@ use crate::shared_tests::agent_run_steering::{
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::sent_context;
 use crate::shared_tests::model_gateway::{admit_run, admit_run_in};
 use crate::shared_tests::project_instruction::{applied, save};
 use crate::shared_tests::project_research_binding::park_queued_runs;
@@ -64,18 +65,7 @@ async fn assemblies(admin: &Client, run_id: &str) -> Value {
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, and
 /// the text of each `instruction_binding` item that the fake destination received.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    json_of(
-        admin,
-        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
-                      jsonb_path_query_array(wire,
-                        '$.context[*] ? (@.source_class == \"instruction_binding\").content'))
-                      ORDER BY model_attempt_id)::text
-               FROM storyos.model_attempts,
-                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
-              WHERE run_id = $1::text::uuid",
-        &[&run_id],
-    )
-    .await
+    sent_context(admin, run_id, &["instruction_binding"], false).await
 }
 
 fn required(revision_id: &str) -> Value {

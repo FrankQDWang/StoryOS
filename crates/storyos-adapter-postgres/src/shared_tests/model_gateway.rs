@@ -5,6 +5,8 @@ use crate::shared_tests::command_sequence_agent_run::CREATE_AGENT_RUN;
 use crate::shared_tests::command_sequence_project_session::UPDATE_PROJECT_ASSISTANCE;
 use crate::shared_tests::command_sequence_structure::{titled_chapter, titled_volume};
 use crate::shared_tests::command_sequence_support::{command_issue, seed_project};
+use crate::shared_tests::json_row::json_of;
+use serde_json::Value;
 use storyos_application::{
     ClaimedAgentRun, ConversationSelection, CreateAgentRunInput, GatewayClock, ProjectScope,
     UpdateProjectAssistanceInput, issue_project_command_challenge,
@@ -467,4 +469,31 @@ pub(crate) async fn conversation(admin: &Client, run_id: &str) -> String {
         .await
         .unwrap()
         .get(/*idx*/ 0)
+}
+
+/// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, for each
+/// source class of `classes` the text of each of its items that the fake destination received,
+/// and with `replaced` the replaced input label.
+pub(crate) async fn sent_context(
+    admin: &Client,
+    run_id: &str,
+    classes: &[&str],
+    replaced: bool,
+) -> Value {
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position)
+                      || (SELECT jsonb_agg(jsonb_path_query_array(wire,
+                                   '$.context[*] ? (@.source_class == $class).content',
+                                   jsonb_build_object('class', class)) ORDER BY place)
+                            FROM unnest($2::text[]) WITH ORDINALITY AS c(class, place))
+                      || CASE WHEN $3 THEN jsonb_build_array(wire->'replaces_earlier_input')
+                              ELSE '[]'::jsonb END
+                      ORDER BY model_attempt_id)::text
+               FROM storyos.model_attempts,
+                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
+              WHERE run_id = $1::text::uuid",
+        &[&run_id, &classes, &replaced],
+    )
+    .await
 }

@@ -22,6 +22,7 @@ use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::write_versions;
 use crate::shared_tests::model_gateway::admit_run_in;
+use crate::shared_tests::model_gateway::sent_context;
 
 /// The Index of the two entries that `seeded` writes at the Memory revision 2.
 const INDEX: &str = "{\"type\":\"foreshadowing\"}\n\
@@ -94,19 +95,7 @@ async fn recorded(admin: &Client, run_id: &str) -> Value {
 /// text of each `memory_index` item that the fake destination received, and the replaced input
 /// label.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    json_of(
-        admin,
-        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
-                      jsonb_path_query_array(wire,
-                        '$.context[*] ? (@.source_class == \"memory_index\").content'),
-                      wire->'replaces_earlier_input')
-                      ORDER BY model_attempt_id)::text
-               FROM storyos.model_attempts,
-                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
-              WHERE run_id = $1::text::uuid",
-        &[&run_id],
-    )
-    .await
+    sent_context(admin, run_id, &["memory_index"], true).await
 }
 
 /// The recorded `memory_index` item with `text`.
