@@ -3,30 +3,48 @@
 # Each run waits for the start gap of Google Chrome. A run that connected to no browser session ran no test file,
 # so it runs one more time (ADR 0015). A failed test does not run again.
 set -u
-root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd) || exit 1
 if [ -d "$root/target/check" ]; then
-  work=$(mktemp -d "$root/target/check/browser-vitest.XXXXXX")
+  work=$(mktemp -d "$root/target/check/browser-vitest.XXXXXX") || exit 1
 else
-  work=$(mktemp -d "${TMPDIR:-/tmp}/storyos-browser-vitest.XXXXXX")
+  work=$(mktemp -d "${TMPDIR:-/tmp}/storyos-browser-vitest.XXXXXX") || exit 1
 fi
 trap 'rm -rf "$work"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-run_once() {
-  python3 "$root/scripts/check-lanes.py" --browser-start || return
-  # POSIX sh has no pipefail, so the exit code of Vitest goes through a file.
-  { pnpm --dir "$root/apps/web" exec vitest run "$@" 2>&1; echo "$?" > "$work/code"; } | tee "$work/output"
-  return "$(cat "$work/code")"
+wait_for_start_gap() {
+  python3 "$root/scripts/check-lanes.py" --browser-start
 }
 
-run_once "$@" && exit 0
+run_vitest() {
+  rm -f "$work/code"
+  # POSIX sh has no pipefail, so the exit code of Vitest goes through a file.
+  if ! { pnpm --dir "$root/apps/web" exec vitest run "$@" 2>&1; echo "$?" > "$work/code"; } | tee "$work/output"
+  then
+    echo "browser-vitest: the output of the Vitest run was not kept" >&2
+    return 1
+  fi
+  code=$(cat "$work/code" 2>/dev/null) || code=
+  case $code in
+    '' | *[!0-9]*) echo "browser-vitest: the exit code of the Vitest run is not known" >&2; return 1 ;;
+  esac
+  return "$code"
+}
+
+connected_to_no_browser() {
+  # Only the error line and the summary line of Vitest count, also with colors.
+  sed "s/$(printf '\033')\[[0-9;]*m//g" "$work/output" > "$work/plain" || return 1
+  grep -Eq '^Error: Failed to connect to the browser session ' "$work/plain" \
+    && grep -Eq '^[[:space:]]*Tests[[:space:]]+no tests[[:space:]]*$' "$work/plain"
+}
+
+wait_for_start_gap || exit
+run_vitest "$@" && exit 0
 code=$?
-if grep -qs 'Failed to connect to the browser session' "$work/output" && grep -qs 'Tests.*no tests' "$work/output"; then
-  # The drill state is safe: the first run executed no test file, and apps/web/vitest.config.ts has no global setup.
-  echo "browser-vitest: the run connected to no browser session and ran no test, so it runs one more time"
-  run_once "$@"
-  exit
-fi
-exit "$code"
+connected_to_no_browser || exit "$code"
+wait_for_start_gap || exit
+# The drill state is safe: the first run executed no test file, and apps/web/vitest.config.ts has no global setup.
+echo "browser-vitest: the run connected to no browser session and ran no test, so it runs one more time"
+run_vitest "$@"

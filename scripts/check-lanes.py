@@ -491,8 +491,17 @@ def print_second_runs(lanes):
 
 
 def run(root, lanes, final_checks):
+    started = []
+    try:
+        return run_lanes(root, lanes, final_checks, started)
+    finally:
+        # Each end of the run gives the count, also a failed final check (issue 1734).
+        print_second_runs(started)
+
+
+def run_lanes(root, lanes, final_checks, started):
     (root / "target/check").mkdir(parents=True, exist_ok=True)
-    pending, running, finished, started = list(lanes), [], [], []
+    pending, running, finished = list(lanes), [], []
     began = time.monotonic()
     token = uuid.uuid4().hex
     # A signal only sets the flag, so that each started lane is in `started` when the runner stops the lanes.
@@ -545,7 +554,6 @@ def run(root, lanes, final_checks):
                 print_failure(lane, reason)
                 for other in started:
                     print(f"Lane {other.name}: started at {round(other.started - began)} s", flush=True)
-                print_second_runs(started)
                 return 1
         if interrupted:
             stopped = stop(started, token)
@@ -559,7 +567,6 @@ def run(root, lanes, final_checks):
         return 1
     for lane in finished:
         print(f"Lane {lane.name}: {round(lane.duration)} s, started at {round(lane.started - began)} s")
-    print_second_runs(started)
     return 0
 
 
