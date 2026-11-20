@@ -15,3 +15,5 @@ The editor input bound (240) can stop input while an Author Edit waits for Chall
 IndexedDB version 5 keeps each version 4 store, index, and row. Its upgrade writes only the schema version in one version-change transaction, and a version 3 Journal gets the version 4 index in the same transaction. Version 5 lets an intent record carry the optional binding `follows_submission_group`. The editor writes it for input during a Challenge wait (ADR 0065). A reader that finds a binding that names no earlier group enters local recovery.
 
 A Journal that cannot upgrade keeps its earlier version and each row, and it enters local recovery. The [Web Editor Session contract](../foundation/web-editor-session-synchronization-and-recovery-semantics.md#32-immutable-intent-records) owns the record shape.
+
+[ADR 0099](0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md) amends this record: the Web has no upgrade from an earlier Journal version.

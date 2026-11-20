@@ -8,7 +8,6 @@ import {
   candidateTextsFromJournal,
   readJournalSnapshot,
   rebuildPendingProjection,
-  reconfirmLegacyReplaceSelection,
 } from "./local-edit-journal.ts";
 import type { JournalAuthorEdit } from "./local-edit-journal.ts";
 import type {
@@ -71,7 +70,6 @@ export interface EditorSessionWritingController {
    */
   runAfterQuiesce<Result>(condition: "journaled" | "settled", command: (projection: PendingEditProjection) => Promise<Result>)
     : Promise<{ kind: "ran"; result: Result } | { kind: "refused"; reason: QuietRefusal }>;
-  reconfirmLegacyBlocks(): Promise<void>;
   /** True during an IME composition, and while captured input waits outside the Journal. */
   hasIncompleteInput(): boolean;
   canAcceptInput(hardBoundary: boolean, candidate?: { proposalId: string; operationId: string }): boolean;
@@ -544,10 +542,6 @@ export function createEditorSessionWritingController({
         return { kind: "refused", reason: "unsettled_input" };
       }
       return { kind: "ran", result: await command(projection) };
-    },
-    async reconfirmLegacyBlocks() {
-      await reconfirmLegacyReplaceSelection(workspace, cryptoImpl);
-      await refresh();
     },
     hasIncompleteInput,
     canAcceptInput(hardBoundary, candidate) {

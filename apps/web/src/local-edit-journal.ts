@@ -20,7 +20,6 @@ import type {
   JournalSubmissionGroup,
   PendingEditProjection,
   ReplaceSelectionEdit,
-  StoredApplyAuthorEditRequest,
   ValidatedJournalSnapshot,
 } from "./editor-types.ts";
 import { flattenChapterBody } from "./manuscript-doc.ts";
@@ -29,14 +28,10 @@ import type { CapturedManuscriptEdit } from "./manuscript-doc.ts";
 import {
   MAX_WORKING_JOURNAL_ITEMS, readJournalWorkingBoundary, retireCollectedJournalPrefix,
 } from "./journal-working-set.ts";
-import { isRemovedDraftGroup, isRemovedDraftRecord } from "./removed-draft-path.ts";
 import { uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
 export const JOURNAL_DATABASE_VERSION = 5;
-/** The schema version that a read of this workspace accepts. Writes always need the current version. */
-const journalReadVersion = (workspace: EditorWorkspace): number =>
-  workspace.readOnlyJournalVersion ?? JOURNAL_DATABASE_VERSION;
 export const JOURNAL_OBJECT_STORES = Object.freeze([
   "metadata",
   "partitions",
@@ -157,7 +152,7 @@ function followedBase(
   if (prior === undefined) return snapshot.workingBoundary === undefined ? "unbound" : "retired";
   const group = snapshot.groups.find((item) => item.ordered_coverage?.some((coverage) =>
     coverage.local_intent_sequence === prior.local_intent_sequence));
-  if (group === undefined || (group.settlement.kind === "unsettled" && !isRemovedDraftGroup(group))) return "waiting";
+  if (group === undefined || group.settlement.kind === "unsettled") return "waiting";
   if (group.settlement.kind === "applied_receipt_settled") return { base: group.settlement.installed_base_snapshot };
   return proposalSuccessors([group]).size === 1
     ? { revisedHead: group.frozen_request_body.expected_authoritative_revision_id } : "unbound";
@@ -342,29 +337,45 @@ function applyAuthorEditPrimitiveOnCopy(
   return owned;
 }
 
-function isLegacyReplaceSelectionPrimitive(value: unknown) {
-  return typeof value === "object"
-    && value !== null
-    && Reflect.get(value, "kind") === "replace_selection";
-}
-
-export function journalHasIncompatiblePendingReplaceSelection(
-  records: JournalIntentRecord[],
-  coveredSequences: Set<number>,
-  base: EditorBaseSnapshot,
-) {
-  return records.some((record) =>
-    recordTargetsCurrentBase(record, base)
-    && record.proposal_target === undefined
-    && !coveredSequences.has(record.local_intent_sequence)
-    && (record.author_edit_unit?.normalized_primitives ?? [])
-      .some(isLegacyReplaceSelectionPrimitive));
-}
-
 function isAppliedSettlement(group: JournalSubmissionGroup) {
   const settlement: Record<string, unknown> = group.settlement;
   const kind = settlement.kind;
   return kind === "applied_receipt_settled" || kind === "receipt_settled";
+}
+
+const AUTHOR_EDIT_PRIMITIVE_KINDS = new Set(["replace_selection", "replace_block_selection", "split_block",
+  "join_blocks", "move_block", "retype_block"]);
+const ZERO_AUTHORITY_EFFECT_KINDS = new Set(["proposal_revised", "no_effect", "conflicted", "refused"]);
+
+/**
+ * True when the primitives have only the kinds of the current contract. The Web writes `replace_selection` only for a
+ * Proposal candidate. An authoritative `replace_selection` of an earlier client has no Block identity, so it is false.
+ */
+function currentPrimitives(primitives: { kind: unknown }[] | undefined, candidate: boolean) {
+  return (primitives ?? []).every((primitive) => AUTHOR_EDIT_PRIMITIVE_KINDS.has(String(primitive.kind))
+    && (candidate || primitive.kind !== "replace_selection"));
+}
+
+/** True when an intent record has only the shapes of the current contract (ADR 0099). */
+export function hasCurrentRecordShape(record: JournalIntentRecord) {
+  return record.retry_source?.kind === "fresh_editor_intent"
+    && currentPrimitives(record.author_edit_unit?.normalized_primitives, record.proposal_target !== undefined);
+}
+
+/**
+ * True when a group and its records have only the shapes of the current contract. A stored shape of a removed path,
+ * for example a Draft retry, a structured primitive, or a Draft settlement, is false (ADR 0099). The check only
+ * refuses: no reader converts or sends an earlier shape.
+ */
+export function hasCurrentSubmissionShape(group: JournalSubmissionGroup, records: JournalIntentRecord[] = []) {
+  const request = group.frozen_request_body as JournalSubmissionGroup["frozen_request_body"] & { retry_source?: unknown };
+  const settlement = group.settlement as { kind?: unknown; effect?: { kind?: unknown } };
+  return request.retry_source === undefined
+    && (request.author_edit_units ?? []).every((unit) =>
+      currentPrimitives(unit.normalized_primitives, request.proposal_target !== undefined))
+    && (settlement.kind !== "zero_authority_receipt_settled"
+      || ZERO_AUTHORITY_EFFECT_KINDS.has(String(settlement.effect?.kind)))
+    && records.every(hasCurrentRecordShape);
 }
 
 function isZeroAuthoritySettlement(group: JournalSubmissionGroup) {
@@ -432,7 +443,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
   const groups = groupsValue as JournalSubmissionGroup[];
   const storedFences = storedFencesValue as { value?: unknown[] } | undefined;
   const fences = storedFences?.value ?? [];
-  if (schema?.version !== journalReadVersion(workspace)
+  if (schema?.version !== JOURNAL_DATABASE_VERSION
     || records.length > MAX_WORKING_JOURNAL_ITEMS
     || payloadChains.length > MAX_WORKING_JOURNAL_ITEMS
     || groups.length > MAX_WORKING_JOURNAL_ITEMS) {
@@ -591,24 +602,19 @@ async function validateCoverage(
   workingBoundary: JournalSnapshot["workingBoundary"],
 ) {
   const covered = new Set<number>();
-  const grouped = new Set(groups.flatMap((group) =>
-    (group.ordered_coverage ?? []).map((item) => item.local_intent_sequence)));
-  // A pending record of a removed Draft path never gets a group, so it counts as covered (ADR 0073).
-  const removed = records.filter((record) =>
-    !grouped.has(record.local_intent_sequence) && isRemovedDraftRecord(record));
-  const coverable = records.filter((record) => !removed.includes(record));
   let coveredRecordCount = 0;
   for (const group of groups) {
     const first = group.covered_sequence_range?.first;
     const last = group.covered_sequence_range?.last;
     const coverage = group.ordered_coverage ?? [];
-    const coveredRecords = coverable.slice(coveredRecordCount, coveredRecordCount + coverage.length);
+    const coveredRecords = records.slice(coveredRecordCount, coveredRecordCount + coverage.length);
     if (group.journal_partition_id !== workspace.partition.journal_partition_id
       || group.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
       || !["unsettled", "applied_receipt_settled", "zero_authority_receipt_settled",
         "outcome_query_rejected_no_admission",
         "outcome_query_requires_reconfirmation"].includes(group.settlement?.kind)
       || !closedReconciliation(group)
+      || !hasCurrentSubmissionShape(group)
       || !Number.isSafeInteger(first)
       || !Number.isSafeInteger(last)
       || first !== coveredRecords[0]?.local_intent_sequence
@@ -666,7 +672,6 @@ async function validateCoverage(
         !== firstRecord?.expected_authoritative_heads[0]
       || JSON.stringify(request?.expected_proposal_head_revision_ids)
         !== JSON.stringify(firstRecord?.expected_proposal_heads)
-      || JSON.stringify((request as StoredApplyAuthorEditRequest | undefined)?.retry_source) !== JSON.stringify(firstRecord?.retry_source.kind === "draft_retry" ? firstRecord.retry_source : undefined)
       || JSON.stringify(request?.proposal_target)
         !== JSON.stringify(firstRecord?.proposal_target)
       || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord?.target_refs)
@@ -703,7 +708,6 @@ async function validateCoverage(
     }
     coveredRecordCount += coverage.length;
   }
-  for (const record of removed) covered.add(record.local_intent_sequence);
   return covered;
 }
 
@@ -724,7 +728,7 @@ export async function validateJournalSnapshot(
       || record.projection_dependency?.prior_sequence !== priorSequence
       || record.projection_dependency?.snapshot_id !== record.base_snapshot_id
       || !validFollowsBinding(record, groups, snapshot.workingBoundary)
-      || (record.retry_source?.kind !== "fresh_editor_intent" && record.retry_source?.kind !== "draft_retry")
+      || !hasCurrentRecordShape(record)
       || record.editor_contract_revision !== EDITOR_CONTRACT_REVISION
       || record.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
       || record.undo_group_binding?.kind !== "direct_author_input"
@@ -862,16 +866,10 @@ function pendingProjectionFromSnapshot(
   const pendingAcceptanceCount = snapshot.explicitAcceptance?.groups.filter((group) =>
     (group.settlement as { kind?: string })?.kind === "unsettled").length ?? 0;
   const resolvedSequences = retainedRecoverySequences(snapshot);
-  for (const record of snapshot.records) {
-    if (isRemovedDraftRecord(record)) resolvedSequences.add(record.local_intent_sequence);
-  }
   let hasZeroAuthoritySettlement = false;
   const base = workspace.session.base_snapshot;
   for (const group of snapshot.groups) {
     const groupTargetsCurrentChapter = group.frozen_request_body.chapter_id === base.chapter_id;
-    if (isRemovedDraftGroup(group)) {
-      for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
-    }
     if (group.ordered_coverage.every((item) => resolvedSequences.has(item.local_intent_sequence))) continue;
     if (isAppliedSettlement(group)) {
       for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
@@ -900,18 +898,13 @@ function pendingProjectionFromSnapshot(
   const body = (authoritativeRecords.length === 0
     ? base.materialized_revision.body
     : snapshot.bodyBySequence.get(authoritativeRecords.at(-1)!.local_intent_sequence))!;
-  const hasLegacyReplaceSelection = journalHasIncompatiblePendingReplaceSelection(
-    snapshot.records,
-    snapshot.covered,
-    base,
-  );
   return {
     body,
     ...(snapshot.groups.some((group) => group.settlement.kind === "outcome_query_requires_reconfirmation"
       && !group.ordered_coverage.every((item) => resolvedSequences.has(item.local_intent_sequence)))
       ? { requires_local_reconfirmation: true } : {}),
     blocks: cloneBlocks(blocks),
-    save_state: pendingAcceptanceCount > 0 || hasZeroAuthoritySettlement || hasLegacyReplaceSelection || unboundFollower
+    save_state: pendingAcceptanceCount > 0 || hasZeroAuthoritySettlement || unboundFollower
       ? "needs_attention"
       : pendingRecordCount
         ? "saving"
@@ -1199,8 +1192,7 @@ async function persistAuthorEditUnit(
       : digestJournalValue(edit.candidate.checkpointText, cryptoImpl),
   ]);
   const coveredSequences = snapshot.covered;
-  const frozenGroup = snapshot.groups.find((group) =>
-    group.settlement?.kind === "unsettled" && !isRemovedDraftGroup(group));
+  const frozenGroup = snapshot.groups.find((group) => group.settlement?.kind === "unsettled");
   const lastRecord = snapshot.records.at(-1);
   // Input while a group is unsettled, or after records that follow it, follows the latest group (ADR 0065).
   const followsGroup = frozenGroup !== undefined || snapshot.records.some((record) =>
@@ -1307,8 +1299,6 @@ async function persistAuthorEditUnit(
     throw new Error("Local Edit Journal schema or partition is incompatible");
   }
   const retainedChains = new Set((snapshot.localRecovery ?? []).flatMap((item) => item.chains.map((chain) => chain.payload_chain_id)));
-  // A chain with a record of a removed Draft path holds text that the Server never applied (ADR 0073).
-  for (const record of snapshot.records) if (isRemovedDraftRecord(record)) retainedChains.add(record.payload_chain_ref);
   const activeChains = chains.filter((chain) => !retainedChains.has(chain.payload_chain_id));
   // Each run of records that follow a group has its own chain, so each later group collects alone (ADR 0065).
   const followerChain = followsGroup && lastRecord?.follows_submission_group !== undefined
@@ -1415,83 +1405,6 @@ async function persistAuthorEditUnit(
       ? { author_undo_frontier_sequence: projection.author_undo_frontier_sequence }
       : {}),
   };
-}
-
-export async function reconfirmLegacyReplaceSelection(
-  workspace: EditorWorkspace,
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  if (workspace.partition.disposition !== "current_writer_open") {
-    throw new Error("Editor Session is read only");
-  }
-  const block = workspace.session.base_snapshot.materialized_revision.blocks[0];
-  if (workspace.session.base_snapshot.materialized_revision.blocks.length !== 1
-    || block?.block_kind !== "paragraph"
-    || block.text !== workspace.session.base_snapshot.materialized_revision.body
-    || !UUID.test(block.manuscript_block_id)) {
-    throw new Error("Local Edit Journal limit failed");
-  }
-  const snapshot = await prepareJournalAppend(workspace);
-  const covered = snapshot.covered;
-  if (snapshot.groups.some((group) => group.settlement?.kind === "unsettled" && !isRemovedDraftGroup(group))) {
-    throw new Error("Local Edit Journal requires prior group settlement");
-  }
-  const pendingLegacy = snapshot.records.filter((record) =>
-    recordTargetsCurrentBase(record, workspace.session.base_snapshot)
-    && !covered.has(record.local_intent_sequence)
-    && (record.author_edit_unit?.normalized_primitives ?? [])
-      .some(isLegacyReplaceSelectionPrimitive));
-  if (pendingLegacy.length === 0) {
-    return pendingProjectionFromSnapshot(workspace, snapshot);
-  }
-  const rewrittenRecords = new Map<string, JournalIntentRecord>();
-  for (const record of pendingLegacy) {
-    const authorEditUnit = {
-      ...record.author_edit_unit!,
-      normalized_primitives: record.author_edit_unit!.normalized_primitives.map((primitive) =>
-        primitive.kind === "replace_selection"
-          ? {
-              kind: "replace_block_selection" as const,
-              manuscript_block_id: block.manuscript_block_id,
-              from: primitive.from,
-              to: primitive.to,
-              text: primitive.text,
-            }
-          : primitive),
-    };
-    rewrittenRecords.set(record.completed_intent_record_id, {
-      ...record,
-      author_edit_unit: authorEditUnit,
-      payload_digest: await digestJournalValue(authorEditUnit, cryptoImpl),
-    });
-  }
-  const transaction = workspace.database.transaction(
-    ["intents", "payload_chains"],
-    "readwrite",
-    { durability: "strict" },
-  );
-  const intents = transaction.objectStore("intents");
-  const chains = transaction.objectStore("payload_chains");
-  for (const record of rewrittenRecords.values()) {
-    intents.put(record);
-  }
-  for (const chain of snapshot.payloadChains) {
-    let changed = false;
-    const orderedPatchRefs = chain.ordered_patch_refs.map((patch) => {
-      const rewritten = rewrittenRecords.get(patch.completed_intent_record_id);
-      if (!rewritten) return patch;
-      changed = true;
-      return {
-        ...patch,
-        normalized_primitives: rewritten.author_edit_unit!.normalized_primitives,
-      };
-    });
-    if (changed) {
-      chains.put({ ...chain, ordered_patch_refs: orderedPatchRefs });
-    }
-  }
-  await transactionResult(transaction);
-  return rebuildPendingProjection(workspace);
 }
 
 type EditInputFields = { inputOrigin?: InputOrigin; undoGroupId?: string; createdAt?: string };

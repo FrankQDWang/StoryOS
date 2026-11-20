@@ -43,7 +43,6 @@ import { ChapterCreationMenu } from "./chapter-creation-menu.tsx";
 import { ManuscriptSearchPanel } from "./manuscript-search.tsx";
 import { ManuscriptStatisticsPanel } from "./manuscript-statistics.tsx";
 import { ManuscriptReadableExportPanel } from "./manuscript-readable-export.tsx";
-import { LocalUnsentTextPanel } from "./local-unsent-text-panel.tsx";
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { ManuscriptTree } from "./manuscript-tree.tsx";
 import { readManuscriptTree } from "./manuscript-tree-read.ts";
@@ -491,11 +490,6 @@ function ProjectReadyView({
             fetchImpl={fetchImpl}
             cryptoImpl={cryptoImpl}
           />
-          {state.editor.kind === "editor-read-only-recovery" && state.editor.localUnsentText !== undefined ? (
-            <LocalUnsentTextPanel text={state.editor.localUnsentText}
-              chapterTitles={new Map(tree?.volumes.flatMap((volume) =>
-                volume.chapters.map((chapter) => [chapter.chapter_id, chapter.title])))} />
-          ) : null}
           </div>
         </>
       )}
@@ -612,20 +606,6 @@ function ProjectReadyView({
               onLocalRecoveryContinued(next);
             }}
           /> : null}
-          {saveState === "needs_attention" && state.editor.kind === "editor-ready" && pending !== null
-            && !pending.requires_local_reconfirmation
-            ? (
-              <button
-                type="button"
-                data-reconfirm-legacy-blocks=""
-                onClick={() => {
-                  void writing?.reconfirmLegacyBlocks();
-                }}
-              >
-                确认待写入正文
-              </button>
-            )
-            : null}
           {writer?.kind === "read_only"
             ? (
               <TakeOverWriterButton

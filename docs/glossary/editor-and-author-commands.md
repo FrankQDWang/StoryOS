@@ -48,7 +48,7 @@ One browser editing session for an exact User and Project Scope, identified by `
 _Avoid_: Browser tab as authority, Project identity, server transaction
 
 **Local Edit Journal**:
-The Project Scope-bound IndexedDB record of ordered, unsettled author editor intents for one Editor Session and writer generation. It preserves reload and crash continuity while remaining a non-authoritative input to Author Command Admission and Core settlement. Input during a Challenge wait enters it at once, as records that follow the unsettled group (ADR 0065).
+The Project Scope-bound IndexedDB record of ordered, unsettled author editor intents for one Editor Session and writer generation. It preserves reload and crash continuity while remaining a non-authoritative input to Author Command Admission and Core settlement. Input during a Challenge wait enters it at once, as records that follow the unsettled group (ADR 0065). A Journal of an earlier version does not open, and it stays unchanged ([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)).
 _Avoid_: Autosaved Authoritative State, server event log, ProseMirror history as truth
 
 **Pending Edit Projection**:
