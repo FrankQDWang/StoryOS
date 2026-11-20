@@ -1,5 +1,7 @@
 # Blender MCP 与 StoryOS 3D 图书馆首页调研
 
+The Git tag `evidence/prototypes-and-test-asset-audit-2026-11-20` keeps the removed directory `prototypes/tiptap-proposal-lab/`, and `git checkout evidence/prototypes-and-test-asset-audit-2026-11-20 -- prototypes/tiptap-proposal-lab` restores it.
+
 状态：2026-07-15 调研结论，未实施。
 
 ## 结论

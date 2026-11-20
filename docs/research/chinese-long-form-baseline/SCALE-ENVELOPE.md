@@ -1,5 +1,7 @@
 # Chinese long-form scale envelope
 
+The Git tag `evidence/prototypes-and-test-asset-audit-2026-11-20` keeps the removed directory `prototypes/chinese-long-form-baseline/`, and `git checkout evidence/prototypes-and-test-asset-audit-2026-11-20 -- prototypes/chinese-long-form-baseline` restores it.
+
 Date: 2026-10-05. Product snapshot: `479224809cdaae997cda51cb8853e3fafa242b65`.
 
 ## Conclusions
