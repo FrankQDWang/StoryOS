@@ -30,6 +30,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
+import { SECURITY_POLICY_REVISION } from "../../src/client-identity.ts";
 
 const CHAPTER_A = "018f0000-0000-7001-8000-000000000003";
 const STALE_CHAPTER_A = "018f0000-0000-7001-8000-000000000006";
@@ -109,7 +110,7 @@ function createChallengeRequest(
     create_project_input: {
       title,
       client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: correlationId,
     },
     idempotency_key: idempotencyKey,
@@ -123,7 +124,7 @@ function renameRequest(title: string, expectedProjectRevision: string, correlati
       title,
       expected_project_revision: expectedProjectRevision,
       client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: correlationId,
     },
   };
@@ -231,13 +232,13 @@ test("one current writer settles one Author Edit and exact retries return one re
     {
       command_schema: "storyos.command.create-editor-session.request.v1",
       client_contract_revision: "storyos.web-client.release-1.v3",
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: "018f0000-0000-7001-8000-000000000020",
     },
     {
       command_schema: "storyos.command.create-editor-session.request.v1",
       client_contract_revision: "storyos.web-client.release-1.v3",
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: "018f0000-0000-7001-8000-000000000021",
     },
   ];
@@ -348,7 +349,7 @@ test("one current writer settles one Author Edit and exact retries return one re
     const authorEditRequest: ApplyAuthorEditRequest = {
       command_schema: "storyos.command.apply-author-edit.request.v1",
       client_contract_revision: "storyos.web-client.release-1.v3",
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: "018f0000-0000-7001-8000-000000000024",
       editor_session_id: currentSession.editor_session.editor_session_id,
       writer_generation: currentSession.writer.writer_generation,

@@ -1,11 +1,12 @@
 import { expect } from "vitest";
 
 import { applyTrustedInput } from "./browser-command-client.ts";
-import { beginInlineChapterCreation, beginInlineVolumeCreation } from "./inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation, selectTreeChapter } from "./inline-chapter-creation.ts";
 import {
   focusManuscriptEnd,
   manuscriptBody,
   manuscriptEditor,
+  manuscriptIsEditable,
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "./manuscript-surface.ts";
 
@@ -85,6 +86,44 @@ export async function waitSaved(
     return { ok: false as const, save, unsettled, failure, revision };
   }, { timeout }).toEqual({ ok: true, failure: "" });
   return root.querySelector("[data-save-state]")?.getAttribute("data-authoritative-revision-id") ?? "";
+}
+
+/** The button of the Chapter `title` in the manuscript tree. */
+export function chapterButton(root: Element | null | undefined, title: string): HTMLButtonElement | undefined {
+  return [...(root?.querySelectorAll<HTMLButtonElement>(
+    'nav[aria-label="稿件目录"] button[data-chapter-id]',
+  ) ?? [])].find((button) => button.textContent === title);
+}
+
+/** Selects the Chapter `chapterId` in the tree and waits until its editor shows `heading` and is editable. */
+export async function makeCurrent(
+  frame: HTMLIFrameElement,
+  chapterId: string,
+  heading: string,
+): Promise<void> {
+  await selectTreeChapter(appRoot(frame), chapterId);
+  await expect.poll(() => {
+    const root = appRoot(frame);
+    const editor = root.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+    return root.querySelector("h2")?.textContent === heading
+      && editor !== null
+      && editor !== undefined
+      && manuscriptIsEditable(editor);
+  }, { timeout: 15_000 }).toBe(true);
+}
+
+/** Loads the Project page again and waits until the Project is ready and has an editor. */
+export async function reloadProject(frame: HTMLIFrameElement, projectId: string): Promise<Element> {
+  const reopened = nextFrameLoad(frame);
+  frame.src = `/projects/${projectId}`;
+  await reopened;
+  await expect.poll(() => {
+    const root = frame.contentDocument?.querySelector("#app");
+    if (root === null || root === undefined) return false;
+    return root.getAttribute("data-boot-state") === "project-ready"
+      && root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
+  }, { timeout: 10_000 }).toBe(true);
+  return appRoot(frame);
 }
 
 /** Types at the end of the Current Chapter and waits for a new saved Authoritative Revision with `body`. */

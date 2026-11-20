@@ -14,8 +14,8 @@ import type {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import type { EditorReadyState, EditorWorkspace, PendingEditProjection } from "./editor-types.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 
-const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const positiveU64 = (value: unknown): value is string =>
   typeof value === "string" && U64.test(value) && BigInt(value) > 0n
@@ -26,18 +26,6 @@ type UndoSubmission = {
   correlationId: string;
   nonce?: string;
 };
-
-function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
-  const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
-  for (let offset = 5; offset >= 0; offset -= 1) {
-    bytes[offset] = now & 0xff;
-    now = Math.floor(now / 256);
-  }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 export async function installAuthoritativeBaseSnapshot(
   workspace: EditorWorkspace,

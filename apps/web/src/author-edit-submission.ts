@@ -8,7 +8,6 @@ import {
 import type {
   ApplyAuthorEditRequest,
   ApplyAuthorEditResponse,
-  DigestValue,
   EditorWriterProjection,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
@@ -36,6 +35,7 @@ import {
   AUTHOR_EDIT_MAX_WIRE_BODY_BYTES,
   JOURNAL_DATABASE_VERSION,
   boundJournalRecord,
+  digestSubmissionCoverage,
   journalHasIncompatiblePendingReplaceSelection,
   mayAppendJournalSubmissionRecord,
   recordTargetsCurrentBase,
@@ -48,6 +48,8 @@ import {
   commitProtectedTransportSend,
   readAvailableCommandProof,
 } from "./protected-transport-capsule.ts";
+import { uuidV7 } from "./client-identity.ts";
+import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -77,51 +79,6 @@ function writerProjectionAllowsLateDurableSettlement(
     && positiveU64(canonicalWriter.observed_writer_generation)
     && sessionWriter.writer_generation === partitionGeneration
     && BigInt(canonicalWriter.observed_writer_generation) > BigInt(sessionWriter.writer_generation);
-}
-
-const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-});
-const transactionResult = (transaction: IDBTransaction): Promise<void> => new Promise(
-  (resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction aborted"),
-    );
-    transaction.onerror = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction failed"),
-    );
-  },
-);
-
-function uuidV7(cryptoImpl: Crypto = globalThis.crypto, now = Date.now()): string {
-  const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
-  for (let offset = 5; offset >= 0; offset -= 1) {
-    bytes[offset] = now & 0xff;
-    now = Math.floor(now / 256);
-  }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-async function digestSubmissionCoverage(
-  coverage: {
-    ordered_coverage: JournalCoverage[];
-    covered_sequence_range: { first: number; last: number };
-  },
-  cryptoImpl: Crypto,
-): Promise<DigestValue> {
-  const bytes = new TextEncoder().encode(JSON.stringify(coverage));
-  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
-  return {
-    algorithm: "sha256",
-    profile: "storyos.local-edit-journal.submission-coverage.sha256.v1",
-    value_hex_lowercase: [...digest]
-      .map((byte) => byte.toString(16).padStart(2, "0")).join(""),
-  };
 }
 
 const HARD_FLUSH_ORIGINS = new Set<InputOrigin>([

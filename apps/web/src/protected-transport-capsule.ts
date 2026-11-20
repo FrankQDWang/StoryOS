@@ -1,4 +1,4 @@
-import { createJournalUuid, JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
+import { JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
 import type {
   AvailableCommandProof,
   EditorWorkspace,
@@ -6,26 +6,14 @@ import type {
   OutcomeQueryAttempt,
   TransportCapsule,
 } from "./editor-types.ts";
+import { uuidV7 } from "./client-identity.ts";
+import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
 const CAPSULE_STORE = "transport_capsules";
 const ATTEMPT_STORE = "transport_attempts";
 const QUERY_ATTEMPT_STORE = "outcome_query_attempts";
 const QUERY_ROUTE =
   "/api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}";
-
-const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-});
-const transactionResult = (transaction: IDBTransaction) => new Promise<void>((resolve, reject) => {
-  transaction.oncomplete = () => resolve();
-  transaction.onabort = () => reject(
-    transaction.error ?? new Error("IndexedDB transaction aborted"),
-  );
-  transaction.onerror = () => reject(
-    transaction.error ?? new Error("IndexedDB transaction failed"),
-  );
-});
 
 function availableProof(
   value: unknown,
@@ -92,7 +80,7 @@ export async function commitProtectedTransportSend(
   const committedAt = new Date();
   const startedAt = new Date(committedAt.getTime() + 1);
   const capsule: TransportCapsule = {
-    exact_transport_retry_capsule_id: createJournalUuid(workspace.cryptoImpl),
+    exact_transport_retry_capsule_id: uuidV7(workspace.cryptoImpl),
     journal_submission_group_id: group.journal_submission_group_id,
     project_scope: group.project_scope,
     client_session_binding_ref: workspace.partition.client_session_binding_ref,
@@ -149,7 +137,7 @@ export async function commitProtectedTransportSend(
   }
   capsules.add(capsule);
   attempts.add({
-    transport_attempt_id: createJournalUuid(workspace.cryptoImpl),
+    transport_attempt_id: uuidV7(workspace.cryptoImpl),
     journal_submission_group_id: group.journal_submission_group_id,
     attempt_ordinal: existingAttempts.length + 1,
     attempt_kind: { kind: "initial" },
@@ -166,7 +154,7 @@ export async function beginOutcomeQueryAttempt(
   capsule: TransportCapsule,
 ) {
   const attempt: OutcomeQueryAttempt = {
-    outcome_query_attempt_id: createJournalUuid(workspace.cryptoImpl),
+    outcome_query_attempt_id: uuidV7(workspace.cryptoImpl),
     journal_submission_group_id: group.journal_submission_group_id,
     exact_transport_retry_capsule_id: capsule.exact_transport_retry_capsule_id,
     request_identity: {

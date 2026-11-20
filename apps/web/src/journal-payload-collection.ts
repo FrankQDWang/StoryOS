@@ -1,6 +1,5 @@
 import {
   JOURNAL_DATABASE_VERSION,
-  createJournalUuid,
 } from "./local-edit-journal.ts";
 import { MAX_WORKING_JOURNAL_ITEMS } from "./journal-working-set.ts";
 import type { EditorWriterProjection }
@@ -12,26 +11,14 @@ import type {
   JournalSubmissionGroup,
   SubmissionSettlement,
 } from "./editor-types.ts";
+import { uuidV7 } from "./client-identity.ts";
+import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
 type AppliedSettlement = Extract<
   SubmissionSettlement,
   { kind: "applied_receipt_settled" }
 >;
 type AppliedSubmissionGroup = JournalSubmissionGroup & { settlement: AppliedSettlement };
-
-const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-});
-const transactionResult = (transaction: IDBTransaction) => new Promise<void>((resolve, reject) => {
-  transaction.oncomplete = () => resolve();
-  transaction.onabort = () => reject(
-    transaction.error ?? new Error("IndexedDB transaction aborted"),
-  );
-  transaction.onerror = () => reject(
-    transaction.error ?? new Error("IndexedDB transaction failed"),
-  );
-});
 
 function fencesKey(partitionId: string) {
   return `collection_fences:${partitionId}`;
@@ -165,7 +152,7 @@ export async function collectEligibleJournalPayload(workspace: EditorWorkspace) 
         record.payload_chain_ref === chainId && !sequences.has(record.local_intent_sequence)))) {
       continue;
     }
-    const collectionFenceId = createJournalUuid(workspace.cryptoImpl);
+    const collectionFenceId = uuidV7(workspace.cryptoImpl);
     const fence = {
       collection_fence_id: collectionFenceId,
       journal_partition_id: partitionId,

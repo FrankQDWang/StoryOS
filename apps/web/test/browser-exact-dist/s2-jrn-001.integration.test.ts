@@ -1,4 +1,3 @@
-import { selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -7,16 +6,17 @@ import {
   focusManuscriptEnd,
   manuscriptBody,
   manuscriptEditor,
-  manuscriptIsEditable,
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
 import {
   appRoot,
   applicationWindow,
+  chapterButton,
   closeApplicationFrame,
-  nextFrameLoad,
+  makeCurrent,
   openApplicationFrame,
   openFirstChapterForm,
+  reloadProject,
   submitChapterForm,
   submitProjectForm,
   submitVolumeForm,
@@ -34,12 +34,6 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-function chapterButton(root: Element, title: string): HTMLButtonElement | undefined {
-  return [...root.querySelectorAll<HTMLButtonElement>(
-    'nav[aria-label="稿件目录"] button[data-chapter-id]',
-  )].find((button) => button.textContent === title);
-}
-
 async function typeExpected(
   frame: HTMLIFrameElement,
   inserted: string,
@@ -54,33 +48,6 @@ async function typeExpected(
   await applyTrustedInput({ operation: "insert_text", text: inserted });
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(expected);
   await waitSaved(root, before);
-}
-
-async function makeCurrent(
-  frame: HTMLIFrameElement,
-  chapterId: string,
-  heading: string,
-): Promise<void> {
-  await selectTreeChapter(appRoot(frame), chapterId);
-  await expect.poll(() => {
-    const root = appRoot(frame);
-    const editor = root.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
-    return root.querySelector("h2")?.textContent === heading
-      && editor !== null
-      && editor !== undefined
-      && manuscriptIsEditable(editor);
-  }, { timeout: 15_000 }).toBe(true);
-}
-
-async function reloadProject(frame: HTMLIFrameElement, projectId: string): Promise<void> {
-  const reopened = nextFrameLoad(frame);
-  frame.src = `/projects/${projectId}`;
-  await reopened;
-  await expect.poll(() => {
-    const nextRoot = frame.contentDocument?.querySelector("#app");
-    return nextRoot?.getAttribute("data-boot-state") === "project-ready"
-      && nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
-  }, { timeout: 10_000 }).toBe(true);
 }
 
 it("runs the AI-disabled production journey without losing Chapter work", {

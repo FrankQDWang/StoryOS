@@ -24,12 +24,14 @@ import type {
   ValidatedJournalSnapshot,
 } from "./editor-types.ts";
 import { flattenChapterBody } from "./manuscript-doc.ts";
-import type { CapturedManuscriptEdit, ContiguousReplacementPrimitive } from "./manuscript-doc.ts";
+import type { CapturedManuscriptEdit } from "./manuscript-doc.ts";
 
 import {
   MAX_WORKING_JOURNAL_ITEMS, readJournalWorkingBoundary, retireCollectedJournalPrefix,
 } from "./journal-working-set.ts";
 import { isRemovedDraftGroup, isRemovedDraftRecord } from "./removed-draft-path.ts";
+import { uuidV7 } from "./client-identity.ts";
+import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
 export const JOURNAL_DATABASE_VERSION = 5;
 /** The schema version that a read of this workspace accepts. Writes always need the current version. */
@@ -307,55 +309,24 @@ function manuscriptBlocksEqual(
       && block.text === right[index]?.text);
 }
 
-const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-});
-const transactionResult = (transaction: IDBTransaction) => new Promise<void>((resolve, reject) => {
-  transaction.oncomplete = () => resolve();
-  transaction.onabort = () => reject(
-    transaction.error ?? new Error("IndexedDB transaction aborted"),
-  );
-  transaction.onerror = () => reject(
-    transaction.error ?? new Error("IndexedDB transaction failed"),
-  );
-});
-
-export function createJournalUuid(cryptoImpl: Crypto = globalThis.crypto, now = Date.now()) {
-  const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
-  for (let offset = 5; offset >= 0; offset -= 1) {
-    bytes[offset] = now & 0xff;
-    now = Math.floor(now / 256);
-  }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-export async function digestJournalValue(value: unknown, cryptoImpl: Crypto): Promise<DigestValue> {
+async function journalDigest(value: unknown, profile: string, cryptoImpl: Crypto): Promise<DigestValue> {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
   const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
   return {
     algorithm: "sha256",
-    profile: "storyos.local-edit-journal.payload.sha256.v1",
+    profile,
     value_hex_lowercase: [...digest]
       .map((byte) => byte.toString(16).padStart(2, "0")).join(""),
   };
 }
 
-async function digestSubmissionCoverage(
-  coverage: unknown,
-  cryptoImpl: Crypto,
-): Promise<DigestValue> {
-  const bytes = new TextEncoder().encode(JSON.stringify(coverage));
-  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
-  return {
-    algorithm: "sha256",
-    profile: "storyos.local-edit-journal.submission-coverage.sha256.v1",
-    value_hex_lowercase: [...digest]
-      .map((byte) => byte.toString(16).padStart(2, "0")).join(""),
-  };
+export function digestJournalValue(value: unknown, cryptoImpl: Crypto): Promise<DigestValue> {
+  return journalDigest(value, "storyos.local-edit-journal.payload.sha256.v1", cryptoImpl);
+}
+
+/** The digest of the ordered coverage and the covered sequence range of one submission group. */
+export function digestSubmissionCoverage(coverage: unknown, cryptoImpl: Crypto): Promise<DigestValue> {
+  return journalDigest(coverage, "storyos.local-edit-journal.submission-coverage.sha256.v1", cryptoImpl);
 }
 
 function cloneBlocks(blocks: readonly ManuscriptBlock[]): ManuscriptBlock[] {
@@ -971,31 +942,59 @@ async function prepareJournalAppend(workspace: EditorWorkspace) {
   return snapshot;
 }
 
-async function persistReplaceSelection(
+type ResultingBlock = { manuscript_block_id: string; text: string; block_kind?: "paragraph" | "heading" };
+
+/** The parts of one Block edit that differ by edit kind. */
+type BlockEdit = {
+  /** Gives the primitives of the edit on `projection`. It throws when the edit is over a limit. */
+  primitives: (projection: PendingEditProjection) => AuthorEditPrimitive[];
+  from: number;
+  to: number;
+  extraUtf8: string;
+  inputOrigin: InputOrigin;
+  resultingBody: string;
+  /** The Blocks that the editor shows after the edit. When they are given, the applied primitives must give them. */
+  resultingBlocks?: readonly ResultingBlock[] | undefined;
+  /** Whether the comparison with `resultingBlocks` includes the Block kind. */
+  compareBlockKind?: true;
+  undoGroupId?: string | undefined;
+  createdAt?: string | undefined;
+};
+
+function sameResultingBlocks(
+  expected: readonly ManuscriptBlock[],
+  resulting: readonly ResultingBlock[],
+  compareBlockKind: boolean,
+): boolean {
+  const shape = (block: ResultingBlock, blockKind: ResultingBlock["block_kind"]) => compareBlockKind
+    ? { manuscript_block_id: block.manuscript_block_id, block_kind: blockKind, text: block.text }
+    : { manuscript_block_id: block.manuscript_block_id, text: block.text };
+  return JSON.stringify(expected.map((block) => shape(block, block.block_kind)))
+    === JSON.stringify(resulting.map((block) => shape(block, block.block_kind ?? "paragraph")));
+}
+
+/** Stores one Author Edit unit for `edit`, or throws when its primitives do not give `edit.resultingBlocks`. */
+async function persistBlockEdit(
   workspace: EditorWorkspace,
-  edit: ReplaceSelectionEdit,
-  cryptoImpl: Crypto = globalThis.crypto,
+  edit: BlockEdit,
+  cryptoImpl: Crypto,
 ): Promise<PendingEditProjection> {
   const snapshot = await prepareJournalAppend(workspace);
   const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const targetId = edit.manuscript_block_id
-    ?? (projection.blocks.length === 1 ? projection.blocks[0]?.manuscript_block_id : undefined);
-  if (targetId === undefined || !UUID.test(targetId)) {
-    throw new Error("Local Edit Journal limit failed");
+  const primitives = edit.primitives(projection);
+  const expectedBlocks = cloneBlocks(projection.blocks);
+  for (const primitive of primitives) {
+    applyAuthorEditPrimitive(expectedBlocks, primitive);
   }
-  const primitive: AuthorEditPrimitive = {
-    kind: "replace_block_selection",
-    manuscript_block_id: targetId ?? "",
-    from: edit.from,
-    to: edit.to,
-    text: edit.text,
-  };
-  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
+  if (edit.resultingBlocks !== undefined
+    && !sameResultingBlocks(expectedBlocks, edit.resultingBlocks, edit.compareBlockKind === true)) {
+    throw new Error("Local Edit Journal reconstruction failed");
+  }
   return persistAuthorEditUnit(workspace, {
     snapshot,
     projection,
     authorEditUnit: {
-      normalized_primitives: [primitive],
+      normalized_primitives: primitives,
       selection_snapshot: {
         coordinate_profile: "storyos.editor.utf16-code-unit.v1",
         from: edit.from,
@@ -1004,12 +1003,39 @@ async function persistReplaceSelection(
     },
     expectedBody: flattenChapterBody(expectedBlocks),
     expectedBlocks,
-    extraUtf8: edit.text,
+    extraUtf8: edit.extraUtf8,
     resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "typing",
+    inputOrigin: edit.inputOrigin,
     undoGroupId: edit.undoGroupId,
     createdAt: edit.createdAt,
   }, cryptoImpl);
+}
+
+/** A selection replacement in one Block. The Blocks of the editor are not compared. */
+function replaceSelectionEdit(edit: ReplaceSelectionEdit): BlockEdit {
+  return {
+    primitives: (projection) => {
+      const targetId = edit.manuscript_block_id
+        ?? (projection.blocks.length === 1 ? projection.blocks[0]?.manuscript_block_id : undefined);
+      if (targetId === undefined || !UUID.test(targetId)) {
+        throw new Error("Local Edit Journal limit failed");
+      }
+      return [{
+        kind: "replace_block_selection",
+        manuscript_block_id: targetId ?? "",
+        from: edit.from,
+        to: edit.to,
+        text: edit.text,
+      }];
+    },
+    from: edit.from,
+    to: edit.to,
+    extraUtf8: edit.text,
+    inputOrigin: edit.inputOrigin ?? "typing",
+    resultingBody: edit.resultingBody,
+    undoGroupId: edit.undoGroupId,
+    createdAt: edit.createdAt,
+  };
 }
 
 export interface CandidateSelectionEdit {
@@ -1106,284 +1132,6 @@ export async function candidateTextsFromJournal(
   return texts;
 }
 
-async function persistSplitBlock(
-  workspace: EditorWorkspace,
-  edit: {
-    manuscript_block_id: string;
-    offset: number;
-    new_manuscript_block_id: string;
-    resultingBody: string;
-    resultingBlocks?: readonly { manuscript_block_id: string; text: string }[];
-    inputOrigin?: InputOrigin;
-    undoGroupId?: string;
-    createdAt?: string;
-  },
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const primitive: AuthorEditPrimitive = {
-    kind: "split_block",
-    manuscript_block_id: edit.manuscript_block_id,
-    offset: edit.offset,
-    new_manuscript_block_id: edit.new_manuscript_block_id,
-  };
-  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
-  if (edit.resultingBlocks !== undefined
-    && JSON.stringify(expectedBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    })))) {
-    throw new Error("Local Edit Journal reconstruction failed");
-  }
-  return persistAuthorEditUnit(workspace, {
-    snapshot,
-    projection,
-    authorEditUnit: {
-      normalized_primitives: [primitive],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: edit.offset,
-        to: edit.offset,
-      },
-    },
-    expectedBody: flattenChapterBody(expectedBlocks),
-    expectedBlocks,
-    extraUtf8: edit.new_manuscript_block_id,
-    resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "split_block",
-    undoGroupId: edit.undoGroupId,
-    createdAt: edit.createdAt,
-  }, cryptoImpl);
-}
-
-async function persistJoinBlocks(
-  workspace: EditorWorkspace,
-  edit: {
-    left_manuscript_block_id: string;
-    right_manuscript_block_id: string;
-    caret: number;
-    resultingBody: string;
-    resultingBlocks?: readonly { manuscript_block_id: string; text: string }[];
-    inputOrigin?: InputOrigin;
-    undoGroupId?: string;
-    createdAt?: string;
-  },
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const primitive: AuthorEditPrimitive = {
-    kind: "join_blocks",
-    left_manuscript_block_id: edit.left_manuscript_block_id,
-    right_manuscript_block_id: edit.right_manuscript_block_id,
-  };
-  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
-  if (edit.resultingBlocks !== undefined
-    && JSON.stringify(expectedBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    })))) {
-    throw new Error("Local Edit Journal reconstruction failed");
-  }
-  return persistAuthorEditUnit(workspace, {
-    snapshot,
-    projection,
-    authorEditUnit: {
-      normalized_primitives: [primitive],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: edit.caret,
-        to: edit.caret,
-      },
-    },
-    expectedBody: flattenChapterBody(expectedBlocks),
-    expectedBlocks,
-    extraUtf8: "",
-    resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "join_blocks",
-    undoGroupId: edit.undoGroupId,
-    createdAt: edit.createdAt,
-  }, cryptoImpl);
-}
-
-async function persistMoveBlock(
-  workspace: EditorWorkspace,
-  edit: {
-    manuscript_block_id: string;
-    to_index: number;
-    resultingBody: string;
-    resultingBlocks?: readonly {
-      manuscript_block_id: string;
-      text: string;
-      block_kind?: "paragraph" | "heading";
-    }[];
-    inputOrigin?: InputOrigin;
-    undoGroupId?: string;
-    createdAt?: string;
-  },
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const primitive: AuthorEditPrimitive = {
-    kind: "move_block",
-    manuscript_block_id: edit.manuscript_block_id,
-    to_index: edit.to_index,
-  };
-  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
-  if (edit.resultingBlocks !== undefined
-    && JSON.stringify(expectedBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      block_kind: block.block_kind,
-      text: block.text,
-    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      block_kind: block.block_kind ?? "paragraph",
-      text: block.text,
-    })))) {
-    throw new Error("Local Edit Journal reconstruction failed");
-  }
-  return persistAuthorEditUnit(workspace, {
-    snapshot,
-    projection,
-    authorEditUnit: {
-      normalized_primitives: [primitive],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: 0,
-        to: 0,
-      },
-    },
-    expectedBody: flattenChapterBody(expectedBlocks),
-    expectedBlocks,
-    extraUtf8: "",
-    resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "move_block",
-    undoGroupId: edit.undoGroupId,
-    createdAt: edit.createdAt,
-  }, cryptoImpl);
-}
-
-async function persistRetypeBlock(
-  workspace: EditorWorkspace,
-  edit: {
-    manuscript_block_id: string;
-    block_kind: "paragraph" | "heading";
-    resultingBody: string;
-    resultingBlocks?: readonly {
-      manuscript_block_id: string;
-      text: string;
-      block_kind?: "paragraph" | "heading";
-    }[];
-    inputOrigin?: InputOrigin;
-    undoGroupId?: string;
-    createdAt?: string;
-  },
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const primitive: AuthorEditPrimitive = {
-    kind: "retype_block",
-    manuscript_block_id: edit.manuscript_block_id,
-    block_kind: edit.block_kind,
-  };
-  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
-  if (edit.resultingBlocks !== undefined
-    && JSON.stringify(expectedBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      block_kind: block.block_kind,
-      text: block.text,
-    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      block_kind: block.block_kind ?? "paragraph",
-      text: block.text,
-    })))) {
-    throw new Error("Local Edit Journal reconstruction failed");
-  }
-  return persistAuthorEditUnit(workspace, {
-    snapshot,
-    projection,
-    authorEditUnit: {
-      normalized_primitives: [primitive],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: 0,
-        to: 0,
-      },
-    },
-    expectedBody: flattenChapterBody(expectedBlocks),
-    expectedBlocks,
-    extraUtf8: "",
-    resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "retype_block",
-    undoGroupId: edit.undoGroupId,
-    createdAt: edit.createdAt,
-  }, cryptoImpl);
-}
-
-async function persistContiguousReplacement(
-  workspace: EditorWorkspace,
-  edit: {
-    primitives: readonly ContiguousReplacementPrimitive[];
-    from: number;
-    to: number;
-    resultingBody: string;
-    resultingBlocks?: readonly { manuscript_block_id: string; text: string }[];
-    inputOrigin?: InputOrigin;
-    undoGroupId?: string;
-    createdAt?: string;
-  },
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const primitives = edit.primitives.map((primitive): AuthorEditPrimitive => primitive);
-  if (primitives.length < 1 || primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES) {
-    throw new Error("Local Edit Journal limit failed");
-  }
-  const expectedBlocks = cloneBlocks(projection.blocks);
-  for (const primitive of primitives) {
-    applyAuthorEditPrimitive(expectedBlocks, primitive);
-  }
-  if (edit.resultingBlocks !== undefined
-    && JSON.stringify(expectedBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    })))) {
-    throw new Error("Local Edit Journal reconstruction failed");
-  }
-  return persistAuthorEditUnit(workspace, {
-    snapshot,
-    projection,
-    authorEditUnit: {
-      normalized_primitives: primitives,
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: edit.from,
-        to: edit.to,
-      },
-    },
-    expectedBody: flattenChapterBody(expectedBlocks),
-    expectedBlocks,
-    extraUtf8: "",
-    resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "selection_replacement",
-    undoGroupId: edit.undoGroupId,
-    createdAt: edit.createdAt,
-  }, cryptoImpl);
-}
-
 async function persistAuthorEditUnit(
   workspace: EditorWorkspace,
   edit: {
@@ -1411,7 +1159,7 @@ async function persistAuthorEditUnit(
   }
   const createdAt = edit.createdAt ?? new Date().toISOString();
   const inputOrigin = edit.inputOrigin;
-  const undoGroupId = edit.undoGroupId ?? createJournalUuid(cryptoImpl);
+  const undoGroupId = edit.undoGroupId ?? uuidV7(cryptoImpl);
   const { snapshot, projection } = edit;
   const baseBlocks = workspace.session.base_snapshot.materialized_revision.blocks;
   if (baseBlocks.length === 0
@@ -1436,8 +1184,8 @@ async function persistAuthorEditUnit(
     throw new Error("Local Edit Journal limit failed");
   }
   const base = workspace.session.base_snapshot;
-  const completedIntentRecordId = createJournalUuid(cryptoImpl);
-  const patchId = createJournalUuid(cryptoImpl);
+  const completedIntentRecordId = uuidV7(cryptoImpl);
+  const patchId = uuidV7(cryptoImpl);
   const authorEditUnit = edit.authorEditUnit;
   if (authorEditUnit.normalized_primitives.length < 1
     || authorEditUnit.normalized_primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES) {
@@ -1593,7 +1341,7 @@ async function persistAuthorEditUnit(
   const isNewChain = existingPayloadChain === undefined;
   const payloadChain: JournalPayloadChain = existingPayloadChain ?? {
       working_set_partition_id: partitionId,
-    payload_chain_id: createJournalUuid(cryptoImpl),
+    payload_chain_id: uuidV7(cryptoImpl),
       journal_partition_id: partitionId,
       checkpoint_ref: {
         chapter_object_id: base.chapter_id,
@@ -1760,14 +1508,78 @@ export async function appendAuthorEdit(
   edit: JournalAuthorEdit,
   cryptoImpl: Crypto = globalThis.crypto,
 ): Promise<PendingEditProjection> {
-  if (!("kind" in edit)) return persistReplaceSelection(workspace, edit, cryptoImpl);
+  if (!("kind" in edit)) return persistBlockEdit(workspace, replaceSelectionEdit(edit), cryptoImpl);
+  if (edit.kind === "candidate_selection") return persistCandidateSelection(workspace, edit, cryptoImpl);
+  if (edit.kind === "replace_block_selection") {
+    return persistBlockEdit(workspace, replaceSelectionEdit(edit), cryptoImpl);
+  }
+  const input = { resultingBody: edit.resultingBody, resultingBlocks: edit.resultingBlocks,
+    undoGroupId: edit.undoGroupId, createdAt: edit.createdAt };
   switch (edit.kind) {
-    case "candidate_selection": return persistCandidateSelection(workspace, edit, cryptoImpl);
-    case "split_block": return persistSplitBlock(workspace, edit, cryptoImpl);
-    case "join_blocks": return persistJoinBlocks(workspace, edit, cryptoImpl);
-    case "move_block": return persistMoveBlock(workspace, edit, cryptoImpl);
-    case "retype_block": return persistRetypeBlock(workspace, edit, cryptoImpl);
-    case "contiguous_replacement": return persistContiguousReplacement(workspace, edit, cryptoImpl);
-    case "replace_block_selection": return persistReplaceSelection(workspace, edit, cryptoImpl);
+    case "split_block": return persistBlockEdit(workspace, {
+      ...input,
+      primitives: () => [{
+        kind: "split_block",
+        manuscript_block_id: edit.manuscript_block_id,
+        offset: edit.offset,
+        new_manuscript_block_id: edit.new_manuscript_block_id,
+      }],
+      from: edit.offset,
+      to: edit.offset,
+      extraUtf8: edit.new_manuscript_block_id,
+      inputOrigin: edit.inputOrigin ?? "split_block",
+    }, cryptoImpl);
+    case "join_blocks": return persistBlockEdit(workspace, {
+      ...input,
+      primitives: () => [{
+        kind: "join_blocks",
+        left_manuscript_block_id: edit.left_manuscript_block_id,
+        right_manuscript_block_id: edit.right_manuscript_block_id,
+      }],
+      from: edit.caret,
+      to: edit.caret,
+      extraUtf8: "",
+      inputOrigin: edit.inputOrigin ?? "join_blocks",
+    }, cryptoImpl);
+    case "move_block": return persistBlockEdit(workspace, {
+      ...input,
+      primitives: () => [{
+        kind: "move_block",
+        manuscript_block_id: edit.manuscript_block_id,
+        to_index: edit.to_index,
+      }],
+      from: 0,
+      to: 0,
+      extraUtf8: "",
+      inputOrigin: edit.inputOrigin ?? "move_block",
+      compareBlockKind: true,
+    }, cryptoImpl);
+    case "retype_block": return persistBlockEdit(workspace, {
+      ...input,
+      primitives: () => [{
+        kind: "retype_block",
+        manuscript_block_id: edit.manuscript_block_id,
+        block_kind: edit.block_kind,
+      }],
+      from: 0,
+      to: 0,
+      extraUtf8: "",
+      inputOrigin: edit.inputOrigin ?? "retype_block",
+      compareBlockKind: true,
+    }, cryptoImpl);
+    case "contiguous_replacement": return persistBlockEdit(workspace, {
+      ...input,
+      primitives: () => {
+        const primitives = edit.primitives.map((primitive): AuthorEditPrimitive => primitive);
+        if (primitives.length < 1 || primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES) {
+          throw new Error("Local Edit Journal limit failed");
+        }
+        return primitives;
+      },
+      from: edit.from,
+      to: edit.to,
+      extraUtf8: "",
+      inputOrigin: edit.inputOrigin ?? "selection_replacement",
+    }, cryptoImpl);
   }
 }

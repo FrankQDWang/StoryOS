@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "playwright/test";
@@ -11,13 +10,9 @@ import type { CreateAgentRunRequest, CreateAgentRunResponse, AcceptProposalReque
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch } from "./node-integration.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 as id } from "../../src/client-identity.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-function id() {
-  const value = randomUUID();
-  const time = Date.now().toString(16).padStart(12, "0");
-  return `${time.slice(0, 8)}-${time.slice(8)}-7${value.slice(15)}`;
-}
 
 export async function verifyProductionMultiProposal(context: BrowserContext, origin: string) {
   const page = await context.newPage();
@@ -40,7 +35,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const request: UpdateProjectAssistanceRequest = { command_schema: "storyos.command.update-project-assistance.request.v1",
       update_project_assistance_input: { availability: "available", expected_assistance_revision: "0",
         client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-        security_policy_revision: "storyos.web-security-policy.release-1.v1", correlation_id: id() } };
+        security_policy_revision: SECURITY_POLICY_REVISION, correlation_id: id() } };
     const key = id();
     const challenge = await createProjectCommandChallenge({ ...options, request: { method: "PUT",
       route_template: "/api/v1/projects/{project_id}/assistance", command_schema: request.command_schema,
@@ -370,7 +365,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
         expected_authoritative_revision_id: proposal.base_authoritative_revision_id,
         editor_session_id: editorSessionId,
         client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-        security_policy_revision: 'storyos.web-security-policy.release-1.v1', correlation_id: id() } };
+        security_policy_revision: SECURITY_POLICY_REVISION, correlation_id: id() } };
     const frozenKey = id();
     const deliver = async () => {
       const challenge = await createProjectCommandChallenge({ ...options, request: { method: 'POST',
