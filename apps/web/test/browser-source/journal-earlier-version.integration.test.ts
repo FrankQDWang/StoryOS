@@ -3,6 +3,8 @@ import { expect, it } from "vitest";
 import exportedFixture from "../../../../generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.json";
 import routeCatalog from "../../../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json";
 import readyExportFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json";
+import { digestExportHumanReadableManuscript, type ExportHumanReadableManuscriptRequest }
+  from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { appendAuthorEdit, openEditorWorkspace } from "../../src/editor-session.ts";
@@ -36,6 +38,8 @@ const { operations } = routeCatalog as { operations: {
 const PROJECT_COMMANDS = operations.filter(({ kind, path }) =>
   kind === "command" && path.startsWith("/api/v1/projects/{project_id}"));
 const NONCE = "a".repeat(64);
+type Challenge = { method: string; route_template: string; command_schema: string; idempotency_key: string;
+  canonical_command_digest: unknown };
 const EXPORT_TEXT = "# Volume A\n\n## Chapter A\n\nBase\n";
 const EXPORT_SHA256 = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(EXPORT_TEXT)))]
   .map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -53,7 +57,8 @@ async function journalRows(name: string, openDatabases: Set<IDBDatabase>) {
 it.each([3, 4] as const)("shows the Server text read-only for a version %i Journal, exports it, and keeps the Journal",
   async (version) => {
     const scenario = createBrowserScenario();
-    const issued = new Map<string, { route: string; expiresAt: number }>();
+    const issued = new Map<string, { challenge: Challenge; expiresAt: number }>();
+    let admitted = false;
     const fetchImpl: typeof fetch = async (input, init) => {
       const path = new URL(input instanceof Request ? input.url : input).pathname;
       const method = init?.method ?? "GET";
@@ -92,8 +97,7 @@ it.each([3, 4] as const)("shows the Server text read-only for a version %i Journ
           message: "The statistics projection is not ready." }, 409);
       }
       if (path.endsWith("/anti-forgery-challenges")) {
-        const challenge = JSON.parse(String(init?.body)) as { method: string; route_template: string;
-          command_schema: string; idempotency_key: string };
+        const challenge = JSON.parse(String(init?.body)) as Challenge;
         // `crates/storyos-server/src/lib.rs:908`: a target that is not a Project command of the route catalog.
         if (!PROJECT_COMMANDS.some((operation) => operation.method === challenge.method
           && operation.path === challenge.route_template && operation.schemas.request === challenge.command_schema)) {
@@ -101,7 +105,7 @@ it.each([3, 4] as const)("shows the Server text read-only for a version %i Journ
         }
         // The Server issues a nonce that is valid for five minutes (`project_command_challenge.rs:142`).
         const expiresAt = Date.now() + 300_000;
-        issued.set(challenge.idempotency_key, { route: challenge.route_template, expiresAt });
+        issued.set(challenge.idempotency_key, { challenge, expiresAt });
         return jsonResponse({ nonce: NONCE, expires_at: new Date(expiresAt).toISOString(),
           limit_profile_revision: "storyos.foundation.absolute.v1" });
       }
@@ -112,15 +116,25 @@ it.each([3, 4] as const)("shows the Server text read-only for a version %i Journ
       if (path.endsWith("/activity")) return emptyActivityStream();
       if (path === `/api/v1/projects/${PROJECT}/manuscript/exports` && method === "POST") {
         // `crates/storyos-server/src/lib.rs:931`: a command with no valid Challenge gets `challenge_invalid`.
+        // The command must match its Challenge: nonce, key, method, route, schema, digest, and expiry
+        // (`crates/storyos-adapter-postgres/src/lib.rs:470`).
         const headers = new Headers(init?.headers);
-        const binding = issued.get(headers.get("idempotency-key") ?? "");
-        if (headers.get("x-storyos-anti-forgery") !== NONCE || binding?.route !== EXPORT_ROUTE
-          || Date.now() >= binding.expiresAt) {
+        const key = headers.get("idempotency-key") ?? "";
+        const binding = issued.get(key)?.challenge;
+        const request = JSON.parse(String(init?.body)) as ExportHumanReadableManuscriptRequest;
+        if (headers.get("x-storyos-anti-forgery") !== NONCE || binding === undefined
+          || binding.idempotency_key !== key || binding.method !== method || binding.route_template !== EXPORT_ROUTE
+          || binding.command_schema !== request.command_schema || Date.now() >= issued.get(key)!.expiresAt
+          || JSON.stringify(binding.canonical_command_digest)
+            !== JSON.stringify(await digestExportHumanReadableManuscript(request, crypto))) {
           return problem("challenge_invalid", "The command challenge is invalid or expired.", 422);
         }
+        admitted = true;
         return jsonResponse(forProject(exportedFixture));
       }
       if (path === `/api/v1/projects/${PROJECT}/manuscript/exports/${readyExportFixture.export_id}`) {
+        // `readable_export.rs:109`: no export exists before the Server admits the export command (`lib.rs:876`).
+        if (!admitted) return problem("resource_unavailable", "The requested resource is unavailable.", 404);
         // The export of this Project has the Server text of its one Chapter.
         return jsonResponse({ ...forProject(readyExportFixture), manuscript_utf8: EXPORT_TEXT,
           content_sha256: EXPORT_SHA256 });

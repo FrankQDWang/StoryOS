@@ -536,9 +536,7 @@ export async function submitOnePendingAuthorEdit({
     try {
       group = await freezeOneIntentSubmission(workspace, cryptoImpl);
     } catch (error) {
-      if (error instanceof Error
-        && (error.message === "Local Edit Journal requires Block reconfirmation"
-          || error.message === "Local Edit Journal requires attention")) {
+      if (error instanceof Error && error.message === "Local Edit Journal requires attention") {
         const pending = await rebuildPendingProjection(workspace);
         return { ...pending, save_state: "needs_attention" };
       }

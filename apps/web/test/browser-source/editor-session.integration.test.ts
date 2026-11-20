@@ -29,8 +29,8 @@ import {
   readJournalSnapshot,
   validateJournalSnapshot,
 } from "../../src/local-edit-journal.ts";
+import { digestApplyAuthorEdit } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { FIRST_APPEND_EDIT, openJournalAppendTestWorkspace, withDigest } from "./local-edit-journal-append-fixture.ts";
-import { restoreJournalVersion } from "./journal-version-fixture.ts";
 import { readLocalRecovery } from "../../src/local-edit-recovery.ts";
 import { recoveryPrefix } from "../../src/local-recovery-record.ts";
 import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
@@ -119,37 +119,69 @@ it.each(["changed_head", "legacy_editor_contract"] as const)("preserves the comp
   }
 });
 
-// A Journal of an earlier version has no upgrade path (ADR 0099). The open fails as for an unknown version, and the
-// Journal stays as it is.
-it.each([3, 4] as const)("keeps a version %i Journal and does not open it", async (version) => {
-  const test = await openJournalAppendTestWorkspace();
-  let kept: IDBDatabase | undefined;
-  try {
-    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
-    const rows = await restoreJournalVersion(test.workspace.database, version);
-    await expect(test.reopen()).rejects.toThrow("workspace unavailable: local_journal_unavailable");
-    kept = await requestResult(indexedDB.open(test.workspace.database.name));
-    const transaction = kept.transaction([...kept.objectStoreNames]);
-    expect({ version: kept.version, rows: Object.fromEntries(await Promise.all([...kept.objectStoreNames]
-      .map(async (store) => [store, await requestResult(transaction.objectStore(store).getAll())]))) })
-      .toEqual({ version, rows });
-  } finally {
-    kept?.close();
-    await test.close();
-  }
-});
+type JournalAppendTest = Awaited<ReturnType<typeof openJournalAppendTestWorkspace>>;
 
-// A stored shape of the removed Draft path is not a shape of the current contract, so it fails closed (ADR 0099).
-it("fails closed for a stored group that an earlier client settled with refused_to_draft", async () => {
+/** Stores the first record of the Journal again with `primitive` in place of its one primitive. */
+async function storeRecordPrimitive(test: JournalAppendTest, primitive: Record<string, unknown>) {
+  const workspace = test.workspace;
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const record = recordAt(snapshot.records, 0);
+  const authorEditUnit = { ...requireAuthorEditUnit(record), normalized_primitives: [primitive] };
+  const payloadDigest = await digestJournalValue(authorEditUnit, crypto);
+  const chain = snapshot.payloadChains[0];
+  if (chain === undefined) throw new Error("the payload chain is unavailable");
+  const transaction = workspace.database.transaction(["intents", "payload_chains"], "readwrite");
+  transaction.objectStore("intents").put({ ...record, author_edit_unit: authorEditUnit, payload_digest: payloadDigest });
+  transaction.objectStore("payload_chains").put({ ...chain, ordered_patch_refs: chain.ordered_patch_refs.map((patch) =>
+    patch.completed_intent_record_id === record.completed_intent_record_id
+      ? { ...patch, normalized_primitives: authorEditUnit.normalized_primitives } : patch) });
+  await transactionResult(transaction);
+}
+
+/** The block selection of the first record, as the Web stores it. */
+async function firstBlockSelection(test: JournalAppendTest) {
+  const snapshot = await validateJournalSnapshot(test.workspace, await readJournalSnapshot(test.workspace));
+  const primitive = requireAuthorEditUnit(recordAt(snapshot.records, 0)).normalized_primitives[0];
+  if (primitive?.kind !== "replace_block_selection") throw new Error("the stored Author Edit is not a Block selection");
+  return primitive;
+}
+
+// Each shape that only an earlier client wrote is not a shape of the current contract. The one shape check of the
+// Journal validation refuses it, so the Journal fails closed and never sends it (ADR 0099).
+it.each([
+  ["a record with a Draft retry source", "Local Edit Journal is corrupt", async (test: JournalAppendTest) => {
+    const intents = test.workspace.database.transaction("intents", "readwrite").objectStore("intents");
+    const [record] = await requestResult(intents.getAll());
+    await requestResult(intents.put({ ...record, retry_source: { kind: "draft_retry" } }));
+  }],
+  ["a record with a structured primitive", "Local Edit Journal is corrupt", async (test: JournalAppendTest) => {
+    const { from, to, text } = await firstBlockSelection(test);
+    await storeRecordPrimitive(test, { kind: "replace_structured_selection", from, to, text });
+  }],
+  ["an authoritative ReplaceSelection record", "Local Edit Journal is corrupt", async (test: JournalAppendTest) => {
+    const { from, to, text } = await firstBlockSelection(test);
+    await storeRecordPrimitive(test, { kind: "replace_selection", from, to, text });
+  }],
+  ["a frozen request with a retry source", "Journal Submission Group is corrupt", async (test: JournalAppendTest) => {
+    const group = await freezeOneIntentSubmission(test.workspace, crypto);
+    const request = { ...group.frozen_request_body, retry_source: { kind: "draft_retry" } };
+    const digest = await digestApplyAuthorEdit(request, crypto);
+    await requestResult(test.workspace.database.transaction("submission_groups", "readwrite")
+      .objectStore("submission_groups").put({ ...group, frozen_request_body: request, frozen_request_digest: digest }));
+  }],
+  ["a group settled with refused_to_draft", "Journal Submission Group is corrupt", async (test: JournalAppendTest) => {
+    const group = await freezeOneIntentSubmission(test.workspace, crypto);
+    await requestResult(test.workspace.database.transaction("submission_groups", "readwrite")
+      .objectStore("submission_groups").put({ ...group, settlement: { kind: "zero_authority_receipt_settled",
+        command_id: createJournalUuid(), author_command_admission_id: createJournalUuid(), receipt: {},
+        effect: { kind: "refused_to_draft" } } }));
+  }],
+] as const)("fails closed for %s of an earlier client", async (_, error, store) => {
   const test = await openJournalAppendTestWorkspace();
   try {
     await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
-    const group = await freezeOneIntentSubmission(test.workspace, crypto);
-    const groups = test.workspace.database.transaction("submission_groups", "readwrite").objectStore("submission_groups");
-    await requestResult(groups.put({ ...group, settlement: { kind: "zero_authority_receipt_settled",
-      command_id: createJournalUuid(), author_command_admission_id: createJournalUuid(), receipt: {},
-      effect: { kind: "refused_to_draft" } } }));
-    await expect(rebuildPendingProjection(test.workspace)).rejects.toThrow("Journal Submission Group is corrupt");
+    await store(test);
+    await expect(rebuildPendingProjection(test.workspace)).rejects.toThrow(error);
     await expect(test.reopen()).rejects.toThrow("workspace unavailable: local_journal_unavailable");
   } finally { await test.close(); }
 });
@@ -174,32 +206,6 @@ it("skips a retained recovery record of a Draft retry of an earlier client and k
     await requestResult(metadata().put(current));
     expect(await readLocalRecovery(test.workspace)).toEqual([current.value]);
     expect(await requestResult(metadata().get(draft.key))).toEqual(draft);
-  } finally { await test.close(); }
-});
-
-it("fails closed for a stored authoritative ReplaceSelection record of an earlier client", async () => {
-  const test = await openJournalAppendTestWorkspace();
-  try {
-    const workspace = test.workspace;
-    await appendAuthorEdit(workspace, FIRST_APPEND_EDIT);
-    const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
-    const record = recordAt(snapshot.records, 0);
-    const primitive = requireAuthorEditUnit(record).normalized_primitives[0];
-    if (primitive?.kind !== "replace_block_selection") throw new Error("the stored Author Edit is not a Block selection");
-    // An earlier client stored the authoritative edit with no Block identity.
-    const authorEditUnit = { ...requireAuthorEditUnit(record), normalized_primitives: [{
-      kind: "replace_selection" as const, from: primitive.from, to: primitive.to, text: primitive.text }] };
-    const chain = snapshot.payloadChains[0];
-    if (chain === undefined) throw new Error("the payload chain is unavailable");
-    const payloadDigest = await digestJournalValue(authorEditUnit, crypto);
-    const transaction = workspace.database.transaction(["intents", "payload_chains"], "readwrite");
-    transaction.objectStore("intents").put({ ...record, author_edit_unit: authorEditUnit, payload_digest: payloadDigest });
-    transaction.objectStore("payload_chains").put({ ...chain, ordered_patch_refs: chain.ordered_patch_refs.map((patch) =>
-      patch.completed_intent_record_id === record.completed_intent_record_id
-        ? { ...patch, normalized_primitives: authorEditUnit.normalized_primitives } : patch) });
-    await transactionResult(transaction);
-    await expect(rebuildPendingProjection(workspace)).rejects.toThrow("Local Edit Journal is corrupt");
-    await expect(test.reopen()).rejects.toThrow("workspace unavailable: local_journal_unavailable");
   } finally { await test.close(); }
 });
 
