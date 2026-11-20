@@ -98,19 +98,7 @@ fn named_entries(candidate: &MemoryOperationCandidate) -> Vec<u64> {
 /// `entries` are the current entries at the pinned Memory revision, `observations` are the
 /// observations of the input, from number 1, and `marks` are the delete marks of the author. Each
 /// admitted operation counts for the operations after it, and a refused operation does not stop
-/// them.
-pub fn decide_memory_operations(
-    candidates: &[MemoryOperationCandidate],
-    entries: &[PassMemoryEntry],
-    next_entry_number: u64,
-    observations: &[PassObservation],
-    marks: &[MemoryDeleteMark],
-) -> Vec<Result<AdmittedOperation, MemoryOperationRefusal>> {
-    decide_with_entries(candidates, entries, next_entry_number, observations, marks).0
-}
-
-/// The decisions of `decide_memory_operations`, and the current entries after the admitted
-/// operations.
+/// them. The second value is the current entries after the admitted operations.
 pub(crate) fn decide_with_entries(
     candidates: &[MemoryOperationCandidate],
     entries: &[PassMemoryEntry],

@@ -282,13 +282,6 @@ impl storyos_application::EmbeddingDispatchStore for RaceStore {
 }
 
 impl PassageVectorStore for RaceStore {
-    async fn vector_store_available(
-        &self,
-        _scope: &ProjectScope,
-    ) -> Result<bool, ProjectReadError> {
-        Ok(true)
-    }
-
     async fn read_passage_index_facts(
         &self,
         _scope: &ProjectScope,
@@ -300,23 +293,6 @@ impl PassageVectorStore for RaceStore {
             chapter: Some(chapter),
             stored,
         })
-    }
-
-    async fn remove_passage_vectors(
-        &self,
-        _scope: &ProjectScope,
-        _chapter_id: &str,
-        _keys: &[PassageVectorKey],
-    ) -> Result<u64, ProjectReadError> {
-        unreachable!("the Worker writes only fenced rows")
-    }
-
-    async fn write_passage_vector(
-        &self,
-        _scope: &ProjectScope,
-        _row: &PassageVectorRow<'_>,
-    ) -> Result<(), ProjectReadError> {
-        unreachable!("the Worker writes only fenced rows")
     }
 }
 
@@ -490,7 +466,7 @@ async fn run_once_claims_again_after_a_serialization_failure() {
         adapter: NoDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
+        embeddings: NoEmbeddings,
     };
 
     run_once(&store, &destination)
@@ -516,7 +492,7 @@ async fn run_once_completes_again_after_a_serialization_failure() {
         adapter: NoDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
+        embeddings: NoEmbeddings,
     };
 
     run_once(&store, &destination)
@@ -542,7 +518,7 @@ async fn run_once_stops_after_one_failure_that_is_not_a_serialization_failure() 
         adapter: NoDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
+        embeddings: NoEmbeddings,
     };
 
     let result = run_once(&store, &destination).await;
@@ -654,7 +630,7 @@ async fn run_once_claims_a_schedule_row_only_after_the_agent_run_claim_finds_no_
         adapter: NoDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
+        embeddings: NoEmbeddings,
     };
 
     run_once(&store, &destination).await.unwrap();
@@ -687,7 +663,7 @@ async fn an_idle_turn_reads_once_and_makes_no_claim_of_the_index_work() {
         adapter: NoDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
+        embeddings: NoEmbeddings,
     };
     let mut index = None;
     let reads_and_claims = |store: &RaceStore| {
@@ -710,4 +686,32 @@ async fn an_idle_turn_reads_once_and_makes_no_claim_of_the_index_work() {
         ),
         ((false, (1, 0)), (false, (1, 0)), (true, (1, 1)))
     );
+}
+
+/// The embedding destination of a process with no embedding adapter. Each request refuses before
+/// the claim.
+struct NoEmbeddings;
+
+impl storyos_application::EmbeddingProviderAdapter for NoEmbeddings {
+    const REGISTRATIONS: &'static [&'static storyos_core::EmbeddingRegistration] = &[];
+    type Prepared = std::convert::Infallible;
+
+    async fn prepare(
+        &self,
+        _registration: &'static storyos_core::EmbeddingRegistration,
+        _route: &storyos_application::EmbeddingRoute,
+        _input: &storyos_core::EmbeddingInput,
+    ) -> Result<
+        storyos_application::PreparedEmbeddingRequest<Self::Prepared>,
+        storyos_application::PreDispatchRefusal,
+    > {
+        Err(storyos_application::PreDispatchRefusal::CredentialUnavailable)
+    }
+
+    async fn exchange(
+        &self,
+        prepared: Self::Prepared,
+    ) -> storyos_application::EmbeddingObservation {
+        match prepared {}
+    }
 }

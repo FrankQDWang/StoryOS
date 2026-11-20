@@ -77,7 +77,6 @@ pub enum ExternalRead {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExternalWrite {
     None,
-    Declared,
 }
 
 /// The upper bound of the effects of one ToolCall: one external read, the declared external

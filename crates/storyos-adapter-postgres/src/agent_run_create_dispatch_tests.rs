@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use storyos_application::{
-    AgentRunDecisionInspect, NoContractFaults, complete_agent_run, open_agent_run,
+    AgentRunDecisionInspect, AgentRunReadSelection, NoContractFaults, complete_agent_run,
+    inspect_agent_run,
 };
 use storyos_core::AgentRunStatus;
 
@@ -31,7 +32,7 @@ async fn rejected_run(prefix: &str, reply: String) -> (AgentRunStatus, AgentRunD
         served.await.unwrap(),
         vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned()]
     );
-    let run = open_agent_run(&store, &scope, &run_id)
+    let run = inspect_agent_run(&store, &scope, &run_id, &AgentRunReadSelection::Current)
         .await
         .unwrap()
         .unwrap();

@@ -6,14 +6,15 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    ConversationSelection, MemoryCaptureSource, MemoryConsolidationStore, MemoryWorkOutcome,
-    MemoryWorkScheduleStore, MemoryWorkSource, NoContractFaults, ProjectScope,
+    ConversationSelection, MemoryCaptureSource, MemoryWorkOutcome, MemoryWorkScheduleStore,
+    MemoryWorkSource, NoContractFaults, ProjectScope,
 };
 use storyos_core::{ConsolidationSkip, MemoryEntryOrigin};
 use tokio_postgres::Client;
 
 use super::tests::{capture, create, scripted, settled};
 use crate::PostgresProjectReader;
+use crate::agent_run_dispatch::tests::NoEmbeddings;
 use crate::agent_run_dispatch::tests::stores;
 use crate::create_agent_run::context::chapter_list_tests::admitted;
 use crate::export_work::tests::admit_readable_export;
@@ -140,10 +141,8 @@ async fn a_pass_in_progress_and_no_waiting_observation_start_no_pass() {
     let (scope, _, source) = project(&store, &admin, "781").await;
     let observation = json!([{ "type": "other", "title": "渡口", "text": "渡口在河边。" }]);
     capture(&store, &admin, &scope, &source, observation).await;
-    let started = store
-        .start_memory_consolidation(&scope)
+    let started = crate::memory_consolidation::tests::start_pass(&store, &scope)
         .await
-        .unwrap()
         .unwrap();
     let in_progress = claim_pass(&store, &admin, &scope).await;
     run_capture(&store, &admin, &scope, &started.run_id).await;
@@ -371,7 +370,7 @@ async fn run_once_takes_two_runs_through_a_capture_and_a_pass_to_the_entries() {
         adapter: FakeDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
+        embeddings: NoEmbeddings,
     };
     // A step can claim work that other tests left. The test records the state of its Project
     // only when it changes.

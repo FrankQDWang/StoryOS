@@ -12,6 +12,7 @@ use storyos_core::{
 use uuid::Uuid;
 
 use crate::agent_run_work::complete_database_error;
+use crate::tool_registration::quarantine_revision;
 
 /// One ToolCall row that the transaction locked.
 pub(crate) struct ToolCallRow {
@@ -344,14 +345,7 @@ pub(crate) async fn quarantine(
         serde_json::to_value(differences)
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?,
     );
-    let changed = client
-        .execute(
-            "UPDATE storyos.tool_registration_revisions
-                SET lifecycle = 'quarantined', quarantine_differences = $2::text::jsonb,
-                    quarantined_at = clock_timestamp()
-              WHERE tool_registration_revision = $1::text::uuid AND lifecycle = 'active'",
-            &[&row.registration_revision, &differences.to_string()],
-        )
+    let changed = quarantine_revision(client, &row.registration_revision, &differences)
         .await
         .map_err(complete_database_error)?;
     if changed == 0 {

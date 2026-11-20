@@ -9,8 +9,8 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeEmbeddings;
 use storyos_application::{
     CredentialReference, EmbeddingDispatchStore as _, EmbeddingObservation,
-    EmbeddingProviderAdapter, EmbeddingResult, EmbeddingRoute, NoEmbeddingDestination,
-    PreDispatchRefusal, PreparedEmbeddingRequest, ProjectScope, dispatch_embedding,
+    EmbeddingProviderAdapter, EmbeddingResult, EmbeddingRoute, PreDispatchRefusal,
+    PreparedEmbeddingRequest, ProjectScope, dispatch_embedding,
 };
 use storyos_core::{
     AGENT_PLAN_EMBEDDING_REGISTRATION, EmbeddingInput, EmbeddingRefusal, EmbeddingRegistration,
@@ -19,6 +19,7 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
+use crate::agent_run_dispatch::tests::NoEmbeddings;
 use crate::agent_run_dispatch::tests::stores;
 use crate::agent_run_finish_rule::tests::complete;
 use crate::project_embedding_binding::tests::{FAKE, embedding_project};
@@ -385,7 +386,7 @@ async fn each_refusal_writes_no_attempt_and_gives_its_typed_reason() {
     results.push(
         dispatch_embedding(
             &store,
-            &NoEmbeddingDestination,
+            &NoEmbeddings,
             FAKE,
             &scope,
             &text("The tide turned."),

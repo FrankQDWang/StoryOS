@@ -5,8 +5,8 @@
 
 use serde_json::{Value, json};
 use storyos_application::{
-    ConversationSelection, MemoryCaptureSource, MemoryConsolidationStore, ProjectScope,
-    StartedMemoryConsolidation, list_memory_entries,
+    ConversationSelection, MemoryCaptureSource, ProjectScope, StartedMemoryConsolidation,
+    list_memory_entries,
 };
 use tokio_postgres::Client;
 
@@ -473,10 +473,8 @@ async fn an_author_write_after_the_start_makes_a_merge_stale() {
         json!([scripted("脚本", &operations)]),
     )
     .await;
-    let started = store
-        .start_memory_consolidation(&scope)
+    let started = crate::memory_consolidation::tests::start_pass(&store, &scope)
         .await
-        .unwrap()
         .unwrap();
     let id: String = admin
         .query_one(
@@ -636,10 +634,8 @@ async fn a_stale_pass_writes_no_flag_and_a_change_of_the_author_removes_the_flag
     seed(&admin, &scope, &rows).await;
     let observations = json!([scripted("脚本", &[flag(1, "不符。")])]);
     capture(&store, &admin, &scope, &source, observations).await;
-    let stale = store
-        .start_memory_consolidation(&scope)
+    let stale = crate::memory_consolidation::tests::start_pass(&store, &scope)
         .await
-        .unwrap()
         .unwrap();
     let id: String = admin
         .query_one(

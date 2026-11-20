@@ -104,34 +104,6 @@ pub enum MemorySourceReference {
     },
 }
 
-/// A source reference as a read gives it. A reference that does not decode, or that names a
-/// record that the Project does not have now, is `Unavailable` (Memory contract, section 10).
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MemorySourceReferenceRead {
-    Available(MemorySourceReference),
-    Unavailable,
-}
-
-/// Decodes the source references of a version. The function `present` tells if the Project has
-/// the record of a reference now. The read does not fail for a reference that is unavailable.
-pub fn read_memory_source_references(
-    value: &serde_json::Value,
-    present: impl Fn(&MemorySourceReference) -> bool,
-) -> Vec<MemorySourceReferenceRead> {
-    let Some(references) = value.as_array() else {
-        return Vec::new();
-    };
-    references
-        .iter()
-        .map(
-            |reference| match serde_json::from_value::<MemorySourceReference>(reference.clone()) {
-                Ok(decoded) if present(&decoded) => MemorySourceReferenceRead::Available(decoded),
-                Ok(_) | Err(_) => MemorySourceReferenceRead::Unavailable,
-            },
-        )
-        .collect()
-}
-
 /// The Memory revision that `createAgentRun` pins for a Run. A Run whose captured Conversation
 /// Memory Settings do not have `use_enabled` has no pin. The revision 0 has no entry, so a
 /// Project with no change of Memory gives no pin either, and its requests stay as before.

@@ -6,10 +6,6 @@ use url::{Host, Origin, SyntaxViolation, Url};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum RequestOriginPolicy {
     SensitiveSafeReadWithRefererFallback,
-    #[cfg_attr(
-        not(test),
-        allow(dead_code, reason = "Issue 119 excludes a state-changing route")
-    )]
     StateChanging,
 }
 

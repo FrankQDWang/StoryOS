@@ -256,7 +256,6 @@ fn called() -> McpObservation {
     McpObservation::Called(CallResult {
         text: vec![CONTENT_CANARY.to_owned()],
         is_error: false,
-        structured_content: Some(json!({"results": 1})),
     })
 }
 
@@ -477,7 +476,6 @@ fn a_call_result_needs_text_blocks_within_the_bound() {
             Ok(CallResult {
                 text: vec!["x".to_owned()],
                 is_error: true,
-                structured_content: None,
             }),
         ),
     ];

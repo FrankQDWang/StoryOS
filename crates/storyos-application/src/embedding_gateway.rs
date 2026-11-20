@@ -134,28 +134,6 @@ pub trait EmbeddingProviderAdapter: Sync {
     ) -> impl Future<Output = EmbeddingObservation> + Send;
 }
 
-/// The embedding destination of a process with no embedding adapter. Each request refuses before
-/// the claim.
-pub struct NoEmbeddingDestination;
-
-impl EmbeddingProviderAdapter for NoEmbeddingDestination {
-    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = &[];
-    type Prepared = std::convert::Infallible;
-
-    async fn prepare(
-        &self,
-        _registration: &'static EmbeddingRegistration,
-        _route: &EmbeddingRoute,
-        _input: &EmbeddingInput,
-    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
-        Err(PreDispatchRefusal::CredentialUnavailable)
-    }
-
-    async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
-        match prepared {}
-    }
-}
-
 /// Sends one embedding request of the Project of `scope` in the order of ADR 0039. `registration`
 /// is the embedding configuration of the deployment; `None` refuses with
 /// `embedding_not_configured`.

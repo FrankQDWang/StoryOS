@@ -1,9 +1,10 @@
 use super::*;
 use storyos_application::{
-    ConversationSelection, CreateAgentRunApplied, CreateAgentRunCommandError, CreateAgentRunInput,
-    CreateAgentRunSettlement, IssueProjectCommandChallenge, ProjectCommandChallengeBinding,
-    ProjectId, ProjectScope, RefusableCommandError, UpdateProjectAssistanceInput, UserId,
-    issue_project_command_challenge, open_agent_run,
+    AgentRunReadSelection, ConversationSelection, CreateAgentRunApplied,
+    CreateAgentRunCommandError, CreateAgentRunInput, CreateAgentRunSettlement,
+    IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    RefusableCommandError, UpdateProjectAssistanceInput, UserId, inspect_agent_run,
+    issue_project_command_challenge,
 };
 use storyos_core::{AssistanceAvailability, CreateAgentRunRefusal, TransitionOutcome};
 
@@ -315,10 +316,15 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
         first_run.conversation_id,
         "018f0000-0000-7001-8000-000000067a12"
     );
-    let opened = open_agent_run(&store, &scope, &first_run.run_id)
-        .await
-        .unwrap()
-        .expect("admitted run");
+    let opened = inspect_agent_run(
+        &store,
+        &scope,
+        &first_run.run_id,
+        &AgentRunReadSelection::Current,
+    )
+    .await
+    .unwrap()
+    .expect("admitted run");
     assert_eq!(opened.conversation_id, first_run.conversation_id);
     assert_eq!(
         opened.memory_settings_revision,
@@ -488,10 +494,11 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
         .get::<_, i64>(0);
     assert_eq!((conversations, runs), (1, 1));
 
-    let hidden = open_agent_run(
+    let hidden = inspect_agent_run(
         &store,
         &ProjectScope::new(UserId::new(USER_B), ProjectId::new(PROJECT)),
         &first_run.run_id,
+        &AgentRunReadSelection::Current,
     )
     .await
     .unwrap();

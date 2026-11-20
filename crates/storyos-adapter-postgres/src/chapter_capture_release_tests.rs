@@ -7,6 +7,7 @@ use storyos_application::MemoryEntrySourceItem;
 use storyos_core::MemoryEntryOrigin;
 
 use super::*;
+use crate::agent_run_dispatch::tests::NoEmbeddings;
 use crate::agent_run_finish_rule::tests::complete;
 use crate::memory_capture::loop_tests::settlement;
 use crate::memory_consolidation::tests::{create, scripted};
@@ -17,13 +18,13 @@ fn destination() -> storyos_worker::ModelDestination<
     FakeDestination,
     NoContractFaults,
     storyos_application::NoToolDestination,
-    storyos_application::NoEmbeddingDestination,
+    NoEmbeddings,
 > {
     storyos_worker::ModelDestination {
         adapter: FakeDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
+        embeddings: NoEmbeddings,
     }
 }
 

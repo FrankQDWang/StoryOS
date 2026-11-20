@@ -6,15 +6,15 @@ use crate::{
     WEB_SEARCH_TOOL_SPEC,
 };
 
-/// A ToolSpec of a later stage that writes outside StoryOS. No Registration maps it.
-const EXTERNAL_WRITE_SPEC: ToolSpec = ToolSpec {
-    revision: "storyos.tool.test-external-write.v1",
+/// A ToolSpec of a later stage that discloses a field outside the grant. No Registration maps it.
+const OUTSIDE_GRANT_SPEC: ToolSpec = ToolSpec {
+    revision: "storyos.tool.test-outside-grant.v1",
     operation: ToolOperation::WebSearch,
     intake_contract: &[IntakeField::Query],
     envelope: Some(ToolEffectEnvelope {
         external_read: ExternalRead::OneSearch,
-        external_write: ExternalWrite::Declared,
-        outbound_disclosure: IntakeField::Query,
+        external_write: ExternalWrite::None,
+        outbound_disclosure: IntakeField::ResultCount,
     }),
     result_text_max_bytes: 16,
 };
@@ -72,7 +72,7 @@ fn the_plan_maps_the_stored_arguments_to_the_pinned_server_tool_and_its_effects(
             ),
             ToolCallPlan::derive(
                 EXA_TOOL_REGISTRATION.revision,
-                EXTERNAL_WRITE_SPEC.revision,
+                OUTSIDE_GRANT_SPEC.revision,
                 &json!({"query": "x"}),
             ),
         ),
@@ -106,7 +106,7 @@ fn both_research_effects_dispatch_and_each_changed_authority_refuses_with_its_re
         },
     )
     .unwrap();
-    let write = search_effect(&EXTERNAL_WRITE_SPEC);
+    let outside = search_effect(&OUTSIDE_GRANT_SPEC);
     let refusal = |change: fn(&mut ToolDispatchFacts<'_>)| {
         let mut facts = admitted_facts(&search);
         change(&mut facts);
@@ -117,7 +117,7 @@ fn both_research_effects_dispatch_and_each_changed_authority_refuses_with_its_re
         [
             admit_tool_dispatch(&admitted_facts(&search)).map_err(|r| (r.code(), r.state())),
             admit_tool_dispatch(&admitted_facts(&fetch)).map_err(|r| (r.code(), r.state())),
-            admit_tool_dispatch(&admitted_facts(&write)).map_err(|r| (r.code(), r.state())),
+            admit_tool_dispatch(&admitted_facts(&outside)).map_err(|r| (r.code(), r.state())),
             refusal(|facts| facts.same_scope = false),
             refusal(|facts| facts.run_grant_names_tool = false),
             refusal(|facts| facts.lifecycle = ToolRegistrationLifecycle::Quarantined),
@@ -148,7 +148,7 @@ fn both_research_effects_dispatch_and_each_changed_authority_refuses_with_its_re
 #[test]
 fn each_observation_settles_the_tool_call_the_attempt_and_the_effect_outcome() {
     let settle = |observation: ToolObservation| {
-        let settlement = settle_tool_call(&EXTERNAL_WRITE_SPEC, &observation);
+        let settlement = settle_tool_call(&OUTSIDE_GRANT_SPEC, &observation);
         (
             settlement.state,
             settlement.attempt,

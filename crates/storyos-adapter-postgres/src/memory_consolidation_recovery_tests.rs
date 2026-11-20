@@ -6,8 +6,8 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ContractFaultObserver, ContractFaultPoint, ConversationSelection, MemoryCaptureSource,
-    MemoryConsolidationStore, MemoryEntrySourceItem, NoContractFaults, ProjectScope,
-    StartedMemoryConsolidation, ToolDispatchStore, complete_agent_run, list_memory_entries,
+    MemoryEntrySourceItem, NoContractFaults, ProjectScope, StartedMemoryConsolidation,
+    ToolDispatchStore, complete_agent_run, list_memory_entries,
 };
 use storyos_core::{AGENT_PLAN_REGISTRATION, MemoryEntryOrigin};
 use tokio::sync::Mutex;
@@ -132,10 +132,8 @@ async fn pass_with_author_entry(
     .await;
     let script = json!([scripted("灯", &[create("foreshadowing", "灯", json!([1]))])]);
     capture(store, admin, &scope, &source, script).await;
-    let started = store
-        .start_memory_consolidation(&scope)
+    let started = crate::memory_consolidation::tests::start_pass(store, &scope)
         .await
-        .unwrap()
         .unwrap();
     (scope, chapter_id, started)
 }

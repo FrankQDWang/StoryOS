@@ -34,8 +34,10 @@ fn protocol_facts() -> ProjectArchiveRootFacts {
 #[test]
 fn protocol_example_entry_and_root_digests_are_golden() {
     assert_eq!(PROTOCOL_ENTRY_BYTES.len(), 90);
-    verify_entry_digest(PROTOCOL_ENTRY_BYTES.as_bytes(), PROTOCOL_ENTRY_DIGEST)
-        .expect("protocol entry digest");
+    assert_eq!(
+        hex_sha256(PROTOCOL_ENTRY_BYTES.as_bytes()),
+        PROTOCOL_ENTRY_DIGEST
+    );
     let built = build_project_archive(
         &protocol_facts(),
         &[ArchiveEntrySource {

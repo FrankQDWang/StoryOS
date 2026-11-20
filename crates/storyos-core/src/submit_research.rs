@@ -137,9 +137,6 @@ impl SubmitResearchRefusal {
         let reason = match self {
             Self::Synthesis(SynthesisRefusal::NoClaim) => "the research result has no claim",
             Self::Synthesis(SynthesisRefusal::EmptyText) => "the summary or a claim text is blank",
-            Self::Synthesis(SynthesisRefusal::UnstorableText) => {
-                "the summary or a claim text has the character U+0000"
-            }
             Self::Synthesis(SynthesisRefusal::UncitedClaim) => "a claim has no citation",
             Self::Synthesis(SynthesisRefusal::UncapturedCitation) => {
                 "a citation is not the id of a source or a gap in a tool_sources tag of this Run"

@@ -2,17 +2,29 @@ use storyos_application::{
     AuthorCommandAdmissionIds, ClaimedExportWork, CompleteArchiveExport, CompleteReadableExport,
     EditorClientBinding, ExportHumanReadableManuscriptInput, ExportOperationReader,
     ExportProjectArchiveInput, GetExportOperation, GetHumanReadableManuscriptExport,
-    HUMAN_READABLE_EXPORT_COMMAND_KIND, HUMAN_READABLE_EXPORT_DIGEST_PROFILE,
-    HUMAN_READABLE_EXPORT_REQUEST_SCHEMA, HUMAN_READABLE_EXPORT_ROUTE,
-    HumanReadableManuscriptExportReader, IssueProjectCommandChallenge, PROJECT_EXPORT_COMMAND_KIND,
-    PROJECT_EXPORT_DIGEST_PROFILE, PROJECT_EXPORT_REQUEST_SCHEMA, PROJECT_EXPORT_ROUTE,
+    HumanReadableManuscriptExportReader, IssueProjectCommandChallenge,
     ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectId, ProjectScope, UserId,
     claim_next_export_work, issue_project_command_challenge,
 };
+use storyos_contracts::CommandKind;
 use tokio_postgres::NoTls;
 
 use crate::PostgresProjectReader;
 use crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK;
+
+pub(crate) const PROJECT_EXPORT_COMMAND_KIND: &str = CommandKind::ExportProjectArchive.as_str();
+pub(crate) const PROJECT_EXPORT_ROUTE: &str = "/api/v1/projects/{project_id}/exports";
+pub(crate) const PROJECT_EXPORT_REQUEST_SCHEMA: &str =
+    "storyos.command.export-project-archive.request.v1";
+pub(crate) const PROJECT_EXPORT_DIGEST_PROFILE: &str =
+    "storyos.command.exportProjectArchive.jcs.v1";
+const HUMAN_READABLE_EXPORT_COMMAND_KIND: &str =
+    CommandKind::ExportHumanReadableManuscript.as_str();
+const HUMAN_READABLE_EXPORT_ROUTE: &str = "/api/v1/projects/{project_id}/manuscript/exports";
+const HUMAN_READABLE_EXPORT_REQUEST_SCHEMA: &str =
+    "storyos.command.export-human-readable-manuscript.request.v1";
+const HUMAN_READABLE_EXPORT_DIGEST_PROFILE: &str =
+    "storyos.command.exportHumanReadableManuscript.jcs.v1";
 
 const USER: &str = "018f0000-0000-7001-8000-000000000001";
 const PROJECT: &str = "018f0000-0000-7001-8000-000000000002";
