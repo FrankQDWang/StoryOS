@@ -6,9 +6,8 @@ use crate::shared_tests::command_sequence_acceptance::{
 };
 use crate::shared_tests::command_sequence_agent_run::seed_run;
 use crate::shared_tests::command_sequence_proposal_decision::{
-    reject_proposal_operations, reject_proposal_operations_call, reopen_rejected_operations,
-    reopen_rejected_operations_call, reopen_withdrawn_proposal, reopen_withdrawn_proposal_call,
-    replan_proposal, replan_proposal_call, withdraw_proposal, withdraw_proposal_call,
+    reject_proposal_operations, reject_proposal_operations_call, withdraw_proposal,
+    withdraw_proposal_call,
 };
 use crate::shared_tests::command_sequence_secondary_operation::{
     edit_secondary_candidate, two_operation_proposal,
@@ -42,9 +41,6 @@ pub(crate) enum Case {
     CreateVolume,
     SetCurrentChapter,
     WithdrawProposal,
-    ReplanProposal,
-    ReopenRejectedOperations,
-    ReopenWithdrawnProposal,
     ApplyAuthorEdit,
     /// An Author Edit of the candidate of a Proposal Operation.
     EditProposalCandidate,
@@ -173,33 +169,6 @@ pub(crate) async fn undo_call(
         Case::WithdrawProposal => {
             let call = withdraw_proposal_call(store, admin, base).await;
             withdraw_proposal(store, &call).await.unwrap();
-            (
-                call.envelope.project_scope,
-                call.input.editor_session_id.as_ref().to_owned(),
-                call.input.expected_authoritative_revision_id,
-            )
-        }
-        Case::ReplanProposal => {
-            let call = replan_proposal_call(store, admin, base).await;
-            replan_proposal(store, &call).await.unwrap();
-            (
-                call.envelope.project_scope,
-                call.input.editor_session_id.as_ref().to_owned(),
-                call.input.expected_authoritative_revision_id,
-            )
-        }
-        Case::ReopenRejectedOperations => {
-            let call = reopen_rejected_operations_call(store, admin, base).await;
-            reopen_rejected_operations(store, &call).await.unwrap();
-            (
-                call.envelope.project_scope,
-                call.input.editor_session_id.as_ref().to_owned(),
-                call.input.expected_authoritative_revision_id,
-            )
-        }
-        Case::ReopenWithdrawnProposal => {
-            let call = reopen_withdrawn_proposal_call(store, admin, base).await;
-            reopen_withdrawn_proposal(store, &call).await.unwrap();
             (
                 call.envelope.project_scope,
                 call.input.editor_session_id.as_ref().to_owned(),

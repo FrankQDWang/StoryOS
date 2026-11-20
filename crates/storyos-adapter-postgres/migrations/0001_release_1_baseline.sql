@@ -26,9 +26,6 @@ CREATE DOMAIN storyos.command_kind AS text CHECK (VALUE IN (
     'exportProjectArchive',
     'pauseAgentRun',
     'rejectProposalOperations',
-    'reopenRejectedOperations',
-    'reopenWithdrawnProposal',
-    'replanProposal',
     'setCurrentChapter',
     'steerAgentRun',
     'takeOverProjectWriter',
@@ -711,49 +708,7 @@ CREATE TABLE storyos.author_command_admissions (
             AND local_intent_sequence IS NULL
             AND challenge_consumed_at IS NOT NULL
             AND challenge_expires_at IS NOT NULL)
-        OR (command_kind = 'reopenRejectedOperations'::text
-            AND action_class = 'explicit_editor_command'::text
-            AND editor_session_id IS NOT NULL
-            AND writer_generation IS NOT NULL
-            AND chapter_object_id IS NOT NULL
-            AND expected_authoritative_revision_id IS NOT NULL
-            AND expected_proposal_head_revision_ids = '{}'::uuid[]
-            AND target_refs = '{}'::text[]
-            AND observed_ownership_partition IS NULL
-            AND undo_group_id IS NULL
-            AND completed_intent_record_id IS NULL
-            AND local_intent_sequence IS NULL
-            AND challenge_consumed_at IS NOT NULL
-            AND challenge_expires_at IS NOT NULL)
-        OR (command_kind = 'replanProposal'::text
-            AND action_class = 'explicit_editor_command'::text
-            AND editor_session_id IS NOT NULL
-            AND writer_generation IS NOT NULL
-            AND chapter_object_id IS NOT NULL
-            AND expected_authoritative_revision_id IS NOT NULL
-            AND expected_proposal_head_revision_ids = '{}'::uuid[]
-            AND target_refs = '{}'::text[]
-            AND observed_ownership_partition IS NULL
-            AND undo_group_id IS NULL
-            AND completed_intent_record_id IS NULL
-            AND local_intent_sequence IS NULL
-            AND challenge_consumed_at IS NOT NULL
-            AND challenge_expires_at IS NOT NULL)
         OR (command_kind = 'withdrawProposal'::text
-            AND action_class = 'explicit_editor_command'::text
-            AND editor_session_id IS NOT NULL
-            AND writer_generation IS NOT NULL
-            AND chapter_object_id IS NOT NULL
-            AND expected_authoritative_revision_id IS NOT NULL
-            AND expected_proposal_head_revision_ids = '{}'::uuid[]
-            AND target_refs = '{}'::text[]
-            AND observed_ownership_partition IS NULL
-            AND undo_group_id IS NULL
-            AND completed_intent_record_id IS NULL
-            AND local_intent_sequence IS NULL
-            AND challenge_consumed_at IS NOT NULL
-            AND challenge_expires_at IS NOT NULL)
-        OR (command_kind = 'reopenWithdrawnProposal'::text
             AND action_class = 'explicit_editor_command'::text
             AND editor_session_id IS NOT NULL
             AND writer_generation IS NOT NULL
@@ -979,16 +934,6 @@ CREATE TABLE storyos.domain_receipts (
             AND array_position(artifact_lifecycle_event_refs, NULL::text) IS NULL
             AND array_position(condition_refs, NULL::text) IS NULL
             AND (((command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR ((command_kind = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'updateProjectInstruction'::text, 'deleteMemoryEntry'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0))))
-        OR (command_kind = 'replanProposal'::text
-            AND cardinality(expected_heads) = 1
-            AND cardinality(prior_heads) <= 1
-            AND resulting_heads = prior_heads
-            AND authoritative_revision_ids = '{}'::uuid[]
-            AND authoritative_commit_ids = '{}'::uuid[]
-            AND condition_refs = '{}'::text[]
-            AND draft_artifact_refs = '{}'::text[]
-            AND artifact_lifecycle_event_refs = '{}'::text[]
-            AND (((result_kind = 'proposal_revised'::text) AND (expected_heads = prior_heads) AND (cardinality(proposal_revision_ids) = 1) AND (array_position(proposal_revision_ids, NULL::uuid) IS NULL)) OR ((result_kind = ANY (ARRAY['refused'::text, 'conflicted'::text])) AND (proposal_revision_ids = '{}'::uuid[]))))
         OR (command_kind = 'withdrawProposal'::text
             AND cardinality(expected_heads) = 1
             AND cardinality(prior_heads) <= 1
@@ -1000,16 +945,6 @@ CREATE TABLE storyos.domain_receipts (
             AND artifact_lifecycle_event_refs = '{}'::text[]
             AND proposal_revision_ids = '{}'::uuid[]
             AND (((result_kind = 'proposal_closure_changed'::text) AND (expected_heads = prior_heads)) OR (result_kind = ANY (ARRAY['refused'::text, 'conflicted'::text, 'no_effect'::text]))))
-        OR (command_kind = 'reopenWithdrawnProposal'::text
-            AND cardinality(expected_heads) = 1
-            AND cardinality(prior_heads) <= 1
-            AND resulting_heads = prior_heads
-            AND authoritative_revision_ids = '{}'::uuid[]
-            AND authoritative_commit_ids = '{}'::uuid[]
-            AND condition_refs = '{}'::text[]
-            AND draft_artifact_refs = '{}'::text[]
-            AND artifact_lifecycle_event_refs = '{}'::text[]
-            AND (((result_kind = 'proposal_revised'::text) AND (expected_heads = prior_heads) AND (cardinality(proposal_revision_ids) = 1) AND (array_position(proposal_revision_ids, NULL::uuid) IS NULL)) OR ((result_kind = ANY (ARRAY['refused'::text, 'conflicted'::text, 'no_effect'::text])) AND (proposal_revision_ids = '{}'::uuid[]))))
         OR (command_kind = 'steerAgentRun'::text
             AND expected_heads = '{}'::uuid[]
             AND prior_heads = '{}'::uuid[]
@@ -1472,24 +1407,6 @@ CREATE TABLE storyos.domain_receipts (
             AND cardinality(authoritative_commit_ids) = 0
             AND prior_heads = resulting_heads
             AND expected_heads = resulting_heads)
-        OR (command_kind = 'reopenRejectedOperations'::text
-            AND result_kind = 'proposal_revised'::text
-            AND result_payload = '{"transition": "reopen_rejected"}'::jsonb
-            AND cardinality(authoritative_revision_ids) = 0
-            AND cardinality(authoritative_commit_ids) = 0
-            AND cardinality(proposal_revision_ids) = 1
-            AND array_dims(proposal_revision_ids) = '[1:1]'::text
-            AND prior_heads = resulting_heads
-            AND expected_heads = resulting_heads)
-        OR (command_kind = 'reopenRejectedOperations'::text
-            AND result_kind = ANY (ARRAY['conflicted'::text, 'refused'::text])
-            AND result_payload ? 'reason'::text
-            AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text
-            AND cardinality(authoritative_revision_ids) = 0
-            AND cardinality(authoritative_commit_ids) = 0
-            AND prior_heads = resulting_heads
-            AND expected_heads = resulting_heads)
         OR (command_kind = 'undoLatestAuthorAction'::text
             AND result_kind = 'authoritative_applied'::text
             AND jsonb_typeof(result_payload) = 'object'::text
@@ -1506,15 +1423,9 @@ END
             AND proposal_revision_ids = '{}'::uuid[]
             AND prior_heads = expected_heads
             AND resulting_heads = expected_heads)
-        OR (command_kind = 'replanProposal'::text
-            AND jsonb_typeof(result_payload) = 'object'::text
-            AND (((result_kind = 'proposal_revised'::text) AND ((result_payload ->> 'transition'::text) = 'replan'::text) AND ((result_payload - ARRAY['transition'::text]) = '{}'::jsonb)) OR ((result_kind = 'conflicted'::text) AND ((result_payload ->> 'reason'::text) = 'changed_head'::text) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR ((result_kind = 'refused'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['wrong_scope'::text, 'wrong_admission'::text, 'stale_proposal_revision'::text, 'not_eligible'::text, 'unavailable_proof'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb))))
         OR (command_kind = 'withdrawProposal'::text
             AND jsonb_typeof(result_payload) = 'object'::text
             AND (((result_kind = 'proposal_closure_changed'::text) AND ((result_payload ->> 'transition'::text) = 'withdraw'::text) AND ((result_payload - ARRAY['transition'::text]) = '{}'::jsonb)) OR ((result_kind = 'conflicted'::text) AND ((result_payload ->> 'reason'::text) = 'changed_head'::text) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR ((result_kind = 'refused'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['wrong_scope'::text, 'wrong_admission'::text, 'stale_proposal_revision'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR ((result_kind = 'no_effect'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['unsupported_cause'::text, 'terminal_supersession'::text, 'closure_not_open'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb))))
-        OR (command_kind = 'reopenWithdrawnProposal'::text
-            AND jsonb_typeof(result_payload) = 'object'::text
-            AND (((result_kind = 'proposal_revised'::text) AND ((result_payload ->> 'transition'::text) = 'reopen_withdrawn'::text) AND ((result_payload - ARRAY['transition'::text]) = '{}'::jsonb)) OR ((result_kind = 'conflicted'::text) AND ((result_payload ->> 'reason'::text) = 'changed_head'::text) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR ((result_kind = 'refused'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['wrong_scope'::text, 'wrong_admission'::text, 'stale_proposal_revision'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb)) OR ((result_kind = 'no_effect'::text) AND ((result_payload ->> 'reason'::text) = ANY (ARRAY['terminal_supersession'::text, 'closure_not_withdrawn'::text, 'withdrawal_event_mismatch'::text])) AND ((result_payload - ARRAY['reason'::text]) = '{}'::jsonb))))
         OR (command_kind = 'steerAgentRun'::text
             AND jsonb_typeof(result_payload) = 'object'::text
             AND (result_payload - ARRAY['reason'::text]) = '{}'::jsonb
@@ -2728,42 +2639,6 @@ BEGIN
         ERRCODE = '23514',
         MESSAGE = 'rejectProposalOperations with zero effect cannot have an authority or Activity relation';
     END IF;
-  ELSIF scoped_command_kind = 'reopenRejectedOperations'
-        AND scoped_result_kind = 'proposal_revised' THEN
-    IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count)
-         <> (0, 1, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'reopenRejectedOperations resolved requires one Author Action and zero authority';
-    END IF;
-  ELSIF scoped_command_kind = 'reopenRejectedOperations'
-        AND scoped_result_kind IN ('conflicted', 'refused') THEN
-    IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count)
-         <> (0, 0, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'reopenRejectedOperations with zero effect cannot have an authority or Activity relation';
-    END IF;
-  ELSIF scoped_command_kind = 'replanProposal'
-        AND scoped_result_kind = 'proposal_revised' THEN
-    IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count)
-         <> (0, 1, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'replanProposal resolved requires one Author Action and zero authority';
-    END IF;
-  ELSIF scoped_command_kind = 'replanProposal'
-        AND scoped_result_kind IN ('conflicted', 'refused') THEN
-    IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count)
-         <> (0, 0, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'replanProposal with zero effect cannot have an authority or Activity relation';
-    END IF;
   ELSIF scoped_command_kind = 'withdrawProposal'
         AND scoped_result_kind = 'proposal_closure_changed'
         AND scoped_producer_cause = 'author_command_admission' THEN
@@ -2792,24 +2667,6 @@ BEGIN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'withdrawProposal with zero effect cannot have an authority or Activity relation';
-    END IF;
-  ELSIF scoped_command_kind = 'reopenWithdrawnProposal'
-        AND scoped_result_kind = 'proposal_revised' THEN
-    IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count)
-         <> (0, 1, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'reopenWithdrawnProposal resolved requires one Author Action and zero authority';
-    END IF;
-  ELSIF scoped_command_kind = 'reopenWithdrawnProposal'
-        AND scoped_result_kind IN ('conflicted', 'refused', 'no_effect') THEN
-    IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count)
-         <> (0, 0, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'reopenWithdrawnProposal with zero effect cannot have an authority or Activity relation';
     END IF;
   ELSIF scoped_command_kind = 'applyAuthorEdit'
         AND scoped_result_kind = 'proposal_revised' THEN

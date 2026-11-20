@@ -9,8 +9,7 @@ use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_damaged_evidence::{ReplayError, replay_past_checks};
 use crate::shared_tests::command_sequence_proposal_decision::{
-    reject_proposal_operations_call, reopen_rejected_operations_call,
-    reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
+    reject_proposal_operations_call, withdraw_proposal_call,
 };
 use crate::shared_tests::command_sequence_support::{CommandCall, SequenceError, stores};
 
@@ -75,33 +74,6 @@ async fn an_applied_replay_refuses_an_unknown_preserved_proposal_state() {
             "preserved_validation",
         )
         .await,
-        replay_with_unknown_preserved_value(
-            &store,
-            &admin,
-            &replan_proposal_call(&store, &admin, /*base*/ 0x9d20).await,
-            "proposal_replans",
-            "replan_receipt_id",
-            "preserved_generation",
-        )
-        .await,
-        replay_with_unknown_preserved_value(
-            &store,
-            &admin,
-            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x9d30).await,
-            "proposal_withdrawal_reopenings",
-            "reopen_receipt_id",
-            "preserved_operation_resolution",
-        )
-        .await,
-        replay_with_unknown_preserved_value(
-            &store,
-            &admin,
-            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x9d40).await,
-            "proposal_operation_reopenings",
-            "reopen_receipt_id",
-            "preserved_closure",
-        )
-        .await,
     ];
-    assert_eq!(observed, vec![ReplayError::Unavailable; 5]);
+    assert_eq!(observed, vec![ReplayError::Unavailable; 2]);
 }

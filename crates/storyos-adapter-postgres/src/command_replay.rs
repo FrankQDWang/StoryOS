@@ -98,7 +98,6 @@ pub(crate) enum StateAxis {
     Generation,
     Validation,
     Closure,
-    OperationResolution,
 }
 
 impl StateAxis {
@@ -108,7 +107,6 @@ impl StateAxis {
             Self::Generation => &["ready"],
             Self::Validation => &["pending", "valid", "invalid", "conflicted"],
             Self::Closure => &["open", "withdrawn", "superseded"],
-            Self::OperationResolution => &["pending", "applied", "rejected"],
         };
         if known.contains(&value.as_str()) {
             return Ok(value);

@@ -25,8 +25,7 @@ use crate::shared_tests::command_sequence_project_session::{
     update_project_assistance_call, update_project_call,
 };
 use crate::shared_tests::command_sequence_proposal_decision::{
-    reject_proposal_operations_call, reopen_rejected_operations_call,
-    reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
+    reject_proposal_operations_call, withdraw_proposal_call,
 };
 use crate::shared_tests::command_sequence_rollback::{
     Failing, FailurePoint, UnchallengedKind, WrappedSpec,
@@ -215,11 +214,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
         .await,
         declared_errors(
             &store,
-            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x93b0).await,
-        )
-        .await,
-        declared_errors(
-            &store,
             &reject_proposal_operations_call(&store, &admin, /*base*/ 0x93c0).await,
         )
         .await,
@@ -228,16 +222,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
             stale.input.proposal_revision_id = Uuid::now_v7().to_string();
             stale
         })
-        .await,
-        declared_errors(
-            &store,
-            &replan_proposal_call(&store, &admin, /*base*/ 0x93e0).await,
-        )
-        .await,
-        declared_errors(
-            &store,
-            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x93f0).await,
-        )
         .await,
         declared_errors(
             &store,
@@ -304,23 +288,12 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
         ),
         (CommandKind::TakeOverProjectWriter, None, "binding_conflict"),
         (
-            CommandKind::ReopenWithdrawnProposal,
-            None,
-            "invalid_challenge",
-        ),
-        (
             CommandKind::RejectProposalOperations,
             None,
             "invalid_challenge",
         ),
         (
             CommandKind::RejectProposalOperations,
-            None,
-            "invalid_challenge",
-        ),
-        (CommandKind::ReplanProposal, None, "invalid_challenge"),
-        (
-            CommandKind::ReopenRejectedOperations,
             None,
             "invalid_challenge",
         ),

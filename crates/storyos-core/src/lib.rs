@@ -89,9 +89,6 @@ mod project_export;
 mod readable_export;
 mod readable_export_command;
 mod reject_proposal_operations;
-mod reopen_rejected_operations;
-mod reopen_withdrawn_proposal;
-mod replan_proposal;
 mod revision_comparison;
 mod set_current_chapter;
 mod skill_instruction;
@@ -341,18 +338,6 @@ pub use record_memory_observations::{
 pub use reject_proposal_operations::{
     RejectProposalOperations, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
     RejectProposalOperationsResult, reject_proposal_operations,
-};
-pub use reopen_rejected_operations::{
-    ReopenRejectedOperations, ReopenRejectedOperationsConflict, ReopenRejectedOperationsRefusal,
-    ReopenRejectedOperationsResult, reopen_rejected_operations,
-};
-pub use reopen_withdrawn_proposal::{
-    ReopenWithdrawnProposal, ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
-    ReopenWithdrawnProposalRefusal, ReopenWithdrawnProposalResult, reopen_withdrawn_proposal,
-};
-pub use replan_proposal::{
-    ReplanProposal, ReplanProposalConflict, ReplanProposalRefusal, ReplanProposalResult,
-    replan_proposal,
 };
 pub use research_destination::{
     EXA_ACCOUNT_BOUNDARY, EXA_CREDENTIAL_REFERENCE, EXA_MCP_SERVER_URL, EXA_TOOL_REGISTRATION,

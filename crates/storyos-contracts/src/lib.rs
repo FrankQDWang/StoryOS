@@ -35,9 +35,6 @@ mod release1_proposal;
 mod release1_readable_export;
 mod release1_readable_export_query;
 mod release1_reject_proposal_operations;
-mod release1_reopen_rejected_operations;
-mod release1_reopen_withdrawn_proposal;
-mod release1_replan_proposal;
 mod release1_research_artifact;
 mod release1_research_source;
 mod release1_route_catalog;
@@ -269,29 +266,6 @@ pub use release1_reject_proposal_operations::{
     RejectProposalOperationsEffect, RejectProposalOperationsRefusalReason,
     RejectProposalOperationsRequest, RejectProposalOperationsResponse, RejectionReceipt,
     RejectionReceiptResult,
-};
-pub use release1_reopen_rejected_operations::{
-    REOPEN_REJECTED_OPERATIONS_DIGEST_PROFILE, REOPEN_REJECTED_OPERATIONS_METHOD,
-    REOPEN_REJECTED_OPERATIONS_PATH, REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,
-    REOPEN_REJECTED_OPERATIONS_RESPONSE_SCHEMA_ID, ReopenReceipt, ReopenReceiptResult,
-    ReopenRejectedOperationsConflictReason, ReopenRejectedOperationsEffect,
-    ReopenRejectedOperationsRefusalReason, ReopenRejectedOperationsRequest,
-    ReopenRejectedOperationsResponse,
-};
-pub use release1_reopen_withdrawn_proposal::{
-    REOPEN_WITHDRAWN_PROPOSAL_DIGEST_PROFILE, REOPEN_WITHDRAWN_PROPOSAL_METHOD,
-    REOPEN_WITHDRAWN_PROPOSAL_PATH, REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,
-    REOPEN_WITHDRAWN_PROPOSAL_RESPONSE_SCHEMA_ID, ReopenWithdrawnProposalConflictReason,
-    ReopenWithdrawnProposalEffect, ReopenWithdrawnProposalNoEffectReason,
-    ReopenWithdrawnProposalRefusalReason, ReopenWithdrawnProposalRequest,
-    ReopenWithdrawnProposalResponse, ReopenWithdrawnReceipt, ReopenWithdrawnReceiptResult,
-};
-pub use release1_replan_proposal::{
-    REPLAN_PROPOSAL_DIGEST_PROFILE, REPLAN_PROPOSAL_METHOD, REPLAN_PROPOSAL_PATH,
-    REPLAN_PROPOSAL_REQUEST_SCHEMA_ID, REPLAN_PROPOSAL_RESPONSE_SCHEMA_ID,
-    ReplanProposalConflictReason, ReplanProposalEffect, ReplanProposalRefusalReason,
-    ReplanProposalRequest, ReplanProposalResponse, ReplanReceipt, ReplanReceiptResult,
-    ReplanSourceCondition,
 };
 pub use release1_research_artifact::{
     GET_RESEARCH_ARTIFACT_METHOD, GET_RESEARCH_ARTIFACT_PATH,

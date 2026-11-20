@@ -80,9 +80,6 @@ mod project_settings;
 mod readable_export;
 mod readable_export_work;
 mod reject_proposal_operations;
-mod reopen_rejected_operations;
-mod reopen_withdrawn_proposal;
-mod replan_proposal;
 mod research_source;
 mod set_current_chapter;
 mod snapshot;
@@ -248,13 +245,6 @@ pub use reject_proposal_operations::{
     ProposalOperationsRejected, RejectProposalOperationsInput, RejectProposalOperationsSettlement,
     RejectionNote,
 };
-pub use reopen_rejected_operations::{
-    RejectedOperationsReopened, ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
-};
-pub use reopen_withdrawn_proposal::{
-    ProposalReopened, ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
-};
-pub use replan_proposal::{ProposalReplanned, ReplanProposalInput, ReplanProposalSettlement};
 pub use research_source::{
     ResearchArtifactReadStore, ResearchSourceReadStore, ResearchSourceText, ResearchSources,
 };

@@ -126,24 +126,6 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.withdraw-proposal.request.v1",
     ),
     target(
-        CommandKind::ReplanProposal,
-        "POST",
-        "/api/v1/projects/{project_id}/proposals/{proposal_id}/replans",
-        "storyos.command.replan-proposal.request.v1",
-    ),
-    target(
-        CommandKind::ReopenWithdrawnProposal,
-        "POST",
-        "/api/v1/projects/{project_id}/proposals/{proposal_id}/reopenings",
-        "storyos.command.reopen-withdrawn-proposal.request.v1",
-    ),
-    target(
-        CommandKind::ReopenRejectedOperations,
-        "POST",
-        "/api/v1/projects/{project_id}/proposals/{proposal_id}/operation-reopenings",
-        "storyos.command.reopen-rejected-operations.request.v1",
-    ),
-    target(
         CommandKind::UndoLatestAuthorAction,
         "POST",
         "/api/v1/projects/{project_id}/author-actions/undo",

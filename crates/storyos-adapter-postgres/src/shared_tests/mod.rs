@@ -28,7 +28,6 @@ pub(crate) mod command_sequence_memory_entry;
 pub(crate) mod command_sequence_producer_withdrawal_undo;
 pub(crate) mod command_sequence_project_session;
 pub(crate) mod command_sequence_proposal_decision;
-pub(crate) mod command_sequence_proposal_decision_undo_chain;
 pub(crate) mod command_sequence_proposal_undo_chain;
 pub(crate) mod command_sequence_replay;
 pub(crate) mod command_sequence_retry;

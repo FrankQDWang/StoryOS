@@ -402,7 +402,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.screenshot({ path: join(repositoryRoot, 'target/382-multi-settled.png') });
     assert.deepEqual(chapters.sort(),[...new Set(run.decision.locations?.map(l=>l.chapter_id))].sort());
     await assertProjectReceipts([projectId], { projects: 1, kinds: "listed", receipts: { updateProjectAssistance: 1,
-      createAgentRun: 3, acceptProposal: 3, rejectProposalOperations: 1, replanProposal: 0 } });
+      createAgentRun: 3, acceptProposal: 3, rejectProposalOperations: 1 } });
   } catch (error) {
     await writeFile(join(repositoryRoot, 'target/382-ui-stop.json'), JSON.stringify({ phase, error: String(error), observed: await page.evaluate(() => {
       const surface = document.querySelector('[data-manuscript-editor]') as HTMLElement & { editor?: import('@tiptap/core').Editor };

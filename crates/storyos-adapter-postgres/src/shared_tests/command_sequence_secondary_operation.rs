@@ -327,7 +327,7 @@ pub(crate) async fn chapter_blocks(
         .collect()
 }
 
-/// The current Revision of one Proposal. A Replan writes a Revision with no Validation Receipt.
+/// The current Revision of one Proposal.
 pub(crate) async fn proposal_head_revision(admin: &Client, proposal_id: &str) -> String {
     admin
         .query_one(

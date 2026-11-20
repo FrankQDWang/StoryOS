@@ -1,17 +1,17 @@
 //! The shared test support from `command_sequence_tests/producer_withdrawal_undo_tests.rs`.
 
 use crate::PostgresProjectReader;
-use crate::shared_tests::command_sequence_proposal_decision::{
-    REOPEN_WITHDRAWN_PROPOSAL, WITHDRAW_PROPOSAL, reopen_withdrawn_proposal,
-};
+use crate::shared_tests::command_sequence_proposal_decision::WITHDRAW_PROPOSAL;
+use crate::shared_tests::command_sequence_proposal_undo_chain::undo_call;
 use crate::shared_tests::command_sequence_secondary_operation::{
     TwoOperationProposal, proposal_head_revision,
 };
-use crate::shared_tests::command_sequence_support::{challenge_issue, command_call, issued};
-use storyos_application::{
-    CurrentProducerWithdrawal, EditorSessionId, ReopenWithdrawnProposalInput,
+use crate::shared_tests::command_sequence_support::{
+    challenge_issue, command_call, with_new_request_ids,
 };
-use storyos_core::{ReopenWithdrawnProposalNoEffect, TransitionOutcome};
+use crate::shared_tests::command_sequence_undo::undo;
+use storyos_application::{CurrentProducerWithdrawal, UndoLatestAuthorActionSettlement};
+use storyos_core::TransitionOutcome;
 use tokio_postgres::Client;
 
 /// The Withdrawal of the current head by the AgentRun decision that produced the Proposal.
@@ -62,39 +62,44 @@ pub(crate) async fn producer_withdraw(
     }
 }
 
-/// The explicit reopen of the current head with `withdrawal_event_id`. Returns the outcome
-/// without its values.
-pub(crate) async fn reopen(
+/// The state axes, the candidate, and the base of the current head of one Proposal.
+pub(crate) async fn head_state(admin: &Client, proposal_id: &str) -> [String; 5] {
+    let row = admin
+        .query_one(
+            "SELECT revision.generation, revision.validation, revision.closure,
+                    revision.candidate_text, revision.base_authoritative_revision_id::text
+               FROM storyos.proposal_heads AS head
+               JOIN storyos.proposal_revisions AS revision
+                 ON (revision.proposal_id, revision.revision_id) =
+                    (head.proposal_id, head.current_revision_id)
+              WHERE head.proposal_id = $1::text::uuid",
+            &[&proposal_id],
+        )
+        .await
+        .unwrap();
+    std::array::from_fn(|idx| row.get(idx))
+}
+
+/// Undo of the current Author Undo Frontier and an exact retry of the same Undo.
+pub(crate) async fn undo_and_retry(
     store: &PostgresProjectReader,
     admin: &Client,
     proposal: &TwoOperationProposal,
-    withdrawal_event_id: String,
     suffix: u16,
-) -> TransitionOutcome<(), ReopenWithdrawnProposalNoEffect, String, String> {
-    let call = issued(
+) -> (
+    UndoLatestAuthorActionSettlement,
+    UndoLatestAuthorActionSettlement,
+) {
+    let call = undo_call(
         store,
+        admin,
         &proposal.scope,
+        &proposal.editor_session_id,
+        &proposal.chapter_revision_id,
         suffix,
-        &REOPEN_WITHDRAWN_PROPOSAL,
-        ReopenWithdrawnProposalInput {
-            editor_session_id: EditorSessionId::new(proposal.editor_session_id.clone()),
-            proposal_id: proposal.proposal_id.clone(),
-            proposal_revision_id: proposal_head_revision(admin, &proposal.proposal_id).await,
-            withdrawal_event_id,
-            expected_authoritative_revision_id: proposal.chapter_revision_id.clone(),
-        },
     )
     .await;
-    match reopen_withdrawn_proposal(store, &call)
-        .await
-        .unwrap()
-        .outcome
-    {
-        TransitionOutcome::Applied(_) => TransitionOutcome::Applied(()),
-        TransitionOutcome::NoEffect(reason) => TransitionOutcome::NoEffect(reason),
-        TransitionOutcome::Conflicted(reason) => {
-            TransitionOutcome::Conflicted(format!("{reason:?}"))
-        }
-        TransitionOutcome::Refused(reason) => TransitionOutcome::Refused(format!("{reason:?}")),
-    }
+    let settled = undo(store, &call).await.unwrap();
+    let retried = undo(store, &with_new_request_ids(&call)).await.unwrap();
+    (settled, retried)
 }

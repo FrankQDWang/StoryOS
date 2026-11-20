@@ -51,9 +51,6 @@ mod project_export;
 mod public_origin;
 mod readable_export;
 mod reject_proposal_operations;
-mod reopen_rejected_operations;
-mod reopen_withdrawn_proposal;
-mod replan_proposal;
 mod request_origin;
 mod request_span;
 mod research_source;
@@ -122,9 +119,6 @@ use readable_export::{
     export_human_readable_manuscript, get_human_readable_manuscript_export_query,
 };
 use reject_proposal_operations::reject_proposal_operations;
-use reopen_rejected_operations::reopen_rejected_operations;
-use reopen_withdrawn_proposal::reopen_withdrawn_proposal;
-use replan_proposal::replan_proposal;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 use research_source::{get_research_artifact, get_research_source, list_research_sources};
 use set_current_chapter::set_current_chapter;
@@ -461,31 +455,10 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             ),
         )
         .route(
-            contracts::REOPEN_REJECTED_OPERATIONS_PATH,
-            routing::on(
-                method_filter(contracts::REOPEN_REJECTED_OPERATIONS_METHOD),
-                reopen_rejected_operations,
-            ),
-        )
-        .route(
-            contracts::REPLAN_PROPOSAL_PATH,
-            routing::on(
-                method_filter(contracts::REPLAN_PROPOSAL_METHOD),
-                replan_proposal,
-            ),
-        )
-        .route(
             contracts::WITHDRAW_PROPOSAL_PATH,
             routing::on(
                 method_filter(contracts::WITHDRAW_PROPOSAL_METHOD),
                 withdraw_proposal,
-            ),
-        )
-        .route(
-            contracts::REOPEN_WITHDRAWN_PROPOSAL_PATH,
-            routing::on(
-                method_filter(contracts::REOPEN_WITHDRAWN_PROPOSAL_METHOD),
-                reopen_withdrawn_proposal,
             ),
         )
         .route(

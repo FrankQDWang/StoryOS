@@ -20,13 +20,10 @@ use crate::shared_tests::command_sequence_undo::{
 };
 
 /// The cases whose Author Undo applies, in the order of their result rows.
-const APPLIED: [Case; 11] = [
+const APPLIED: [Case; 8] = [
     Case::CreateVolume,
     Case::SetCurrentChapter,
     Case::WithdrawProposal,
-    Case::ReplanProposal,
-    Case::ReopenRejectedOperations,
-    Case::ReopenWithdrawnProposal,
     Case::ApplyAuthorEdit,
     Case::EditProposalCandidate,
     Case::EditSecondaryCandidate,
@@ -101,9 +98,6 @@ async fn every_undo_outcome_replays_its_first_settlement_and_writes_only_its_rec
             structure,
             current_chapter,
             proposal,
-            proposal,
-            proposal,
-            proposal,
             revision,
             proposal,
             proposal,
@@ -119,7 +113,7 @@ async fn every_undo_outcome_replays_its_first_settlement_and_writes_only_its_rec
     // on `main`.
     assert_eq!(
         acceptance_children,
-        vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1]
+        vec![0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1]
     );
 }
 

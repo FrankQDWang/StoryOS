@@ -1,16 +1,13 @@
 //! Author Undo of a chain of Proposal candidate edits and withdrawals (ADR 0068). Each Undo
 //! takes the current Author Undo Frontier, as the Web Client does.
 
-use storyos_application::{
-    EditorSessionId, RejectProposalOperationsInput, RejectionNote, ReopenWithdrawnProposalInput,
-};
+use storyos_application::{EditorSessionId, RejectProposalOperationsInput, RejectionNote};
 use storyos_core::{TransitionOutcome, UndoLatestAuthorActionUnavailable};
 use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_proposal_decision::{
-    REJECT_PROPOSAL_OPERATIONS, REOPEN_WITHDRAWN_PROPOSAL, reject_proposal_operations,
-    reopen_withdrawn_proposal, withdraw_proposal, withdraw_proposal_call,
+    REJECT_PROPOSAL_OPERATIONS, reject_proposal_operations,
 };
 use crate::shared_tests::command_sequence_proposal_undo_chain::{
     compensated, edit, head_closure, on, undo_call, undo_latest, withdraw,
@@ -133,64 +130,6 @@ async fn author_undo_reverses_three_candidate_edits_in_reverse_order() {
                 (first, Some(prior)),
             ],
             before
-        )
-    );
-}
-
-/// The Undo of a Reopen withdraws the Proposal again in a new head. The Undo of the Withdrawal
-/// then reopens the Proposal.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn author_undo_reopens_a_withdrawal_after_the_undo_of_a_later_reopen() {
-    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
-    let (store, admin) = stores().await;
-    let withdrawal = withdraw_proposal_call(&store, &admin, /*base*/ 0x4a40).await;
-    let scope = withdrawal.envelope.project_scope.clone();
-    let session = withdrawal.input.editor_session_id.as_ref().to_owned();
-    let chapter_head = withdrawal.input.expected_authoritative_revision_id.clone();
-    let proposal_id = withdrawal.input.proposal_id.clone();
-    let prior = latest_forward(&admin, &scope).await;
-    withdraw_proposal(&store, &withdrawal).await.unwrap();
-    let withdrawn = latest_forward(&admin, &scope).await;
-    let withdrawal_event_id: String = admin
-        .query_one(
-            "SELECT withdrawal_event_id::text FROM storyos.proposal_withdrawals
-              WHERE proposal_id = $1::text::uuid",
-            &[&proposal_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    let reopen = issued(
-        &store,
-        &scope,
-        /*suffix*/ 0x4a4a,
-        &REOPEN_WITHDRAWN_PROPOSAL,
-        ReopenWithdrawnProposalInput {
-            editor_session_id: EditorSessionId::new(session.clone()),
-            proposal_id: proposal_id.clone(),
-            proposal_revision_id: proposal_head_revision(&admin, &proposal_id).await,
-            withdrawal_event_id,
-            expected_authoritative_revision_id: chapter_head.clone(),
-        },
-    )
-    .await;
-    reopen_withdrawn_proposal(&store, &reopen).await.unwrap();
-    let reopened = latest_forward(&admin, &scope).await;
-
-    let mut steps = Vec::new();
-    let mut closures = Vec::new();
-    for suffix in [0x4a4b, 0x4a4c] {
-        let call = undo_call(&store, &admin, &scope, &session, &chapter_head, suffix).await;
-        steps.push(compensated(&undo(&store, &call).await.unwrap()));
-        closures.push(head_closure(&admin, &proposal_id).await);
-    }
-
-    assert_eq!(
-        (steps, closures),
-        (
-            vec![(reopened, Some(withdrawn)), (withdrawn, Some(prior))],
-            vec!["withdrawn".to_owned(), "open".to_owned()]
         )
     );
 }
@@ -479,7 +418,7 @@ async fn the_receipt_trigger_accepts_a_chained_parent_and_refuses_another_source
 }
 
 /// A withdrawal of a head that a Compensation wrote. Each Undo of the chain E1, E2, Undo E2,
-/// W, reopen, Undo reopen, Undo W, Undo E1 compensates.
+/// W, Undo W, Undo E1 compensates.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_reopens_a_withdrawal_of_a_compensation_head_and_continues() {
@@ -508,34 +447,9 @@ async fn author_undo_reopens_a_withdrawal_of_a_compensation_head_and_continues()
     .await;
     let undo_second = compensated(&undo_latest(&store, &admin, &proposal, /*suffix*/ 0x4aeb).await);
     let withdrawn = withdraw(&store, &admin, &proposal, /*suffix*/ 0x4aec).await;
-    let withdrawal_event_id: String = admin
-        .query_one(
-            "SELECT withdrawal_event_id::text FROM storyos.proposal_withdrawals
-              WHERE proposal_id = $1::text::uuid",
-            &[&proposal.proposal_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    let reopen = issued(
-        &store,
-        &proposal.scope,
-        /*suffix*/ 0x4aed,
-        &REOPEN_WITHDRAWN_PROPOSAL,
-        ReopenWithdrawnProposalInput {
-            editor_session_id: EditorSessionId::new(proposal.editor_session_id.clone()),
-            proposal_id: proposal.proposal_id.clone(),
-            proposal_revision_id: proposal_head_revision(&admin, &proposal.proposal_id).await,
-            withdrawal_event_id,
-            expected_authoritative_revision_id: proposal.chapter_revision_id.clone(),
-        },
-    )
-    .await;
-    reopen_withdrawn_proposal(&store, &reopen).await.unwrap();
-    let reopened = latest_forward(&admin, &proposal.scope).await;
 
     let mut steps = vec![undo_second];
-    for suffix in [0x4aee, 0x4aef, 0x4af0] {
+    for suffix in [0x4aee, 0x4aef] {
         steps.push(compensated(
             &undo_latest(&store, &admin, &proposal, suffix).await,
         ));
@@ -550,7 +464,6 @@ async fn author_undo_reopens_a_withdrawal_of_a_compensation_head_and_continues()
         (
             vec![
                 (second, Some(first)),
-                (reopened, Some(withdrawn)),
                 (withdrawn, Some(first)),
                 (first, Some(prior)),
             ],

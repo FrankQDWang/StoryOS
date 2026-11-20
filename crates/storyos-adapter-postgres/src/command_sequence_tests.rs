@@ -55,17 +55,11 @@ mod undo_chain;
 #[path = "command_sequence_tests/proposal_undo_chain_tests.rs"]
 mod proposal_undo_chain;
 
-#[path = "command_sequence_tests/proposal_decision_undo_chain_tests.rs"]
-mod proposal_decision_undo_chain;
-
 #[path = "command_sequence_tests/proposal_acceptance_undo_chain_tests.rs"]
 mod proposal_acceptance_undo_chain;
 
 #[path = "command_sequence_tests/producer_withdrawal_undo_tests.rs"]
 mod producer_withdrawal_undo;
-
-#[path = "command_sequence_tests/withdrawal_reopen_undo_tests.rs"]
-mod withdrawal_reopen_undo;
 
 #[path = "command_sequence_tests/author_edit_tests.rs"]
 mod author_edit;
