@@ -9,7 +9,7 @@ A Core Artifact containing inspectable, core-validatable domain changes together
 _Avoid_: Suggestion, direct write, executable extension
 
 **Proposal Operation**:
-A stable, independently resolvable domain change within a Proposal; dynamically calculated diff hunks are never operations. Historical applied or rejected incarnations remain frozen, while reopening creates a new Proposal Revision and retains the operation ID only when target and semantic identity are unchanged.
+A stable, independently resolvable domain change within a Proposal; dynamically calculated diff hunks are never operations. Historical applied or rejected incarnations remain frozen.
 _Avoid_: Diff hunk, visual change marker
 
 **Proposal Growth**:
@@ -29,7 +29,7 @@ The orthogonal generation (`ready`), validation (`pending | valid | invalid | co
 _Avoid_: Proposal status, accepted Proposal state, rejected Proposal state, stale state
 
 **Proposal Transition**:
-One exhaustive StoryOS Core command-and-event change to a Proposal State Axis under exact expected Revision and lifecycle preconditions. Unlisted transitions are invalid; content correction, replanning, reopening, and Undo Acceptance append new Proposal Revisions rather than rewriting historical state.
+One exhaustive StoryOS Core command-and-event change to a Proposal State Axis under exact expected Revision and lifecycle preconditions. Unlisted transitions are invalid; content correction and Undo Acceptance append new Proposal Revisions rather than rewriting historical state.
 _Avoid_: Status assignment, implicit transition, mutable historical resolution
 
 **Proposal Anchor**:
@@ -93,7 +93,7 @@ The Core-produced `conflicted` condition on the validation axis of a well-formed
 _Avoid_: Proposal Invalidity, stale warning, automatic merge, silent anchor repair
 
 **Proposal Rejection**:
-An author's non-destructive decision not to apply selected pending Proposal Operations. Reopen creates a new pending Proposal Revision. Its Acceptance Eligibility follows the current rules, and a base behind the Chapter Head does not stop it ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
+An author's non-destructive decision not to apply selected pending Proposal Operations. A rejected Operation stays rejected: StoryOS has no command that reopens it ([ADR 0098](../adr/0098-remove-the-three-proposal-recovery-commands-that-no-client-sends.md)).
 _Avoid_: Withdrawal, deletion
 
 **Proposal Withdrawal**:

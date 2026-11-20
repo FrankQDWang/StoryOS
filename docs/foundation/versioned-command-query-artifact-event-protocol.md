@@ -589,20 +589,20 @@ meaning:
 | `AcceptProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/acceptances` | explicit protected editor command; typed Acceptance Receipt stays distinct |
 | `RejectProposalOperations` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/rejections` | exact selected pending operations and rejection events |
 | `WithdrawProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/withdrawals` | author cause or exact current-producer cause only |
-| `ReopenWithdrawnProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/reopenings` | exact withdrawal event and `withdrawn` closure precondition |
 | `SupersedeProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/supersessions` | exact replacing Proposal and current head; terminal `superseded` closure |
-| `ReopenRejectedOperations` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/operation-reopenings` | exact rejection event references; validation returns to `pending` |
-| `ReplanProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/replans` | exact Proposal Conflict or Proposal Recovery Conflict source |
 | `CompleteReadyPartialProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/generation-completions` | exact `ready_partial` generation and candidate digest |
 | `ContinueProposalGeneration` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/generation-continuations` | synchronous generation-axis transition; a fresh generation ID is returned |
 | `UndoLatestAuthorAction` | Manuscript Revision and Proposal State Machine | `/author-actions/undo` | one unified newest-first frontier; compensation or reversal remains typed |
+
+[ADR 0098](../adr/0098-remove-the-three-proposal-recovery-commands-that-no-client-sends.md) removes `ReplanProposal`, `ReopenWithdrawnProposal`, and
+`ReopenRejectedOperations`. The rules of this document for them are historical.
 
 `SupersedeProposal` is a planned operation of
 [section 7.1.2](#712-planned-operations-of-later-stages). The generated catalog
 does not list it.
 
-`WithdrawProposal` and `ReplanProposal` each have one public operation and a
-closed request discriminator for their two Core-legal causes. The `author`
+`WithdrawProposal` has one public operation and a closed request
+discriminator for its two Core-legal causes. The `author`
 profile is an explicit protected editor command. It requires the current
 Editor Session and writer generation, an `AuthorCommandAdmission`, its
 idempotency record, and the author-only `RequiresReconfirmation` recovery
