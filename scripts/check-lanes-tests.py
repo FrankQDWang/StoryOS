@@ -4,8 +4,12 @@
 CHECK_LANES_SCRIPT gives another runner to test, for example the runner of an earlier commit.
 """
 
+import contextlib
+import fcntl
 import hashlib
 import importlib.util
+import io
+import json
 import os
 from pathlib import Path
 import re
@@ -195,6 +199,18 @@ class BrowserStartTests(unittest.TestCase):
             starts.append(float(record.read_text()))
         self.assertGreaterEqual(starts[1] - starts[0], gap)
 
+    def test_a_claim_without_wait_does_not_wait_for_a_held_record(self):
+        module = runner_module()
+        # A root of its own, so that the test does not change the gap of the browser lanes of a run.
+        root = Path(tempfile.mkdtemp(prefix="storyos-browser-start-"))
+        record = root / module.BROWSER_START_FILE
+        record.parent.mkdir(parents=True)
+        with open(record, "a+") as holder:
+            fcntl.flock(holder, fcntl.LOCK_EX)
+            began = time.monotonic()
+            self.assertFalse(module.claim_browser_start(root, wait=False))
+            self.assertLess(time.monotonic() - began, 5)
+
 
 def runner_module():
     """Load the runner as a module, for the tests of its functions."""
@@ -237,6 +253,124 @@ class FunctionTests(unittest.TestCase):
             self.assertLessEqual(len(running), 2, lane.name)
         # The lane without a browser starts while the third browser lane waits.
         self.assertLess(lanes[3].started, lanes[2].started)
+
+    def run_lanes(self, module, lanes):
+        """Run the lanes in this process. Return the exit code, the output, and the time of the run."""
+        handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
+        output, began = io.StringIO(), time.monotonic()
+        try:
+            with contextlib.redirect_stdout(output):
+                code = module.run(ROOT, lanes, [])
+        finally:
+            for number, handler in handlers.items():
+                signal.signal(number, handler)
+        return code, output.getvalue(), time.monotonic() - began
+
+    def test_a_lane_that_does_not_end_in_the_time_limit_fails_the_run(self):
+        # The lane and its child in a new session do not obey SIGTERM, as the Vitest run of issue 1728. Each writes
+        # its ID after it ignores SIGTERM. Without a time limit, the lane passes after 20 s.
+        module, directory = runner_module(), Path(tempfile.mkdtemp(prefix="storyos-lane-limit-"))
+        module.LANE_TIME_LIMIT_SECONDS, module.STOP_SECONDS = 15, 2
+        ready = ("import os, signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                 "open({!r}, 'w').write(str(os.getpid())); ")
+        child = [sys.executable, "-c", ready.format(str(directory / "child")) + "time.sleep(20)"]
+        lane = module.Lane("lanes-test-no-end", [sys.executable, "-c", (
+            ready.format(str(directory / "lane"))
+            + f"import subprocess; subprocess.Popen({child!r}, start_new_session=True); time.sleep(20)")])
+        try:
+            code, text, elapsed = self.run_lanes(module, [lane])
+            watched = [int((directory / name).read_text()) for name in ("lane", "child")
+                       if (directory / name).exists()]
+            # The system reaps a killed child of another parent a short time after its end.
+            deadline = time.monotonic() + 5
+            while any(alive(pid) for pid in watched) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            remaining = [pid for pid in watched if alive(pid)]
+        finally:
+            for name in ("lane", "child"):
+                if (directory / name).exists() and alive(int((directory / name).read_text())):
+                    os.kill(int((directory / name).read_text()), signal.SIGKILL)
+        self.assertEqual(code, 1, text)
+        self.assertRegex(text, r"Lane lanes-test-no-end: FAIL after \d+ s \(the lane ran longer than the time limit "
+                               r"of 15 s\)")
+        # The limit, then SIGTERM and SIGKILL of the lane, then SIGTERM and SIGKILL of the child, then Docker.
+        self.assertLess(elapsed, 15 + 2 * (module.STOP_SECONDS + module.KILL_SECONDS) + 15, text)
+        self.assertEqual(len(watched), 2, f"the lane or its child did not start before the stop\n{text}")
+        self.assertEqual(remaining, [], text)
+
+    def test_a_stop_whose_scan_of_the_processes_fails_still_ends_the_lanes(self):
+        # A ps command that does not end, and a ps line that does not parse.
+        for error in (subprocess.TimeoutExpired(["ps"], 60), ValueError("not enough values to unpack")):
+            with self.subTest(error=type(error).__name__):
+                module, removals = runner_module(), []
+
+                def process_table(error=error):
+                    raise error
+
+                module.process_table, module.remove_run_resources = process_table, removals.append
+                # The lane does not obey SIGTERM, so only the SIGKILL ends it. It writes a line after it ignores it.
+                lane = module.Lane("lanes-test-scan-fails", [])
+                lane.process = subprocess.Popen([sys.executable, "-c", (
+                    "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); print('ready', flush=True); "
+                    "time.sleep(287)")], start_new_session=True, stdout=subprocess.PIPE, text=True)
+                self.assertEqual(lane.process.stdout.readline(), "ready\n")
+                handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
+                try:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        self.assertFalse(module.stop([lane], "token"))
+                    self.assertEqual(lane.process.wait(timeout=30), -signal.SIGKILL)
+                    self.assertEqual(removals, ["token"])
+                finally:
+                    for number, handler in handlers.items():
+                        signal.signal(number, handler)
+                    if lane.process.poll() is None:
+                        os.killpg(lane.process.pid, signal.SIGKILL)
+                        lane.process.wait()
+                    lane.process.stdout.close()
+
+    def test_a_command_of_the_runner_that_does_not_end_fails_in_its_time_limit(self):
+        module = runner_module()
+        module.TOOL_SECONDS = 1
+        began = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            module.tool_output(["sleep", "30"])
+        self.assertLess(time.monotonic() - began, 10)
+
+        def tool_output(command):
+            raise subprocess.TimeoutExpired(command, module.TOOL_SECONDS)
+
+        # A Docker command that does not end makes the removal not verified, and the stop continues to its result.
+        module.tool_output = tool_output
+        self.assertFalse(module.remove_run_resources("token"))
+
+    def test_a_report_of_a_run_that_did_not_connect_to_its_browser_fails_the_lane(self):
+        # The shape of the second report of the lane journeys-2 in a run of `make check-full` on 2026-11-20 (issue
+        # 1728): Vitest did not connect to its browser session, and its report lists each file as passed with no test.
+        module, root = runner_module(), Path(tempfile.mkdtemp(prefix="storyos-lane-report-"))
+        web, reports = root / "apps/web", root / "target/check"
+        reports.mkdir(parents=True)
+        first = "test/browser-exact-dist/s2-workspace.integration.test.ts"
+        files = [f"test/browser-exact-dist/journey-{index}.integration.test.ts" for index in range(15)]
+
+        def report(suites):
+            return json.dumps({"numTotalTests": sum(tests for _, tests in suites), "success": True,
+                               "testResults": [{"name": str(web / file), "status": "passed",
+                                                "assertionResults": [{"status": "passed"}] * tests}
+                                               for file, tests in suites]})
+
+        cases = (("journeys-test", lambda: module.journey_lane(root, "journeys-test", [first, *files]),
+                  {"journeys-test-1.json": [(first, 1)], "journeys-test-2.json": [(file, 0) for file in files]}),
+                 ("vitest-test", lambda: module.vitest_lane(root, "vitest-test", "browser-exact-dist", files),
+                  {"vitest-test.json": [(file, 0) for file in files]}))
+        for name, lane, outputs in cases:
+            for output, suites in outputs.items():
+                (reports / output).write_text(report(suites))
+            with self.assertRaisesRegex(ValueError, "has no passing test", msg=name):
+                lane().passed("")
+            # The same report with one passing test in each file passes, so the check refuses only the missing tests.
+            for output, suites in outputs.items():
+                (reports / output).write_text(report([(file, 1) for file, _ in suites]))
+            self.assertEqual(lane().passed(""), [], name)
 
     def test_a_failed_container_removal_does_not_stop_the_removal_of_networks_and_volumes(self):
         module, removed = runner_module(), []
