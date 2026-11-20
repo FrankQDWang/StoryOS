@@ -4,11 +4,10 @@ import { fileURLToPath } from "node:url";
 import { acceptProposal, applyAuthorEdit, createAgentRun, createChapter, createEditorSession, createProject,
   createProjectChallenge, createProjectCommandChallenge, createVolume, digestAcceptProposal, digestApplyAuthorEdit,
   digestCreateAgentRun, digestCreateChapter, digestCreateEditorSession, digestCreateVolume,
-  digestRejectProposalOperations, digestUpdateProjectAssistance, getAgentRun, getChapter, getEditorSession, getProposal,
-  rejectProposalOperations, updateProjectAssistance,
+  digestUpdateProjectAssistance, getAgentRun, getChapter, getEditorSession, getProposal, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, ApplyAuthorEditRequest, AuthorEditPrimitive, CreateAgentRunRequest,
-  CreateEditorSessionRequest, GetAgentRunResponse, RejectProposalOperationsRequest, SelectionReference,
+  CreateEditorSessionRequest, GetAgentRunResponse, SelectionReference,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres as queryPostgres, runStoryOSWorkerStderr,
@@ -432,47 +431,6 @@ export async function openedBlockProposal(started: Started, ns: string) {
       FROM storyos.validation_receipts AS record WHERE project_id = '${prepared.projectId}'::uuid))::text`);
   return { prepared, session, revised: revised.proposal, base: base.chapter, history,
     validationReceiptId: revised.proposal.validation_receipt.validation_receipt_id };
-}
-
-export function acceptRequest(opened: Awaited<ReturnType<typeof openedBlockProposal>>, expectedRevisionId: string,
-  correlation: string): AcceptProposalRequest {
-  return {
-    command_schema: "storyos.command.accept-proposal.request.v1",
-    accept_proposal_input: {
-      proposal_revision_id: opened.revised.revision_id, validation_receipt_id: opened.validationReceiptId,
-      selected_operation_ids: [opened.revised.operation_id], expected_authoritative_revision_id: expectedRevisionId,
-      editor_session_id: opened.session.editor_session.editor_session_id, ...BINDING, correlation_id: id(correlation),
-    },
-  };
-}
-
-export async function accept(started: Started, opened: Awaited<ReturnType<typeof openedBlockProposal>>,
-  request: AcceptProposalRequest, key: string) {
-  const options = { baseUrl: started.baseUrl, projectId: opened.prepared.projectId,
-    proposalId: opened.revised.proposal_id, fetchImpl: opened.prepared.fetchImpl, idempotencyKey: id(key), request };
-  let nonce = "";
-  const accepted = await challenged(started.baseUrl, opened.prepared.fetchImpl, opened.prepared.projectId, "POST",
-    "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", request.command_schema,
-    await digestAcceptProposal(request), id(key), (antiForgery) => acceptProposal({ ...options, antiForgery: (nonce = antiForgery) }));
-  return { accepted, replay: () => acceptProposal({ ...options, antiForgery: nonce }) };
-}
-
-export async function reject(started: Started, opened: Awaited<ReturnType<typeof openedBlockProposal>>,
-  headRevisionId: string, key: string) {
-  const request: RejectProposalOperationsRequest = {
-    command_schema: "storyos.command.reject-proposal-operations.request.v1",
-    reject_proposal_operations_input: { ...BINDING, correlation_id: id(`${key}1`),
-      editor_session_id: opened.session.editor_session.editor_session_id,
-      proposal_revision_id: opened.revised.revision_id,
-      selected_pending_operation_ids: [opened.revised.operation_id],
-      expected_target_revisions: [headRevisionId],
-      rejection_reason: { kind: "author_declined", note: { kind: "omitted" } } },
-  };
-  return challenged(started.baseUrl, opened.prepared.fetchImpl, opened.prepared.projectId, "POST",
-    "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections", request.command_schema,
-    await digestRejectProposalOperations(request), id(`${key}2`), (antiForgery) => rejectProposalOperations({
-      baseUrl: started.baseUrl, projectId: opened.prepared.projectId, proposalId: opened.revised.proposal_id,
-      request, fetchImpl: opened.prepared.fetchImpl, antiForgery, idempotencyKey: id(`${key}2`) }));
 }
 
 type Proposal = Awaited<ReturnType<typeof getProposal>>["proposal"];

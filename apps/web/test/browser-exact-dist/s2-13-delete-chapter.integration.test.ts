@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -13,7 +14,6 @@ import {
   applicationWindow,
   closeApplicationFrame,
   openApplicationFrame,
-  openFirstChapterForm,
   submitChapterForm,
   submitProjectForm,
   submitVolumeForm,
@@ -89,7 +89,11 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
   await submitProjectForm(frame, "Delete Novel");
 
   await submitVolumeForm(frame, "Volume A");
-  await openFirstChapterForm(frame);
+  await beginInlineChapterCreation(frame.contentDocument);
+  await expect.poll(() =>
+    frame.contentDocument?.querySelector('#app form[data-create-chapter] input[name="chapter-title"]')
+      ?.tagName
+  ).toBe("INPUT");
 
   await submitChapterForm(frame, "Chapter A");
   await expect.poll(() =>
@@ -100,6 +104,12 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
     ["Chapter B", "Chapter A\nChapter B"],
     ["Chapter C", "Chapter A\nChapter B\nChapter C"],
   ] as const) {
+    await beginInlineChapterCreation(frame.contentDocument);
+    await expect.poll(() =>
+      frame.contentDocument?.querySelector(
+        '#app form[data-create-chapter] input[name="chapter-title"]',
+      )?.tagName
+    ).toBe("INPUT");
     await submitChapterForm(frame, name);
     await expect.poll(() => {
       const root = frame.contentDocument?.querySelector("#app");

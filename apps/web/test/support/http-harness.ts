@@ -23,7 +23,7 @@ export { BINDING, PROSE, USER_A, admitProse, admitRun, attempt, challenged, drai
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 /** The path of one binary of the release package. */
-export const packaged = (name: string) =>
+const packaged = (name: string) =>
   join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
 const execFileAsync = promisify(execFile);
 
@@ -40,7 +40,7 @@ export function freshNamespace(): string {
 // Server
 
 /** The sessions of a test Server: `session-a` and `session-c` are User A, and `session-b` is User B. */
-export const SESSIONS: Readonly<Record<string, string>> = { "session-a": USER_A, "session-b": USER_B, "session-c": USER_A };
+const SESSIONS: Readonly<Record<string, string>> = { "session-a": USER_A, "session-b": USER_B, "session-c": USER_A };
 
 /** The options of `startServer`. The default sessions are `SESSIONS`. */
 type ServerOptions = Omit<Parameters<typeof startStoryOSServer>[0], "repositoryRoot" | "serverBinary">;
@@ -147,7 +147,7 @@ interface Challenged<Op extends ProjectCommandId> {
   send(options?: { request?: CommandRequest<Op>; session?: string; fetchImpl?: typeof fetch }): Promise<Delivered<Op>>;
 }
 
-export interface Sent<Op extends ProjectCommandId> extends Delivered<Op> {
+interface Sent<Op extends ProjectCommandId> extends Delivered<Op> {
   readonly command: Challenged<Op>;
 }
 
@@ -533,7 +533,7 @@ export function appliedVolume(created: CommandResponse<"createVolume">) {
 // Problems
 
 /** The status and the problem code of a refused HTTP response. */
-export interface Problem {
+interface Problem {
   readonly status: number | undefined;
   readonly code: string | undefined;
   readonly body: string;

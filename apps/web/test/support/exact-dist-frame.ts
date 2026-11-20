@@ -87,7 +87,7 @@ export async function waitSaved(
   return root.querySelector("[data-save-state]")?.getAttribute("data-authoritative-revision-id") ?? "";
 }
 
-/** Types at the end of the current Chapter and waits for a new saved revision with `body`. */
+/** Types at the end of the Current Chapter and waits for a new saved Authoritative Revision with `body`. */
 export async function typeIntoCurrent(frame: HTMLIFrameElement, text: string, body = text): Promise<void> {
   const root = appRoot(frame);
   const editor = manuscriptEditor(root, applicationWindow(frame));
@@ -190,11 +190,6 @@ export async function openChapterEditor(frameTitle: string, projectTitle: string
   await submitVolumeForm(frame, "Volume A");
   await openFirstChapterForm(frame);
   await submitChapterForm(frame, "Chapter A");
-  return { frame, ...await waitOpenedChapter(frame) };
-}
-
-/** Waits until the editor shows the current Chapter of the ready Project, and returns the two identities. */
-export async function waitOpenedChapter(frame: HTMLIFrameElement): Promise<{ projectId: string; chapterId: string }> {
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
     const projectId = root?.querySelector("[data-project-id]")?.getAttribute("data-project-id");
@@ -217,5 +212,5 @@ export async function waitOpenedChapter(frame: HTMLIFrameElement): Promise<{ pro
     || chapterId === null || chapterId === undefined) {
     throw new Error("the Project or Chapter identity is missing");
   }
-  return { projectId, chapterId };
+  return { frame, projectId, chapterId };
 }

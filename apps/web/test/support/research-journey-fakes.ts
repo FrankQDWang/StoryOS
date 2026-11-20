@@ -9,7 +9,7 @@ type ReceivedBody = Record<string, unknown>;
 /** The SSE events of one Agent Plan response, made from the request body and the earlier bodies. */
 type ModelReply = (body: ReceivedBody, earlier: readonly ReceivedBody[]) => readonly unknown[];
 
-export interface FakeDestination {
+interface FakeDestination {
   readonly base: string;
   /** Each request body, in arrival order. */
   readonly bodies: ReceivedBody[];
@@ -118,7 +118,7 @@ export const PAGE_URL = "https://example.org/liverpool-tides-1890";
 export const MISSING_URL = "https://example.org/missing-harbour-log";
 /** The query of the search that the fake holds while the author cancels the Run. */
 export const HELD_QUERY = "Liverpool port log 1890 morning";
-export const SEARCH_TEXT = `Title: Liverpool tide table 1890\nURL: ${PAGE_URL}\nPublished: 1890-01-01T00:00:00.000Z\nAuthor: N/A\n`
+const SEARCH_TEXT = `Title: Liverpool tide table 1890\nURL: ${PAGE_URL}\nPublished: 1890-01-01T00:00:00.000Z\nAuthor: N/A\n`
   + "Highlights:\nHigh water at the Prince's Dock came at 10.42.\n\n---\n\n"
   + "Title: Mersey port log\nURL: https://example.org/mersey-port-log\nPublished: N/A\nAuthor: N/A\nHighlights:\n"
   + "The port log notes a calm morning.";

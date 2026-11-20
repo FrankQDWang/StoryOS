@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -55,6 +55,11 @@ it("the author cannot remove a nonempty Volume, then removes an empty Volume", {
     ["Volume A", "Volume A"],
     ["Volume B", "Volume A\nVolume B"],
   ] as const) {
+    await beginInlineVolumeCreation(frame.contentDocument);
+    await expect.poll(() =>
+      frame.contentDocument?.querySelector('#app form[data-create-volume] input[name="volume-title"]')
+        ?.tagName
+    ).toBe("INPUT");
     await submitVolumeForm(frame, name);
     await expect.poll(() => {
       const root = frame.contentDocument?.querySelector("#app");

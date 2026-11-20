@@ -16,8 +16,9 @@ import {
   submitChapterForm,
   submitProjectForm,
   submitVolumeForm,
-  waitOpenedChapter,
 } from "../support/exact-dist-frame.ts";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 afterEach(async () => {
   await closeApplicationFrame();
@@ -54,7 +55,11 @@ it("hydrates production Tiptap for one paragraph Block without a textarea write 
   await submitVolumeForm(frame, "Volume A");
   await openFirstChapterForm(frame);
   await submitChapterForm(frame, "Chapter A");
-  const { projectId, chapterId } = await waitOpenedChapter(frame);
+  await expect.poll(() => {
+    const root = frame.contentDocument?.querySelector("#app");
+    return root?.getAttribute("data-boot-state") === "project-ready"
+      && root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
+  }).toBe(true);
 
   const root = appRoot(frame);
   const childWindow = applicationWindow(frame);
@@ -65,6 +70,25 @@ it("hydrates production Tiptap for one paragraph Block without a textarea write 
   await expect.poll(() =>
     root.querySelector("[data-save-state]")?.getAttribute("data-unsettled-intent-count")
   ).toBe("0");
+  await expect.poll(() => {
+    const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
+    const chapterId = root.querySelector(
+      'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
+    )?.getAttribute("data-chapter-id");
+    return typeof projectId === "string"
+      && UUID.test(projectId)
+      && typeof chapterId === "string"
+      && UUID.test(chapterId);
+  }, { timeout: 10_000 }).toBe(true);
+
+  const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
+  const chapterId = root.querySelector(
+    'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
+  )?.getAttribute("data-chapter-id");
+  if (projectId === null || projectId === undefined
+    || chapterId === null || chapterId === undefined) {
+    throw new Error("the Project or Chapter identity is missing");
+  }
   const before = await readChapter(frame, projectId, chapterId);
   expect(editor.getAttribute("data-manuscript-block-id")).toBe(before.manuscriptBlockId);
   expect(before.body).toBe("");

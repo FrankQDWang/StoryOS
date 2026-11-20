@@ -83,7 +83,7 @@ export function recordingFetch(route: Route): { fetchImpl: typeof fetch; methods
   const methods: string[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
-    const method = init?.method ?? "GET";
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     methods.push(`${method} ${path}`);
     const response = await route(method, path);
     if (response === undefined) throw new Error(`unexpected request: ${method} ${path}`);

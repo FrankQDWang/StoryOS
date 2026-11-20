@@ -1,4 +1,4 @@
-import { beginTreeAction } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -7,7 +7,6 @@ import {
   closeApplicationFrame,
   destroyApplicationFrame,
   openApplicationFrame,
-  openFirstChapterForm,
   submitChapterForm,
   submitProjectForm,
   submitVolumeForm,
@@ -43,7 +42,11 @@ it("the author renames and reorders Chapters from the canonical tree and they su
     throw new Error("the empty Project document is missing");
   }
   await submitVolumeForm(created, "Volume A");
-  await openFirstChapterForm(created);
+  await beginInlineChapterCreation(createdRoot);
+  await expect.poll(() =>
+    createdRoot.querySelector('#app form[data-create-chapter] input[name="chapter-title"]')
+      ?.tagName
+  ).toBe("INPUT");
   await submitChapterForm(created, "Chapter A");
   await expect.poll(() => {
     const root = createdRoot.querySelector("#app");
