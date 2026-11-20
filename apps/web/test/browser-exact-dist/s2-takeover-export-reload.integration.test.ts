@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction, selectTreeChapter } from "../support/inline-chapter-creation.ts";
+import { beginTreeAction, selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -16,13 +16,22 @@ import {
   manuscriptIsEditable,
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
+import {
+  appRoot,
+  applicationWindow,
+  closeApplicationFrame,
+  nextFrameLoad,
+  openApplicationFrame,
+  openFirstChapterForm,
+  submitChapterForm,
+  submitProjectForm,
+  submitVolumeForm,
+} from "../support/exact-dist-frame.ts";
 
 // Three Chapters of 10,000 Unicode scalars give the 30,000-scalar baseline size.
 const CHAPTER_SCALARS = 10_000;
 const PHRASES = ["夜雨落在旧书房的窗沿，", "守夜人在渡口找到一枚旧铜钱，",
   "风从门缝里吹了进来。", "“我们该走了？”小舟低声问道。"];
-
-let applicationFrame: HTMLIFrameElement | undefined;
 
 function chapterText(seed: number): string {
   const scalars: string[] = [];
@@ -32,44 +41,11 @@ function chapterText(seed: number): string {
   return scalars.slice(0, CHAPTER_SCALARS).join("");
 }
 
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist takeover export page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
-
 afterEach(async () => {
-  if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
-
-function applicationWindow(frame: HTMLIFrameElement): Window & typeof globalThis {
-  const result = frame.contentWindow;
-  if (result === null) throw new Error("the production page realm is unavailable");
-  return result as Window & typeof globalThis;
-}
-
-function appRoot(frame: HTMLIFrameElement): Element {
-  const root = frame.contentDocument?.querySelector("#app");
-  if (root === null || root === undefined) throw new Error("the production page root is missing");
-  return root;
-}
 
 function chapterIds(root: Element): Record<string, string> {
   return Object.fromEntries([...root.querySelectorAll<HTMLButtonElement>(
@@ -77,19 +53,8 @@ function chapterIds(root: Element): Record<string, string> {
   )].map((button) => [button.textContent ?? "", button.getAttribute("data-chapter-id") ?? ""]));
 }
 
-async function submitForm(frame: HTMLIFrameElement, selector: string, value: string): Promise<void> {
-  const input = frame.contentDocument?.querySelector<HTMLInputElement>(selector);
-  const form = input?.form;
-  if (input === null || input === undefined || form === null || form === undefined) {
-    throw new Error(`the form of ${selector} is missing`);
-  }
-  input.value = value;
-  form.requestSubmit();
-}
-
 async function createChapter(frame: HTMLIFrameElement, title: string): Promise<void> {
-  await beginInlineChapterCreation(frame.contentDocument);
-  await submitForm(frame, '#app form[data-create-chapter] input[name="chapter-title"]', title);
+  await submitChapterForm(frame, title);
   await expect.poll(() => chapterIds(appRoot(frame))[title] ?? "").not.toBe("");
 }
 
@@ -111,7 +76,7 @@ async function waitWritable(frame: HTMLIFrameElement, previousRevisionId?: strin
   }, { timeout: 30_000 }).toEqual({ save: "saved", unsettled: "0", failure: "", editable: true });
 }
 
-async function typeIntoCurrent(frame: HTMLIFrameElement, text: string, expected: string): Promise<void> {
+async function typeIntoWritableChapter(frame: HTMLIFrameElement, text: string, expected: string): Promise<void> {
   await waitWritable(frame);
   const root = appRoot(frame);
   const realm = applicationWindow(frame);
@@ -159,32 +124,21 @@ async function requestExport(frame: HTMLIFrameElement): Promise<string> {
 it("keeps a taken-over writer editable after structure changes, a readable export, and a reload", {
   timeout: 300_000,
 }, async () => {
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = "StoryOS exact-dist takeover export reload";
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName,
-  ).toBe("INPUT");
-  await submitForm(frame, '#app input[name="title"]', "Takeover export reload");
-  await expect.poll(() => appRoot(frame).getAttribute("data-boot-state")).toBe("empty-project-ready");
-  await beginInlineVolumeCreation(frame.contentDocument);
-  await submitForm(frame, '#app form[data-create-volume] input[name="volume-title"]', "Volume A");
-  await beginInlineChapterCreation(frame.contentDocument);
+  const frame = await openApplicationFrame("StoryOS exact-dist takeover export reload");
+  await submitProjectForm(frame, "Takeover export reload");
+  await submitVolumeForm(frame, "Volume A");
+  await openFirstChapterForm(frame);
   for (const title of ["Chapter A", "Chapter B", "Chapter C"]) await createChapter(frame, title);
   await expect.poll(() => appRoot(frame).getAttribute("data-boot-state")).toBe("project-ready");
   const ids = chapterIds(appRoot(frame));
   const projectId = appRoot(frame).querySelector("[data-project-id]")?.getAttribute("data-project-id");
   if (projectId === null || projectId === undefined) throw new Error("the Project identity is missing");
   const texts = { "Chapter A": chapterText(0), "Chapter B": chapterText(1), "Chapter C": chapterText(2) };
-  await typeIntoCurrent(frame, texts["Chapter A"], texts["Chapter A"]);
+  await typeIntoWritableChapter(frame, texts["Chapter A"], texts["Chapter A"]);
   await makeCurrent(frame, ids["Chapter B"]!, "Chapter B");
-  await typeIntoCurrent(frame, texts["Chapter B"], texts["Chapter B"]);
+  await typeIntoWritableChapter(frame, texts["Chapter B"], texts["Chapter B"]);
   await makeCurrent(frame, ids["Chapter C"]!, "Chapter C");
-  await typeIntoCurrent(frame, texts["Chapter C"], texts["Chapter C"]);
+  await typeIntoWritableChapter(frame, texts["Chapter C"], texts["Chapter C"]);
   expect(Object.values(texts).reduce((total, text) => total + [...text].length, 0)).toBe(30_000);
   await resetCommandChallengeRateWindows();
 
@@ -224,7 +178,7 @@ it("keeps a taken-over writer editable after structure changes, a readable expor
   await reloadProject(frame, projectId);
   await waitWritable(frame);
   expect(appRoot(frame).querySelector("h2")?.textContent).toBe("Chapter C");
-  await typeIntoCurrent(frame, "+", `${texts["Chapter C"]}+`);
+  await typeIntoWritableChapter(frame, "+", `${texts["Chapter C"]}+`);
   const saved = await getChapter({ baseUrl: realm.location.origin, projectId,
     chapterId: ids["Chapter C"]!, fetchImpl: applicationWindow(frame).fetch.bind(applicationWindow(frame)) });
   expect(saved.chapter.current_revision.body).toBe(`${texts["Chapter C"]}+`);

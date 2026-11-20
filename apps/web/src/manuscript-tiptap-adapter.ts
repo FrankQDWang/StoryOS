@@ -61,10 +61,6 @@ export function isStoryosHydrateTransaction(transaction: { getMeta: (key: string
   return transaction.getMeta(STORYOS_HYDRATE) === true;
 }
 
-export function hydrateManuscript(editor: Editor, blockId: string, body: string): void {
-  hydrateManuscriptBlocks(editor, [{ manuscript_block_id: blockId, text: body }]);
-}
-
 export function hydrateManuscriptBlocks(editor: Editor, blocks: readonly ManuscriptParagraph[]): void {
   const next = editor.schema.nodeFromJSON(manuscriptBlocksJson(blocks));
   const transaction = editor.state.tr.replaceWith(0, editor.state.doc.content.size, next);

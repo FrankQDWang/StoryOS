@@ -29,7 +29,7 @@ export interface ExportFamily<Request extends { command_schema: string }> {
 
 type ExportEffect = { kind: "admitted"; export_id: string } | { kind: string };
 
-export interface ExportRead {
+interface ExportRead {
   readonly status: string;
   readonly export_id: string;
 }

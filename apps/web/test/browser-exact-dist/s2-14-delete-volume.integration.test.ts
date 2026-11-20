@@ -2,32 +2,15 @@ import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../suppor
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
-
-let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist delete-volume page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
+import {
+  closeApplicationFrame,
+  openApplicationFrame,
+  submitProjectForm,
+  submitVolumeForm,
+} from "../support/exact-dist-frame.ts";
 
 afterEach(async () => {
-  if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
@@ -64,27 +47,9 @@ async function confirmDeleteVolume(frame: HTMLIFrameElement, title: string): Pro
 }
 
 it("the author cannot remove a nonempty Volume, then removes an empty Volume", { timeout: 90_000 }, async () => {
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = "StoryOS exact-dist Delete Volume";
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
+  const frame = await openApplicationFrame("StoryOS exact-dist Delete Volume");
 
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName
-  ).toBe("INPUT");
-  const title = frame.contentDocument?.querySelector<HTMLInputElement>('#app input[name="title"]');
-  const form = title?.form;
-  if (title === null || title === undefined || form === null || form === undefined) {
-    throw new Error("the protected-ready form is missing");
-  }
-  title.value = "Delete Volume Novel";
-  form.requestSubmit();
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
-  ).toBe("empty-project-ready");
+  await submitProjectForm(frame, "Delete Volume Novel");
 
   for (const [name, expected] of [
     ["Volume A", "Volume A"],
@@ -95,16 +60,7 @@ it("the author cannot remove a nonempty Volume, then removes an empty Volume", {
       frame.contentDocument?.querySelector('#app form[data-create-volume] input[name="volume-title"]')
         ?.tagName
     ).toBe("INPUT");
-    const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
-      '#app form[data-create-volume] input[name="volume-title"]',
-    );
-    const volumeForm = volumeTitle?.form;
-    if (volumeTitle === null || volumeTitle === undefined
-      || volumeForm === null || volumeForm === undefined) {
-      throw new Error("the Create Volume form is missing");
-    }
-    volumeTitle.value = name;
-    volumeForm.requestSubmit();
+    await submitVolumeForm(frame, name);
     await expect.poll(() => {
       const root = frame.contentDocument?.querySelector("#app");
       return volumeTitles(root).join("\n") === expected;

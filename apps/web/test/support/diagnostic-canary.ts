@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
 /** One JSON line that the Diagnostic Projection formatter writes (ADR 0047). */
-export interface DiagnosticLine {
+interface DiagnosticLine {
   readonly level: string;
   readonly target: string;
   readonly fields: Readonly<Record<string, unknown>>;

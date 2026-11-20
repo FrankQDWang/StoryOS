@@ -1,6 +1,6 @@
 import type { BlockProposalInspect } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 
-export type ProposalConditionKind = "absent" | "proposal_conflict" | "proposal_recovery_conflict";
+type ProposalConditionKind = "absent" | "proposal_conflict" | "proposal_recovery_conflict";
 export type SessionPosture = "current" | "blocked" | "closed";
 
 const SESSION_NOTE = "当前编辑会话不能写入，系统不会自动提交。";

@@ -55,7 +55,7 @@ export function replaceBlockUnit(
   };
 }
 
-export interface BrowserScenario {
+interface BrowserScenario {
   readonly chapter: GetChapterResponse;
   readonly journalName: string;
   readonly profile: Release1ProtocolProfile;
@@ -230,7 +230,7 @@ export function requireDigestValue(value: unknown, name: string): DigestValue {
   return { algorithm, profile, value_hex_lowercase: valueHexLowercase };
 }
 
-export interface AppliedAuthorEditResponseOptions {
+interface AppliedAuthorEditResponseOptions {
   readonly authorCommandAdmissionId?: string;
   readonly authoritativeCommitId?: string;
   readonly authoritativeRevisionId?: string;
@@ -312,7 +312,7 @@ function canonicalJson(value: unknown): unknown {
   return value;
 }
 
-export interface AppliedActivityEventOptions {
+interface AppliedActivityEventOptions {
   readonly authorActionSequence?: string;
   readonly commandId: string;
   readonly commitId: string;

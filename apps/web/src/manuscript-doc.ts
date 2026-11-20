@@ -110,7 +110,7 @@ export function manuscriptJson(blockId: string, body: string) {
   return manuscriptBlocksJson([{ manuscript_block_id: blockId, text: body }]);
 }
 
-export function isUtf16Boundary(body: string, offset: number): boolean {
+function isUtf16Boundary(body: string, offset: number): boolean {
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > body.length) return false;
   if (offset === 0 || offset === body.length) return true;
   const prior = body.charCodeAt(offset - 1);
@@ -153,12 +153,6 @@ export function readManuscriptParagraphs(doc: Node): ManuscriptParagraph[] | und
   return blocks;
 }
 
-export function paragraphUtf16(doc: Node): string | undefined {
-  const blocks = readManuscriptParagraphs(doc);
-  if (blocks === undefined || blocks.length !== 1) return undefined;
-  return blocks[0]?.text;
-}
-
 export function paragraphsEqual(
   left: readonly ManuscriptParagraph[],
   right: readonly ManuscriptParagraph[],
@@ -168,17 +162,6 @@ export function paragraphsEqual(
       block.manuscript_block_id === right[index]?.manuscript_block_id
       && block.text === right[index]?.text
       && (block.block_kind ?? "paragraph") === (right[index]?.block_kind ?? "paragraph"));
-}
-
-export function isSupportedManuscriptDoc(previous: Node, next: Node, blockId: string): boolean {
-  const nextBlocks = readManuscriptParagraphs(next);
-  if (nextBlocks === undefined) return false;
-  if (previous.childCount === 0) return true;
-  const previousBlocks = readManuscriptParagraphs(previous);
-  if (previousBlocks === undefined) return nextBlocks.length === 1
-    && nextBlocks[0]?.manuscript_block_id === blockId;
-  return captureManuscriptChange(previousBlocks, nextBlocks) !== undefined
-    || paragraphsEqual(previousBlocks, nextBlocks);
 }
 
 export function contiguousUtf16Replace(

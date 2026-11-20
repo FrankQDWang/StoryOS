@@ -24,15 +24,15 @@ import type { UndoLatestAuthorActionUnavailableReason }
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
 
 /** One edit that the editor captures. The controller adds the input origin, the undo group, and the time. */
-export type CapturedEdit = JournalAuthorEdit;
+type CapturedEdit = JournalAuthorEdit;
 
 /** The text of one Proposal operation that the controller shows, and the Revisions that this text continues. */
-export interface CandidateText {
+interface CandidateText {
   readonly revisions: readonly string[];
   readonly text: string;
 }
 
-export interface EditorWritingSnapshot {
+interface EditorWritingSnapshot {
   readonly projection: PendingEditProjection;
   /** True while the projection shows input that is not in the Journal yet. */
   readonly local: boolean;

@@ -1,5 +1,4 @@
 import { act, createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
@@ -16,6 +15,7 @@ import type { ChapterTextReference } from "../../src/selection-reference.ts";
 import { addDraftReferences } from "../../src/selection-reference-draft.ts";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
 import { applyTrustedInput } from "../support/browser-command-client.ts";
+import { openPanelHost, seedProseRequest } from "./assistant-panel-harness.ts";
 import { BLOCK, CHAPTER, OWNER, PROJECT, REVISION, jsonResponse } from "./scenario.ts";
 
 // ADR 0089 sections 5, 7, and 8: the author selects Skills with the $ picker, and no view shows a digest.
@@ -61,10 +61,10 @@ afterEach(async () => {
 async function openPanel(setup: { skills?: SkillCatalogEntry[] | "failed"; claimed?: boolean;
   create?: Array<"unavailable" | "refused">; uses?: SkillUseInspect[] } = {}) {
   if (setup.claimed === true) {
-    sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
+    seedProseRequest({
       scope, message: "Help with this passage.", chapterId: CHAPTER,
       correlationId: "018f0000-0000-7001-8000-000000000c84", idempotencyKey: "018f0000-0000-7001-8000-000000000c85",
-      snapshotId: "018f0000-0000-7001-8000-000000000c86", runId: RUN_IN_PROGRESS, conversationId: CONVERSATION }));
+      snapshotId: "018f0000-0000-7001-8000-000000000c86", runId: RUN_IN_PROGRESS, conversationId: CONVERSATION });
   }
   const posts: Post[] = [];
   const replies = [...setup.create ?? []];
@@ -100,29 +100,21 @@ async function openPanel(setup: { skills?: SkillCatalogEntry[] | "failed"; claim
     const runId = RUNS[created++]!;
     return jsonResponse({ ...createFixture, project_scope: scope, effect: { ...createFixture.effect, run_id: runId } }, 202);
   };
-  const host = document.createElement("div");
-  document.body.append(host);
-  let root: Root | undefined;
-  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const panelHost = openPanelHost();
+  const host = panelHost.host;
   const settle = async () => {
     for (let turn = 0; turn < 40; turn += 1) await act(async () => { await Promise.resolve(); });
   };
   const mount = async () => {
-    root = createRoot(host);
     await act(async () => {
-      root!.render(createElement(WritingAssistantPanel, {
+      panelHost.root.render(createElement(WritingAssistantPanel, {
         collapsed: false, scheduleRefresh: () => () => {},
         context: { scope, chapterId: CHAPTER, canSubmit: true, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto },
       }));
     });
     await settle();
   };
-  cleanup.push(async () => {
-    await act(async () => root?.unmount());
-    host.remove();
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
-  });
+  cleanup.push(() => panelHost.close());
   await mount();
   const field = () => host.querySelector("textarea")!;
   const panel = {
@@ -158,7 +150,7 @@ async function openPanel(setup: { skills?: SkillCatalogEntry[] | "failed"; claim
     },
     /** A reload keeps `sessionStorage` and starts a new page. */
     reload: async () => {
-      await act(async () => root?.unmount());
+      await panelHost.reload();
       await mount();
     },
     /** The outcome sentence and the Skill lines of each turn, each Skill list as its label and the number of

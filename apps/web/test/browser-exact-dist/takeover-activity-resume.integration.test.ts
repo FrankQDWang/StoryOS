@@ -3,7 +3,6 @@ import { afterEach, expect, it } from "vitest";
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { applyTrustedInput, assertPageProjectReceipts, updateClientSessionCookie }
   from "../support/browser-command-client.ts";
-import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import {
   focusManuscriptEnd,
   manuscriptBody,
@@ -11,22 +10,18 @@ import {
   manuscriptIsEditable,
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
+import {
+  appRoot,
+  applicationWindow,
+  closeApplicationFrame,
+  nextFrameLoad,
+  openApplicationFrame,
+  submitChapterForm,
+  submitProjectForm,
+  submitVolumeForm,
+} from "../support/exact-dist-frame.ts";
 
 const JOURNAL_DATABASE_PREFIX = "storyos-local-edit-journal:";
-
-let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist takeover activity page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
 
 async function unloadApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
   const unloaded = nextFrameLoad(frame);
@@ -35,36 +30,10 @@ async function unloadApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
 }
 
 afterEach(async () => {
-  if (applicationFrame?.isConnected === true) {
-    await unloadApplicationFrame(applicationFrame);
-    applicationFrame.remove();
-  }
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
-
-function applicationWindow(frame: HTMLIFrameElement): Window & typeof globalThis {
-  const result = frame.contentWindow;
-  if (result === null) throw new Error("the production page realm is unavailable");
-  return result as Window & typeof globalThis;
-}
-
-function appRoot(frame: HTMLIFrameElement): Element {
-  const root = frame.contentDocument?.querySelector("#app");
-  if (root === null || root === undefined) throw new Error("the production page root is missing");
-  return root;
-}
-
-async function submitForm(frame: HTMLIFrameElement, selector: string, value: string): Promise<void> {
-  const input = frame.contentDocument?.querySelector<HTMLInputElement>(selector);
-  const form = input?.form;
-  if (input === null || input === undefined || form === null || form === undefined) {
-    throw new Error(`the form of ${selector} is missing`);
-  }
-  input.value = value;
-  form.requestSubmit();
-}
 
 // The poll returns the failure facts, so a stuck editor shows its state in the diff.
 async function waitWritableAndSynchronized(frame: HTMLIFrameElement): Promise<void> {
@@ -106,22 +75,10 @@ async function deleteJournalDatabase(projectId: string): Promise<void> {
 it("synchronizes activity and keeps the editor writable after a takeover with no later command", {
   timeout: 120_000,
 }, async () => {
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = "StoryOS exact-dist takeover activity resume";
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName,
-  ).toBe("INPUT");
-  await submitForm(frame, '#app input[name="title"]', "Takeover activity resume");
-  await expect.poll(() => appRoot(frame).getAttribute("data-boot-state")).toBe("empty-project-ready");
-  await beginInlineVolumeCreation(frame.contentDocument);
-  await submitForm(frame, '#app form[data-create-volume] input[name="volume-title"]', "Volume A");
-  await beginInlineChapterCreation(frame.contentDocument);
-  await submitForm(frame, '#app form[data-create-chapter] input[name="chapter-title"]', "Chapter A");
+  const frame = await openApplicationFrame("StoryOS exact-dist takeover activity resume");
+  await submitProjectForm(frame, "Takeover activity resume");
+  await submitVolumeForm(frame, "Volume A");
+  await submitChapterForm(frame, "Chapter A");
   await expect.poll(() => appRoot(frame).getAttribute("data-boot-state")).toBe("project-ready");
   const chapterSelector = 'nav[aria-label="稿件目录"] button[data-chapter-id]';
   await expect.poll(() => appRoot(frame).querySelector(chapterSelector)?.getAttribute("data-chapter-id") ?? "")

@@ -11,7 +11,7 @@ import {
 } from "./historical-acknowledgement.ts";
 import { VolumeTreeActions } from "./volume-tree-actions.tsx";
 
-export function CreateVolumeForm({
+function CreateVolumeForm({
   projectId,
   treeRevision,
   baseUrl,

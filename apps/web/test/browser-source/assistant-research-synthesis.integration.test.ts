@@ -1,5 +1,4 @@
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
@@ -9,6 +8,7 @@ import treeFixture from "../../../../generated/golden-wire/storyos-public-releas
 import artifactFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-research-artifact.json";
 import { USE_RESEARCH_MESSAGE } from "../../src/assistant-run-outcome.ts";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
+import { openPanelHost, seedProseRequest } from "./assistant-panel-harness.ts";
 import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 
 const RUN = artifactFixture.artifact.lineage.run_id;
@@ -39,11 +39,11 @@ it.each([
   ["the synthesis of a continuation successor", recovered],
 ])("shows %s with numbered citations and a gap reason, and sends the ordinary request to use it", async (_, recovery) => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
-  sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
+  seedProseRequest({
     scope, message: "Check the tide tables of 1890.", chapterId: CHAPTER,
     correlationId: "018f0000-0000-7001-8000-000000000e92", idempotencyKey: "018f0000-0000-7001-8000-000000000e93",
     snapshotId: "018f0000-0000-7001-8000-000000000e94", runId: RUN, conversationId: CONVERSATION,
-  }));
+  });
   const created: Array<Record<string, unknown>> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
@@ -70,11 +70,8 @@ it.each([
     if (path.endsWith("/activity")) return new Response("", { status: 200, headers: { "content-type": "text/event-stream" } });
     throw new Error(`Unexpected request ${path}`);
   };
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
-  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const panel = openPanelHost();
+  const { host, root } = panel;
   const settle = async () => {
     for (let turn = 0; turn < 40; turn += 1) await act(async () => { await Promise.resolve(); });
   };
@@ -119,9 +116,6 @@ it.each([
       target: { kind: "current_chapter", chapter_id: CHAPTER },
     });
   } finally {
-    await act(async () => root.unmount());
-    host.remove();
-    sessionStorage.clear();
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
+    await panel.close();
   }
 });

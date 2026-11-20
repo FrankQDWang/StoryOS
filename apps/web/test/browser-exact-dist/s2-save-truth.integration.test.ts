@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation, selectTreeChapter } from "../support/inline-chapter-creation.ts";
+import { selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -10,49 +10,24 @@ import {
   manuscriptIsEditable,
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
-
-let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist save-truth page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
+import {
+  appRoot,
+  applicationWindow,
+  closeApplicationFrame,
+  nextFrameLoad,
+  openApplicationFrame,
+  openFirstChapterForm,
+  submitChapterForm,
+  submitProjectForm,
+  submitVolumeForm,
+  waitLastChapter,
+} from "../support/exact-dist-frame.ts";
 
 afterEach(async () => {
-  if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
-
-function applicationWindow(frame: HTMLIFrameElement): Window & typeof globalThis {
-  const result = frame.contentWindow;
-  if (result === null) throw new Error("the production page realm is unavailable");
-  return result as Window & typeof globalThis;
-}
-
-function appRoot(frame: HTMLIFrameElement): Element {
-  const root = frame.contentDocument?.querySelector("#app");
-  if (root === null || root === undefined) {
-    throw new Error("the production page root is missing");
-  }
-  return root;
-}
 
 function chapterButton(root: Element, title: string): HTMLButtonElement | undefined {
   return [...root.querySelectorAll<HTMLButtonElement>(
@@ -64,7 +39,7 @@ function saveNode(root: Element): Element | null {
   return root.querySelector("[data-save-state]");
 }
 
-async function waitSaved(root: Element): Promise<void> {
+async function waitSaveState(root: Element): Promise<void> {
   await expect.poll(() => {
     const node = saveNode(root);
     return node?.getAttribute("data-save-state") === "saved"
@@ -75,61 +50,13 @@ async function waitSaved(root: Element): Promise<void> {
 }
 
 it("shows pending, saving, and saved without calling local input saved, across Chapters", async () => {
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = "StoryOS exact-dist save truth";
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName
-  ).toBe("INPUT");
-  const title = frame.contentDocument?.querySelector<HTMLInputElement>('#app input[name="title"]');
-  const form = title?.form;
-  if (title === null || title === undefined || form === null || form === undefined) {
-    throw new Error("the protected-ready form is missing");
-  }
-  title.value = "Save Truth Novel";
-  form.requestSubmit();
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
-  ).toBe("empty-project-ready");
-  await beginInlineVolumeCreation(frame.contentDocument);
-  const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
-    '#app form[data-create-volume] input[name="volume-title"]',
-  );
-  const volumeForm = volumeTitle?.form;
-  if (volumeTitle === null || volumeTitle === undefined
-    || volumeForm === null || volumeForm === undefined) {
-    throw new Error("the Create Volume form is missing");
-  }
-  volumeTitle.value = "Volume A";
-  volumeForm.requestSubmit();
-  await beginInlineChapterCreation(frame.contentDocument);
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
-  ).toBe(true);
+  const frame = await openApplicationFrame("StoryOS exact-dist save truth");
+  await submitProjectForm(frame, "Save Truth Novel");
+  await submitVolumeForm(frame, "Volume A");
+  await openFirstChapterForm(frame);
   for (const name of ["Chapter A", "Chapter B"] as const) {
-    await beginInlineChapterCreation(frame.contentDocument);
-    const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
-      '#app form[data-create-chapter] input[name="chapter-title"]',
-    );
-    const chapterForm = chapterTitle?.form;
-    if (chapterTitle === null || chapterTitle === undefined
-      || chapterForm === null || chapterForm === undefined) {
-      throw new Error("the Create Chapter form is missing");
-    }
-    chapterTitle.value = name;
-    chapterForm.requestSubmit();
-    await expect.poll(() => {
-      const root = frame.contentDocument?.querySelector("#app");
-      const titles = [...(root?.querySelectorAll(
-        'nav[aria-label="稿件目录"] button[data-chapter-id]',
-      ) ?? [])].map((button) => button.textContent);
-      return root?.getAttribute("data-boot-state") === "project-ready"
-        && titles[titles.length - 1] === name;
-    }).toBe(true);
+    await submitChapterForm(frame, name);
+    await waitLastChapter(frame, name);
   }
 
   const root = appRoot(frame);
@@ -152,7 +79,7 @@ it("shows pending, saving, and saved without calling local input saved, across C
   }, { timeout: 10_000 }).toBe("Alpha prose");
   expect(seenWhileLocal.includes("saved")).toBe(false);
   expect(seenWhileLocal.some((state) => state === "pending" || state === "saving")).toBe(true);
-  await waitSaved(root);
+  await waitSaveState(root);
   expect(saveNode(root)?.textContent).toContain("已保存");
 
   const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
@@ -181,7 +108,7 @@ it("shows pending, saving, and saved without calling local input saved, across C
   focusManuscriptEnd(switchedEditor, applicationWindow(frame));
   await applyTrustedInput({ operation: "insert_text", text: "Beta prose" });
   await expect.poll(() => manuscriptBody(switchedEditor), { timeout: 10_000 }).toBe("Beta prose");
-  await waitSaved(switchedRoot);
+  await waitSaveState(switchedRoot);
 
   await selectTreeChapter(switchedRoot, chapterAId);
   await expect.poll(() => {
@@ -214,5 +141,5 @@ it("shows pending, saving, and saved without calling local input saved, across C
   expect(reopenedRoot.querySelector("h2")?.textContent).toBe("Chapter A");
   expect(manuscriptBody(manuscriptEditor(reopenedRoot, applicationWindow(frame))))
     .toBe("Alpha prose");
-  await waitSaved(reopenedRoot);
+  await waitSaveState(reopenedRoot);
 });

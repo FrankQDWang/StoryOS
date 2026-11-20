@@ -8,11 +8,11 @@ export const SELECTION_REFERENCE_LIMIT = 8;
 
 export type ChapterTextReference = Extract<SelectionReference, { kind: "chapter_text" }>;
 export type CandidateTextReference = Extract<SelectionReference, { kind: "proposal_candidate_text" }>;
-export type EditorRange = { from: number; to: number };
+type EditorRange = { from: number; to: number };
 /** The Chapter block of a candidate. */
 export type CandidateTarget = { blockId: string };
 /** One reference of a selection. A candidate reference also has the target of its candidate. */
-export type SelectedReference = { reference: SelectionReference; candidate?: CandidateTarget };
+type SelectedReference = { reference: SelectionReference; candidate?: CandidateTarget };
 /** The part of the manuscript tree that a label reads: the Chapters of each Volume in reading order. */
 export type ChapterOrder = { volumes: readonly { chapters: readonly { chapter_id: string; title: string }[] }[] };
 type TextPoint = ChapterTextReference["start"];
@@ -192,11 +192,6 @@ export function mergeReferences(existing: readonly SelectionReference[],
     }
   }
   return merged;
-}
-
-/** True when the AgentRun or the message can hold one more reference. */
-export function canAddReference(references: readonly SelectionReference[]): boolean {
-  return references.length < SELECTION_REFERENCE_LIMIT;
 }
 
 /**

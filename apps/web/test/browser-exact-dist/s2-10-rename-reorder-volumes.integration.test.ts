@@ -2,39 +2,11 @@ import { beginInlineVolumeCreation, beginTreeAction } from "../support/inline-ch
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
-
-let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist update-volume page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
-
-async function loadApplication(title: string): Promise<HTMLIFrameElement> {
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = title;
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
-  return frame;
-}
+import {
+  closeApplicationFrame,
+  destroyApplicationFrame,
+  openApplicationFrame,
+} from "../support/exact-dist-frame.ts";
 
 function volumeTitles(root: Element | null | undefined): string[] {
   return [...(root?.querySelectorAll('nav[aria-label="稿件目录"] [data-volume-title]') ?? [])]
@@ -56,14 +28,13 @@ async function createNamedVolume(root: Document, title: string): Promise<void> {
 }
 
 afterEach(async () => {
-  if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
 
 it("the author renames and reorders Volumes from the canonical tree and they survive reopen", async () => {
-  const created = await loadApplication("StoryOS exact-dist create for volume update");
+  const created = await openApplicationFrame("StoryOS exact-dist create for volume update");
   await expect.poll(() =>
     created.contentDocument?.querySelector('#app input[name="title"]')?.tagName
   ).toBe("INPUT");
@@ -113,7 +84,7 @@ it("the author renames and reorders Volumes from the canonical tree and they sur
   ]);
   await destroyApplicationFrame(created);
 
-  const reopened = await loadApplication("StoryOS exact-dist renamed Volume library");
+  const reopened = await openApplicationFrame("StoryOS exact-dist renamed Volume library");
   await expect.poll(() =>
     [...(reopened.contentDocument?.querySelectorAll('#app button[data-open="empty"]') ?? [])]
       .some((button) => button.textContent === "Volume Update Novel")
@@ -142,7 +113,7 @@ it("the author renames and reorders Volumes from the canonical tree and they sur
   await expect.poll(() => volumeTitles(libraryRoot)).toEqual(["Volume B", "Volume C"]);
   await destroyApplicationFrame(reopened);
 
-  const ordered = await loadApplication("StoryOS exact-dist reordered Volume library");
+  const ordered = await openApplicationFrame("StoryOS exact-dist reordered Volume library");
   await expect.poll(() =>
     [...(ordered.contentDocument?.querySelectorAll('#app button[data-open="empty"]') ?? [])]
       .some((button) => button.textContent === "Volume Update Novel")

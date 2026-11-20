@@ -8,7 +8,7 @@ import type {
 const PROJECT_PATH =
   /^\/projects\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/settings)?\/?$/i;
 
-export interface LoadedStoryOSWebState {
+interface LoadedStoryOSWebState {
   root: HTMLElement;
   state: ControlledProjectState;
   baseUrl: string;

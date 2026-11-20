@@ -13,7 +13,7 @@ import { challengeRefused } from "./refused-command.ts";
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
 /** The outcome of one delete, as the Memory section shows it. */
-export type MemoryDeleteOutcome = "deleted" | "changed" | "failed";
+type MemoryDeleteOutcome = "deleted" | "changed" | "failed";
 
 /**
  * One delete intent of an entry at a version. A delete that has no known outcome keeps its flight. The next confirm
