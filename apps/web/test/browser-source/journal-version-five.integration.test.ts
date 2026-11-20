@@ -12,6 +12,7 @@ import { submitOnePendingAuthorEdit } from "../../src/author-edit-submission.ts"
 import { appendAuthorEdit, openEditorWorkspace } from "../../src/editor-session.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
 import { LocalUnsentTextPanel, localUnsentTextFile } from "../../src/local-unsent-text-panel.tsx";
+import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
 import { readJournalSnapshot, rebuildPendingProjection } from "../../src/local-edit-journal.ts";
 import { retainLocalRecovery } from "../../src/local-edit-recovery.ts";
 import { FIRST_APPEND_EDIT, openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
@@ -34,7 +35,6 @@ import {
   requireEditorReady,
   trackDatabase,
 } from "./scenario.ts";
-import { uuidV7 } from "../../src/client-identity.ts";
 
 const VOLUME = "018f0000-0000-7001-8000-000000000816";
 const PROPOSAL = "018f0000-0000-7001-8000-000000000c01";
@@ -346,7 +346,7 @@ it("fails closed for a record that follows a group that the Journal does not hav
     const intents = test.workspace.database.transaction("intents", "readwrite").objectStore("intents");
     const [record] = await requestResult(intents.getAll());
     await requestResult(intents.put({ ...record,
-      follows_submission_group: { journal_submission_group_id: uuidV7() } }));
+      follows_submission_group: { journal_submission_group_id: createJournalUuid() } }));
     await expect(rebuildPendingProjection(test.workspace)).rejects.toThrow("Local Edit Journal is corrupt");
     await expect(test.reopen()).rejects.toThrow("workspace unavailable: local_journal_unavailable");
   } finally { await test.close(); }
