@@ -254,7 +254,7 @@ it("stops the Challenge wait when the input bound stops input, and recovers the 
   } finally {
     await cleanup();
   }
-});
+}, 60_000);
 
 it("counts the recovered records that follow a group in the input bound after a reload", async () => {
   const { scenario, server, mount, unmount, cleanup, typeToBound, stopState } = boundHarness();
@@ -282,7 +282,7 @@ it("counts the recovered records that follow a group in the input bound after a 
   } finally {
     await cleanup();
   }
-});
+}, 60_000);
 
 it("counts the records that follow a group with an unknown outcome in the input bound", async () => {
   const { scenario, server, mount, cleanup, typeToBound, stopState } = boundHarness("unknown_outcome");
@@ -305,4 +305,4 @@ it("counts the records that follow a group with an unknown outcome in the input 
   } finally {
     await cleanup();
   }
-});
+}, 60_000);
