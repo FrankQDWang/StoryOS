@@ -230,11 +230,10 @@ pub(crate) async fn rows(admin: &Client, scope: &ProjectScope) -> Vec<String> {
         .collect()
 }
 
-/// Indexes the Chapter through the Worker path with the fake embedding destination: a mark of the
-/// Chapter and the end of its quiet time, the work of each other Project waits, and each claim
-/// steps until a step does not write.
-pub(crate) async fn index(store: &PostgresProjectReader, admin: &Client, chapter: &Chapter) {
-    let store = store.clone().with_embedding_registration(FAKE);
+/// Marks the Chapter for the deployment with the fake Embedding Registration, ends its quiet time,
+/// and moves the work of each other Project one day later. `admin` is the separate admin
+/// connection of `stores`, and not a pooled client.
+async fn mark(admin: &Client, chapter: &Chapter) {
     admin.batch_execute("BEGIN").await.unwrap();
     deploy(admin).await;
     let changed = [chapter.chapter_id.as_str()];
@@ -244,6 +243,14 @@ pub(crate) async fn index(store: &PostgresProjectReader, admin: &Client, chapter
     admin.batch_execute("COMMIT").await.unwrap();
     wake(admin, &chapter.scope).await;
     park_other_work(admin, &chapter.scope).await;
+}
+
+/// Indexes the Chapter through the Worker path with the fake embedding destination: a mark of the
+/// Chapter and the end of its quiet time, the work of each other Project waits, and each claim
+/// steps until a step does not write.
+pub(crate) async fn index(store: &PostgresProjectReader, admin: &Client, chapter: &Chapter) {
+    let store = store.clone().with_embedding_registration(FAKE);
+    mark(admin, chapter).await;
     while let Some(claim) = claim_next_passage_index_work(&store, FAKE_ONLY)
         .await
         .unwrap()
@@ -408,4 +415,46 @@ async fn the_vector_store_is_available_exactly_when_the_database_offers_the_exte
         .get(/*idx*/ 0);
 
     assert_eq!(vector_table_visible(&store, &scope).await, offered);
+}
+
+/// ADR 0095 section 4: the Worker path follows the vector store of the database. With the vector
+/// table, the mark of a Chapter gives work that a claim takes, and its steps write one row for
+/// each passage. Without it, the mark gives no work, a claim takes nothing, and no Embedding
+/// Attempt starts.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_passage_index_work_follows_the_vector_store_of_the_database() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let chapter = chapter(&store, &admin, ["281", "282"], "283", &texts()).await;
+    let available = vector_table_visible(&store, &chapter.scope).await;
+    let configured = store.clone().with_embedding_registration(FAKE);
+    mark(&admin, &chapter).await;
+
+    let claim = claim_next_passage_index_work(&configured, FAKE_ONLY)
+        .await
+        .unwrap();
+    let claimed = claim.is_some();
+    let indexed = match claim {
+        Some(claim) => {
+            while step_passage_index_work(&configured, &FakeEmbeddings, FAKE_ONLY, &claim)
+                .await
+                .unwrap()
+                == PassageIndexStep::Written
+            {}
+            rows(&admin, &chapter.scope).await
+        }
+        None => Vec::new(),
+    };
+    let expected = match available {
+        true => digests(&texts()),
+        false => Vec::new(),
+    };
+
+    assert_eq!(
+        (claimed, indexed, attempts(&admin, &chapter.scope).await > 0),
+        (available, expected, available)
+    );
 }

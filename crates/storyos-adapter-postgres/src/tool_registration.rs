@@ -1,5 +1,5 @@
 //! The global Tool Registration rows (ADR 0083). The Tool Gateway quarantines a revision on Tool
-//! Contract Drift (`agent_run_tool_authority.rs`).
+//! Contract Drift (`agent_run_tool_authority.rs`) with `quarantine_revision`.
 
 use serde_json::json;
 use storyos_core::ToolRegistration;
@@ -60,6 +60,25 @@ pub(crate) async fn insert_registration_rows(
             .await?;
     }
     Ok(())
+}
+
+/// Moves an active revision to quarantined with the stored form of its Tool Contract Drift
+/// differences. A revision that is already unavailable, or an unknown revision, does not change.
+/// The result is the number of changed rows: 1 or 0.
+pub(crate) async fn quarantine_revision(
+    client: &tokio_postgres::Client,
+    revision: &str,
+    differences: &serde_json::Value,
+) -> Result<u64, tokio_postgres::Error> {
+    client
+        .execute(
+            "UPDATE storyos.tool_registration_revisions
+                SET lifecycle = 'quarantined', quarantine_differences = $2::text::jsonb,
+                    quarantined_at = clock_timestamp()
+              WHERE tool_registration_revision = $1::text::uuid AND lifecycle = 'active'",
+            &[&revision, &differences.to_string()],
+        )
+        .await
 }
 
 /// Inserts the global row of a Host Tool Registration, if it is absent. It has no server and no
