@@ -14,6 +14,7 @@ import type { CreateEditorSessionResponse, DigestValue, GetProposalResponse,
 import { BINDING, PROSE, USER_A, admitProse, admitRun, attempt, challenged, drainLeftoverWork, id, inspectRun, issueChallenge, postRun,
   prepare, produced, rewriteChapter, runRequest, runWorker, selected, settleOnce, settleRun } from "./acceptance.ts";
 import { zipStoreFiles } from "./archive.ts";
+import { SECURITY_POLICY_REVISION } from "../../src/client-identity.ts";
 import { createEmptyProject, queryStoryOSPostgres, requireStoryOSProtocolError, sessionFetch, startStoryOSServer,
   stopStoryOSServer, withChallengeBudget } from "./node-integration.ts";
 import type { StoryOSServer } from "./node-integration.ts";
@@ -590,7 +591,7 @@ export async function openEditorSession(baseUrl: string, correlationId: string,
   const request = {
     command_schema: "storyos.command.create-editor-session.request.v1",
     client_contract_revision: "storyos.web-client.release-1.v3",
-    security_policy_revision: "storyos.web-security-policy.release-1.v1",
+    security_policy_revision: SECURITY_POLICY_REVISION,
     correlation_id: correlationId,
   };
   const digest = await client.digestCreateEditorSession(request);

@@ -7,7 +7,8 @@ import { openEditorWorkspace, appendAuthorEdit, submitOnePendingAuthorEdit }
   from "../../src/editor-session.ts";
 import { collectEligibleJournalPayload } from "../../src/journal-payload-collection.ts";
 import type { JournalIntentRecord, JournalSnapshot, JournalSubmissionGroup } from "../../src/editor-types.ts";
-import { createJournalUuid, readJournalSnapshot, rebuildPendingProjection }
+import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
+import { readJournalSnapshot, rebuildPendingProjection }
   from "../../src/local-edit-journal.ts";
 import {
   OWNER, PROJECT, SESSION, chapterRevision, createAppliedAuthorEditResponse,

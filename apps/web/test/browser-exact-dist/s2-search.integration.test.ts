@@ -5,6 +5,7 @@ import { updateClientSessionCookie } from "../support/browser-command-client.ts"
 import { manuscriptIsEditable, MANUSCRIPT_EDITOR_SELECTOR } from "../support/manuscript-surface.ts";
 import {
   appRoot,
+  chapterButton,
   closeApplicationFrame,
   openApplicationFrame,
   openFirstChapterForm,
@@ -24,12 +25,6 @@ afterEach(async () => {
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
-
-function chapterButton(root: Element, title: string): HTMLButtonElement | undefined {
-  return [...root.querySelectorAll<HTMLButtonElement>(
-    'nav[aria-label="稿件目录"] button[data-chapter-id]',
-  )].find((button) => button.textContent === title);
-}
 
 async function search(
   frame: HTMLIFrameElement,

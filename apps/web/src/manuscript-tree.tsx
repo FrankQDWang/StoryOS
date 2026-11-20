@@ -1,7 +1,6 @@
 import { Fragment, useRef, useState } from "react";
 
 import type { GetManuscriptTreeResponse, CreateChapterPlacement } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { ChapterTreeActions } from "./chapter-tree-actions.tsx";
 import { InlineCreateChapter } from "./inline-create-chapter.tsx";
 import { ChapterCreationMenu } from "./chapter-creation-menu.tsx";
 import { createOwnedVolume } from "./create-volume.ts";
@@ -9,7 +8,7 @@ import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
   historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
-import { VolumeTreeActions } from "./volume-tree-actions.tsx";
+import { TreeItemActions } from "./tree-item-actions.tsx";
 
 function CreateVolumeForm({
   projectId,
@@ -155,12 +154,13 @@ export function ManuscriptTree({
               >
                 {expanded ? "▾" : "▸"}
               </button>
-              <VolumeTreeActions
+              <TreeItemActions
+                  kind="volume"
                   projectId={projectId}
-                  volumeId={volume.volume_id}
+                  itemId={volume.volume_id}
                   title={volume.title}
                   order={volume.order}
-                  volumeCount={volumeCount}
+                  itemCount={volumeCount}
                   expectedTreeRevision={tree.tree_revision}
                   baseUrl={baseUrl}
                   fetchImpl={fetchImpl}
@@ -168,7 +168,7 @@ export function ManuscriptTree({
                   onUpdated={onVolumeUpdated}
                   creationActions={<button type="button" data-chapter-placement="append"
                     onClick={() => begin(volume.volume_id)}>创建章</button>}
-                  onRemoveVolume={onRemoveVolume}
+                  onRemove={onRemoveVolume}
                 />
               </div>
               <ul>
@@ -176,17 +176,18 @@ export function ManuscriptTree({
                   <Fragment key={chapter.chapter_id}>
                   {creation?.volumeId === volume.volume_id && creation.placement?.kind === "before"
                     && creation.placement.chapter_id === chapter.chapter_id ? renderCreation() : null}
-                  <ChapterTreeActions
+                  <TreeItemActions
+                    kind="chapter"
                     key={chapter.chapter_id}
                     projectId={projectId}
-                    chapterId={chapter.chapter_id}
+                    itemId={chapter.chapter_id}
                     title={chapter.title}
                     order={chapter.order}
-                    chapterCount={volume.chapters.length}
+                    itemCount={volume.chapters.length}
                     expectedTreeRevision={tree.tree_revision}
                     selectedChapterId={selectedChapterId}
                     onSelectChapter={onSelectChapter}
-                    onRemoveChapter={onRemoveChapter}
+                    onRemove={onRemoveChapter}
                     baseUrl={baseUrl}
                     fetchImpl={fetchImpl}
                     cryptoImpl={cryptoImpl}

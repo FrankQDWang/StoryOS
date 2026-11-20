@@ -31,6 +31,8 @@ import {
   stageProjectActivitySnapshot,
   validatedCanonicalSnapshot,
 } from "./project-activity-ingest.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
+import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
 export {
   freezeOneIntentSubmission,
@@ -39,38 +41,12 @@ export {
 export { appendAuthorEdit, rebuildPendingProjection, reconfirmLegacyReplaceSelection }
   from "./local-edit-journal.ts";
 
-const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const boundedU64 = (value: unknown): value is string => typeof value === "string" && U64.test(value)
   && BigInt(value) <= 18446744073709551615n;
 const positiveU64 = (value: unknown): value is string => boundedU64(value) && BigInt(value) > 0n
   && BigInt(value) <= 18446744073709551615n;
-
-const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-});
-const transactionResult = (transaction: IDBTransaction): Promise<void> => new Promise(
-  (resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction aborted"),
-    );
-    transaction.onerror = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction failed"),
-    );
-  },
-);
-
-function uuidV7(cryptoImpl: Crypto = globalThis.crypto, now = Date.now()): string {
-  const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
-  for (let offset = 5; offset >= 0; offset -= 1) { bytes[offset] = now & 0xff; now = Math.floor(now / 256); }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 async function openJournalDatabase(
   indexedDBImpl: IDBFactory | undefined,

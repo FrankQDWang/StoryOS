@@ -54,6 +54,7 @@ import {
   requireRequestBody,
   requireString,
 } from "./scenario.ts";
+import { transactionResult } from "../../src/indexed-db-request.ts";
 
 type ZeroAuthorityResult = Exclude<DomainReceiptResult, "authoritative_applied" | "proposal_revised">;
 
@@ -203,18 +204,6 @@ it("keeps incompatible pending ReplaceSelection inspectable until Block reconfir
     await test.close();
   }
 });
-
-function transactionResult(transaction: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction aborted"),
-    );
-    transaction.onerror = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction failed"),
-    );
-  });
-}
 
 function groupAt(groups: JournalSubmissionGroup[], index: number): JournalSubmissionGroup {
   const group = groups[index];

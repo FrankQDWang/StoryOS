@@ -12,7 +12,8 @@ import { submitOnePendingAuthorEdit } from "../../src/author-edit-submission.ts"
 import { appendAuthorEdit, openEditorWorkspace } from "../../src/editor-session.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
 import { LocalUnsentTextPanel, localUnsentTextFile } from "../../src/local-unsent-text-panel.tsx";
-import { createJournalUuid, readJournalSnapshot, rebuildPendingProjection } from "../../src/local-edit-journal.ts";
+import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
+import { readJournalSnapshot, rebuildPendingProjection } from "../../src/local-edit-journal.ts";
 import { retainLocalRecovery } from "../../src/local-edit-recovery.ts";
 import { FIRST_APPEND_EDIT, openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
 import { restoreJournalVersion } from "./journal-version-fixture.ts";

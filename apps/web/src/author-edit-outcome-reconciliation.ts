@@ -12,12 +12,14 @@ import type {
   SubmissionSettlement,
   TransportCapsule,
 } from "./editor-types.ts";
-import { createJournalUuid, JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
+import { JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
 import {
   beginOutcomeQueryAttempt,
   completeOutcomeQueryUnavailable,
   readAvailableCommandProof,
 } from "./protected-transport-capsule.ts";
+import { uuidV7 } from "./client-identity.ts";
+import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -66,22 +68,6 @@ interface SettleFromCommandResponseOptions {
   cryptoImpl: Crypto;
   durableQuery: DurableOutcomeQuery;
 }
-
-const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-});
-const transactionResult = (transaction: IDBTransaction): Promise<void> => new Promise(
-  (resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction aborted"),
-    );
-    transaction.onerror = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction failed"),
-    );
-  },
-);
 
 function groupEvidenceRank(group: GroupEvidenceView | undefined): number {
   const settlement = group?.settlement?.kind;
@@ -251,7 +237,7 @@ export async function commitOutcomeQueryWithGroup(
     activeBase?: EditorBaseSnapshot;
   },
 ): Promise<JournalSubmissionGroup> {
-  const observationId = createJournalUuid(workspace.cryptoImpl);
+  const observationId = uuidV7(workspace.cryptoImpl);
   const digest = new Uint8Array(await workspace.cryptoImpl.subtle.digest(
     "SHA-256", new TextEncoder().encode(captured),
   ));

@@ -1,22 +1,8 @@
-import {
-  createProjectCommandChallenge,
-  createVolume,
-  digestCreateVolume,
-} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { createVolume, digestCreateVolume } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateVolumeResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
-import { challengeRefused, forgetFlight, forgettingRefusedFlight } from "./refused-command.ts";
+import { type CommandFlight, sendOwnedCommand } from "./owned-command.ts";
 
-const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
-
-type InFlightCreateVolume = {
-  idempotencyKey: string;
-  correlationId: string;
-  nonce?: string;
-};
-
-const inFlightCreates = new Map<string, InFlightCreateVolume>();
+const inFlightCreates = new Map<string, CommandFlight>();
 
 function createVolumeIdentity(options: {
   projectId: string;
@@ -24,18 +10,6 @@ function createVolumeIdentity(options: {
   expectedTreeRevision: string;
 }): string {
   return `${options.projectId}\n${options.expectedTreeRevision}\n${options.title}`;
-}
-
-function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
-  const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
-  for (let offset = 5; offset >= 0; offset -= 1) {
-    bytes[offset] = now & 0xff;
-    now = Math.floor(now / 256);
-  }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export async function createOwnedVolume(options: {
@@ -46,78 +20,22 @@ export async function createOwnedVolume(options: {
   title: string;
   expectedTreeRevision: string;
 }): Promise<CreateVolumeResponse> {
-  const identity = createVolumeIdentity(options);
-  let flight = inFlightCreates.get(identity);
-  if (flight === undefined) {
-    flight = {
-      idempotencyKey: uuidV7(options.cryptoImpl),
-      correlationId: uuidV7(options.cryptoImpl),
-    };
-    inFlightCreates.set(identity, flight);
-  }
-  const send = () => forgettingRefusedFlight(inFlightCreates, identity, flight, () =>
-    submitCreateVolume(options, flight));
-  try {
-    const created = await send();
-    forgetFlight(inFlightCreates, identity, flight);
-    return created;
-  } catch (error) {
-    if (historicalAcknowledgementUnavailable(error) || challengeRefused(error)) {
-      throw error;
-    }
-    const created = await send();
-    forgetFlight(inFlightCreates, identity, flight);
-    return created;
-  }
-}
-
-async function submitCreateVolume(
-  options: {
-    baseUrl: string;
-    fetchImpl: typeof fetch;
-    cryptoImpl: Crypto;
-    projectId: string;
-    title: string;
-    expectedTreeRevision: string;
-  },
-  flight: InFlightCreateVolume,
-): Promise<CreateVolumeResponse> {
-  const request = {
-    command_schema: "storyos.command.create-volume.request.v1",
-    create_volume_input: {
-      title: options.title,
-      expected_tree_revision: options.expectedTreeRevision,
-      client_contract_revision:
-        RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-      security_policy_revision: SECURITY_POLICY_REVISION,
-      correlation_id: flight.correlationId,
-    },
-  };
-  if (flight.nonce === undefined) {
-    const challenge = await createProjectCommandChallenge({
-      baseUrl: options.baseUrl,
-      projectId: options.projectId,
-      fetchImpl: options.fetchImpl,
-      request: {
-        method: "POST",
-        route_template: "/api/v1/projects/{project_id}/volumes",
-        command_schema: request.command_schema,
-        canonical_command_digest: await digestCreateVolume(request, options.cryptoImpl),
-        idempotency_key: flight.idempotencyKey,
+  return sendOwnedCommand({
+    ...options,
+    flights: inFlightCreates,
+    identity: createVolumeIdentity(options),
+    method: "POST",
+    routeTemplate: "/api/v1/projects/{project_id}/volumes",
+    name: "Create Volume",
+    request: (envelope) => ({
+      command_schema: "storyos.command.create-volume.request.v1",
+      create_volume_input: {
+        title: options.title,
+        expected_tree_revision: options.expectedTreeRevision,
+        ...envelope,
       },
-    });
-    flight.nonce = challenge.nonce;
-  }
-  const nonce = flight.nonce;
-  if (nonce === undefined) {
-    throw new Error("the Create Volume challenge nonce is missing");
-  }
-  return createVolume({
-    baseUrl: options.baseUrl,
-    projectId: options.projectId,
-    fetchImpl: options.fetchImpl,
-    idempotencyKey: flight.idempotencyKey,
-    antiForgery: nonce,
-    request,
+    }),
+    digest: digestCreateVolume,
+    send: createVolume,
   });
 }

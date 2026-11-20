@@ -19,6 +19,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
+import { SECURITY_POLICY_REVISION } from "../../src/client-identity.ts";
 
 const UNKNOWN_SNAPSHOT = "018f0000-0000-7001-8000-000000000250";
 const PROJECT_B = "018f0000-0000-7001-8000-000000000102";
@@ -54,7 +55,7 @@ async function ensureCurrentWriter(baseUrl: string): Promise<GetEditorSessionRes
   const request = {
     command_schema: "storyos.command.create-editor-session.request.v1",
     client_contract_revision: "storyos.web-client.release-1.v3",
-    security_policy_revision: "storyos.web-security-policy.release-1.v1",
+    security_policy_revision: SECURITY_POLICY_REVISION,
     correlation_id: "018f0000-0000-7001-8000-000000000201",
   };
   const digest = await digestCreateEditorSession(request);
@@ -216,7 +217,7 @@ test("Editor Sessions capture nonzero Activity and preserve legacy Snapshot evid
     const request = {
       command_schema: "storyos.command.create-editor-session.request.v1",
       client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: project.key(),
     };
     const openSession = async () => {

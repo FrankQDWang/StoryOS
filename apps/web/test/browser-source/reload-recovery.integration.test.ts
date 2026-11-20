@@ -45,6 +45,7 @@ import {
   requireString,
   trackDatabase,
 } from "./scenario.ts";
+import { transactionResult } from "../../src/indexed-db-request.ts";
 
 type OutcomeMode = "challenge" | "committed" | "rejected" | "unavailable";
 
@@ -53,18 +54,6 @@ const EXPIRES = "2026-08-13T08:05:00.000Z";
 const NONCE = "a".repeat(64);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-
-function transactionResult(transaction: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction aborted"),
-    );
-    transaction.onerror = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction failed"),
-    );
-  });
-}
 
 it("recovers ApplyAuthorEdit from a persisted capsule after reload without a second POST", async () => {
   const scenario = createBrowserScenario();
