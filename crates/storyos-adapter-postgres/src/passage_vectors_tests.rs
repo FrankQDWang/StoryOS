@@ -333,18 +333,51 @@ async fn a_read_in_one_project_scope_gets_only_its_rows_and_cannot_name_another_
         }
     };
 
-    // The read of the own Project Scope that names the Chapter of the other Project.
-    let facts = store
-        .read_passage_index_facts(&own.scope, &other.chapter_id)
+    // The read of the own Project Scope names its own Chapter, and then the Chapter of the other
+    // Project.
+    let read = async |chapter_id: &str| {
+        let facts = store
+            .read_passage_index_facts(&own.scope, chapter_id)
+            .await
+            .unwrap();
+        (facts.chapter.is_some(), facts.stored.len())
+    };
+    let own_facts = read(&own.chapter_id).await;
+    let crossed_facts = read(&other.chapter_id).await;
+    // The other Project holds its work: a later mark and a live lease of its claim.
+    let held = admin
+        .query_one(
+            "UPDATE storyos.passage_index_work
+                SET mark_generation = mark_generation + 1,
+                    lease_expires_at = clock_timestamp() + interval '1 hour'
+              WHERE project_id = $1::text::uuid AND chapter_id = $2::text::uuid
+          RETURNING mark_generation, fence_token",
+            &[&other.scope.project_id.as_ref(), &other.chapter_id],
+        )
         .await
         .unwrap();
-    // A claim of the own Project Scope that names the Chapter of the other Project.
+    let other_work = async || -> (i64, i64, Option<String>, Option<String>) {
+        let row = admin
+            .query_one(
+                "SELECT mark_generation, completed_generation, lease_expires_at::text,
+                        indexed_cut_revision
+                   FROM storyos.passage_index_work
+                  WHERE project_id = $1::text::uuid AND chapter_id = $2::text::uuid",
+                &[&other.scope.project_id.as_ref(), &other.chapter_id],
+            )
+            .await
+            .unwrap();
+        (row.get(0), row.get(1), row.get(2), row.get(3))
+    };
+    let held_work = other_work().await;
+    // A claim of the own Project Scope with the Chapter, the mark generation, and the fence token
+    // of the live claim of the other Project.
     let crossed = ClaimedPassageIndex {
         project_scope: own.scope.clone(),
         chapter_id: other.chapter_id.clone(),
         embedding_registration_revision: HOST_FAKE_EMBEDDING_REGISTRATION.revision.to_owned(),
-        mark_generation: 1,
-        fence_token: 1,
+        mark_generation: held.get(/*idx*/ 0),
+        fence_token: held.get(/*idx*/ 1),
         lease: PASSAGE_INDEX_LEASE,
     };
     let configured = store.clone().with_embedding_registration(FAKE);
@@ -352,8 +385,9 @@ async fn a_read_in_one_project_scope_gets_only_its_rows_and_cannot_name_another_
         .await
         .unwrap();
 
-    assert_eq!((facts.chapter.is_none(), facts.stored.len()), (true, 0));
+    assert_eq!((own_facts, crossed_facts), ((true, 3), (false, 0)));
     assert_eq!(crossed, PassageIndexStep::StaleFence);
+    assert_eq!(other_work().await, held_work);
     assert_eq!(
         (
             rows(&admin, &other.scope).await,
