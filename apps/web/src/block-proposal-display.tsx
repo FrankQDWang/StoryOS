@@ -16,7 +16,6 @@ import { acceptanceJournalProposals, acceptanceSessionBlocked, hasPendingDisplay
   knownProblemDisplayedAcceptance, latestDisplayedDecisionIsAcceptance, reconcileDisplayedAcceptance,
   settledDisplayedAcceptance } from "./acceptance-journal.ts";
 import { proposalConditionKind } from "./proposal-recovery-surface.ts";
-import { dropStoredReplans } from "./stored-replan-records.ts";
 import { authorWithdrawControlReady, dispatchDisplayedWithdraw, dispatchDisplayedWithdrawRetry,
   pendingWithdrawIds } from "./withdraw-block-proposal.ts";
 import { ProposalDecisionStatus, type AcceptanceRefusalStatus } from "./proposal-decision-status.tsx";
@@ -153,7 +152,7 @@ export function BlockProposalDisplay({
     if (workspace === undefined) return () => { active = false; };
     const generation = decisionGeneration;
     void Promise.all([acceptanceJournalProposals(workspace), rejectionJournalState(workspace),
-      pendingWithdrawIds(workspace), dropStoredReplans(workspace)])
+      pendingWithdrawIds(workspace)])
       .then(([acceptance, rejection, withdrawals]) => {
       if (!active) return;
       setRecoveredProposalIds([...new Set([...acceptance.proposalIds, ...rejection.proposalIds])]);

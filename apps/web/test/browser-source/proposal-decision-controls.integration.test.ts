@@ -9,7 +9,7 @@ import type { EditorReadyState } from "../../src/editor-types.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
 import { candidateFor, proposalTransport, renderTab, withActEnvironment, type Proposal }
   from "./proposal-display-harness.ts";
-import { jsonResponse, requestResult, withOpenProposalList, type OpenProposalListAnswer } from "./scenario.ts";
+import { jsonResponse, withOpenProposalList, type OpenProposalListAnswer } from "./scenario.ts";
 import proposalFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-proposal.json";
 
 const EARLIER_BASE = "018f0000-0000-7001-8000-000000000e01";
@@ -280,35 +280,6 @@ it("shows no inline Proposal, with no candidate, control, status, or unavailable
         .toEqual({ inlineReads: true, card: null, status: null, unavailable: null, controls: 0, failures: [] });
     } finally {
       await tab.unmount(); await test.close();
-    }
-  });
-});
-
-it("drops a stored Replan entry of an earlier page at load and sends no request", async () => {
-  const test = await openJournalAppendTestWorkspace();
-  const workspace = test.workspace;
-  const proposal = withCondition(candidateFor(workspace), "proposal_conflict");
-  const key = `replan:${workspace.partition.journal_partition_id}:${proposal.proposal_id}:${proposal.revision_id}`;
-  const store = (mode: IDBTransactionMode) => workspace.database.transaction("metadata", mode).objectStore("metadata");
-  // The record of an earlier page whose Replan result is unknown.
-  await requestResult(store("readwrite").put({ key, schema_id: "storyos.local-edit-journal.replan-proposal.v1",
-    project_scope: workspace.partition.project_scope, proposal_id: proposal.proposal_id,
-    revision_id: proposal.revision_id, journal_partition_id: workspace.partition.journal_partition_id,
-    writer_generation: workspace.partition.writer_generation, idempotency_key: "018f0000-0000-7001-8000-000000000e03",
-    nonce: "c".repeat(64), request: { command_schema: "storyos.command.replan-proposal.request.v1" },
-    digest: { algorithm: "sha256", value_hex_lowercase: "0".repeat(64) }, settlement: "unresolved" }));
-  await withActEnvironment(async () => {
-    const shown = await display(workspace, proposal);
-    try {
-      await expect.poll(() => shown.controls().reject + shown.controls().replan).toBeGreaterThan(0);
-      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
-      expect({ stored: await requestResult(store("readonly").get(key)) !== undefined,
-        replan: shown.controls().replan, reject: shown.controls().reject,
-        retry: shown.tab.host.textContent?.includes("重新规划") ?? false,
-        sent: shown.sent.map(({ path }) => path), failures: shown.tab.failures })
-        .toEqual({ stored: false, replan: 0, reject: 1, retry: false, sent: [], failures: [] });
-    } finally {
-      await shown.tab.unmount(); await test.close();
     }
   });
 });

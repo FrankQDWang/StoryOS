@@ -1,6 +1,5 @@
 import type { EditorWorkspace, JournalSnapshot, JournalSubmissionGroup } from "./editor-types.ts";
-import { readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
-import { isRemovedDraftGroup } from "./removed-draft-path.ts";
+import { hasCurrentSubmissionShape, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 import { MAX_WORKING_JOURNAL_ITEMS } from "./journal-working-set.ts";
 import { readRecoveryDispositions, recoveryKey, recoveryPrefix, recoveryMaterial, recoveryRequest as result, RECOVERY_PAGE_SIZE, type LocalRecoveryMaterial } from "./local-recovery-record.ts";
 export type { LocalRecoveryMaterial } from "./local-recovery-record.ts";
@@ -11,8 +10,8 @@ export async function retainLocalRecovery(workspace: EditorWorkspace, groupId: s
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const group = snapshot.groups.find((item) => item.journal_submission_group_id === groupId);
   if (workspace.partition.disposition !== "current_writer_open"
-    || !group || group.settlement.kind !== "outcome_query_requires_reconfirmation" || isRemovedDraftGroup(group)
-    || snapshot.groups.some((item) => item.settlement.kind === "unsettled" && !isRemovedDraftGroup(item))
+    || !group || group.settlement.kind !== "outcome_query_requires_reconfirmation"
+    || snapshot.groups.some((item) => item.settlement.kind === "unsettled")
     || snapshot.records.some((record) => !snapshot.covered.has(record.local_intent_sequence))) {
     throw new Error("Only a closed Author Edit can be kept for manual re-entry");
   }
@@ -45,7 +44,6 @@ export async function retainLocalRecovery(workspace: EditorWorkspace, groupId: s
 /** Read retained local material across this Project's Editor Sessions. */
 export async function readLocalRecovery(workspace: EditorWorkspace, after?: LocalRecoveryMaterial): Promise<LocalRecoveryMaterial[]> {
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
-  // A group of a removed Draft path has no recovery material (ADR 0073), so a page reads on past its rows.
   const retained: LocalRecoveryMaterial[] = [];
   for (let cursor = after; retained.length < RECOVERY_PAGE_SIZE;) {
     const limit = RECOVERY_PAGE_SIZE - retained.length;
@@ -56,12 +54,14 @@ export async function readLocalRecovery(workspace: EditorWorkspace, after?: Loca
     if (page.some((item) => item.format_version !== 1 || item.disposition !== "retained_for_manual_reentry"
       || item.group.settlement.kind !== "outcome_query_requires_reconfirmation"
       || !equal(item.group.project_scope, workspace.partition.project_scope))) throw new Error("Local recovery record is corrupt");
-    retained.push(...page.filter((item) => !isRemovedDraftGroup(item.group)));
+    // A retained record with a shape of a removed path stays in the store, and the page shows no text of it (ADR 0099).
+    // The other records of the page stay available.
+    retained.push(...page.filter((item) => hasCurrentSubmissionShape(item.group, item.records)));
     if (page.length < limit) break;
     cursor = page.at(-1);
   }
   const pending = after ? [] : snapshot.groups.filter((group) => group.settlement.kind === "outcome_query_requires_reconfirmation"
-    && !isRemovedDraftGroup(group) && !snapshot.localRecovery?.some((item) => item.group.journal_submission_group_id === group.journal_submission_group_id))
+    && !snapshot.localRecovery?.some((item) => item.group.journal_submission_group_id === group.journal_submission_group_id))
     .map((group) => recoveryMaterial(snapshot, group));
   return [...pending, ...retained];
 }
