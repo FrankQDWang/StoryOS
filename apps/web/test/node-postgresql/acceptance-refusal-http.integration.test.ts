@@ -266,7 +266,7 @@ test("acceptProposal retains altered_candidate across reload and refuses another
   }
 });
 
-test("getProposal and the Project archive keep a seeded Proposal Conflict condition", async () => {
+test("the Project archive keeps a seeded Proposal Conflict condition after a later Revision", async () => {
   const server = await TestServer.start();
   try {
     await drainLeftoverWork();
@@ -323,6 +323,16 @@ test("getProposal and the Project archive keep a seeded Proposal Conflict condit
       kind: "proposal_conflict",
       proposal_conflict_ref: conflictRef,
     });
+    // A candidate edit advances the current Proposal Revision. The archive keeps the condition
+    // row of the earlier Revision unchanged. The test moved the Chapter Head with SQL, so the
+    // edit names that current Head.
+    const { revised: edited } = await reviseCandidate(story.baseUrl, story.fetchImpl, story.projectId,
+      await getProposal({ baseUrl: story.baseUrl, projectId: story.projectId,
+        proposalId: afterConflict.proposal_id, fetchImpl: story.fetchImpl }), freshNamespace(),
+      { ...session, base_snapshot: { ...session.base_snapshot,
+        authoritative_head_revision_id: before.current_revision.revision_id } });
+    assert.notEqual(edited.proposal.revision_id, afterConflict.revision_id);
+    assert.equal((await inspect(afterConflict.proposal_id)).revision_id, edited.proposal.revision_id);
     const archive = await story.send("exportProjectArchive", { request: {
       command_schema: "storyos.command.export-project-archive.request.v1",
       export_project_archive_input: { ...story.binding(), archive_profile: "storyos.project-export.v1",

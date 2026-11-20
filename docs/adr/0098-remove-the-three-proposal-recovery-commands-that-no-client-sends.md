@@ -21,7 +21,12 @@ ADR 0064 removed Replan from the editor and kept the command on the Server. The 
 1. The three commands go from each layer: the contract rows, the command kinds, the route catalog, the Server handlers, the application entry points, the core command types, the PostgreSQL adapter commands, and the closed lists of the baseline migration ([ADR 0079](0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)).
 2. The Author Undo of a Replan and of the two reopens goes with them.
 3. The Author Undo of a candidate edit, of a rejection, and of an Acceptance does not change. The Author Undo of a rejection stays a Barrier.
-4. The Compensation of an author Withdrawal writes the closure `open`, and its walk to a producer Withdrawal that keeps the head withdrawn goes (ADR 0069). The author Withdrawal and the producer Withdrawal each require the closure `open`. Thus without the explicit reopen, no producer Withdrawal can come after an author Withdrawal that is still the newest action of the author on that Proposal, and no path reaches the walk. When the head is not the withdrawn Revision and no recorded Compensation explains it, the Undo still refuses (ADR 0068).
+4. The Compensation of an author Withdrawal writes the closure `open`. Its walk to a producer Withdrawal that keeps the head withdrawn goes (ADR 0069). The reason:
+   - The author Withdrawal and the producer Withdrawal each require the closure `open`.
+   - Thus without the explicit reopen, no producer Withdrawal can come after an author Withdrawal that is still the newest action of the author on that Proposal.
+   - Thus no path reaches the walk.
+
+   When the head is not the withdrawn Revision and no recorded Compensation explains it, the Undo still refuses (ADR 0068).
 5. The rule of ADR 0069 that an Author Undo keeps a producer Withdrawal stays for each Compensation that a producer Withdrawal can come before: a candidate edit keeps a `withdrawn` head.
 6. The tables `proposal_replans`, `proposal_withdrawal_reopenings`, and `proposal_operation_reopenings` stay in the baseline. The Project Export Archive reads them. No command writes them now. A later ticket can remove them with the archive format.
 
@@ -39,4 +44,4 @@ ADR 0064 removed Replan from the editor and kept the command on the Server. The 
 - A later reopen command must build again: the command, the walk from the head to the Withdrawals that keep it withdrawn, the kept closure in the Undo of an author Withdrawal, and a test of the chain author Withdrawal, reopen, producer Withdrawal, Undo of the reopen, and Undo of the author Withdrawal.
 - No command opens a Proposal that its producer withdrew. Only the HTTP route sends a producer Withdrawal today (ADR 0069).
 - The rules of the [Manuscript Revision and Proposal State Machine](../foundation/manuscript-revision-proposal-state-machine.md) for Replan and for the two explicit reopens are historical. A note at the top of that specification says so.
-- A rejected Operation stays rejected, because the Author Undo of a rejection is a Barrier. A withdrawn Proposal opens again only through the Author Undo of an author Withdrawal. A conflicted Proposal stays acceptable, and a candidate edit validates it again (ADR 0064).
+- A rejected Operation stays rejected, because the Author Undo of a rejection is a Barrier. A withdrawn Proposal opens again only through the Author Undo of an author Withdrawal. A Proposal with the validation `conflicted` or with a Proposal Conflict condition stays acceptable, and a candidate edit validates it again (ADR 0064). A Proposal Recovery Conflict condition still blocks Acceptance, and the editor offers only Reject and Withdraw for it (ADR 0064). Thus without the Replan, such a Proposal has no path back to Acceptance. The author can reject or withdraw it.

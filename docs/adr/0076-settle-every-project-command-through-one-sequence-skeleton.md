@@ -105,7 +105,7 @@ Each Forward command family has one compensation adapter in the module of its fo
 | The six structure commands | Compensation ([ADR 0030](0030-restore-prior-identities-for-structure-compensation.md)). |
 | `setCurrentChapter` | Compensation when the prior Chapter is a lawful target. Otherwise Barrier. |
 | `withdrawProposal`, author form | Compensation: reopen the Proposal (ADR 0068). |
-| `replanProposal`, `reopenRejectedOperations`, `reopenWithdrawnProposal` | Compensation: append the Revision before the decision again, and reject the reopened operations or withdraw the Proposal again (ADR 0068). |
+| `replanProposal`, `reopenRejectedOperations`, `reopenWithdrawnProposal` | Compensation: append the Revision before the decision again, and reject the reopened operations or withdraw the Proposal again (ADR 0068). Note: [ADR 0098](0098-remove-the-three-proposal-recovery-commands-that-no-client-sends.md) removes these three commands and their Compensation. |
 | `rejectProposalOperations`, `completeReadyPartialProposal`, `continueProposalGeneration` | Barrier. Note: [ADR 0092](0092-remove-streamed-proposal-generation.md) removes `completeReadyPartialProposal` and `continueProposalGeneration`. |
 | `undoLatestAuthorAction`, `reversal_required` | Barrier. |
 
