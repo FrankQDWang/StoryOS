@@ -5,9 +5,9 @@ use crate::shared_tests::model_gateway::RuntimeClock;
 use crate::shared_tests::model_gateway::claim_run;
 use std::sync::Mutex;
 use storyos_application::{
-    CreateRequest, DestinationRequest, ModelProviderAdapter, ModelStreamSink, NoContractFaults,
-    Observation, PreDispatchRefusal, PreparedRequest, ProjectScope, WirePayloadProjection,
-    complete_agent_run,
+    CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter, ModelStreamSink,
+    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, ProjectScope,
+    ToolProbeRequest, WirePayloadProjection, complete_agent_run,
 };
 use storyos_core::{DeploymentDestination, ModelAdapter, ToolChoice};
 use tokio_postgres::Client;
@@ -54,6 +54,14 @@ impl ModelProviderAdapter for ScriptedAgentPlan {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
         self.seen.lock().unwrap().push(create.clone());
+        // As the real adapter does, a function output probe without a call ID has no body, so it
+        // refuses before dispatch (ADR 0049). The test still reads the request that the Host gave.
+        if let CreatePurpose::ToolQualification(ToolProbeRequest::FunctionCallOutput {
+            call_id: None,
+        }) = create.purpose
+        {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        }
         Ok(PreparedRequest {
             projection: WirePayloadProjection {
                 execution_profile: "storyos.volcengine-agent-plan.execution.v1".to_owned(),

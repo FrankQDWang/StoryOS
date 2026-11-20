@@ -53,11 +53,6 @@ impl ModelRegistration {
         self.requirement.contains(&ModelCapability::Continuation)
     }
 
-    /// Whether the mapping can replace the prior response with a Host-managed summary.
-    pub fn compacts(&self) -> bool {
-        requirement_compacts(self.requirement)
-    }
-
     /// Whether the Host may read a stored response of an unknown create. Either the profile
     /// qualifies retrieval, or an authorized runtime qualification examines a route that needs it.
     pub fn retrieves(&self, qualification: crate::RuntimeQualification) -> bool {
@@ -65,8 +60,8 @@ impl ModelRegistration {
     }
 }
 
-/// The compaction rule of `ModelRegistration::compacts`: the mapping of `requirement` can replace
-/// the prior response with a Host-managed summary.
+/// The compaction rule: the mapping of `requirement` can replace the prior response with a
+/// Host-managed summary.
 pub(crate) fn requirement_compacts(requirement: &[ModelCapability]) -> bool {
     requirement.contains(&ModelCapability::HostCompaction)
 }

@@ -48,9 +48,9 @@ fn qualified_members_qualify_only_with_a_qualified_combination() {
             UNQUALIFIED_PROFILE.qualifies(AGENT_PLAN_REGISTRATION.requirement),
             UNQUALIFIED_PROFILE.qualifies(&[ModelCapability::Continuation]),
             AGENT_PLAN_REGISTRATION.qualified(),
-            AGENT_PLAN_REGISTRATION.compacts(),
+            requirement_compacts(AGENT_PLAN_REGISTRATION.requirement),
             HOST_FAKE_TOOL_LOOP_REGISTRATION.qualified(),
-            HOST_FAKE_TOOL_LOOP_REGISTRATION.compacts(),
+            requirement_compacts(HOST_FAKE_TOOL_LOOP_REGISTRATION.requirement),
             PROBE_FIXTURE_REGISTRATION.qualified(),
         ],
         [
