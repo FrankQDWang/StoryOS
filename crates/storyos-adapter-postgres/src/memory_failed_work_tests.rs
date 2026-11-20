@@ -15,12 +15,13 @@ use crate::shared_tests::agent_run_read_chapter::project;
 use crate::shared_tests::agent_run_write_memory::first_index;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::replace_text;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_capture::start;
 use crate::shared_tests::memory_capture_loop::{record, script, settlement};
 use crate::shared_tests::memory_capture_tools::conversation_source;
 use crate::shared_tests::memory_consolidation::{capture, settled};
 use crate::shared_tests::memory_consolidation_merge::{flag_lines, seed};
-use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 
 /// The fake destination, but it rejects each request of a capture and of a pass.
 struct RejectsMemoryWork;

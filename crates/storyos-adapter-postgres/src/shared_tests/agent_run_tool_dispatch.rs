@@ -3,6 +3,7 @@
 use crate::shared_tests::agent_run_retrieval::{TestCredential, destination, research_run};
 use crate::shared_tests::agent_run_tool_call::text_and_call_stream;
 use crate::shared_tests::agent_run_tool_exposure::{advisory_stream, finish_stream};
+use crate::shared_tests::json_row::json_of;
 use serde_json::{Value, json};
 use storyos_adapter_mcp_client::{McpClient, McpExchange};
 use storyos_application::{
@@ -150,9 +151,7 @@ pub(crate) async fn point_mcp(
 /// The Run, its one research ToolCall without volatile identities, and the Activity Run Events
 /// that are not of a Host Tool call.
 pub(crate) async fn tool_facts(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    json_of(admin, "SELECT jsonb_build_object(
                       'run', jsonb_build_object('status', run.status, 'settlement', run.settlement),
                       'tool_call', (SELECT jsonb_build_object(
                           'state', call.state, 'refusal', call.refusal,
@@ -228,12 +227,7 @@ pub(crate) async fn tool_facts(admin: &Client, run_id: &str) -> Value {
                                             SELECT to_jsonb(event)
                                               FROM storyos.agent_run_events AS event
                                              WHERE event.run_id = run.run_id) AS records))::text
-               FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-            &[&run_id, &KEY],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(0)).unwrap()
+               FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid", &[&run_id, &KEY]).await
 }
 
 pub(crate) fn settled_event(state: &str, refusal: Value, outcome: Value, bytes: Value) -> Value {

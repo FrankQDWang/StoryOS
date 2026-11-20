@@ -24,8 +24,9 @@ use crate::shared_tests::agent_run_tool_exposure::advisory_stream;
 use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_agent_run::CANCEL_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::command_sequence_support::{CommandCall, issued};
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
 use crate::shared_tests::research_source::calls_stream;
 
 /// The result of the one search, as the fake MCP server sends it.

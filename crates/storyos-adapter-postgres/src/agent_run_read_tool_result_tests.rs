@@ -4,6 +4,7 @@ use storyos_core::{RESEARCH_RECORDED_RESULT, ReadToolResultRefusal};
 
 use crate::shared_tests::agent_run_submit_research::{ResearchProject, research_project};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::research_source::SEARCH_TEXT;
 
 fn script(first: &str, identity: &str) -> String {
@@ -12,17 +13,14 @@ fn script(first: &str, identity: &str) -> String {
 
 /// The function outputs that the request at `position` of the Run sent, by call identifier.
 async fn outputs(project: &ResearchProject, run_id: &str, position: i32) -> Value {
-    let row = project
-        .admin
-        .query_one(
-            "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'tool_outputs')::text
+    json_of(
+        &project.admin,
+        "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'tool_outputs')::text
                FROM storyos.model_attempts
               WHERE run_id = $1::text::uuid AND decision_position = $2::text::numeric",
-            &[&run_id, &position.to_string()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id, &position.to_string()],
+    )
+    .await
 }
 
 /// The status of the Run and each ToolCall as its function name, state, refusal, and Host

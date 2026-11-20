@@ -13,8 +13,9 @@ use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_load_skill::{TOOLS, calls, loaded_run, record, skill_md};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
-use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::json_row::json_of;
 
 /// A package whose `SKILL.md` has exactly 32,000 counted tokens, the limit of ADR 0089 section
 /// 9, with `<`, `&`, and `"` in its text.
@@ -40,19 +41,17 @@ fn long_package() -> SkillPackage {
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, the
 /// Tools that it declared, the Tool outputs that it sent, and whether it sent the current input.
 async fn requests(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position, wire -> 'tools',
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position, wire -> 'tools',
                       wire -> 'tool_outputs', wire ? 'context')
                       ORDER BY model_attempt_id)::text
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 #[tokio::test]
@@ -306,18 +305,15 @@ async fn the_summary_request_of_a_compaction_at_the_step_of_the_load_sends_the_l
     );
     // The current input of the later full input has no load item, so the load output is not a
     // part of the current input digest (ADR 0085).
-    let context = admin
-        .query_one(
-            "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
+    let context = json_of(
+        &admin,
+        "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
                FROM storyos.model_attempts
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
                 AND decision_position = 1",
-            &[&run_id],
-        )
-        .await
-        .unwrap()
-        .get::<_, String>(/*idx*/ 0);
-    let context: Value = serde_json::from_str(&context).unwrap();
+        &[&run_id],
+    )
+    .await;
     let classes: Vec<_> = context
         .as_array()
         .unwrap()

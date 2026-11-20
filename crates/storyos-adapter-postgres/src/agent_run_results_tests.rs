@@ -18,10 +18,11 @@ use crate::shared_tests::agent_run_steering::{
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_capture::project;
 use crate::shared_tests::memory_consolidation::{capture, run_pass, scripted, settled};
 use crate::shared_tests::memory_entries::write_versions;
-use crate::shared_tests::model_gateway::{RuntimeClock, stores};
+use crate::shared_tests::model_gateway::RuntimeClock;
 
 /// The fake script line of one `write_memory` call.
 fn script(action: &str, arguments: &Value) -> String {

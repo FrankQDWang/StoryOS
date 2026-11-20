@@ -1,6 +1,7 @@
 use serde_json::json;
 
 use super::*;
+use crate::shared_tests::exposure_facts;
 use crate::{
     AGENT_PLAN_REGISTRATION, ContextSourceClass, ExposureFacts, HOST_FAKE_TOOL_LOOP_REGISTRATION,
     LocatedPassage, PASSAGE_TERM_LIMIT, PASSAGE_TERM_MAX_CHARS, ToolExposure,
@@ -8,12 +9,8 @@ use crate::{
 
 fn names(revision: &str, hybrid_search: bool) -> Vec<&'static str> {
     let exposure = ToolExposure::compute(&ExposureFacts {
-        bound: &[],
-        model_registration_revision: revision,
-        skill_catalog: false,
-        memory_use: false,
         hybrid_search,
-        run_kind: crate::AgentRunKind::Author,
+        ..exposure_facts(revision)
     });
     exposure.tools.iter().map(|tool| tool.name).collect()
 }
@@ -28,12 +25,8 @@ fn each_current_mapping_declares_the_tool_only_when_the_search_by_meaning_is_pos
         HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
     ] {
         let exposure = ToolExposure::compute(&ExposureFacts {
-            bound: &[],
-            model_registration_revision: revision,
-            skill_catalog: false,
-            memory_use: false,
             hybrid_search: true,
-            run_kind: crate::AgentRunKind::Author,
+            ..exposure_facts(revision)
         });
         let declaration = exposure.tools[5].declaration();
         assert_eq!(
@@ -94,12 +87,9 @@ fn each_current_mapping_declares_the_tool_only_when_the_search_by_meaning_is_pos
     // A background Run gets only the Tools of its kind, and a capture does not get the search by
     // meaning.
     let capture = ToolExposure::compute(&ExposureFacts {
-        bound: &[],
-        model_registration_revision: AGENT_PLAN_REGISTRATION.revision,
-        skill_catalog: false,
-        memory_use: false,
         hybrid_search: true,
         run_kind: crate::AgentRunKind::MemoryCapture,
+        ..exposure_facts(AGENT_PLAN_REGISTRATION.revision)
     });
     assert_eq!(
         (capture.tools.iter().map(|tool| tool.name)).collect::<Vec<_>>(),

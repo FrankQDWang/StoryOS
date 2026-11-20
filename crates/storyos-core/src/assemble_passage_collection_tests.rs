@@ -1,24 +1,17 @@
 use crate::assemble_context::{ConsideredSource, RejectedSource};
+use crate::shared_tests::targeted_passage_assembly;
 use crate::{
     ContextBlockReason, ContextSourceClass, ContextSufficiency, CurrentPassageAssembly,
-    CurrentPassageAssemblyRecord, InstructionBindingInput, PassageContextTarget, RejectionReason,
+    CurrentPassageAssemblyRecord, PassageContextTarget, RejectionReason,
     assemble_passage_collection,
 };
 
 fn passage(chapter_id: &str, body: &str) -> CurrentPassageAssembly {
     CurrentPassageAssembly {
-        operation_requirement_id: "req-1".to_owned(),
-        input_snapshot_id: "snap-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "user-1".to_owned(),
-        project_id: "proj-1".to_owned(),
-        author_message: "Help with these passages.".to_owned(),
         chapter_id: chapter_id.to_owned(),
         chapter_revision_id: Some(format!("{chapter_id}-rev")),
         proposal_target_block_ids: Some(vec![format!("{chapter_id}-block")]),
-        chapter_body: body.to_owned(),
-        instruction: InstructionBindingInput::Absent,
-        destination_identity: "dest-1".to_owned(),
+        ..targeted_passage_assembly("Help with these passages.", body)
     }
 }
 

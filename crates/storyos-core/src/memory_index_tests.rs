@@ -3,10 +3,10 @@ use super::{
     memory_index_text,
 };
 use crate::assemble_context::count_context_item_tokens;
+use crate::shared_tests::passage_assembly;
 use crate::{
-    ContextSourceClass, CurrentPassageAssembly, InstructionBindingInput, MemoryEntryType,
-    ProjectionMode, assemble_current_passage_context, decode_assembly_record,
-    encode_assembly_record,
+    ContextSourceClass, MemoryEntryType, ProjectionMode, assemble_current_passage_context,
+    decode_assembly_record, encode_assembly_record,
 };
 
 fn entry(
@@ -25,20 +25,7 @@ fn entry(
 }
 
 fn record() -> crate::CurrentPassageAssemblyRecord {
-    assemble_current_passage_context(&CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Write the quarrel.".to_owned(),
-        chapter_id: "chapter-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: "Rain.".to_owned(),
-        instruction: InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
-    })
+    assemble_current_passage_context(&passage_assembly("Write the quarrel.", "Rain."))
 }
 
 /// ADR 0094 section 4: one group for each type that has an entry, in the order of the type

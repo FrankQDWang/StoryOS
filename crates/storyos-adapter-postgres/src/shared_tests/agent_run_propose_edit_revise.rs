@@ -116,6 +116,28 @@ impl Fixture {
         fixture
     }
 
+    /// Admits one Run with `references` in a new Conversation, with the identities of
+    /// `lead + offset`.
+    pub(crate) async fn admit(
+        &self,
+        store: &PostgresProjectReader,
+        offset: u16,
+        message: &str,
+        references: Vec<SelectionReference>,
+    ) -> String {
+        let prefix = format!("{:03x}", self.lead + offset);
+        admit_referenced_run(
+            store,
+            &self.scope,
+            &self.chapter_id,
+            &prefix,
+            self.destination.clone(),
+            message,
+            references,
+        )
+        .await
+    }
+
     /// Admits and completes one Run with `references` in a new Conversation.
     pub(crate) async fn run(
         &self,
@@ -125,17 +147,7 @@ impl Fixture {
         message: &str,
         references: Vec<SelectionReference>,
     ) -> String {
-        let prefix = format!("{:03x}", self.lead + offset);
-        let run_id = admit_referenced_run(
-            store,
-            &self.scope,
-            &self.chapter_id,
-            &prefix,
-            self.destination.clone(),
-            message,
-            references,
-        )
-        .await;
+        let run_id = self.admit(store, offset, message, references).await;
         complete(store, admin, &self.scope, &run_id).await;
         run_id
     }

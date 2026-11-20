@@ -12,7 +12,7 @@ use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_read_chapter::project;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
-use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
 
 fn chapter_read(chapter_id: &str, title: &str) -> ManuscriptUse {

@@ -7,9 +7,9 @@ use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::calls;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_capture::{project, run_capture, start};
 use crate::shared_tests::memory_capture_loop::{other_records, record, script, settlement};
-use crate::shared_tests::model_gateway::stores;
 
 /// The count of the capture Runs of the Project of `project_id`.
 async fn captures(admin: &Client, project_id: &str) -> i64 {

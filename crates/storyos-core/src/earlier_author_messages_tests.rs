@@ -2,6 +2,7 @@ use super::{
     EARLIER_AUTHOR_MESSAGES_TOKEN_LIMIT, EarlierAuthorMessage, EarlierAuthorMessageSource,
     is_earlier_author_message, keep_earlier_author_messages,
 };
+use crate::shared_tests::passage_assembly;
 use crate::{ContextSourceClass, ProjectionMode, later_request_record};
 
 fn message(message_id: &str, text: String) -> EarlierAuthorMessage {
@@ -15,20 +16,8 @@ fn message(message_id: &str, text: String) -> EarlierAuthorMessage {
 }
 
 fn later_record() -> crate::CurrentPassageAssemblyRecord {
-    let decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Help again.".to_owned(),
-        chapter_id: "chapter-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: "Passage.".to_owned(),
-        instruction: crate::InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
-    });
+    let decision =
+        crate::assemble_current_passage_context(&passage_assembly("Help again.", "Passage."));
     later_request_record(&decision, "compaction-1", "Summary.", &[])
 }
 

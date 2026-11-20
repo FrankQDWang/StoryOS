@@ -19,9 +19,11 @@ use crate::shared_tests::agent_run_tool_exposure::{
     advisory_stream, finish_stream, finish_then_advisory,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};
 use crate::shared_tests::grant_scope::current_grant;
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run, claim_run, stores};
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run, claim_run};
 use crate::shared_tests::research_source::calls_stream;
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
@@ -241,9 +243,9 @@ async fn continue_run(
 /// `tool_result` sources, and grant scope of its RunStep. The author message item shows only
 /// its role.
 async fn run_facts(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    let mut facts: Value = json_of(
+        admin,
+        "SELECT jsonb_build_object(
                       'status', run.status, 'settlement', run.settlement,
                       'position', run.active_decision_position,
                       'steps', (SELECT jsonb_agg(jsonb_build_object(
@@ -269,11 +271,9 @@ async fn run_facts(admin: &Client, run_id: &str) -> Value {
                              (attempt.run_id, attempt.decision_position, 'decision')
                        WHERE attempt.run_id = run.run_id))::text
                FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    let mut facts: Value = serde_json::from_str(row.get::<_, &str>(0)).unwrap();
+        &[&run_id],
+    )
+    .await;
     for step in facts["steps"].as_array_mut().unwrap() {
         for item in step["input"].as_array_mut().unwrap() {
             if let Some(role) = item.get("role").cloned() {

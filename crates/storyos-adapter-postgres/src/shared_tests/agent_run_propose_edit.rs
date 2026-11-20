@@ -1,6 +1,7 @@
 //! The shared test support from `agent_run_propose_edit_tests.rs`.
 
 use crate::PostgresProjectReader;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
@@ -31,9 +32,7 @@ pub(crate) async fn complete(
 /// The Proposal records of the Run with no identity: the Proposal, its Revisions, its
 /// Operations, and its Validation Receipts.
 pub(crate) async fn proposal_records(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    json_of(admin, "SELECT COALESCE(jsonb_agg(jsonb_build_object(
                       'proposal', jsonb_build_array(proposal.kind, proposal.bundle_policy),
                       'revisions', (SELECT jsonb_agg(jsonb_build_array(revision.generation,
                                       revision.validation, revision.closure, revision.candidate_text)
@@ -52,12 +51,7 @@ pub(crate) async fn proposal_records(admin: &Client, run_id: &str) -> Value {
                                     WHERE receipt.proposal_id = proposal.proposal_id))
                       ORDER BY proposal.proposal_id), '[]')::text
                FROM storyos.proposals AS proposal
-              WHERE proposal.source_run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+              WHERE proposal.source_run_id = $1::text::uuid", &[&run_id]).await
 }
 
 /// Each `propose_edit` call of the Run in RunStep and item order: its RunStep, state, refusal,

@@ -1,50 +1,9 @@
 use super::*;
+use crate::shared_tests::harbour_passage;
+use crate::shared_tests::tool_result_candidate;
 use crate::{
-    CitableSource, CitedSource, CurrentPassageAssembly, InstructionBindingInput, SourceGapReason,
-    assemble_current_passage_context, decode_assembly_record, encode_assembly_record,
+    CitableSource, CitedSource, SourceGapReason, decode_assembly_record, encode_assembly_record,
 };
-
-fn passage() -> CurrentPassageAssemblyRecord {
-    assemble_current_passage_context(&CurrentPassageAssembly {
-        operation_requirement_id: "req-2".to_owned(),
-        input_snapshot_id: "snap-2".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "user-1".to_owned(),
-        project_id: "proj-1".to_owned(),
-        author_message: "When was the harbour built?".to_owned(),
-        chapter_id: "ch-1".to_owned(),
-        chapter_revision_id: Some("ch-1-rev".to_owned()),
-        proposal_target_block_ids: Some(vec!["ch-1-block".to_owned()]),
-        chapter_body: "The harbour was old.".to_owned(),
-        instruction: InstructionBindingInput::Absent,
-        destination_identity: "dest-1".to_owned(),
-    })
-}
-
-fn candidate<'a>(
-    tool_call_id: &'a str,
-    state: ToolCallState,
-    result_text: Option<&'a str>,
-) -> ToolResultCandidate<'a> {
-    ToolResultCandidate {
-        tool_call_id,
-        call_id: tool_call_id,
-        owner_user_id: "user-1",
-        project_id: "proj-1",
-        run_id: "run-1",
-        model_attempt_id: "attempt-1",
-        decision_id: "decision-1",
-        state,
-        result_text,
-        sources: &[],
-        output: ToolResultOutput::Research,
-        function_name: "web_search",
-        arguments: "{}",
-        form: ToolResultForm::Exact,
-        skill: None,
-        resource_path: None,
-    }
-}
 
 fn source(tool_call_id: &str, state: &str, kept_result_tokens: Option<u64>) -> ToolResultSource {
     ToolResultSource {
@@ -79,7 +38,7 @@ fn tool_items(record: &CurrentPassageAssemblyRecord) -> Vec<(String, ProjectionM
 
 #[test]
 fn each_resolved_tool_call_is_one_candidate_named_by_its_snapshots_with_its_citable_ids() {
-    let mut record = passage();
+    let mut record = harbour_passage();
     let snapshots = ["s1".to_owned(), "s2".to_owned()];
     let cited = |id: &str, cited: CitedSource| CitableSource {
         id: id.to_owned(),
@@ -101,11 +60,11 @@ fn each_resolved_tool_call_is_one_candidate_named_by_its_snapshots_with_its_cita
         &[
             ToolResultCandidate {
                 sources: &sources,
-                ..candidate("c1", ToolCallState::Settled, Some("Built in 1890."))
+                ..tool_result_candidate("c1", ToolCallState::Settled, Some("Built in 1890."))
             },
-            candidate("c2", ToolCallState::Failed, None),
-            candidate("c3", ToolCallState::Unknown, None),
-            candidate("c4", ToolCallState::Refused, None),
+            tool_result_candidate("c2", ToolCallState::Failed, None),
+            tool_result_candidate("c3", ToolCallState::Unknown, None),
+            tool_result_candidate("c4", ToolCallState::Refused, None),
         ],
     );
 
@@ -174,15 +133,18 @@ fn each_resolved_tool_call_is_one_candidate_named_by_its_snapshots_with_its_cita
 
 #[test]
 fn an_unresolved_tool_call_or_one_of_another_run_blocks_the_continuation() {
-    let mut record = passage();
+    let mut record = harbour_passage();
     let other_run = ToolResultCandidate {
         run_id: "run-2",
-        ..candidate("c2", ToolCallState::Settled, Some("Built in 1890."))
+        ..tool_result_candidate("c2", ToolCallState::Settled, Some("Built in 1890."))
     };
 
     assemble_tool_result_continuation(
         &mut record,
-        &[candidate("c1", ToolCallState::Dispatched, None), other_run],
+        &[
+            tool_result_candidate("c1", ToolCallState::Dispatched, None),
+            other_run,
+        ],
     );
 
     let rejected = |id: &str| RejectedSource {
@@ -209,13 +171,17 @@ fn an_unresolved_tool_call_or_one_of_another_run_blocks_the_continuation() {
 
 #[test]
 fn a_result_above_the_item_limit_keeps_a_prefix_and_an_explicit_truncation_mark() {
-    let mut record = passage();
+    let mut record = harbour_passage();
     record.operation_requirement.item_token_limit = 200;
     let long = "a<b".repeat(40);
 
     assemble_tool_result_continuation(
         &mut record,
-        &[candidate("c1", ToolCallState::Settled, Some(&long))],
+        &[tool_result_candidate(
+            "c1",
+            ToolCallState::Settled,
+            Some(&long),
+        )],
     );
 
     let item = record
@@ -249,7 +215,7 @@ fn a_result_above_the_item_limit_keeps_a_prefix_and_an_explicit_truncation_mark(
 
 #[test]
 fn a_cut_result_keeps_each_citable_id_whole_inside_the_item_limit() {
-    let mut record = passage();
+    let mut record = harbour_passage();
     record.operation_requirement.item_token_limit = 300;
     let long = "a<b".repeat(40);
     let sources = [CitableSource {
@@ -267,7 +233,7 @@ fn a_cut_result_keeps_each_citable_id_whole_inside_the_item_limit() {
         &mut record,
         &[ToolResultCandidate {
             sources: &sources,
-            ..candidate("c1", ToolCallState::Settled, Some(&long))
+            ..tool_result_candidate("c1", ToolCallState::Settled, Some(&long))
         }],
     );
 
@@ -289,7 +255,7 @@ fn a_cut_result_keeps_each_citable_id_whole_inside_the_item_limit() {
 
 #[test]
 fn a_citable_tag_above_the_item_limit_rejects_the_result_and_blocks_the_continuation() {
-    let mut record = passage();
+    let mut record = harbour_passage();
     record.operation_requirement.item_token_limit = 300;
     let sources = [CitableSource {
         id: "018f0000-0000-7001-8000-000000000a01".to_owned(),
@@ -305,7 +271,7 @@ fn a_citable_tag_above_the_item_limit_rejects_the_result_and_blocks_the_continua
         &mut record,
         &[ToolResultCandidate {
             sources: &sources,
-            ..candidate("c1", ToolCallState::Settled, Some("High water at 10.42."))
+            ..tool_result_candidate("c1", ToolCallState::Settled, Some("High water at 10.42."))
         }],
     );
 
@@ -340,7 +306,7 @@ fn only_a_long_research_result_or_read_in_the_stub_form_becomes_a_stub() {
     let long = "Tide. ".repeat(500);
     let research = |id, text, form| ToolResultCandidate {
         form,
-        ..candidate(id, ToolCallState::Settled, Some(text))
+        ..tool_result_candidate(id, ToolCallState::Settled, Some(text))
     };
     let candidates = [
         research("call_long", &long, ToolResultForm::Stub),
@@ -358,7 +324,7 @@ fn only_a_long_research_result_or_read_in_the_stub_form_becomes_a_stub() {
             ..research("call_read", &long, ToolResultForm::Stub)
         },
     ];
-    let mut record = passage();
+    let mut record = harbour_passage();
     assemble_tool_result_continuation(&mut record, &candidates);
     let modes: Vec<ProjectionMode> = tool_items(&record).into_iter().map(|item| item.1).collect();
     let read = &tool_items(&record)[4].2;
@@ -431,7 +397,7 @@ fn a_settled_manuscript_read_or_search_keeps_its_exact_form_in_its_class() {
             function_name: "read_chapter",
             arguments: "{\"chapter\":2}",
             form: ToolResultForm::Stub,
-            ..candidate(id, state, Some(text))
+            ..tool_result_candidate(id, state, Some(text))
         }
     }
     fn search<'a>(id: &'a str, text: &'a str) -> ToolResultCandidate<'a> {
@@ -456,7 +422,7 @@ fn a_settled_manuscript_read_or_search_keeps_its_exact_form_in_its_class() {
         search("search-1", long),
         search("search-2", above),
     ];
-    let mut record = passage();
+    let mut record = harbour_passage();
     assemble_tool_result_continuation(&mut record, &candidates);
     stub_selected_results(&mut record, &candidates);
     let outputs: Vec<_> = function_outputs(&record)

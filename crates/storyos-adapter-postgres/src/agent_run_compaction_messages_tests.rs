@@ -11,34 +11,34 @@ use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, queued, settle, steering,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::{admit_run_in, stores};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::admit_run_in;
 
 /// For each decision request of the Run in RunStep order: its position, the earlier author
 /// messages and the author message that it sent, and whether it sent the current input again
 /// with the replaced input label.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(decision_position,
                       wire->'earlier_author_messages', wire->>'author_message',
                       wire->'replaces_earlier_input') ORDER BY decision_position)::text
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// For each decision and later request Context Assembly of the Run in RunStep order: its role,
 /// its position, the text of each selected `conversation_summary` and `author_instruction` item,
 /// and the earlier author messages that its Operation Requirement records.
 async fn assemblies(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(manifest_role, decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(manifest_role, decision_position,
                       (SELECT jsonb_agg(jsonb_build_array(item->>'source_class',
                                                           item->>'content'))
                          FROM jsonb_array_elements(payload->'selected') AS item
@@ -48,11 +48,9 @@ async fn assemblies(admin: &Client, run_id: &str) -> Value {
                       ORDER BY decision_position, manifest_role)::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role IN ('decision', 'later_request')",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 fn source(run_id: &str, message_id: &str) -> Value {

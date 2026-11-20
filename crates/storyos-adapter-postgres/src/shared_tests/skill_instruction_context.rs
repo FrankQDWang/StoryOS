@@ -4,7 +4,9 @@ use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_steering::queued;
 use crate::shared_tests::create_agent_run_skill::{fixture, set};
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::admit_selected_run;
+use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
 use serde_json::{Value, json};
 use std::sync::Arc;
 use storyos_application::{ConversationSelection, ProjectScope};
@@ -46,44 +48,33 @@ pub(crate) fn catalog(packages: &[SkillPackage]) -> String {
     skill_catalog_text(&entries)
 }
 
-/// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, the
-/// text of each `skill_instruction` item, and the text of each `skill_catalog` item that the fake
-/// destination received.
+/// For each Model Attempt of the Run in the order of its creation: its role, the position of its
+/// RunStep, the text of each `skill_instruction` item, and the text of each `skill_catalog` item
+/// that the fake destination received.
 pub(crate) async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
-                      jsonb_path_query_array(wire,
-                        '$.context[*] ? (@.source_class == \"skill_instruction\").content'),
-                      jsonb_path_query_array(wire,
-                        '$.context[*] ? (@.source_class == \"skill_catalog\").content'))
-                      ORDER BY model_attempt_id)::text
-               FROM storyos.model_attempts,
-                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
-              WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+    sent_context(
+        admin,
+        run_id,
+        &["skill_instruction", "skill_catalog"],
+        ReplacedInputLabel::Omit,
+    )
+    .await
 }
 
 /// For each decision Context Assembly of the Run in RunStep order: its RunStep, and the Skill
 /// requirements and the pinned catalog of its Operation Requirement.
 pub(crate) async fn requirements(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(decision_position,
                       payload #> '{operation_requirement,skill_requirements}',
                       payload #> '{operation_requirement,skill_catalog}')
                       ORDER BY decision_position)::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The pinned SkillPackage References of `packages`, as the Operation Requirement records them.
@@ -114,13 +105,6 @@ pub(crate) fn with_provenance(packages: &[SkillPackage], provenance: &str) -> Va
             })
         })
         .collect()
-}
-
-/// The Conversation of the Run that `prefix` admitted.
-pub(crate) fn conversation_of(prefix: &str) -> ConversationSelection {
-    ConversationSelection::Existing {
-        conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
-    }
 }
 
 /// Completes the first Run of a new Project of the tool loop profile, then admits one Run with

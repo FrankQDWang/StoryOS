@@ -2,11 +2,7 @@
 //! section 1, ADR 0085).
 
 use serde_json::{Value, json};
-use storyos_application::{
-    ConversationSelection, CreateChapterInput, EditorSessionStore, IssueProjectCommandChallenge,
-    VerifiedExportArchive, claim_next_archive_export, complete_archive_export,
-    get_verified_export_archive, issue_project_command_challenge,
-};
+use storyos_application::{ConversationSelection, CreateChapterInput, EditorSessionStore};
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CreateChapterPlacement,
     TransitionOutcome, hex_sha256,
@@ -14,6 +10,7 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_finish_rule::conversation_of;
 use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, queued, settle, steering,
 };
@@ -23,8 +20,10 @@ use crate::shared_tests::command_sequence_structure::{
     CREATE_CHAPTER, create_chapter, update_chapter,
 };
 use crate::shared_tests::command_sequence_support::issued;
-use crate::shared_tests::model_gateway::stores;
-use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::memory_entries::archived_rows;
+use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
 /// The list of the fixture Project: one Volume with its Chapter, the Current Chapter of the Run.
@@ -34,29 +33,21 @@ const FIXTURE_LIST: &str = "{\"volume\":\"Volume A\"}\n[1,0,\"Chapter A\",\"curr
 /// text of each `chapter_list` item that the fake destination received, and the replaced input
 /// label.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
-                      jsonb_path_query_array(wire,
-                        '$.context[*] ? (@.source_class == \"chapter_list\").content'),
-                      wire->'replaces_earlier_input')
-                      ORDER BY model_attempt_id)::text
-               FROM storyos.model_attempts,
-                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
-              WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+    sent_context(
+        admin,
+        run_id,
+        &["chapter_list"],
+        ReplacedInputLabel::Include,
+    )
+    .await
 }
 
 /// For each decision Context Assembly of the Run in RunStep order: its RunStep and its selected
 /// `chapter_list` items.
 async fn recorded(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(decision_position,
                       (SELECT jsonb_agg(jsonb_build_array(item->>'projection_mode',
                                                           item->>'source_version',
                                                           item->>'content'))
@@ -65,11 +56,9 @@ async fn recorded(admin: &Client, run_id: &str) -> Value {
                       ORDER BY decision_position)::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The recorded `chapter_list` item with `text`.
@@ -79,13 +68,6 @@ fn item(text: &str) -> Value {
         format!("sha256:{}", hex_sha256(text.as_bytes())),
         text
     ])
-}
-
-/// The Conversation of the Run that `prefix` admitted.
-fn conversation_of(prefix: &str) -> ConversationSelection {
-    ConversationSelection::Existing {
-        conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
-    }
 }
 
 #[tokio::test]
@@ -361,35 +343,7 @@ async fn the_archive_of_a_project_whose_run_has_the_list_builds_and_packs_its_re
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued(&store, "0ec").await;
     complete(&store, &admin, &scope, &run_id).await;
-    let (export, input) = export_command(&scope, "0e");
-    issue_project_command_challenge(
-        &store,
-        &IssueProjectCommandChallenge {
-            binding: export.challenge_binding.clone(),
-            nonce: "nonce-export-0e".to_owned(),
-            nonce_digest: export.nonce_digest.clone(),
-            earlier_revision_nonces: Vec::new(),
-        },
-    )
-    .await
-    .unwrap();
-    store.export_project_archive(&export, &input).await.unwrap();
-    let claimed = claim_next_archive_export(&store).await.unwrap().unwrap();
-    complete_archive_export(&store, &claimed).await.unwrap();
-    let VerifiedExportArchive::Ready(zip) =
-        get_verified_export_archive(&store, &scope, &input.export_id)
-            .await
-            .unwrap()
-    else {
-        panic!("the Project Export must return verified ZIP bytes");
-    };
-    let files = zip_store_files(&zip);
-    let rows = &files
-        .iter()
-        .find(|(name, _)| *name == "canonical/context_assembly_manifests.json")
-        .unwrap()
-        .1;
-    let packed: Vec<Value> = serde_json::from_slice(rows).unwrap();
+    let [packed] = archived_rows(&store, &scope, "0e", ["context_assembly_manifests"]).await;
     let lists: Vec<Value> = packed
         .iter()
         .filter(|row| row["run_id"] == json!(run_id) && row["manifest_role"] == "decision")

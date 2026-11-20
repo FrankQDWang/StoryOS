@@ -15,7 +15,9 @@ use crate::shared_tests::agent_run_tool_call::{
 };
 use crate::shared_tests::agent_run_tool_exposure::advisory_stream;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 
 const SEARCH_ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 /// The digest of the validated arguments of `SEARCH_ARGUMENTS`.
@@ -43,9 +45,9 @@ async fn tool_call_rows(admin: &Client, run_id: &str) -> Vec<serde_json::Value> 
 /// The status and settlement of the Run, and the decision identity, dispatch state, decision
 /// record, batch evidence, and item count of its decision Attempt.
 async fn decision_facts(admin: &Client, run_id: &str) -> serde_json::Value {
-    admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    json_of(
+        admin,
+        "SELECT jsonb_build_object(
                       'status', run.status, 'settlement', run.settlement,
                       'model_attempt_id', attempt.model_attempt_id,
                       'decision_id', attempt.decision_id,
@@ -58,11 +60,9 @@ async fn decision_facts(admin: &Client, run_id: &str) -> serde_json::Value {
                  ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
                 AND attempt.decision_position = 0
               WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get::<_, &str>(0)).unwrap())
-        .unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The one member of the batch of a complete `web_search` call, validated against the pinned
@@ -802,9 +802,9 @@ async fn successor_run(
         .await
         .unwrap();
     reactivate_research_revision(admin).await;
-    let facts: serde_json::Value = admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    let facts: serde_json::Value = json_of(
+        admin,
+        "SELECT jsonb_build_object(
                       'status', run.status, 'settlement', run.settlement,
                       'successor_decision_id', successor.decision_id,
                       'marker_decision_id',
@@ -824,11 +824,9 @@ async fn successor_run(
                JOIN storyos.model_attempts AS successor
                  ON successor.run_id = run.run_id AND successor.attempt_role = 'successor'
               WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get::<_, &str>(0)).unwrap())
-        .unwrap();
+        &[&run_id],
+    )
+    .await;
     let rows = tool_call_rows(admin, &run_id)
         .await
         .into_iter()

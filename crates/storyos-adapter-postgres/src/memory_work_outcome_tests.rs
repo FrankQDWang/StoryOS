@@ -19,11 +19,12 @@ use crate::shared_tests::agent_run_steering::{
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::{admitted, rename};
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_capture::{project, run_capture};
 use crate::shared_tests::memory_capture_loop::{record, script, settlement};
 use crate::shared_tests::memory_work_outcome::stopped_at_the_start;
 use crate::shared_tests::memory_work_schedule::{claim_due, make_due};
-use crate::shared_tests::model_gateway::{RuntimeClock, stores};
+use crate::shared_tests::model_gateway::RuntimeClock;
 
 /// The state of the schedule row of the Conversation: `none` (no row), `empty`, `now` (due), or
 /// `quiet` (due at the end of the quiet time).

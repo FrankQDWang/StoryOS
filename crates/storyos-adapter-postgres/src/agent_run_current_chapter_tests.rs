@@ -19,7 +19,9 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_acceptance::ACCEPT_PROPOSAL;
 use crate::shared_tests::command_sequence_structure::{DELETE_CHAPTER, named_call};
 use crate::shared_tests::command_sequence_support::issued;
-use crate::shared_tests::model_gateway::{admit_referenced_run, stores};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::admit_referenced_run;
 
 const MESSAGE: &str = "Help with this passage.";
 const EDITED: &str = "Still, ";
@@ -78,21 +80,14 @@ fn sent_reference(
 /// For the RunStep at `position`: the references of its Context Assembly record and the
 /// references that its request sent.
 async fn sent(admin: &Client, run_id: &str, position: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(
+    json_of(admin, "SELECT jsonb_build_array(
                       (SELECT payload #> '{operation_requirement,selection_references}'
                          FROM storyos.context_assembly_manifests
                         WHERE run_id = $1::text::uuid AND decision_position = $2::text::numeric),
                       (SELECT (payload #>> '{wire,serialized_payload}')::jsonb -> 'selection_references'
                          FROM storyos.model_attempts
                         WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
-                          AND decision_position = $2::text::numeric))::text",
-            &[&run_id, &position],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+                          AND decision_position = $2::text::numeric))::text", &[&run_id, &position]).await
 }
 
 /// `text` before the text of Block `index`.
@@ -505,20 +500,10 @@ async fn a_later_propose_edit_call_on_the_moved_reference_opens_the_proposal_on_
     )
     .await;
     let head = head(&admin, &fixture).await;
-    let bases: Value = serde_json::from_str(
-        admin
-            .query_one(
-                "SELECT jsonb_agg(DISTINCT location ->> 'base_authoritative_revision_id')::text
+    let bases: Value = json_of(&admin, "SELECT jsonb_agg(DISTINCT location ->> 'base_authoritative_revision_id')::text
                    FROM storyos.model_attempts AS attempt,
                         jsonb_array_elements(attempt.payload #> '{proposed_edit,locations}') AS location
-                  WHERE attempt.run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get(/*idx*/ 0),
-    )
-    .unwrap();
+                  WHERE attempt.run_id = $1::text::uuid", &[&run_id]).await;
     let changed_head = json!([
         0,
         "refused",

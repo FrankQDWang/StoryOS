@@ -4,8 +4,9 @@ use crate::shared_tests::agent_run_retrieval::{
     AfterExchange, adapter, broken_stream, destination, real_run, recovery,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::RuntimeClock;
-use crate::shared_tests::model_gateway::{claim_run, stores};
+use crate::shared_tests::model_gateway::claim_run;
 
 /// The stored complete response that a Retrieve reads: one complete `finish` call.
 pub(crate) fn stored_finish(reference: &str) -> String {

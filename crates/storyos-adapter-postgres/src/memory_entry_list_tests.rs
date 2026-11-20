@@ -16,8 +16,9 @@ use crate::shared_tests::agent_run_steering::queued;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_structure::titled_chapter;
 use crate::shared_tests::command_sequence_support::seed_project;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::delete_structure::settle_delete_chapter;
-use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::model_gateway::conversation as conversation_of;
 
 /// Writes each version of `rows` in the Project of `scope` with SQL, and moves the head of the
 /// Project. A row is one line of the number, the version, the Memory revision, the state, the
@@ -94,18 +95,6 @@ async fn listed(store: &PostgresProjectReader, scope: &ProjectScope) -> Option<V
         format!("{number} {version} {kind} {origin} {title} {text} {source}")
     };
     Some(entries.into_iter().map(line).collect())
-}
-
-/// The Conversation of the Run `run_id`.
-async fn conversation_of(admin: &Client, run_id: &str) -> String {
-    admin
-        .query_one(
-            "SELECT conversation_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap()
-        .get(0)
 }
 
 /// The list gives each current entry in the order of the Memory Index (the type list, then the

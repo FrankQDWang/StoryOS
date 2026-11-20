@@ -11,6 +11,7 @@ use storyos_core::{
 
 use crate::shared_tests::agent_run_submit_research::research_project;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
 use crate::shared_tests::research_source::SEARCH_TEXT;
 
@@ -80,20 +81,14 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
             }],
         }],
     };
-    let artifact: Value = serde_json::from_str(
-        project
-            .admin
-            .query_one(
-                "SELECT (to_jsonb(artifact) - 'owner_user_id' - 'project_id'
+    let artifact: Value = json_of(
+        &project.admin,
+        "SELECT (to_jsonb(artifact) - 'owner_user_id' - 'project_id'
                           - 'research_artifact_id' - 'created_at')::text
                    FROM storyos.research_artifacts AS artifact WHERE run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get::<_, &str>(0),
+        &[&run_id],
     )
-    .unwrap();
+    .await;
     let AgentRunDecisionInspect::ResearchSynthesis {
         research_artifact_id,
         ..

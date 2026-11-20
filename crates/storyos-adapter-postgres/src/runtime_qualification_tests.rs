@@ -14,8 +14,9 @@ use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::text_item;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::RuntimeClock;
-use crate::shared_tests::model_gateway::{admit_run, admit_run_in, claim_run, queued_run, stores};
+use crate::shared_tests::model_gateway::{admit_run, admit_run_in, claim_run, queued_run};
 use crate::shared_tests::runtime_qualification::{ScriptedAgentPlan, authorized, settle};
 
 const REFERENCE: &str = storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE;

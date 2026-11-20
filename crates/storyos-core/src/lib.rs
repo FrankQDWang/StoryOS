@@ -773,6 +773,9 @@ pub(crate) fn utf16_offset_to_byte(value: &str, wanted: u32) -> Option<usize> {
 }
 
 #[cfg(test)]
+mod shared_tests;
+
+#[cfg(test)]
 #[path = "apply_author_edit_tests.rs"]
 mod tests;
 

@@ -1,5 +1,6 @@
 //! The shared test support from `agent_run_write_memory_tests.rs`.
 
+use crate::shared_tests::json_row::json_of;
 use serde_json::{Value, json};
 use storyos_application::ProjectScope;
 use storyos_core::MemoryWriteRefusal;
@@ -52,16 +53,14 @@ pub(crate) async fn memory_head(admin: &Client, scope: &ProjectScope) -> Option<
 /// The text of each `memory_index` item of the decision Context Assembly at the RunStep 0 of the
 /// Run.
 pub(crate) async fn first_index(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT COALESCE(jsonb_path_query_array(payload,
+    json_of(
+        admin,
+        "SELECT COALESCE(jsonb_path_query_array(payload,
                       '$.selected[*] ? (@.source_class == \"memory_index\").content'), '[]')::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'
                 AND decision_position = 0",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
