@@ -371,52 +371,6 @@ const COMMANDS: CommandRows = {
     },
     expected: { effect: { kind: "resolved", undo_disposition: "forward", prior_closure: "open",
       resulting_closure: "withdrawn", preserved_generation: "ready", preserved_validation: "valid" } },  },
-  replanProposal: {
-    arrange: async () => {
-      const { story, target, proposal, editorSessionId } = await proposed("Smoke Replan Novel");
-      return { project: story, input: { request: {
-        command_schema: "storyos.command.replan-proposal.request.v1",
-        replan_proposal_input: { conflicted_proposal_revision_id: proposal.revision_id,
-          expected_current_proposal_head: proposal.revision_id, expected_current_target_revisions: [target],
-          replacement_operations: [proposal.operation_id],
-          source_condition: { kind: "proposal_conflict", proposal_conflict_ref: story.key() },
-          editor_session_id: editorSessionId, ...story.binding() },
-      }, path: { proposalId: proposal.proposal_id } } };
-    },
-    expected: { effect: { kind: "refused", reason: "unavailable_proof" } },  },
-  reopenWithdrawnProposal: {
-    arrange: async () => {
-      const opened = await proposed("Smoke Reopen Novel");
-      const { story, target, proposal, editorSessionId } = opened;
-      const withdrawn = await story.send("withdrawProposal", withdrawal(opened));
-      if (withdrawn.response.effect.kind !== "resolved") throw new Error("expected a withdrawal");
-      return { project: story, input: { request: {
-        command_schema: "storyos.command.reopen-withdrawn-proposal.request.v1",
-        reopen_withdrawn_proposal_input: { proposal_revision_id: proposal.revision_id,
-          withdrawal_event_ref: withdrawn.response.effect.closure_event_refs[0] ?? "", expected_closure: "withdrawn",
-          expected_target_revisions: [target], editor_session_id: editorSessionId, ...story.binding() },
-      }, path: { proposalId: proposal.proposal_id } } };
-    },
-    expected: { effect: { kind: "resolved", undo_disposition: "forward", prior_closure: "withdrawn",
-      resulting_closure: "open", resulting_validation: "pending", preserved_generation: "ready",
-      preserved_operation_resolution: "pending" } },  },
-  reopenRejectedOperations: {
-    arrange: async () => {
-      const opened = await proposed("Smoke Reopen Rejected Novel");
-      const { story, target, proposal, editorSessionId } = opened;
-      const rejected = await story.send("rejectProposalOperations", rejection(opened));
-      if (rejected.response.effect.kind !== "resolved") throw new Error("expected a rejection");
-      return { project: story, input: { request: {
-        command_schema: "storyos.command.reopen-rejected-operations.request.v1",
-        reopen_rejected_operations_input: { proposal_revision_id: proposal.revision_id,
-          selected_rejected_operation_ids: [proposal.operation_id],
-          rejection_event_refs: rejected.response.effect.resolution_event_refs, expected_target_revisions: [target],
-          editor_session_id: editorSessionId, ...story.binding() },
-      }, path: { proposalId: proposal.proposal_id } } };
-    },
-    expected: { effect: { kind: "resolved", undo_disposition: "forward", prior_resolution: "rejected",
-      resulting_resolution: "pending", resulting_validation: "pending", preserved_generation: "ready",
-      preserved_closure: "open" } },  },
   undoLatestAuthorAction: {
     arrange: async () => {
       const project = await createStory(server, { title: "Smoke Undo Novel" });

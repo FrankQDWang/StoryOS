@@ -59,7 +59,6 @@ impl DecisionRecord<'_> {
             StateAxis::Generation => "preserved_generation",
             StateAxis::Validation => "preserved_validation",
             StateAxis::Closure => "preserved_closure",
-            StateAxis::OperationResolution => "preserved_operation_resolution",
         };
         self.state(key, axis)
     }

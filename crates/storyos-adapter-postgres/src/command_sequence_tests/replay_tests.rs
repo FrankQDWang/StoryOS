@@ -1,9 +1,8 @@
 use storyos_application::{
     AcceptProposalInput, CreateChapterInput, CreateVolumeInput, DeleteChapterInput,
     DeleteMemoryEntryInput, DeleteVolumeInput, RejectProposalOperationsInput,
-    ReopenWithdrawnProposalInput, SetCurrentChapterInput, UpdateChapterInput,
-    UpdateProjectAssistanceInput, UpdateProjectInput, UpdateProjectInstructionInput,
-    UpdateVolumeInput, WithdrawProposalInput,
+    SetCurrentChapterInput, UpdateChapterInput, UpdateProjectAssistanceInput, UpdateProjectInput,
+    UpdateProjectInstructionInput, UpdateVolumeInput, WithdrawProposalInput,
 };
 use storyos_application::{
     CancelAgentRunInput, ChapterId, EditorSessionId, PauseAgentRunInput, VolumeId,
@@ -28,11 +27,8 @@ use crate::shared_tests::command_sequence_project_session::{
     UPDATE_PROJECT_INSTRUCTION, take_over_project_writer, take_over_project_writer_call,
 };
 use crate::shared_tests::command_sequence_proposal_decision::{
-    REJECT_PROPOSAL_OPERATIONS, REOPEN_REJECTED_OPERATIONS, REOPEN_WITHDRAWN_PROPOSAL,
-    REPLAN_PROPOSAL, WITHDRAW_PROPOSAL, conflicted_proposal, move_head_away, pending_proposal,
-    reject_proposal_operations, rejected_operation, reopen_rejected_operations,
-    reopen_withdrawn_proposal, replan_proposal, withdraw_proposal, withdrawable_proposal,
-    withdrawn_proposal,
+    REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL, move_head_away, pending_proposal,
+    reject_proposal_operations, withdraw_proposal, withdrawable_proposal,
 };
 use crate::shared_tests::command_sequence_replay::move_to_earlier_base;
 use crate::shared_tests::command_sequence_steer_agent_run::{
@@ -325,56 +321,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let outcome = replayed_outcome(&store, &admin, &call, take_over_project_writer).await;
     observed.push((TAKE_OVER_PROJECT_WRITER.kind, outcome));
 
-    let (scope, withdrawn) = withdrawn_proposal(&store, &admin, /*base*/ 0x5db0).await;
-    let call = issued(
-        &store,
-        &scope,
-        /*suffix*/ 0x5db9,
-        &REOPEN_WITHDRAWN_PROPOSAL,
-        withdrawn.clone(),
-    )
-    .await;
-    let outcome = replayed_outcome(&store, &admin, &call, reopen_withdrawn_proposal).await;
-    observed.push((REOPEN_WITHDRAWN_PROPOSAL.kind, outcome));
-    let reopened_revision_id: String = admin
-        .query_one(
-            "SELECT current_revision_id::text FROM storyos.proposal_heads
-              WHERE proposal_id = $1::text::uuid",
-            &[&withdrawn.proposal_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    for (suffix, proposal_revision_id) in [
-        (0x5dba, reopened_revision_id),
-        (0x5dbb, withdrawn.proposal_revision_id.clone()),
-    ] {
-        let input = ReopenWithdrawnProposalInput {
-            proposal_revision_id,
-            ..withdrawn.clone()
-        };
-        let call = issued(&store, &scope, suffix, &REOPEN_WITHDRAWN_PROPOSAL, input).await;
-        let outcome = replayed_outcome(&store, &admin, &call, reopen_withdrawn_proposal).await;
-        observed.push((REOPEN_WITHDRAWN_PROPOSAL.kind, outcome));
-    }
-    let (scope, withdrawn) = withdrawn_proposal(&store, &admin, /*base*/ 0x5dc0).await;
-    move_head_away(
-        &admin,
-        &scope,
-        &withdrawn.expected_authoritative_revision_id,
-    )
-    .await;
-    let call = issued(
-        &store,
-        &scope,
-        /*suffix*/ 0x5dc9,
-        &REOPEN_WITHDRAWN_PROPOSAL,
-        withdrawn,
-    )
-    .await;
-    let outcome = replayed_outcome(&store, &admin, &call, reopen_withdrawn_proposal).await;
-    observed.push((REOPEN_WITHDRAWN_PROPOSAL.kind, outcome));
-
     let mut rejection_records = Vec::new();
     let (scope, pending) = pending_proposal(&store, &admin, /*base*/ 0x7b00).await;
     let stale = RejectProposalOperationsInput {
@@ -409,56 +355,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
                 .get::<_, i64>(/*idx*/ 0),
         );
     }
-
-    // The second exact call names a Proposal Revision that the first call superseded.
-    let (scope, conflicted) = conflicted_proposal(&store, &admin, /*base*/ 0x7200).await;
-    for suffix in [0x7209, 0x720a] {
-        let call = issued(&store, &scope, suffix, &REPLAN_PROPOSAL, conflicted.clone()).await;
-        let outcome = replayed_outcome(&store, &admin, &call, replan_proposal).await;
-        observed.push((REPLAN_PROPOSAL.kind, outcome));
-    }
-    let (scope, conflicted) = conflicted_proposal(&store, &admin, /*base*/ 0x7210).await;
-    move_head_away(
-        &admin,
-        &scope,
-        &conflicted.expected_authoritative_revision_id,
-    )
-    .await;
-    let call = issued(
-        &store,
-        &scope,
-        /*suffix*/ 0x7219,
-        &REPLAN_PROPOSAL,
-        conflicted,
-    )
-    .await;
-    let outcome = replayed_outcome(&store, &admin, &call, replan_proposal).await;
-    observed.push((REPLAN_PROPOSAL.kind, outcome));
-    let (scope, rejected) = rejected_operation(&store, &admin, /*base*/ 0x7220).await;
-    for suffix in [0x7229, 0x722a] {
-        let call = issued(
-            &store,
-            &scope,
-            suffix,
-            &REOPEN_REJECTED_OPERATIONS,
-            rejected.clone(),
-        )
-        .await;
-        let outcome = replayed_outcome(&store, &admin, &call, reopen_rejected_operations).await;
-        observed.push((REOPEN_REJECTED_OPERATIONS.kind, outcome));
-    }
-    let (scope, rejected) = rejected_operation(&store, &admin, /*base*/ 0x7230).await;
-    move_head_away(&admin, &scope, &rejected.expected_authoritative_revision_id).await;
-    let call = issued(
-        &store,
-        &scope,
-        /*suffix*/ 0x7239,
-        &REOPEN_REJECTED_OPERATIONS,
-        rejected,
-    )
-    .await;
-    let outcome = replayed_outcome(&store, &admin, &call, reopen_rejected_operations).await;
-    observed.push((REOPEN_REJECTED_OPERATIONS.kind, outcome));
 
     let (scope, open) = withdrawable_proposal(&store, &admin, /*base*/ 0x7440).await;
     let mut withdrawal_receipts = Vec::new();
@@ -580,7 +476,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let structural_applied = ("authoritative_applied", [1, 1, 1, 1, 1]);
     let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
     let activity_applied = ("authoritative_applied", [1, 0, 1, 0, 0]);
-    let proposal_revised = ("proposal_revised", [1, 1, 0, 0, 0]);
     let proposal_closure_changed = ("proposal_closure_changed", [1, 1, 0, 0, 0]);
     let operations_resolved = ("proposal_operations_resolved", [1, 1, 0, 0, 0]);
     let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
@@ -636,20 +531,10 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             (CommandKind::DeleteMemoryEntry, activity_applied),
             (CommandKind::DeleteMemoryEntry, no_effect),
             (CommandKind::TakeOverProjectWriter, writer_takeover),
-            (CommandKind::ReopenWithdrawnProposal, proposal_revised),
-            (CommandKind::ReopenWithdrawnProposal, no_effect),
-            (CommandKind::ReopenWithdrawnProposal, refused),
-            (CommandKind::ReopenWithdrawnProposal, conflicted),
             (CommandKind::RejectProposalOperations, operations_resolved),
             (CommandKind::RejectProposalOperations, refused),
             (CommandKind::RejectProposalOperations, refused),
             (CommandKind::RejectProposalOperations, conflicted),
-            (CommandKind::ReplanProposal, proposal_revised),
-            (CommandKind::ReplanProposal, refused),
-            (CommandKind::ReplanProposal, conflicted),
-            (CommandKind::ReopenRejectedOperations, proposal_revised),
-            (CommandKind::ReopenRejectedOperations, refused),
-            (CommandKind::ReopenRejectedOperations, conflicted),
             (CommandKind::WithdrawProposal, proposal_closure_changed),
             (CommandKind::WithdrawProposal, no_effect),
             (CommandKind::WithdrawProposal, refused),

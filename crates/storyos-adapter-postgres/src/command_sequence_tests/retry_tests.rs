@@ -18,8 +18,7 @@ use crate::shared_tests::command_sequence_project_session::{
     update_project_instruction_call,
 };
 use crate::shared_tests::command_sequence_proposal_decision::{
-    reject_proposal_operations_call, reopen_rejected_operations_call,
-    reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
+    reject_proposal_operations_call, withdraw_proposal_call,
 };
 use crate::shared_tests::command_sequence_retry::in_progress_retry;
 use crate::shared_tests::command_sequence_steer_agent_run::steer_agent_run_call;
@@ -114,25 +113,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
-            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x5eb0).await,
-        )
-        .await,
-        in_progress_retry(
-            &store,
-            &admin,
             &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7b20).await,
-        )
-        .await,
-        in_progress_retry(
-            &store,
-            &admin,
-            &replan_proposal_call(&store, &admin, /*base*/ 0x7240).await,
-        )
-        .await,
-        in_progress_retry(
-            &store,
-            &admin,
-            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7250).await,
         )
         .await,
         in_progress_retry(
@@ -172,7 +153,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         )
         .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 22]);
+    assert_eq!(observed, vec![(true, [0; 5]); 19]);
 }
 
 #[tokio::test]

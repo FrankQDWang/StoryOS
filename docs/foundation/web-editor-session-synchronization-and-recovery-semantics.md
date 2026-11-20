@@ -325,7 +325,7 @@ not show the text of that Journal, and the readable export of the Server text
 stays available.
 
 An `ExplicitEditorCommandRecord` durably represents takeover, Acceptance,
-rejection, withdrawal, reopen, supersede, continuation, completion,
+rejection, withdrawal, supersede, continuation, completion,
 Author Undo, or another explicit editor command before network
 submission. It is never coalesced. Before Admission, its protected transport
 attempts may only finish that same already-confirmed submission; after
@@ -1539,12 +1539,9 @@ The result consumer is likewise closed:
 | `AcceptProposal.Invalid` | project current Proposal with validation `invalid`; remove accept until a new current Revision validates |
 | `AcceptProposal.Conflicted` | project its exact `ProposalConflict`; expose accept/reject/copy as the `ProposalConflict` row above |
 | `AcceptProposal.Refused` | project the exact returned current target; expose only controls permitted by that current state and never imply Acceptance. After a Core refusal, the status line of the open Proposal shows the refusal text until the next decision or a new Proposal Revision. For `missing_target`, the text tells that the target paragraph is not in the Chapter and that Reject closes the Proposal. getProposal does not return the Core refusal, so the text stays through a reload only from the Local Edit Journal of the same browser profile and journal partition. |
-| `RejectProposalOperations` applied | selected Operations become `rejected`; remove their accept/reject controls and expose reopen only against the exact rejection events |
-| `WithdrawProposal` applied | closure becomes `withdrawn`; remove accept/reject/continue/complete and expose only exact reopen or supersede when current state permits |
-| `ReplanProposal` applied | the editor has no Replan control and sends no Replan (ADR 0064); it projects a new pending Revision from another client as any current Proposal Revision |
-| `ReopenWithdrawnProposal` applied | project the new open, validation-pending Revision; remove the stale reopen control |
+| `RejectProposalOperations` applied | selected Operations become `rejected`; remove their accept/reject controls |
+| `WithdrawProposal` applied | closure becomes `withdrawn`; remove accept/reject/continue/complete and expose only supersede when current state permits |
 | `SupersedeProposal` applied | project terminal `superseded`; remove every active Proposal control |
-| `ReopenRejectedOperations` applied | selected Operations become pending in the new validation-pending Revision; remove stale rejection-event controls |
 | `ContinueProposalGeneration` applied | project the new Generation ID and `generating`; remove controls bound to the prior Generation ID and disable Acceptance until a later exact ready/valid state |
 | `CompleteReadyPartialProposal` applied | project `ready` for the same current Revision with every other returned axis preserved; remove the stale complete control and derive Acceptance only from current validation/closure/resolution |
 | any explicit decision `Refused`, `Conflicted`, or `NoEffect` | project the returned `DecisionCurrentTarget` and condition exactly; allocate no lifecycle change locally and derive controls only from that returned current target |

@@ -8,7 +8,6 @@ use uuid::Uuid;
 use crate::author_edit_proposal::{decode_proposal_compensation, proposal_receipt_payload};
 use crate::command_replay::ReplayFault;
 use crate::command_sequence::{ActionDisposition, insert_author_action};
-use crate::reopen_withdrawn_proposal::head_withdrawals;
 use crate::undo_compensation::{
     CompensationAction, CompensationAdapter, CompensationReplay, UndoRequest,
     allocate_compensation_action,
@@ -16,8 +15,8 @@ use crate::undo_compensation::{
 use crate::undo_frontier::proposal_head_restores;
 use crate::undo_latest_author_action::undo_database_error;
 
-/// Reopens a Proposal that the author withdrew. A later producer Withdrawal keeps it withdrawn
-/// (ADR 0069).
+/// Reopens a Proposal that the author withdrew. No command can withdraw a withdrawn Proposal,
+/// so no producer Withdrawal comes after it (ADR 0098).
 pub(crate) struct AuthorWithdrawalCompensation;
 
 impl CompensationAdapter for AuthorWithdrawalCompensation {
@@ -89,8 +88,6 @@ pub(crate) struct ObservedAuthorWithdrawal {
     pub generation: String,
     pub candidate_text: String,
     pub base_authoritative_revision_id: String,
-    /// `withdrawn` when a producer Withdrawal still keeps the head withdrawn, else `open`.
-    pub closure: &'static str,
 }
 
 async fn load_author_withdrawal(
@@ -164,15 +161,6 @@ async fn load_author_withdrawal(
     {
         return Ok(None);
     }
-    let producer_withdrew = head_withdrawals(
-        client,
-        &command.project_scope,
-        &proposal_id,
-        &current_revision_id,
-    )
-    .await?
-    .iter()
-    .any(|withdrawal| withdrawal.by_producer);
     Ok(Some(ObservedAuthorWithdrawal {
         sequence,
         compensation_revision_id: Uuid::now_v7().to_string(),
@@ -181,11 +169,6 @@ async fn load_author_withdrawal(
         generation: row.get(/*idx*/ 2),
         candidate_text: row.get(/*idx*/ 3),
         base_authoritative_revision_id: row.get(/*idx*/ 4),
-        closure: if producer_withdrew {
-            "withdrawn"
-        } else {
-            "open"
-        },
     }))
 }
 
@@ -203,7 +186,7 @@ async fn persist_withdrawal_compensation(
                (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
                 closure, candidate_text, base_authoritative_revision_id, parent_revision_id)
              SELECT withdrawal.owner_user_id, withdrawal.project_id, withdrawal.proposal_id,
-                    $4::text::uuid, $5, 'pending', $9, $6, $7::text::uuid,
+                    $4::text::uuid, $5, 'pending', 'open', $6, $7::text::uuid,
                     $8::text::uuid
                FROM storyos.proposal_withdrawals AS withdrawal
               WHERE withdrawal.owner_user_id = $1::text::uuid
@@ -219,7 +202,6 @@ async fn persist_withdrawal_compensation(
                 &frontier.candidate_text,
                 &frontier.base_authoritative_revision_id,
                 &frontier.current_revision_id,
-                &frontier.closure,
             ],
         )
         .await

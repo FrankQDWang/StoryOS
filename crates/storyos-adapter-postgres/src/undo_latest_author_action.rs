@@ -247,13 +247,6 @@ async fn undo_admission(
             (Some(frontier.chapter_id.as_str()), Some(expected))
         }
         Some(
-            ObservedFrontier::Replan(decision)
-            | ObservedFrontier::ReopenWithdrawnProposal(decision),
-        ) => (Some(decision.chapter_id.as_str()), Some(expected)),
-        Some(ObservedFrontier::ReopenRejectedOperations(frontier)) => {
-            (Some(frontier.decision.chapter_id.as_str()), Some(expected))
-        }
-        Some(
             ObservedFrontier::Structure(_)
             | ObservedFrontier::CurrentChapter(_)
             | ObservedFrontier::Barrier { .. },

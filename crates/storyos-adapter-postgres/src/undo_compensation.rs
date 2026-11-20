@@ -155,9 +155,6 @@ pub(crate) enum ForwardCommand {
     Structure(StructureCommand),
     SetCurrentChapter,
     WithdrawProposal,
-    ReplanProposal,
-    ReopenRejectedOperations,
-    ReopenWithdrawnProposal,
     RejectProposalOperations,
     /// The Forward Author Action of an Undo Acceptance that requires a Reversal Proposal.
     UndoReversalRequired,
@@ -184,9 +181,6 @@ pub(crate) enum UndoDisposition {
     Prose,
     Acceptance,
     ProposalEdit,
-    Replan,
-    ReopenRejectedOperations,
-    ReopenWithdrawnProposal,
     Structure(StructureCommand),
     CurrentChapter,
     AuthorWithdrawal,
@@ -211,9 +205,6 @@ impl ForwardCommand {
             CommandKind::DeleteChapter => Self::Structure(StructureCommand::DeleteChapter),
             CommandKind::SetCurrentChapter => Self::SetCurrentChapter,
             CommandKind::WithdrawProposal => Self::WithdrawProposal,
-            CommandKind::ReplanProposal => Self::ReplanProposal,
-            CommandKind::ReopenRejectedOperations => Self::ReopenRejectedOperations,
-            CommandKind::ReopenWithdrawnProposal => Self::ReopenWithdrawnProposal,
             CommandKind::RejectProposalOperations => Self::RejectProposalOperations,
             CommandKind::UndoLatestAuthorAction => Self::UndoReversalRequired,
             CommandKind::CreateProject
@@ -245,9 +236,6 @@ impl ForwardCommand {
             Self::Structure(StructureCommand::DeleteChapter) => CommandKind::DeleteChapter,
             Self::SetCurrentChapter => CommandKind::SetCurrentChapter,
             Self::WithdrawProposal => CommandKind::WithdrawProposal,
-            Self::ReplanProposal => CommandKind::ReplanProposal,
-            Self::ReopenRejectedOperations => CommandKind::ReopenRejectedOperations,
-            Self::ReopenWithdrawnProposal => CommandKind::ReopenWithdrawnProposal,
             Self::RejectProposalOperations => CommandKind::RejectProposalOperations,
             Self::UndoReversalRequired => CommandKind::UndoLatestAuthorAction,
         }
@@ -261,10 +249,7 @@ impl ForwardCommand {
             | Self::Structure(_)
             | Self::SetCurrentChapter
             | Self::UndoReversalRequired => "authoritative_applied",
-            Self::AuthorEdit(AuthorEditVariant::ProposalRevised)
-            | Self::ReplanProposal
-            | Self::ReopenRejectedOperations
-            | Self::ReopenWithdrawnProposal => "proposal_revised",
+            Self::AuthorEdit(AuthorEditVariant::ProposalRevised) => "proposal_revised",
             Self::WithdrawProposal => "proposal_closure_changed",
             Self::RejectProposalOperations => "proposal_operations_resolved",
         }
@@ -274,9 +259,6 @@ impl ForwardCommand {
         match self {
             Self::AuthorEdit(AuthorEditVariant::AuthoritativeApplied) => UndoDisposition::Prose,
             Self::AuthorEdit(AuthorEditVariant::ProposalRevised) => UndoDisposition::ProposalEdit,
-            Self::ReplanProposal => UndoDisposition::Replan,
-            Self::ReopenRejectedOperations => UndoDisposition::ReopenRejectedOperations,
-            Self::ReopenWithdrawnProposal => UndoDisposition::ReopenWithdrawnProposal,
             Self::AcceptProposal => UndoDisposition::Acceptance,
             Self::Structure(command) => UndoDisposition::Structure(command),
             Self::SetCurrentChapter => UndoDisposition::CurrentChapter,

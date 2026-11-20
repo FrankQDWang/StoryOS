@@ -14,8 +14,7 @@ use crate::shared_tests::command_sequence_project_session::{
     update_project_instruction_call,
 };
 use crate::shared_tests::command_sequence_proposal_decision::{
-    reject_proposal_operations_call, reopen_rejected_operations_call,
-    reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
+    reject_proposal_operations_call, withdraw_proposal_call,
 };
 use crate::shared_tests::command_sequence_rollback::failed_then_settled;
 use crate::shared_tests::command_sequence_steer_agent_run::steer_agent_run_call;
@@ -107,12 +106,6 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
-            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x5fb0).await,
-        )
-        .await,
-        failed_then_settled(
-            &store,
-            &admin,
             &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7b30).await,
         )
         .await,
@@ -121,18 +114,6 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             stale.input.proposal_revision_id = Uuid::now_v7().to_string();
             stale
         })
-        .await,
-        failed_then_settled(
-            &store,
-            &admin,
-            &replan_proposal_call(&store, &admin, /*base*/ 0x7260).await,
-        )
-        .await,
-        failed_then_settled(
-            &store,
-            &admin,
-            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7270).await,
-        )
         .await,
         failed_then_settled(
             &store,
@@ -188,9 +169,9 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
     };
     let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 11];
     expected.push(rolled_back(ReceiptResult::NoEffect));
-    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
+    expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::Refused));
-    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 6]);
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 4]);
     expected.push(rolled_back(ReceiptResult::NoEffect));
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::NoEffect));

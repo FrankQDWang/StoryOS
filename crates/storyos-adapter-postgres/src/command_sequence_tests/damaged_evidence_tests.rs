@@ -17,8 +17,7 @@ use crate::shared_tests::command_sequence_project_session::{
     update_project_assistance_call, update_project_call, update_project_instruction_call,
 };
 use crate::shared_tests::command_sequence_proposal_decision::{
-    reject_proposal_operations_call, reopen_rejected_operations_call,
-    reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
+    reject_proposal_operations_call, withdraw_proposal_call,
 };
 use crate::shared_tests::command_sequence_steer_agent_run::steer_agent_run_call;
 use crate::shared_tests::command_sequence_structure::{
@@ -103,25 +102,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         evidence_replays(
             &store,
             &admin,
-            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x6ad0).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
             &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7b50).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
-            &replan_proposal_call(&store, &admin, /*base*/ 0x7280).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
-            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7290).await,
         )
         .await,
         evidence_replays(
@@ -166,7 +147,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ],
         )
     };
-    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 19];
+    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 16];
     expected.push(separated(ReceiptResult::NoEffect));
     expected.push(separated(ReceiptResult::AuthoritativeApplied));
     assert_eq!(observed, expected);
@@ -231,29 +212,8 @@ async fn an_applied_replay_requires_the_payload_field_of_its_receipt() {
             "result_payload - 'transition'",
         )
         .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &replan_proposal_call(&store, &admin, /*base*/ 0x9c20).await,
-            "result_payload - 'transition'",
-        )
-        .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x9c30).await,
-            "result_payload - 'transition'",
-        )
-        .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x9c40).await,
-            "result_payload - 'transition'",
-        )
-        .await,
     ];
-    assert_eq!(observed, vec![ReplayError::Unavailable; 5]);
+    assert_eq!(observed, vec![ReplayError::Unavailable; 2]);
 }
 
 #[tokio::test]

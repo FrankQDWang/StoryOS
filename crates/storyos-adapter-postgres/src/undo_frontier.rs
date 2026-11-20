@@ -4,10 +4,6 @@ use storyos_core::AuthorUndoFrontierKind;
 use crate::accept_proposal::{AcceptanceCompensation, LoadedAcceptance};
 use crate::author_edit::{ObservedProseFrontier, ProseCompensation};
 use crate::author_edit_proposal::{ObservedProposalFrontier, ProposalEditCompensation};
-use crate::proposal_decision_compensation::ObservedProposalDecision;
-use crate::reopen_rejected_operations::{ObservedOperationReopening, ReopenRejectedCompensation};
-use crate::reopen_withdrawn_proposal::{REOPEN_WITHDRAWN_HISTORY, ReopenWithdrawnCompensation};
-use crate::replan_proposal::{REPLAN_HISTORY, ReplanCompensation};
 use crate::set_current_chapter::{CurrentChapterCompensation, ObservedCurrentChapterFrontier};
 use crate::structural_authority_settlement::{ObservedStructureFrontier, StructureCompensation};
 use crate::undo_compensation::{CompensationAdapter, ForwardCommand, UndoDisposition, UndoRequest};
@@ -19,9 +15,6 @@ pub(crate) enum ObservedFrontier {
     Structure(ObservedStructureFrontier),
     CurrentChapter(ObservedCurrentChapterFrontier),
     Proposal(ObservedProposalFrontier),
-    Replan(ObservedProposalDecision),
-    ReopenRejectedOperations(ObservedOperationReopening),
-    ReopenWithdrawnProposal(ObservedProposalDecision),
     AuthorWithdrawal(ObservedAuthorWithdrawal),
     Barrier { sequence: u64 },
 }
@@ -95,21 +88,6 @@ pub(crate) async fn load_observed_frontier(
                 .await?
                 .map(ObservedFrontier::Proposal)
         }
-        UndoDisposition::Replan => {
-            ReplanCompensation::load(client, command, REPLAN_HISTORY, sequence)
-                .await?
-                .map(ObservedFrontier::Replan)
-        }
-        UndoDisposition::ReopenRejectedOperations => {
-            ReopenRejectedCompensation::load(client, command, (), sequence)
-                .await?
-                .map(ObservedFrontier::ReopenRejectedOperations)
-        }
-        UndoDisposition::ReopenWithdrawnProposal => {
-            ReopenWithdrawnCompensation::load(client, command, REOPEN_WITHDRAWN_HISTORY, sequence)
-                .await?
-                .map(ObservedFrontier::ReopenWithdrawnProposal)
-        }
         UndoDisposition::Structure(forward) => {
             StructureCompensation::load(client, command, forward, sequence)
                 .await?
@@ -140,8 +118,6 @@ impl ObservedFrontier {
             Self::Structure(frontier) => frontier.sequence,
             Self::CurrentChapter(frontier) => frontier.sequence,
             Self::Proposal(frontier) => frontier.sequence,
-            Self::Replan(frontier) | Self::ReopenWithdrawnProposal(frontier) => frontier.sequence,
-            Self::ReopenRejectedOperations(frontier) => frontier.decision.sequence,
             Self::AuthorWithdrawal(frontier) => frontier.sequence,
             Self::Barrier { sequence } => *sequence,
         }
@@ -154,13 +130,6 @@ impl ObservedFrontier {
             Self::Structure(frontier) => StructureCompensation::frontier_kind(frontier),
             Self::CurrentChapter(frontier) => CurrentChapterCompensation::frontier_kind(frontier),
             Self::Proposal(frontier) => ProposalEditCompensation::frontier_kind(frontier),
-            Self::Replan(frontier) => ReplanCompensation::frontier_kind(frontier),
-            Self::ReopenRejectedOperations(frontier) => {
-                ReopenRejectedCompensation::frontier_kind(frontier)
-            }
-            Self::ReopenWithdrawnProposal(frontier) => {
-                ReopenWithdrawnCompensation::frontier_kind(frontier)
-            }
             Self::AuthorWithdrawal(frontier) => {
                 AuthorWithdrawalCompensation::frontier_kind(frontier)
             }
@@ -175,9 +144,6 @@ impl ObservedFrontier {
             Self::Structure(_)
             | Self::CurrentChapter(_)
             | Self::Proposal(_)
-            | Self::Replan(_)
-            | Self::ReopenRejectedOperations(_)
-            | Self::ReopenWithdrawnProposal(_)
             | Self::AuthorWithdrawal(_)
             | Self::Barrier { .. } => None,
         }
@@ -197,9 +163,6 @@ impl ObservedFrontier {
             Self::Structure(_)
             | Self::CurrentChapter(_)
             | Self::Proposal(_)
-            | Self::Replan(_)
-            | Self::ReopenRejectedOperations(_)
-            | Self::ReopenWithdrawnProposal(_)
             | Self::AuthorWithdrawal(_)
             | Self::Barrier { .. } => None,
         }
@@ -331,9 +294,7 @@ pub(crate) async fn proposal_head_restores(
                     AND appended.revision_id = lineage.revision_id
                     AND ((source_receipt.command_kind = 'withdrawProposal'
                           AND withdrawal.proposal_revision_id IS NOT NULL)
-                      OR (source_receipt.command_kind IN
-                            ('applyAuthorEdit', 'replanProposal', 'reopenRejectedOperations',
-                             'reopenWithdrawnProposal')
+                      OR (source_receipt.command_kind = 'applyAuthorEdit'
                           AND resulting.parent_revision_id IS NOT NULL))
                UNION ALL
                  SELECT reopened.parent_revision_id

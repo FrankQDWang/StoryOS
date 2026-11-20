@@ -8,8 +8,7 @@ use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_damaged_evidence::{ReplayError, damaged_replay};
 use crate::shared_tests::command_sequence_proposal_decision::{
-    reject_proposal_operations, reject_proposal_operations_call, reopen_rejected_operations_call,
-    reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
+    reject_proposal_operations, reject_proposal_operations_call, withdraw_proposal_call,
 };
 use crate::shared_tests::command_sequence_support::{
     CommandCall, SequenceError, replayed_outcome, run_without_foreign_keys, stores,
@@ -103,39 +102,6 @@ async fn every_proposal_decision_replay_separates_pre_capture_from_damaged_effec
             },
         )
         .await,
-        effect_replays(
-            &store,
-            &admin,
-            &replan_proposal_call(&store, &admin, /*base*/ 0x7c20).await,
-            PreservedEffect {
-                table: "proposal_replans",
-                receipt_column: "replan_receipt_id",
-                preserved_columns: &["preserved_generation", "preserved_closure"],
-            },
-        )
-        .await,
-        effect_replays(
-            &store,
-            &admin,
-            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x7c30).await,
-            PreservedEffect {
-                table: "proposal_withdrawal_reopenings",
-                receipt_column: "reopen_receipt_id",
-                preserved_columns: &["preserved_generation", "preserved_operation_resolution"],
-            },
-        )
-        .await,
-        effect_replays(
-            &store,
-            &admin,
-            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7c40).await,
-            PreservedEffect {
-                table: "proposal_operation_reopenings",
-                receipt_column: "reopen_receipt_id",
-                preserved_columns: &["preserved_generation", "preserved_closure"],
-            },
-        )
-        .await,
     ];
     let separated = (
         Some(SqlState::CHECK_VIOLATION),
@@ -144,7 +110,7 @@ async fn every_proposal_decision_replay_separates_pre_capture_from_damaged_effec
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 5]);
+    assert_eq!(observed, vec![separated; 2]);
 }
 
 #[tokio::test]

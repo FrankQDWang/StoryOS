@@ -13,9 +13,6 @@ use crate::PostgresProjectReader;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_acceptance::{ACCEPT_PROPOSAL, accept_proposal};
 use crate::shared_tests::command_sequence_agent_run::seed_run;
-use crate::shared_tests::command_sequence_proposal_decision_undo_chain::{
-    conflict_and_replan, head_state,
-};
 use crate::shared_tests::command_sequence_proposal_undo_chain::{compensated, edit, on, undo_call};
 use crate::shared_tests::command_sequence_secondary_operation::{
     PRIMARY_TEXT, SECONDARY_TEXT, TwoOperationProposal, chapter_blocks, proposal_head,
@@ -415,49 +412,6 @@ async fn the_undo_of_an_unselected_edit_compensates_after_a_derived_acceptance_u
             before,
             vec!["applied".to_owned(), "pending".to_owned()]
         )
-    );
-}
-
-/// Replan D, candidate edit E, Acceptance, Undo of the Acceptance, Undo of E, Undo of D. The edit
-/// gives the replanned Proposal a Validation Receipt, so the Acceptance is possible. The Undo of D
-/// restores the Revision before D with its base.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn author_undo_restores_a_replan_after_the_undo_of_an_acceptance_of_its_edit() {
-    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
-    let (store, admin) = stores().await;
-    let mut proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4ec0).await;
-    let before = operation_candidates(&admin, &proposal).await;
-    let (replanned, before_replan) =
-        conflict_and_replan(&store, &admin, &proposal, /*suffix*/ 0x4ec9).await;
-    let edited = edit(
-        &store,
-        &admin,
-        &proposal,
-        on(
-            /*operation*/ 0, /*suffix*/ 0x4eca, /*local_intent_sequence*/ 3,
-        ),
-    )
-    .await;
-    accept(
-        &store,
-        &admin,
-        &mut proposal,
-        &[0, 1],
-        /*suffix*/ 0x4ecb,
-    )
-    .await;
-    undo_source(&store, &admin, &mut proposal, /*suffix*/ 0x4ecc).await;
-    let undo_edit = undo_source(&store, &admin, &mut proposal, /*suffix*/ 0x4ecd).await;
-    let undo_replan = undo_source(&store, &admin, &mut proposal, /*suffix*/ 0x4ece).await;
-
-    assert_eq!(
-        (
-            (undo_edit, undo_replan),
-            head_state(&admin, &proposal.proposal_id).await,
-            operation_candidates(&admin, &proposal).await,
-        ),
-        ((edited, replanned), before_replan, before)
     );
 }
 

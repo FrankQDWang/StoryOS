@@ -333,58 +333,6 @@ export type WithdrawProposalEffect = { "kind": "resolved", author_action_sequenc
 
 export type WithdrawProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string | null, receipt: WithdrawalReceipt, project: ControlledProject, effect: WithdrawProposalEffect, };
 
-export type ReplanSourceCondition = { "kind": "proposal_conflict", proposal_conflict_ref: string, } | { "kind": "proposal_recovery_conflict", proposal_recovery_conflict_ref: string, };
-
-export type ReplanProposalInput = { conflicted_proposal_revision_id: string, expected_current_proposal_head: string, expected_current_target_revisions: Array<string>, replacement_operations: Array<string>, source_condition: ReplanSourceCondition, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
-
-export type ReplanProposalRequest = { command_schema: string, replan_proposal_input: ReplanProposalInput, };
-
-export type ReplanReceiptResult = "resolved" | "conflicted" | "refused";
-
-export type ReplanReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, source_proposal_revision_id: string, resulting_proposal_revision_id: string, expected_current_target_revisions: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: ReplanReceiptResult, created_at: string, };
-
-export type ReplanProposalRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "unavailable_proof";
-
-export type ReplanProposalConflictReason = "changed_head";
-
-export type ReplanProposalEffect = { "kind": "resolved", author_action_sequence: string, undo_disposition: AuthorUndoDisposition, resulting_proposal_revision_id: string, resulting_validation: string, preserved_generation: string, preserved_closure: string, source_condition: ReplanSourceCondition, state_event_refs: Array<string>, } | { "kind": "conflicted", reason: ReplanProposalConflictReason, } | { "kind": "refused", reason: ReplanProposalRefusalReason, };
-
-export type ReplanProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ReplanReceipt, project: ControlledProject, effect: ReplanProposalEffect, };
-
-export type ReopenWithdrawnProposalInput = { proposal_revision_id: string, withdrawal_event_ref: string, expected_closure: string, expected_target_revisions: Array<string>, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
-
-export type ReopenWithdrawnProposalRequest = { command_schema: string, reopen_withdrawn_proposal_input: ReopenWithdrawnProposalInput, };
-
-export type ReopenWithdrawnReceiptResult = "resolved" | "conflicted" | "refused" | "no_effect";
-
-export type ReopenWithdrawnReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, source_proposal_revision_id: string, resulting_proposal_revision_id: string | null, withdrawal_event_ref: string, expected_target_revisions: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: ReopenWithdrawnReceiptResult, created_at: string, };
-
-export type ReopenWithdrawnProposalRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision";
-
-export type ReopenWithdrawnProposalConflictReason = "changed_head";
-
-export type ReopenWithdrawnProposalNoEffectReason = "terminal_supersession" | "closure_not_withdrawn" | "withdrawal_event_mismatch";
-
-export type ReopenWithdrawnProposalEffect = { "kind": "resolved", author_action_sequence: string, undo_disposition: AuthorUndoDisposition, resulting_proposal_revision_id: string, prior_closure: string, resulting_closure: string, resulting_validation: string, preserved_generation: string, preserved_operation_resolution: string, withdrawal_event_ref: string, state_event_refs: Array<string>, } | { "kind": "conflicted", reason: ReopenWithdrawnProposalConflictReason, } | { "kind": "refused", reason: ReopenWithdrawnProposalRefusalReason, } | { "kind": "no_effect", reason: ReopenWithdrawnProposalNoEffectReason, };
-
-export type ReopenWithdrawnProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ReopenWithdrawnReceipt, project: ControlledProject, effect: ReopenWithdrawnProposalEffect, };
-
-export type ReopenRejectedOperationsInput = { proposal_revision_id: string, selected_rejected_operation_ids: Array<string>, rejection_event_refs: Array<string>, expected_target_revisions: Array<string>, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
-
-export type ReopenRejectedOperationsRequest = { command_schema: string, reopen_rejected_operations_input: ReopenRejectedOperationsInput, };
-
-export type ReopenReceiptResult = "resolved" | "conflicted" | "refused";
-
-export type ReopenReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, source_proposal_revision_id: string, resulting_proposal_revision_id: string, selected_rejected_operation_ids: Array<string>, rejection_event_refs: Array<string>, expected_target_revisions: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: ReopenReceiptResult, created_at: string, };
-
-export type ReopenRejectedOperationsRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "operation_not_rejected" | "unavailable_proof";
-
-export type ReopenRejectedOperationsConflictReason = "changed_head";
-
-export type ReopenRejectedOperationsEffect = { "kind": "resolved", author_action_sequence: string, undo_disposition: AuthorUndoDisposition, operation_ids: Array<string>, rejection_event_refs: Array<string>, prior_resolution: string, resulting_resolution: string, resulting_proposal_revision_id: string, resulting_validation: string, preserved_generation: string, preserved_closure: string, state_event_refs: Array<string>, } | { "kind": "conflicted", reason: ReopenRejectedOperationsConflictReason, } | { "kind": "refused", reason: ReopenRejectedOperationsRefusalReason, };
-
-export type ReopenRejectedOperationsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ReopenReceipt, project: ControlledProject, effect: ReopenRejectedOperationsEffect, };
-
 export type UndoLatestAuthorActionInput = { expected_author_undo_frontier_sequence: string, expected_authoritative_revision_id: string, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type UndoLatestAuthorActionRequest = { command_schema: string, undo_latest_author_action_input: UndoLatestAuthorActionInput, };
@@ -769,12 +717,6 @@ export declare function digestRejectProposalOperations(request: RejectProposalOp
 export declare function rejectProposalOperations(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: RejectProposalOperationsRequest; idempotencyKey: string; antiForgery: string }): Promise<RejectProposalOperationsResponse>;
 export declare function digestWithdrawProposal(request: WithdrawProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function withdrawProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: WithdrawProposalRequest; idempotencyKey: string; antiForgery?: string }): Promise<WithdrawProposalResponse>;
-export declare function digestReplanProposal(request: ReplanProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
-export declare function replanProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReplanProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<ReplanProposalResponse>;
-export declare function digestReopenWithdrawnProposal(request: ReopenWithdrawnProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
-export declare function reopenWithdrawnProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReopenWithdrawnProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<ReopenWithdrawnProposalResponse>;
-export declare function digestReopenRejectedOperations(request: ReopenRejectedOperationsRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
-export declare function reopenRejectedOperations(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReopenRejectedOperationsRequest; idempotencyKey: string; antiForgery: string }): Promise<ReopenRejectedOperationsResponse>;
 export declare function digestUndoLatestAuthorAction(request: UndoLatestAuthorActionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function undoLatestAuthorAction(options: StoryOSQueryOptions & { projectId: string; request: UndoLatestAuthorActionRequest; idempotencyKey: string; antiForgery: string }): Promise<UndoLatestAuthorActionResponse>;
 export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
