@@ -99,7 +99,9 @@ export function emptyProjectRoute(volumes: Volume[], command: Route): Route {
     if (path === "/api/v1/projects") return jsonResponse(listedEmptyProject());
     if (path === `/api/v1/projects/${LISTED_PROJECT}`) return jsonResponse(emptyProject());
     if (path === `/api/v1/projects/${LISTED_PROJECT}/manuscript/tree`) return jsonResponse(tree(volumes));
-    if (path === `/api/v1/projects/${LISTED_PROJECT}/anti-forgery-challenges`) return jsonResponse(challenge());
+    if (path === `/api/v1/projects/${LISTED_PROJECT}/anti-forgery-challenges` && method === "POST") {
+      return jsonResponse(challenge());
+    }
     return command(method, path);
   };
 }
@@ -140,16 +142,20 @@ export function openedChapterRoute(scenario: Scenario, treeRevision: string, cha
         volumes: [{ volume_id: VOLUME, title: "Volume A", order: "1", chapters }],
       });
     }
-    if (path.endsWith("/anti-forgery-challenges")) return jsonResponse(challenge());
-    if (path.endsWith("/editor-sessions")) return jsonResponse(scenario.session);
-    if (path.endsWith(`/editor-sessions/${SESSION}`)) {
+    if (path === `/api/v1/projects/${PROJECT}/anti-forgery-challenges` && method === "POST") {
+      return jsonResponse(challenge());
+    }
+    if (path === `/api/v1/projects/${PROJECT}/editor-sessions` && method === "POST") {
+      return jsonResponse(scenario.session);
+    }
+    if (path === `/api/v1/projects/${PROJECT}/editor-sessions/${SESSION}` && method === "GET") {
       return jsonResponse({
         ...scenario.session,
         schema_id: "storyos.query.editor-session.response.v1",
         ...sessionRead,
       });
     }
-    if (path.endsWith("/activity")) return emptyActivityStream();
+    if (path === `/api/v1/projects/${PROJECT}/activity` && method === "GET") return emptyActivityStream();
     return command(method, path);
   };
 }

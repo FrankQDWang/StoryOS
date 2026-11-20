@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction, selectTreeChapter } from "../support/inline-chapter-creation.ts";
+import { beginTreeAction, selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -22,6 +22,10 @@ import {
   closeApplicationFrame,
   nextFrameLoad,
   openApplicationFrame,
+  openFirstChapterForm,
+  submitChapterForm,
+  submitProjectForm,
+  submitVolumeForm,
 } from "../support/exact-dist-frame.ts";
 
 // Three Chapters of 10,000 Unicode scalars give the 30,000-scalar baseline size.
@@ -49,19 +53,8 @@ function chapterIds(root: Element): Record<string, string> {
   )].map((button) => [button.textContent ?? "", button.getAttribute("data-chapter-id") ?? ""]));
 }
 
-async function submitForm(frame: HTMLIFrameElement, selector: string, value: string): Promise<void> {
-  const input = frame.contentDocument?.querySelector<HTMLInputElement>(selector);
-  const form = input?.form;
-  if (input === null || input === undefined || form === null || form === undefined) {
-    throw new Error(`the form of ${selector} is missing`);
-  }
-  input.value = value;
-  form.requestSubmit();
-}
-
 async function createChapter(frame: HTMLIFrameElement, title: string): Promise<void> {
-  await beginInlineChapterCreation(frame.contentDocument);
-  await submitForm(frame, '#app form[data-create-chapter] input[name="chapter-title"]', title);
+  await submitChapterForm(frame, title);
   await expect.poll(() => chapterIds(appRoot(frame))[title] ?? "").not.toBe("");
 }
 
@@ -132,14 +125,9 @@ it("keeps a taken-over writer editable after structure changes, a readable expor
   timeout: 300_000,
 }, async () => {
   const frame = await openApplicationFrame("StoryOS exact-dist takeover export reload");
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName,
-  ).toBe("INPUT");
-  await submitForm(frame, '#app input[name="title"]', "Takeover export reload");
-  await expect.poll(() => appRoot(frame).getAttribute("data-boot-state")).toBe("empty-project-ready");
-  await beginInlineVolumeCreation(frame.contentDocument);
-  await submitForm(frame, '#app form[data-create-volume] input[name="volume-title"]', "Volume A");
-  await beginInlineChapterCreation(frame.contentDocument);
+  await submitProjectForm(frame, "Takeover export reload");
+  await submitVolumeForm(frame, "Volume A");
+  await openFirstChapterForm(frame);
   for (const title of ["Chapter A", "Chapter B", "Chapter C"]) await createChapter(frame, title);
   await expect.poll(() => appRoot(frame).getAttribute("data-boot-state")).toBe("project-ready");
   const ids = chapterIds(appRoot(frame));
