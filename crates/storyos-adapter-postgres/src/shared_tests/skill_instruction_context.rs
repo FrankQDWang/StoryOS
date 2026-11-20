@@ -5,7 +5,7 @@ use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_steering::queued;
 use crate::shared_tests::create_agent_run_skill::{fixture, set};
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::admit_selected_run;
+use crate::shared_tests::model_gateway::Admission;
 use crate::shared_tests::model_gateway::sent_context;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -119,15 +119,13 @@ pub(crate) async fn selected_run(
     let (scope, chapter_id, first) = queued(store, prefixes[0]).await;
     complete(store, admin, &scope, &first).await;
     let (_, skills, selections) = selected();
-    let run_id = admit_selected_run(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
+    let run_id = Admission {
         message,
         conversation,
-        (skills, selections),
-    )
+        skills: (skills, selections),
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[1])
     .await;
     (scope, chapter_id, run_id)
 }

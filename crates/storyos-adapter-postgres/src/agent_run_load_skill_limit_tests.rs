@@ -3,7 +3,6 @@
 //! order, and the exact load outputs after a compaction (ADR 0093 section 5).
 
 use serde_json::{Value, json};
-use storyos_application::ConversationSelection;
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, LoadSkillRefusal,
     SKILL_MD_PATH, SkillFileInput, SkillPackage,
@@ -17,7 +16,7 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::admit_selected_run;
+use crate::shared_tests::model_gateway::Admission;
 
 /// The Skills `skill-1` to `skill-<count>`, each with a short `SKILL.md`.
 fn numbered(count: usize) -> Vec<SkillPackage> {
@@ -129,15 +128,12 @@ async fn a_second_load_of_a_skill_and_a_load_of_a_selected_skill_are_refused() {
     let selections = vec![packages[0].reference(), packages[1].reference()];
     let (scope, chapter_id, first) = queued(&store, "215").await;
     complete(&store, &admin, &scope, &first).await;
-    let selected = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "216",
-        &format!("SCRIPT:load_skill skill-1,{}", names(3..=9)),
-        ConversationSelection::New,
-        (set(packages.clone()), selections),
-    )
+    let selected = Admission {
+        message: &format!("SCRIPT:load_skill skill-1,{}", names(3..=9)),
+        skills: (set(packages.clone()), selections),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "216")
     .await;
     complete(&store, &admin, &scope, &selected).await;
 

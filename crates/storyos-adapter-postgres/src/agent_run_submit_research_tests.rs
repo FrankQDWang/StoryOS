@@ -5,13 +5,13 @@ use storyos_application::{
     complete_agent_run,
 };
 use storyos_core::{
-    Citation, DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT, RESEARCH_RECORDED_RESULT,
-    ResearchClaim, ResearchSynthesis, SubmitResearchRefusal, SynthesisRefusal,
+    Citation, FINISH_DOES_NOT_COUNT_RESULT, RESEARCH_RECORDED_RESULT, ResearchClaim,
+    ResearchSynthesis, SubmitResearchRefusal, SynthesisRefusal,
 };
 
 use crate::shared_tests::agent_run_submit_research::research_project;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 use crate::shared_tests::research_source::SEARCH_TEXT;
 
 const FAILED_PAGE: &str = "Error fetching https://example.org/c: CRAWL_NOT_FOUND";
@@ -150,16 +150,12 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
             .await
             .unwrap()
             .get(/*idx*/ 0);
-        let story = admit_run_in(
-            &project.store,
-            &project.scope,
-            &project.chapter_id,
-            prefix,
-            DeploymentDestination::HostFakeToolLoop,
-            "Revise these passages with the research.",
-            ConversationSelection::Existing { conversation_id },
-            None,
-        )
+        let story = Admission {
+            message: "Revise these passages with the research.",
+            conversation: ConversationSelection::Existing { conversation_id },
+            ..Default::default()
+        }
+        .admit(&project.store, &project.scope, &project.chapter_id, prefix)
         .await;
         let claim = claim_run(&project.admin, project.scope.clone(), story.clone()).await;
         complete_agent_run(

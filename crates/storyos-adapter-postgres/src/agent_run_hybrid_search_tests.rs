@@ -5,25 +5,21 @@
 //! question vector that is not finite. Test prefix leads `54`, `b5`, `bb`, and `ba`, and the
 //! prefixes `a2c`, `a2d`, `a2e`, `a31`, `c7a`, `c7b`, `c7c`, and `c8b`.
 
-use std::future::Future;
-use std::pin::Pin;
-
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::{
     EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER, EMBEDDING_UNKNOWN_MARKER,
-    FakeDestination, FakeEmbeddingExchange, FakeEmbeddings, fake_vector,
+    FakeDestination, fake_vector,
 };
 use storyos_application::{
     CompleteAgentRun, CompleteAgentRunError, ContractFaultPoint, ConversationSelection,
-    EmbeddingObservation, EmbeddingProviderAdapter, EmbeddingRoute, NoContractFaults,
-    NoToolDestination, PauseAgentRunInput, PreDispatchRefusal, PreparedEmbeddingRequest,
-    ProjectScope, QuestionVector, SteerAgentRunInput, complete_agent_run,
+    EmbeddingObservation, EmbeddingProviderAdapter, NoContractFaults, NoToolDestination,
+    PauseAgentRunInput, ProjectScope, QuestionVector, SteerAgentRunInput, complete_agent_run,
     complete_agent_run_with_destinations,
 };
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CallValidationRefusal,
-    EmbeddingInput, EmbeddingRegistration, FINISH_DOES_NOT_COUNT_RESULT, HybridSearchRefusal,
-    IntakeRefusal, NO_SEARCH_BY_MEANING, PassageTerms,
+    FINISH_DOES_NOT_COUNT_RESULT, HybridSearchRefusal, IntakeRefusal, NO_SEARCH_BY_MEANING,
+    PassageTerms,
 };
 use tokio_postgres::Client;
 
@@ -45,6 +41,7 @@ use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::NoEmbeddings;
 use crate::shared_tests::model_gateway::conversation;
 use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
+use crate::shared_tests::passage_index_work::During;
 use crate::shared_tests::passage_ranking::rank_passages;
 use crate::shared_tests::passage_vectors::{
     Chapter, SHORE, chapter, index, prepend, texts, vector_table_visible,
@@ -525,50 +522,6 @@ async fn a_compaction_after_a_call_keeps_the_exact_result() {
     );
 }
 
-type Action<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
-
-/// The fake embedding destination that runs one author action in the exchange of the first
-/// question, while the Worker holds the Run, and then answers. With `stop`, the exchange never
-/// answers, as for a stopped Worker.
-struct Held<'a> {
-    action: std::sync::Mutex<Option<Action<'a>>>,
-    stop: bool,
-}
-
-impl<'a> Held<'a> {
-    fn new(action: impl Future<Output = ()> + Send + 'a, stop: bool) -> Self {
-        Self {
-            action: std::sync::Mutex::new(Some(Box::pin(action))),
-            stop,
-        }
-    }
-}
-
-impl EmbeddingProviderAdapter for Held<'_> {
-    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
-    type Prepared = FakeEmbeddingExchange;
-
-    async fn prepare(
-        &self,
-        registration: &'static EmbeddingRegistration,
-        route: &EmbeddingRoute,
-        input: &EmbeddingInput,
-    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
-        FakeEmbeddings.prepare(registration, route, input).await
-    }
-
-    async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
-        let action = self.action.lock().unwrap().take();
-        if let Some(action) = action {
-            action.await;
-        }
-        if self.stop {
-            std::future::pending::<()>().await;
-        }
-        FakeEmbeddings.exchange(prepared).await
-    }
-}
-
 /// Claims and completes the Run `run_id` with the embedding destination `held`.
 async fn complete_held(
     store: &PostgresProjectReader,
@@ -591,31 +544,15 @@ async fn complete_held(
     .await
 }
 
-/// The fake embedding destination with one component above the range of `f32` in each vector.
-/// The cast of the adapter makes the component infinite.
-struct NotFinite;
-
-impl EmbeddingProviderAdapter for NotFinite {
-    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
-    type Prepared = FakeEmbeddingExchange;
-
-    async fn prepare(
-        &self,
-        registration: &'static EmbeddingRegistration,
-        route: &EmbeddingRoute,
-        input: &EmbeddingInput,
-    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
-        FakeEmbeddings.prepare(registration, route, input).await
-    }
-
-    async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
-        match FakeEmbeddings.exchange(prepared).await {
-            EmbeddingObservation::Vector { mut values, usage } => {
-                values[0] = 1e39_f64 as f32;
-                EmbeddingObservation::Vector { values, usage }
-            }
-            other => other,
+/// One component above the range of `f32` in each vector of the fake embedding destination. The
+/// cast of the adapter makes the component infinite.
+fn not_finite(observation: EmbeddingObservation) -> EmbeddingObservation {
+    match observation {
+        EmbeddingObservation::Vector { mut values, usage } => {
+            values[0] = 1e39_f64 as f32;
+            EmbeddingObservation::Vector { values, usage }
         }
+        other => other,
     }
 }
 
@@ -632,9 +569,18 @@ async fn a_question_vector_that_is_not_finite_gives_the_exact_term_list() {
     let (scope, chapter_id) = (&chapter.scope, &chapter.chapter_id);
     let new = ConversationSelection::New;
     let run_id = admitted(&store, scope, chapter_id, "c8b", &script(&["渔船"]), new).await;
-    complete_held(&store, &admin, scope, &run_id, &NotFinite)
-        .await
-        .unwrap();
+    complete_held(
+        &store,
+        &admin,
+        scope,
+        &run_id,
+        &During {
+            change: not_finite,
+            ..During::new(async {})
+        },
+    )
+    .await
+    .unwrap();
 
     let text = ranked(&store, scope, &["渔船"], false).await;
     let ids = call_ids(&admin, &run_id, None).await;
@@ -680,7 +626,7 @@ async fn an_edit_or_a_steering_input_during_the_question_request_does_not_wait()
     let edit = async {
         store.apply_author_edit(&command).await.unwrap();
     };
-    let edit = complete_held(&store, &admin, scope, &edited, &Held::new(edit, false)).await;
+    let edit = complete_held(&store, &admin, scope, &edited, &During::new(edit)).await;
     let edited_text = ranked(&store, scope, &["渔船"], true).await;
 
     let steered = run("bbb").await;
@@ -694,7 +640,7 @@ async fn an_edit_or_a_steering_input_during_the_question_request_does_not_wait()
     let action = async {
         (store.steer_agent_run(&steer.envelope, &steer.input).await).unwrap();
     };
-    let steer = complete_held(&store, &admin, scope, &steered, &Held::new(action, false)).await;
+    let steer = complete_held(&store, &admin, scope, &steered, &During::new(action)).await;
 
     let steps = step_requests(&admin, &steered).await;
     assert_eq!(
@@ -745,7 +691,7 @@ async fn a_cancellation_or_a_pause_during_the_question_request_keeps_the_result_
             .await)
             .unwrap();
     };
-    let cancel = complete_held(&store, &admin, scope, &cancelled, &Held::new(action, false)).await;
+    let cancel = complete_held(&store, &admin, scope, &cancelled, &During::new(action)).await;
 
     let paused = run("ba9").await;
     let input = PauseAgentRunInput {
@@ -755,7 +701,7 @@ async fn a_cancellation_or_a_pause_during_the_question_request_keeps_the_result_
     let action = async {
         (store.pause_agent_run(&pause.envelope, &pause.input).await).unwrap();
     };
-    let pause = complete_held(&store, &admin, scope, &paused, &Held::new(action, false)).await;
+    let pause = complete_held(&store, &admin, scope, &paused, &During::new(action)).await;
 
     let ok_or_stale = |result: Result<CompleteAgentRun, CompleteAgentRunError>| {
         matches!(result, Ok(_) | Err(CompleteAgentRunError::StaleFence))
@@ -802,12 +748,12 @@ async fn the_next_claim_after_a_stopped_worker_sends_a_new_question_request() {
     let new = ConversationSelection::New;
     let run_id = admitted(&store, scope, chapter_id, "ba4", &script(&["渔船"]), new).await;
     let (reached, reached_rx) = tokio::sync::oneshot::channel();
-    let held = Held::new(
-        async {
+    let held = During {
+        stop: true,
+        ..During::new(async {
             let _reported = reached.send(());
-        },
-        /*stop*/ true,
-    );
+        })
+    };
     tokio::select! {
         _ = complete_held(&store, &admin, scope, &run_id, &held) => {
             panic!("the held exchange does not answer")

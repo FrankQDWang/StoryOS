@@ -2,23 +2,18 @@
 //! work rows with the admin connection, and they park the work of other Projects. Test prefix
 //! leads `f3`, `2f`, and `59`.
 
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Mutex;
 use std::time::Duration;
 
 use storyos_adapter_fake_destination::{
     EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER, EMBEDDING_UNKNOWN_MARKER,
-    FakeEmbeddings,
 };
 use storyos_application::{
-    ClaimedPassageIndex, EmbeddingObservation, EmbeddingProviderAdapter, EmbeddingRoute,
-    PassageIndexStep, PassageIndexWorkStore, PassageVectorKey, PassageVectorRow,
-    PreDispatchRefusal, PreparedEmbeddingRequest, ProjectId, ProjectScope,
+    ClaimedPassageIndex, PassageIndexStep, PassageIndexWorkStore, PassageVectorKey,
+    PassageVectorRow, ProjectId, ProjectScope,
 };
 use storyos_core::{
-    AGENT_PLAN_EMBEDDING_REGISTRATION, EmbeddingInput, EmbeddingRegistration,
-    HOST_FAKE_EMBEDDING_REGISTRATION, PASSAGE_CUT_REVISION, TransitionOutcome,
+    AGENT_PLAN_EMBEDDING_REGISTRATION, HOST_FAKE_EMBEDDING_REGISTRATION, PASSAGE_CUT_REVISION,
+    TransitionOutcome,
 };
 use tokio_postgres::Client;
 
@@ -30,8 +25,9 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_structure::titled_chapter;
 use crate::shared_tests::command_sequence_support::undo_named;
 use crate::shared_tests::delete_structure::settle_delete_chapter;
+use crate::shared_tests::model_gateway::Admission;
 use crate::shared_tests::model_gateway::NoEmbeddings;
-use crate::shared_tests::model_gateway::admit_embedding_run;
+use crate::shared_tests::passage_index_work::During;
 use crate::shared_tests::passage_index_work::{
     FAKE_ONLY, claim, configured, deploy, park_other_work, step, step_with, steps, wake, work,
 };
@@ -78,43 +74,6 @@ async fn settlements(admin: &Client, scope: &ProjectScope) -> Vec<Option<String>
         .iter()
         .map(|row| row.get(0))
         .collect()
-}
-
-/// The fake embedding destination with a deterministic hold in the exchange. The first exchange
-/// runs `action` to its end before the fake gives the vector, so the action occurs during the
-/// work of the claim.
-struct During<'a> {
-    action: Mutex<Option<Pin<Box<dyn Future<Output = ()> + Send + 'a>>>>,
-}
-
-impl<'a> During<'a> {
-    fn new(action: impl Future<Output = ()> + Send + 'a) -> Self {
-        Self {
-            action: Mutex::new(Some(Box::pin(action))),
-        }
-    }
-}
-
-impl EmbeddingProviderAdapter for During<'_> {
-    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
-    type Prepared = <FakeEmbeddings as EmbeddingProviderAdapter>::Prepared;
-
-    async fn prepare(
-        &self,
-        registration: &'static EmbeddingRegistration,
-        route: &EmbeddingRoute,
-        input: &EmbeddingInput,
-    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
-        FakeEmbeddings.prepare(registration, route, input).await
-    }
-
-    async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
-        let action = self.action.lock().unwrap().take();
-        if let Some(action) = action {
-            action.await;
-        }
-        FakeEmbeddings.exchange(prepared).await
-    }
 }
 
 async fn run_status(admin: &Client, run_id: &str) -> String {
@@ -448,7 +407,12 @@ async fn a_manuscript_that_exists_gets_its_work_in_chapter_order_with_the_first_
     let three = titled_chapter(&store, &scope, "f3b1", &volume, "第三章", tree + 1).await;
     assert_eq!(work(&admin, &scope).await, Vec::new());
 
-    let run_id = admit_embedding_run(&store, &scope, &one, "f3c", FAKE).await;
+    let run_id = Admission {
+        embedding: FAKE,
+        ..Default::default()
+    }
+    .admit(&store, &scope, &one, "f3c")
+    .await;
     complete(&store, &admin, &scope, &run_id).await;
     let live = |id: &str, order| (id.to_owned(), order, 1, 0, false);
     assert_eq!(
@@ -567,7 +531,12 @@ async fn a_cancel_of_a_run_during_the_work_does_not_change_the_work() {
     let (store, admin) = configured().await;
     let chapter = chapter(&store, &admin, ["2f3", "2f4"], "2f5", &texts()).await;
     let scope = chapter.scope.clone();
-    let run_id = admit_embedding_run(&store, &scope, &chapter.chapter_id, "2f6", FAKE).await;
+    let run_id = Admission {
+        embedding: FAKE,
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter.chapter_id, "2f6")
+    .await;
     let cancel = cancellation(&store, &scope, 0xf3f5, &run_id).await;
     park_other_work(&admin, &scope).await;
     wake(&admin, &scope).await;
@@ -615,7 +584,12 @@ async fn the_editor_and_each_run_work_while_each_embedding_request_fails() {
     let command = prepend(&store, &chapter, ("2f92", 2), 0, "新的一句。").await;
     store.apply_author_edit(&command).await.unwrap();
     assert_ne!(head(&admin, &id).await, chapter.head);
-    let run_id = admit_embedding_run(&store, &scope, &id, "2fd", FAKE).await;
+    let run_id = Admission {
+        embedding: FAKE,
+        ..Default::default()
+    }
+    .admit(&store, &scope, &id, "2fd")
+    .await;
     complete(&store, &admin, &scope, &run_id).await;
     assert_eq!(run_status(&admin, &run_id).await, "completed");
 

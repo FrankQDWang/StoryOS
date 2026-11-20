@@ -26,7 +26,7 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_agent_run::CANCEL_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::command_sequence_support::{CommandCall, issued};
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 use crate::shared_tests::research_source::calls_stream;
 
 /// The result of the one search, as the fake MCP server sends it.
@@ -230,20 +230,17 @@ async fn a_cancel_after_the_claim_sends_nothing_and_the_next_message_asks_with_a
         .await
         .map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1)))
         .unwrap();
-    let next_run = admit_run_in(
-        &store,
-        &scope,
-        &run.0,
-        "082",
-        DeploymentDestination::VolcengineAgentPlan {
+    let next_run = Admission {
+        destination: DeploymentDestination::VolcengineAgentPlan {
             qualification_authorization: None,
         },
-        "Check the tide tables again.",
-        ConversationSelection::Existing {
+        message: "Check the tide tables again.",
+        conversation: ConversationSelection::Existing {
             conversation_id: run.1,
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &run.0, "082")
     .await;
     let claim = claim_run(&admin, scope.clone(), next_run.clone()).await;
     complete_agent_run_with_tools(

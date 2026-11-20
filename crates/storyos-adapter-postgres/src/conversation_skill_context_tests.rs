@@ -25,7 +25,7 @@ use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::issued;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_agent_run_skill::{package, set};
-use crate::shared_tests::model_gateway::admit_selected_run;
+use crate::shared_tests::model_gateway::Admission;
 use crate::shared_tests::skill_instruction_context::{
     catalog, of_conversation, pinned, recorded, requirements, selected, selected_run, sent, texts,
 };
@@ -58,15 +58,13 @@ async fn later_run(
     let (scope, chapter_id, selected) =
         selected_run(store, admin, [prefixes[0], prefixes[1]], first, new).await;
     complete(store, admin, &scope, &selected).await;
-    let later = admit_selected_run(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[2],
+    let later = Admission {
         message,
-        conversation_of(prefixes[1]),
-        (skills, own),
-    )
+        conversation: conversation_of(prefixes[1]),
+        skills: (skills, own),
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[2])
     .await;
     (scope, later)
 }
@@ -221,73 +219,59 @@ async fn only_an_earlier_run_of_the_conversation_with_a_selection_gives_a_skill(
     )
     .await;
     complete(&store, &admin, &scope, &earlier).await;
-    let new = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "cac",
-        "Help again.",
-        ConversationSelection::New,
-        (Arc::clone(&skills), Vec::new()),
-    )
+    let new = Admission {
+        message: "Help again.",
+        skills: (Arc::clone(&skills), Vec::new()),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "cac")
     .await;
     complete(&store, &admin, &scope, &new).await;
     // The Agent loaded a Skill in the earlier Run. The full input of the later Run sends no text
     // of it.
     let (scope, chapter_id, first) = queued(&store, "cad").await;
     complete(&store, &admin, &scope, &first).await;
-    let loaded = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "cae",
-        &format!(
+    let loaded = Admission {
+        message: &format!(
             "SCRIPT:load_skill {}\nSCRIPT:reference-expires",
             packages[0].name
         ),
-        ConversationSelection::New,
-        (Arc::clone(&skills), Vec::new()),
-    )
+        skills: (Arc::clone(&skills), Vec::new()),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "cae")
     .await;
     complete(&store, &admin, &scope, &loaded).await;
-    let after_load = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "caf",
-        "Help again.",
-        conversation_of("cae"),
-        (Arc::clone(&skills), Vec::new()),
-    )
+    let after_load = Admission {
+        message: "Help again.",
+        conversation: conversation_of("cae"),
+        skills: (Arc::clone(&skills), Vec::new()),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "caf")
     .await;
     complete(&store, &admin, &scope, &after_load).await;
     // A cancelled Run gives its selection.
     let (scope, chapter_id, first) = queued(&store, "c9a").await;
     complete(&store, &admin, &scope, &first).await;
-    let cancelled = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "c9b",
-        "Help with this passage.",
-        ConversationSelection::New,
-        (Arc::clone(&skills), selections),
-    )
+    let cancelled = Admission {
+        skills: (Arc::clone(&skills), selections),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "c9b")
     .await;
     let cancel = cancellation(&store, &scope, 0xc900, &cancelled).await;
     store
         .cancel_agent_run(&cancel.envelope, &cancel.input)
         .await
         .unwrap();
-    let after_cancel = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "c9c",
-        "Help again.",
-        conversation_of("c9b"),
-        (skills, Vec::new()),
-    )
+    let after_cancel = Admission {
+        message: "Help again.",
+        conversation: conversation_of("c9b"),
+        skills: (skills, Vec::new()),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "c9c")
     .await;
     let catalog = catalog(&packages);
     let status: String = admin

@@ -1,7 +1,6 @@
 //! A control command that loses a serialization race with the Worker (#1484).
 
 use std::fmt::Debug;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -17,6 +16,7 @@ use tokio::sync::Notify;
 use tokio_postgres::{Client, NoTls};
 
 use crate::PostgresProjectReader;
+use crate::shared_tests::agent_run_steering::Creates;
 use crate::shared_tests::agent_run_steering::{
     cancellation, claim_duties, queued, settle, steering,
 };
@@ -75,7 +75,7 @@ struct RaceAt<'a> {
     race: usize,
     start: &'a Notify,
     answered: &'a Notify,
-    creates: Mutex<usize>,
+    creates: Creates,
     released: AtomicBool,
 }
 
@@ -140,14 +140,7 @@ impl ModelProviderAdapter for RaceAt<'_> {
         &self,
         request: &DestinationRequest,
     ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
-        let create = match request {
-            DestinationRequest::Create(_) => {
-                let mut creates = self.creates.lock().unwrap();
-                *creates += 1;
-                Some(*creates)
-            }
-            DestinationRequest::Retrieve(_) | DestinationRequest::Abort(_) => None,
-        };
+        let create = self.creates.count(request);
         if create == Some(self.race + 1) {
             self.release().await;
             tokio::time::timeout(Duration::from_secs(/*secs*/ 30), self.answered.notified())
@@ -249,7 +242,7 @@ async fn a_control_command_that_loses_a_race_with_the_worker_answers_the_committ
             race,
             start: &start,
             answered: &answered,
-            creates: Mutex::new(/*value*/ 0),
+            creates: Creates::default(),
             released: AtomicBool::new(false),
         };
         let worker = async {

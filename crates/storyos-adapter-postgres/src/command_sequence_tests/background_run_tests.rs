@@ -16,7 +16,7 @@ use crate::PostgresProjectReader;
 use crate::command_sequence::settle_project_command;
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_steering::queued;
-use crate::shared_tests::model_gateway::admit_run_in;
+use crate::shared_tests::model_gateway::Admission;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_agent_run::{
@@ -453,16 +453,13 @@ async fn a_background_run_changes_nothing_for_a_project_conversation() {
     background_run(&admin, &first, background, "queued").await;
     let admit = async |prefix: &str, message: &str| {
         let destination = DeploymentDestination::HostFakeToolLoop;
-        let run_id = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            prefix,
+        let run_id = Admission {
             destination,
             message,
-            conversation.clone(),
-            None,
-        )
+            conversation: conversation.clone(),
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, prefix)
         .await;
         complete(&store, &admin, &scope, &run_id).await;
         run_id

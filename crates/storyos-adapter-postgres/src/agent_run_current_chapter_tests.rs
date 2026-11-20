@@ -21,7 +21,7 @@ use crate::shared_tests::command_sequence_structure::{DELETE_CHAPTER, named_call
 use crate::shared_tests::command_sequence_support::issued;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::admit_referenced_run;
+use crate::shared_tests::model_gateway::Admission;
 
 const MESSAGE: &str = "Help with this passage.";
 const EDITED: &str = "Still, ";
@@ -131,15 +131,13 @@ async fn the_closing_run_step_reads_the_chapter_head_after_an_author_edit_of_ano
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0x2c0, tool_loop.clone()).await;
     let reference = fixture.chapter_text(1, 2);
-    let run_id = admit_referenced_run(
-        &store,
-        &fixture.scope,
-        &fixture.chapter_id,
-        "2c2",
-        tool_loop,
-        MESSAGE,
-        vec![reference.clone()],
-    )
+    let run_id = Admission {
+        destination: tool_loop,
+        message: MESSAGE,
+        references: Some(vec![reference.clone()]),
+        ..Default::default()
+    }
+    .admit(&store, &fixture.scope, &fixture.chapter_id, "2c2")
     .await;
     let edit = fixture
         .chapter_edit(&store, 2, vec![prefix(&fixture, 0)])
@@ -183,15 +181,12 @@ async fn run_with_edit(
     references: Vec<SelectionReference>,
     action: AuthorAction,
 ) -> String {
-    let run_id = admit_referenced_run(
-        store,
-        &fixture.scope,
-        &fixture.chapter_id,
-        run_prefix,
-        DeploymentDestination::HostFakeToolLoop,
+    let run_id = Admission {
         message,
-        references,
-    )
+        references: Some(references),
+        ..Default::default()
+    }
+    .admit(store, &fixture.scope, &fixture.chapter_id, run_prefix)
     .await;
     let author = AuthorAt::new(store, Moment::DuringRequest(1), action);
     settle(store, admin, &fixture.scope, &run_id, &author)
@@ -349,15 +344,12 @@ async fn a_steering_reference_moves_to_the_chapter_head_that_the_author_edited()
     )
     .await;
     let reference = fixture.chapter_text(1, 2);
-    let run_id = admit_referenced_run(
-        &store,
-        &fixture.scope,
-        &fixture.chapter_id,
-        "1ba",
-        DeploymentDestination::HostFakeToolLoop,
-        MESSAGE,
-        Vec::new(),
-    )
+    let run_id = Admission {
+        message: MESSAGE,
+        references: Some(Vec::new()),
+        ..Default::default()
+    }
+    .admit(&store, &fixture.scope, &fixture.chapter_id, "1ba")
     .await;
     let input = steering(
         &store,
@@ -607,15 +599,12 @@ async fn a_removed_chapter_a_chapter_over_the_item_limit_an_invalid_range_and_th
                 .await
             }
             _ => {
-                let run_id = admit_referenced_run(
-                    &store,
-                    &fixture.scope,
-                    &fixture.chapter_id,
-                    run_prefix,
-                    DeploymentDestination::HostFakeToolLoop,
-                    MESSAGE,
-                    vec![reference],
-                )
+                let run_id = Admission {
+                    message: MESSAGE,
+                    references: Some(vec![reference]),
+                    ..Default::default()
+                }
+                .admit(&store, &fixture.scope, &fixture.chapter_id, run_prefix)
                 .await;
                 // The Chapter changes after the admission of the Run, before its first request.
                 if change == "first_run_step" {

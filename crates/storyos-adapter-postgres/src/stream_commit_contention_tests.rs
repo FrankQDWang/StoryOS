@@ -7,7 +7,7 @@ use tokio_postgres::{Client, NoTls};
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run, claim_run, queued_run};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run};
 use crate::shared_tests::stream_commit_contention::dispatched;
 
 /// Cancels the claimed AgentRun, so that the Worker of its next claim does cancellation duties.
@@ -59,14 +59,11 @@ async fn a_stream_commit_beside_the_work_of_another_run_commits() {
     let (store, admin) = stores().await;
     let (scope, chapter_id, streaming) =
         queued_run(&store, "5c1", DeploymentDestination::HostFakeToolLoop).await;
-    let other = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "5c2",
-        DeploymentDestination::HostFakeToolLoop,
-        "Cancel this run.",
-    )
+    let other = Admission {
+        message: "Cancel this run.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "5c2")
     .await;
     let streaming = claim_run(&admin, scope.clone(), streaming).await;
     let other = claim_run(&admin, scope, other).await;

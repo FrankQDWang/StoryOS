@@ -10,9 +10,7 @@ use storyos_application::{
     ContractFaultPoint, ConversationSelection, NoContractFaults, complete_agent_run,
     complete_agent_run_with_tools,
 };
-use storyos_core::{
-    DeploymentDestination, MEMORY_TITLE_MAX_CHARS, MemoryWriteRefusal, RESEARCH_TOOL_OFFER,
-};
+use storyos_core::{MEMORY_TITLE_MAX_CHARS, MemoryWriteRefusal, RESEARCH_TOOL_OFFER};
 
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_load_skill::calls;
@@ -27,7 +25,7 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_entries::{archived, write_versions};
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 
 /// The fake script line of one `write_memory` call.
 fn script(action: &str, arguments: &Value) -> String {
@@ -322,16 +320,12 @@ async fn a_create_of_a_run_that_lost_its_lease_writes_nothing() {
     let create = json!({"type": "other", "title": "潮汐", "description": "潮汐表。",
                         "text": "1890 年的潮汐表。"});
     let message = format!("{}\nSearch the web: tide tables", script("create", &create));
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "9fc",
-        DeploymentDestination::HostFakeToolLoop,
-        &message,
-        ConversationSelection::New,
-        Some(&RESEARCH_TOOL_OFFER),
-    )
+    let run_id = Admission {
+        message: &message,
+        research: Some(&RESEARCH_TOOL_OFFER),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "9fc")
     .await;
     let (mcp_base, _mcp) = destination(mcp_replies(exa_tools(|_| {}), None)).await;
     point_mcp(&admin, &scope, &mcp_base).await;

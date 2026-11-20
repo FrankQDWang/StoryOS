@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-    NoContractFaults, complete_agent_run,
+    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, NoContractFaults,
+    complete_agent_run,
 };
 use storyos_contracts::{ToolCallInspect, ToolCallOutcomeInspect};
 use storyos_core::{
@@ -15,7 +15,7 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run, queued_run_offering,
+    Admission, RuntimeClock, claim_run, queued_run, queued_run_offering,
 };
 
 /// The `tool_result` projection of an empty result (ADR 0085).
@@ -149,16 +149,12 @@ async fn a_process_with_no_tool_adapter_executes_finish_and_refuses_the_research
     )
     .await
     .unwrap();
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "1e3",
-        DeploymentDestination::HostFakeToolLoop,
-        "Search the web: tide tables of 1890",
-        ConversationSelection::New,
+    let run_id = Admission {
+        message: "Search the web: tide tables of 1890",
         research,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "1e3")
     .await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
 

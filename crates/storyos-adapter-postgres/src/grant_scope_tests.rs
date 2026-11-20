@@ -11,7 +11,7 @@ use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::grant_scope::current_grant;
 use crate::shared_tests::model_gateway::RuntimeClock;
 use crate::shared_tests::model_gateway::{
-    DispatchEvidence, admit_run, claim_run, dispatch_evidence, queued_run,
+    Admission, DispatchEvidence, claim_run, dispatch_evidence, queued_run,
 };
 
 const OUTSIDE_GRANT: &str =
@@ -126,28 +126,16 @@ async fn a_grant_without_a_scope_refuses_before_dispatch_and_the_next_run_rebind
     let (store, admin) = stores().await;
     let (scope, chapter_id, unscoped_run) =
         queued_run(&store, "d5b", DeploymentDestination::HostFakeToolLoop).await;
-    let pinned_run = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "d5c",
-        DeploymentDestination::HostFakeToolLoop,
-        "Help with this passage.",
-    )
-    .await;
+    let pinned_run = Admission::default()
+        .admit(&store, &scope, &chapter_id, "d5c")
+        .await;
     let (old_grant, _) = current_grant(&store, &admin, &scope).await;
     remove_grant_scope(&admin, &old_grant).await;
 
     let unscoped = settle(&store, &admin, &FakeDestination, &scope, &unscoped_run).await;
-    let rebound_run = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "d5d",
-        DeploymentDestination::HostFakeToolLoop,
-        "Help with this passage.",
-    )
-    .await;
+    let rebound_run = Admission::default()
+        .admit(&store, &scope, &chapter_id, "d5d")
+        .await;
     let (new_grant, new_scope) = current_grant(&store, &admin, &scope).await;
     let pinned = settle(&store, &admin, &FakeDestination, &scope, &pinned_run).await;
     settle(&store, &admin, &FakeDestination, &scope, &rebound_run).await;
@@ -238,15 +226,9 @@ async fn a_grant_with_the_fourth_scope_gets_new_records_with_the_fifth_scope_at_
     let earlier_rows = binding_rows(&admin, &earlier).await;
     let other_rows = binding_rows(&admin, &other).await;
 
-    let rebound_run = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "b02",
-        DeploymentDestination::HostFakeToolLoop,
-        "Help with this passage.",
-    )
-    .await;
+    let rebound_run = Admission::default()
+        .admit(&store, &scope, &chapter_id, "b02")
+        .await;
     let current = open_project_assistance(&store, &scope)
         .await
         .unwrap()
@@ -411,15 +393,9 @@ async fn the_dispatch_claim_checks_the_current_grant_again_and_sends_nothing() {
     }
     // The next createAgentRun replaces a binding whose grant names another identity.
     let (scope, chapter_id, mismatched_grant) = &changed[1];
-    let rebound_run = admit_run(
-        &store,
-        scope,
-        chapter_id,
-        "d6f",
-        DeploymentDestination::HostFakeToolLoop,
-        "Help with this passage.",
-    )
-    .await;
+    let rebound_run = Admission::default()
+        .admit(&store, scope, chapter_id, "d6f")
+        .await;
     let rebound = settle(&store, &admin, &FakeDestination, scope, &rebound_run).await;
 
     assert_eq!(observed, [refused_before_claim(), refused_before_claim()]);
@@ -468,14 +444,11 @@ async fn a_retrieve_after_an_unknown_create_checks_the_current_grant_and_sends_n
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) =
         queued_run(&store, "d6d", DeploymentDestination::HostFakeToolLoop).await;
-    let run_id = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "d6e",
-        DeploymentDestination::HostFakeToolLoop,
-        "SCRIPT:retrieve-complete",
-    )
+    let run_id = Admission {
+        message: "SCRIPT:retrieve-complete",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "d6e")
     .await;
     let adapter = ChangeGrantAtPrepare {
         admin: &admin,

@@ -4,14 +4,13 @@ use crate::PostgresProjectReader;
 use crate::shared_tests::command_sequence_structure::{SET_CURRENT_CHAPTER, UPDATE_CHAPTER};
 use crate::shared_tests::command_sequence_support::{CommandCall, issued};
 use crate::shared_tests::create_volume_authority::{NamedEdit, adjusted_edit_command};
-use crate::shared_tests::model_gateway::admit_run_in;
+use crate::shared_tests::model_gateway::Admission;
 use storyos_application::{
     ApplyAuthorEditCommand, ChallengeRateClass, ChapterId, ConversationSelection, EditorSessionId,
     ProjectScope, SetCurrentChapterInput, UpdateChapterInput,
 };
 use storyos_core::{
-    AuthorEditPrimitive, AuthorEditUnit, DeploymentDestination, SelectionSnapshot,
-    UTF16_COORDINATE_PROFILE,
+    AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot, UTF16_COORDINATE_PROFILE,
 };
 use tokio_postgres::Client;
 
@@ -24,17 +23,12 @@ pub(crate) async fn admitted(
     message: &str,
     conversation: ConversationSelection,
 ) -> String {
-    let destination = DeploymentDestination::HostFakeToolLoop;
-    admit_run_in(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        destination,
+    Admission {
         message,
         conversation,
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(store, scope, chapter_id, prefix)
     .await
 }
 

@@ -1,10 +1,9 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::{FakeDestination, LIMIT_ANSWER};
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, CacheUse,
-    ConversationSelection, CreateRequest, DestinationRequest, ModelProviderAdapter, ModelResponse,
-    ModelStreamSink, ModelUsage, NoContractFaults, Observation, PreDispatchRefusal,
-    PreparedRequest, complete_agent_run,
+    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, CacheUse, CreateRequest,
+    DestinationRequest, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
+    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, complete_agent_run,
 };
 use storyos_core::{
     ADVISORY_TEXT, AgentRunStatus, CallValidationRefusal, DeploymentDestination,
@@ -18,9 +17,7 @@ use crate::shared_tests::agent_run_finish_rule::{
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
-use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
-};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run_offering};
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -116,16 +113,12 @@ async fn the_next_run_of_the_conversation_continues_from_the_closing_response() 
             ..
         }
     ));
-    let third = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "1fb",
-        DeploymentDestination::HostFakeToolLoop,
-        "Help again.",
-        conversation_of("1f1"),
-        None,
-    )
+    let third = Admission {
+        message: "Help again.",
+        conversation: conversation_of("1f1"),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "1fb")
     .await;
     complete(&store, &admin, &scope, &third).await;
 
@@ -145,16 +138,12 @@ async fn a_rebuilt_run_records_its_reference_recovery_once_across_run_steps() {
     let message = "Help with this passage. SCRIPT:reference-expires";
     let (scope, chapter_id, _, _) =
         tool_loop_run(&store, &admin, ["8f1", "8f2"], message, None, true).await;
-    let third = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "8f3",
-        DeploymentDestination::HostFakeToolLoop,
-        "I changed my mind: keep the voice.",
-        conversation_of("8f1"),
-        None,
-    )
+    let third = Admission {
+        message: "I changed my mind: keep the voice.",
+        conversation: conversation_of("8f1"),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "8f3")
     .await;
     complete(&store, &admin, &scope, &third).await;
 
@@ -420,16 +409,12 @@ async fn a_recovered_response_of_the_last_run_step_executes_no_call() {
         let (scope, chapter_id, first) =
             queued_run_offering(&store, prefixes[0], destination.clone(), None).await;
         complete(&store, &admin, &scope, &first).await;
-        let run_id = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            prefixes[1],
+        let run_id = Admission {
             destination,
             message,
-            ConversationSelection::New,
-            None,
-        )
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, prefixes[1])
         .await;
         let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
         complete_agent_run(

@@ -7,8 +7,7 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-    ProjectScope,
+    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ProjectScope,
 };
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, ReadToolResultRefusal,
@@ -25,7 +24,7 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::admit_selected_run;
+use crate::shared_tests::model_gateway::Admission;
 
 const EXPIRES: &str = "SCRIPT:step-reference-expires";
 
@@ -59,15 +58,12 @@ async fn selected_run(
 ) -> (ProjectScope, String) {
     let (scope, chapter_id, first) = queued(store, prefixes[0]).await;
     complete(store, admin, &scope, &first).await;
-    let run_id = admit_selected_run(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
+    let run_id = Admission {
         message,
-        ConversationSelection::New,
-        (skills, selected),
-    )
+        skills: (skills, selected),
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[1])
     .await;
     complete(store, admin, &scope, &run_id).await;
     (scope, run_id)

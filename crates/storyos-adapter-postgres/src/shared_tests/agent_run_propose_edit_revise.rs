@@ -3,7 +3,7 @@
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_propose_edit::{REVISE, complete};
 use crate::shared_tests::create_volume_authority::{NamedEdit, adjusted_edit_command};
-use crate::shared_tests::model_gateway::{admit_referenced_run, queued_run_offering};
+use crate::shared_tests::model_gateway::{Admission, queued_run_offering};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorEditProposalTarget, EditorSessionStore, ProjectScope,
@@ -126,15 +126,13 @@ impl Fixture {
         references: Vec<SelectionReference>,
     ) -> String {
         let prefix = format!("{:03x}", self.lead + offset);
-        admit_referenced_run(
-            store,
-            &self.scope,
-            &self.chapter_id,
-            &prefix,
-            self.destination.clone(),
+        Admission {
+            destination: self.destination.clone(),
             message,
-            references,
-        )
+            references: Some(references),
+            ..Default::default()
+        }
+        .admit(store, &self.scope, &self.chapter_id, &prefix)
         .await
     }
 

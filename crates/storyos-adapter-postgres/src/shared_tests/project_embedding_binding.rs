@@ -1,7 +1,7 @@
 //! The shared test support from `project_embedding_binding_tests.rs`.
 
 use crate::PostgresProjectReader;
-use crate::shared_tests::model_gateway::{admit_embedding_run, queued_run_offering};
+use crate::shared_tests::model_gateway::{Admission, queued_run_offering};
 use crate::shared_tests::project_research_binding::park_queued_runs;
 use storyos_application::ProjectScope;
 use storyos_core::{
@@ -27,6 +27,11 @@ pub(crate) async fn embedding_project(
     )
     .await;
     park_queued_runs(admin, &scope).await;
-    let run_id = admit_embedding_run(store, &scope, &chapter_id, prefixes[1], embedding).await;
+    let run_id = Admission {
+        embedding,
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[1])
+    .await;
     (scope, chapter_id, run_id)
 }

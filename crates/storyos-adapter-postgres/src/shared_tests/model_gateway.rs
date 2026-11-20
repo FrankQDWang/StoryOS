@@ -123,16 +123,12 @@ pub(crate) async fn queued_run_offering(
     research: Option<&'static ResearchToolOffer>,
 ) -> (ProjectScope, String, String) {
     let (scope, chapter_id) = assisted_chapter(store, prefix).await;
-    let run_id = admit_run_in(
-        store,
-        &scope,
-        &chapter_id,
-        prefix,
+    let run_id = Admission {
         destination,
-        "Help with this passage.",
-        ConversationSelection::New,
         research,
-    )
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefix)
     .await;
     (scope, chapter_id, run_id)
 }
@@ -191,239 +187,83 @@ pub(crate) async fn assisted_chapter(
     (scope, chapter_id)
 }
 
-/// Admits one queued AgentRun of a new conversation on `chapter_id`, in a deployment that offers
-/// `destination`. `prefix` gives the identities of the command and the Run.
-pub(crate) async fn admit_run(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    chapter_id: &str,
-    prefix: &str,
-    destination: DeploymentDestination,
-    author_message: &str,
-) -> String {
-    let conversation = ConversationSelection::New;
-    admit_run_in(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        destination,
-        author_message,
-        conversation,
-        None,
-    )
-    .await
+/// The inputs of one createAgentRun of a test. The default is a Run of a new Conversation in a
+/// deployment that offers the tool loop profile, with the message "Help with this passage.", no
+/// research offer, no Selection Reference, no embedding configuration, no Skill, and the Run
+/// identity that the prefix gives.
+pub(crate) struct Admission<'a> {
+    pub(crate) destination: DeploymentDestination,
+    pub(crate) message: &'a str,
+    pub(crate) conversation: ConversationSelection,
+    pub(crate) research: Option<&'static ResearchToolOffer>,
+    pub(crate) references: Option<Vec<SelectionReference>>,
+    pub(crate) embedding: Option<&'static storyos_core::EmbeddingRegistration>,
+    pub(crate) skills: (std::sync::Arc<SkillSet>, Vec<SkillPackageReference>),
+    pub(crate) run_id: Option<String>,
 }
 
-/// Admits one queued AgentRun of `conversation`, as `admit_run` does, in a deployment that also
-/// offers `research`.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "each input of one createAgentRun is a test input"
-)]
-pub(crate) async fn admit_run_in(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    chapter_id: &str,
-    prefix: &str,
-    destination: DeploymentDestination,
-    author_message: &str,
-    conversation: ConversationSelection,
-    research: Option<&'static ResearchToolOffer>,
-) -> String {
-    let input = (conversation, research, None, None);
-    admit_with(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        destination,
-        author_message,
-        input,
-        Default::default(),
-    )
-    .await
+impl Default for Admission<'_> {
+    fn default() -> Self {
+        Self {
+            destination: DeploymentDestination::HostFakeToolLoop,
+            message: "Help with this passage.",
+            conversation: ConversationSelection::New,
+            research: None,
+            references: None,
+            embedding: None,
+            skills: Default::default(),
+            run_id: None,
+        }
+    }
 }
 
-/// Admits one queued AgentRun of a new conversation of the tool loop profile, as `admit_run`
-/// does, in a deployment with the embedding configuration `embedding`.
-pub(crate) async fn admit_embedding_run(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    chapter_id: &str,
-    prefix: &str,
-    embedding: Option<&'static storyos_core::EmbeddingRegistration>,
-) -> String {
-    admit_with(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        DeploymentDestination::HostFakeToolLoop,
-        "Help with this passage.",
-        (ConversationSelection::New, None, None, embedding),
-        Default::default(),
-    )
-    .await
-}
-
-/// Admits one queued AgentRun of a new conversation, as `admit_run` does, with the Selection
-/// References `references`.
-pub(crate) async fn admit_referenced_run(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    chapter_id: &str,
-    prefix: &str,
-    destination: DeploymentDestination,
-    author_message: &str,
-    references: Vec<SelectionReference>,
-) -> String {
-    let input = (ConversationSelection::New, None, Some(references), None);
-    admit_with(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        destination,
-        author_message,
-        input,
-        Default::default(),
-    )
-    .await
-}
-
-/// Admits one queued AgentRun of `conversation` of the tool loop profile, as `admit_run` does,
-/// in a deployment that offers `skills`, with the Skill selections `selections`.
-pub(crate) async fn admit_selected_run(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    chapter_id: &str,
-    prefix: &str,
-    author_message: &str,
-    conversation: ConversationSelection,
-    skills: (std::sync::Arc<SkillSet>, Vec<SkillPackageReference>),
-) -> String {
-    admit_with(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        DeploymentDestination::HostFakeToolLoop,
-        author_message,
-        (conversation, None, None, None),
-        skills,
-    )
-    .await
-}
-
-#[expect(
-    clippy::too_many_arguments,
-    reason = "each input of one createAgentRun is a test input"
-)]
-pub(crate) async fn admit_with(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    chapter_id: &str,
-    prefix: &str,
-    destination: DeploymentDestination,
-    author_message: &str,
-    conversation: (
-        ConversationSelection,
-        Option<&'static ResearchToolOffer>,
-        Option<Vec<SelectionReference>>,
-        Option<&'static storyos_core::EmbeddingRegistration>,
-    ),
-    skills: (std::sync::Arc<SkillSet>, Vec<SkillPackageReference>),
-) -> String {
-    let run_id = format!("018f0000-0000-7001-8000-00000004{prefix}6");
-    let inputs = (destination, author_message, run_id);
-    admit_with_run_id(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        inputs,
-        conversation,
-        skills,
-    )
-    .await
-}
-
-/// Admits one queued AgentRun of a new Conversation of the tool loop profile with the identity
-/// `run_id`, as `admit_run` does.
-pub(crate) async fn admit_run_with_id(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    chapter_id: &str,
-    prefix: &str,
-    author_message: &str,
-    run_id: String,
-) -> String {
-    let inputs = (
-        DeploymentDestination::HostFakeToolLoop,
-        author_message,
-        run_id,
-    );
-    let conversation = (ConversationSelection::New, None, None, None);
-    admit_with_run_id(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        inputs,
-        conversation,
-        Default::default(),
-    )
-    .await
-}
-
-pub(crate) async fn admit_with_run_id(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    chapter_id: &str,
-    prefix: &str,
-    (destination, author_message, run_id): (DeploymentDestination, &str, String),
-    (conversation, research, selection_references, embedding): (
-        ConversationSelection,
-        Option<&'static ResearchToolOffer>,
-        Option<Vec<SelectionReference>>,
-        Option<&'static storyos_core::EmbeddingRegistration>,
-    ),
-    (skills, skill_selections): (std::sync::Arc<SkillSet>, Vec<SkillPackageReference>),
-) -> String {
-    let run = command_issue(
-        scope,
-        &format!("{prefix}5"),
-        &CREATE_AGENT_RUN,
-        &digest(CommandKind::CreateAgentRun.as_str(), RUN_BYTES),
-    );
-    issue_project_command_challenge(store, &run).await.unwrap();
-    let call = crate::shared_tests::command_sequence_support::command_call(
-        run.binding.clone(),
-        &run.nonce_digest,
-        &format!("{prefix}6"),
-        RUN_BYTES,
-        CreateAgentRunInput {
-            passage_targets: None,
-            selection_references,
-            conversation,
-            author_message: author_message.to_owned(),
-            chapter_id: chapter_id.to_owned(),
-            run_id,
-            conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
-            project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
-            destination: Some(destination),
-            research,
-            embedding,
-            skills,
-            skill_selections,
-        },
-    );
-    store
-        .create_agent_run(&call.envelope, &call.input)
-        .await
-        .unwrap();
-    call.input.run_id
+impl Admission<'_> {
+    /// Admits one queued AgentRun on `chapter_id`. `prefix` gives the identities of the command,
+    /// the Run, its Conversation, and its Project agent.
+    pub(crate) async fn admit(
+        self,
+        store: &PostgresProjectReader,
+        scope: &ProjectScope,
+        chapter_id: &str,
+        prefix: &str,
+    ) -> String {
+        let run = command_issue(
+            scope,
+            &format!("{prefix}5"),
+            &CREATE_AGENT_RUN,
+            &digest(CommandKind::CreateAgentRun.as_str(), RUN_BYTES),
+        );
+        issue_project_command_challenge(store, &run).await.unwrap();
+        let (skills, skill_selections) = self.skills;
+        let call = crate::shared_tests::command_sequence_support::command_call(
+            run.binding.clone(),
+            &run.nonce_digest,
+            &format!("{prefix}6"),
+            RUN_BYTES,
+            CreateAgentRunInput {
+                passage_targets: None,
+                selection_references: self.references,
+                conversation: self.conversation,
+                author_message: self.message.to_owned(),
+                chapter_id: chapter_id.to_owned(),
+                run_id: self
+                    .run_id
+                    .unwrap_or_else(|| format!("018f0000-0000-7001-8000-00000004{prefix}6")),
+                conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
+                project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
+                destination: Some(self.destination),
+                research: self.research,
+                embedding: self.embedding,
+                skills,
+                skill_selections,
+            },
+        );
+        store
+            .create_agent_run(&call.envelope, &call.input)
+            .await
+            .unwrap();
+        call.input.run_id
+    }
 }
 
 pub(crate) async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchEvidence {

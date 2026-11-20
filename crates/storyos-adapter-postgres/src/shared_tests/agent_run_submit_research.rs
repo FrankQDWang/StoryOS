@@ -6,14 +6,12 @@ use crate::shared_tests::agent_run_tool_dispatch::{
     Hooked, exa_tools, mcp_replies, point_mcp, reply,
 };
 use crate::shared_tests::command_sequence_support::stores;
-use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
-};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run_offering};
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-    NoContractFaults, ProjectScope, complete_agent_run, complete_agent_run_with_tools,
+    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, NoContractFaults,
+    ProjectScope, complete_agent_run, complete_agent_run_with_tools,
 };
 use storyos_core::{DeploymentDestination, RESEARCH_TOOL_OFFER};
 use tokio_postgres::Client;
@@ -59,16 +57,12 @@ impl ResearchProject {
     /// Settles one Run with `message` through the fake model and the real MCP client. The fake
     /// MCP server answers the one research call of the Run with `text`.
     pub(crate) async fn settle(&self, prefix: &str, message: &str, text: &str) -> String {
-        let run_id = admit_run_in(
-            &self.store,
-            &self.scope,
-            &self.chapter_id,
-            prefix,
-            DeploymentDestination::HostFakeToolLoop,
+        let run_id = Admission {
             message,
-            ConversationSelection::New,
-            Some(&RESEARCH_TOOL_OFFER),
-        )
+            research: Some(&RESEARCH_TOOL_OFFER),
+            ..Default::default()
+        }
+        .admit(&self.store, &self.scope, &self.chapter_id, prefix)
         .await;
         let result = reply(
             /*id*/ 0,

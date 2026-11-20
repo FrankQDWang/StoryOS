@@ -3,12 +3,19 @@
 use crate::PostgresProjectReader;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::project_embedding_binding::FAKE;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Mutex;
 use std::time::Duration;
 use storyos_adapter_fake_destination::FakeEmbeddings;
 use storyos_application::{
     ClaimedPassageIndex, EmbeddingProviderAdapter, PassageIndexStep, ProjectScope,
     claim_next_passage_index_work, step_passage_index_work,
 };
+use storyos_application::{
+    EmbeddingObservation, EmbeddingRoute, PreDispatchRefusal, PreparedEmbeddingRequest,
+};
+use storyos_core::EmbeddingInput;
 use storyos_core::{EmbeddingRegistration, HOST_FAKE_EMBEDDING_REGISTRATION};
 use tokio_postgres::Client;
 
@@ -127,4 +134,49 @@ pub(crate) async fn steps(
         }
     }
     steps
+}
+
+/// The fake embedding destination with a deterministic hold in the exchange. The first exchange
+/// runs `action` to its end before the fake gives the vector, so the action occurs during the
+/// work of the claim. With `stop`, each exchange then never answers, as for a stopped Worker.
+/// `change` changes each observation of the fake.
+pub(crate) struct During<'a> {
+    pub(crate) action: Mutex<Option<Pin<Box<dyn Future<Output = ()> + Send + 'a>>>>,
+    pub(crate) stop: bool,
+    pub(crate) change: fn(EmbeddingObservation) -> EmbeddingObservation,
+}
+
+impl<'a> During<'a> {
+    pub(crate) fn new(action: impl Future<Output = ()> + Send + 'a) -> Self {
+        Self {
+            action: Mutex::new(Some(Box::pin(action))),
+            stop: false,
+            change: std::convert::identity,
+        }
+    }
+}
+
+impl EmbeddingProviderAdapter for During<'_> {
+    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
+    type Prepared = <FakeEmbeddings as EmbeddingProviderAdapter>::Prepared;
+
+    async fn prepare(
+        &self,
+        registration: &'static EmbeddingRegistration,
+        route: &EmbeddingRoute,
+        input: &EmbeddingInput,
+    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
+        FakeEmbeddings.prepare(registration, route, input).await
+    }
+
+    async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
+        let action = self.action.lock().unwrap().take();
+        if let Some(action) = action {
+            action.await;
+        }
+        if self.stop {
+            std::future::pending::<()>().await;
+        }
+        (self.change)(FakeEmbeddings.exchange(prepared).await)
+    }
 }

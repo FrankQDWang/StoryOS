@@ -3,10 +3,10 @@ use std::sync::Mutex;
 use serde_json::json;
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, CacheUse,
-    ConversationSelection, CreateRequest, DestinationRequest, ModelProviderAdapter, ModelResponse,
-    ModelStreamSink, ModelUsage, NoContractFaults, Observation, PreDispatchRefusal,
-    PreparedRequest, ToolOutputOrigin, complete_agent_run,
+    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, CacheUse, CreateRequest,
+    DestinationRequest, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
+    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, ToolOutputOrigin,
+    complete_agent_run,
 };
 use storyos_core::{
     ADVISORY_TEXT, AgentRunStatus, CallValidationRefusal, DeploymentDestination,
@@ -16,9 +16,7 @@ use storyos_core::{
 use crate::shared_tests::agent_run_finish_rule::{calls, complete};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
-use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
-};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run_offering};
 
 /// The RunStep whose first create the destination loses.
 #[derive(Clone, Copy, Debug)]
@@ -254,16 +252,12 @@ async fn a_recovered_response_gives_the_agent_decision_of_a_direct_response_at_e
         let (scope, chapter_id, first_run) =
             queued_run_offering(&store, &first, destination.clone(), None).await;
         complete(&store, &admin, &scope, &first_run).await;
-        let run_id = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            &second,
+        let run_id = Admission {
             destination,
             message,
-            ConversationSelection::New,
-            None,
-        )
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, &second)
         .await;
         let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
         let adapter = LoseOneCreate {
