@@ -4,8 +4,15 @@
 # so it runs one more time (ADR 0015). A failed test does not run again.
 set -u
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-work=$(mktemp -d "${TMPDIR:-/tmp}/storyos-browser-vitest.XXXXXX")
+if [ -d "$root/target/check" ]; then
+  work=$(mktemp -d "$root/target/check/browser-vitest.XXXXXX")
+else
+  work=$(mktemp -d "${TMPDIR:-/tmp}/storyos-browser-vitest.XXXXXX")
+fi
 trap 'rm -rf "$work"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 run_once() {
   python3 "$root/scripts/check-lanes.py" --browser-start || return
@@ -17,6 +24,7 @@ run_once() {
 run_once "$@" && exit 0
 code=$?
 if grep -qs 'Failed to connect to the browser session' "$work/output" && grep -qs 'Tests.*no tests' "$work/output"; then
+  # The drill state is safe: the first run executed no test file, and apps/web/vitest.config.ts has no global setup.
   echo "browser-vitest: the run connected to no browser session and ran no test, so it runs one more time"
   run_once "$@"
   exit

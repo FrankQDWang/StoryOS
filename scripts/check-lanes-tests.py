@@ -221,6 +221,19 @@ def runner_module():
     return module
 
 
+def run_lanes(module, lanes, root=ROOT):
+    """Run the lanes in this process. Return the exit code, the output, and the time of the run."""
+    handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
+    output, began = io.StringIO(), time.monotonic()
+    try:
+        with contextlib.redirect_stdout(output):
+            code = module.run(root, lanes, [])
+    finally:
+        for number, handler in handlers.items():
+            signal.signal(number, handler)
+    return code, output.getvalue(), time.monotonic() - began
+
+
 class FunctionTests(unittest.TestCase):
     def test_a_screenshot_directory_is_not_a_test_file(self):
         web = Path(tempfile.mkdtemp(prefix="storyos-test-files-"))
@@ -255,18 +268,6 @@ class FunctionTests(unittest.TestCase):
         # The lane without a browser starts while the third browser lane waits.
         self.assertLess(lanes[3].started, lanes[2].started)
 
-    def run_lanes(self, module, lanes, root=ROOT):
-        """Run the lanes in this process. Return the exit code, the output, and the time of the run."""
-        handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
-        output, began = io.StringIO(), time.monotonic()
-        try:
-            with contextlib.redirect_stdout(output):
-                code = module.run(root, lanes, [])
-        finally:
-            for number, handler in handlers.items():
-                signal.signal(number, handler)
-        return code, output.getvalue(), time.monotonic() - began
-
     def test_a_lane_that_does_not_end_in_the_time_limit_fails_the_run(self):
         # The lane and its child in a new session do not obey SIGTERM, as the Vitest run of issue 1728. Each writes
         # its ID after it ignores SIGTERM. Without a time limit, the lane passes after 20 s.
@@ -279,7 +280,7 @@ class FunctionTests(unittest.TestCase):
             ready.format(str(directory / "lane"))
             + f"import subprocess; subprocess.Popen({child!r}, start_new_session=True); time.sleep(20)")])
         try:
-            code, text, elapsed = self.run_lanes(module, [lane])
+            code, text, elapsed = run_lanes(module, [lane])
             watched = [int((directory / name).read_text()) for name in ("lane", "child")
                        if (directory / name).exists()]
             # The system reaps a killed child of another parent a short time after its end.
@@ -388,22 +389,6 @@ class FunctionTests(unittest.TestCase):
         self.assertFalse(module.remove_run_resources("token"))
         self.assertEqual(removed, ["network", "volume"])
 
-    def test_the_runner_prints_the_count_of_the_second_runs_of_its_lanes(self):
-        module = runner_module()
-        line = module.SECOND_RUN_LINE
-        for code in (0, 1):
-            with self.subTest(code=code):
-                root = Path(tempfile.mkdtemp(prefix="storyos-second-runs-"))
-                (root / "target/check").mkdir(parents=True)
-                # target/check keeps the logs of the lanes of earlier runs.
-                (root / "target/check/lanes-test-old.log").write_text(f"{line}\n")
-                lanes = [module.Lane("lanes-test-second-runs", ["sh", "-c", f"echo '{line}'; echo '{line}'; exit {code}"]),
-                         module.Lane("lanes-test-one-run", ["true"])]
-                result, text, _ = self.run_lanes(module, lanes, root)
-                self.assertEqual((result, text.splitlines()[-1]),
-                                 (code, "check-lanes: second runs of a browser Vitest run: 2 (lanes-test-second-runs 2)"),
-                                 text)
-
 
 # The output of Vitest 4.1.11 for a run that connected to no browser session (issue 1728).
 NO_BROWSER = ('Error: Failed to connect to the browser session "b63626c2" [browser-exact-dist (chromium)] within the '
@@ -414,40 +399,52 @@ CONNECT_LINE_WITH_TESTS = ('Error: Failed to connect to the browser session "b63
                            "within the timeout.\n Test Files  1 failed (1)\n      Tests  1 failed | 2 passed (3)\n")
 
 
+def fake_browser_vitest_root(answers):
+    """A root with scripts/browser-vitest.sh, a fake start gap, and a fake `pnpm` that plays one answer for each run.
+
+    `pnpm exec` takes node_modules/.bin before the PATH, so the fake is `pnpm`. Each wait and run goes to <root>/record.
+    """
+    root = Path(tempfile.mkdtemp(prefix="storyos-browser-vitest-"))
+    for directory in ("scripts", "bin", "target/check"):
+        (root / directory).mkdir(parents=True)
+    shutil.copy(ROOT / "scripts/browser-vitest.sh", root / "scripts")
+    (root / "answers.json").write_text(json.dumps(answers))
+    (root / "scripts/check-lanes.py").write_text(
+        "from pathlib import Path\n"
+        "with open(Path(__file__).resolve().parent.parent / 'record', 'a') as record:\n"
+        "    record.write('gap\\n')\n")
+    pnpm = root / "bin/pnpm"
+    pnpm.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys, time\n"
+        "from pathlib import Path\n"
+        "root = Path(__file__).resolve().parent.parent\n"
+        "record = root / 'record'\n"
+        "runs = [line for line in record.read_text().splitlines() if line.startswith('run')]\n"
+        "answer = json.loads((root / 'answers.json').read_text())[len(runs)]\n"
+        "with open(record, 'a') as file:\n"
+        "    file.write('run ' + ' '.join(sys.argv[1:]) + '\\n')\n"
+        "sys.stdout.write(answer[0])\n"
+        "sys.stdout.flush()\n"
+        "if answer[1] is None:\n"
+        "    time.sleep(60)\n"
+        "sys.exit(answer[1])\n")
+    pnpm.chmod(0o755)
+    command = ["sh", str(root / "scripts/browser-vitest.sh"), "--project", "browser-exact-dist", "a.integration.test.ts"]
+    env = {"PATH": f"{root / 'bin'}{os.pathsep}{os.environ['PATH']}"}
+    return root, command, env
+
+
 class BrowserVitestTests(unittest.TestCase):
     def browser_vitest(self, answers):
         """Run scripts/browser-vitest.sh with fake `pnpm exec vitest` answers. Return the code, output, and record."""
-        root = Path(tempfile.mkdtemp(prefix="storyos-browser-vitest-"))
-        (root / "scripts").mkdir()
-        (root / "bin").mkdir()
-        shutil.copy(ROOT / "scripts/browser-vitest.sh", root / "scripts")
-        (root / "answers.json").write_text(json.dumps(answers))
-        # The fake start gap records each wait and does not wait.
-        (root / "scripts/check-lanes.py").write_text(
-            "from pathlib import Path\n"
-            "with open(Path(__file__).resolve().parent.parent / 'record', 'a') as record:\n"
-            "    record.write('gap\\n')\n")
-        # `pnpm exec` takes node_modules/.bin before the PATH, so the fake is `pnpm`. Each run takes the next answer.
-        pnpm = root / "bin/pnpm"
-        pnpm.write_text(
-            f"#!{sys.executable}\n"
-            "import json, sys\n"
-            "from pathlib import Path\n"
-            "root = Path(__file__).resolve().parent.parent\n"
-            "record = root / 'record'\n"
-            "runs = [line for line in record.read_text().splitlines() if line.startswith('run')]\n"
-            "answer = json.loads((root / 'answers.json').read_text())[len(runs)]\n"
-            "with open(record, 'a') as file:\n"
-            "    file.write('run ' + ' '.join(sys.argv[1:]) + '\\n')\n"
-            "sys.stdout.write(answer[0])\n"
-            "sys.exit(answer[1])\n")
-        pnpm.chmod(0o755)
-        result = subprocess.run(["sh", str(root / "scripts/browser-vitest.sh"), "--project", "browser-exact-dist",
-                                 "a.integration.test.ts"], capture_output=True, text=True, timeout=60,
-                                env={**os.environ, "PATH": f"{root / 'bin'}{os.pathsep}{os.environ['PATH']}"})
+        root, command, env = fake_browser_vitest_root(answers)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=60, env={**os.environ, **env})
         run = f"run --dir {root}/apps/web exec vitest run --project browser-exact-dist a.integration.test.ts"
         record = ["gap" if line == "gap" else "run" if line == run else line
                   for line in (root / "record").read_text().splitlines()]
+        # The temporary output of the script is under target/check, and the script removes it.
+        self.assertEqual(list((root / "target/check").iterdir()), [])
         return result.returncode, result.stdout, record
 
     def test_only_a_run_that_connected_to_no_browser_runs_one_more_time(self):
@@ -467,6 +464,35 @@ class BrowserVitestTests(unittest.TestCase):
                 # The caller gets the output of each run.
                 self.assertEqual(output.replace(f"{line}\n", ""),
                                  "".join(text for text, _ in answers[:len(expected[1]) // 2]))
+
+    def test_a_stopped_run_removes_its_temporary_output(self):
+        root, command, env = fake_browser_vitest_root([["started\n", None]])
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True, env={**os.environ, **env},
+                                   start_new_session=True)
+        try:
+            self.assertEqual(process.stdout.readline(), "started\n")
+            self.assertEqual(len(list((root / "target/check").iterdir())), 1)
+            # The lane runner sends SIGTERM to the process group of a lane.
+            os.killpg(process.pid, signal.SIGTERM)
+            self.assertEqual(process.wait(timeout=30), 143)
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+        self.assertEqual(list((root / "target/check").iterdir()), [])
+
+    def test_the_runner_counts_the_second_runs_of_the_script_in_the_lanes_of_its_run(self):
+        module = runner_module()
+        for code, answers in ((0, [[NO_BROWSER, 1], [PASSED, 0]]), (1, [[NO_BROWSER, 1], [NO_BROWSER, 1]])):
+            with self.subTest(code=code):
+                root, command, env = fake_browser_vitest_root(answers)
+                # target/check keeps the logs of the lanes of earlier runs.
+                (root / "target/check/lanes-test-old.log").write_text(f"{module.SECOND_RUN_LINE}\n")
+                lanes = [module.Lane("lanes-test-second-run", command, env=env),
+                         module.Lane("lanes-test-one-run", ["true"])]
+                result, text, _ = run_lanes(module, lanes, root)
+                self.assertEqual((result, text.splitlines()[-1]),
+                                 (code, "check-lanes: second runs of a browser Vitest run: 1 (lanes-test-second-run 1)"),
+                                 text)
 
 
 if __name__ == "__main__":
