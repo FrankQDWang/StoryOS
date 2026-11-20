@@ -6,6 +6,7 @@ import assistanceFixture from "../../../../generated/golden-wire/storyos-public-
 import artifactFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-research-artifact.json";
 import { RESEARCH_SYNTHESIS_SENTENCE } from "../../src/assistant-run-outcome.ts";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
+import { inActEnvironment, seedProseRequest } from "./assistant-panel-harness.ts";
 import { BLOCK, CHAPTER, OWNER, PROJECT, REVISION, jsonResponse } from "./scenario.ts";
 
 const scope = { owner_user_id: OWNER, project_id: PROJECT };
@@ -63,8 +64,8 @@ const ARTIFACT_LINES = [
 
 /** Renders the panel for the stored request and returns its host, the opened Proposals, and a cleanup. */
 async function renderPanel(runs: readonly { run_id: string }[], stored: object) {
-  sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({ scope, chapterId: CHAPTER,
-    conversationId: CONVERSATION, ...stored }));
+  seedProseRequest({ scope, chapterId: CHAPTER,
+    conversationId: CONVERSATION, ...stored });
   const fetchImpl: typeof fetch = async (input) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     if (path.endsWith("/assistance")) return jsonResponse({ ...assistanceFixture, project_scope: scope });
@@ -97,17 +98,6 @@ function shownResults(section: Element | null) {
     + "[data-assistant-research-artifact] p, [data-assistant-research-artifact] li, [data-assistant-use-research], "
     + "[data-proposal-location]") ?? []]
     .map(item => item.textContent);
-}
-
-async function inActEnvironment(body: () => Promise<void>) {
-  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  try {
-    await body();
-  } finally {
-    sessionStorage.clear();
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
-  }
 }
 
 it.each([

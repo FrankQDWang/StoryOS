@@ -16,6 +16,7 @@ import type { ChapterTextReference } from "../../src/selection-reference.ts";
 import { addDraftReferences } from "../../src/selection-reference-draft.ts";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
 import { applyTrustedInput } from "../support/browser-command-client.ts";
+import { seedProseRequest } from "./assistant-panel-harness.ts";
 import { BLOCK, CHAPTER, OWNER, PROJECT, REVISION, jsonResponse } from "./scenario.ts";
 
 // ADR 0089 sections 5, 7, and 8: the author selects Skills with the $ picker, and no view shows a digest.
@@ -61,10 +62,10 @@ afterEach(async () => {
 async function openPanel(setup: { skills?: SkillCatalogEntry[] | "failed"; claimed?: boolean;
   create?: Array<"unavailable" | "refused">; uses?: SkillUseInspect[] } = {}) {
   if (setup.claimed === true) {
-    sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
+    seedProseRequest({
       scope, message: "Help with this passage.", chapterId: CHAPTER,
       correlationId: "018f0000-0000-7001-8000-000000000c84", idempotencyKey: "018f0000-0000-7001-8000-000000000c85",
-      snapshotId: "018f0000-0000-7001-8000-000000000c86", runId: RUN_IN_PROGRESS, conversationId: CONVERSATION }));
+      snapshotId: "018f0000-0000-7001-8000-000000000c86", runId: RUN_IN_PROGRESS, conversationId: CONVERSATION });
   }
   const posts: Post[] = [];
   const replies = [...setup.create ?? []];

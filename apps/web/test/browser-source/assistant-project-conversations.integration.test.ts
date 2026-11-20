@@ -13,6 +13,7 @@ import type { AgentRunStatus, CreateAgentRunRequest, ProjectConversationEntry, S
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
 import { applyTrustedInput } from "../support/browser-command-client.ts";
+import { seedProseRequest } from "./assistant-panel-harness.ts";
 import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 
 // ADR 0094 section 10: the author opens an earlier Project Conversation in the panel and continues it.
@@ -53,9 +54,9 @@ async function openPanel(setup: Setup) {
   const runs = [...setup.runs ?? []];
   if (setup.stored !== undefined) {
     runs.push(setup.stored);
-    sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
+    seedProseRequest({
       scope, message: setup.stored.message, chapterId: CHAPTER, correlationId: id("f91"), idempotencyKey: id("f92"),
-      snapshotId: id("f93"), runId: setup.stored.runId, conversationId: setup.stored.conversationId }));
+      snapshotId: id("f93"), runId: setup.stored.runId, conversationId: setup.stored.conversationId });
   }
   const requests: string[] = [];
   const creates: CreateAgentRunRequest[] = [];

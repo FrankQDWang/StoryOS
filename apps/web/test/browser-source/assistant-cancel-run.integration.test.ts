@@ -8,6 +8,7 @@ import assistanceFixture from "../../../../generated/golden-wire/storyos-public-
 import cancelFixture from "../../../../generated/golden-wire/storyos-public-release-1/cancel-agent-run.json";
 import challengeFixture from "../../../../generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
+import { openPanelHost, seedProseRequest } from "./assistant-panel-harness.ts";
 import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 
 const RUN = "018f0000-0000-7001-8000-000000000c71";
@@ -25,11 +26,11 @@ type RunState = "claimed" | "paused" | "completed" | "unread";
  * arrive. Then the page reloads.
  */
 async function cancelFrom(state: RunState, acknowledgement: "received" | "lost" = "received") {
-  sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
+  seedProseRequest({
     scope, message: "Help with this passage.", chapterId: CHAPTER,
     correlationId: "018f0000-0000-7001-8000-000000000c72", idempotencyKey: "018f0000-0000-7001-8000-000000000c73",
     snapshotId: "018f0000-0000-7001-8000-000000000c74", runId: RUN, conversationId: CONVERSATION,
-  }));
+  });
   let cancelled = false;
   let lost = acknowledgement === "lost";
   const challenges: Array<Record<string, unknown>> = [];
@@ -60,17 +61,14 @@ async function cancelFrom(state: RunState, acknowledgement: "received" | "lost" 
     }
     throw new Error(`Unexpected request ${path}`);
   };
-  const host = document.createElement("div");
-  document.body.append(host);
-  let root = createRoot(host);
-  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const panel = openPanelHost();
+  const { host } = panel;
   const settle = async () => {
     for (let turn = 0; turn < 40; turn += 1) await act(async () => { await Promise.resolve(); });
   };
   const mount = async () => {
     await act(async () => {
-      root.render(createElement(WritingAssistantPanel, {
+      panel.root.render(createElement(WritingAssistantPanel, {
         collapsed: false,
         context: { scope, chapterId: CHAPTER, canSubmit: true, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto },
         // No scheduled read runs, so only the cancel control makes the panel read the Run again.
@@ -97,17 +95,14 @@ async function cancelFrom(state: RunState, acknowledgement: "received" | "lost" 
       if (acknowledgement === "lost") {
         unacknowledged = view();
         // A reload keeps `sessionStorage` and starts a new page.
-        await act(async () => root.unmount());
-        root = createRoot(host);
+        await act(async () => panel.root.unmount());
+        panel.root = createRoot(host);
         await mount();
       }
     }
     return { before, unacknowledged, after: view(), commands, challenges };
   } finally {
-    await act(async () => root.unmount());
-    host.remove();
-    sessionStorage.clear();
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
+    await panel.close();
   }
 }
 

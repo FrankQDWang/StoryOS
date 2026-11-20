@@ -10,6 +10,7 @@ import steerFixture from "../../../../generated/golden-wire/storyos-public-relea
 import type { ChapterTextReference } from "../../src/selection-reference.ts";
 import { addDraftReferences } from "../../src/selection-reference-draft.ts";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
+import { openPanelHost, seedProseRequest } from "./assistant-panel-harness.ts";
 import { BLOCK, CHAPTER, OWNER, PROJECT, REVISION, jsonResponse } from "./scenario.ts";
 
 const RUN = "018f0000-0000-7001-8000-000000000c51";
@@ -38,11 +39,11 @@ type AuthorStep = "send" | "edit";
  * with `steering`.
  */
 async function sendAfterCompletion(steering: SteeringReply, interruption?: Interruption, step?: AuthorStep) {
-  sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
+  seedProseRequest({
     scope, message: "Help with this passage.", chapterId: CHAPTER,
     correlationId: "018f0000-0000-7001-8000-000000000c52", idempotencyKey: "018f0000-0000-7001-8000-000000000c53",
     snapshotId: "018f0000-0000-7001-8000-000000000c54", runId: RUN, conversationId: CONVERSATION,
-  }));
+  });
   let completed = false;
   // The page reloads while this request waits for its reply.
   let held: "read" | "create" | undefined = interruption === "reload-before-resend" ? "read"
@@ -91,17 +92,14 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
     }
     throw new Error(`Unexpected request ${path}`);
   };
-  const host = document.createElement("div");
-  document.body.append(host);
-  let root = createRoot(host);
-  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const panel = openPanelHost();
+  const { host } = panel;
   const settle = async () => {
     for (let turn = 0; turn < 40; turn += 1) await act(async () => { await Promise.resolve(); });
   };
   const mount = async () => {
     await act(async () => {
-      root.render(createElement(WritingAssistantPanel, {
+      panel.root.render(createElement(WritingAssistantPanel, {
         collapsed: false,
         context: { scope, chapterId: CHAPTER, canSubmit: true, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto },
         // A scheduled read runs only when the test runs it, so the panel keeps the claimed Run until the steering reply.
@@ -141,9 +139,9 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
     }
     if (held !== undefined) {
       // A reload keeps `sessionStorage` and starts a new page.
-      await act(async () => root.unmount());
+      await act(async () => panel.root.unmount());
       held = undefined;
-      root = createRoot(host);
+      panel.root = createRoot(host);
       await mount();
     }
     if (interruption === "edit-before-reply") {
@@ -163,10 +161,7 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
       retainedIntent: sessionStorage.getItem(`run_control:${OWNER}:${PROJECT}`) !== null,
     };
   } finally {
-    await act(async () => root.unmount());
-    host.remove();
-    sessionStorage.clear();
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
+    await panel.close();
   }
 }
 

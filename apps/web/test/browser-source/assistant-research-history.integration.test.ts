@@ -7,6 +7,7 @@ import artifactFixture from "../../../../generated/golden-wire/storyos-public-re
 import sourcesFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-research-sources.json";
 import { RESEARCH_SYNTHESIS_SENTENCE } from "../../src/assistant-run-outcome.ts";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
+import { inActEnvironment, seedProseRequest } from "./assistant-panel-harness.ts";
 import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 
 const scope = { owner_user_id: OWNER, project_id: PROJECT };
@@ -24,14 +25,14 @@ function synthesisRun(runId: string, researchArtifactId: string) {
 
 /** Stores a history exchange of the settled Run `earlier` before the current Run `current`. */
 function storeConversation(earlier: ReturnType<typeof synthesisRun>, current: string, suffix: string) {
-  sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
+  seedProseRequest({
     scope, message: "Check the ferry times of 1890.", chapterId: CHAPTER,
     correlationId: `018f0000-0000-7001-8000-000000000${suffix}1`, idempotencyKey: `018f0000-0000-7001-8000-000000000${suffix}2`,
     snapshotId: `018f0000-0000-7001-8000-000000000${suffix}3`, runId: current, conversationId: CONVERSATION,
     history: [{ requestId: `018f0000-0000-7001-8000-000000000${suffix}4`, chapterId: CHAPTER, conversationId: CONVERSATION,
       runId: earlier.run_id, run: earlier, message: "Check the tide tables of 1890.", status: "completed",
       result: RESEARCH_SYNTHESIS_SENTENCE }],
-  }));
+  });
 }
 
 /** Renders the panel, and returns a function that renders it again and one that removes it. */
@@ -70,17 +71,6 @@ async function renderPanel(fetchImpl: typeof fetch) {
 
 function lines(section: Element | null) {
   return [...section?.querySelectorAll("p, li") ?? []].map(item => item.textContent);
-}
-
-async function inActEnvironment(body: () => Promise<void>) {
-  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  try {
-    await body();
-  } finally {
-    sessionStorage.clear();
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
-  }
 }
 
 it("keeps the sources, claims, and citations of an earlier research turn after a second research Run, and reads them once", async () => {
