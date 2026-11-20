@@ -1,57 +1,18 @@
-use std::time::Duration;
-
 use storyos_application::{
-    AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, GatewayClock, ModelDispatchStore,
-    NoContractFaults, complete_agent_run,
+    AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, ModelDispatchStore, NoContractFaults,
+    complete_agent_run,
 };
 use storyos_core::ModelAdapter;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{oneshot, watch};
+use tokio::sync::oneshot;
 use tokio_postgres::{Client, NoTls};
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{claim_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, real_run};
-use crate::agent_run_tool_exposure::tests::{advisory_stream, finish_stream};
-
-/// A Deterministic Test Scheduler. A renewal waits until the test advances one step.
-pub(crate) struct SteppedClock {
-    steps: watch::Sender<u64>,
-    waits: watch::Sender<u64>,
-}
-
-impl SteppedClock {
-    pub(crate) fn new() -> Self {
-        Self {
-            steps: watch::Sender::new(/*init*/ 0),
-            waits: watch::Sender::new(/*init*/ 0),
-        }
-    }
-
-    pub(crate) fn step(&self) {
-        self.steps.send_modify(|steps| *steps += 1);
-    }
-
-    /// Completes when the renewal waits for the `count`-th time, after its renewal committed.
-    async fn waited(&self, count: u64) {
-        let mut waits = self.waits.subscribe();
-        tokio::time::timeout(
-            Duration::from_secs(/*secs*/ 10),
-            waits.wait_for(|waits| *waits >= count),
-        )
-        .await
-        .expect("the Worker renews the lease while the request is held")
-        .unwrap();
-    }
-}
-
-impl GatewayClock for SteppedClock {
-    async fn wait(&self, _delay: Duration) {
-        let mut steps = self.steps.subscribe();
-        self.waits.send_modify(|waits| *waits += 1);
-        let _stepped = steps.changed().await;
-    }
-}
+use crate::shared_tests::agent_run_lease::SteppedClock;
+use crate::shared_tests::agent_run_retrieval::{adapter, real_run};
+use crate::shared_tests::agent_run_tool_exposure::{advisory_stream, finish_stream};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{claim_run, stores};
 
 /// Serves one streamed Create. It reports the reference, then holds the response until the test
 /// releases it. A dropped release closes the stream with no terminal event. A released response
@@ -150,9 +111,7 @@ async fn claim_of_another_worker(store: &PostgresProjectReader, run_id: &str) ->
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_request_longer_than_the_lease_keeps_its_claim() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (base, received, release) = held_destination("resp_2b1").await;
     let (scope, run_id) = real_run(&store, &admin, "2b1", &base).await;
@@ -197,9 +156,7 @@ async fn a_request_longer_than_the_lease_keeps_its_claim() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_stopped_worker_stops_renewing_and_recovery_takes_the_claim() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (base, received, release) = held_destination("resp_2b2").await;
     let (scope, run_id) = real_run(&store, &admin, "2b2", &base).await;

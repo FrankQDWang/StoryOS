@@ -9,11 +9,14 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_run, admit_run_in, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
-use crate::project_instruction_tests::{applied, save};
-use crate::project_research_binding::tests::park_queued_runs;
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_steering::{
+    AuthorAction, AuthorAt, Moment, queued, settle, steering,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{admit_run, admit_run_in, stores};
+use crate::shared_tests::project_instruction::{applied, save};
+use crate::shared_tests::project_research_binding::park_queued_runs;
 
 const FAKE: DeploymentDestination = DeploymentDestination::HostFakeToolLoop;
 
@@ -95,9 +98,7 @@ fn required(revision_id: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_binds_only_a_current_revision_with_text_other_than_white_space() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, none) = queued(&store, "bc1").await;
     let blank = saved(&store, &scope, 0xdd11, " \n\u{3000}", 0).await;
@@ -148,9 +149,7 @@ async fn a_run_binds_only_a_current_revision_with_text_other_than_white_space() 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_binds_the_revision_of_its_own_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (project_a, chapter_a, _) = queued(&store, "bc4").await;
     let (project_b, _, _) = queued(&store, "bc5").await;
@@ -194,9 +193,7 @@ async fn versions(admin: &Client, run_id: &str) -> Vec<Value> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "bc7").await;
     complete(&store, &admin, &scope, &first).await;
@@ -260,9 +257,7 @@ async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_next_run_after_a_removal_sends_no_project_instruction() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "bcd").await;
     complete(&store, &admin, &scope, &first).await;
@@ -303,9 +298,7 @@ async fn the_next_run_after_a_removal_sends_no_project_instruction() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_request_does_not() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "bcb").await;
     complete(&store, &admin, &scope, &first).await;

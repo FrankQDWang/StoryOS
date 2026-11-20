@@ -1,33 +1,13 @@
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    ClaimedAgentRun, DispatchClaim, ModelDispatchStore, ModelProviderAdapter, NextDispatchWork,
-    NoContractFaults, complete_agent_run,
+    ClaimedAgentRun, ModelDispatchStore, NoContractFaults, complete_agent_run,
 };
 use storyos_core::{DeploymentDestination, NativeStreamItem, StreamItemRole, StreamItemState};
 use tokio_postgres::{Client, NoTls};
 
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run, claim_run, queued_run, stores};
-
-/// Claims the next Create of `claim`, as the Gateway does before the exchange.
-pub(crate) async fn dispatched(
-    store: &PostgresProjectReader,
-    claim: &ClaimedAgentRun,
-) -> DispatchClaim {
-    let NextDispatchWork::Request(request) = store
-        .next_dispatch_work(claim, FakeDestination::ADAPTERS)
-        .await
-        .unwrap()
-    else {
-        panic!("The claimed AgentRun has no request");
-    };
-    let prepared = FakeDestination.prepare(&request).await.unwrap();
-    store
-        .commit_dispatch_claim(claim, &request, &prepared.projection)
-        .await
-        .unwrap()
-        .unwrap()
-}
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run, claim_run, queued_run, stores};
+use crate::shared_tests::stream_commit_contention::dispatched;
 
 /// Cancels the claimed AgentRun, so that the Worker of its next claim does cancellation duties.
 async fn cancelled(admin: &Client, claim: ClaimedAgentRun) -> ClaimedAgentRun {
@@ -74,9 +54,7 @@ async fn wait_for_lock_wait(admin: &Client, holder: i32) {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_stream_commit_beside_the_work_of_another_run_commits() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, streaming) =
         queued_run(&store, "5c1", DeploymentDestination::HostFakeToolLoop).await;

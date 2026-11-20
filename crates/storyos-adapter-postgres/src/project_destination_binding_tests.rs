@@ -12,9 +12,10 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::RuntimeClock;
-use crate::agent_run_dispatch::tests::{admit_run, claim_run, queued_run, stores};
-use crate::model_registration::tests::agent_plan;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::RuntimeClock;
+use crate::shared_tests::model_gateway::{admit_run, claim_run, queued_run, stores};
+use crate::shared_tests::model_registration::agent_plan;
 
 /// The non-secret binding facts that the Agent Plan binding of a Project records.
 #[derive(Debug, PartialEq)]
@@ -88,9 +89,7 @@ async fn refusal(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_drifted_runs() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, fake_run) =
         queued_run(&store, "e7a", DeploymentDestination::HostFakeToolLoop).await;
@@ -203,9 +202,7 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_binding_with_earlier_bounds_or_an_earlier_registration_gets_new_records() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) = queued_run(&store, "e7f", agent_plan()).await;
     let reply_form = storyos_core::AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision;
@@ -296,9 +293,7 @@ async fn a_binding_with_earlier_bounds_or_an_earlier_registration_gets_new_recor
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_that_pinned_fa21_refuses_with_drift_after_the_deployment_offers_a_later_head() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, drifted_run) = queued_run(&store, "b03", agent_plan()).await;
     let stale_run = admit_run(
@@ -449,9 +444,7 @@ impl ContractFaultObserver for RebindAtFirstClaim<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_rebinding_after_an_unknown_create_pauses_its_successor_without_dispatch() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) =
         queued_run(&store, "e7c", DeploymentDestination::HostFakeToolLoop).await;
@@ -535,9 +528,7 @@ impl ModelProviderAdapter for DisableAtSuccessorPreparation<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn disabled_assistance_during_successor_preparation_pauses_it_with_its_spent_allowance() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) =
         queued_run(&store, "f5a", DeploymentDestination::HostFakeToolLoop).await;

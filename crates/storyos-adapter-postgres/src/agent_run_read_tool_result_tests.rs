@@ -2,8 +2,9 @@ use serde_json::{Value, json};
 use storyos_application::{AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore};
 use storyos_core::{RESEARCH_RECORDED_RESULT, ReadToolResultRefusal};
 
-use crate::agent_run_submit_research::tests::{ResearchProject, research_project};
-use crate::research_source::tests::SEARCH_TEXT;
+use crate::shared_tests::agent_run_submit_research::{ResearchProject, research_project};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::research_source::SEARCH_TEXT;
 
 fn script(first: &str, identity: &str) -> String {
     format!("SCRIPT:read_tool_result {first} {identity}")
@@ -34,9 +35,7 @@ async fn later_calls(project: &ResearchProject, run_id: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_gives_the_stored_result_as_the_first_read_and_submit_research_cites_its_source() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let project = research_project("260").await;
     let run_id = project
         .settle("261", &script("web_search", "call_web_search"), SEARCH_TEXT)
@@ -118,9 +117,7 @@ async fn a_read_gives_the_stored_result_as_the_first_read_and_submit_research_ci
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_refused_read_gives_its_reason_to_the_model_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let project = research_project("262").await;
     let refused = |refusal: ReadToolResultRefusal| {
         json!([

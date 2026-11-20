@@ -6,8 +6,10 @@ use storyos_application::{
 use storyos_core::DeploymentDestination;
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::RuntimeClock;
-use crate::agent_run_dispatch::tests::{
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::grant_scope::current_grant;
+use crate::shared_tests::model_gateway::RuntimeClock;
+use crate::shared_tests::model_gateway::{
     DispatchEvidence, admit_run, claim_run, dispatch_evidence, queued_run, stores,
 };
 
@@ -74,29 +76,6 @@ async fn grant_evidence(
     )
 }
 
-/// The current grant of the Project and its recorded scope.
-pub(crate) async fn current_grant(
-    store: &crate::PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-) -> (String, Option<String>) {
-    let grant_id = open_project_assistance(store, scope)
-        .await
-        .unwrap()
-        .unwrap()
-        .grant_id;
-    let grant_scope = admin
-        .query_one(
-            "SELECT grant_scope FROM storyos.project_destination_grants
-              WHERE grant_id = $1::text::uuid",
-            &[&grant_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    (grant_id, grant_scope)
-}
-
 /// Removes the scope of the current grant, as a row from before migration 0090 has none.
 async fn remove_grant_scope(admin: &Client, grant_id: &str) {
     admin
@@ -112,9 +91,7 @@ async fn remove_grant_scope(admin: &Client, grant_id: &str) {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_scope() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) =
         queued_run(&store, "d5a", DeploymentDestination::HostFakeToolLoop).await;
@@ -144,9 +121,7 @@ async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_sco
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_grant_without_a_scope_refuses_before_dispatch_and_the_next_run_rebinds() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, unscoped_run) =
         queued_run(&store, "d5b", DeploymentDestination::HostFakeToolLoop).await;
@@ -235,9 +210,7 @@ async fn binding_rows(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_grant_with_the_fourth_scope_gets_new_records_with_the_fifth_scope_at_the_next_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, pinned_run) =
         queued_run(&store, "b01", DeploymentDestination::HostFakeToolLoop).await;
@@ -400,9 +373,7 @@ const REMOVE_SCOPE: &str = "UPDATE storyos.project_destination_grants SET grant_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_dispatch_claim_checks_the_current_grant_again_and_sends_nothing() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let changes = [
         REMOVE_SCOPE,
@@ -464,9 +435,7 @@ async fn the_dispatch_claim_checks_the_current_grant_again_and_sends_nothing() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_project_dispatches_only_under_its_own_grant() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (granted_scope, _, granted_run) =
         queued_run(&store, "d6b", DeploymentDestination::HostFakeToolLoop).await;
@@ -494,9 +463,7 @@ async fn each_project_dispatches_only_under_its_own_grant() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_retrieve_after_an_unknown_create_checks_the_current_grant_and_sends_nothing() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) =
         queued_run(&store, "d6d", DeploymentDestination::HostFakeToolLoop).await;
@@ -556,9 +523,7 @@ async fn a_retrieve_after_an_unknown_create_checks_the_current_grant_and_sends_n
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_recorded_purpose_outside_the_scope_refuses_before_dispatch() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) =
         queued_run(&store, "d7a", DeploymentDestination::HostFakeToolLoop).await;

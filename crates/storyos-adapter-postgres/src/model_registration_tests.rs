@@ -5,14 +5,10 @@ use storyos_application::{
 };
 use storyos_core::{DeploymentDestination, ModelAdapter};
 
-use crate::agent_run_dispatch::tests::RuntimeClock;
-use crate::agent_run_dispatch::tests::{DispatchEvidence, dispatch_evidence, queued_run, stores};
-
-pub(crate) fn agent_plan() -> DeploymentDestination {
-    DeploymentDestination::VolcengineAgentPlan {
-        qualification_authorization: None,
-    }
-}
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::RuntimeClock;
+use crate::shared_tests::model_gateway::{DispatchEvidence, dispatch_evidence, queued_run, stores};
+use crate::shared_tests::model_registration::agent_plan;
 
 /// An adapter of the Agent Plan Registration whose credential is unavailable.
 struct UnreachableAgentPlan;
@@ -36,9 +32,7 @@ impl ModelProviderAdapter for UnreachableAgentPlan {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn fake_worker_skips_an_agent_plan_run_that_only_the_agent_plan_worker_claims() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (_, _, agent_plan_run) = queued_run(&store, "0a1", agent_plan()).await;
     let (_, _, fake_run) = queued_run(&store, "0a2", DeploymentDestination::HostFakeToolLoop).await;

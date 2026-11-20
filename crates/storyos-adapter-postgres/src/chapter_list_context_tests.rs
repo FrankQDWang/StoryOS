@@ -3,30 +3,29 @@
 
 use serde_json::{Value, json};
 use storyos_application::{
-    ApplyAuthorEditCommand, ChallengeRateClass, ChapterId, ConversationSelection,
-    CreateChapterInput, EditorSessionId, EditorSessionStore, IssueProjectCommandChallenge,
-    ProjectScope, SetCurrentChapterInput, UpdateChapterInput, VerifiedExportArchive,
-    claim_next_archive_export, complete_archive_export, get_verified_export_archive,
-    issue_project_command_challenge,
+    ConversationSelection, CreateChapterInput, EditorSessionStore, IssueProjectCommandChallenge,
+    VerifiedExportArchive, claim_next_archive_export, complete_archive_export,
+    get_verified_export_archive, issue_project_command_challenge,
 };
 use storyos_core::{
-    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, AuthorEditPrimitive,
-    AuthorEditUnit, CreateChapterPlacement, DeploymentDestination, SelectionSnapshot,
-    TransitionOutcome, UTF16_COORDINATE_PROFILE, hex_sha256,
+    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CreateChapterPlacement,
+    TransitionOutcome, hex_sha256,
 };
 use tokio_postgres::Client;
 
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_run_in, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
-use crate::command_sequence::tests::{
-    CREATE_CHAPTER, CommandCall, SET_CURRENT_CHAPTER, UPDATE_CHAPTER, create_chapter, issued,
-    update_chapter,
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_steering::{
+    AuthorAction, AuthorAt, Moment, queued, settle, steering,
 };
-use crate::create_volume_authority_tests::{NamedEdit, adjusted_edit_command};
-use crate::project_archive_build::tests::{export_command, zip_store_files};
-use crate::set_current_chapter_authority_tests::open_session_request;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::{admitted, head, rename, replace_text, select};
+use crate::shared_tests::command_sequence_structure::{
+    CREATE_CHAPTER, create_chapter, update_chapter,
+};
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
+use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
 /// The list of the fixture Project: one Volume with its Chapter, the Current Chapter of the Run.
 const FIXTURE_LIST: &str = "{\"volume\":\"Volume A\"}\n[1,0,\"Chapter A\",\"current\"]";
@@ -89,52 +88,10 @@ fn conversation_of(prefix: &str) -> ConversationSelection {
     }
 }
 
-/// Admits one Run of the tool loop profile with `message` in `conversation` of the Project.
-pub(crate) async fn admitted(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    chapter_id: &str,
-    prefix: &str,
-    message: &str,
-    conversation: ConversationSelection,
-) -> String {
-    let destination = DeploymentDestination::HostFakeToolLoop;
-    admit_run_in(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        destination,
-        message,
-        conversation,
-        None,
-    )
-    .await
-}
-
-/// The rename of the fixture Chapter to `title`, with a fresh challenge `suffix`.
-pub(crate) async fn rename(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    suffix: u16,
-    chapter_id: &str,
-    title: &str,
-) -> CommandCall<UpdateChapterInput> {
-    let input = UpdateChapterInput {
-        chapter_id: ChapterId::new(chapter_id),
-        title: title.to_owned(),
-        order: 1,
-        expected_tree_revision: 3,
-    };
-    issued(store, scope, suffix, &UPDATE_CHAPTER, input).await
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_run_step_records_the_list_and_an_unchanged_incremental_request_sends_none() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued(&store, "0e1").await;
     complete(&store, &admin, &scope, &run_id).await;
@@ -156,9 +113,7 @@ async fn each_run_step_records_the_list_and_an_unchanged_incremental_request_sen
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_full_input_a_compaction_and_a_replaced_input_send_the_list_and_a_summary_sends_none() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The destination lost the closing reference of the Run before the third Run, so the third
     // Run sends its full input again.
@@ -234,9 +189,7 @@ async fn a_full_input_a_compaction_and_a_replaced_input_send_the_list_and_a_summ
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_rename_and_a_new_chapter_between_two_run_steps_send_the_new_list_as_a_replaced_input() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, renamed) = queued(&store, "0e8").await;
     let call = rename(&store, &scope, 0x0f10, &chapter_id, "Harbor").await;
@@ -297,92 +250,10 @@ async fn a_rename_and_a_new_chapter_between_two_run_steps_send_the_new_list_as_a
     );
 }
 
-/// The head of `chapter_id` and its first Block.
-pub(crate) async fn head(admin: &Client, chapter_id: &str) -> (String, String) {
-    let row = admin
-        .query_one(
-            "SELECT head.current_revision_id::text, member.manuscript_block_id::text
-               FROM storyos.authoritative_heads AS head
-               JOIN storyos.manuscript_revision_members AS member
-                 ON member.revision_id = head.current_revision_id
-              WHERE head.manuscript_object_id = $1::text::uuid
-              ORDER BY member.block_order
-              LIMIT 1",
-            &[&chapter_id],
-        )
-        .await
-        .unwrap();
-    (row.get(/*idx*/ 0), row.get(/*idx*/ 1))
-}
-
-/// The Author Edit of the Editor Session `editor_session_id` that replaces the first `length`
-/// characters of the head of `chapter_id` with `text`. `sequence` is its local intent sequence,
-/// and `suffix` is its fresh challenge suffix.
-pub(crate) async fn replace_text(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    (editor_session_id, sequence, suffix): (&str, u64, &str),
-    chapter_id: &str,
-    (length, text): (u32, &str),
-) -> ApplyAuthorEditCommand {
-    let (revision, block) = head(admin, chapter_id).await;
-    let edit = NamedEdit {
-        editor_session_id,
-        chapter_id,
-        expected_revision_id: &revision,
-        suffix,
-        local_intent_sequence: sequence,
-        text: "",
-        proposal_target: None,
-    };
-    adjusted_edit_command(store, scope, edit, |command| {
-        // The Author Edit class keeps the Shared Challenges of the Project for the Runs.
-        command.challenge_binding.challenge_rate_policy_revision =
-            ChallengeRateClass::AuthorEdit.policy_revision().to_owned();
-        command.author_edit_units = vec![AuthorEditUnit {
-            normalized_primitives: vec![AuthorEditPrimitive::ReplaceBlockSelection {
-                manuscript_block_id: block,
-                from: 0,
-                to: length,
-                text: text.to_owned(),
-            }],
-            selection_snapshot: SelectionSnapshot {
-                coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
-                from: 0,
-                to: length,
-            },
-        }];
-    })
-    .await
-}
-
-/// The selection of `chapter_id` as the Current Chapter of the Project in place of `from`, by
-/// the Editor Session `editor_session_id`, with a fresh challenge `suffix`. An Author Edit
-/// changes only the Current Chapter of the Project.
-pub(crate) async fn select(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    (editor_session_id, suffix): (&EditorSessionId, u16),
-    chapter_id: &str,
-    from: &str,
-) -> CommandCall<SetCurrentChapterInput> {
-    let input = SetCurrentChapterInput {
-        editor_session_id: editor_session_id.clone(),
-        chapter_id: chapter_id.to_owned(),
-        expected_current_chapter_id: from.to_owned(),
-        expected_target_revision_id: head(admin, chapter_id).await.0,
-    };
-    issued(store, scope, suffix, &SET_CURRENT_CHAPTER, input).await
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_edit_of_another_chapter_that_keeps_its_length_sends_no_replaced_input() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, current, first) = queued(&store, "0ee").await;
     complete(&store, &admin, &scope, &first).await;
@@ -457,9 +328,7 @@ async fn an_edit_of_another_chapter_that_keeps_its_length_sends_no_replaced_inpu
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_list_of_a_run_has_only_the_chapters_of_its_own_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (first_scope, _, first) = queued(&store, "0ea").await;
     complete(&store, &admin, &first_scope, &first).await;
@@ -488,9 +357,7 @@ async fn the_list_of_a_run_has_only_the_chapters_of_its_own_project() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_archive_of_a_project_whose_run_has_the_list_builds_and_packs_its_records() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued(&store, "0ec").await;
     complete(&store, &admin, &scope, &run_id).await;

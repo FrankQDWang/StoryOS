@@ -15,9 +15,12 @@ use crate::command_sequence::{
     ZeroAuthorityRows, ZeroOutcome, settle_project_command, unavailable,
 };
 
-use super::project_session::{UPDATE_PROJECT, update_project_call};
-use super::rollback::failed_then_settled;
-use super::support::{CommandCall, issued, replayed_outcome, stores};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_project_session::{UPDATE_PROJECT, update_project_call};
+use crate::shared_tests::command_sequence_rollback::failed_then_settled;
+use crate::shared_tests::command_sequence_support::{
+    CommandCall, issued, replayed_outcome, stores,
+};
 
 /// An Update Project on the declared surface of ADR 0080. It classifies, writes, and decodes as
 /// Update Project, and adds the surface parts that Update Project does not use: a constant Receipt
@@ -160,9 +163,7 @@ async fn declared_call(store: &PostgresProjectReader, base: u16) -> CommandCall<
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_command_on_the_declared_surface_settles_replays_and_rolls_back_through_the_sequence() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let renamed = declared_call(&store, /*base*/ 0x2e00).await;
     let applied = replayed_outcome(&store, &admin, &renamed, settle_declared).await;

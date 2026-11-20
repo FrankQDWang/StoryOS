@@ -12,8 +12,8 @@ use storyos_core::{TakeOverProjectWriterNoEffect, TransitionOutcome};
 use tokio_postgres::{Client, NoTls};
 
 use super::*;
-use crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK;
-use crate::command_sequence::tests::CommandCall;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::CommandCall;
 
 const USER: &str = "018f0000-0000-7001-8000-000000000001";
 const EMPTY_OBJECT_TAKEOVER_DIGEST: &str = "sha256:storyos.command.takeOverProjectWriter.jcs.v1:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";

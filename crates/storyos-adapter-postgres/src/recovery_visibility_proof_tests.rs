@@ -1,5 +1,6 @@
 use super::*;
-use crate::command_sequence::tests::{create_project_command, create_project_issue};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::{create_project_command, create_project_issue};
 use std::path::PathBuf;
 use storyos_application::{CreateProjectCommand, create_project, issue_create_project_challenge};
 use tokio_postgres::{Client, NoTls};
@@ -314,9 +315,7 @@ async fn prove_keeps_hold(admin: &Client, ids: &ProofIds) {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn recovery_visibility_proof_accepts_lawful_null_current_chapter() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (_isolated, store, admin) =
         open_isolated_proof("storyos_rvp_null", /*stop_before*/ None).await;
     let project_id = create_empty_project(&store, "f801").await;
@@ -375,9 +374,7 @@ async fn recovery_visibility_proof_accepts_lawful_null_current_chapter() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn recovery_visibility_proof_keeps_hold_for_broken_required_checks() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (_isolated, store, admin) =
         open_isolated_proof("storyos_rvp_hold", /*stop_before*/ None).await;
     let project_id = create_empty_project(&store, "f811").await;

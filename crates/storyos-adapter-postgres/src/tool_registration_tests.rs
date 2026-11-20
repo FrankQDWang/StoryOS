@@ -6,7 +6,8 @@ use storyos_core::{
 
 use super::quarantine_revision;
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::stores;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::stores;
 
 const PINNED: ToolRegistration = ToolRegistration {
     revision: "018f0000-0000-7001-8000-0000000e0f01",
@@ -63,9 +64,7 @@ async fn lifecycle(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn drift_quarantines_one_revision_once_and_a_new_revision_carries_no_authority_from_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     insert(&store, &PINNED).await;
     insert(&store, &PINNED).await;
@@ -146,9 +145,7 @@ async fn drift_quarantines_one_revision_once_and_a_new_revision_carries_no_autho
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_runtime_role_never_reactivates_edits_or_extends_a_registration_revision() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, _admin) = stores().await;
     const REVISION: ToolRegistration = ToolRegistration {
         revision: "018f0000-0000-7001-8000-0000000e0f04",

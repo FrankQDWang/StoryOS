@@ -7,10 +7,14 @@ use storyos_application::{ConversationSelection, MemoryCaptureSource, ProjectSco
 use storyos_core::{DeploymentDestination, ObservationRefusal, RESEARCH_TOOL_OFFER};
 use tokio_postgres::Client;
 
-use super::tests::{park_queued_author_runs, project, run_capture, start};
-use crate::agent_run_dispatch::tests::{admit_selected_run, queued_run_offering, stores};
-use crate::agent_run_finish_rule::tests::{calls, complete};
-use crate::create_agent_run_tests::skill_tests::{fixture, set};
+use crate::shared_tests::agent_run_finish_rule::{calls, complete};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::create_agent_run_skill::{fixture, set};
+use crate::shared_tests::memory_capture::{park_queued_author_runs, project, run_capture, start};
+use crate::shared_tests::memory_capture_loop::{
+    other_records, record, requests, script, settlement,
+};
+use crate::shared_tests::model_gateway::{admit_selected_run, queued_run_offering, stores};
 
 /// The Tool Exposure of each RunStep of a capture (ADR 0094 section 5).
 pub(crate) const CAPTURE_TOOLS: [&str; 4] = [
@@ -19,32 +23,6 @@ pub(crate) const CAPTURE_TOOLS: [&str; 4] = [
     "read_memory_entry",
     "record_memory_observations",
 ];
-
-/// The input of a capture: one script line for each call, in RunStep order.
-pub(crate) fn script(calls: &[(&str, Value)]) -> String {
-    let lines: Vec<String> = calls
-        .iter()
-        .map(|(name, arguments)| format!("SCRIPT:capture {name} {arguments}"))
-        .collect();
-    format!("林舟在雨夜撑船。\n{}", lines.join("\n"))
-}
-
-/// The `record_memory_observations` call with `observations`. An item with no key `kind` is an
-/// observation of a fact, and it gets the null entry and the null reason of the strict schema.
-pub(crate) fn record(observations: Value) -> (&'static str, Value) {
-    let items = observations.as_array().into_iter().flatten().map(|item| {
-        let mut item = item.clone();
-        if item.get("kind").is_none() {
-            let fact = json!({ "kind": "observation", "entry": null, "reason": null });
-            item.as_object_mut()
-                .unwrap()
-                .extend(fact.as_object().unwrap().clone());
-        }
-        item
-    });
-    let arguments = json!({ "observations": items.collect::<Vec<_>>() });
-    ("record_memory_observations", arguments)
-}
 
 fn refused(position: u64, refusal: ObservationRefusal) -> Value {
     let (label, text) = (refusal.label(), refusal.result().text);
@@ -55,65 +33,6 @@ fn refused(position: u64, refusal: ObservationRefusal) -> Value {
         label,
         text
     ])
-}
-
-/// The Run status, the capture state, outcome, and failure reason, and each observation of the
-/// Run `run_id`.
-pub(crate) async fn settlement(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(run.status, capture.state, capture.outcome,
-                      capture.failure_reason,
-                      COALESCE((SELECT jsonb_agg(jsonb_build_array(item.position, item.entry_type,
-                                  item.title, item.text, item.state) ORDER BY item.position)
-                                  FROM storyos.memory_observations AS item
-                                 WHERE item.capture_id = capture.capture_id), '[]'))::text
-               FROM storyos.agent_runs AS run
-               JOIN storyos.memory_captures AS capture USING (owner_user_id, project_id, run_id)
-              WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
-}
-
-/// The count of the Memory entry versions, the Proposals, the Research Artifacts, and the
-/// Authoritative Revisions of the Project of `scope`.
-pub(crate) async fn other_records(admin: &Client, scope: &ProjectScope) -> Value {
-    let tables = [
-        "memory_entry_versions",
-        "proposals",
-        "research_artifacts",
-        "authoritative_revisions",
-    ];
-    let mut counts = Vec::new();
-    for table in tables {
-        let query = format!(
-            "SELECT count(*) FROM storyos.{table}
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid"
-        );
-        let values = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
-        let row = admin.query_one(&query, &[&values[0], &values[1]]).await;
-        counts.push(row.unwrap().get::<_, i64>(/*idx*/ 0));
-    }
-    json!(counts)
-}
-
-/// For each decision request of the Run: its purpose, its `tool_choice`, and its Tools.
-pub(crate) async fn requests(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(wire ->> 'purpose', wire ->> 'tool_choice',
-                      wire -> 'tools') ORDER BY decision_position)::text
-               FROM storyos.model_attempts,
-                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
-              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
 }
 
 /// A Project whose first Run of the author has a research binding, and whose second Run pins a
@@ -156,9 +75,7 @@ async fn bound_project(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_capture_records_its_observations_after_refused_calls_and_writes_no_other_record() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, source) = bound_project(&store, &admin).await;
     let before = other_records(&admin, &scope).await;
@@ -213,9 +130,7 @@ async fn a_capture_records_its_observations_after_refused_calls_and_writes_no_ot
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_empty_list_settles_the_capture_with_no_observation_after_each_refusal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "fda").await;
     let long = "字".repeat(storyos_core::MEMORY_TEXT_MAX_CHARS + 1);
@@ -253,9 +168,7 @@ async fn an_empty_list_settles_the_capture_with_no_observation_after_each_refusa
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_capture_that_never_records_settles_with_the_step_limit() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "fdb").await;
     let max = usize::try_from(storyos_core::MEMORY_CAPTURE_MAX_RUN_STEPS).unwrap();
@@ -287,9 +200,7 @@ async fn a_capture_that_never_records_settles_with_the_step_limit() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_refused_output_call_in_the_last_run_step_settles_with_the_step_limit() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "fdc").await;
     let max = usize::try_from(storyos_core::MEMORY_CAPTURE_MAX_RUN_STEPS).unwrap();
@@ -320,9 +231,7 @@ async fn a_refused_output_call_in_the_last_run_step_settles_with_the_step_limit(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_request_of_a_capture_has_the_kind_of_its_input() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, conversation) = project(&store, &admin, "590").await;
     let revision_id: String = admin

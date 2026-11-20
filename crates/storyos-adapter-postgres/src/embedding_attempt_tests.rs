@@ -19,11 +19,12 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::NoEmbeddings;
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_finish_rule::tests::complete;
-use crate::project_embedding_binding::tests::{FAKE, embedding_project};
-use crate::project_research_binding::tests::park_queued_runs;
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::NoEmbeddings;
+use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
+use crate::shared_tests::project_research_binding::park_queued_runs;
 
 /// The fake embedding adapter. Its exchange first reads the Embedding Attempts of the Project
 /// through `admin`; `truncate` cuts the vector to 1,023 values.
@@ -128,9 +129,7 @@ async fn scoped_count(store: &PostgresProjectReader, scope: &ProjectScope) -> i6
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_claim_commits_the_attempt_before_the_exchange_and_the_record_settles_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, revision_id, run_id) =
         project(&store, &admin, ["ab7", "ab8"], FAKE).await;
@@ -336,9 +335,7 @@ async fn the_claim_commits_the_attempt_before_the_exchange_and_the_record_settle
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_refusal_writes_no_attempt_and_gives_its_typed_reason() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, revision_id, run_id) =
         project(&store, &admin, ["abb", "abc"], FAKE).await;
@@ -437,9 +434,7 @@ async fn each_refusal_writes_no_attempt_and_gives_its_typed_reason() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_route_is_the_endpoint_of_the_evidence_and_the_reference_of_the_current_binding() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (agent_plan, ..) = project(
         &store,

@@ -7,20 +7,21 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ClaimedMemoryWork, ConversationSelection, MemoryCaptureSource, MemoryWorkOutcome,
-    MemoryWorkScheduleStore, MemoryWorkSource, NoContractFaults, ProjectScope, complete_agent_run,
+    MemoryWorkScheduleStore, NoContractFaults, complete_agent_run,
 };
 use storyos_core::ConversationCaptureSkip;
 use tokio_postgres::Client;
 
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::NoEmbeddings;
-use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_retrieval::tests::{adapter, destination, real_run};
-use crate::agent_run_steering::tests::{cancellation, claim_duties, queued};
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::memory_capture::loop_tests::{other_records, record, script, settlement};
-use crate::memory_capture::tests::{project, run_capture};
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_retrieval::{adapter, destination, real_run};
+use crate::shared_tests::agent_run_steering::{cancellation, claim_duties, queued};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::memory_capture::{project, run_capture};
+use crate::shared_tests::memory_capture_loop::{other_records, record, script, settlement};
+use crate::shared_tests::memory_work_schedule::{claim_due, due, make_due};
+use crate::shared_tests::model_gateway::NoEmbeddings;
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
 
 /// The conversation of a source of a capture.
 fn conversation(source: &MemoryCaptureSource) -> &str {
@@ -32,64 +33,12 @@ fn conversation(source: &MemoryCaptureSource) -> &str {
     }
 }
 
-/// Whether the row of the Conversation is due in the quiet time from now: `None` when the
-/// Conversation has no row, `Some(None)` when the due time is empty.
-async fn due(admin: &Client, conversation_id: &str) -> Option<Option<bool>> {
-    admin
-        .query_opt(
-            "SELECT due_at > clock_timestamp() + interval '29 minutes'
-                AND due_at <= clock_timestamp() + interval '30 minutes'
-               FROM storyos.memory_work_schedules WHERE conversation_id = $1::text::uuid",
-            &[&conversation_id],
-        )
-        .await
-        .unwrap()
-        .map(|row| row.get(/*idx*/ 0))
-}
-
-/// Makes the row of the Conversation due now, and each other row not due, so that the claim
-/// takes this row.
-pub(crate) async fn make_due(admin: &Client, conversation_id: &str) {
-    admin
-        .execute(
-            "UPDATE storyos.memory_work_schedules
-                SET due_at = CASE WHEN conversation_id = $1::text::uuid
-                                  THEN clock_timestamp() - interval '1 second' END
-              WHERE conversation_id = $1::text::uuid OR due_at IS NOT NULL",
-            &[&conversation_id],
-        )
-        .await
-        .unwrap();
-}
-
-/// Claims the due row of the Conversation, and returns its outcome. The due time is then empty.
-pub(crate) async fn claim_due(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    conversation_id: &str,
-) -> MemoryWorkOutcome {
-    make_due(admin, conversation_id).await;
-    let claimed = store.claim_due_memory_work().await.unwrap().unwrap();
-    assert_eq!(
-        (&claimed.project_scope, &claimed.source),
-        (
-            scope,
-            &MemoryWorkSource::Conversation(conversation_id.to_owned())
-        )
-    );
-    assert_eq!(due(admin, conversation_id).await, Some(None));
-    claimed.outcome
-}
-
 /// A Run of the author that completes sets the due time of its Conversation to the settlement
 /// time and 30 minutes. A Run that is refused or cancelled does not change the row.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn only_the_completion_of_a_run_of_the_author_sets_the_due_time() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (_, _, completed) = project(&store, &admin, "290").await;
 
@@ -165,9 +114,7 @@ async fn only_the_completion_of_a_run_of_the_author_sets_the_due_time() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_due_row_starts_one_capture_and_a_locked_row_is_not_claimed() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "293").await;
     let conversation_id = conversation(&source);
@@ -244,9 +191,7 @@ async fn a_due_row_starts_one_capture_and_a_locked_row_is_not_claimed() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_queued_run_of_the_author_and_read_messages_start_no_capture() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "294").await;
     let conversation_id = conversation(&source).to_owned();
@@ -278,9 +223,7 @@ async fn a_queued_run_of_the_author_and_read_messages_start_no_capture() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_capture_in_progress_starts_no_second_capture() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "296").await;
     let conversation_id = conversation(&source);
@@ -304,9 +247,7 @@ async fn a_capture_in_progress_starts_no_second_capture() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_settings_and_a_refused_start_start_no_capture() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "297").await;
     let conversation_id = conversation(&source);
@@ -395,9 +336,7 @@ async fn capture_of(admin: &Client, conversation_id: &str) -> Option<(String, St
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn run_once_captures_two_completed_runs_into_stored_observations() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "298").await;
     let MemoryCaptureSource::Conversation {

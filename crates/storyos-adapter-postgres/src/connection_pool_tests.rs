@@ -3,6 +3,7 @@ use std::time::SystemTime;
 use storyos_application::{ProjectId, ProjectScope, UserId};
 
 use crate::PostgresProjectReader;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 
 const USER: &str = "018f0000-0000-7001-8000-000000000001";
 const PROJECT: &str = "018f0000-0000-7001-8000-000000000002";
@@ -22,9 +23,7 @@ async fn backend_identity(client: &tokio_postgres::Client) -> (i32, SystemTime) 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_settled_connection_is_reused_and_an_unsettled_transaction_is_not() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);

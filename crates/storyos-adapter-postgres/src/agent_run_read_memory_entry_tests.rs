@@ -14,35 +14,24 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_load_skill::tests::calls;
-use crate::agent_run_read_chapter::tests::{
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_load_skill::calls;
+use crate::shared_tests::agent_run_read_chapter::{
     boundary, finish, no_public_call, outputs_record, sent,
 };
-use crate::agent_run_retrieval::tests::destination;
-use crate::agent_run_steering::tests::{cancellation, queued};
-use crate::agent_run_tool_dispatch::tests::{client, exa_tools, mcp_replies, point_mcp};
-use crate::agent_run_tool_recovery::tests::{Fault, FaultAt};
-use crate::agent_run_write_memory::tests::first_index;
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::memory_entries::tests::{archived_rows, as_runtime, write_versions};
-
-const NOT_FOUND: &str = "The Host refused this call because no current entry has this id: use an \
-id of the section Memory index, so no result is available, and this is not an empty result.";
+use crate::shared_tests::agent_run_read_memory_entry::refused;
+use crate::shared_tests::agent_run_retrieval::destination;
+use crate::shared_tests::agent_run_steering::{cancellation, queued};
+use crate::shared_tests::agent_run_tool_dispatch::{client, exa_tools, mcp_replies, point_mcp};
+use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
+use crate::shared_tests::agent_run_write_memory::first_index;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::memory_entries::{archived_rows, as_runtime, write_versions};
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run, stores};
 
 fn settled(text: &str) -> Value {
     json!(["read_memory_entry", "settled", null, text, true])
-}
-
-pub(crate) fn refused() -> Value {
-    json!([
-        "read_memory_entry",
-        "refused",
-        "memory_entry_not_found",
-        NOT_FOUND,
-        true
-    ])
 }
 
 /// The result of a read of the current version of the entry `number` of the Project of `scope`,
@@ -113,9 +102,7 @@ async fn call_id(admin: &Client, run_id: &str, call_id: &str) -> String {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_after_a_write_of_the_same_run_gives_the_current_version_and_the_request_sends_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "c21").await;
     complete(&store, &admin, &scope, &first).await;
@@ -182,9 +169,7 @@ async fn a_read_after_a_write_of_the_same_run_gives_the_current_version_and_the_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_of_a_deleted_or_missing_entry_is_refused_and_each_run_reads_its_own_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "c23").await;
     complete(&store, &admin, &scope, &first).await;
@@ -249,9 +234,7 @@ async fn a_read_of_a_deleted_or_missing_entry_is_refused_and_each_run_reads_its_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_last_read_is_the_newest_read_row_and_the_archive_has_each_read() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "c27").await;
     complete(&store, &admin, &scope, &first).await;
@@ -307,9 +290,7 @@ async fn the_last_read_is_the_newest_read_row_and_the_archive_has_each_read() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_of_a_run_that_lost_its_lease_writes_no_read_row() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "c2a").await;
     complete(&store, &admin, &scope, &first).await;
@@ -364,9 +345,7 @@ async fn a_read_of_a_run_that_lost_its_lease_writes_no_read_row() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_compaction_after_a_read_keeps_the_exact_result() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "c2c").await;
     complete(&store, &admin, &scope, &first).await;
@@ -405,9 +384,7 @@ async fn a_compaction_after_a_read_keeps_the_exact_result() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_with_no_memory_use_declares_no_read() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "c2e").await;
     complete(&store, &admin, &scope, &first).await;

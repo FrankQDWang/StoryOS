@@ -6,18 +6,19 @@ use serde_json::{Value, json};
 use storyos_application::MemoryWorkSource;
 use storyos_application::{MemoryEntrySourceItem, MemoryWorkOutcome, MemoryWorkScheduleStore};
 
-use super::super::schedule_tests::{claim_pass, pass_due};
-use super::super::tests::settled;
-use super::conflict_tests::conflict;
-use super::flag_show_tests::{listed_flags, run, write};
-use super::{flag_lines, seed};
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_load_skill::tests::calls;
-use crate::agent_run_read_chapter::tests::project;
-use crate::agent_run_write_memory::tests::first_index;
-use crate::chapter_capture_schedule::tests::make_chapter_due;
-use crate::memory_capture::loop_tests::record;
-use crate::memory_capture::tests::run_capture;
+use crate::shared_tests::agent_run_load_skill::calls;
+use crate::shared_tests::agent_run_read_chapter::project;
+use crate::shared_tests::agent_run_write_memory::first_index;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_capture_schedule::make_chapter_due;
+use crate::shared_tests::memory_capture::run_capture;
+use crate::shared_tests::memory_capture_loop::record;
+use crate::shared_tests::memory_conflict_flag_show::{listed_flags, run, write};
+use crate::shared_tests::memory_consolidation::settled;
+use crate::shared_tests::memory_consolidation_conflict::conflict;
+use crate::shared_tests::memory_consolidation_merge::{flag_lines, seed};
+use crate::shared_tests::memory_consolidation_schedule::{claim_pass, pass_due};
+use crate::shared_tests::model_gateway::stores;
 
 /// The path on the fake destination. The second Block of the Chapter is the capture script of
 /// the fake model, so the Chapter capture gives a conflict item for entry 1. The pass has only
@@ -26,9 +27,7 @@ use crate::memory_capture::tests::run_capture;
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_chapter_capture_flags_an_entry_of_the_author_and_a_change_removes_the_flag() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let reason = "第一章写林舟游过了河。";
     let (call, arguments) = record(json!([conflict(1, reason)]));

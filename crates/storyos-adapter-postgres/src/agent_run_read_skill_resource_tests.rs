@@ -18,11 +18,12 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_selected_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_load_skill::tests::{TOOLS, calls, loaded_run, skill_md};
-use crate::agent_run_steering::tests::queued;
-use crate::create_agent_run_tests::skill_tests::{fixture, package, set};
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_load_skill::{TOOLS, calls, loaded_run, skill_md};
+use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
+use crate::shared_tests::model_gateway::{admit_selected_run, stores};
 
 const EXPIRES: &str = "SCRIPT:step-reference-expires";
 
@@ -131,9 +132,7 @@ fn finish() -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_of_the_resource_of_each_fixture_settles_with_its_exact_text() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let comms = fixture("internal-comms");
     let dialogue = fixture("dialogue-style-guide");
@@ -261,9 +260,7 @@ async fn a_read_of_the_resource_of_each_fixture_settles_with_its_exact_text() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_refused_read_gives_its_reason_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let comms = fixture("internal-comms");
     let odd = with_files(
@@ -362,9 +359,7 @@ async fn each_refused_read_gives_its_reason_and_the_run_continues() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_of_an_empty_file_or_a_file_of_white_space_gives_its_exact_text() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let blank = with_files(
         "blank-files",
@@ -428,9 +423,7 @@ async fn a_read_of_an_empty_file_or_a_file_of_white_space_gives_its_exact_text()
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn seventeen_reads_of_one_file_settle_sixteen_and_refuse_the_last_at_the_limit() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let notes = with_files(
         "notes",
@@ -472,9 +465,7 @@ async fn seventeen_reads_of_one_file_settle_sixteen_and_refuse_the_last_at_the_l
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_compaction_keeps_a_long_read_output_exact_and_names_no_read_stub() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let text = "Write each scene in the present tense. ".repeat(80);
     let long = with_files("long-notes", vec![("notes.md", text.clone().into_bytes())]);
@@ -569,9 +560,7 @@ async fn a_compaction_keeps_a_long_read_output_exact_and_names_no_read_stub() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_tool_result_call_of_a_skill_call_is_refused_as_a_host_tool_call() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let notes = with_files(
         "notes",

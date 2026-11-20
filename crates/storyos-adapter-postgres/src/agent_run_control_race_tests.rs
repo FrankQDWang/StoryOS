@@ -17,9 +17,13 @@ use tokio::sync::Notify;
 use tokio_postgres::{Client, NoTls};
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, stores};
-use crate::agent_run_steering::tests::{cancellation, claim_duties, queued, settle, steering};
-use crate::command_sequence::tests::{CommandCall, PAUSE_AGENT_RUN, issued};
+use crate::shared_tests::agent_run_steering::{
+    cancellation, claim_duties, queued, settle, steering,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::{CommandCall, issued};
+use crate::shared_tests::model_gateway::{RuntimeClock, stores};
 
 /// The control command of the author.
 enum Control {
@@ -189,9 +193,7 @@ enum Kind {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_control_command_that_loses_a_race_with_the_worker_answers_the_committed_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL").unwrap();
     // Request 1 is the first RunStep, and request 2 is the closing RunStep. The Worker commits

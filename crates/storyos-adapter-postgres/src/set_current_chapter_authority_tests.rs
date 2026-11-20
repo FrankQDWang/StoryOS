@@ -1,143 +1,23 @@
 use super::*;
 use storyos_application::{
-    ChapterCreated, ChapterId, ChapterNode, ChapterSelectionAuthority, CreateChapterInput,
-    CreateVolumeInput, EditorClientBinding, EditorSessionId, GetManuscriptTree, OpenChapter,
-    OpenEditorSession, ProjectScope, SetCurrentChapterInput, SetCurrentChapterSettlement,
-    UndoApplied, UndoRecords, VolumeCreated, VolumeId, VolumeNode, create_editor_session,
-    get_manuscript_tree, issue_project_command_challenge, open_chapter, open_project,
+    ChapterId, ChapterNode, ChapterSelectionAuthority, EditorSessionId, GetManuscriptTree,
+    OpenChapter, ProjectScope, SetCurrentChapterInput, SetCurrentChapterSettlement, UndoApplied,
+    UndoRecords, VolumeId, VolumeNode, get_manuscript_tree, issue_project_command_challenge,
+    open_chapter, open_project,
 };
 use storyos_core::{ReceiptResult, TransitionOutcome};
 use tokio_postgres::NoTls;
 
-use crate::command_sequence::tests::{
-    CREATE_CHAPTER, CREATE_EDITOR_SESSION, CREATE_VOLUME, SET_CURRENT_CHAPTER, applied,
-    command_call, command_issue, create_chapter, create_volume, outcome_code, seed_owned_project,
-    undo_named,
-};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::{SET_CURRENT_CHAPTER, outcome_code};
+use crate::shared_tests::command_sequence_support::{command_call, command_issue, undo_named};
+use crate::shared_tests::set_current_chapter_authority::{open_session, seed_two_chapters};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const MISSING: &str = "018f0000-0000-7001-8000-00000000ffff";
-const VOLUME_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
-const VOLUME_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:2b02ae40bec5ed5ccf7ec412519d2178186dc80e3829100851514a6f3422cedf";
-const CHAPTER_A_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapter A"}"#;
-const CHAPTER_A_DIGEST: &str = "sha256:storyos.command.createChapter.jcs.v1:fdee6f3020b94d08f6e75dfab8be7caf86d1a8c84c521254b03e6a45153a1de2";
-const CHAPTER_B_BYTES: &[u8] = br#"{"expected_tree_revision":"3","title":"Chapter B"}"#;
-const CHAPTER_B_DIGEST: &str = "sha256:storyos.command.createChapter.jcs.v1:23a99998cce1f35b113794d41235dae8fae7d8ae9f234ba67161a2f9e8e86e65";
 const CURRENT_BYTES: &[u8] = b"{}";
 const CURRENT_DIGEST: &str = "sha256:storyos.command.setCurrentChapter.jcs.v1:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";
-
-async fn post_volume(store: &PostgresProjectReader, scope: &ProjectScope, suffix: &str) -> String {
-    let issue = command_issue(scope, suffix, &CREATE_VOLUME, VOLUME_DIGEST);
-    issue_project_command_challenge(store, &issue)
-        .await
-        .unwrap();
-    let settlement = create_volume(
-        store,
-        &command_call(
-            issue.binding,
-            &issue.nonce_digest,
-            suffix,
-            VOLUME_BYTES,
-            CreateVolumeInput {
-                title: "Volume A".to_owned(),
-                expected_tree_revision: 1,
-            },
-        ),
-    )
-    .await
-    .unwrap();
-    let (VolumeCreated { volume_id, .. }, _) = applied(&settlement);
-    volume_id
-}
-
-struct SeedChapter<'a> {
-    suffix: &'a str,
-    title: &'a str,
-    bytes: &'a [u8],
-    digest: &'a str,
-    expected_tree_revision: u64,
-}
-
-async fn post_chapter(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    volume_id: &str,
-    chapter: SeedChapter<'_>,
-) -> String {
-    let SeedChapter {
-        suffix,
-        title,
-        bytes,
-        digest,
-        expected_tree_revision,
-    } = chapter;
-    let issue = command_issue(scope, suffix, &CREATE_CHAPTER, digest);
-    issue_project_command_challenge(store, &issue)
-        .await
-        .unwrap();
-    let settlement = create_chapter(
-        store,
-        &command_call(
-            issue.binding,
-            &issue.nonce_digest,
-            suffix,
-            bytes,
-            CreateChapterInput {
-                placement: storyos_core::CreateChapterPlacement::Append,
-                volume_id: volume_id.to_owned(),
-                title: title.to_owned(),
-                expected_tree_revision,
-            },
-        ),
-    )
-    .await
-    .unwrap();
-    let (ChapterCreated { chapter_id, .. }, _) = applied(&settlement);
-    chapter_id
-}
-
-pub(super) async fn open_session(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    suffix: &str,
-) -> String {
-    let request = open_session_request(store, scope, suffix).await;
-    create_editor_session(store, &request).await.unwrap();
-    request.editor_session_id.as_ref().to_owned()
-}
-
-/// Issues one Create Editor Session Command Challenge and returns the request that uses it.
-pub(crate) async fn open_session_request(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    suffix: &str,
-) -> OpenEditorSession {
-    let issue = command_issue(
-        scope,
-        suffix,
-        &CREATE_EDITOR_SESSION,
-        &format!("sha256:storyos.test:{suffix}"),
-    );
-    issue_project_command_challenge(store, &issue)
-        .await
-        .unwrap();
-    OpenEditorSession {
-        project_scope: scope.clone(),
-        editor_session_id: EditorSessionId::new(format!(
-            "018f0000-0000-7001-8000-00000001{suffix}"
-        )),
-        snapshot_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-        client_binding: EditorClientBinding {
-            binding_ref: issue.binding.client_session_binding_digest.clone(),
-            session_generation: issue.binding.client_session_generation,
-            client_contract_revision: issue.binding.client_contract_revision.clone(),
-            security_policy_revision: issue.binding.security_policy_revision.clone(),
-        },
-        challenge_binding: issue.binding,
-        nonce_digest: issue.nonce_digest,
-    }
-}
 
 async fn switch_current(
     store: &PostgresProjectReader,
@@ -190,51 +70,10 @@ async fn open_admin() -> tokio_postgres::Client {
     admin
 }
 
-pub(super) async fn seed_two_chapters(
-    store: &PostgresProjectReader,
-    owner: &str,
-    project_suffix: &str,
-    volume_suffix: &str,
-    chapter_a_suffix: &str,
-    chapter_b_suffix: &str,
-) -> (ProjectScope, String, String, String) {
-    let scope = seed_owned_project(store, owner, project_suffix).await;
-    let volume_id = post_volume(store, &scope, volume_suffix).await;
-    let chapter_a = post_chapter(
-        store,
-        &scope,
-        &volume_id,
-        SeedChapter {
-            suffix: chapter_a_suffix,
-            title: "Chapter A",
-            bytes: CHAPTER_A_BYTES,
-            digest: CHAPTER_A_DIGEST,
-            expected_tree_revision: 2,
-        },
-    )
-    .await;
-    let chapter_b = post_chapter(
-        store,
-        &scope,
-        &volume_id,
-        SeedChapter {
-            suffix: chapter_b_suffix,
-            title: "Chapter B",
-            bytes: CHAPTER_B_BYTES,
-            digest: CHAPTER_B_DIGEST,
-            expected_tree_revision: 3,
-        },
-    )
-    .await;
-    (scope, volume_id, chapter_a, chapter_b)
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn set_current_chapter_classifies_its_outcomes_and_keeps_each_project_sequence() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
@@ -371,9 +210,7 @@ async fn set_current_chapter_classifies_its_outcomes_and_keeps_each_project_sequ
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);

@@ -3,54 +3,21 @@
 //! rollback, and evidence.
 
 use storyos_application::{
-    ChapterId, DeleteChapterInput, DeleteChapterSettlement, DeleteVolumeInput,
-    DeleteVolumeSettlement, GetManuscriptTree, OpenChapter, ProjectScope, StructureAuthority,
-    UndoApplied, UndoRecords, UserId, VolumeId, get_manuscript_tree, open_chapter, open_project,
+    ChapterId, GetManuscriptTree, OpenChapter, ProjectScope, StructureAuthority, UndoApplied,
+    UndoRecords, UserId, get_manuscript_tree, open_chapter, open_project,
 };
 use storyos_core::{DeleteChapterCurrent, ReceiptResult, TransitionOutcome};
 
 use crate::PostgresProjectReader;
-use crate::command_sequence::tests::{
-    DELETE_CHAPTER, DELETE_VOLUME, applied, delete_chapter, delete_volume, named_call,
-    outcome_code, seed_project, stores, undo_named,
-};
-use crate::set_current_chapter_authority_tests::open_session;
-use crate::update_structure_tests::{Seeded, Sibling, tree};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::outcome_code;
+use crate::shared_tests::command_sequence_support::{applied, seed_project, stores, undo_named};
+use crate::shared_tests::delete_structure::{settle_delete_chapter, settle_delete_volume};
+use crate::shared_tests::set_current_chapter_authority::open_session;
+use crate::shared_tests::update_structure::{Seeded, Sibling, tree};
 
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const MISSING: &str = "018f0000-0000-7001-8000-00000000ffff";
-
-/// Settles one Delete Volume whose ids derive from the four hex digits `suffix`.
-pub(crate) async fn settle_delete_volume(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    suffix: &str,
-    volume_id: &str,
-    expected_tree_revision: u64,
-) -> DeleteVolumeSettlement {
-    let input = DeleteVolumeInput {
-        volume_id: VolumeId::new(volume_id),
-        expected_tree_revision,
-    };
-    let call = named_call(store, scope, suffix, &DELETE_VOLUME, input).await;
-    delete_volume(store, &call).await.unwrap()
-}
-
-/// Settles one Delete Chapter whose ids derive from the four hex digits `suffix`.
-pub(crate) async fn settle_delete_chapter(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    suffix: &str,
-    chapter_id: &str,
-    expected_tree_revision: u64,
-) -> DeleteChapterSettlement {
-    let input = DeleteChapterInput {
-        chapter_id: ChapterId::new(chapter_id),
-        expected_tree_revision,
-    };
-    let call = named_call(store, scope, suffix, &DELETE_CHAPTER, input).await;
-    delete_chapter(store, &call).await.unwrap()
-}
 
 /// The applied effect of one deletion: the tree revision, the Volume of the effect, and the
 /// Current Chapter disposition of a Chapter deletion.
@@ -126,9 +93,7 @@ async fn current_chapter(store: &PostgresProjectReader, scope: &ProjectScope) ->
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_delete_classifies_its_outcomes_and_writes_its_effect_rows() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     for (kind, base) in [(Sibling::Volume, 0x96d0), (Sibling::Chapter, 0x96e0)] {
         let suffix = |offset: u16| format!("{:04x}", base + offset);
@@ -226,9 +191,7 @@ async fn each_delete_classifies_its_outcomes_and_writes_its_effect_rows() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_of_each_delete_restores_the_prior_identity_and_place() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The Volume row deletes the empty Volume B. The Chapter row deletes the current Chapter A,
     // and Chapter B becomes current.

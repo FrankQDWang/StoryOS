@@ -2,6 +2,7 @@
 //! readers and reviewers (ADR 0079). No runtime code reads the file. The test compares the
 //! committed file with the activated schema, and `STORYOS_UPDATE_GENERATED=1` rewrites the file.
 
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -277,9 +278,7 @@ fn the_first_difference_names_the_line_and_both_texts() {
 #[tokio::test]
 #[ignore = "run through scripts/dev-postgres.sh with"]
 async fn the_committed_persistence_catalog_matches_the_activated_schema() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (client, connection) = tokio_postgres::connect(
         &std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
             .expect("run through scripts/dev-postgres.sh with"),

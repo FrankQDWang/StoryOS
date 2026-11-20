@@ -1,118 +1,16 @@
-use storyos_application::EditorSessionId;
-use storyos_application::{
-    ProjectCommandError, UpdateProjectAssistanceInput, UpdateProjectInput,
-    UpdateProjectInstructionInput,
+use storyos_application::ProjectCommandError;
+
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_damaged_evidence::ReplayError;
+use crate::shared_tests::command_sequence_project_session::{
+    take_over_project_writer, take_over_project_writer_call, update_project_assistance_call,
 };
-use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
-use storyos_contracts::CommandKind;
-use storyos_core::AssistanceAvailability;
-
-use crate::PostgresProjectReader;
-use crate::set_current_chapter_authority_tests::open_session;
-
-use super::damaged_evidence::ReplayError;
-use super::support::{
-    CommandCall, Route, issued, seed_project, stores, two_chapter_writer, with_new_request_ids,
-};
-
-pub(super) async fn take_over_project_writer(
-    store: &PostgresProjectReader,
-    call: &CommandCall<TakeOverProjectWriterInput>,
-) -> Result<TakeOverProjectWriterSettlement, ProjectCommandError> {
-    store
-        .take_over_project_writer(&call.envelope, &call.input)
-        .await
-}
-
-pub(crate) const UPDATE_PROJECT_ASSISTANCE: Route = Route {
-    kind: CommandKind::UpdateProjectAssistance,
-    method: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_METHOD,
-    path: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_PATH,
-    schema: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
-};
-
-pub(crate) const UPDATE_PROJECT_INSTRUCTION: Route = Route {
-    kind: CommandKind::UpdateProjectInstruction,
-    method: storyos_contracts::UPDATE_PROJECT_INSTRUCTION_METHOD,
-    path: storyos_contracts::UPDATE_PROJECT_INSTRUCTION_PATH,
-    schema: storyos_contracts::UPDATE_PROJECT_INSTRUCTION_REQUEST_SCHEMA_ID,
-};
-
-pub(crate) const TAKE_OVER_PROJECT_WRITER: Route = Route {
-    kind: CommandKind::TakeOverProjectWriter,
-    method: storyos_contracts::TAKE_OVER_PROJECT_WRITER_METHOD,
-    path: storyos_contracts::TAKE_OVER_PROJECT_WRITER_PATH,
-    schema: storyos_contracts::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
-};
-
-pub(crate) const UPDATE_PROJECT: Route = Route {
-    kind: CommandKind::UpdateProject,
-    method: storyos_contracts::UPDATE_PROJECT_METHOD,
-    path: storyos_contracts::UPDATE_PROJECT_PATH,
-    schema: storyos_contracts::UPDATE_PROJECT_REQUEST_SCHEMA_ID,
-};
-
-/// One applicable writer takeover by a second Editor Session in a new Project.
-pub(super) async fn take_over_project_writer_call(
-    store: &PostgresProjectReader,
-    base: u16,
-) -> CommandCall<TakeOverProjectWriterInput> {
-    let (scope, ..) = two_chapter_writer(store, base).await;
-    let observer = open_session(store, &scope, &format!("{:04x}", base + 5)).await;
-    let input = TakeOverProjectWriterInput {
-        editor_session_id: EditorSessionId::new(observer),
-        observed_writer_generation: 1,
-        editor_contract_revision: storyos_contracts::EDITOR_CONTRACT_REVISION.to_owned(),
-    };
-    issued(store, &scope, base + 9, &TAKE_OVER_PROJECT_WRITER, input).await
-}
-
-/// One applicable first Update Project Assistance in a new Project.
-pub(super) async fn update_project_assistance_call(
-    store: &PostgresProjectReader,
-    base: u16,
-) -> CommandCall<UpdateProjectAssistanceInput> {
-    let scope = seed_project(store, &format!("{base:04x}")).await;
-    let input = UpdateProjectAssistanceInput {
-        availability: AssistanceAvailability::Available,
-        expected_revision: 0,
-        destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
-    };
-    issued(store, &scope, base + 9, &UPDATE_PROJECT_ASSISTANCE, input).await
-}
-
-/// One applicable first save of the Project Instruction in a new Project.
-pub(super) async fn update_project_instruction_call(
-    store: &PostgresProjectReader,
-    base: u16,
-) -> CommandCall<UpdateProjectInstructionInput> {
-    let scope = seed_project(store, &format!("{base:04x}")).await;
-    let input = UpdateProjectInstructionInput {
-        text: "Write in the past tense.".to_owned(),
-        expected_revision: 0,
-    };
-    issued(store, &scope, base + 9, &UPDATE_PROJECT_INSTRUCTION, input).await
-}
-
-/// One applicable Update Project in a new Project.
-pub(super) async fn update_project_call(
-    store: &PostgresProjectReader,
-    base: u16,
-) -> CommandCall<UpdateProjectInput> {
-    let scope = seed_project(store, &format!("{base:04x}")).await;
-    let input = UpdateProjectInput {
-        title: "Renamed".to_owned(),
-        expected_revision: 1,
-    };
-    issued(store, &scope, base + 9, &UPDATE_PROJECT, input).await
-}
+use crate::shared_tests::command_sequence_support::{stores, with_new_request_ids};
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_command_without_a_response_record_replays_without_it_and_damaged_activity_is_a_fault() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let call = take_over_project_writer_call(&store, /*base*/ 0x6aa0).await;
     let first = take_over_project_writer(&store, &call).await.unwrap();
@@ -156,9 +54,7 @@ async fn a_command_without_a_response_record_replays_without_it_and_damaged_acti
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_assistance_replay_separates_a_project_only_record_from_damaged_assistance() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let call = update_project_assistance_call(&store, /*base*/ 0x6ab0).await;
     store

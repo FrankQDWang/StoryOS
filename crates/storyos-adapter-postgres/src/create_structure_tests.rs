@@ -8,7 +8,6 @@ use storyos_application::{
     SnapshotLookup, UndoApplied, UndoRecords, UserId, VolumeCreated, VolumeId, VolumeNode,
     get_manuscript_tree, get_snapshot, open_chapter, open_project,
 };
-use storyos_application::{Chapter, ProjectReadError, ProjectReader};
 use storyos_contracts::CommandKind;
 use storyos_core::{
     CreateChapterCurrent, CreateChapterPlacement, ManuscriptBlockKind, ReceiptResult,
@@ -16,32 +15,21 @@ use storyos_core::{
 };
 
 use crate::PostgresProjectReader;
-use crate::command_sequence::tests::{
-    CREATE_CHAPTER, CREATE_VOLUME, applied, create_chapter, create_volume, named_call,
-    outcome_code, seed_owned_project, seed_project, stores, titled_chapter, titled_volume,
-    undo_named,
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::{
+    CREATE_CHAPTER, CREATE_VOLUME, create_chapter, create_volume, named_call, outcome_code,
+    titled_chapter, titled_volume,
 };
-use crate::create_volume_authority_tests::{NamedEdit, apply_named_edit};
-use crate::set_current_chapter_authority_tests::open_session;
+use crate::shared_tests::command_sequence_support::{
+    applied, seed_owned_project, seed_project, stores, undo_named,
+};
+use crate::shared_tests::create_structure::current_chapter;
+use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};
+use crate::shared_tests::set_current_chapter_authority::open_session;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const MISSING: &str = "018f0000-0000-7001-8000-00000000ffff";
-
-/// The Chapter `chapter_id` when it is the current Chapter of the Project of `scope`.
-pub(crate) async fn current_chapter(
-    reader: &impl ProjectReader,
-    scope: &ProjectScope,
-    chapter_id: &ChapterId,
-) -> Result<Option<Chapter>, ProjectReadError> {
-    let Some(project) = reader.read_project(scope).await? else {
-        return Ok(None);
-    };
-    if project.current_chapter_id.as_ref() != Some(chapter_id) {
-        return Ok(None);
-    }
-    reader.read_chapter(scope, chapter_id).await
-}
 
 async fn settle_volume(
     store: &PostgresProjectReader,
@@ -128,9 +116,7 @@ async fn expire_latest_snapshot(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn create_volume_classifies_its_outcomes_and_writes_its_effect_rows() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, "9620").await;
     let first = settle_volume(&store, &scope, "9621", "Volume A", 1).await;
@@ -224,9 +210,7 @@ async fn create_volume_classifies_its_outcomes_and_writes_its_effect_rows() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn create_chapter_classifies_its_outcomes_and_writes_its_effect_rows() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, "9630").await;
     let foreign = ProjectScope::new(UserId::new(USER_B), scope.project_id.clone());
@@ -390,9 +374,7 @@ async fn create_chapter_classifies_its_outcomes_and_writes_its_effect_rows() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_project_keeps_its_own_structure_author_action_sequence() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, _admin) = stores().await;
     let mut observed = Vec::new();
     for (owner, project) in [(USER_A, "9640"), (USER_A, "9643"), (USER_B, "9646")] {
@@ -433,9 +415,7 @@ async fn each_project_keeps_its_own_structure_author_action_sequence() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_compensates_create_volume_after_a_later_edit_is_undone() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, "9650").await;
     let volume_a = titled_volume(&store, &scope, "9651", "Volume A", 1).await;
@@ -543,9 +523,7 @@ async fn author_undo_compensates_create_volume_after_a_later_edit_is_undone() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_compensates_create_chapter_and_keeps_the_initial_revision() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, "9660").await;
     let volume_id = titled_volume(&store, &scope, "9661", "Volume A", 1).await;

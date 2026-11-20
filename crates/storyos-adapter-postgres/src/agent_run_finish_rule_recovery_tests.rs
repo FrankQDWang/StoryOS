@@ -13,8 +13,9 @@ use storyos_core::{
     FINISH_DOES_NOT_COUNT_RESULT, NativeStreamItem, StreamItemRole, StreamItemState, ToolChoice,
 };
 
-use super::tests::{calls, complete};
-use crate::agent_run_dispatch::tests::{
+use crate::shared_tests::agent_run_finish_rule::{calls, complete};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{
     RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
 };
 
@@ -160,9 +161,7 @@ fn call(name: &str) -> NativeStreamItem {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_recovered_response_gives_the_agent_decision_of_a_direct_response_at_each_run_step() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let unexposed = CallValidationRefusal::Unexposed;
     let refused = |position: u64| {

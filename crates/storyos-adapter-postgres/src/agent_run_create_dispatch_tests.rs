@@ -5,10 +5,11 @@ use storyos_application::{
 };
 use storyos_core::AgentRunStatus;
 
-use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, destination, real_run};
-use crate::agent_run_tool_exposure::tests::{finish_stream, sse};
-use crate::research_source::tests::calls_stream;
+use crate::shared_tests::agent_run_retrieval::{adapter, destination, real_run};
+use crate::shared_tests::agent_run_tool_exposure::{finish_stream, sse};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::research_source::calls_stream;
 
 /// A native rejection of the Create, before any stream.
 fn rejection(status: &str, body: &str) -> String {
@@ -42,9 +43,7 @@ async fn rejected_run(prefix: &str, reply: String) -> (AgentRunStatus, AgentRunD
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_destination_rejection_refuses_the_run_with_a_result_for_the_author() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     assert_eq!(
         rejected_run(
             "4d1",
@@ -66,9 +65,7 @@ async fn a_destination_rejection_refuses_the_run_with_a_result_for_the_author() 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_input_above_the_model_window_refuses_the_run_as_a_conversation_too_long() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     assert_eq!(
         rejected_run(
             "4d2",
@@ -175,9 +172,7 @@ fn settled_without_decision(text: &str, escaped: &[&str], refusals: Value) -> Va
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_decision_text_with_u0000_settles_the_run_with_no_decision_and_no_proposal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let advisory = answered_run("4d3", |_| {
         vec![
             finish_stream("resp_4d3"),

@@ -9,90 +9,31 @@ use storyos_application::{
 };
 use storyos_contracts::ResearchArtifactInspect;
 use storyos_core::{Citation, DeploymentDestination, ResearchClaim, ResearchSynthesis};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, stores};
-use crate::agent_run_retrieval::tests::{
+use crate::shared_tests::agent_run_retrieval::{
     adapter, broken_stream, destination, real_run, research_run, stored,
 };
-use crate::agent_run_tool_dispatch::tests::{Hooked, exa_tools, mcp_replies, point_mcp, reply};
-use crate::agent_run_tool_exposure::tests::{advisory_stream, finish_stream};
-use crate::command_sequence::tests::{REJECT_PROPOSAL_OPERATIONS, issued, seed_project};
-use crate::project_archive_build::tests::{export_command, zip_store_files};
-use crate::research_source::tests::{SEARCH_TEXT, calls_stream, calls_stream_in};
-use crate::set_current_chapter_authority_tests::open_session_request;
+use crate::shared_tests::agent_run_tool_dispatch::{
+    Hooked, exa_tools, mcp_replies, point_mcp, reply,
+};
+use crate::shared_tests::agent_run_tool_exposure::{advisory_stream, finish_stream};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_proposal_decision::REJECT_PROPOSAL_OPERATIONS;
+use crate::shared_tests::command_sequence_support::{issued, seed_project};
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run, stores};
+use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
+use crate::shared_tests::research_artifact::{Reply, computed, tagged};
+use crate::shared_tests::research_source::{SEARCH_TEXT, calls_stream, calls_stream_in};
+use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
 const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 const FETCH: &str = r#"{"urls":["https://example.org/c","https://example.org/d"]}"#;
 const FAILED_PAGE: &str = "Error fetching https://example.org/c: CRAWL_NOT_FOUND";
 
-/// One reply of the model destination, made from the JSON body of its request.
-pub(crate) type Reply = Box<dyn FnOnce(&Value) -> String + Send>;
-
 /// The claims of a synthesis, from the tagged Snapshot and Gap identities, in that order.
 type Cite = fn(&[String], &[String]) -> Vec<(&'static str, Vec<String>)>;
-
-/// A model destination that reads each complete request and answers it with the next reply.
-/// Returns the base URL and the request lines.
-pub(crate) async fn computed(
-    replies: Vec<Reply>,
-) -> (String, tokio::task::JoinHandle<Vec<String>>) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}/api/plan/v3", listener.local_addr().unwrap());
-    let served = tokio::spawn(async move {
-        let mut lines = Vec::new();
-        for reply in replies {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = Vec::new();
-            let mut chunk = [0_u8; 8192];
-            let head_end = loop {
-                if let Some(end) = request
-                    .windows(/*size*/ 4)
-                    .position(|window| window == b"\r\n\r\n")
-                {
-                    break end + 4;
-                }
-                let read = stream.read(&mut chunk).await.unwrap();
-                request.extend_from_slice(&chunk[..read]);
-            };
-            let raw = String::from_utf8_lossy(&request[..head_end]).into_owned();
-            lines.push(raw.lines().next().unwrap_or_default().to_owned());
-            let head = raw.to_lowercase();
-            let length: usize = head
-                .lines()
-                .find_map(|line| line.strip_prefix("content-length:"))
-                .map_or(0, |value| value.trim().parse().unwrap());
-            while request.len() < head_end + length {
-                let read = stream.read(&mut chunk).await.unwrap();
-                request.extend_from_slice(&chunk[..read]);
-            }
-            let body = serde_json::from_slice(&request[head_end..]).unwrap_or(Value::Null);
-            stream.write_all(reply(&body).as_bytes()).await.unwrap();
-        }
-        lines
-    });
-    (base, served)
-}
-
-/// The identities that the `tool_sources` tags of the function outputs of `body` name after
-/// `tag`, in order.
-pub(crate) fn tagged(body: &Value, tag: &str) -> Vec<String> {
-    body["input"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|item| item["output"].as_str())
-        .flat_map(|output| {
-            output
-                .split(tag)
-                .skip(1)
-                .map(|rest| rest.split('"').next().unwrap().to_owned())
-                .collect::<Vec<_>>()
-        })
-        .collect()
-}
 
 /// A synthesis reply in `status`: a `submit_research` call whose claims cite the tagged
 /// identities that `cite` selects, and a `finish` call.
@@ -292,9 +233,7 @@ fn two_snapshot_claims(sources: &[String], _gaps: &[String]) -> Vec<(&'static st
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_valid_synthesis_becomes_one_immutable_artifact_with_its_lineage_and_citations() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin, scope, run_id) =
         synthesis_run("c31", ("web_search", SEARCH), SEARCH_TEXT, |_| {
             vec![
@@ -385,9 +324,7 @@ async fn a_valid_synthesis_becomes_one_immutable_artifact_with_its_lineage_and_c
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_synthesis_that_cites_only_gaps_is_a_partial_artifact() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin, scope, run_id) =
         synthesis_run("c32", ("web_fetch", FETCH), FAILED_PAGE, |_| {
             vec![
@@ -422,9 +359,7 @@ async fn a_synthesis_that_cites_only_gaps_is_a_partial_artifact() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_invalid_or_incomplete_synthesis_writes_no_artifact() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let mut observed = Vec::new();
     // The model reads the refusal of the call, so its next `finish` call counts.
     let finish = |reference: &'static str| -> Reply { Box::new(move |_| finish_stream(reference)) };
@@ -617,9 +552,7 @@ fn story_lineage(story: &Story) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn use_in_the_story_opens_a_proposal_with_the_artifact_and_a_rejection_keeps_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let story = use_in_the_story("c35", "c36", /*successor*/ false).await;
     let Story {
         store,
@@ -671,9 +604,7 @@ async fn use_in_the_story_opens_a_proposal_with_the_artifact_and_a_rejection_kee
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_successor_proposal_names_the_successor_attempt_and_the_artifact() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let story = use_in_the_story("c39", "c3b", /*successor*/ true).await;
     let roles: String = story
         .admin
@@ -701,9 +632,7 @@ async fn a_successor_proposal_names_the_successor_attempt_and_the_artifact() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_project_export_packs_the_artifact_and_a_reload_reads_it_unchanged() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin, scope, run_id) =
         synthesis_run("c37", ("web_search", SEARCH), SEARCH_TEXT, |_| {
             vec![
@@ -773,9 +702,7 @@ async fn the_project_export_packs_the_artifact_and_a_reload_reads_it_unchanged()
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_retrieved_synthesis_of_the_first_runstep_writes_no_artifact_and_keeps_its_refusal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The first RunStep has no ToolResult, so the Run captured no source to cite.
     let arguments = json!({"summary": "The tides of 1890.",

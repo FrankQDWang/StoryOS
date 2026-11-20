@@ -11,18 +11,21 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::create_volume_authority_tests::{NamedEdit, apply_named_edit};
+use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};
 
-use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal};
-use super::agent_run::seed_run;
-use super::proposal_decision::{
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_acceptance::{
+    ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal,
+};
+use crate::shared_tests::command_sequence_agent_run::seed_run;
+use crate::shared_tests::command_sequence_proposal_decision::{
     REJECT_PROPOSAL_OPERATIONS, pending_proposal, reject_proposal_operations,
 };
-use super::secondary_operation::{
+use crate::shared_tests::command_sequence_secondary_operation::{
     PRIMARY_TEXT, chapter_blocks, earlier_base_proposal, proposal_head,
 };
-use super::support::{issued, stores, two_chapter_writer};
-use super::undo::{
+use crate::shared_tests::command_sequence_support::{issued, stores, two_chapter_writer};
+use crate::shared_tests::command_sequence_undo::{
     edit_in_chapter_of, issued_undo, latest_forward, resulting_revision, session_chapter_head, undo,
 };
 
@@ -132,9 +135,7 @@ async fn chapter_content(admin: &Client, session: &str) -> (String, Vec<String>)
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_reverses_three_prose_edits_in_reverse_order() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _chapter_a, _chapter_b, _revision_b, session) =
         two_chapter_writer(&store, /*base*/ 0xa700).await;
@@ -177,9 +178,7 @@ async fn author_undo_reverses_three_prose_edits_in_reverse_order() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_continues_after_a_later_edit_is_also_undone() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _chapter_a, _chapter_b, _revision_b, session) =
         two_chapter_writer(&store, /*base*/ 0xa720).await;
@@ -216,9 +215,7 @@ async fn author_undo_continues_after_a_later_edit_is_also_undone() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_barrier_between_two_prose_edits_stops_the_chain() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, input) = pending_proposal(&store, &admin, /*base*/ 0xa740).await;
     let session = input.editor_session_id.as_ref().to_owned();
@@ -267,9 +264,7 @@ async fn a_barrier_between_two_prose_edits_stops_the_chain() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_compensates_an_acceptance_after_the_undo_of_a_later_edit() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, input, _chapter_a_head) =
         acceptable_proposal(&store, &admin, /*base*/ 0xa760).await;
@@ -328,9 +323,7 @@ async fn author_undo_compensates_an_acceptance_after_the_undo_of_a_later_edit() 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_of_an_earlier_base_acceptance_restores_the_head_that_it_replaced() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (proposal, _earlier) = earlier_base_proposal(&store, &admin, /*base*/ 0x8ae0).await;
     let head = chapter_blocks(&store, &proposal.scope, &proposal.chapter_id).await;

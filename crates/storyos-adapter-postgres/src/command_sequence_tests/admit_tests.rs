@@ -15,7 +15,8 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 
-use super::support::{
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::{
     CommandCall, Route, SequenceError, issued, run_without_foreign_keys, seed_project, stores,
     with_new_request_ids,
 };
@@ -258,9 +259,7 @@ async fn admitted_rows<E: ExportInput>(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_admit_step_keeps_the_fence_open_and_replays_the_first_admission() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     keeps_the_fence_open::<ExportHumanReadableManuscriptInput>(/*base*/ 0xe600).await;
     keeps_the_fence_open::<ExportProjectArchiveInput>(/*base*/ 0xc600).await;
 }
@@ -366,9 +365,7 @@ async fn keeps_the_fence_open<E: ExportInput>(base: u16) {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_failed_admission_writes_no_row_and_keeps_the_challenge_unused() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     writes_no_row::<ExportHumanReadableManuscriptInput>(/*base*/ 0xe620).await;
     writes_no_row::<ExportProjectArchiveInput>(/*base*/ 0xc620).await;
 }
@@ -425,9 +422,7 @@ async fn writes_no_row<E: ExportInput>(base: u16) {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn pre_capture_and_damaged_admission_evidence_give_different_errors() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     damaged_evidence::<ExportHumanReadableManuscriptInput>(/*first_base*/ 0xe640).await;
     damaged_evidence::<ExportProjectArchiveInput>(/*first_base*/ 0xc640).await;
 }
@@ -512,9 +507,7 @@ async fn damaged_evidence<E: ExportInput>(first_base: u16) {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_archive_build_refusal_writes_no_row_and_the_archive_pins_its_own_admission() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let call = export_call::<ExportProjectArchiveInput>(&store, /*base*/ 0xc660).await;
     let scope = &call.envelope.project_scope;

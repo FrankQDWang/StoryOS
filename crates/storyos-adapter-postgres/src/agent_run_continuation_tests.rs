@@ -10,12 +10,15 @@ use storyos_core::DeploymentDestination;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{
+use crate::shared_tests::agent_run_propose_edit::REVISE;
+use crate::shared_tests::agent_run_propose_edit_revise::{CandidateChange, Fixture};
+use crate::shared_tests::agent_run_steering::{
+    AuthorAction, AuthorAt, Moment, queued, settle, steering,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{
     RuntimeClock, admit_referenced_run, admit_run_in, claim_run, stores,
 };
-use crate::agent_run_propose_edit::revise_tests::{CandidateChange, Fixture};
-use crate::agent_run_propose_edit::tests::REVISE;
-use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
 
 async fn complete(
     store: &PostgresProjectReader,
@@ -101,9 +104,7 @@ async fn reserved_blocks(admin: &Client, run_id: &str) -> Vec<Value> {
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_request_after_an_opened_proposal_continues_the_prior_response_with_the_current_input()
 {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0xcd0, tool_loop.clone()).await;
@@ -197,9 +198,7 @@ async fn continued(admin: &Client, run_id: &str, position: u64, text: &str) -> V
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_step_after_a_steering_input_an_author_edit_or_a_head_move_continues_the_prior_response()
  {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let message = "Help with this passage.";

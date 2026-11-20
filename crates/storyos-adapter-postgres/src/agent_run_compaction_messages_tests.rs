@@ -6,9 +6,12 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::{admit_run_in, stores};
-use crate::agent_run_finish_rule::tests::{complete, tool_loop_run};
-use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
+use crate::shared_tests::agent_run_finish_rule::{complete, tool_loop_run};
+use crate::shared_tests::agent_run_steering::{
+    AuthorAction, AuthorAt, Moment, queued, settle, steering,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{admit_run_in, stores};
 
 /// For each decision request of the Run in RunStep order: its position, the earlier author
 /// messages and the author message that it sent, and whether it sent the current input again
@@ -59,9 +62,7 @@ fn source(run_id: &str, message_id: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_later_request_sends_the_earlier_author_messages_of_the_conversation_in_exact_words() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The first Run reads a steering input at RunStep 1. Two more Runs follow it in the same
     // Conversation, and the fourth Run compacts at RunStep 0.
@@ -171,9 +172,7 @@ async fn the_later_request_sends_the_earlier_author_messages_of_the_conversation
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_compaction_in_the_first_run_of_a_conversation_sends_no_earlier_author_message() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The Run of another Conversation of the Project completes first.
     let current = format!(

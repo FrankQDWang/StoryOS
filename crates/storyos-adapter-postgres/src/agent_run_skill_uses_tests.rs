@@ -3,17 +3,16 @@
 use storyos_application::{AgentRunReadSelection, AgentRunReadStore, ConversationSelection};
 use storyos_core::{SKILL_MD_PATH, SkillFileInput, SkillUse};
 
-use crate::agent_run_dispatch::tests::{admit_selected_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::queued;
-use crate::create_agent_run_tests::skill_tests::{fixture, package, set};
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
+use crate::shared_tests::model_gateway::{admit_selected_run, stores};
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_run_read_names_each_selected_skill_then_each_settled_load_with_its_reason() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let outline = package(
         "plot-outline",

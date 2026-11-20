@@ -9,12 +9,15 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_compaction::summary::tests::{
+use crate::shared_tests::agent_run_compaction_summary::{
     ADVICE, ChangingFake, finish_events, near_threshold, second_run_on_agent_plan,
     second_run_on_agent_plan_after, streamed, with_usage,
 };
-use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, queued_run, stores};
-use crate::agent_run_finish_rule::tests::tool_loop_run;
+use crate::shared_tests::agent_run_finish_rule::tool_loop_run;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{
+    RuntimeClock, admit_run_in, claim_run, queued_run, stores,
+};
 
 /// An author message that asks the Host fake to compact at RunSteps 0 and 1.
 fn compact_twice() -> String {
@@ -61,9 +64,7 @@ async fn settlement(admin: &Client, run_id: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn one_run_compacts_at_two_run_steps_and_the_second_summary_continues_the_first() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // RunStep 0 continues the response of the first Run of the Conversation. RunStep 1 continues
     // the later request of RunStep 0, and it waits for the output of its `finish` call.
@@ -215,9 +216,7 @@ async fn compact_twice_with_change(
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_install_check_refuses_a_changed_input_or_a_restricted_source_at_the_second_compaction()
 {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let changed_input = "UPDATE storyos.authoritative_payloads AS payload
             SET canonical_bytes = convert_to('An edit during the second summary.', 'UTF8')
            FROM storyos.authoritative_heads AS head
@@ -282,9 +281,7 @@ const SECOND_SUMMARY: &str = "The author keeps the rain scene and the open lette
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_that_crosses_the_threshold_two_times_compacts_two_times() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // RunStep 0 compacts: the closing response of the first Run puts the new turn above the
     // threshold of 812,646 tokens. The later request is a full input, and its response reports
@@ -371,9 +368,7 @@ async fn a_run_that_crosses_the_threshold_two_times_compacts_two_times() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_that_a_compaction_cannot_fit_ends_as_too_long() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens.
     let mut dropped = streamed("resp_dropped", "The author keeps the rain.");

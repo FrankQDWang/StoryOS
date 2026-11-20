@@ -14,30 +14,36 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 
-use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal, acceptance_rows};
-use super::agent_run::{
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_acceptance::{
+    ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal, acceptance_rows,
+};
+use crate::shared_tests::command_sequence_agent_run::{
     CANCEL_AGENT_RUN, CREATE_AGENT_RUN, PAUSE_AGENT_RUN, cancel_agent_run, create_agent_run,
     create_agent_run_call, park_run, pause_agent_run, seed_run,
 };
-use super::memory_entry::{DELETE_MEMORY_ENTRY, seed_memory_entry};
-use super::project_session::{
+use crate::shared_tests::command_sequence_memory_entry::{DELETE_MEMORY_ENTRY, seed_memory_entry};
+use crate::shared_tests::command_sequence_project_session::{
     TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE,
     UPDATE_PROJECT_INSTRUCTION, take_over_project_writer, take_over_project_writer_call,
 };
-use super::proposal_decision::{
+use crate::shared_tests::command_sequence_proposal_decision::{
     REJECT_PROPOSAL_OPERATIONS, REOPEN_REJECTED_OPERATIONS, REOPEN_WITHDRAWN_PROPOSAL,
     REPLAN_PROPOSAL, WITHDRAW_PROPOSAL, conflicted_proposal, move_head_away, pending_proposal,
     reject_proposal_operations, rejected_operation, reopen_rejected_operations,
     reopen_withdrawn_proposal, replan_proposal, withdraw_proposal, withdrawable_proposal,
     withdrawn_proposal,
 };
-use super::steer_agent_run::{STEER_AGENT_RUN, steer_agent_run, steering};
-use super::structure::{
+use crate::shared_tests::command_sequence_replay::move_to_earlier_base;
+use crate::shared_tests::command_sequence_steer_agent_run::{
+    STEER_AGENT_RUN, steer_agent_run, steering,
+};
+use crate::shared_tests::command_sequence_structure::{
     CREATE_CHAPTER, CREATE_VOLUME, DELETE_CHAPTER, DELETE_VOLUME, SET_CURRENT_CHAPTER,
     UPDATE_CHAPTER, UPDATE_VOLUME, create_chapter, create_volume, delete_chapter, delete_volume,
     new_chapter, new_volume, update_chapter, update_volume,
 };
-use super::support::{
+use crate::shared_tests::command_sequence_support::{
     CommandCall, SequenceError, issued, replayed_outcome, seed_project, stores, two_chapter_writer,
     with_new_request_ids,
 };
@@ -47,9 +53,7 @@ const MISSING_VOLUME: &str = "018f0000-0000-7001-8000-00000000ffff";
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_records() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let missing_volume = VolumeId::new(MISSING_VOLUME);
     let missing_chapter = ChapterId::new(MISSING_VOLUME);
@@ -675,9 +679,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_exact_retry_after_a_later_settlement_returns_the_captured_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, _admin) = stores().await;
     let scope = seed_project(&store, "9840").await;
     let mut renames = Vec::new();
@@ -717,32 +719,4 @@ async fn an_exact_retry_after_a_later_settlement_returns_the_captured_project() 
         (replayed.unwrap(), replayed_reorder.unwrap()),
         (first.clone(), first_reorder.clone())
     );
-}
-
-/// Gives the Proposal Revision and its Validation Receipt a copy of the Chapter Head as base.
-/// Thus the Head is not the base.
-pub(super) async fn move_to_earlier_base(
-    admin: &tokio_postgres::Client,
-    acceptance: &AcceptProposalInput,
-) {
-    let earlier = Uuid::now_v7();
-    admin
-        .batch_execute(&format!(
-            "INSERT INTO storyos.authoritative_revisions
-             SELECT owner_user_id, project_id, manuscript_object_id, '{earlier}'::uuid, payload_id
-               FROM storyos.authoritative_revisions WHERE revision_id = '{head}'::uuid;
-             INSERT INTO storyos.manuscript_revision_members
-             SELECT owner_user_id, project_id, manuscript_object_id, '{earlier}'::uuid,
-                    manuscript_block_id, block_order
-               FROM storyos.manuscript_revision_members WHERE revision_id = '{head}'::uuid;
-             UPDATE storyos.proposal_revisions SET base_authoritative_revision_id = '{earlier}'::uuid
-              WHERE revision_id = '{revision}'::uuid;
-             UPDATE storyos.validation_receipts SET base_authoritative_revision_id = '{earlier}'::uuid
-              WHERE validation_receipt_id = '{validation}'::uuid;",
-            head = acceptance.expected_authoritative_revision_id,
-            revision = acceptance.proposal_revision_id,
-            validation = acceptance.validation_receipt_id,
-        ))
-        .await
-        .unwrap();
 }

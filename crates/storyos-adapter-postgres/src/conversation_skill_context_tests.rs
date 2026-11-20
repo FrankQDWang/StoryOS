@@ -14,18 +14,20 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use super::{
+use crate::PostgresProjectReader;
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_steering::{
+    AuthorAction, AuthorAt, Moment, cancellation, queued, settle,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::create_agent_run_skill::{package, set};
+use crate::shared_tests::model_gateway::{admit_selected_run, stores};
+use crate::shared_tests::skill_instruction_context::{
     catalog, conversation_of, of_conversation, pinned, recorded, requirements, selected,
     selected_run, sent, texts,
 };
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_selected_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::{
-    AuthorAction, AuthorAt, Moment, cancellation, queued, settle,
-};
-use crate::command_sequence::tests::{STEER_AGENT_RUN, issued};
-use crate::create_agent_run_tests::skill_tests::{package, set};
 
 /// A Skill set of the deployment that has neither fixture Skill.
 fn other_set() -> (SkillPackage, Arc<SkillSet>) {
@@ -71,9 +73,7 @@ async fn later_run(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_later_run_sends_each_skill_of_the_conversation_only_with_a_full_input() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (packages, skills, _) = selected();
     let (text, catalog) = (texts(&packages), [catalog(&packages)]);
@@ -147,7 +147,12 @@ async fn a_later_run_sends_each_skill_of_the_conversation_only_with_a_full_input
     };
 
     let outline = std::slice::from_ref(&outline);
-    let (other_catalog, other_pinned) = ([super::catalog(outline)], pinned(outline));
+    let (other_catalog, other_pinned) = (
+        [crate::shared_tests::skill_instruction_context::catalog(
+            outline,
+        )],
+        pinned(outline),
+    );
 
     assert_eq!(
         (
@@ -202,9 +207,7 @@ async fn a_later_run_sends_each_skill_of_the_conversation_only_with_a_full_input
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn only_an_earlier_run_of_the_conversation_with_a_selection_gives_a_skill() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (packages, skills, selections) = selected();
     // A new Conversation of the same Project gets no Skill of another Conversation.

@@ -8,9 +8,10 @@ use storyos_application::{
 use storyos_core::DeploymentDestination;
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::{admit_run_in, stores};
-use crate::agent_run_propose_edit::revise_tests::Fixture;
-use crate::agent_run_propose_edit::tests::{complete, opened, propose_edit_calls};
+use crate::shared_tests::agent_run_propose_edit::{complete, opened, propose_edit_calls};
+use crate::shared_tests::agent_run_propose_edit_revise::Fixture;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{admit_run_in, stores};
 
 /// The message of Run 3 of the live run record of 2026-11-14. It has an edit word, and no clause
 /// names a Chapter, so the passage request does not resolve.
@@ -36,9 +37,7 @@ async fn first_working_text(admin: &Client, run_id: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_unresolved_passage_request_works_on_the_current_chapter() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     // Four paragraphs, and an open Proposal on the last one.

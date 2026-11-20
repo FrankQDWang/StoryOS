@@ -8,12 +8,17 @@ use storyos_application::{EditorSessionId, ProjectScope, UndoLatestAuthorActionI
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::create_volume_authority_tests::{NamedEdit, apply_named_edit};
+use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};
 
-use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal};
-use super::structure::{UPDATE_CHAPTER, update_chapter};
-use super::support::{issued, stores, two_chapter_writer};
-use super::undo::{issued_undo, latest_forward, session_chapter_head, undo};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_acceptance::{
+    ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal,
+};
+use crate::shared_tests::command_sequence_structure::{UPDATE_CHAPTER, update_chapter};
+use crate::shared_tests::command_sequence_support::{issued, stores, two_chapter_writer};
+use crate::shared_tests::command_sequence_undo::{
+    issued_undo, latest_forward, session_chapter_head, undo,
+};
 
 /// The row of each Chapter of the Project: the Chapter, its due time, and whether the due time is
 /// the time of the last commit of the Chapter and the quiet time of 1 hour. The write precedes
@@ -90,9 +95,7 @@ async fn edit(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_commit_that_changes_the_text_of_a_chapter_writes_the_due_time_of_its_row() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, input, chapter_a_head) = acceptable_proposal(&store, &admin, 0x8300).await;
     let chapter_of = async |revision_id: &str| -> String {
@@ -163,9 +166,7 @@ async fn each_commit_that_changes_the_text_of_a_chapter_writes_the_due_time_of_i
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_later_commit_of_the_chapter_moves_its_due_time() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, _, _, session) = two_chapter_writer(&store, 0x8310).await;
     edit(&store, &admin, &scope, &session, (0x8380, "Rain. ")).await;

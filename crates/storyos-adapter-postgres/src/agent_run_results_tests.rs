@@ -12,15 +12,16 @@ use storyos_contracts::AgentRunResultInspect;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::{
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, cancellation, claim_duties, queued, settle,
 };
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::memory_capture::tests::project;
-use crate::memory_consolidation::tests::{capture, run_pass, scripted, settled};
-use crate::memory_entries::tests::write_versions;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::memory_capture::project;
+use crate::shared_tests::memory_consolidation::{capture, run_pass, scripted, settled};
+use crate::shared_tests::memory_entries::write_versions;
+use crate::shared_tests::model_gateway::{RuntimeClock, stores};
 
 /// The fake script line of one `write_memory` call.
 fn script(action: &str, arguments: &Value) -> String {
@@ -62,9 +63,7 @@ async fn write_states(admin: &Client, run_id: &str) -> Vec<String> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_settled_write_is_a_result_at_the_position_of_its_call() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "fc1").await;
     complete(&store, &admin, &scope, &first).await;
@@ -137,9 +136,7 @@ async fn each_settled_write_is_a_result_at_the_position_of_its_call() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_cancelled_after_a_settled_write_gives_the_write() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "fc4").await;
     complete(&store, &admin, &scope, &first).await;
@@ -189,9 +186,7 @@ async fn a_run_cancelled_after_a_settled_write_gives_the_write() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_pass_that_flags_an_entry_of_a_run_gives_the_run_no_result() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "a27").await;
     let message = script(
