@@ -2,6 +2,7 @@ use serde_json::json;
 
 use super::{SEARCH_MEMORY_TOOL_SPEC, search_memory};
 use crate::assemble_context::count_context_item_tokens;
+use crate::shared_tests::exposure_facts;
 use crate::{
     AGENT_PLAN_REGISTRATION, AGENT_PLAN_SKILL_REGISTRATION, CONTEXT_ITEM_TOKEN_LIMIT,
     ContextSourceClass, CurrentMemoryEntry, ExposureFacts, HOST_FAKE_TOOL_LOOP_REGISTRATION,
@@ -11,12 +12,8 @@ use crate::{
 
 fn names(revision: &str, memory_use: bool) -> Vec<&'static str> {
     let exposure = ToolExposure::compute(&ExposureFacts {
-        bound: &[],
-        model_registration_revision: revision,
-        skill_catalog: false,
         memory_use,
-        hybrid_search: false,
-        run_kind: crate::AgentRunKind::Author,
+        ..exposure_facts(revision)
     });
     exposure.tools.iter().map(|tool| tool.name).collect()
 }
@@ -58,12 +55,8 @@ fn a_run_with_memory_use_declares_search_memory_with_a_strict_schema() {
         HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
     ] {
         let exposure = ToolExposure::compute(&ExposureFacts {
-            bound: &[],
-            model_registration_revision: revision,
-            skill_catalog: false,
             memory_use: true,
-            hybrid_search: false,
-            run_kind: crate::AgentRunKind::Author,
+            ..exposure_facts(revision)
         });
         let search = exposure.tools[7].declaration();
         assert_eq!(

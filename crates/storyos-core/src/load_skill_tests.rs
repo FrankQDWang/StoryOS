@@ -1,12 +1,14 @@
 use serde_json::json;
 
 use super::{LoadSkillRefusal, SkillLoadFacts, admit_skill_load, skill_load_result};
+use crate::shared_tests::targeted_passage_assembly;
+use crate::shared_tests::tool_result_candidate;
 use crate::{
     CallValidationRefusal, ContextSourceClass, CurrentPassageAssembly,
-    CurrentPassageAssemblyRecord, InstructionBindingInput, IntakeRefusal, LOAD_SKILL_TOOL_SPEC,
-    ProjectionMode, SkillInstructionSource, SkillPackageReference, SkillProvenance,
-    SkillRequirement, ToolCallState, ToolIntake, ToolResultCandidate, ToolResultForm,
-    ToolResultOutput, assemble_current_passage_context, assemble_skill_instructions,
+    CurrentPassageAssemblyRecord, IntakeRefusal, LOAD_SKILL_TOOL_SPEC, ProjectionMode,
+    SkillInstructionSource, SkillPackageReference, SkillProvenance, SkillRequirement,
+    ToolCallState, ToolIntake, ToolResultCandidate, ToolResultForm, ToolResultOutput,
+    assemble_current_passage_context, assemble_skill_instructions,
     assemble_tool_result_continuation, compaction_assembly_record, function_outputs,
     is_function_output, is_skill_load_output,
 };
@@ -161,18 +163,9 @@ fn a_load_admits_a_new_catalog_skill_below_the_limit_and_gives_the_exact_skill_m
 
 fn passage() -> CurrentPassageAssemblyRecord {
     assemble_current_passage_context(&CurrentPassageAssembly {
-        operation_requirement_id: "req-1".to_owned(),
-        input_snapshot_id: "snap-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "user-1".to_owned(),
-        project_id: "proj-1".to_owned(),
-        author_message: "Write the quarrel.".to_owned(),
-        chapter_id: "ch-1".to_owned(),
         chapter_revision_id: Some("ch-1-rev".to_owned()),
         proposal_target_block_ids: Some(vec!["ch-1-block".to_owned()]),
-        chapter_body: "They met at the door.".to_owned(),
-        instruction: InstructionBindingInput::Absent,
-        destination_identity: "dest-1".to_owned(),
+        ..targeted_passage_assembly("Write the quarrel.", "They met at the door.")
     })
 }
 
@@ -183,22 +176,11 @@ fn call<'a>(
     skill: Option<&'a SkillPackageReference>,
 ) -> ToolResultCandidate<'a> {
     ToolResultCandidate {
-        tool_call_id,
-        call_id: tool_call_id,
-        owner_user_id: "user-1",
-        project_id: "proj-1",
-        run_id: "run-1",
-        model_attempt_id: "attempt-1",
-        decision_id: "decision-1",
-        state,
-        result_text: Some(result_text),
-        sources: &[],
         output: ToolResultOutput::HostTool(crate::ContextSourceClass::ToolResult),
         function_name: "load_skill",
-        arguments: "{}",
         form: ToolResultForm::Stub,
         skill,
-        resource_path: None,
+        ..tool_result_candidate(tool_call_id, state, Some(result_text))
     }
 }
 

@@ -4,6 +4,7 @@ use super::{
     BoundTool, ExposedTool, ExposureFacts, ResponseDisposition, ResponseFacts,
     ToolCompatibilityDecision, ToolExposure, requests_function, response_disposition,
 };
+use crate::shared_tests::exposure_facts;
 use crate::{
     AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, AgentDecisionKind,
     AgentDecisionOutcome, EXA_TOOL_REGISTRATION, HOST_FAKE_REGISTRATION,
@@ -25,11 +26,7 @@ fn bound(
 fn exposure(bound: &[BoundTool], model_registration_revision: &str) -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
         bound,
-        model_registration_revision,
-        skill_catalog: false,
-        memory_use: false,
-        hybrid_search: false,
-        run_kind: crate::AgentRunKind::Author,
+        ..exposure_facts(model_registration_revision)
     })
 }
 
@@ -140,12 +137,10 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
     };
     let with_catalog = |revision: &str| {
         ToolExposure::compute(&ExposureFacts {
-            bound: &[],
-            model_registration_revision: revision,
             skill_catalog: true,
             memory_use: true,
             hybrid_search: true,
-            run_kind: crate::AgentRunKind::Author,
+            ..exposure_facts(revision)
         })
     };
     let without_skill = |registration| {
@@ -482,11 +477,11 @@ fn a_background_run_gets_only_the_tools_of_its_kind() {
     let names = |run_kind, memory_use| -> Vec<&str> {
         ToolExposure::compute(&ExposureFacts {
             bound: &active,
-            model_registration_revision: HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
             skill_catalog: true,
             memory_use,
             hybrid_search: true,
             run_kind,
+            ..exposure_facts(HOST_FAKE_TOOL_LOOP_REGISTRATION.revision)
         })
         .tools
         .iter()

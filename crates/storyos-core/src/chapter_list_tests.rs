@@ -3,9 +3,9 @@ use crate::assemble_context::{
     CONTEXT_ITEM_TOKEN_LIMIT, ConsideredSource, ProjectionMode, SelectedProjection,
     count_context_item_tokens,
 };
+use crate::shared_tests::passage_assembly;
 use crate::{
-    ContextSourceClass, CurrentPassageAssembly, InstructionBindingInput,
-    assemble_current_passage_context, hex_sha256,
+    ContextSourceClass, CurrentPassageAssembly, assemble_current_passage_context, hex_sha256,
 };
 
 fn entry(volume: &str, chapter: &str, title: &str, length: u64) -> ChapterListEntry {
@@ -77,18 +77,8 @@ fn the_text_lists_each_volume_before_its_chapters_and_marks_the_current_chapter(
 #[test]
 fn the_item_is_one_exact_chapter_list_item_with_the_digest_of_its_text() {
     let mut record = assemble_current_passage_context(&CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Help.".to_owned(),
         chapter_id: "chapter-a".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: "Rain.".to_owned(),
-        instruction: InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
+        ..passage_assembly("Help.", "Rain.")
     });
     let before = record.selected.clone();
     let entries = [entry("1", "a", "Harbor", 5)];

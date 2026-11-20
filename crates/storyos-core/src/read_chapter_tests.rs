@@ -4,8 +4,9 @@ use super::{
     BlockRange, ChapterReadRefusal, READ_CHAPTER_TOOL_SPEC, ReadableChapter, admit_chapter_read,
 };
 use crate::assemble_context::count_context_item_tokens;
+use crate::shared_tests::exposure_facts;
 use crate::{
-    AGENT_PLAN_REGISTRATION, CONTEXT_ITEM_TOKEN_LIMIT, ContextSourceClass, ExposureFacts,
+    AGENT_PLAN_REGISTRATION, CONTEXT_ITEM_TOKEN_LIMIT, ContextSourceClass,
     HOST_FAKE_TOOL_LOOP_REGISTRATION, IntakeRefusal, ToolExposure, ToolIntake,
     ToolResultProjection, host_tool_result,
 };
@@ -34,18 +35,11 @@ fn item_tokens(text: &str) -> u64 {
 #[test]
 fn each_current_mapping_declares_read_chapter_with_a_strict_schema() {
     let declared = |revision| {
-        ToolExposure::compute(&ExposureFacts {
-            bound: &[],
-            model_registration_revision: revision,
-            skill_catalog: false,
-            memory_use: false,
-            hybrid_search: false,
-            run_kind: crate::AgentRunKind::Author,
-        })
-        .tools
-        .into_iter()
-        .map(|tool| tool.declaration())
-        .collect::<Vec<_>>()
+        ToolExposure::compute(&exposure_facts(revision))
+            .tools
+            .into_iter()
+            .map(|tool| tool.declaration())
+            .collect::<Vec<_>>()
     };
     for revision in [
         AGENT_PLAN_REGISTRATION.revision,

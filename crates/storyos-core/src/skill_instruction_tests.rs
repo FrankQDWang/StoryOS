@@ -5,6 +5,7 @@ use super::{
     skill_reference_well_formed,
 };
 use crate::assemble_context::{SelectedProjection, count_context_item_tokens};
+use crate::shared_tests::passage_assembly;
 use crate::{
     ContextSourceClass, CurrentPassageAssemblyRecord, FrontmatterValue, ProjectionMode,
     SKILL_MD_PATH, SkillCatalogEntry, SkillFileInput, SkillPackage, SkillPackageInput,
@@ -56,20 +57,10 @@ fn entry(package: &SkillPackage) -> SkillCatalogEntry {
 }
 
 fn decision() -> CurrentPassageAssemblyRecord {
-    crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Help with this passage.".to_owned(),
-        chapter_id: "chapter-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: "The rain.".to_owned(),
-        instruction: crate::InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
-    })
+    crate::assemble_current_passage_context(&passage_assembly(
+        "Help with this passage.",
+        "The rain.",
+    ))
 }
 
 #[test]
