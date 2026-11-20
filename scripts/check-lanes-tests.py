@@ -241,35 +241,77 @@ class FunctionTests(unittest.TestCase):
         # The lane without a browser starts while the third browser lane waits.
         self.assertLess(lanes[3].started, lanes[2].started)
 
-    def test_a_lane_that_does_not_end_in_the_time_limit_fails_the_run(self):
-        # The lane and its child in a new session do not obey SIGTERM, as the Vitest run of issue 1728. Without a
-        # time limit, the lane passes after 20 s.
-        module, pids = runner_module(), Path(tempfile.mkdtemp(prefix="storyos-lane-limit-")) / "pids"
-        module.LANE_TIME_LIMIT_SECONDS, module.STOP_SECONDS = 2, 2
-        ignore = "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
-        child = [sys.executable, "-c", ignore + "time.sleep(20)"]
-        lane = module.Lane("lanes-test-no-end", [sys.executable, "-c", (
-            f"{ignore}import os, subprocess; child = subprocess.Popen({child!r}, start_new_session=True); "
-            f"open({str(pids)!r}, 'w').write(f'{{os.getpid()}} {{child.pid}}'); time.sleep(20)")])
+    def run_lanes(self, module, lanes):
+        """Run the lanes in this process. Return the exit code, the output, and the time of the run."""
         handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
         output, began = io.StringIO(), time.monotonic()
         try:
             with contextlib.redirect_stdout(output):
-                code = module.run(ROOT, [lane], [])
+                code = module.run(ROOT, lanes, [])
         finally:
             for number, handler in handlers.items():
                 signal.signal(number, handler)
-            watched = [int(pid) for pid in pids.read_text().split()] if pids.exists() else []
-            for pid in watched:
-                if alive(pid):
-                    os.kill(pid, signal.SIGKILL)
-        elapsed, text = time.monotonic() - began, output.getvalue()
+        return code, output.getvalue(), time.monotonic() - began
+
+    def test_a_lane_that_does_not_end_in_the_time_limit_fails_the_run(self):
+        # The lane and its child in a new session do not obey SIGTERM, as the Vitest run of issue 1728. Each writes
+        # its ID after it ignores SIGTERM. Without a time limit, the lane passes after 20 s.
+        module, directory = runner_module(), Path(tempfile.mkdtemp(prefix="storyos-lane-limit-"))
+        module.LANE_TIME_LIMIT_SECONDS, module.STOP_SECONDS = 5, 2
+        ready = ("import os, signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                 "open({!r}, 'w').write(str(os.getpid())); ")
+        child = [sys.executable, "-c", ready.format(str(directory / "child")) + "time.sleep(20)"]
+        lane = module.Lane("lanes-test-no-end", [sys.executable, "-c", (
+            ready.format(str(directory / "lane"))
+            + f"import subprocess; subprocess.Popen({child!r}, start_new_session=True); time.sleep(20)")])
+        try:
+            code, text, elapsed = self.run_lanes(module, [lane])
+            watched = [int((directory / name).read_text()) for name in ("lane", "child")
+                       if (directory / name).exists()]
+            # The system reaps a killed child of another parent a short time after its end.
+            deadline = time.monotonic() + 5
+            while any(alive(pid) for pid in watched) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            remaining = [pid for pid in watched if alive(pid)]
+        finally:
+            for name in ("lane", "child"):
+                if (directory / name).exists() and alive(int((directory / name).read_text())):
+                    os.kill(int((directory / name).read_text()), signal.SIGKILL)
         self.assertEqual(code, 1, text)
-        self.assertIn("Lane lanes-test-no-end: FAIL after 2 s (the lane did not end in the time limit of 2 s)", text)
+        self.assertRegex(text, r"Lane lanes-test-no-end: FAIL after \d+ s \(the lane ran longer than the time limit "
+                               r"of 5 s\)")
         # The limit, then SIGTERM and SIGKILL of the lane, then SIGTERM and SIGKILL of the child, then Docker.
-        self.assertLess(elapsed, 2 + 2 * (module.STOP_SECONDS + module.KILL_SECONDS) + 15, text)
-        self.assertEqual(len(watched), 2, text)
-        self.assertEqual([pid for pid in watched if alive(pid)], [], text)
+        self.assertLess(elapsed, 5 + 2 * (module.STOP_SECONDS + module.KILL_SECONDS) + 15, text)
+        self.assertEqual(len(watched), 2, f"the lane or its child did not start before the stop\n{text}")
+        self.assertEqual(remaining, [], text)
+
+    def test_a_lane_that_the_runner_finds_ended_after_the_time_limit_fails_the_run(self):
+        # The check of the first lane takes 4 s. The second lane ends with exit code 0 in that time, before the limit
+        # of 2 s or after it, and the runner finds it only after the check.
+        module = runner_module()
+        module.LANE_TIME_LIMIT_SECONDS = 2
+        lanes = [module.Lane("lanes-test-slow-check", ["true"], passed=lambda _log: time.sleep(4) or []),
+                 module.Lane("lanes-test-ends-late", ["sleep", "1"])]
+        code, text, _ = self.run_lanes(module, lanes)
+        self.assertEqual(code, 1, text)
+        self.assertIn("Lane lanes-test-slow-check: PASS", text)
+        self.assertRegex(text, r"Lane lanes-test-ends-late: FAIL after \d+ s \(the lane ran longer than the time "
+                               r"limit of 2 s, then ended with exit code 0\)")
+
+    def test_a_command_of_the_runner_that_does_not_end_fails_in_its_time_limit(self):
+        module = runner_module()
+        module.TOOL_SECONDS = 1
+        began = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            module.tool_output(["sleep", "30"])
+        self.assertLess(time.monotonic() - began, 10)
+
+        def tool_output(command):
+            raise subprocess.TimeoutExpired(command, module.TOOL_SECONDS)
+
+        # A Docker command that does not end makes the removal not verified, and the stop continues to its result.
+        module.tool_output = tool_output
+        self.assertFalse(module.remove_run_resources("token"))
 
     def test_a_report_of_a_run_that_did_not_connect_to_its_browser_fails_the_lane(self):
         # The shape of the second report of the lane journeys-2 in a run of `make check-full` on 2026-11-20 (issue

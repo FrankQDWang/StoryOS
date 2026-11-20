@@ -27,9 +27,13 @@ import uuid
 
 # Selected from measured runs of `make check` on an Apple M4 with 10 cores and 32 GB (issue 1711).
 LANE_LIMIT = 6
-# A lane that runs longer than this time fails the run. The longest lane took 419 s in the measured runs. In a run
-# of `make check-full` on 2026-11-20, a Vitest run did not end after its browser did not connect (issue 1728).
+# A lane that the runner finds running or ended at or after this time fails the run. The longest lane took 419 s in
+# the measured runs. In a run of `make check-full` on 2026-11-20, a Vitest run did not end after its browser did
+# not connect (issue 1728).
 LANE_TIME_LIMIT_SECONDS = 900
+# A command of the runner itself (ps, docker, the list of a test binary) that runs longer than this time fails, so
+# that it does not stop the check of the time limit or the report of a failure.
+TOOL_SECONDS = 60
 POSTGRES_SHARDS = 4
 # At most this count of browser lanes runs at the same time (issue 1712). In two runs of `make check-full` on
 # 2026-11-20, a journey wait did not succeed in time when three or four browser lanes ran at the same time.
@@ -248,7 +252,7 @@ def postgres_lanes(root, after, final_checks):
                 continue
             binary, directory = message["executable"], str(Path(message["manifest_path"]).parent)
             listed = subprocess.run([binary, "--list", "--ignored"], cwd=directory, check=True,
-                                    capture_output=True, text=True).stdout
+                                    capture_output=True, text=True, timeout=TOOL_SECONDS).stdout
             tests.extend((directory, binary, name) for name in re.findall(r"^(\S+): test$", listed, re.MULTILINE))
         names = [name for _, _, name in tests]
         if not names or len(set(names)) != len(names):
@@ -325,7 +329,8 @@ def start(root, lane, running, token):
 
 def tool_output(command):
     """Run ps or docker in a session of its own, so that an interruption of the run does not reach it."""
-    return subprocess.run(command, capture_output=True, text=True, check=True, start_new_session=True).stdout
+    return subprocess.run(command, capture_output=True, text=True, check=True, start_new_session=True,
+                          timeout=TOOL_SECONDS).stdout
 
 
 def process_table():
@@ -393,11 +398,11 @@ def remove_run_resources(token):
             found = run_resources(token, list_command)
             if found:
                 tool_output([*remove_command, *found])
-        except (OSError, subprocess.CalledProcessError) as error:
+        except (OSError, subprocess.SubprocessError) as error:
             print(f"check-lanes: the removal of the {kind}s of the run failed: {error}", flush=True)
         try:
             remaining += [f"{kind} {name}" for name in run_resources(token, list_command)]
-        except (OSError, subprocess.CalledProcessError) as error:
+        except (OSError, subprocess.SubprocessError) as error:
             print(f"check-lanes: the {kind}s of the run are not verified: {error}", flush=True)
             verified = False
     if remaining:
@@ -446,7 +451,7 @@ def stop(lanes, token):
             stopped = False
         if not stopped:
             print("check-lanes: processes of the run remain", flush=True)
-    except (OSError, subprocess.CalledProcessError) as error:
+    except (OSError, subprocess.SubprocessError) as error:
         print(f"check-lanes: the processes of the run are not verified: {error}", flush=True)
         stopped = False
     finally:
@@ -500,16 +505,18 @@ def run(root, lanes, final_checks):
             time.sleep(0.2)
             for lane in list(running):
                 code = None if interrupted else exit_code(lane)
-                late = (code is None and not interrupted
-                        and time.monotonic() - lane.started >= LANE_TIME_LIMIT_SECONDS)
+                # A lane that ended with exit code 0 also fails when the runner finds it only after the time limit.
+                late = not interrupted and time.monotonic() - lane.started >= LANE_TIME_LIMIT_SECONDS
                 if code is None and not late:
                     continue
                 running.remove(lane)
                 lane.duration = time.monotonic() - lane.started
                 lane.log.close()
-                reason = (f"the lane did not end in the time limit of {LANE_TIME_LIMIT_SECONDS} s" if late
-                          else f"exit code {code}")
-                if code == 0:
+                reason = f"exit code {code}"
+                if late:
+                    reason = (f"the lane ran longer than the time limit of {LANE_TIME_LIMIT_SECONDS} s"
+                              + ("" if code is None else f", then ended with {reason}"))
+                if code == 0 and not late:
                     try:
                         more = lane.passed(Path(lane.log.name).read_text()) if lane.passed else []
                         # A passed lane is reaped here, so it is out of the scope of a later stop.
@@ -518,7 +525,7 @@ def run(root, lanes, final_checks):
                         finished.append(lane)
                         print(f"Lane {lane.name}: PASS {round(lane.duration)} s", flush=True)
                         continue
-                    except (ValueError, OSError, KeyError, TypeError, subprocess.CalledProcessError) as error:
+                    except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as error:
                         reason = str(error)
                 stop(started, token)
                 print_failure(lane, reason)
