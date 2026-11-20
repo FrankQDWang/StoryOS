@@ -12,6 +12,7 @@ use storyos_core::{
 use uuid::Uuid;
 
 use super::{load_chain_source, unavailable, work_error, write};
+use crate::agent_run_attempt::{AttemptRole, NewModelAttempt, insert_model_attempt};
 use crate::agent_run_work::{RunPhaseRow, WorkPhase, route_facts};
 use crate::update_project_assistance::read_assistance_record;
 
@@ -283,10 +284,6 @@ pub(crate) async fn commit_claim(
         return Ok(None);
     };
     let manifest_id: String = manifest.get(/*idx*/ 0);
-    let scope = [
-        &claim.project_scope.owner_user_id.as_ref(),
-        &claim.project_scope.project_id.as_ref(),
-    ];
     let model_attempt_id = Uuid::now_v7().to_string();
     let mut payload = serde_json::json!({
         "execution_profile": {
@@ -313,35 +310,29 @@ pub(crate) async fn commit_claim(
     if let Some(setting) = projection.cache_setting {
         payload["cache"] = crate::provider_evidence::encode_cache_setting(setting);
     }
-    client
-        .execute(
-            "INSERT INTO storyos.model_attempts
-               (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
-                outbound_disclosure_event_id, destination_context_manifest_id,
-                outbound_disclosure_manifest_id, wire_payload_projection_id, model_invocation_id,
-                conversation_id, dispatch_state, payload, attempt_role, decision_position)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                     $9::text::uuid, $10::text::uuid, $11::text::uuid, 'uncertain',
-                     $12::text::jsonb, 'compaction', $13::text::numeric)",
-            &[
-                scope[0],
-                scope[1],
-                &claim.run_id,
-                &model_attempt_id,
-                &Uuid::now_v7().to_string(),
-                &Uuid::now_v7().to_string(),
-                &destination_manifest_id,
-                &outbound_manifest_id,
-                &Uuid::now_v7().to_string(),
-                &Uuid::now_v7().to_string(),
-                &run.conversation_id,
-                &payload.to_string(),
-                &run.decision_position,
-            ],
-        )
-        .await
-        .map_err(work_error)?;
+    let [destination_attempt_id, outbound_disclosure_event_id] =
+        [(); 2].map(|()| Uuid::now_v7().to_string());
+    let [wire_payload_projection_id, model_invocation_id] =
+        [(); 2].map(|()| Uuid::now_v7().to_string());
+    insert_model_attempt(
+        client,
+        &NewModelAttempt {
+            claim,
+            model_attempt_id: &model_attempt_id,
+            destination_attempt_id: &destination_attempt_id,
+            outbound_disclosure_event_id: &outbound_disclosure_event_id,
+            destination_context_manifest_id: &destination_manifest_id,
+            outbound_disclosure_manifest_id: &outbound_manifest_id,
+            wire_payload_projection_id: &wire_payload_projection_id,
+            model_invocation_id: &model_invocation_id,
+            conversation_id: run.conversation_id.as_deref(),
+            payload: &payload,
+            role: AttemptRole::Compaction,
+            decision_position: &run.decision_position,
+        },
+    )
+    .await
+    .map_err(work_error)?;
     Ok(Some(DispatchClaim { model_attempt_id }))
 }
 

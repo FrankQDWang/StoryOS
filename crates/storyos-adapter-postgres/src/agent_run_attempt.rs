@@ -173,37 +173,97 @@ pub(crate) async fn persist_uncertain_attempt(
         )
         .await
         .map_err(complete_database_error)?;
+    insert_model_attempt(
+        client,
+        &NewModelAttempt {
+            claim,
+            model_attempt_id: &model_attempt_id,
+            destination_attempt_id: &destination_attempt_id,
+            outbound_disclosure_event_id: &outbound_disclosure_event_id,
+            destination_context_manifest_id: &destination_context_manifest_id,
+            outbound_disclosure_manifest_id: &outbound_disclosure_manifest_id,
+            wire_payload_projection_id: &wire_payload_projection_id,
+            model_invocation_id: &model_invocation_id,
+            conversation_id: conversation_id.as_deref(),
+            payload: &payload,
+            role: AttemptRole::Decision,
+            decision_position,
+        },
+    )
+    .await
+    .map_err(complete_database_error)?;
+    Ok(Some(model_attempt_id))
+}
+
+/// The role of a new Model Attempt row.
+#[derive(Clone, Copy)]
+pub(crate) enum AttemptRole {
+    Decision,
+    Successor,
+    Compaction,
+}
+
+impl AttemptRole {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Decision => "decision",
+            Self::Successor => "successor",
+            Self::Compaction => "compaction",
+        }
+    }
+}
+
+/// The values of one new Model Attempt row of the claimed AgentRun.
+pub(crate) struct NewModelAttempt<'a> {
+    pub(crate) claim: &'a ClaimedAgentRun,
+    pub(crate) model_attempt_id: &'a str,
+    pub(crate) destination_attempt_id: &'a str,
+    pub(crate) outbound_disclosure_event_id: &'a str,
+    pub(crate) destination_context_manifest_id: &'a str,
+    pub(crate) outbound_disclosure_manifest_id: &'a str,
+    pub(crate) wire_payload_projection_id: &'a str,
+    pub(crate) model_invocation_id: &'a str,
+    pub(crate) conversation_id: Option<&'a str>,
+    pub(crate) payload: &'a serde_json::Value,
+    pub(crate) role: AttemptRole,
+    pub(crate) decision_position: &'a str,
+}
+
+/// Writes `attempt` as a Model Attempt row whose dispatch state is `uncertain`.
+pub(crate) async fn insert_model_attempt(
+    client: &tokio_postgres::Client,
+    attempt: &NewModelAttempt<'_>,
+) -> Result<(), tokio_postgres::Error> {
     client
         .execute(
             "INSERT INTO storyos.model_attempts
-               (owner_user_id, project_id, run_id, model_attempt_id,
-                destination_attempt_id, outbound_disclosure_event_id,
-                destination_context_manifest_id, outbound_disclosure_manifest_id,
-                wire_payload_projection_id, model_invocation_id, conversation_id,
-                dispatch_state, payload, decision_position)
+               (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
+                outbound_disclosure_event_id, destination_context_manifest_id,
+                outbound_disclosure_manifest_id, wire_payload_projection_id, model_invocation_id,
+                conversation_id, dispatch_state, payload, attempt_role, decision_position)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
                      $9::text::uuid, $10::text::uuid, $11::text::uuid, 'uncertain',
-                     $12::text::jsonb, $13::text::numeric)",
+                     $12::text::jsonb, $13::text, $14::text::numeric)",
             &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &model_attempt_id,
-                &destination_attempt_id,
-                &outbound_disclosure_event_id,
-                &destination_context_manifest_id,
-                &outbound_disclosure_manifest_id,
-                &wire_payload_projection_id,
-                &model_invocation_id,
-                &conversation_id,
-                &payload.to_string(),
-                &decision_position,
+                &attempt.claim.project_scope.owner_user_id.as_ref(),
+                &attempt.claim.project_scope.project_id.as_ref(),
+                &attempt.claim.run_id,
+                &attempt.model_attempt_id,
+                &attempt.destination_attempt_id,
+                &attempt.outbound_disclosure_event_id,
+                &attempt.destination_context_manifest_id,
+                &attempt.outbound_disclosure_manifest_id,
+                &attempt.wire_payload_projection_id,
+                &attempt.model_invocation_id,
+                &attempt.conversation_id,
+                &attempt.payload.to_string(),
+                &attempt.role.as_str(),
+                &attempt.decision_position,
             ],
         )
-        .await
-        .map_err(complete_database_error)?;
-    Ok(Some(model_attempt_id))
+        .await?;
+    Ok(())
 }
 
 pub(crate) fn evidence_values(

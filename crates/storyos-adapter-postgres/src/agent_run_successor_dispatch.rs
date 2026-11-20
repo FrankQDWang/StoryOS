@@ -11,6 +11,7 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
+use crate::agent_run_attempt::{AttemptRole, NewModelAttempt};
 use crate::agent_run_create_dispatch::PriorContext;
 use crate::agent_run_successor::{
     DecisionRow, SuccessorWork, flag, load_decision, seal, text, unavailable,
@@ -163,36 +164,28 @@ pub(crate) async fn commit(
     if let Some(wire) = crate::agent_run_continuation::parse_wire(&row.payload) {
         successor_payload["continuation"] = crate::agent_run_continuation::encode_wire(&wire);
     }
-    client
-        .execute(
-            "INSERT INTO storyos.model_attempts
-               (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
-                outbound_disclosure_event_id, destination_context_manifest_id,
-                outbound_disclosure_manifest_id, wire_payload_projection_id,
-                model_invocation_id, conversation_id, dispatch_state, payload, attempt_role,
-                decision_position)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                     $9::text::uuid, $10::text::uuid, $11::text::uuid, 'uncertain',
-                     $12::text::jsonb, 'successor', $13::text::numeric)",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &attempt_id,
-                &Uuid::now_v7().to_string(),
-                &Uuid::now_v7().to_string(),
-                &manifests.destination,
-                &manifests.outbound,
-                &Uuid::now_v7().to_string(),
-                &row.invocation_id,
-                &row.conversation_id,
-                &successor_payload.to_string(),
-                &run.decision_position,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
+    let [destination_attempt_id, outbound_disclosure_event_id] =
+        [(); 2].map(|()| Uuid::now_v7().to_string());
+    let wire_payload_projection_id = Uuid::now_v7().to_string();
+    crate::agent_run_attempt::insert_model_attempt(
+        client,
+        &NewModelAttempt {
+            claim,
+            model_attempt_id: &attempt_id,
+            destination_attempt_id: &destination_attempt_id,
+            outbound_disclosure_event_id: &outbound_disclosure_event_id,
+            destination_context_manifest_id: &manifests.destination,
+            outbound_disclosure_manifest_id: &manifests.outbound,
+            wire_payload_projection_id: &wire_payload_projection_id,
+            model_invocation_id: &row.invocation_id,
+            conversation_id: row.conversation_id.as_deref(),
+            payload: &successor_payload,
+            role: AttemptRole::Successor,
+            decision_position: &run.decision_position,
+        },
+    )
+    .await
+    .map_err(unavailable)?;
     Ok(Some(DispatchClaim {
         model_attempt_id: attempt_id,
     }))
