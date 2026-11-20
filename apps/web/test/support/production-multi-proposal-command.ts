@@ -10,7 +10,7 @@ import type { CreateAgentRunRequest, CreateAgentRunResponse, AcceptProposalReque
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch } from "./node-integration.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
-import { uuidV7 as id } from "../../src/client-identity.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 as id } from "../../src/client-identity.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 
@@ -35,7 +35,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const request: UpdateProjectAssistanceRequest = { command_schema: "storyos.command.update-project-assistance.request.v1",
       update_project_assistance_input: { availability: "available", expected_assistance_revision: "0",
         client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-        security_policy_revision: "storyos.web-security-policy.release-1.v1", correlation_id: id() } };
+        security_policy_revision: SECURITY_POLICY_REVISION, correlation_id: id() } };
     const key = id();
     const challenge = await createProjectCommandChallenge({ ...options, request: { method: "PUT",
       route_template: "/api/v1/projects/{project_id}/assistance", command_schema: request.command_schema,

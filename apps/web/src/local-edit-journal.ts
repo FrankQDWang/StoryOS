@@ -973,10 +973,7 @@ function sameResultingBlocks(
     === JSON.stringify(resulting.map((block) => shape(block, block.block_kind ?? "paragraph")));
 }
 
-/**
- * Persists one Block edit: prepares the append, projects the Journal, builds the primitives, applies them to a copy
- * of the projected Blocks, compares the result with the Blocks of the editor, and persists the Author Edit unit.
- */
+/** Stores one Author Edit unit for `edit`, or throws when its primitives do not give `edit.resultingBlocks`. */
 async function persistBlockEdit(
   workspace: EditorWorkspace,
   edit: BlockEdit,

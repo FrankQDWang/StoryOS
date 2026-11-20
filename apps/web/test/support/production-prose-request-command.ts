@@ -17,7 +17,7 @@ import { verifyConflictedProposalRecovery } from "./production-conflict-recovery
 import { verifyProductionFirstOwnerEdit } from "./production-first-owner-edit-command.ts";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch, startStoryOSServer, stopStoryOSServer } from "./node-integration";
 import { assertProjectReceipts } from "./project-receipts.ts";
-import { uuidV7 } from "../../src/client-identity.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "../../src/client-identity.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const USER = "018f0000-0000-7001-8000-000000000001";
@@ -75,7 +75,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
         availability: "available",
         expected_assistance_revision: "0",
         client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-        security_policy_revision: "storyos.web-security-policy.release-1.v1",
+        security_policy_revision: SECURITY_POLICY_REVISION,
         correlation_id: uuidV7(),
       },
     };

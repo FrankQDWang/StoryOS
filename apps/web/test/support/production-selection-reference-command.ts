@@ -11,7 +11,7 @@ import type { CreateAgentRunRequest, CreateAgentRunResponse, SelectionReference,
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { runStoryOSWorker, sessionFetch } from "./node-integration.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
-import { uuidV7 } from "../../src/client-identity.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "../../src/client-identity.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const PARAGRAPHS = ["雨夜。渡口无人。", "船夫在等着。", "灯灭了。"];
@@ -47,7 +47,7 @@ export async function verifyProductionSelectionReference(context: BrowserContext
       command_schema: "storyos.command.update-project-assistance.request.v1",
       update_project_assistance_input: { availability: "available", expected_assistance_revision: "0",
         client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-        security_policy_revision: "storyos.web-security-policy.release-1.v1", correlation_id: uuidV7() },
+        security_policy_revision: SECURITY_POLICY_REVISION, correlation_id: uuidV7() },
     };
     const idempotencyKey = uuidV7();
     const challenge = await createProjectCommandChallenge({ ...options, request: {

@@ -10,6 +10,7 @@ import type { AcceptProposalRequest, ApplyAuthorEditRequest, AuthorEditPrimitive
   CreateEditorSessionRequest, GetAgentRunResponse, SelectionReference,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { SECURITY_POLICY_REVISION } from "../../src/client-identity.ts";
 import { queryStoryOSPostgres as queryPostgres, runStoryOSWorkerStderr,
   sessionFetch as browserFetch, withChallengeBudget } from "./node-integration.ts";
 
@@ -19,7 +20,7 @@ export const USER_A = "018f0000-0000-7001-8000-000000000001";
 export const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const BINDING = {
   client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-  security_policy_revision: "storyos.web-security-policy.release-1.v1",
+  security_policy_revision: SECURITY_POLICY_REVISION,
 };
 export const PROSE = "Guard the narrator voice in this passage.";
 export const REVISED = "Keep the narrator voice in this passage.";

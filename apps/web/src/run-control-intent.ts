@@ -4,7 +4,7 @@ import type { CancelAgentRunRequest, GetAgentRunResponse, PauseAgentRunRequest, 
   SteerAgentRunRequest } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import type { AssistantContext } from "./writing-assistant-panel.tsx";
-import { uuidV7 } from "./client-identity.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 
 type Target = { scope: ProjectScope; runId: string; conversationId: string; idempotencyKey: string };
 export type RunControlIntent = Target & (
@@ -69,7 +69,7 @@ export function freezeRunControl(context: AssistantContext, run: GetAgentRunResp
     idempotencyKey: uuidV7(context.cryptoImpl) };
   const binding = {
     client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-    security_policy_revision: "storyos.web-security-policy.release-1.v1",
+    security_policy_revision: SECURITY_POLICY_REVISION,
     correlation_id: uuidV7(context.cryptoImpl),
   };
   switch (action.kind) {
