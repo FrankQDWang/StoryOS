@@ -3,22 +3,9 @@ import { afterEach, expect, it } from "vitest";
 import { createProjectChallenge } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { closeApplicationFrame, openApplicationFrame } from "../support/exact-dist-frame.ts";
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist bootstrap page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
 async function waitForProtectedReady(frame: HTMLIFrameElement): Promise<Element> {
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
@@ -30,29 +17,14 @@ async function waitForProtectedReady(frame: HTMLIFrameElement): Promise<Element>
   return root;
 }
 
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
-
 afterEach(async () => {
-  if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
 
 it("a new local browser session reaches protected-ready without AI and acquires createProjectChallenge", async () => {
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = "StoryOS exact-dist local bootstrap";
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
+  const frame = await openApplicationFrame("StoryOS exact-dist local bootstrap");
   const root = await waitForProtectedReady(frame);
   expect(root.getAttribute("data-boot-state")).toBe("protected-ready");
   expect(root.querySelector('[role="alert"]')).toBeNull();

@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -9,32 +9,16 @@ import {
   manuscriptIsEditable,
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
-
-let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist delete-chapter page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
+import {
+  closeApplicationFrame,
+  openApplicationFrame,
+  submitChapterForm,
+  submitProjectForm,
+  submitVolumeForm,
+} from "../support/exact-dist-frame.ts";
 
 afterEach(async () => {
-  if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
@@ -44,7 +28,7 @@ function chapterTitles(root: Element | null | undefined): string[] {
     .map((node) => node.textContent?.trim() ?? "");
 }
 
-async function waitSaved(frame: HTMLIFrameElement): Promise<void> {
+async function waitSaveState(frame: HTMLIFrameElement): Promise<void> {
   await expect.poll(() => {
     const node = frame.contentDocument?.querySelector("[data-save-state]");
     return node?.getAttribute("data-save-state") === "saved"
@@ -52,7 +36,7 @@ async function waitSaved(frame: HTMLIFrameElement): Promise<void> {
   }, { timeout: 10_000 }).toBe(true);
 }
 
-async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<void> {
+async function typeThroughSaving(frame: HTMLIFrameElement, text: string): Promise<void> {
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
     const editor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
@@ -74,7 +58,7 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<
       ?.querySelector("[data-save-state]")
       ?.getAttribute("data-save-state") === "saving";
   }, { timeout: 10_000 }).toBe(true);
-  await waitSaved(frame);
+  await waitSaveState(frame);
 }
 
 function currentChapterRow(frame: HTMLIFrameElement): Element | undefined {
@@ -104,47 +88,16 @@ async function confirmCurrentDelete(frame: HTMLIFrameElement): Promise<void> {
 }
 
 async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName
-  ).toBe("INPUT");
-  const title = frame.contentDocument?.querySelector<HTMLInputElement>('#app input[name="title"]');
-  const form = title?.form;
-  if (title === null || title === undefined || form === null || form === undefined) {
-    throw new Error("the protected-ready form is missing");
-  }
-  title.value = "Delete Novel";
-  form.requestSubmit();
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
-  ).toBe("empty-project-ready");
+  await submitProjectForm(frame, "Delete Novel");
 
-  await beginInlineVolumeCreation(frame.contentDocument);
-  const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
-    '#app form[data-create-volume] input[name="volume-title"]',
-  );
-  const volumeForm = volumeTitle?.form;
-  if (volumeTitle === null || volumeTitle === undefined
-    || volumeForm === null || volumeForm === undefined) {
-    throw new Error("the Create Volume form is missing");
-  }
-  volumeTitle.value = "Volume A";
-  volumeForm.requestSubmit();
+  await submitVolumeForm(frame, "Volume A");
   await beginInlineChapterCreation(frame.contentDocument);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter] input[name="chapter-title"]')
       ?.tagName
   ).toBe("INPUT");
 
-  const firstChapter = frame.contentDocument?.querySelector<HTMLInputElement>(
-    '#app form[data-create-chapter] input[name="chapter-title"]',
-  );
-  const firstForm = firstChapter?.form;
-  if (firstChapter === null || firstChapter === undefined
-    || firstForm === null || firstForm === undefined) {
-    throw new Error("the Create Chapter form is missing");
-  }
-  firstChapter.value = "Chapter A";
-  firstForm.requestSubmit();
+  await submitChapterForm(frame, "Chapter A");
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("project-ready");
@@ -159,17 +112,7 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
         '#app form[data-create-chapter] input[name="chapter-title"]',
       )?.tagName
     ).toBe("INPUT");
-    await beginInlineChapterCreation(frame.contentDocument);
-    const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
-      '#app form[data-create-chapter] input[name="chapter-title"]',
-    );
-    const chapterForm = chapterTitle?.form;
-    if (chapterTitle === null || chapterTitle === undefined
-      || chapterForm === null || chapterForm === undefined) {
-      throw new Error("the later Create Chapter form is missing");
-    }
-    chapterTitle.value = name;
-    chapterForm.requestSubmit();
+    await submitChapterForm(frame, name);
     await expect.poll(() => {
       const root = frame.contentDocument?.querySelector("#app");
       return root?.getAttribute("data-boot-state") === "project-ready"
@@ -179,15 +122,9 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
 }
 
 it("the author confirms Chapter removal, keeps the next current Chapter, then opens empty", { timeout: 90_000 }, async () => {
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = "StoryOS exact-dist Delete Chapter";
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
+  const frame = await openApplicationFrame("StoryOS exact-dist Delete Chapter");
   await createThreeChapters(frame);
-  await typeIntoCurrent(frame, "Alpha");
+  await typeThroughSaving(frame, "Alpha");
   await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");

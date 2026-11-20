@@ -1,4 +1,3 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -8,51 +7,24 @@ import {
   manuscriptEditor,
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
+import {
+  appRoot,
+  applicationWindow,
+  closeApplicationFrame,
+  openApplicationFrame,
+  openFirstChapterForm,
+  submitChapterForm,
+  submitProjectForm,
+  submitVolumeForm,
+} from "../support/exact-dist-frame.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist Tiptap editor page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
-
 afterEach(async () => {
-  if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
-
-function applicationWindow(frame: HTMLIFrameElement): Window & typeof globalThis {
-  const result = frame.contentWindow;
-  if (result === null) throw new Error("the production page realm is unavailable");
-  return result as Window & typeof globalThis;
-}
-
-function appRoot(frame: HTMLIFrameElement): Element {
-  const root = frame.contentDocument?.querySelector("#app");
-  if (root === null || root === undefined) {
-    throw new Error("the production page root is missing");
-  }
-  return root;
-}
 
 async function readChapter(frame: HTMLIFrameElement, projectId: string, chapterId: string) {
   const childWindow = applicationWindow(frame);
@@ -75,55 +47,14 @@ async function readChapter(frame: HTMLIFrameElement, projectId: string, chapterI
 }
 
 it("hydrates production Tiptap for one paragraph Block without a textarea write path", async () => {
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = "StoryOS exact-dist Tiptap Block replacement";
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName
-  ).toBe("INPUT");
-  const title = frame.contentDocument?.querySelector<HTMLInputElement>('#app input[name="title"]');
-  const form = title?.form;
-  if (title === null || title === undefined || form === null || form === undefined) {
-    throw new Error("the protected-ready form is missing");
-  }
-  title.value = "Tiptap Novel";
-  form.requestSubmit();
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
-  ).toBe("empty-project-ready");
+  const frame = await openApplicationFrame("StoryOS exact-dist Tiptap Block replacement");
+  await submitProjectForm(frame, "Tiptap Novel");
   expect(appRoot(frame).querySelector(".editor-panel textarea")).toBeNull();
   expect(appRoot(frame).querySelector(MANUSCRIPT_EDITOR_SELECTOR)).toBeNull();
 
-  await beginInlineVolumeCreation(frame.contentDocument);
-  const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
-    '#app form[data-create-volume] input[name="volume-title"]',
-  );
-  const volumeForm = volumeTitle?.form;
-  if (volumeTitle === null || volumeTitle === undefined
-    || volumeForm === null || volumeForm === undefined) {
-    throw new Error("the Create Volume form is missing");
-  }
-  volumeTitle.value = "Volume A";
-  volumeForm.requestSubmit();
-  await beginInlineChapterCreation(frame.contentDocument);
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
-  ).toBe(true);
-  await beginInlineChapterCreation(frame.contentDocument);
-  const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
-    '#app form[data-create-chapter] input[name="chapter-title"]',
-  );
-  const chapterForm = chapterTitle?.form;
-  if (chapterTitle === null || chapterTitle === undefined
-    || chapterForm === null || chapterForm === undefined) {
-    throw new Error("the Create Chapter form is missing");
-  }
-  chapterTitle.value = "Chapter A";
-  chapterForm.requestSubmit();
+  await submitVolumeForm(frame, "Volume A");
+  await openFirstChapterForm(frame);
+  await submitChapterForm(frame, "Chapter A");
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
     return root?.getAttribute("data-boot-state") === "project-ready"

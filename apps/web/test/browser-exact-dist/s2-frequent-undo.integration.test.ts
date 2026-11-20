@@ -1,4 +1,3 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -9,88 +8,35 @@ import {
   manuscriptEditor,
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
+import {
+  closeApplicationFrame,
+  openApplicationFrame,
+  openFirstChapterForm,
+  submitChapterForm,
+  submitProjectForm,
+  submitVolumeForm,
+  waitSaved,
+} from "../support/exact-dist-frame.ts";
 
 const ROUNDS = 12;
 
-let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist frequent-undo page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
 afterEach(async () => {
-  if (applicationFrame?.isConnected) {
-    const unloaded = nextFrameLoad(applicationFrame);
-    applicationFrame.src = "about:blank";
-    await unloaded;
-    applicationFrame.remove();
-  }
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
 
-function submitTitle(frame: HTMLIFrameElement, selector: string, value: string): void {
-  const input = frame.contentDocument?.querySelector<HTMLInputElement>(selector);
-  if (input === null || input === undefined || input.form === null) {
-    throw new Error(`the form for ${selector} is missing`);
-  }
-  input.value = value;
-  input.form.requestSubmit();
-}
-
-function saveFacts(root: Element) {
-  const node = root.querySelector("[data-save-state]");
-  return {
-    save: node?.getAttribute("data-save-state"),
-    unsettled: node?.getAttribute("data-unsettled-intent-count"),
-    failure: node?.getAttribute("data-editor-failure") ?? "",
-    revision: node?.getAttribute("data-authoritative-revision-id") ?? "",
-  };
-}
-
-async function waitSaved(root: Element, previousRevisionId: string): Promise<string> {
-  await expect.poll(() => {
-    const facts = saveFacts(root);
-    return facts.save === "saved" && facts.unsettled === "0" && facts.failure === ""
-      && facts.revision !== previousRevisionId ? "saved" : facts;
-  }, { timeout: 10_000 }).toBe("saved");
-  return saveFacts(root).revision;
-}
-
 it("keeps the editor writable through frequent Author Undo between Author Edit batches", {
   timeout: 180_000,
 }, async () => {
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = "StoryOS exact-dist frequent undo";
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
+  const frame = await openApplicationFrame("StoryOS exact-dist frequent undo");
   const childWindow = frame.contentWindow as (Window & typeof globalThis) | null;
   if (childWindow === null) throw new Error("the production page realm is unavailable");
   childWindow.performance.setResourceTimingBufferSize(2_000);
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName).toBe("INPUT");
-  submitTitle(frame, '#app input[name="title"]', "Frequent Undo Novel");
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state"))
-    .toBe("empty-project-ready");
-  await beginInlineVolumeCreation(frame.contentDocument);
-  submitTitle(frame, '#app form[data-create-volume] input[name="volume-title"]', "Volume A");
-  await beginInlineChapterCreation(frame.contentDocument);
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector("#app form[data-create-chapter]") !== null).toBe(true);
-  submitTitle(frame, '#app form[data-create-chapter] input[name="chapter-title"]', "Chapter A");
+  await submitProjectForm(frame, "Frequent Undo Novel");
+  await submitVolumeForm(frame, "Volume A");
+  await openFirstChapterForm(frame);
+  await submitChapterForm(frame, "Chapter A");
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
     return root?.getAttribute("data-boot-state") === "project-ready"
@@ -106,7 +52,7 @@ it("keeps the editor writable through frequent Author Undo between Author Edit b
   focusManuscriptEnd(editor, childWindow);
 
   const started = childWindow.performance.now();
-  let revision = saveFacts(root).revision;
+  let revision = root.querySelector("[data-save-state]")?.getAttribute("data-authoritative-revision-id") ?? "";
   let expected = "";
   for (let round = 0; round < ROUNDS; round += 1) {
     for (const [phrase, body] of [["我们", `${expected}我们`], ["写作", `${expected}我们写作`]] as const) {
