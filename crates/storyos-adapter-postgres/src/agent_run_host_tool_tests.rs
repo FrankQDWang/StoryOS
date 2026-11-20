@@ -12,6 +12,7 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{
     RuntimeClock, admit_run_in, claim_run, queued_run, queued_run_offering, stores,
 };
@@ -23,9 +24,9 @@ const EMPTY_OUTPUT: &str = r#"<tool_result source="call_finish" state="empty">Th
 /// the sent function outputs, and the `tool_result` sources of the Operation Requirement, each
 /// ToolCall row without its identities, and each Activity Run Event.
 async fn run_facts(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    json_of(
+        admin,
+        "SELECT jsonb_build_object(
                       'status', run.status, 'position', run.active_decision_position,
                       'steps', (SELECT jsonb_agg(jsonb_build_object(
                           'position', attempt.decision_position,
@@ -56,11 +57,9 @@ async fn run_facts(admin: &Client, run_id: &str) -> Value {
                                    FROM storyos.agent_run_events AS event
                                   WHERE event.run_id = run.run_id))::text
                FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 #[tokio::test]

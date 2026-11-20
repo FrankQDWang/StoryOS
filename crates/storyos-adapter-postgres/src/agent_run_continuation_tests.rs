@@ -16,6 +16,7 @@ use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, queued, settle, steering,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{
     RuntimeClock, admit_referenced_run, admit_run_in, claim_run, stores,
 };
@@ -174,17 +175,15 @@ async fn the_request_after_an_opened_proposal_continues_the_prior_response_with_
 /// whether the request sent `text`.
 async fn continued(admin: &Client, run_id: &str, position: u64, text: &str) -> Value {
     let steps = requests(admin, run_id).await;
-    let row = admin
-        .query_one(
-            "SELECT payload #>> '{wire,serialized_payload}'
+    let wire: Value = json_of(
+        admin,
+        "SELECT payload #>> '{wire,serialized_payload}'
                FROM storyos.model_attempts
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
                 AND decision_position = $2::text::numeric",
-            &[&run_id, &position.to_string()],
-        )
-        .await
-        .unwrap();
-    let wire: Value = serde_json::from_str(row.get(/*idx*/ 0)).unwrap();
+        &[&run_id, &position.to_string()],
+    )
+    .await;
     let index = usize::try_from(position).unwrap();
     json!([
         steps[index][1],

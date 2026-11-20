@@ -15,6 +15,7 @@ use crate::shared_tests::agent_run_load_skill::{calls, loaded_run, record, skill
 use crate::shared_tests::agent_run_steering::queued;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{admit_selected_run, stores};
 
 /// The Skills `skill-1` to `skill-<count>`, each with a short `SKILL.md`.
@@ -66,9 +67,9 @@ fn finish() -> Value {
 /// whether it continues a prior response, and the call identifier and output of each Tool
 /// output that it sent.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
                       wire ? 'previous_response_reference',
                       COALESCE((SELECT jsonb_agg(jsonb_build_array(output ->> 'call_id',
                                                                    output ->> 'output'))
@@ -78,11 +79,9 @@ async fn sent(admin: &Client, run_id: &str) -> Value {
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 #[tokio::test]

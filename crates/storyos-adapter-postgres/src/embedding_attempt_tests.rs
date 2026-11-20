@@ -21,6 +21,7 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::NoEmbeddings;
 use crate::shared_tests::model_gateway::stores;
 use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
@@ -63,17 +64,15 @@ impl EmbeddingProviderAdapter for Held<'_> {
 
 /// Each Embedding Attempt of the Project in the order of its creation.
 async fn attempts(admin: &Client, project_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    json_of(
+        admin,
+        "SELECT COALESCE(jsonb_agg(jsonb_build_object(
                       'cause', cause, 'settlement', settlement, 'attempt', attempt)
                       ORDER BY embedding_attempt_id), '[]'::jsonb)::text
                FROM storyos.embedding_attempts WHERE project_id = $1::text::uuid",
-            &[&project_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&project_id],
+    )
+    .await
 }
 
 /// The Project of `embedding_project`, with the head revision of its Chapter.

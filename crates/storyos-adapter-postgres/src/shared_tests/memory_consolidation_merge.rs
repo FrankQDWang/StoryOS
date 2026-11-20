@@ -1,6 +1,7 @@
 //! The shared test support from `memory_consolidation_merge_tests.rs`.
 
 use crate::PostgresProjectReader;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_consolidation::{capture, run_pass, scripted};
 use serde_json::{Value, json};
 use storyos_application::{MemoryCaptureSource, ProjectScope, StartedMemoryConsolidation};
@@ -74,17 +75,17 @@ pub(crate) fn flag(entry: u64, reason: &str) -> Value {
 /// version, the Memory revision, the state, the origin, the title, the description, the text, the
 /// cause kind, the reason of the flag, and the source kind of the flag.
 pub(crate) async fn flag_lines(admin: &Client, scope: &ProjectScope) -> Value {
-    let row = admin
-        .query_one(
+    version_lines(
+        &json_of(
+            admin,
             "SELECT jsonb_agg(jsonb_build_array(entry_number, version, memory_revision, state,
                       origin, title, description, text, cause ->> 'kind', flag_reason,
                       flag_source ->> 'kind') ORDER BY entry_number, version)::text
                FROM storyos.memory_entry_versions WHERE project_id = $1::text::uuid",
             &[&scope.project_id.as_ref()],
         )
-        .await
-        .unwrap();
-    version_lines(&serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
+        .await,
+    )
 }
 
 /// Captures one observation with the script lines of `operations` and runs one pass.

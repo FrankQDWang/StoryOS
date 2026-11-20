@@ -19,6 +19,7 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_acceptance::ACCEPT_PROPOSAL;
 use crate::shared_tests::command_sequence_structure::{DELETE_CHAPTER, named_call};
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{admit_referenced_run, stores};
 
 const MESSAGE: &str = "Help with this passage.";
@@ -78,21 +79,14 @@ fn sent_reference(
 /// For the RunStep at `position`: the references of its Context Assembly record and the
 /// references that its request sent.
 async fn sent(admin: &Client, run_id: &str, position: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(
+    json_of(admin, "SELECT jsonb_build_array(
                       (SELECT payload #> '{operation_requirement,selection_references}'
                          FROM storyos.context_assembly_manifests
                         WHERE run_id = $1::text::uuid AND decision_position = $2::text::numeric),
                       (SELECT (payload #>> '{wire,serialized_payload}')::jsonb -> 'selection_references'
                          FROM storyos.model_attempts
                         WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
-                          AND decision_position = $2::text::numeric))::text",
-            &[&run_id, &position],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+                          AND decision_position = $2::text::numeric))::text", &[&run_id, &position]).await
 }
 
 /// `text` before the text of Block `index`.

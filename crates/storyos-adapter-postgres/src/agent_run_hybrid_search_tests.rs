@@ -40,6 +40,7 @@ use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
 use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::NoEmbeddings;
 use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
 use crate::shared_tests::passage_ranking::rank_passages;
@@ -99,34 +100,30 @@ async fn shape(admin: &Client, run_id: &str) -> Value {
 
 /// The function names that the first decision request of the Run declares.
 async fn declared(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'tools')::text
+    json_of(
+        admin,
+        "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'tools')::text
                FROM storyos.model_attempts
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
               ORDER BY model_attempt_id LIMIT 1",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The settlement and the ToolCall of each Embedding Attempt of a question in the Project, in
 /// the order of the attempts.
 async fn question_attempts(admin: &Client, scope: &ProjectScope) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT COALESCE(jsonb_agg(jsonb_build_array(settlement,
+    json_of(
+        admin,
+        "SELECT COALESCE(jsonb_agg(jsonb_build_array(settlement,
                       jsonb_path_query_first(attempt, '$.**.tool_call_id'))
                       ORDER BY embedding_attempt_id), '[]')::text
                FROM storyos.embedding_attempts
               WHERE project_id = $1::text::uuid AND cause = 'search_question'",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&scope.project_id.as_ref()],
+    )
+    .await
 }
 
 /// The Tool names of a Run of a new Conversation, with the search by meaning or without it.

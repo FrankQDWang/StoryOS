@@ -23,6 +23,7 @@ use crate::shared_tests::command_sequence_structure::{
     CREATE_CHAPTER, create_chapter, update_chapter,
 };
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::stores;
 use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
@@ -34,9 +35,9 @@ const FIXTURE_LIST: &str = "{\"volume\":\"Volume A\"}\n[1,0,\"Chapter A\",\"curr
 /// text of each `chapter_list` item that the fake destination received, and the replaced input
 /// label.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
                       jsonb_path_query_array(wire,
                         '$.context[*] ? (@.source_class == \"chapter_list\").content'),
                       wire->'replaces_earlier_input')
@@ -44,19 +45,17 @@ async fn sent(admin: &Client, run_id: &str) -> Value {
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// For each decision Context Assembly of the Run in RunStep order: its RunStep and its selected
 /// `chapter_list` items.
 async fn recorded(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(decision_position,
                       (SELECT jsonb_agg(jsonb_build_array(item->>'projection_mode',
                                                           item->>'source_version',
                                                           item->>'content'))
@@ -65,11 +64,9 @@ async fn recorded(admin: &Client, run_id: &str) -> Value {
                       ORDER BY decision_position)::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The recorded `chapter_list` item with `text`.

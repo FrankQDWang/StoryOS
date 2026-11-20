@@ -17,6 +17,7 @@ use crate::shared_tests::agent_run_steering::{
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_structure::UPDATE_CHAPTER;
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::write_versions;
 use crate::shared_tests::model_gateway::{admit_run_in, stores};
 
@@ -74,9 +75,9 @@ fn conversation_of(prefix: &str) -> ConversationSelection {
 /// For each decision RunStep of the Run in order: its position, the pinned Memory revision of
 /// its Operation Requirement, and its selected `memory_index` items.
 async fn recorded(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(manifest.decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(manifest.decision_position,
                       requirement.payload #> '{operation_requirement,memory_revision}',
                       (SELECT COALESCE(jsonb_agg(jsonb_build_array(item->>'projection_mode',
                                                                    item->>'source_version',
@@ -89,20 +90,18 @@ async fn recorded(admin: &Client, run_id: &str) -> Value {
                  ON (requirement.run_id, requirement.decision_position) =
                     (manifest.run_id, manifest.decision_position)
               WHERE manifest.run_id = $1::text::uuid AND manifest.manifest_role = 'decision'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, the
 /// text of each `memory_index` item that the fake destination received, and the replaced input
 /// label.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
                       jsonb_path_query_array(wire,
                         '$.context[*] ? (@.source_class == \"memory_index\").content'),
                       wire->'replaces_earlier_input')
@@ -110,11 +109,9 @@ async fn sent(admin: &Client, run_id: &str) -> Value {
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The recorded `memory_index` item with `text`.

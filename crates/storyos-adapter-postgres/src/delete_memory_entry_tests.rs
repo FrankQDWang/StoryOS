@@ -25,6 +25,7 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::command_sequence_support::seed_project;
 use crate::shared_tests::delete_memory_entry::delete;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::{Version, archived, write_versions};
 use crate::shared_tests::model_gateway::stores;
 
@@ -46,12 +47,6 @@ async fn entry_id(admin: &Client, scope: &ProjectScope) -> String {
         .await
         .unwrap()
         .get(/*idx*/ 0)
-}
-
-/// One text of the query `sql` with the parameter `id`, as JSON.
-async fn json_of(admin: &Client, sql: &str, id: &str) -> Value {
-    let row = admin.query_one(sql, &[&id]).await.unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
 }
 
 /// The number of each entry that the settings page lists in the Project of `scope`.
@@ -94,7 +89,7 @@ async fn each_row_of_the_outcome_table_settles_and_the_deleted_version_keeps_its
              ON receipt.project_id = version.project_id
             AND receipt.receipt_id::text = version.cause ->> 'receipt_id'
           WHERE version.project_id = $1::text::uuid GROUP BY receipt.command_kind",
-        scope.project_id.as_ref(),
+        &[&scope.project_id.as_ref()],
     )
     .await;
 
@@ -238,10 +233,10 @@ async fn a_run_that_pinned_its_index_before_the_delete_lists_the_entry_and_its_r
     let run_id = admitted(&store, &scope, &chapter_id, "adf", message, new).await;
     let run_row = "SELECT to_jsonb(run)::text FROM storyos.agent_runs AS run
                     WHERE run_id = $1::text::uuid";
-    let held = json_of(&admin, run_row, &run_id).await;
+    let held = json_of(&admin, run_row, &[&run_id]).await;
     let entry = entry_id(&admin, &scope).await;
     let outcome = delete(&store, &scope, 0xadd0, &entry, 1).await;
-    let after_delete = json_of(&admin, run_row, &run_id).await;
+    let after_delete = json_of(&admin, run_row, &[&run_id]).await;
     complete(&store, &admin, &scope, &run_id).await;
 
     assert_eq!(

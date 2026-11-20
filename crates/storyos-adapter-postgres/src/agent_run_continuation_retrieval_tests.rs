@@ -25,6 +25,7 @@ use crate::shared_tests::agent_run_tool_exposure::advisory_stream;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_agent_run::CANCEL_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
 use crate::shared_tests::research_artifact::{Reply, computed, tagged};
 use crate::shared_tests::research_source::{SEARCH_TEXT, calls_stream};
@@ -209,9 +210,9 @@ async fn retrieval_context(admin: &Client, run_id: &str) -> Vec<String> {
 /// The successor marker of the Attempt at position 1: its disposition, pause reason, allowance,
 /// fence, and late evidence.
 async fn marker(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT COALESCE((
+    json_of(
+        admin,
+        "SELECT COALESCE((
                SELECT jsonb_build_object(
                         'disposition', marker->'disposition',
                         'pause_reason', marker->'pause_reason',
@@ -223,11 +224,9 @@ async fn marker(admin: &Client, run_id: &str) -> Value {
                          FROM storyos.model_attempts WHERE run_id = $1::text::uuid
                           AND attempt_role = 'decision' AND decision_position = 1) AS found
                 WHERE marker IS NOT NULL), 'null')::text",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The Research Artifacts of the Run: the role and position of the producing Attempt, whether
@@ -751,17 +750,15 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
 
 /// The status, the settlement, the successor marker, and the Attempt roles of a Run.
 async fn outcome(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_object('status', run.status, 'settlement', run.settlement,
+    let mut outcome: Value = json_of(
+        admin,
+        "SELECT jsonb_build_object('status', run.status, 'settlement', run.settlement,
                       'roles', (SELECT string_agg(attempt_role, ',' ORDER BY model_attempt_id)
                                   FROM storyos.model_attempts WHERE run_id = run.run_id))::text
                FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    let mut outcome: Value = serde_json::from_str(row.get(/*idx*/ 0)).unwrap();
+        &[&run_id],
+    )
+    .await;
     outcome["marker"] = marker(admin, run_id).await;
     outcome
 }

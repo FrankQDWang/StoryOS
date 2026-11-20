@@ -7,15 +7,16 @@ use storyos_core::HOST_FAKE_EMBEDDING_REGISTRATION;
 use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{admit_embedding_run, stores};
 use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
 use crate::shared_tests::project_research_binding::park_queued_runs;
 
 /// The embedding grant and use binding rows of the Project.
 async fn embedding_records(admin: &Client, scope: &ProjectScope) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT COALESCE(jsonb_agg(jsonb_build_array(
+    json_of(
+        admin,
+        "SELECT COALESCE(jsonb_agg(jsonb_build_array(
                       grant_row.grant_id, grant_row.grant_scope, identity.destination_kind,
                       binding.embedding_registration_revision, binding.credential_source,
                       binding.budget_bounds) ORDER BY grant_row.grant_id), '[]'::jsonb)::text
@@ -26,11 +27,9 @@ async fn embedding_records(admin: &Client, scope: &ProjectScope) -> Value {
                  USING (owner_user_id, project_id, grant_id)
               WHERE grant_row.project_id = $1::text::uuid
                 AND grant_row.grant_kind = 'manuscript_embedding_use'",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&scope.project_id.as_ref()],
+    )
+    .await
 }
 
 #[tokio::test]

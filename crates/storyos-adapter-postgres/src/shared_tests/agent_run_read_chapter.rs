@@ -7,6 +7,7 @@ use crate::shared_tests::chapter_list_context::head;
 use crate::shared_tests::command_sequence_structure::{CREATE_CHAPTER, create_chapter};
 use crate::shared_tests::command_sequence_support::issued;
 use crate::shared_tests::create_volume_authority::{NamedEdit, adjusted_edit_command};
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 use serde_json::{Value, json};
 use storyos_application::{
@@ -66,9 +67,9 @@ pub(crate) fn boundary(call_id: &str, state: &str, text: &str) -> Value {
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, each
 /// Tool output that it sent, and whether it sent the current input.
 pub(crate) async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
                       COALESCE((SELECT jsonb_agg(jsonb_build_array(output ->> 'call_id',
                                                                    output ->> 'output'))
                                   FROM jsonb_array_elements(wire -> 'tool_outputs') AS output),
@@ -77,19 +78,15 @@ pub(crate) async fn sent(admin: &Client, run_id: &str) -> Value {
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The trust and state of each `tool_results` source, and the class, source version, and
 /// projection mode of each function output item, of the decision Context Assembly at `position`.
 pub(crate) async fn outputs_record(admin: &Client, run_id: &str, position: i32) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(
+    json_of(admin, "SELECT jsonb_build_array(
                       (SELECT jsonb_agg(jsonb_build_array(source ->> 'trust', source ->> 'state'))
                          FROM jsonb_array_elements(payload #> '{operation_requirement,tool_results}')
                               AS source),
@@ -102,12 +99,7 @@ pub(crate) async fn outputs_record(admin: &Client, run_id: &str, position: i32) 
                                    'memory_read_result', 'memory_search_result')))::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'
-                AND decision_position = $2::text::numeric",
-            &[&run_id, &position.to_string()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+                AND decision_position = $2::text::numeric", &[&run_id, &position.to_string()]).await
 }
 
 /// The identity of each call of the Run with the function name `name`, in call order, or of

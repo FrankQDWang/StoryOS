@@ -3,6 +3,7 @@
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::admit_selected_run;
 use serde_json::Value;
 use std::sync::Arc;
@@ -43,9 +44,9 @@ pub(crate) async fn loaded_run(
 /// The status of the Run, and each ToolCall as its function name, state, refusal, Host result,
 /// and whether it has no Destination Attempt and pins the current Host Tool Registration.
 pub(crate) async fn calls(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(run.status, (SELECT jsonb_agg(jsonb_build_array(
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(run.status, (SELECT jsonb_agg(jsonb_build_array(
                       call.function_name, call.state, call.refusal, call.result_text,
                       COALESCE(call.destination_attempt_id IS NULL AND call.attempt IS NULL
                         AND call.registration_id = 'host_tools'
@@ -53,29 +54,25 @@ pub(crate) async fn calls(admin: &Client, run_id: &str) -> Value {
                       ORDER BY call.decision_position, call.call_position)
                       FROM storyos.tool_calls AS call WHERE call.run_id = run.run_id))::text
                FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-            &[&run_id, &storyos_core::HOST_TOOL_REGISTRATION.revision],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id, &storyos_core::HOST_TOOL_REGISTRATION.revision],
+    )
+    .await
 }
 
 /// The Tool sources of the Operation Requirement and each selected `skill_instruction` item of
 /// the Context Assembly with `role` at `position`.
 pub(crate) async fn record(admin: &Client, run_id: &str, role: &str, position: i32) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(payload #> '{operation_requirement,tool_results}',
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(payload #> '{operation_requirement,tool_results}',
                       jsonb_path_query_array(payload,
                         '$.selected[*] ? (@.source_class == \"skill_instruction\")'))::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = $2
                 AND decision_position = $3::text::numeric",
-            &[&run_id, &role, &position.to_string()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id, &role, &position.to_string()],
+    )
+    .await
 }
 
 pub(crate) const TOOLS: [&str; 11] = [

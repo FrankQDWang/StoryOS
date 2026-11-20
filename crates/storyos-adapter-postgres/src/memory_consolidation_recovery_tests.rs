@@ -20,6 +20,7 @@ use crate::shared_tests::agent_run_write_memory::first_index;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::delete_memory_entry::delete;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::project;
 use crate::shared_tests::memory_consolidation::{
     capture, create, delete as delete_operation, run_pass, scripted, settled, update, versions,
@@ -385,17 +386,15 @@ async fn a_pass_changes_only_the_entries_and_observations_of_its_project() {
 
 /// The state of each observation of the Project of `scope`, in the order of its captures.
 async fn observation_states(admin: &Client, scope: &ProjectScope) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(item.state ORDER BY capture.started_at, item.position)::text
+    json_of(
+        admin,
+        "SELECT jsonb_agg(item.state ORDER BY capture.started_at, item.position)::text
                FROM storyos.memory_observations AS item
                JOIN storyos.memory_captures AS capture USING (capture_id)
               WHERE item.project_id = $1::text::uuid",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&scope.project_id.as_ref()],
+    )
+    .await
 }
 
 /// After a pass creates two entries and a second pass deletes one, the Memory Index of the next

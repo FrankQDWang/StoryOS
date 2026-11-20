@@ -27,6 +27,7 @@ use crate::shared_tests::command_sequence_agent_run::{
 };
 use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::{issued, seed_project, stores};
+use crate::shared_tests::json_row::json_of;
 
 /// Inserts the background Run `run_id` with `status` in the Project of the Run of the author
 /// `like`, with the Agent, the grant, and the Model Registration of that Run.
@@ -442,16 +443,14 @@ async fn prior_response(admin: &Client, run_id: &str, previous: &str) -> [Option
 
 /// The earlier author messages that the later request of the compaction of the Run records.
 async fn earlier_messages(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT (payload #> '{operation_requirement,earlier_author_messages}')::text
+    json_of(
+        admin,
+        "SELECT (payload #> '{operation_requirement,earlier_author_messages}')::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'later_request'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 #[tokio::test]

@@ -23,6 +23,7 @@ use crate::shared_tests::command_sequence_proposal_decision::{
 };
 use crate::shared_tests::command_sequence_structure::{DELETE_CHAPTER, delete_chapter, named_call};
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{admit_referenced_run, stores};
 
 const EDITED: &str = "Still, ";
@@ -58,9 +59,9 @@ fn moved(reference: &SelectionReference, revision_id: &str, text: &str) -> Value
 /// `revision_id` in its Context Assembly record, and the selected text of each reference that
 /// its request sent.
 async fn sent_revision(admin: &Client, run_id: &str, position: &str, revision_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(
                       (SELECT jsonb_path_query_array(manifest.payload,
                                 '$.selected[*] ? (@.source_version == $revision).content',
                                 jsonb_build_object('revision', $3::text))
@@ -73,11 +74,9 @@ async fn sent_revision(admin: &Client, run_id: &str, position: &str, revision_id
                          FROM storyos.model_attempts AS attempt
                         WHERE attempt.run_id = $1::text::uuid AND attempt.attempt_role = 'decision'
                           AND attempt.decision_position = $2::text::numeric))::text",
-            &[&run_id, &position, &revision_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&run_id, &position, &revision_id],
+    )
+    .await
 }
 
 #[tokio::test]

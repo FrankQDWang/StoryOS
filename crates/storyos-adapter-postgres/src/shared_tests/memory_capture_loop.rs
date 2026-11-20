@@ -1,5 +1,6 @@
 //! The shared test support from `memory_capture_loop_tests.rs`.
 
+use crate::shared_tests::json_row::json_of;
 use serde_json::{Value, json};
 use storyos_application::ProjectScope;
 use tokio_postgres::Client;
@@ -33,9 +34,9 @@ pub(crate) fn record(observations: Value) -> (&'static str, Value) {
 /// The Run status, the capture state, outcome, and failure reason, and each observation of the
 /// Run `run_id`.
 pub(crate) async fn settlement(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(run.status, capture.state, capture.outcome,
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(run.status, capture.state, capture.outcome,
                       capture.failure_reason,
                       COALESCE((SELECT jsonb_agg(jsonb_build_array(item.position, item.entry_type,
                                   item.title, item.text, item.state) ORDER BY item.position)
@@ -44,11 +45,9 @@ pub(crate) async fn settlement(admin: &Client, run_id: &str) -> Value {
                FROM storyos.agent_runs AS run
                JOIN storyos.memory_captures AS capture USING (owner_user_id, project_id, run_id)
               WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The count of the Memory entry versions, the Proposals, the Research Artifacts, and the
@@ -75,16 +74,14 @@ pub(crate) async fn other_records(admin: &Client, scope: &ProjectScope) -> Value
 
 /// For each decision request of the Run: its purpose, its `tool_choice`, and its Tools.
 pub(crate) async fn requests(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(wire ->> 'purpose', wire ->> 'tool_choice',
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(wire ->> 'purpose', wire ->> 'tool_choice',
                       wire -> 'tools') ORDER BY decision_position)::text
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }

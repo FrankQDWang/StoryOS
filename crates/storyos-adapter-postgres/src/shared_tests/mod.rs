@@ -46,6 +46,7 @@ pub(crate) mod delete_memory_entry;
 pub(crate) mod delete_structure;
 pub(crate) mod export_work;
 pub(crate) mod grant_scope;
+pub(crate) mod json_row;
 pub(crate) mod memory_capture;
 pub(crate) mod memory_capture_loop;
 pub(crate) mod memory_capture_tools;
