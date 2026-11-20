@@ -3,6 +3,8 @@
 //! by their identities. Core checks each citation against the sources that the Run captured. The
 //! Host does no claim splitting and no support classification.
 
+use serde::Deserialize;
+
 use crate::SourceGapReason;
 
 /// What a citable identity names.
@@ -34,8 +36,10 @@ pub struct CitableSources {
     pub sources: Vec<CitableSource>,
 }
 
-/// One claim as the model gave it: its text and the identities that it cites.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// One claim as the model gave it: its text and the identities that it cites. It is also the
+/// strict form of one claim in the arguments of `submit_research`.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct ClaimCandidate {
     pub text: String,
     pub citations: Vec<String>,
