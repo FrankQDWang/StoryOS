@@ -31,7 +31,7 @@ export type BlockProposalProjection = {
   focused?: boolean;
 };
 
-export const PROPOSAL_ATTRIBUTES = [
+const PROPOSAL_ATTRIBUTES = [
   "proposalId", "operationId", "revisionId", "blockId", "sourceRunId",
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
   "rejectEligible", "retryRejection", "earlierBase", "withdrawEligible",

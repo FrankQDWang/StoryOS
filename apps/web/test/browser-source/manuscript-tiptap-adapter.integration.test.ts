@@ -3,7 +3,7 @@ import { afterEach, expect, it } from "vitest";
 
 import {
   manuscriptJson,
-  paragraphUtf16,
+  readManuscriptParagraphs,
 } from "../../src/manuscript-doc.ts";
 import {
   storyosManuscriptExtensions,
@@ -32,12 +32,12 @@ it("refuses an unsupported Block document and keeps the previous text", () => {
   const before = editor.state.doc;
   editor.view.dispatch(editor.state.tr.setNodeMarkup(0, undefined, { id: "other-block" }));
   expect(editor.state.doc.eq(before)).toBe(true);
-  expect(paragraphUtf16(editor.state.doc)).toBe("Hello");
+  expect(readManuscriptParagraphs(editor.state.doc)?.map((block) => block.text)).toEqual(["Hello"]);
   expect(editor.state.doc.firstChild?.attrs.id).toBe(BLOCK_ID);
 
   editor.commands.splitBlock();
   expect(editor.state.doc.childCount).toBe(1);
-  expect(paragraphUtf16(editor.state.doc)).toBe("Hello");
+  expect(readManuscriptParagraphs(editor.state.doc)?.map((block) => block.text)).toEqual(["Hello"]);
 });
 
 function pressKey(editor: Editor, key: string, shiftKey = false): boolean {

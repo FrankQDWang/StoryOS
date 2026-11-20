@@ -27,7 +27,7 @@ type WithdrawRecord = {
   response?: WithdrawProposalResponse;
 };
 
-export type WithdrawTarget = {
+type WithdrawTarget = {
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
@@ -189,7 +189,7 @@ export async function withdrawDisplayedBlockProposal(options: WithdrawTarget): P
     });
 }
 
-export async function retryPendingDisplayedWithdraw(options: Pick<WithdrawTarget, "baseUrl"
+async function retryPendingDisplayedWithdraw(options: Pick<WithdrawTarget, "baseUrl"
   | "fetchImpl" | "cryptoImpl" | "workspace" | "proposalId">): Promise<WithdrawProposalResponse> {
   if (globalThis.navigator?.locks === undefined) {
     throw new Error("Protected Withdrawal transport lock is unavailable");

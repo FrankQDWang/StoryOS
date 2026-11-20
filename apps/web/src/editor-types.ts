@@ -22,7 +22,7 @@ import type {
 /** ADR 0073 removed the Refused Edit Draft from the contract. A Journal record or group that an earlier client
  * stored can still hold one of these shapes. The Journal reads them only to resolve the removed path, and it never
  * sends them. */
-export type StoredDraftRetry = Record<string, unknown> & { kind: "draft_retry" };
+type StoredDraftRetry = Record<string, unknown> & { kind: "draft_retry" };
 
 export type StoredAuthorEditPrimitive =
   | AuthorEditPrimitive
@@ -38,7 +38,7 @@ export type StoredApplyAuthorEditRequest = Omit<ApplyAuthorEditRequest, "author_
   author_edit_units: StoredAuthorEditUnit[];
 };
 
-export type StoredApplyAuthorEditEffect =
+type StoredApplyAuthorEditEffect =
   | ApplyAuthorEditEffect
   | (Record<string, unknown> & { kind: "refused_to_draft" });
 
@@ -69,7 +69,7 @@ export interface JournalPartition {
   disposition: "current_writer_open" | "read_only_observer";
 }
 
-export interface ProposalJournalAnchor {
+interface ProposalJournalAnchor {
   manuscript_block_id: string;
   coordinate_profile: string;
   from: number;
@@ -108,7 +108,7 @@ export interface JournalIntentRecord extends Record<string, unknown> {
   created_at: string;
 }
 
-export interface JournalPatchReference {
+interface JournalPatchReference {
   patch_id: string;
   completed_intent_record_id: string;
   local_intent_sequence: number;
@@ -264,7 +264,7 @@ export interface EditorReadyState extends EditorWorkspace {
   readonly openedProjection: PendingEditProjection;
 }
 
-export interface EditorReadOnlyState {
+interface EditorReadOnlyState {
   kind: "editor-read-only-recovery";
   code: "editor_session_read_only" | "local_journal_unavailable";
   editor_session?: EditorSessionBinding;
@@ -398,7 +398,7 @@ export interface ProtocolBlockedState {
   details: StateDifference[];
 }
 
-export interface ProtectedReadyState {
+interface ProtectedReadyState {
   kind: "protected-ready";
   profile: Release1ProtocolProfile;
 }
@@ -413,7 +413,7 @@ export interface ProjectBlockedState {
   details?: StateDifference[];
 }
 
-export interface EmptyProjectReadyState {
+interface EmptyProjectReadyState {
   kind: "empty-project-ready";
   profile: Release1ProtocolProfile;
   project: GetProjectResponse;

@@ -3,30 +3,11 @@ import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../suppor
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { destroyApplicationFrame, nextFrameLoad } from "../support/exact-dist-frame.ts";
 import { manuscriptBody, MANUSCRIPT_EDITOR_SELECTOR }
   from "../support/manuscript-surface.ts";
 
 let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist create-chapter page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
 
 afterEach(async () => {
   if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);

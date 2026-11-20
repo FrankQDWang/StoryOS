@@ -1,5 +1,4 @@
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import type { ChapterTextReference } from "../../src/selection-reference.ts";
@@ -7,6 +6,7 @@ import {
   addDraftReferences, copiedReferences, REFERENCE_CLIPBOARD_TYPE, type DraftReference,
 } from "../../src/selection-reference-draft.ts";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
+import { openPanelHost } from "./assistant-panel-harness.ts";
 import { BLOCK, CHAPTER, OWNER, PROJECT, REVISION, jsonResponse } from "./scenario.ts";
 
 function entry(start: number, end: number): Omit<DraftReference, "key"> {
@@ -23,11 +23,8 @@ it("adds the references of a paste from the editor, and pastes text when the mes
     if (path.endsWith("/assistance")) return jsonResponse({ ...assistanceFixture, project_scope: scope });
     throw new Error(`Unexpected request ${path}`);
   };
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
-  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const panel = openPanelHost();
+  const host = panel.host;
   /** Pastes the data of an editor copy and returns true when the composer took it as references. */
   const paste = async (values: Omit<DraftReference, "key">[]) => {
     const data = new DataTransfer();
@@ -40,7 +37,7 @@ it("adds the references of a paste from the editor, and pastes text when the mes
   const labels = () => host.querySelectorAll("[data-selection-reference-label]").length;
   try {
     await act(async () => {
-      root.render(createElement(WritingAssistantPanel, {
+      panel.root.render(createElement(WritingAssistantPanel, {
         collapsed: false,
         context: { scope, chapterId: CHAPTER, canSubmit: true, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto },
         scheduleRefresh: () => () => {},
@@ -54,9 +51,6 @@ it("adds the references of a paste from the editor, and pastes text when the mes
     // Seven references and two more are above the limit of eight, so the paste gives its text.
     expect({ taken: await paste([entry(20, 21), entry(22, 23)]), labels: labels() }).toEqual({ taken: false, labels: 7 });
   } finally {
-    await act(async () => root.unmount());
-    host.remove();
-    sessionStorage.clear();
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
+    await panel.close();
   }
 });

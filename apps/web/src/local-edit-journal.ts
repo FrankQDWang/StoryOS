@@ -33,7 +33,7 @@ import { isRemovedDraftGroup, isRemovedDraftRecord } from "./removed-draft-path.
 
 export const JOURNAL_DATABASE_VERSION = 5;
 /** The schema version that a read of this workspace accepts. Writes always need the current version. */
-export const journalReadVersion = (workspace: EditorWorkspace): number =>
+const journalReadVersion = (workspace: EditorWorkspace): number =>
   workspace.readOnlyJournalVersion ?? JOURNAL_DATABASE_VERSION;
 export const JOURNAL_OBJECT_STORES = Object.freeze([
   "metadata",
@@ -47,7 +47,7 @@ export const JOURNAL_OBJECT_STORES = Object.freeze([
   "outcome_query_attempts",
   "outcome_query_observations",
 ]);
-export const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v3";
+const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v3";
 export const AUTHOR_EDIT_BATCH_POLICY_REVISION =
   "storyos.author-edit-batch.release-1.preview.v1";
 export const AUTHOR_EDIT_BATCH_IDLE_MS = 250;
