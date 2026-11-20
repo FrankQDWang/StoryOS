@@ -1,6 +1,7 @@
 //! The shared test support from `memory_consolidation_tests.rs`.
 
 use crate::PostgresProjectReader;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{run_capture, start};
 use crate::shared_tests::memory_capture_loop::{record, script};
 use serde_json::{Value, json};
@@ -86,9 +87,9 @@ pub(crate) async fn run_pass(
 /// The Run status, the outcome, the failure reason, and the result of each operation of the pass
 /// of the Run `run_id`, and the state of each observation of its Project.
 pub(crate) async fn settled(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(run.status, pass.outcome, pass.failure_reason,
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(run.status, pass.outcome, pass.failure_reason,
                       COALESCE((SELECT jsonb_agg(jsonb_build_array(item ->> 'result',
                                   item ->> 'refusal', item -> 'entry'))
                                   FROM jsonb_array_elements(pass.operations) AS item), '[]'),
@@ -99,30 +100,26 @@ pub(crate) async fn settled(admin: &Client, run_id: &str) -> Value {
                FROM storyos.agent_runs AS run
                JOIN storyos.memory_consolidation_passes AS pass USING (run_id)
               WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// Each version that a pass wrote in the Project of `scope`, in the order of the Memory revisions:
 /// the number, the version, the revision, the state, the type, the origin, the title, the text,
 /// the cause kind, and the source kinds.
 pub(crate) async fn versions(admin: &Client, scope: &ProjectScope) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT COALESCE(jsonb_agg(jsonb_build_array(entry_number, version, memory_revision,
+    json_of(
+        admin,
+        "SELECT COALESCE(jsonb_agg(jsonb_build_array(entry_number, version, memory_revision,
                       state, entry_type, origin, title, text, cause ->> 'kind',
                       jsonb_path_query_array(source_references, '$[*].kind'))
                       ORDER BY memory_revision), '[]')::text
                FROM storyos.memory_entry_versions
               WHERE project_id = $1::text::uuid AND cause ->> 'kind' = 'consolidation'",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&scope.project_id.as_ref()],
+    )
+    .await
 }
 
 /// The count of the rows of each table that a pass must not write (threat model, AP-22): the

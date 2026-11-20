@@ -21,7 +21,7 @@ use crate::shared_tests::command_sequence_structure::{
     DELETE_CHAPTER, UPDATE_CHAPTER, update_chapter,
 };
 use crate::shared_tests::command_sequence_support::issued;
-use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::command_sequence_support::stores;
 
 fn settled(text: &str) -> Value {
     json!(["read_chapter", "settled", null, text, true])

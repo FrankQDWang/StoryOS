@@ -11,6 +11,7 @@ use storyos_core::{
     DeleteMemoryEntryConflict, DeleteMemoryEntryNoEffect, DeleteMemoryEntryRefusal,
     TransitionOutcome,
 };
+use tokio_postgres::Client;
 
 pub(crate) type Outcome = Result<
     TransitionOutcome<
@@ -40,4 +41,17 @@ pub(crate) async fn delete(
         Err(RefusableCommandError::RefusedBeforeAdmission(refusal)) => Err(refusal),
         Err(RefusableCommandError::Command(error)) => panic!("the delete must settle: {error:?}"),
     }
+}
+
+/// The identity of the entry 1 of the Project of `scope`.
+pub(crate) async fn entry_id(admin: &Client, scope: &ProjectScope) -> String {
+    admin
+        .query_one(
+            "SELECT DISTINCT memory_entry_id::text FROM storyos.memory_entry_versions
+              WHERE project_id = $1::text::uuid AND entry_number = 1",
+            &[&scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0)
 }

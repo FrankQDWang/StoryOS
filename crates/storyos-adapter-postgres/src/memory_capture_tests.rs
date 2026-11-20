@@ -15,18 +15,20 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::command_sequence_background_run::claim_in_project;
 use crate::shared_tests::command_sequence_support::seed_project;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{project, start};
 use crate::shared_tests::memory_entries::{archived_rows, as_runtime};
-use crate::shared_tests::model_gateway::{RuntimeClock, stores};
+use crate::shared_tests::model_gateway::RuntimeClock;
 use crate::shared_tests::project_research_binding::park_queued_runs;
 
 /// The Run of the capture as its kind and status, the capture as its source and state, the
 /// Context Assembly of its first RunStep as its Purpose, its cause, and each selected item, and
 /// the count of its Model Attempts.
 async fn started_rows(admin: &Client, started: &StartedMemoryCapture) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(run.run_kind, run.status, run.chapter_id,
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(run.run_kind, run.status, run.chapter_id,
                       run.conversation_id, capture.source_kind, capture.state, capture.outcome,
                       capture.capture_id::text = $2,
                       (SELECT jsonb_build_array(
@@ -43,11 +45,9 @@ async fn started_rows(admin: &Client, started: &StartedMemoryCapture) -> Value {
                FROM storyos.agent_runs AS run
                JOIN storyos.memory_captures AS capture USING (owner_user_id, project_id, run_id)
               WHERE run.run_id = $1::text::uuid",
-            &[&started.run_id, &started.capture_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&started.run_id, &started.capture_id],
+    )
+    .await
 }
 
 /// A start writes the queued Run, the capture, and the first RunStep. The Worker claims the capture

@@ -9,6 +9,8 @@ use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_load_skill::calls;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{project, run_capture, start};
 use crate::shared_tests::memory_capture_loop::{record, script};
 use crate::shared_tests::memory_consolidation::{
@@ -20,13 +22,13 @@ use crate::shared_tests::memory_consolidation_merge::{
 };
 use crate::shared_tests::memory_consolidation_schedule::claim_pass;
 use crate::shared_tests::memory_entries::archived_rows;
-use crate::shared_tests::model_gateway::stores;
 
 /// Each observation row of the Project as one line: the position, the kind, the title, the entry
 /// number, the reason, and the state, in the order of the captures.
 async fn observation_lines(admin: &Client, scope: &ProjectScope) -> Value {
-    let row = admin
-        .query_one(
+    version_lines(
+        &json_of(
+            admin,
             "SELECT jsonb_agg(jsonb_build_array(item.position, item.kind, item.title,
                       item.entry_number, item.reason, item.state)
                       ORDER BY capture.started_at, item.position)::text
@@ -35,9 +37,8 @@ async fn observation_lines(admin: &Client, scope: &ProjectScope) -> Value {
               WHERE item.project_id = $1::text::uuid",
             &[&scope.project_id.as_ref()],
         )
-        .await
-        .unwrap();
-    version_lines(&serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
+        .await,
+    )
 }
 
 /// A conflict item is stored as an observation that waits, with its entry number and its reason,
@@ -257,20 +258,18 @@ async fn a_pass_with_only_a_conflict_sends_the_entries_and_flags_the_entry() {
     capture(&store, &admin, &scope, &source, json!([conflict(1, "甲")])).await;
     let started = run_pass(&store, &admin, &scope).await;
     // The source classes of the decision Context Assembly of the pass.
-    let classes: String = admin
-        .query_one(
-            "SELECT jsonb_path_query_array(payload, '$.selected[*].source_class')::text
+    let classes = json_of(
+        &admin,
+        "SELECT jsonb_path_query_array(payload, '$.selected[*].source_class')::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
-            &[&started.run_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
+        &[&started.run_id],
+    )
+    .await;
 
     assert_eq!(
         (
-            serde_json::from_str::<Value>(&classes).unwrap(),
+            classes,
             settled(&admin, &started.run_id).await,
             flag_lines(&admin, &scope).await[1].clone()
         ),
@@ -328,8 +327,9 @@ async fn no_pass_starts_for_conflicts_when_the_project_has_no_current_entry() {
 /// The last version of each entry of the Project as one line: the number, the state, the title,
 /// the length of the text, and the reason of the flag.
 async fn last_versions(admin: &Client, scope: &ProjectScope) -> Value {
-    let row = admin
-        .query_one(
+    version_lines(
+        &json_of(
+            admin,
             "SELECT jsonb_agg(jsonb_build_array(entry_number, state, title, char_length(text),
                       flag_reason) ORDER BY entry_number)::text
                FROM (SELECT DISTINCT ON (entry_number) * FROM storyos.memory_entry_versions
@@ -337,9 +337,8 @@ async fn last_versions(admin: &Client, scope: &ProjectScope) -> Value {
                       ORDER BY entry_number, memory_revision DESC) AS latest",
             &[&scope.project_id.as_ref()],
         )
-        .await
-        .unwrap();
-    version_lines(&serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
+        .await,
+    )
 }
 
 /// One pass with each duty: it deletes an out-of-date entry, merges two duplicated entries,

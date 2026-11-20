@@ -8,7 +8,9 @@ use storyos_core::AgentRunStatus;
 use crate::shared_tests::agent_run_retrieval::{adapter, destination, real_run};
 use crate::shared_tests::agent_run_tool_exposure::{finish_stream, sse};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 use crate::shared_tests::research_source::calls_stream;
 
 /// A native rejection of the Create, before any stream.
@@ -128,9 +130,9 @@ async fn answered_run(prefix: &str, replies: impl FnOnce(&str) -> Vec<String>) -
         .await
         .unwrap();
     served.await.unwrap();
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    json_of(
+        &admin,
+        "SELECT jsonb_build_object(
                       'status', run.status, 'settlement', run.settlement,
                       'decision_id', attempt.decision_id,
                       'dispatch_state', attempt.dispatch_state,
@@ -147,11 +149,9 @@ async fn answered_run(prefix: &str, replies: impl FnOnce(&str) -> Vec<String>) -
                  ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
                 AND attempt.decision_position = run.active_decision_position
               WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The facts of a Run whose closing RunStep completed with no Decision and no Proposal, and

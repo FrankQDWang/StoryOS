@@ -6,13 +6,14 @@ use serde_json::{Value, json};
 use storyos_application::MemoryCaptureSource;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::project;
 use crate::shared_tests::memory_capture_loop::requests;
 use crate::shared_tests::memory_consolidation::{
     capture, create, delete, guarded, run_pass, scripted, settled, update, versions,
 };
 use crate::shared_tests::memory_entries::{archived_rows, write_versions};
-use crate::shared_tests::model_gateway::stores;
 
 /// A started pass pins the Memory revision and has one RunStep whose Context Assembly holds the
 /// current entries and the waiting observations. Its one request requires the one output Tool, and
@@ -36,9 +37,9 @@ async fn a_pass_sends_one_request_and_an_empty_list_consumes_the_observations() 
     .await;
     let before = guarded(&admin, &scope).await;
     let started = run_pass(&store, &admin, &scope).await;
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(pass.memory_revision, jsonb_array_length(pass.observations),
+    let mut rows: Value = json_of(
+        &admin,
+        "SELECT jsonb_build_array(pass.memory_revision, jsonb_array_length(pass.observations),
                       run.run_kind,
                       (SELECT jsonb_agg(jsonb_build_array(item ->> 'source_class',
                                 item ->> 'projection_mode', item ->> 'content') ORDER BY number)
@@ -51,11 +52,9 @@ async fn a_pass_sends_one_request_and_an_empty_list_consumes_the_observations() 
                FROM storyos.memory_consolidation_passes AS pass
                JOIN storyos.agent_runs AS run USING (run_id)
               WHERE pass.pass_id = $1::text::uuid",
-            &[&started.pass_id],
-        )
-        .await
-        .unwrap();
-    let mut rows: Value = serde_json::from_str(row.get(/*idx*/ 0)).unwrap();
+        &[&started.pass_id],
+    )
+    .await;
     let MemoryCaptureSource::Conversation {
         conversation_id, ..
     } = source
@@ -311,18 +310,16 @@ async fn a_null_title_of_an_update_or_a_merge_keeps_the_title() {
     let second = json!([scripted("林舟", &[untitled, merged])]);
     capture(&store, &admin, &scope, &source, second).await;
     let changed = run_pass(&store, &admin, &scope).await;
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(entry_number, state, title, description, text)
+    let latest: Value = json_of(
+        &admin,
+        "SELECT jsonb_agg(jsonb_build_array(entry_number, state, title, description, text)
                       ORDER BY entry_number)::text
                FROM (SELECT DISTINCT ON (entry_number) entry_number, state, title, description, text
                        FROM storyos.memory_entry_versions WHERE project_id = $1::text::uuid
                       ORDER BY entry_number, version DESC) AS latest",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    let latest: Value = serde_json::from_str(row.get(/*idx*/ 0)).unwrap();
+        &[&scope.project_id.as_ref()],
+    )
+    .await;
 
     assert_eq!(
         (settled(&admin, &changed.run_id).await[3].clone(), latest),
@@ -446,10 +443,7 @@ async fn the_archive_holds_the_passes_and_the_conversation_memory_settings() {
     let stored = |sql: &'static str| {
         let admin = &admin;
         let project = scope.project_id.as_ref().to_owned();
-        async move {
-            let row = admin.query_one(sql, &[&project]).await.unwrap();
-            serde_json::from_str::<Value>(row.get(/*idx*/ 0)).unwrap()
-        }
+        async move { json_of(admin, sql, &[&project]).await }
     };
     let stored_passes = stored(
         "SELECT jsonb_agg(jsonb_build_array(pass_id, run_id, outcome) ORDER BY pass_id)::text

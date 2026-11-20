@@ -16,17 +16,18 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_finish_rule::conversation_of;
 use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, cancellation, queued, settle,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_agent_run_skill::{package, set};
-use crate::shared_tests::model_gateway::{admit_selected_run, stores};
+use crate::shared_tests::model_gateway::admit_selected_run;
 use crate::shared_tests::skill_instruction_context::{
-    catalog, conversation_of, of_conversation, pinned, recorded, requirements, selected,
-    selected_run, sent, texts,
+    catalog, of_conversation, pinned, recorded, requirements, selected, selected_run, sent, texts,
 };
 
 /// A Skill set of the deployment that has neither fixture Skill.

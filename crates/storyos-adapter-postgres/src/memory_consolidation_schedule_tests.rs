@@ -15,7 +15,9 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::export_work::admit_readable_export;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{project, run_capture};
 use crate::shared_tests::memory_capture_loop::{record, script};
 use crate::shared_tests::memory_consolidation::{capture, create, scripted, settled};
@@ -23,7 +25,6 @@ use crate::shared_tests::memory_consolidation_schedule::{claim_pass, pass_due};
 use crate::shared_tests::memory_entries::write_versions;
 use crate::shared_tests::memory_work_schedule::make_due;
 use crate::shared_tests::model_gateway::NoEmbeddings;
-use crate::shared_tests::model_gateway::stores;
 
 /// Claims the due consolidation row of the Project and requires a started pass. Returns its Run.
 async fn started_pass(
@@ -253,9 +254,9 @@ async fn a_failed_pass_makes_the_project_due_again() {
 /// The settled export work, the status of the Run `run_id`, and the outcome of the capture and of
 /// the pass of the Project after one step of the Worker.
 async fn step_state(admin: &Client, scope: &ProjectScope, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(
                       (SELECT count(*) FROM storyos.human_readable_manuscript_export_operations
                         WHERE project_id = $1::text::uuid AND settled_result IS NOT NULL),
                       (SELECT status FROM storyos.agent_runs WHERE run_id = $2::text::uuid),
@@ -265,11 +266,9 @@ async fn step_state(admin: &Client, scope: &ProjectScope, run_id: &str) -> Value
                       (SELECT jsonb_agg(COALESCE(outcome, 'running'))
                          FROM storyos.memory_consolidation_passes
                         WHERE project_id = $1::text::uuid))::text",
-            &[&scope.project_id.as_ref(), &run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&scope.project_id.as_ref(), &run_id],
+    )
+    .await
 }
 
 /// From two completed Runs of a Conversation on the fake destination to the entries through

@@ -22,9 +22,11 @@ use crate::shared_tests::command_sequence_structure::{
     CREATE_CHAPTER, DELETE_CHAPTER, create_chapter, delete_chapter,
 };
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture_loop::{record, script};
 use crate::shared_tests::model_gateway::NoEmbeddings;
-use crate::shared_tests::model_gateway::{assisted_chapter, stores};
+use crate::shared_tests::model_gateway::assisted_chapter;
 use crate::shared_tests::project_research_binding::park_queued_runs;
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
@@ -165,8 +167,7 @@ async fn a_project_with_no_completed_run_holds_the_row() {
                                 (SELECT count(*) FROM storyos.project_destination_grants
                                   WHERE project_id = $1::text::uuid))::text";
             let project_id = f.scope.project_id.as_ref();
-            let row = f.admin.query_one(counts, &[&project_id]).await.unwrap();
-            serde_json::from_str::<Value>(row.get(/*idx*/ 0)).unwrap()
+            json_of(&f.admin, counts, &[&project_id]).await
         };
         let before = counts().await;
         f.edit((1, suffix + 1), &chapter_id, &["雨。"]).await;

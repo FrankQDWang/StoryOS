@@ -17,8 +17,10 @@ use crate::shared_tests::agent_run_finish_rule::{
     calls, complete, conversation_of, steps, tool_loop_run,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
+    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
 };
 
 #[tokio::test]
@@ -182,19 +184,17 @@ async fn a_rebuilt_run_records_its_reference_recovery_once_across_run_steps() {
 
 /// The function output of the call `call_id` that the request of RunStep 1 sent.
 async fn second_step_output(admin: &Client, run_id: &str, call_id: &str) -> Value {
-    admin
-        .query_one(
-            "SELECT (SELECT output -> 'output' FROM jsonb_array_elements(
+    json_of(
+        admin,
+        "SELECT (SELECT output -> 'output' FROM jsonb_array_elements(
                        (payload #>> '{wire,serialized_payload}')::jsonb -> 'tool_outputs')
                        AS output WHERE output ->> 'call_id' = $2)::text
                FROM storyos.model_attempts
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
                 AND decision_position = 1",
-            &[&run_id, &call_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(0)).unwrap())
-        .unwrap()
+        &[&run_id, &call_id],
+    )
+    .await
 }
 
 #[tokio::test]

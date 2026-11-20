@@ -1,26 +1,9 @@
 use super::*;
+use crate::shared_tests::harbour_passage;
+use crate::shared_tests::tool_result_candidate;
 use crate::{
-    CitedSource, CurrentPassageAssembly, InstructionBindingInput, ToolResultCandidate,
-    ToolResultForm, ToolResultOutput, assemble_current_passage_context,
-    assemble_tool_result_continuation,
+    CitedSource, ToolResultCandidate, ToolResultOutput, assemble_tool_result_continuation,
 };
-
-fn passage() -> crate::CurrentPassageAssemblyRecord {
-    assemble_current_passage_context(&CurrentPassageAssembly {
-        operation_requirement_id: "req-2".to_owned(),
-        input_snapshot_id: "snap-2".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "user-1".to_owned(),
-        project_id: "proj-1".to_owned(),
-        author_message: "When was the harbour built?".to_owned(),
-        chapter_id: "ch-1".to_owned(),
-        chapter_revision_id: Some("ch-1-rev".to_owned()),
-        proposal_target_block_ids: Some(vec!["ch-1-block".to_owned()]),
-        chapter_body: "The harbour was old.".to_owned(),
-        instruction: InstructionBindingInput::Absent,
-        destination_identity: "dest-1".to_owned(),
-    })
-}
 
 fn sources() -> Vec<CitableSource> {
     vec![CitableSource {
@@ -41,22 +24,9 @@ fn candidate<'a>(
     output: ToolResultOutput,
 ) -> ToolResultCandidate<'a> {
     ToolResultCandidate {
-        tool_call_id,
-        call_id: tool_call_id,
-        owner_user_id: "user-1",
-        project_id: "proj-1",
-        run_id: "run-1",
-        model_attempt_id: "attempt-1",
-        decision_id: "decision-1",
-        state: ToolCallState::Settled,
-        result_text: Some(result_text),
         sources,
         output,
-        function_name: "web_search",
-        arguments: "{}",
-        form: ToolResultForm::Exact,
-        skill: None,
-        resource_path: None,
+        ..tool_result_candidate(tool_call_id, ToolCallState::Settled, Some(result_text))
     }
 }
 
@@ -72,7 +42,7 @@ fn search<'a>(text: &'a str, sources: &'a [CitableSource]) -> StoredCall<'a> {
 
 /// The content of each selected item of the continuation of `candidates`.
 fn items(candidates: &[ToolResultCandidate<'_>]) -> Vec<String> {
-    let mut record = passage();
+    let mut record = harbour_passage();
     assemble_tool_result_continuation(&mut record, candidates);
     record
         .selected
@@ -85,7 +55,7 @@ fn items(candidates: &[ToolResultCandidate<'_>]) -> Vec<String> {
 #[test]
 fn a_read_gives_the_bounded_form_of_the_first_read_and_the_next_request_sends_it_as_it_is() {
     let sources = sources();
-    let limit = passage().operation_requirement.item_token_limit;
+    let limit = harbour_passage().operation_requirement.item_token_limit;
     // One short result, and one result above the item limit that the bound cuts.
     for text in [
         "Title: Harbour\nURL: https://example.org/harbour\nBuilt in 1890.".to_owned(),

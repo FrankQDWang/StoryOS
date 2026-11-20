@@ -11,8 +11,8 @@ use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_structure::titled_chapter;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::delete_structure::settle_delete_chapter;
-use crate::shared_tests::model_gateway::stores;
 use crate::shared_tests::passage_vectors::{
     FAKE_ONLY, chapter, digests, index, mark, rows, texts, vector_table_visible,
 };

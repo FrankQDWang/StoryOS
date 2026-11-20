@@ -15,6 +15,7 @@ use crate::shared_tests::command_sequence_structure::{
 };
 use crate::shared_tests::command_sequence_support::{CommandCall, applied, seed_project, stores};
 use crate::shared_tests::delete_structure::settle_delete_chapter;
+use crate::shared_tests::json_row::json_of;
 
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 
@@ -144,18 +145,13 @@ async fn install_chapter_tree_sql_probes(admin: &tokio_postgres::Client) {
 }
 
 async fn chapter_tree_sql_counts(admin: &tokio_postgres::Client) -> (i64, i64, i64, i64) {
-    let counts: serde_json::Value = serde_json::from_str(
-        &admin
-            .query_one(
-                "SELECT jsonb_object_agg(name, statement_count)::text
+    let counts: serde_json::Value = json_of(
+        admin,
+        "SELECT jsonb_object_agg(name, statement_count)::text
                    FROM public.storyos_issue_650_sql_calls",
-                &[],
-            )
-            .await
-            .unwrap()
-            .get::<_, String>(0),
+        &[],
     )
-    .unwrap();
+    .await;
     (
         counts["manuscript_objects"].as_i64().unwrap(),
         counts["projects"].as_i64().unwrap(),
@@ -337,21 +333,6 @@ async fn applied_chapter_reorder_uses_one_rank_write_for_many_siblings() {
     .await;
 }
 
-async fn json_query(
-    admin: &tokio_postgres::Client,
-    sql: &str,
-    params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
-) -> serde_json::Value {
-    serde_json::from_str(
-        &admin
-            .query_one(sql, params)
-            .await
-            .unwrap()
-            .get::<_, String>(0),
-    )
-    .unwrap()
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn applied_chapter_reorder_keeps_other_volume_scope_and_removed_sibling_storage_keys() {
@@ -480,7 +461,7 @@ async fn applied_chapter_reorder_keeps_other_volume_scope_and_removed_sibling_st
         GetManuscriptTree::Missing
     );
     assert_eq!(
-        json_query(
+        json_of(
             &admin,
             "SELECT jsonb_build_object(
                'live_a', (

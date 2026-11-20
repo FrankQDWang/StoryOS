@@ -1,10 +1,11 @@
 use super::{BoundInstruction, assemble_instruction_binding, project_instruction_binding};
 use crate::assemble_context::{
     CONTEXT_ITEM_TOKEN_LIMIT, ConsideredSource, ContextBlockReason, ContextSourceClass,
-    ContextSufficiency, CurrentPassageAssembly, CurrentPassageAssemblyRecord,
-    InstructionBindingInput, ProjectionMode, RejectedSource, RejectionReason, SelectedProjection,
-    assemble_current_passage_context, decode_assembly_record, encode_assembly_record,
+    ContextSufficiency, CurrentPassageAssemblyRecord, InstructionBindingInput, ProjectionMode,
+    RejectedSource, RejectionReason, SelectedProjection, assemble_current_passage_context,
+    decode_assembly_record, encode_assembly_record,
 };
+use crate::shared_tests::targeted_passage_assembly;
 
 fn revision(text: &str) -> BoundInstruction {
     BoundInstruction {
@@ -14,20 +15,10 @@ fn revision(text: &str) -> BoundInstruction {
 }
 
 fn assembled() -> CurrentPassageAssemblyRecord {
-    assemble_current_passage_context(&CurrentPassageAssembly {
-        operation_requirement_id: "req-1".to_owned(),
-        input_snapshot_id: "snap-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "user-1".to_owned(),
-        project_id: "proj-1".to_owned(),
-        author_message: "Help with this passage.".to_owned(),
-        chapter_id: "ch-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: Some(vec!["block-1".to_owned()]),
-        chapter_body: "Once upon a time.".to_owned(),
-        instruction: InstructionBindingInput::Absent,
-        destination_identity: "dest-1".to_owned(),
-    })
+    assemble_current_passage_context(&targeted_passage_assembly(
+        "Help with this passage.",
+        "Once upon a time.",
+    ))
 }
 
 /// The source class of each selected item of `record`, in item order.

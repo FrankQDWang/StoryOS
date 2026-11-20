@@ -22,8 +22,10 @@ use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_load_skill::{TOOLS, calls, loaded_run, skill_md};
 use crate::shared_tests::agent_run_steering::queued;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
-use crate::shared_tests::model_gateway::{admit_selected_run, stores};
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::admit_selected_run;
 
 const EXPIRES: &str = "SCRIPT:step-reference-expires";
 
@@ -74,9 +76,9 @@ async fn selected_run(
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, the
 /// Tools that it declared, and the call identifier and output of each Tool output that it sent.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position, wire -> 'tools',
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position, wire -> 'tools',
                       COALESCE((SELECT jsonb_agg(jsonb_build_array(output ->> 'call_id',
                                                                    output ->> 'output'))
                                   FROM jsonb_array_elements(wire -> 'tool_outputs') AS output),
@@ -85,30 +87,26 @@ async fn sent(admin: &Client, run_id: &str) -> Value {
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The read sources of the Operation Requirement and each selected `skill_resource` item of the
 /// decision Context Assembly at `position`.
 async fn read_record(admin: &Client, run_id: &str, position: i32) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(jsonb_path_query_array(payload,
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(jsonb_path_query_array(payload,
                         '$.operation_requirement.tool_results[*] ? (exists (@.resource_path))'),
                       jsonb_path_query_array(payload,
                         '$.selected[*] ? (@.source_class == \"skill_resource\")'))::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'
                 AND decision_position = $2::text::numeric",
-            &[&run_id, &position.to_string()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id, &position.to_string()],
+    )
+    .await
 }
 
 fn settled(name: &str, text: &str) -> Value {
@@ -503,18 +501,13 @@ async fn a_compaction_keeps_a_long_read_output_exact_and_names_no_read_stub() {
             ])
         })
         .collect();
-    let stubs: Value = serde_json::from_str(
-        admin
-            .query_one(
-                "SELECT jsonb_agg(jsonb_build_array(decision_position, stub_tool_call_ids))::text
+    let stubs: Value = json_of(
+        &admin,
+        "SELECT jsonb_agg(jsonb_build_array(decision_position, stub_tool_call_ids))::text
                    FROM storyos.active_context_compactions WHERE run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get::<_, &str>(/*idx*/ 0),
+        &[&run_id],
     )
-    .unwrap();
+    .await;
     // The summary request sends the read output that waits for it. The later request and each
     // later full input send the read output in its exact form, and no call is a stub.
     assert_eq!(
@@ -534,20 +527,15 @@ async fn a_compaction_keeps_a_long_read_output_exact_and_names_no_read_stub() {
     );
     // The current input of the later full input has no read item, so the read output is not a
     // part of the current input digest (ADR 0085).
-    let context: Value = serde_json::from_str(
-        &admin
-            .query_one(
-                "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
+    let context: Value = json_of(
+        &admin,
+        "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
                    FROM storyos.model_attempts
                   WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
                     AND decision_position = 3",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get::<_, String>(/*idx*/ 0),
+        &[&run_id],
     )
-    .unwrap();
+    .await;
     let classes: Vec<&str> = context
         .as_array()
         .unwrap()

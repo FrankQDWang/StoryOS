@@ -13,8 +13,9 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::RuntimeClock;
-use crate::shared_tests::model_gateway::{admit_run, claim_run, queued_run, stores};
+use crate::shared_tests::model_gateway::{admit_run, claim_run, queued_run};
 use crate::shared_tests::model_registration::agent_plan;
 
 /// The non-secret binding facts that the Agent Plan binding of a Project records.

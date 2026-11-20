@@ -24,8 +24,10 @@ use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_referenced_run, admit_run_in, claim_run, queued_run_offering, stores,
+    RuntimeClock, admit_referenced_run, admit_run_in, claim_run, queued_run_offering,
 };
 
 /// The status of the Run, and each steering input as its position, its text, and whether a
@@ -380,17 +382,15 @@ async fn a_cancel_fences_the_research_call_of_a_later_run_step_and_no_later_run_
     let _fenced = tokio::time::timeout(std::time::Duration::from_secs(/*secs*/ 120), gateway)
         .await
         .expect("the Run settles");
-    let calls: Value = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(decision_position, function_name, state, refusal,
+    let calls: Value = json_of(
+        &admin,
+        "SELECT jsonb_agg(jsonb_build_array(decision_position, function_name, state, refusal,
                                                 attempt #>> '{fence,cause}')
                               ORDER BY decision_position, call_position)::text
                FROM storyos.tool_calls WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-        .unwrap();
+        &[&run_id],
+    )
+    .await;
 
     assert_eq!(
         (run_steps(&admin, &run_id).await, calls),
@@ -494,9 +494,9 @@ async fn a_steering_input_that_only_the_last_run_step_can_read_is_conflicted() {
 /// The status and the active position of the Run, the positions of its Operation Requirements,
 /// and the author instruction of the requirement at the active position.
 async fn run_position(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(run.status, run.active_decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(run.status, run.active_decision_position,
                       (SELECT jsonb_agg(requirement.decision_position
                                         ORDER BY requirement.decision_position)
                          FROM storyos.operation_requirements AS requirement
@@ -508,14 +508,12 @@ async fn run_position(admin: &Client, run_id: &str) -> Value {
                           AND requirement.requirement_role = 'primary'
                           AND requirement.decision_position = run.active_decision_position))::text
                FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-            &[
-                &run_id,
-                &r#"$.selected[*] ? (@.source_class == "author_instruction").content"#,
-            ],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[
+            &run_id,
+            &r#"$.selected[*] ? (@.source_class == "author_instruction").content"#,
+        ],
+    )
+    .await
 }
 
 /// A pause opens no position. The steering input that resumes the Run has position 1, so the

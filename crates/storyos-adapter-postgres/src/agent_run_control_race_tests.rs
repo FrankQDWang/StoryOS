@@ -22,8 +22,9 @@ use crate::shared_tests::agent_run_steering::{
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::command_sequence_support::{CommandCall, issued};
-use crate::shared_tests::model_gateway::{RuntimeClock, stores};
+use crate::shared_tests::model_gateway::RuntimeClock;
 
 /// The control command of the author.
 enum Control {

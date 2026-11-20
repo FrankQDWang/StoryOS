@@ -39,14 +39,13 @@ pub(crate) async fn write_versions(admin: &Client, scope: &ProjectScope, version
     }
 }
 
-/// The rows of each file `canonical/<name>.json` of `names`, in order, of the Project Export
-/// Archive of the Project of `scope`, with the export identities of `lead`.
-pub(crate) async fn archived_rows<const N: usize>(
+/// The path and the bytes of each file of the Project Export Archive of the Project of `scope`,
+/// with the export identities of `lead`.
+pub(crate) async fn archived_files(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     lead: &str,
-    names: [&str; N],
-) -> [Vec<Value>; N] {
+) -> Vec<(String, Vec<u8>)> {
     let (export, input) = export_command(scope, lead);
     issue_project_command_challenge(
         store,
@@ -69,12 +68,25 @@ pub(crate) async fn archived_rows<const N: usize>(
     else {
         panic!("the Project Export must return verified ZIP bytes");
     };
-    let files = zip_store_files(&zip);
-    names.map(|name| {
-        let name = format!("canonical/{name}.json");
-        let rows = &files.iter().find(|(file, _)| *file == name).unwrap().1;
-        serde_json::from_slice(rows).unwrap()
-    })
+    zip_store_files(&zip)
+}
+
+/// The bytes of the file `canonical/<name>.json` of `files`.
+pub(crate) fn canonical<'a>(files: &'a [(String, Vec<u8>)], name: &str) -> &'a [u8] {
+    let path = format!("canonical/{name}.json");
+    &files.iter().find(|(file, _)| *file == path).unwrap().1
+}
+
+/// The rows of each file `canonical/<name>.json` of `names`, in order, of the Project Export
+/// Archive of the Project of `scope`, with the export identities of `lead`.
+pub(crate) async fn archived_rows<const N: usize>(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    lead: &str,
+    names: [&str; N],
+) -> [Vec<Value>; N] {
+    let files = archived_files(store, scope, lead).await;
+    names.map(|name| serde_json::from_slice(canonical(&files, name)).unwrap())
 }
 
 /// The Project Export Archive of the Project of `scope`, with the export identities of `lead`:

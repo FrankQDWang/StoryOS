@@ -10,13 +10,13 @@ use storyos_core::{DeleteMemoryEntryConflict, TransitionOutcome};
 use crate::shared_tests::agent_run_load_skill::calls;
 use crate::shared_tests::agent_run_write_memory::first_index;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::delete_memory_entry::delete;
 use crate::shared_tests::memory_capture::project;
 use crate::shared_tests::memory_conflict_flag_show::{listed_flags, run, write};
 use crate::shared_tests::memory_consolidation::{capture, delete as delete_operation, run_pass};
 use crate::shared_tests::memory_consolidation_conflict::{conflict, entry_id};
 use crate::shared_tests::memory_consolidation_merge::{flag_lines, pass_on, seed};
-use crate::shared_tests::model_gateway::stores;
 
 /// The items of one capture: one fact with no script, and the conflict items `conflicts`. The
 /// fact makes the pass request have an observation.

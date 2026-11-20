@@ -17,11 +17,13 @@ use crate::shared_tests::agent_run_retrieval::{adapter, destination, real_run};
 use crate::shared_tests::agent_run_steering::{cancellation, claim_duties, queued};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{project, run_capture};
 use crate::shared_tests::memory_capture_loop::{other_records, record, script, settlement};
 use crate::shared_tests::memory_work_schedule::{claim_due, due, make_due};
 use crate::shared_tests::model_gateway::NoEmbeddings;
-use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 
 /// The conversation of a source of a capture.
 fn conversation(source: &MemoryCaptureSource) -> &str {
@@ -141,9 +143,9 @@ async fn a_due_row_starts_one_capture_and_a_locked_row_is_not_claimed() {
     else {
         panic!("the claim must start a capture: {first:?}");
     };
-    let capture = admin
-        .query_one(
-            "SELECT jsonb_build_array(capture.source_kind, capture.conversation_id::text,
+    let capture = json_of(
+        &admin,
+        "SELECT jsonb_build_array(capture.source_kind, capture.conversation_id::text,
                       capture.first_run_id::text, capture.last_run_id::text,
                       capture.memory_settings_revision = run.memory_settings_revision)::text
                FROM storyos.memory_captures AS capture
@@ -151,11 +153,9 @@ async fn a_due_row_starts_one_capture_and_a_locked_row_is_not_claimed() {
                  ON (run.owner_user_id, run.project_id, run.run_id) =
                     (capture.owner_user_id, capture.project_id, capture.last_run_id)
               WHERE capture.capture_id = $1::text::uuid",
-            &[&started.capture_id],
-        )
-        .await
-        .unwrap()
-        .get::<_, String>(/*idx*/ 0);
+        &[&started.capture_id],
+    )
+    .await;
     run_capture(&store, &admin, &scope, &started.run_id).await;
     let MemoryCaptureSource::Conversation {
         first_run_id,
@@ -167,11 +167,7 @@ async fn a_due_row_starts_one_capture_and_a_locked_row_is_not_claimed() {
     };
 
     assert_eq!(
-        (
-            (due, locked),
-            serde_json::from_str::<serde_json::Value>(&capture).unwrap(),
-            (second, due_after)
-        ),
+        ((due, locked), capture, (second, due_after)),
         (
             (true, None),
             serde_json::json!([

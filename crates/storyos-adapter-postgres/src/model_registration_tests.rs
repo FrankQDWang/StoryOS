@@ -6,8 +6,9 @@ use storyos_application::{
 use storyos_core::{DeploymentDestination, ModelAdapter};
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::RuntimeClock;
-use crate::shared_tests::model_gateway::{DispatchEvidence, dispatch_evidence, queued_run, stores};
+use crate::shared_tests::model_gateway::{DispatchEvidence, dispatch_evidence, queued_run};
 use crate::shared_tests::model_registration::agent_plan;
 
 /// An adapter of the Agent Plan Registration whose credential is unavailable.

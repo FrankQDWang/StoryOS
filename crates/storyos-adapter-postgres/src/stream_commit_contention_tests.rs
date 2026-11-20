@@ -6,7 +6,9 @@ use storyos_core::{DeploymentDestination, NativeStreamItem, StreamItemRole, Stre
 use tokio_postgres::{Client, NoTls};
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run, claim_run, queued_run, stores};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run, claim_run, queued_run};
 use crate::shared_tests::stream_commit_contention::dispatched;
 
 /// Cancels the claimed AgentRun, so that the Worker of its next claim does cancellation duties.
@@ -121,17 +123,12 @@ async fn a_stream_commit_beside_the_work_of_another_run_commits() {
     );
 
     assert_eq!(appended.unwrap(), None);
-    let items: String = admin
-        .query_one(
-            "SELECT payload->>'items' FROM storyos.model_attempts
+    let items = json_of(
+        &admin,
+        "SELECT payload->>'items' FROM storyos.model_attempts
               WHERE model_attempt_id = $1::text::uuid",
-            &[&dispatch.model_attempt_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&items).unwrap()[0]["text"],
-        "Guard"
-    );
+        &[&dispatch.model_attempt_id],
+    )
+    .await;
+    assert_eq!(items[0]["text"], "Guard");
 }

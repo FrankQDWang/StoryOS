@@ -2,7 +2,7 @@
 //! section 2, ADR 0085, ADR 0093).
 
 use serde_json::{Value, json};
-use storyos_application::{ConversationSelection, ProjectScope};
+use storyos_application::ProjectScope;
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination,
 };
@@ -10,11 +10,15 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_finish_rule::conversation_of;
 use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, queued, settle, steering,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::{admit_run, admit_run_in, stores};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
+use crate::shared_tests::model_gateway::{admit_run, admit_run_in};
 use crate::shared_tests::project_instruction::{applied, save};
 use crate::shared_tests::project_research_binding::park_queued_runs;
 
@@ -48,47 +52,26 @@ async fn binding(admin: &Client, run_id: &str) -> Option<String> {
 /// Operation Requirement value of the instruction, the version of each considered
 /// `instruction_binding` source, and the source class of each selected item.
 async fn assemblies(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(manifest_role, decision_position,
+    json_of(admin, "SELECT jsonb_agg(jsonb_build_array(manifest_role, decision_position,
                       payload #> '{operation_requirement,instruction}',
                       jsonb_path_query_array(payload,
                         '$.considered[*] ? (@.source_class == \"instruction_binding\").source_version'),
                       jsonb_path_query_array(payload, '$.selected[*].source_class'))
                       ORDER BY context_assembly_manifest_id)::text
                FROM storyos.context_assembly_manifests
-              WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+              WHERE run_id = $1::text::uuid", &[&run_id]).await
 }
 
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, and
 /// the text of each `instruction_binding` item that the fake destination received.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
-                      jsonb_path_query_array(wire,
-                        '$.context[*] ? (@.source_class == \"instruction_binding\").content'))
-                      ORDER BY model_attempt_id)::text
-               FROM storyos.model_attempts,
-                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
-              WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
-}
-
-/// The Conversation of the Run that `admit_run` admitted with `prefix`.
-fn conversation_of(prefix: &str) -> ConversationSelection {
-    ConversationSelection::Existing {
-        conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
-    }
+    sent_context(
+        admin,
+        run_id,
+        &["instruction_binding"],
+        ReplacedInputLabel::Omit,
+    )
+    .await
 }
 
 fn required(revision_id: &str) -> Value {

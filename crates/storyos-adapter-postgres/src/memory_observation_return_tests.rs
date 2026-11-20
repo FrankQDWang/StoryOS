@@ -6,13 +6,13 @@ use storyos_application::ProjectScope;
 use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_capture::{project, run_capture};
 use crate::shared_tests::memory_consolidation::{
     capture, create, run_pass, scripted, settled, update,
 };
 use crate::shared_tests::memory_consolidation_schedule::pass_due;
 use crate::shared_tests::memory_entries::write_versions;
-use crate::shared_tests::model_gateway::stores;
 
 /// The state of each observation of the Project, from the settlement of the pass of `run_id`.
 async fn states(admin: &Client, run_id: &str) -> Value {

@@ -7,6 +7,7 @@ use storyos_core::{
 
 use crate::shared_tests::agent_run_submit_research::{ResearchProject, research_project};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::json_row::json_of;
 
 /// A search result of 30 entries, so that its exact form is larger than a stub.
 fn long_search() -> String {
@@ -54,10 +55,9 @@ async fn sent_outputs(project: &ResearchProject, run_id: &str, position: u32) ->
 /// function name of each call that its later request sent as a stub, and the projection mode of
 /// each `tool_result` item of its later request.
 async fn stub_records(project: &ResearchProject, run_id: &str) -> Value {
-    let row = project
-        .admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(record.decision_position, record.install_state,
+    json_of(
+        &project.admin,
+        "SELECT jsonb_agg(jsonb_build_array(record.decision_position, record.install_state,
                       (SELECT jsonb_agg(call.function_name ORDER BY stub.ordinal)
                          FROM jsonb_array_elements_text(record.stub_tool_call_ids)
                               WITH ORDINALITY AS stub(id, ordinal)
@@ -72,11 +72,9 @@ async fn stub_records(project: &ResearchProject, run_id: &str) -> Value {
                       ORDER BY record.decision_position)::text
                FROM storyos.active_context_compactions AS record
               WHERE record.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The ToolCall identity of each call of the Run with the provider call identifier of `calls`.

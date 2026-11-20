@@ -4,6 +4,7 @@ use super::{
     MEMORY_READ_NOT_FOUND, MemoryEntryRead, MemoryFlagSource, MemoryReadFlag,
     READ_MEMORY_ENTRY_TOOL_SPEC,
 };
+use crate::shared_tests::exposure_facts;
 use crate::{
     AGENT_PLAN_REGISTRATION, AGENT_PLAN_SKILL_REGISTRATION, ContextSourceClass, ExposureFacts,
     HOST_FAKE_TOOL_LOOP_REGISTRATION, IntakeRefusal, MemoryEntryType, ToolExposure, ToolIntake,
@@ -11,12 +12,8 @@ use crate::{
 
 fn exposure(revision: &str, memory_use: bool) -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
-        bound: &[],
-        model_registration_revision: revision,
-        skill_catalog: false,
         memory_use,
-        hybrid_search: false,
-        run_kind: crate::AgentRunKind::Author,
+        ..exposure_facts(revision)
     })
 }
 

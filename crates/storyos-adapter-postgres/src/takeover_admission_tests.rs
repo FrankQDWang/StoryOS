@@ -14,6 +14,7 @@ use tokio_postgres::{Client, NoTls};
 use super::*;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::CommandCall;
+use crate::shared_tests::json_row::json_of;
 
 const USER: &str = "018f0000-0000-7001-8000-000000000001";
 const EMPTY_OBJECT_TAKEOVER_DIGEST: &str = "sha256:storyos.command.takeOverProjectWriter.jcs.v1:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";
@@ -398,16 +399,14 @@ async fn durable_state(admin: &Client, fixture: &TakeoverFixture) -> DurableTake
 }
 
 async fn base_rows(admin: &Client, fixture: &TakeoverFixture) -> serde_json::Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_object_agg(editor_session_id::text, to_jsonb(snapshot))::text
+    json_of(
+        admin,
+        "SELECT jsonb_object_agg(editor_session_id::text, to_jsonb(snapshot))::text
                FROM storyos.editor_session_base_snapshots AS snapshot
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&USER, &fixture.project_id.as_str()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(0)).unwrap()
+        &[&USER, &fixture.project_id.as_str()],
+    )
+    .await
 }
 
 fn expected_initial_state(

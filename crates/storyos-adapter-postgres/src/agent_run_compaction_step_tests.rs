@@ -6,7 +6,8 @@ use storyos_core::{
 
 use crate::shared_tests::agent_run_finish_rule::{steps, tool_loop_run};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -26,9 +27,9 @@ async fn the_first_run_step_with_a_prior_response_installs_the_summary_and_the_r
             .await
             .unwrap()
             .unwrap();
-        let compaction: Value = admin
-            .query_one(
-                "SELECT jsonb_build_array(record.install_state, attempt.decision_position,
+        let compaction: Value = json_of(
+            &admin,
+            "SELECT jsonb_build_array(record.install_state, attempt.decision_position,
                           (SELECT jsonb_agg(output -> 'call_id') FROM jsonb_array_elements(
                              (attempt.payload #>> '{wire,serialized_payload}')::jsonb
                                -> 'tool_outputs') AS output))::text
@@ -36,11 +37,9 @@ async fn the_first_run_step_with_a_prior_response_installs_the_summary_and_the_r
                    JOIN storyos.model_attempts AS attempt
                      ON attempt.model_attempt_id = record.installed_model_attempt_id
                   WHERE record.run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .map(|row| serde_json::from_str(row.get(0)).unwrap())
-            .unwrap();
+            &[&run_id],
+        )
+        .await;
         let steps = steps(&admin, &run_id).await;
         // The later request sends no prior response, and the RunStep after it continues it.
         let prior: Vec<_> = steps
@@ -107,10 +106,10 @@ async fn a_later_run_step_compacts_while_the_tool_results_of_the_prior_response_
                  AND decision_position = 1)"
         )
     };
-    let row: Value = admin
-        .query_one(
-            &format!(
-                "SELECT jsonb_build_array({}, {},
+    let row: Value = json_of(
+        &admin,
+        &format!(
+            "SELECT jsonb_build_array({}, {},
                    (SELECT jsonb_agg(jsonb_build_array(call_id, state, result_text)
                                      ORDER BY call_position)
                       FROM storyos.tool_calls
@@ -126,14 +125,12 @@ async fn a_later_run_step_compacts_while_the_tool_results_of_the_prior_response_
                                   payload #> '{{operation_requirement,tool_results}}') AS source))
                       FROM storyos.context_assembly_manifests
                      WHERE run_id = $1::text::uuid AND manifest_role = 'compaction'))::text",
-                sent("compaction"),
-                sent("decision")
-            ),
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(0)).unwrap())
-        .unwrap();
+            sent("compaction"),
+            sent("decision")
+        ),
+        &[&run_id],
+    )
+    .await;
     let (summary, later, stored) = (&row[0], &row[1], &row[2]);
     let delivered: Vec<_> = stored
         .as_array()

@@ -19,13 +19,16 @@ use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
 use crate::shared_tests::agent_run_write_memory::first_index;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::delete_memory_entry::delete;
+use crate::shared_tests::delete_memory_entry::entry_id;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::project;
 use crate::shared_tests::memory_consolidation::{
     capture, create, delete as delete_operation, run_pass, scripted, settled, update, versions,
 };
 use crate::shared_tests::memory_entries::write_versions;
-use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 
 /// The pass takes the oldest observations whose expected input stays below the window after the
 /// output bound of the binding. The pass row records them, and the other observations wait. The
@@ -100,19 +103,6 @@ async fn a_pass_takes_the_oldest_observations_that_fit_the_request() {
             ])
         )
     );
-}
-
-/// The identity of the entry 1 of the Project of `scope`.
-async fn entry_id(admin: &Client, scope: &ProjectScope) -> String {
-    admin
-        .query_one(
-            "SELECT DISTINCT memory_entry_id::text FROM storyos.memory_entry_versions
-              WHERE project_id = $1::text::uuid AND entry_number = 1",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0)
 }
 
 /// A Project with an entry of the author (number 1) and one observation whose script creates the
@@ -385,17 +375,15 @@ async fn a_pass_changes_only_the_entries_and_observations_of_its_project() {
 
 /// The state of each observation of the Project of `scope`, in the order of its captures.
 async fn observation_states(admin: &Client, scope: &ProjectScope) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(item.state ORDER BY capture.started_at, item.position)::text
+    json_of(
+        admin,
+        "SELECT jsonb_agg(item.state ORDER BY capture.started_at, item.position)::text
                FROM storyos.memory_observations AS item
                JOIN storyos.memory_captures AS capture USING (capture_id)
               WHERE item.project_id = $1::text::uuid",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&scope.project_id.as_ref()],
+    )
+    .await
 }
 
 /// After a pass creates two entries and a second pass deletes one, the Memory Index of the next
