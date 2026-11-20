@@ -82,48 +82,80 @@ pub async fn run_once<
     store: &impl WorkerStore,
     destination: &ModelDestination<A, O, T, E>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    match claim_after_contention(|| claim_next_export_work(store)).await? {
-        Some(ClaimedExportWork::Readable(claim)) => {
+    match claim_next_work::<A>(store, Retry::SerializationFailure).await? {
+        NextWork::Export(ClaimedExportWork::Readable(claim)) => {
             readable_export_claim(store, &claim, Retry::SerializationFailure).await?;
             Ok(())
         }
-        Some(ClaimedExportWork::Archive(claim)) => {
+        NextWork::Export(ClaimedExportWork::Archive(claim)) => {
             archive_export_claim(store, &claim, Retry::SerializationFailure).await?;
             Ok(())
         }
-        None => match claim_after_contention(|| claim_next_agent_run(store, A::ADAPTERS)).await? {
-            Some(claim) => {
-                match agent_run_claim(store, destination, &claim, Retry::SerializationFailure).await
-                {
-                    Ok(_) | Err(CompleteAgentRunError::StaleFence) => Ok(()),
-                    Err(error) => Err(error.into()),
-                }
+        NextWork::AgentRun(claim) => {
+            match agent_run_claim(store, destination, &claim, Retry::SerializationFailure).await {
+                Ok(_) | Err(CompleteAgentRunError::StaleFence) => Ok(()),
+                Err(error) => Err(error.into()),
             }
-            None => {
-                if claim_after_contention(|| memory_work_claim(store)).await? {
-                    return Ok(());
-                }
-                let mut index = None;
+        }
+        NextWork::MemoryWork => Ok(()),
+        NextWork::None => {
+            let mut index = None;
+            passage_index_step(store, &destination.embeddings, &mut index).await?;
+            while index.is_some() {
                 passage_index_step(store, &destination.embeddings, &mut index).await?;
-                while index.is_some() {
-                    passage_index_step(store, &destination.embeddings, &mut index).await?;
-                }
-                Ok(())
             }
+            Ok(())
+        }
+    }
+}
+
+/// The work that one claim of the loop gets. The claim order is export work, then a Run, then a
+/// due schedule row of background Memory work. The index work comes after each of them.
+enum NextWork {
+    Export(ClaimedExportWork),
+    AgentRun(ClaimedAgentRun),
+    MemoryWork,
+    None,
+}
+
+/// Claims the next work in the claim order. With `Retry::SerializationFailure`, each claim runs
+/// again after a serialization failure (`claim_after_contention`).
+async fn claim_next_work<A: ModelProviderAdapter>(
+    store: &impl WorkerStore,
+    retry: Retry,
+) -> Result<NextWork, ProjectReadError> {
+    if let Some(claim) = claim_with(retry, || claim_next_export_work(store)).await? {
+        return Ok(NextWork::Export(claim));
+    }
+    if let Some(claim) = claim_with(retry, || claim_next_agent_run(store, A::ADAPTERS)).await? {
+        return Ok(NextWork::AgentRun(claim));
+    }
+    Ok(
+        match claim_with(retry, || memory_work_claim(store)).await? {
+            true => NextWork::MemoryWork,
+            false => NextWork::None,
         },
+    )
+}
+
+/// Runs one claim, and with `Retry::SerializationFailure` again after a serialization failure.
+/// With `Retry::EachFailure` the claim runs one time: the loop claims again in its next turn.
+async fn claim_with<T, F>(retry: Retry, mut claim: impl FnMut() -> F) -> Result<T, ProjectReadError>
+where
+    F: Future<Output = Result<T, ProjectReadError>>,
+{
+    match retry {
+        Retry::SerializationFailure => claim_after_contention(claim).await,
+        Retry::EachFailure => claim().await,
     }
 }
 
 pub async fn claim_only<A: ModelProviderAdapter, E: EmbeddingProviderAdapter>(
     store: &impl WorkerStore,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if claim_next_export_work(store).await?.is_some()
-        || claim_next_agent_run(store, A::ADAPTERS).await?.is_some()
-        || memory_work_claim(store).await?
-    {
-        return Ok(());
+    if let NextWork::None = claim_next_work::<A>(store, Retry::EachFailure).await? {
+        claim_next_passage_index_work(store, E::REGISTRATIONS).await?;
     }
-    claim_next_passage_index_work(store, E::REGISTRATIONS).await?;
     Ok(())
 }
 
@@ -137,32 +169,26 @@ async fn step<
     destination: &ModelDestination<A, O, T, E>,
     index: &mut Option<ClaimedPassageIndex>,
 ) -> bool {
-    match claim_next_export_work(store).await {
-        Ok(Some(ClaimedExportWork::Readable(claim))) => matches!(
+    match claim_next_work::<A>(store, Retry::EachFailure).await {
+        Ok(NextWork::Export(ClaimedExportWork::Readable(claim))) => matches!(
             readable_export_claim(store, &claim, Retry::EachFailure).await,
             Ok(_) | Err(CompleteReadableExportError::StaleFence)
         ),
-        Ok(Some(ClaimedExportWork::Archive(claim))) => matches!(
+        Ok(NextWork::Export(ClaimedExportWork::Archive(claim))) => matches!(
             archive_export_claim(store, &claim, Retry::EachFailure).await,
             Ok(_) | Err(CompleteArchiveExportError::StaleFence)
         ),
-        Ok(None) => match claim_next_agent_run(store, A::ADAPTERS).await {
-            Ok(Some(claim)) => matches!(
-                agent_run_claim(store, destination, &claim, Retry::EachFailure).await,
-                Ok(_) | Err(CompleteAgentRunError::StaleFence)
-            ),
-            Ok(None) => match memory_work_claim(store).await {
-                Ok(true) => true,
-                Ok(false) => {
-                    match passage_index_step(store, &destination.embeddings, index).await {
-                        Ok(worked) => worked,
-                        Err(error) => claim_failed(&error),
-                    }
-                }
+        Ok(NextWork::AgentRun(claim)) => matches!(
+            agent_run_claim(store, destination, &claim, Retry::EachFailure).await,
+            Ok(_) | Err(CompleteAgentRunError::StaleFence)
+        ),
+        Ok(NextWork::MemoryWork) => true,
+        Ok(NextWork::None) => {
+            match passage_index_step(store, &destination.embeddings, index).await {
+                Ok(worked) => worked,
                 Err(error) => claim_failed(&error),
-            },
-            Err(error) => claim_failed(&error),
-        },
+            }
+        }
         Err(error) => claim_failed(&error),
     }
 }
