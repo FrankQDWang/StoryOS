@@ -4,7 +4,7 @@ status: accepted
 
 # Remove the Three Proposal Recovery Commands That No Client Sends
 
-The coordinator decided this on 2026-11-20 in the cleanup of Stage 5 to Stage 7 ([#1715](https://github.com/FrankQDWang/StoryOS/issues/1715)). Ticket [#1723](https://github.com/FrankQDWang/StoryOS/issues/1723) delivers it. This ADR amends [ADR 0064](0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md), [ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md), and [ADR 0069](0069-keep-a-producer-withdrawal-through-author-undo.md).
+The author decided on 2026-11-20 to remove the three commands, in the cleanup of Stage 5 to Stage 7 ([#1715](https://github.com/FrankQDWang/StoryOS/issues/1715)). The coordinator decided item 4 of the Decision on the same day. Ticket [#1723](https://github.com/FrankQDWang/StoryOS/issues/1723) delivers the two decisions. This ADR amends [ADR 0064](0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md), [ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md), and [ADR 0069](0069-keep-a-producer-withdrawal-through-author-undo.md).
 
 ## Context
 
@@ -14,7 +14,7 @@ The Server had three Proposal recovery commands:
 - `reopenWithdrawnProposal` opened a withdrawn Proposal again.
 - `reopenRejectedOperations` made rejected Operations pending again.
 
-ADR 0064 removed Replan from the editor and kept the command on the Server. The editor has no control for the two reopen commands. Thus no client sends the three commands. Only their HTTP tests, their Smoke Check rows, and the adapter tests call them. An Acceptance on an earlier base applies (ADR 0064), so a Proposal does not need a Replan. The author has three Proposal actions: accept, reject, and edit the candidate text.
+ADR 0064 removed Replan from the editor and kept the command on the Server. The editor has no control for the two reopen commands. Thus no client sends the three commands. Only their HTTP tests, their Smoke Check rows, and the adapter tests call them. An Acceptance on an earlier base applies (ADR 0064), so a Proposal does not need a Replan. For an Acceptance on an earlier base, the author has three Proposal actions: accept, reject, and edit the candidate text.
 
 ## Decision
 
