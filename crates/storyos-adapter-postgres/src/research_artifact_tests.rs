@@ -1,11 +1,9 @@
 use serde_json::{Value, json};
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-    EditorSessionStore, ExportProjectArchiveInput, IssueProjectCommandChallenge, NoContractFaults,
-    ProjectScope, RejectProposalOperationsInput, RejectionNote, ResearchArtifactReadStore,
-    ResearchSourceReadStore, VerifiedExportArchive, claim_next_archive_export, complete_agent_run,
-    complete_agent_run_with_tools, complete_archive_export, get_verified_export_archive,
-    issue_project_command_challenge,
+    EditorSessionStore, NoContractFaults, ProjectScope, RejectProposalOperationsInput,
+    RejectionNote, ResearchArtifactReadStore, ResearchSourceReadStore, complete_agent_run,
+    complete_agent_run_with_tools,
 };
 use storyos_contracts::ResearchArtifactInspect;
 use storyos_core::{Citation, DeploymentDestination, ResearchClaim, ResearchSynthesis};
@@ -23,8 +21,8 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_proposal_decision::REJECT_PROPOSAL_OPERATIONS;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::command_sequence_support::{issued, seed_project};
+use crate::shared_tests::memory_entries::{archived_files, canonical};
 use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
-use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
 use crate::shared_tests::research_artifact::{Reply, computed, tagged};
 use crate::shared_tests::research_source::{SEARCH_TEXT, calls_stream, calls_stream_in};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
@@ -644,34 +642,8 @@ async fn the_project_export_packs_the_artifact_and_a_reload_reads_it_unchanged()
         .await;
     let id = artifact_id(&store, &scope, &run_id).await;
     let before = store.get_research_artifact(&scope, &id).await.unwrap();
-    let (export, input): (_, ExportProjectArchiveInput) = export_command(&scope, "c3");
-    issue_project_command_challenge(
-        &store,
-        &IssueProjectCommandChallenge {
-            binding: export.challenge_binding.clone(),
-            nonce: "nonce-export-c3".to_owned(),
-            nonce_digest: export.nonce_digest.clone(),
-            earlier_revision_nonces: Vec::new(),
-        },
-    )
-    .await
-    .unwrap();
-    store.export_project_archive(&export, &input).await.unwrap();
-    let claimed = claim_next_archive_export(&store).await.unwrap().unwrap();
-    complete_archive_export(&store, &claimed).await.unwrap();
-    let VerifiedExportArchive::Ready(zip) =
-        get_verified_export_archive(&store, &scope, &input.export_id)
-            .await
-            .unwrap()
-    else {
-        panic!("the Project Export must return verified ZIP bytes");
-    };
-    let files = zip_store_files(&zip);
-    let rows = &files
-        .iter()
-        .find(|(name, _)| *name == "canonical/research_artifacts.json")
-        .unwrap()
-        .1;
+    let files = archived_files(&store, &scope, "c3").await;
+    let rows = canonical(&files, "research_artifacts");
     let packed: Vec<Value> = serde_json::from_slice(rows).unwrap();
     // A restore loads the packed rows again in place of the stored rows.
     admin

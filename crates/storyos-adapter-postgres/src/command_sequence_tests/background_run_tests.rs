@@ -6,10 +6,8 @@
 use serde_json::{Value, json};
 use storyos_application::{
     AgentRunControlRefusal, AgentRunReadSelection, AgentRunReadStore, CancelAgentRunInput,
-    ConversationSelection, IssueProjectCommandChallenge, PauseAgentRunInput,
-    ProjectConversationReader, ProjectScope, RefusableCommandError, ResearchSourceReadStore,
-    SteerAgentRunInput, VerifiedExportArchive, claim_next_archive_export, complete_archive_export,
-    get_verified_export_archive, issue_project_command_challenge,
+    ConversationSelection, PauseAgentRunInput, ProjectConversationReader, ProjectScope,
+    RefusableCommandError, ResearchSourceReadStore, SteerAgentRunInput,
 };
 use storyos_core::{ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination};
 use tokio_postgres::Client;
@@ -19,7 +17,6 @@ use crate::command_sequence::settle_project_command;
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_steering::queued;
 use crate::shared_tests::model_gateway::admit_run_in;
-use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_agent_run::{
@@ -28,6 +25,7 @@ use crate::shared_tests::command_sequence_agent_run::{
 use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::{issued, seed_project, stores};
 use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::memory_entries::archived_rows;
 
 /// Inserts the background Run `run_id` with `status` in the Project of the Run of the author
 /// `like`, with the Agent, the grant, and the Model Registration of that Run.
@@ -115,29 +113,7 @@ async fn refusals(admin: &Client, run_id: &str, forms: &[&str]) -> (String, Vec<
 
 /// The identity and the kind of each Run in the Project Export Archive of the Project.
 async fn archived_kinds(store: &PostgresProjectReader, scope: &ProjectScope) -> Vec<[String; 2]> {
-    let (export, input) = export_command(scope, "77");
-    let challenge = IssueProjectCommandChallenge {
-        binding: export.challenge_binding.clone(),
-        nonce: "nonce-export-77".to_owned(),
-        nonce_digest: export.nonce_digest.clone(),
-        earlier_revision_nonces: Vec::new(),
-    };
-    issue_project_command_challenge(store, &challenge)
-        .await
-        .unwrap();
-    store.export_project_archive(&export, &input).await.unwrap();
-    let claimed = claim_next_archive_export(store).await.unwrap().unwrap();
-    complete_archive_export(store, &claimed).await.unwrap();
-    let archive = get_verified_export_archive(store, scope, &input.export_id).await;
-    let VerifiedExportArchive::Ready(zip) = archive.unwrap() else {
-        panic!("the Project Export must return verified ZIP bytes");
-    };
-    let files = zip_store_files(&zip);
-    let (_, runs) = files
-        .iter()
-        .find(|(path, _)| path == "canonical/agent_runs.json")
-        .unwrap();
-    let runs: Vec<Value> = serde_json::from_slice(runs).unwrap();
+    let [runs] = archived_rows(store, scope, "77", ["agent_runs"]).await;
     runs.iter()
         .map(|run| {
             [&run["run_id"], &run["run_kind"]].map(|value| value.as_str().unwrap().to_owned())

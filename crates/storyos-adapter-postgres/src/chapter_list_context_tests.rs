@@ -2,11 +2,7 @@
 //! section 1, ADR 0085).
 
 use serde_json::{Value, json};
-use storyos_application::{
-    ConversationSelection, CreateChapterInput, EditorSessionStore, IssueProjectCommandChallenge,
-    VerifiedExportArchive, claim_next_archive_export, complete_archive_export,
-    get_verified_export_archive, issue_project_command_challenge,
-};
+use storyos_application::{ConversationSelection, CreateChapterInput, EditorSessionStore};
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CreateChapterPlacement,
     TransitionOutcome, hex_sha256,
@@ -26,8 +22,8 @@ use crate::shared_tests::command_sequence_structure::{
 use crate::shared_tests::command_sequence_support::issued;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::memory_entries::archived_rows;
 use crate::shared_tests::model_gateway::sent_context;
-use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
 /// The list of the fixture Project: one Volume with its Chapter, the Current Chapter of the Run.
@@ -341,35 +337,7 @@ async fn the_archive_of_a_project_whose_run_has_the_list_builds_and_packs_its_re
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued(&store, "0ec").await;
     complete(&store, &admin, &scope, &run_id).await;
-    let (export, input) = export_command(&scope, "0e");
-    issue_project_command_challenge(
-        &store,
-        &IssueProjectCommandChallenge {
-            binding: export.challenge_binding.clone(),
-            nonce: "nonce-export-0e".to_owned(),
-            nonce_digest: export.nonce_digest.clone(),
-            earlier_revision_nonces: Vec::new(),
-        },
-    )
-    .await
-    .unwrap();
-    store.export_project_archive(&export, &input).await.unwrap();
-    let claimed = claim_next_archive_export(&store).await.unwrap().unwrap();
-    complete_archive_export(&store, &claimed).await.unwrap();
-    let VerifiedExportArchive::Ready(zip) =
-        get_verified_export_archive(&store, &scope, &input.export_id)
-            .await
-            .unwrap()
-    else {
-        panic!("the Project Export must return verified ZIP bytes");
-    };
-    let files = zip_store_files(&zip);
-    let rows = &files
-        .iter()
-        .find(|(name, _)| *name == "canonical/context_assembly_manifests.json")
-        .unwrap()
-        .1;
-    let packed: Vec<Value> = serde_json::from_slice(rows).unwrap();
+    let [packed] = archived_rows(&store, &scope, "0e", ["context_assembly_manifests"]).await;
     let lists: Vec<Value> = packed
         .iter()
         .filter(|row| row["run_id"] == json!(run_id) && row["manifest_role"] == "decision")

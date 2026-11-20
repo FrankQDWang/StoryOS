@@ -1,9 +1,6 @@
 use serde_json::{Value, json};
 use storyos_application::{
-    ExportProjectArchiveInput, IssueProjectCommandChallenge, NoContractFaults, ProjectScope,
-    ResearchSourceReadStore, VerifiedExportArchive, claim_next_archive_export,
-    complete_agent_run_with_tools, complete_archive_export, get_verified_export_archive,
-    issue_project_command_challenge,
+    NoContractFaults, ProjectScope, ResearchSourceReadStore, complete_agent_run_with_tools,
 };
 use tokio_postgres::Client;
 
@@ -16,8 +13,8 @@ use crate::shared_tests::agent_run_tool_exposure::advisory_stream;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::seed_project;
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::memory_entries::{archived_files, canonical};
 use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
-use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
 use crate::shared_tests::research_source::{SEARCH_TEXT, calls_stream};
 
 /// Settles one Run whose first response requests `calls`. The fake MCP server answers the calls
@@ -562,33 +559,10 @@ async fn the_project_export_packs_the_sources_and_a_reload_reads_them_unchanged(
             .await
             .unwrap(),
     );
-    let (export, input): (_, ExportProjectArchiveInput) = export_command(&scope, "5a");
-    issue_project_command_challenge(
-        &store,
-        &IssueProjectCommandChallenge {
-            binding: export.challenge_binding.clone(),
-            nonce: "nonce-export-5a".to_owned(),
-            nonce_digest: export.nonce_digest.clone(),
-            earlier_revision_nonces: Vec::new(),
-        },
-    )
-    .await
-    .unwrap();
-    store.export_project_archive(&export, &input).await.unwrap();
-    let claimed = claim_next_archive_export(&store).await.unwrap().unwrap();
-    complete_archive_export(&store, &claimed).await.unwrap();
-    let VerifiedExportArchive::Ready(zip) =
-        get_verified_export_archive(&store, &scope, &input.export_id)
-            .await
-            .unwrap()
-    else {
-        panic!("the Project Export must return verified ZIP bytes");
-    };
-    let files = zip_store_files(&zip);
+    let files = archived_files(&store, &scope, "5a").await;
     let mut packed = Vec::new();
     for table in ["source_snapshots", "source_gaps"] {
-        let path = format!("canonical/{table}.json");
-        let bytes = &files.iter().find(|(name, _)| *name == path).unwrap().1;
+        let bytes = canonical(&files, table);
         let rows: Vec<Value> = serde_json::from_slice(bytes).unwrap();
         packed.push((
             table,
