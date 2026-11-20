@@ -27,10 +27,7 @@ import uuid
 
 # Selected from measured runs of `make check` on an Apple M4 with 10 cores and 32 GB (issue 1711).
 LANE_LIMIT = 6
-# A lane that still runs when the runner examines it at or after this time fails the run. The limit is not an exact
-# end time: it makes sure that no run holds the heavy-run slot for an unlimited time. The longest lane took 419 s in
-# the measured runs. In a run of `make check-full` on 2026-11-20, a Vitest run did not end after its browser did not
-# connect (issue 1728).
+# No run holds the heavy-run slot for an unlimited time; the longest measured lane took 419 s (issue 1728).
 LANE_TIME_LIMIT_SECONDS = 900
 # A command that the runner itself starts and waits for (ps, docker, the list of a test binary) fails after this
 # time, so that the examinations of the lanes and the stop cannot wait for an unlimited time.
@@ -102,13 +99,16 @@ class Lane:
 def claim_browser_start(root, wait):
     """Record a start of Chrome when the last start is BROWSER_START_GAP_SECONDS ago. With wait, wait for that time.
 
-    Return False when the gap is not complete and wait is false.
+    Return False when the gap is not complete or another process holds the record, and wait is false.
     """
     path = Path(os.environ.get(BROWSER_START_VARIABLE) or root / BROWSER_START_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a+") as file:
         while True:
-            fcntl.flock(file, fcntl.LOCK_EX)
+            try:
+                fcntl.flock(file, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return False
             file.seek(0)
             text = file.read().strip()
             remaining = (float(text) if text else 0.0) + BROWSER_START_GAP_SECONDS - time.time()
@@ -455,7 +455,7 @@ def stop(lanes, token):
             stopped = False
         if not stopped:
             print("check-lanes: processes of the run remain", flush=True)
-    except (OSError, subprocess.SubprocessError) as error:
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
         # Without a scan, the runner cannot see when the lanes end, so it kills them at once.
         print(f"check-lanes: the processes of the run are not verified, so the lanes are killed: {error}", flush=True)
         signal_processes(leaders, signal.SIGKILL, os.killpg)
@@ -553,7 +553,8 @@ def run(root, lanes, final_checks):
 
 
 def main():
-    root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
+    root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True,
+                                        timeout=TOOL_SECONDS).strip())
     if sys.argv[1:] == ["--browser-start"]:
         claim_browser_start(root, wait=True)
         return 0

@@ -5,6 +5,7 @@ CHECK_LANES_SCRIPT gives another runner to test, for example the runner of an ea
 """
 
 import contextlib
+import fcntl
 import hashlib
 import importlib.util
 import io
@@ -198,6 +199,18 @@ class BrowserStartTests(unittest.TestCase):
             starts.append(float(record.read_text()))
         self.assertGreaterEqual(starts[1] - starts[0], gap)
 
+    def test_a_claim_without_wait_does_not_wait_for_a_held_record(self):
+        module = runner_module()
+        # A root of its own, so that the test does not change the gap of the browser lanes of a run.
+        root = Path(tempfile.mkdtemp(prefix="storyos-browser-start-"))
+        record = root / module.BROWSER_START_FILE
+        record.parent.mkdir(parents=True)
+        with open(record, "a+") as holder:
+            fcntl.flock(holder, fcntl.LOCK_EX)
+            began = time.monotonic()
+            self.assertFalse(module.claim_browser_start(root, wait=False))
+            self.assertLess(time.monotonic() - began, 5)
+
 
 def runner_module():
     """Load the runner as a module, for the tests of its functions."""
@@ -257,7 +270,7 @@ class FunctionTests(unittest.TestCase):
         # The lane and its child in a new session do not obey SIGTERM, as the Vitest run of issue 1728. Each writes
         # its ID after it ignores SIGTERM. Without a time limit, the lane passes after 20 s.
         module, directory = runner_module(), Path(tempfile.mkdtemp(prefix="storyos-lane-limit-"))
-        module.LANE_TIME_LIMIT_SECONDS, module.STOP_SECONDS = 5, 2
+        module.LANE_TIME_LIMIT_SECONDS, module.STOP_SECONDS = 15, 2
         ready = ("import os, signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
                  "open({!r}, 'w').write(str(os.getpid())); ")
         child = [sys.executable, "-c", ready.format(str(directory / "child")) + "time.sleep(20)"]
@@ -279,37 +292,41 @@ class FunctionTests(unittest.TestCase):
                     os.kill(int((directory / name).read_text()), signal.SIGKILL)
         self.assertEqual(code, 1, text)
         self.assertRegex(text, r"Lane lanes-test-no-end: FAIL after \d+ s \(the lane ran longer than the time limit "
-                               r"of 5 s\)")
+                               r"of 15 s\)")
         # The limit, then SIGTERM and SIGKILL of the lane, then SIGTERM and SIGKILL of the child, then Docker.
-        self.assertLess(elapsed, 5 + 2 * (module.STOP_SECONDS + module.KILL_SECONDS) + 15, text)
+        self.assertLess(elapsed, 15 + 2 * (module.STOP_SECONDS + module.KILL_SECONDS) + 15, text)
         self.assertEqual(len(watched), 2, f"the lane or its child did not start before the stop\n{text}")
         self.assertEqual(remaining, [], text)
 
     def test_a_stop_whose_scan_of_the_processes_fails_still_ends_the_lanes(self):
-        module = runner_module()
+        # A ps command that does not end, and a ps line that does not parse.
+        for error in (subprocess.TimeoutExpired(["ps"], 60), ValueError("not enough values to unpack")):
+            with self.subTest(error=type(error).__name__):
+                module, removals = runner_module(), []
 
-        def process_table():
-            raise subprocess.TimeoutExpired(["ps"], module.TOOL_SECONDS)
+                def process_table(error=error):
+                    raise error
 
-        module.process_table, module.remove_run_resources = process_table, lambda _token: True
-        # The lane does not obey SIGTERM, so only the SIGKILL ends it. It writes a line after it ignores SIGTERM.
-        lane = module.Lane("lanes-test-scan-fails", [])
-        lane.process = subprocess.Popen([sys.executable, "-c", (
-            "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); print('ready', flush=True); "
-            "time.sleep(287)")], start_new_session=True, stdout=subprocess.PIPE, text=True)
-        self.assertEqual(lane.process.stdout.readline(), "ready\n")
-        handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
-        try:
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertFalse(module.stop([lane], "token"))
-            self.assertEqual(lane.process.wait(timeout=30), -signal.SIGKILL)
-        finally:
-            for number, handler in handlers.items():
-                signal.signal(number, handler)
-            if lane.process.poll() is None:
-                os.killpg(lane.process.pid, signal.SIGKILL)
-                lane.process.wait()
-            lane.process.stdout.close()
+                module.process_table, module.remove_run_resources = process_table, removals.append
+                # The lane does not obey SIGTERM, so only the SIGKILL ends it. It writes a line after it ignores it.
+                lane = module.Lane("lanes-test-scan-fails", [])
+                lane.process = subprocess.Popen([sys.executable, "-c", (
+                    "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); print('ready', flush=True); "
+                    "time.sleep(287)")], start_new_session=True, stdout=subprocess.PIPE, text=True)
+                self.assertEqual(lane.process.stdout.readline(), "ready\n")
+                handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
+                try:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        self.assertFalse(module.stop([lane], "token"))
+                    self.assertEqual(lane.process.wait(timeout=30), -signal.SIGKILL)
+                    self.assertEqual(removals, ["token"])
+                finally:
+                    for number, handler in handlers.items():
+                        signal.signal(number, handler)
+                    if lane.process.poll() is None:
+                        os.killpg(lane.process.pid, signal.SIGKILL)
+                        lane.process.wait()
+                    lane.process.stdout.close()
 
     def test_a_command_of_the_runner_that_does_not_end_fails_in_its_time_limit(self):
         module = runner_module()
