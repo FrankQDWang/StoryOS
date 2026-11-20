@@ -54,3 +54,5 @@ This record supersedes these parts of earlier records:
 - The HTTP evidence of answer A-012 of [ADR 0066](0066-record-the-answers-to-the-reference-model-contract-questions.md) moves to `edit-proposal-candidate-http.integration.test.ts`. An unknown Operation in the target of a Block Proposal edit gives `Refused` with `target_mismatch`. The [ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md) chain through a replacing Inline Acceptance has no test, because no such Acceptance exists.
 - Both modes of the recovery drill keep two Acceptance conditions, because no Inline Replan condition exists.
 - [Keep the inline rebind lineage](https://github.com/FrankQDWang/StoryOS/issues/1257) has no effect after the last ticket.
+
+[ADR 0099](0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md) amends the Local Edit Journal read rule: the Journal has no reader of a stored record of a removed path.

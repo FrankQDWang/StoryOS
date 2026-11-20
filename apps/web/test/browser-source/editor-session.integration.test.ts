@@ -14,7 +14,6 @@ import {
   openEditorWorkspace,
   appendAuthorEdit,
   rebuildPendingProjection,
-  reconfirmLegacyReplaceSelection,
   submitOnePendingAuthorEdit,
 } from "../../src/editor-session.ts";
 import type {
@@ -30,11 +29,9 @@ import {
   readJournalSnapshot,
   validateJournalSnapshot,
 } from "../../src/local-edit-journal.ts";
-import {
-  FIRST_APPEND_EDIT,
-  openJournalAppendTestWorkspace,
-  withDigest,
-} from "./local-edit-journal-append-fixture.ts";
+import { FIRST_APPEND_EDIT, openJournalAppendTestWorkspace, withDigest } from "./local-edit-journal-append-fixture.ts";
+import { restoreJournalVersion } from "./journal-version-fixture.ts";
+import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
 import {
   CHAPTER,
   OWNER,
@@ -120,89 +117,38 @@ it.each(["changed_head", "legacy_editor_contract"] as const)("preserves the comp
   }
 });
 
-it("keeps incompatible pending ReplaceSelection inspectable until Block reconfirmation", async () => {
+// A Journal of an earlier version has no upgrade path (ADR 0099). The open fails as for an unknown version, and the
+// Journal stays as it is.
+it.each([3, 4] as const)("keeps a version %i Journal and does not open it", async (version) => {
   const test = await openJournalAppendTestWorkspace();
+  let kept: IDBDatabase | undefined;
   try {
-    const workspace = test.workspace;
-    await appendAuthorEdit(workspace, FIRST_APPEND_EDIT);
-    const snapshot = await validateJournalSnapshot(
-      workspace,
-      await readJournalSnapshot(workspace),
-    );
-    const record = recordAt(snapshot.records, 0);
-    const primitive = requireAuthorEditUnit(record).normalized_primitives[0];
-    if (primitive?.kind !== "replace_block_selection") {
-      throw new Error("the persisted Author Edit is not a Block selection");
-    }
-    const authorEditUnit = {
-      ...requireAuthorEditUnit(record),
-      normalized_primitives: [{
-        kind: "replace_selection" as const,
-        from: primitive.from,
-        to: primitive.to,
-        text: primitive.text,
-      }],
-    };
-    const rewritten = {
-      ...record,
-      author_edit_unit: authorEditUnit,
-      payload_digest: await digestJournalValue(authorEditUnit, crypto),
-    };
-    const chain = snapshot.payloadChains[0];
-    if (chain === undefined) throw new Error("the payload chain is unavailable");
-    const rewrittenChain = {
-      ...chain,
-      ordered_patch_refs: chain.ordered_patch_refs.map((patch) =>
-        patch.completed_intent_record_id === record.completed_intent_record_id
-          ? { ...patch, normalized_primitives: authorEditUnit.normalized_primitives }
-          : patch),
-    };
-    const transaction = workspace.database.transaction(
-      ["intents", "payload_chains"],
-      "readwrite",
-      { durability: "strict" },
-    );
-    transaction.objectStore("intents").put(rewritten);
-    transaction.objectStore("payload_chains").put(rewrittenChain);
-    await transactionResult(transaction);
-
-    projection = await rebuildPendingProjection(workspace);
-    expect(projection).toMatchObject({
-      body: "Base!",
-      save_state: "needs_attention",
-      unsettled_intent_count: 1,
-      authoritative_revision_id: REVISION,
-    });
-    await expect(freezeOneIntentSubmission(workspace, crypto))
-      .rejects.toThrow(/Block reconfirmation/);
-    await expect(appendAuthorEdit(workspace, {
-      from: 5,
-      to: 5,
-      text: "?",
-      resultingBody: "Base!?",
-    })).rejects.toThrow(/limit failed/);
-
-    projection = await reconfirmLegacyReplaceSelection(workspace, crypto);
-    expect(projection).toMatchObject({
-      body: "Base!",
-      save_state: "saving",
-      unsettled_intent_count: 1,
-      authoritative_revision_id: REVISION,
-    });
-    const confirmed = await validateJournalSnapshot(
-      workspace,
-      await readJournalSnapshot(workspace),
-    );
-    expect(confirmed.records).toHaveLength(1);
-    expect(recordAt(confirmed.records, 0).completed_intent_record_id)
-      .toBe(record.completed_intent_record_id);
-    expect(requireAuthorEditUnit(recordAt(confirmed.records, 0)))
-      .toEqual(replaceBlockUnit(4, 4, "!"));
-    const group = await freezeOneIntentSubmission(workspace, crypto);
-    expect(group.frozen_request_body.author_edit_units).toEqual([replaceBlockUnit(4, 4, "!")]);
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
+    const rows = await restoreJournalVersion(test.workspace.database, version);
+    await expect(test.reopen()).rejects.toThrow("workspace unavailable: local_journal_unavailable");
+    kept = await requestResult(indexedDB.open(test.workspace.database.name));
+    const transaction = kept.transaction([...kept.objectStoreNames]);
+    expect({ version: kept.version, rows: Object.fromEntries(await Promise.all([...kept.objectStoreNames]
+      .map(async (store) => [store, await requestResult(transaction.objectStore(store).getAll())]))) })
+      .toEqual({ version, rows });
   } finally {
+    kept?.close();
     await test.close();
   }
+});
+
+// A record that follows a group must name an earlier frozen authoritative group (ADR 0065).
+it("fails closed for a record that follows a group that the Journal does not have", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  try {
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
+    const intents = test.workspace.database.transaction("intents", "readwrite").objectStore("intents");
+    const [record] = await requestResult(intents.getAll());
+    await requestResult(intents.put({ ...record,
+      follows_submission_group: { journal_submission_group_id: createJournalUuid() } }));
+    await expect(rebuildPendingProjection(test.workspace)).rejects.toThrow("Local Edit Journal is corrupt");
+    await expect(test.reopen()).rejects.toThrow("workspace unavailable: local_journal_unavailable");
+  } finally { await test.close(); }
 });
 
 function groupAt(groups: JournalSubmissionGroup[], index: number): JournalSubmissionGroup {

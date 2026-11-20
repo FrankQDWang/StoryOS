@@ -1,9 +1,7 @@
 import type { JournalWorkingBoundary } from "./journal-working-set.ts";
-import type { LocalUnsentText } from "./local-unsent-text.ts";
 import type {
   ApplyAuthorEditRequest,
   ApplyAuthorEditEffect,
-  AuthorEditPrimitive,
   AuthorEditProposalTarget,
   AuthorEditUnit,
   DigestValue,
@@ -18,29 +16,6 @@ import type {
   ProjectScope,
   Release1ProtocolProfile,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-
-/** ADR 0073 removed the Refused Edit Draft from the contract. A Journal record or group that an earlier client
- * stored can still hold one of these shapes. The Journal reads them only to resolve the removed path, and it never
- * sends them. */
-type StoredDraftRetry = Record<string, unknown> & { kind: "draft_retry" };
-
-export type StoredAuthorEditPrimitive =
-  | AuthorEditPrimitive
-  | (Record<string, unknown> & { kind: "replace_structured_selection" });
-
-export interface StoredAuthorEditUnit {
-  normalized_primitives: StoredAuthorEditPrimitive[];
-  selection_snapshot: AuthorEditUnit["selection_snapshot"] & { ordered_selection?: unknown };
-}
-
-export type StoredApplyAuthorEditRequest = Omit<ApplyAuthorEditRequest, "author_edit_units"> & {
-  retry_source?: StoredDraftRetry;
-  author_edit_units: StoredAuthorEditUnit[];
-};
-
-type StoredApplyAuthorEditEffect =
-  | ApplyAuthorEditEffect
-  | (Record<string, unknown> & { kind: "refused_to_draft" });
 
 export type InputOrigin =
   | "typing"
@@ -97,7 +72,7 @@ export interface JournalIntentRecord extends Record<string, unknown> {
   proposal_anchors: ProposalJournalAnchor[];
   observed_ownership_partition: string;
   author_edit_unit?: AuthorEditUnit;
-  retry_source: { kind: "fresh_editor_intent" } | StoredDraftRetry;
+  retry_source: { kind: "fresh_editor_intent" };
   editor_contract_revision: string;
   undo_group_binding: { kind: "direct_author_input"; undo_group_id: string };
   payload_chain_ref: string;
@@ -173,7 +148,7 @@ export type SubmissionSettlement =
       author_command_admission_id: string;
       receipt: DomainReceipt;
       source_draft_disposition?: unknown;
-      effect: Exclude<StoredApplyAuthorEditEffect, { kind: "authoritative_applied" }>;
+      effect: Exclude<ApplyAuthorEditEffect, { kind: "authoritative_applied" }>;
     })
   | (Record<string, unknown> & {
       kind: "outcome_query_rejected_no_admission";
@@ -254,8 +229,6 @@ export interface EditorWorkspace {
   cryptoImpl: Crypto;
   maxJsonStringUtf8Bytes: number;
   submitQueue?: Promise<PendingEditProjection | void>;
-  /** Set only on the read-only reader of a Journal that cannot upgrade (contract 3.2). */
-  readOnlyJournalVersion?: 4;
 }
 
 export interface EditorReadyState extends EditorWorkspace {
@@ -270,8 +243,6 @@ interface EditorReadOnlyState {
   editor_session?: EditorSessionBinding;
   writer?: EditorWriterProjection;
   pending?: PendingEditProjection;
-  /** The unsent text of a Journal that did not open (contract 3.2). */
-  localUnsentText?: LocalUnsentText;
   error?: unknown;
 }
 

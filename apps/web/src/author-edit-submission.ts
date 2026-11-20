@@ -25,8 +25,6 @@ import type {
   JournalIntentRecord,
   JournalSubmissionGroup,
   PendingEditProjection,
-  StoredApplyAuthorEditRequest,
-  StoredAuthorEditUnit,
 } from "./editor-types.ts";
 import {
   AUTHOR_EDIT_BATCH_POLICY_REVISION,
@@ -36,14 +34,12 @@ import {
   JOURNAL_DATABASE_VERSION,
   boundJournalRecord,
   digestSubmissionCoverage,
-  journalHasIncompatiblePendingReplaceSelection,
   mayAppendJournalSubmissionRecord,
   recordTargetsCurrentBase,
   rebuildPendingProjection,
   readJournalSnapshot,
   validateJournalSnapshot,
 } from "./local-edit-journal.ts";
-import { isRemovedDraftGroup } from "./removed-draft-path.ts";
 import {
   commitProtectedTransportSend,
   readAvailableCommandProof,
@@ -126,7 +122,7 @@ async function validateFrozenGroup(
     || request?.expected_authoritative_revision_id !== firstRecord.expected_authoritative_heads[0]
     || JSON.stringify(request?.expected_proposal_head_revision_ids)
       !== JSON.stringify(firstRecord.expected_proposal_heads)
-    || (request as StoredApplyAuthorEditRequest | undefined)?.retry_source !== undefined
+    || (request as { retry_source?: unknown } | undefined)?.retry_source !== undefined
     || JSON.stringify(request?.proposal_target)
       !== JSON.stringify(firstRecord.proposal_target)
     || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord.target_refs)
@@ -167,8 +163,7 @@ export async function freezeOneIntentSubmission(
     throw new Error("Editor Session is read only");
   }
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
-  const existing = snapshot.groups.find((group) => group.settlement?.kind === "unsettled"
-    && !isRemovedDraftGroup(group));
+  const existing = snapshot.groups.find((group) => group.settlement?.kind === "unsettled");
   if (existing) {
     if (existing.reconciliation?.kind === "outcome_query_unresolved") return existing;
     const existingRecords = existing.ordered_coverage.map((coverage) => {
@@ -200,13 +195,6 @@ export async function freezeOneIntentSubmission(
   });
   if (candidates.length === 0) {
     throw new Error("One pending Author Edit is required");
-  }
-  if (journalHasIncompatiblePendingReplaceSelection(
-    candidates,
-    new Set(),
-    workspace.session.base_snapshot,
-  )) {
-    throw new Error("Local Edit Journal requires Block reconfirmation");
   }
   const firstCandidate = candidates[0]!;
   if (firstCandidate.local_intent_sequence !== firstUncovered?.local_intent_sequence) {
@@ -455,7 +443,7 @@ async function settleAuthorEditResponse({
   const edgeRecord = request.proposal_target === undefined
     && request.author_edit_units.length === 1 && request.author_edit_units[0]?.normalized_primitives.length === 1
     && primitive?.kind === "replace_block_selection" && primitive.from === primitive.to
-    && (request.author_edit_units[0] as StoredAuthorEditUnit | undefined)?.selection_snapshot?.ordered_selection == null
+    && (request.author_edit_units[0]?.selection_snapshot as { ordered_selection?: unknown } | undefined)?.ordered_selection == null
     && request.observed_ownership_partition === "mixed" && request.expected_proposal_head_revision_ids.length === 1
     && workspace.session.base_snapshot.proposal_head_revision_ids.length === 0
     && workspace.session.base_snapshot.observed_ownership_partition === "authoritative"

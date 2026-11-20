@@ -316,31 +316,13 @@ and the editor enters read-only local recovery with `needs_attention`. A reader
 that finds a binding that names no earlier group also enters local
 recovery. The records stay immutable in each case.
 
-The version 5 upgrade runs in one version-change transaction. It keeps each
-version 4 row under its primary key with its bytes, and it writes only the schema
-version. Thus a version 4 Journal with one unsettled group has the same meaning
-at version 5. A version 3 Journal first gets the version 4 working index in the
-same transaction.
-
-A Journal that cannot upgrade keeps its earlier version and each
-row, and the editor enters read-only local recovery with `needs_attention`. The
-readable export of the Server text stays available.
-
-The editor also opens the
-version 4 Journal with no version request, so the open does not upgrade or write
-it. It reads the records of each partition in read-only transactions.
-The author can download the unsent text of each Chapter as one file that the
-editor labels as local unsent text. The file also holds the unsent candidate
-text of each Proposal, after the Chapter text. When the editor cannot read the
-records, for example in a version 3 Journal, it tells the author that local text
-exists. The earlier Journal stays unchanged, so a later reader can open it.
-
-The file holds the text of each record that has no proof of save. Only an
-applied group and a group that gives a Proposal Revision prove a save. A conflicted,
-refused, or no-effect group is not a save. A group that needs a new confirmation
-by the author is also not a save. When the editor cannot read one partition, it
-tells the author that local text exists, and the file keeps the text of each
-other partition.
+The Web has no upgrade from an earlier Journal version
+([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)). When IndexedDB asks for an upgrade, the Web aborts the
+version-change transaction. The open fails, and the earlier Journal keeps its
+version and each row. The editor enters read-only local recovery with
+`local_journal_unavailable`, as for a Journal of an unknown version. It does
+not show the text of that Journal, and the readable export of the Server text
+stays available.
 
 An `ExplicitEditorCommandRecord` durably represents takeover, Acceptance,
 rejection, withdrawal, reopen, supersede, continuation, completion,
@@ -1162,8 +1144,9 @@ separate axes and never override one another.
 
 Release 1 has no Refused Edit Draft
 ([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)).
-A stored Local Edit Journal group that an earlier client settled with
-`refused_to_draft` counts as resolved, and the Journal never sends it.
+The Local Edit Journal has no reader of a stored record or group of that path
+([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)). A record with a `draft_retry` source or a
+`replace_structured_selection` primitive fails the Journal validation.
 
 For Block Proposal candidate input, the frozen Journal group retains the exact
 Proposal, Operation, current Proposal Revision, and manuscript Block target.
