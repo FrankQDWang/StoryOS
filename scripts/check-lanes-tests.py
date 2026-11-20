@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests of scripts/check-lanes.py (issues 1711, 1712): the stop, the Chrome start gap, and some functions.
+"""Tests of scripts/check-lanes.py (issues 1711, 1712) and scripts/browser-vitest.sh (issue 1734).
 
 CHECK_LANES_SCRIPT gives another runner to test, for example the runner of an earlier commit.
 """
@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -254,13 +255,13 @@ class FunctionTests(unittest.TestCase):
         # The lane without a browser starts while the third browser lane waits.
         self.assertLess(lanes[3].started, lanes[2].started)
 
-    def run_lanes(self, module, lanes):
+    def run_lanes(self, module, lanes, root=ROOT):
         """Run the lanes in this process. Return the exit code, the output, and the time of the run."""
         handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
         output, began = io.StringIO(), time.monotonic()
         try:
             with contextlib.redirect_stdout(output):
-                code = module.run(ROOT, lanes, [])
+                code = module.run(root, lanes, [])
         finally:
             for number, handler in handlers.items():
                 signal.signal(number, handler)
@@ -386,6 +387,86 @@ class FunctionTests(unittest.TestCase):
         module.tool_output = tool_output
         self.assertFalse(module.remove_run_resources("token"))
         self.assertEqual(removed, ["network", "volume"])
+
+    def test_the_runner_prints_the_count_of_the_second_runs_of_its_lanes(self):
+        module = runner_module()
+        line = module.SECOND_RUN_LINE
+        for code in (0, 1):
+            with self.subTest(code=code):
+                root = Path(tempfile.mkdtemp(prefix="storyos-second-runs-"))
+                (root / "target/check").mkdir(parents=True)
+                # target/check keeps the logs of the lanes of earlier runs.
+                (root / "target/check/lanes-test-old.log").write_text(f"{line}\n")
+                lanes = [module.Lane("lanes-test-second-runs", ["sh", "-c", f"echo '{line}'; echo '{line}'; exit {code}"]),
+                         module.Lane("lanes-test-one-run", ["true"])]
+                result, text, _ = self.run_lanes(module, lanes, root)
+                self.assertEqual((result, text.splitlines()[-1]),
+                                 (code, "check-lanes: second runs of a browser Vitest run: 2 (lanes-test-second-runs 2)"),
+                                 text)
+
+
+# The output of Vitest 4.1.11 for a run that connected to no browser session (issue 1728).
+NO_BROWSER = ('Error: Failed to connect to the browser session "b63626c2" [browser-exact-dist (chromium)] within the '
+              "timeout.\n\n Test Files   (1)\n      Tests  no tests\n     Errors  1 error\n")
+PASSED = " Test Files  1 passed (1)\n      Tests  1 passed (1)\n"
+FAILED_TEST = " Test Files  1 failed (1)\n      Tests  1 failed (1)\n"
+CONNECT_LINE_WITH_TESTS = ('Error: Failed to connect to the browser session "b63626c2" [browser-exact-dist (chromium)] '
+                           "within the timeout.\n Test Files  1 failed (1)\n      Tests  1 failed | 2 passed (3)\n")
+
+
+class BrowserVitestTests(unittest.TestCase):
+    def browser_vitest(self, answers):
+        """Run scripts/browser-vitest.sh with fake `pnpm exec vitest` answers. Return the code, output, and record."""
+        root = Path(tempfile.mkdtemp(prefix="storyos-browser-vitest-"))
+        (root / "scripts").mkdir()
+        (root / "bin").mkdir()
+        shutil.copy(ROOT / "scripts/browser-vitest.sh", root / "scripts")
+        (root / "answers.json").write_text(json.dumps(answers))
+        # The fake start gap records each wait and does not wait.
+        (root / "scripts/check-lanes.py").write_text(
+            "from pathlib import Path\n"
+            "with open(Path(__file__).resolve().parent.parent / 'record', 'a') as record:\n"
+            "    record.write('gap\\n')\n")
+        # `pnpm exec` takes node_modules/.bin before the PATH, so the fake is `pnpm`. Each run takes the next answer.
+        pnpm = root / "bin/pnpm"
+        pnpm.write_text(
+            f"#!{sys.executable}\n"
+            "import json, sys\n"
+            "from pathlib import Path\n"
+            "root = Path(__file__).resolve().parent.parent\n"
+            "record = root / 'record'\n"
+            "runs = [line for line in record.read_text().splitlines() if line.startswith('run')]\n"
+            "answer = json.loads((root / 'answers.json').read_text())[len(runs)]\n"
+            "with open(record, 'a') as file:\n"
+            "    file.write('run ' + ' '.join(sys.argv[1:]) + '\\n')\n"
+            "sys.stdout.write(answer[0])\n"
+            "sys.exit(answer[1])\n")
+        pnpm.chmod(0o755)
+        result = subprocess.run(["sh", str(root / "scripts/browser-vitest.sh"), "--project", "browser-exact-dist",
+                                 "a.integration.test.ts"], capture_output=True, text=True, timeout=60,
+                                env={**os.environ, "PATH": f"{root / 'bin'}{os.pathsep}{os.environ['PATH']}"})
+        run = f"run --dir {root}/apps/web exec vitest run --project browser-exact-dist a.integration.test.ts"
+        record = ["gap" if line == "gap" else "run" if line == run else line
+                  for line in (root / "record").read_text().splitlines()]
+        return result.returncode, result.stdout, record
+
+    def test_only_a_run_that_connected_to_no_browser_runs_one_more_time(self):
+        line = runner_module().SECOND_RUN_LINE
+        one, two = ["gap", "run"], ["gap", "run", "gap", "run"]
+        cases = {
+            "no browser, then a pass": ([[NO_BROWSER, 1], [PASSED, 0]], (0, two, 1)),
+            "no browser two times": ([[NO_BROWSER, 1], [NO_BROWSER, 1], [PASSED, 0]], (1, two, 1)),
+            "a failed test": ([[FAILED_TEST, 1], [PASSED, 0]], (1, one, 0)),
+            "a pass": ([[PASSED, 0], [PASSED, 0]], (0, one, 0)),
+            "the connect line with tests that ran": ([[CONNECT_LINE_WITH_TESTS, 1], [PASSED, 0]], (1, one, 0)),
+        }
+        for name, (answers, expected) in cases.items():
+            with self.subTest(name):
+                code, output, record = self.browser_vitest(answers)
+                self.assertEqual((code, record, output.splitlines().count(line)), expected, output)
+                # The caller gets the output of each run.
+                self.assertEqual(output.replace(f"{line}\n", ""),
+                                 "".join(text for text, _ in answers[:len(expected[1]) // 2]))
 
 
 if __name__ == "__main__":

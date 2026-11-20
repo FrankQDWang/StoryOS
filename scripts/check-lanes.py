@@ -6,10 +6,10 @@ A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -e
 --postgres-shards adds the ignored tests of the library test binaries in shards, each with its own database.
 --project-scope adds the parts of `make check-full` after the lanes `build` and `package`: the storage activation
 checks, the exact-dist journeys in shards, and the two modes of the recovery drill.
-`scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; a script runs it before each
-browser Vitest run that does not start at the start of its lane.
+`scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; scripts/browser-vitest.sh runs it
+before each browser Vitest run that does not start at the start of its lane.
 When a lane fails or does not end in LANE_TIME_LIMIT_SECONDS, the runner stops the lanes, prints the log of that
-lane, and exits with 1.
+lane, and exits with 1. At the end, the runner prints the count of the second runs of scripts/browser-vitest.sh.
 """
 
 import fcntl
@@ -47,6 +47,7 @@ BROWSER_START_GAP_SECONDS = 8
 BROWSER_START_FILE = "target/check/browser-start"
 # A test gives another file in this variable, so that it does not change the gap of a run.
 BROWSER_START_VARIABLE = "STORYOS_BROWSER_START_FILE"
+SECOND_RUN_LINE = "browser-vitest: the run connected to no browser session and ran no test, so it runs one more time"
 # The count of the exact-dist journey shards. Each shard has its own database and its own packaged Servers.
 JOURNEY_SHARDS = 3
 # The time of the longest journey files in a run of `make check-full` on 2026-11-20 (issue 1712). The other files
@@ -481,6 +482,14 @@ def print_failure(lane, reason):
     print(Path(lane.log.name).read_text(errors="replace"), flush=True)
 
 
+def print_second_runs(lanes):
+    counts = {lane.name: Path(lane.log.name).read_text(errors="replace").splitlines().count(SECOND_RUN_LINE)
+              for lane in lanes}
+    if sum(counts.values()):
+        names = ", ".join(f"{name} {count}" for name, count in counts.items() if count)
+        print(f"check-lanes: second runs of a browser Vitest run: {sum(counts.values())} ({names})", flush=True)
+
+
 def run(root, lanes, final_checks):
     (root / "target/check").mkdir(parents=True, exist_ok=True)
     pending, running, finished, started = list(lanes), [], [], []
@@ -536,6 +545,7 @@ def run(root, lanes, final_checks):
                 print_failure(lane, reason)
                 for other in started:
                     print(f"Lane {other.name}: started at {round(other.started - began)} s", flush=True)
+                print_second_runs(started)
                 return 1
         if interrupted:
             stopped = stop(started, token)
@@ -549,6 +559,7 @@ def run(root, lanes, final_checks):
         return 1
     for lane in finished:
         print(f"Lane {lane.name}: {round(lane.duration)} s, started at {round(lane.started - began)} s")
+    print_second_runs(started)
     return 0
 
 
