@@ -22,7 +22,7 @@ use crate::shared_tests::command_sequence_proposal_decision::REJECT_PROPOSAL_OPE
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::command_sequence_support::{issued, seed_project};
 use crate::shared_tests::memory_entries::{archived_files, canonical};
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 use crate::shared_tests::research_artifact::{Reply, computed, tagged};
 use crate::shared_tests::research_source::{SEARCH_TEXT, calls_stream, calls_stream_in};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
@@ -485,20 +485,17 @@ async fn use_in_the_story(prefix: &str, story: &str, successor: bool) -> Story {
         )
         .await
         .unwrap();
-    let story_run = admit_run_in(
-        &store,
-        &scope,
-        run.get(/*idx*/ 0),
-        story,
-        DeploymentDestination::VolcengineAgentPlan {
+    let story_run = Admission {
+        destination: DeploymentDestination::VolcengineAgentPlan {
             qualification_authorization: None,
         },
-        "Use this research in the story.",
-        ConversationSelection::Existing {
+        message: "Use this research in the story.",
+        conversation: ConversationSelection::Existing {
             conversation_id: run.get(/*idx*/ 1),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, run.get(/*idx*/ 0), story)
     .await;
     let claim = claim_run(&admin, scope.clone(), story_run.clone()).await;
     complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)

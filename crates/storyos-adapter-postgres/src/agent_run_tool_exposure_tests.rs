@@ -15,7 +15,7 @@ use crate::shared_tests::agent_run_tool_exposure::{
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run, queued_run};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run};
 
 /// The stored complete response that a Retrieve reads: one complete function call.
 fn stored_function_call(reference: &str) -> String {
@@ -119,18 +119,16 @@ async fn a_bound_tool_is_declared_on_a_new_transport_and_its_function_call_settl
         .unwrap();
     // The deployment starts to offer the research destination between the two requests of one
     // Conversation, so the second createAgentRun binds it.
-    let second = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "f72",
-        plan,
-        "Check the tide tables of 1890.",
-        ConversationSelection::Existing {
+    let second = Admission {
+        destination: plan,
+        message: "Check the tide tables of 1890.",
+        conversation: ConversationSelection::Existing {
             conversation_id: "018f0000-0000-7001-8000-00000006f716".to_owned(),
         },
-        Some(&RESEARCH_TOOL_OFFER),
-    )
+        research: Some(&RESEARCH_TOOL_OFFER),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "f72")
     .await;
     let claim = claim_run(&admin, scope, second.clone()).await;
     complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)

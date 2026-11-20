@@ -2,7 +2,7 @@
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::model_gateway::RuntimeClock;
-use crate::shared_tests::model_gateway::{admit_run_in, claim_run, queued_run};
+use crate::shared_tests::model_gateway::{Admission, claim_run, queued_run};
 use storyos_application::{
     ConversationSelection, ModelProviderAdapter, NoContractFaults, complete_agent_run,
 };
@@ -160,18 +160,15 @@ pub(crate) async fn second_run_on_agent_plan_after(
     complete_agent_run(store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    let run_id = admit_run_in(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
+    let run_id = Admission {
         destination,
         message,
-        ConversationSelection::Existing {
+        conversation: ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[1])
     .await;
     admin
         .batch_execute(&before_claim.replace("{run}", &run_id))

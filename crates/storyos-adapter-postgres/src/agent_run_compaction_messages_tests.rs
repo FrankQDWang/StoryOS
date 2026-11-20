@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use storyos_application::{AgentRunReadSelection, AgentRunReadStore, ConversationSelection};
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, AgentRunStatus,
-    DeploymentDestination, HOST_FAKE_COMPACTION_OUTPUT,
+    HOST_FAKE_COMPACTION_OUTPUT,
 };
 use tokio_postgres::Client;
 
@@ -13,7 +13,7 @@ use crate::shared_tests::agent_run_steering::{
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::admit_run_in;
+use crate::shared_tests::model_gateway::Admission;
 
 /// For each decision request of the Run in RunStep order: its position, the earlier author
 /// messages and the author message that it sent, and whether it sent the current input again
@@ -84,16 +84,12 @@ async fn the_later_request_sends_the_earlier_author_messages_of_the_conversation
         ("862", "Name the inn The Gull."),
         ("863", current.as_str()),
     ] {
-        let run_id = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            prefix,
-            DeploymentDestination::HostFakeToolLoop,
+        let run_id = Admission {
             message,
-            conversation.clone(),
-            None,
-        )
+            conversation: conversation.clone(),
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, prefix)
         .await;
         complete(&store, &admin, &scope, &run_id).await;
         runs.push(run_id);

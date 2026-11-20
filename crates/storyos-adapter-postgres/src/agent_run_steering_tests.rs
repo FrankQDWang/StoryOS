@@ -26,9 +26,7 @@ use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::issued;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_referenced_run, admit_run_in, claim_run, queued_run_offering,
-};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run_offering};
 
 /// The status of the Run, and each steering input as its position, its text, and whether a
 /// decision Model Attempt read it.
@@ -155,9 +153,13 @@ async fn a_steering_input_of_a_later_run_step_joins_its_references_up_to_eight()
     let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
     let message = MESSAGE;
     let references = run_references.clone();
-    let run_id = admit_referenced_run(
-        &store, scope, chapter_id, "f92", tool_loop, message, references,
-    )
+    let run_id = Admission {
+        destination: tool_loop,
+        message,
+        references: Some(references),
+        ..Default::default()
+    }
+    .admit(&store, scope, chapter_id, "f92")
     .await;
     let inputs = vec![
         steering(
@@ -217,9 +219,13 @@ async fn after_a_steering_input_the_next_propose_edit_call_revises_the_moved_can
     let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
     let candidates = fixture.candidates(&admin).await;
     let references = candidates.clone();
-    let run_id = admit_referenced_run(
-        &store, scope, chapter_id, "f9a", tool_loop, REVISE, references,
-    )
+    let run_id = Admission {
+        destination: tool_loop,
+        message: REVISE,
+        references: Some(references),
+        ..Default::default()
+    }
+    .admit(&store, scope, chapter_id, "f9a")
     .await;
     // The first RunStep calls `propose_edit` and `finish`. The steering RunStep after it reads
     // one `propose_edit` result, so `propose_again` makes one call alone, and then a `finish`
@@ -345,16 +351,14 @@ async fn a_cancel_fences_the_research_call_of_a_later_run_step_and_no_later_run_
         .await
         .unwrap();
     let conversation = ConversationSelection::New;
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "f47",
-        tool_loop,
-        MESSAGE,
+    let run_id = Admission {
+        destination: tool_loop,
+        message: MESSAGE,
         conversation,
         research,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "f47")
     .await;
     let (mcp_base, _mcp) = destination(mcp_replies(exa_tools(|_| {}), None)).await;
     point_mcp(&admin, &scope, &mcp_base).await;
@@ -445,16 +449,13 @@ async fn a_steering_input_that_only_the_last_run_step_can_read_is_conflicted() {
             .unwrap();
         let conversation = ConversationSelection::New;
         let message = "SCRIPT:never_finish";
-        let run_id = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            prefixes[1],
-            tool_loop,
+        let run_id = Admission {
+            destination: tool_loop,
             message,
             conversation,
-            None,
-        )
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, prefixes[1])
         .await;
         let input = steering(&store, &scope, suffix, &run_id, "Keep the voice.", None).await;
         let author = AuthorAt::new(
@@ -538,16 +539,13 @@ async fn a_pause_before_the_first_request_opens_no_position_and_the_input_opens_
             .await
             .unwrap();
         let conversation = ConversationSelection::New;
-        let run_id = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            prefixes[1],
-            tool_loop.clone(),
-            MESSAGE,
+        let run_id = Admission {
+            destination: tool_loop.clone(),
+            message: MESSAGE,
             conversation,
-            None,
-        )
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, prefixes[1])
         .await;
         if pause {
             let input = PauseAgentRunInput {
@@ -605,16 +603,13 @@ async fn a_pause_before_the_first_request_opens_no_position_and_the_input_opens_
         .unwrap();
     let conversation = ConversationSelection::New;
     let message = "SCRIPT:never_finish";
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "fb7",
-        tool_loop,
+    let run_id = Admission {
+        destination: tool_loop,
         message,
         conversation,
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "fb7")
     .await;
     let input = PauseAgentRunInput {
         run_id: run_id.clone(),

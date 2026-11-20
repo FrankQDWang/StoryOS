@@ -5,6 +5,7 @@ use storyos_core::{NativeStreamItem, StreamItemRole, StreamItemState, ToolProbe}
 
 use super::*;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::Admission;
 use crate::shared_tests::runtime_qualification::{
     AUTHORIZATION, ScriptedAgentPlan, authorized, settle,
 };
@@ -122,30 +123,25 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
         native_type: Some("function_call".to_owned()),
         name: Some("storyos_probe_echo".to_owned()),
     }];
-    let call = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "b4b",
-        authorized(),
-        ToolProbe::FunctionCall.instruction(),
-    )
+    let call = Admission {
+        destination: authorized(),
+        message: ToolProbe::FunctionCall.instruction(),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "b4b")
     .await;
     authorize_tool_probes(&admin, &scope, &call).await;
     let call_adapter = response("resp_b4b", function_call);
     settle(&store, &admin, &scope, &call, &call_adapter).await;
-    let output = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "b4c",
-        authorized(),
-        ToolProbe::FunctionCallOutput.instruction(),
-        ConversationSelection::Existing {
+    let output = Admission {
+        destination: authorized(),
+        message: ToolProbe::FunctionCallOutput.instruction(),
+        conversation: ConversationSelection::Existing {
             conversation_id: "018f0000-0000-7001-8000-00000006b4b6".to_owned(),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "b4c")
     .await;
     authorize_tool_probes(&admin, &scope, &output).await;
     let pending = storyos_core::AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION.revision;
@@ -200,18 +196,15 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
             true,
         ),
     ] {
-        let run = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            prefix,
-            authorized(),
-            ToolProbe::FunctionCallOutput.instruction(),
-            ConversationSelection::Existing {
+        let run = Admission {
+            destination: authorized(),
+            message: ToolProbe::FunctionCallOutput.instruction(),
+            conversation: ConversationSelection::Existing {
                 conversation_id: "018f0000-0000-7001-8000-00000006b4b6".to_owned(),
             },
-            None,
-        )
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, prefix)
         .await;
         authorize_tool_probes(&admin, &scope, &run).await;
         move_call(
@@ -233,14 +226,12 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
         ));
     }
     // The head qualifies function calling, so the same message is an ordinary request.
-    let ordinary = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "b4d",
-        authorized(),
-        ToolProbe::FunctionCall.instruction(),
-    )
+    let ordinary = Admission {
+        destination: authorized(),
+        message: ToolProbe::FunctionCall.instruction(),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "b4d")
     .await;
     let ordinary_adapter = response(
         "resp_b4d",

@@ -17,8 +17,8 @@ use crate::shared_tests::agent_run_steering::{
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::Admission;
 use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
-use crate::shared_tests::model_gateway::{admit_run, admit_run_in};
 use crate::shared_tests::project_instruction::{applied, save};
 use crate::shared_tests::project_research_binding::park_queued_runs;
 
@@ -85,10 +85,22 @@ async fn a_run_binds_only_a_current_revision_with_text_other_than_white_space() 
     let (store, admin) = stores().await;
     let (scope, chapter_id, none) = queued(&store, "bc1").await;
     let blank = saved(&store, &scope, 0xdd11, " \n\u{3000}", 0).await;
-    let white_space = admit_run(&store, &scope, &chapter_id, "bc2", FAKE, "Help again.").await;
+    let white_space = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bc2")
+    .await;
     let text = " Write in the past tense.\n";
     let current = saved(&store, &scope, 0xdd12, text, 1).await;
-    let bound = admit_run(&store, &scope, &chapter_id, "bc3", FAKE, "Help again.").await;
+    let bound = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bc3")
+    .await;
     let context = |run_id: String| {
         let admin = &admin;
         async move { assemblies(admin, &run_id).await }
@@ -138,7 +150,13 @@ async fn a_run_binds_the_revision_of_its_own_project() {
     let (project_b, _, _) = queued(&store, "bc5").await;
     let revision_a = saved(&store, &project_a, 0xdd41, "Rule of Project A.", 0).await;
     saved(&store, &project_b, 0xdd51, "Rule of Project B.", 0).await;
-    let run_id = admit_run(&store, &project_a, &chapter_a, "bc6", FAKE, "Help again.").await;
+    let run_id = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        ..Default::default()
+    }
+    .admit(&store, &project_a, &chapter_a, "bc6")
+    .await;
     let payloads: String = admin
         .query_one(
             "SELECT string_agg(payload::text, ' ') FROM storyos.context_assembly_manifests
@@ -182,7 +200,13 @@ async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
     complete(&store, &admin, &scope, &first).await;
     let first_text = "Write in the past tense.";
     let first_revision = saved(&store, &scope, 0xdd71, first_text, 0).await;
-    let steered = admit_run(&store, &scope, &chapter_id, "bc8", FAKE, "Help again.").await;
+    let steered = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bc8")
+    .await;
     // The author saves a new text after the admission of the Run.
     let next_text = "Write in the present tense.";
     let next_revision = saved(&store, &scope, 0xdd72, next_text, 1).await;
@@ -195,16 +219,13 @@ async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
     settle(&store, &admin, &scope, &steered, &author)
         .await
         .unwrap();
-    let next = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "bc9",
-        FAKE,
-        "Help again.",
-        conversation_of("bc8"),
-        None,
-    )
+    let next = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        conversation: conversation_of("bc8"),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bc9")
     .await;
     complete(&store, &admin, &scope, &next).await;
     park_queued_runs(&admin, &scope).await;
@@ -246,20 +267,23 @@ async fn the_next_run_after_a_removal_sends_no_project_instruction() {
     complete(&store, &admin, &scope, &first).await;
     let text = "Write in the past tense.";
     saved(&store, &scope, 0xddd1, text, 0).await;
-    let bound = admit_run(&store, &scope, &chapter_id, "bce", FAKE, "Help again.").await;
+    let bound = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bce")
+    .await;
     complete(&store, &admin, &scope, &bound).await;
     // The author removes the Project Instruction.
     saved(&store, &scope, 0xddd2, "", 1).await;
-    let removed = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "bcf",
-        FAKE,
-        "Help again.",
-        conversation_of("bce"),
-        None,
-    )
+    let removed = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        conversation: conversation_of("bce"),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bcf")
     .await;
     complete(&store, &admin, &scope, &removed).await;
     park_queued_runs(&admin, &scope).await;
@@ -290,7 +314,13 @@ async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_
     let message = format!(
         "{ACTIVE_COMPACTION_REQUEST_PREFIX} {ACTIVE_COMPACTION_POSITIONS_PREFIX} 1. Help again."
     );
-    let compacted = admit_run(&store, &scope, &chapter_id, "bcc", FAKE, &message).await;
+    let compacted = Admission {
+        destination: FAKE,
+        message: &message,
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bcc")
+    .await;
     // The author saves a new text after the admission of the Run.
     saved(&store, &scope, 0xddb2, "Write in the present tense.", 1).await;
     complete(&store, &admin, &scope, &compacted).await;

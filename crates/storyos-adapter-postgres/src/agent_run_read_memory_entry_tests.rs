@@ -9,8 +9,7 @@ use storyos_application::{
     complete_agent_run_with_tools,
 };
 use storyos_core::{
-    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination,
-    RESEARCH_TOOL_OFFER,
+    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, RESEARCH_TOOL_OFFER,
 };
 use tokio_postgres::Client;
 
@@ -30,7 +29,7 @@ use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::{archived_rows, as_runtime, write_versions};
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 
 fn settled(text: &str) -> Value {
     json!(["read_memory_entry", "settled", null, text, true])
@@ -298,16 +297,12 @@ async fn a_read_of_a_run_that_lost_its_lease_writes_no_read_row() {
     complete(&store, &admin, &scope, &first).await;
     let versions = [(1, 1, 1, "current", "other", "潮汐", "潮汐表。")];
     write_versions(&admin, &scope, &versions).await;
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "c2b",
-        DeploymentDestination::HostFakeToolLoop,
-        "SCRIPT:read_memory_entry 1\nSearch the web: tide tables",
-        ConversationSelection::New,
-        Some(&RESEARCH_TOOL_OFFER),
-    )
+    let run_id = Admission {
+        message: "SCRIPT:read_memory_entry 1\nSearch the web: tide tables",
+        research: Some(&RESEARCH_TOOL_OFFER),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "c2b")
     .await;
     let (mcp_base, _mcp) = destination(mcp_replies(exa_tools(|_| {}), None)).await;
     point_mcp(&admin, &scope, &mcp_base).await;

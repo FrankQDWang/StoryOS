@@ -23,7 +23,7 @@ use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};
 use crate::shared_tests::grant_scope::current_grant;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run, claim_run};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 use crate::shared_tests::research_source::calls_stream;
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
@@ -621,16 +621,13 @@ async fn a_grant_scope_without_tool_results_refuses_the_continuation_and_the_nex
     let facts = run_facts(&admin, &ran.run_id).await;
     let (old_grant, _) = current_grant(&store, &admin, &ran.scope).await;
     let chapter_id = run_chapter(&admin, &ran.run_id).await;
-    let rebound_run = admit_run(
-        &store,
-        &ran.scope,
-        &chapter_id,
-        "e57",
-        DeploymentDestination::VolcengineAgentPlan {
+    let rebound_run = Admission {
+        destination: DeploymentDestination::VolcengineAgentPlan {
             qualification_authorization: None,
         },
-        "Help with this passage.",
-    )
+        ..Default::default()
+    }
+    .admit(&store, &ran.scope, &chapter_id, "e57")
     .await;
     let (new_grant, new_scope) = current_grant(&store, &admin, &ran.scope).await;
     // The rebound Run dispatches under the current scope.

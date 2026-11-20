@@ -16,7 +16,7 @@ use crate::shared_tests::agent_run_finish_rule::text_item;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::RuntimeClock;
-use crate::shared_tests::model_gateway::{admit_run, admit_run_in, claim_run, queued_run};
+use crate::shared_tests::model_gateway::{Admission, claim_run, queued_run};
 use crate::shared_tests::runtime_qualification::{ScriptedAgentPlan, authorized, settle};
 
 const REFERENCE: &str = storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE;
@@ -97,7 +97,13 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
     });
     settle(&store, &admin, &scope, &early_run, &unknown).await;
     settle(&store, &admin, &other_scope, &other_run, &unknown).await;
-    let unknown_run = admit_run(&store, &scope, &chapter_id, "e9b", authorized(), "Help.").await;
+    let unknown_run = Admission {
+        destination: authorized(),
+        message: "Help.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "e9b")
+    .await;
     let current = open_project_assistance(&store, &scope)
         .await
         .unwrap()
@@ -176,21 +182,24 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
         cache_use: storyos_application::CacheUse::Unknown,
         response_reference: Some("resp_01".to_owned()),
     }));
-    let first = admit_run(&store, &scope, &chapter_id, "e9c", authorized(), "Help.").await;
+    let first = Admission {
+        destination: authorized(),
+        message: "Help.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "e9c")
+    .await;
     settle(&store, &admin, &scope, &first, &advisory).await;
     let conversation_id = "018f0000-0000-7001-8000-00000006e9c6".to_owned();
-    let next = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "e9d",
-        authorized(),
-        "Help again.",
-        ConversationSelection::Existing {
+    let next = Admission {
+        destination: authorized(),
+        message: "Help again.",
+        conversation: ConversationSelection::Existing {
             conversation_id: conversation_id.clone(),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "e9d")
     .await;
     settle(&store, &admin, &scope, &next, &advisory).await;
     // The prior binding of the Conversation came from the earlier Registration of the route.
@@ -207,16 +216,13 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
         )
         .await
         .unwrap();
-    let upgraded = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "ea7",
-        authorized(),
-        "Help once more.",
-        ConversationSelection::Existing { conversation_id },
-        None,
-    )
+    let upgraded = Admission {
+        destination: authorized(),
+        message: "Help once more.",
+        conversation: ConversationSelection::Existing { conversation_id },
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "ea7")
     .await;
     settle(&store, &admin, &scope, &upgraded, &advisory).await;
 
@@ -594,18 +600,15 @@ async fn the_dispatch_claim_refuses_a_prior_reference_that_changed_after_prepara
         response_reference: Some("resp_01".to_owned()),
     }));
     settle(&store, &admin, &scope, &first, &advisory).await;
-    let next = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "eab",
-        authorized(),
-        "Help again.",
-        ConversationSelection::Existing {
+    let next = Admission {
+        destination: authorized(),
+        message: "Help again.",
+        conversation: ConversationSelection::Existing {
             conversation_id: "018f0000-0000-7001-8000-00000006ea96".to_owned(),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "eab")
     .await;
     let adapter = ReferenceChangingAgentPlan {
         admin: &admin,

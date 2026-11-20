@@ -55,12 +55,30 @@ pub(crate) enum AuthorAction {
     Sequence(Vec<AuthorAction>),
 }
 
+/// The count of the Create requests of a Run of a fake model, from 1.
+#[derive(Default)]
+pub(crate) struct Creates(Mutex<usize>);
+
+impl Creates {
+    /// The count of `request` when it is a Create request.
+    pub(crate) fn count(&self, request: &DestinationRequest) -> Option<usize> {
+        match request {
+            DestinationRequest::Create(_) => {
+                let mut creates = self.0.lock().unwrap();
+                *creates += 1;
+                Some(*creates)
+            }
+            DestinationRequest::Retrieve(_) | DestinationRequest::Abort(_) => None,
+        }
+    }
+}
+
 /// The fake model of the tool loop profile, and the author who acts one time at `moment`.
 pub(crate) struct AuthorAt<'a> {
     pub store: &'a PostgresProjectReader,
     pub moment: Moment,
     pub action: AuthorAction,
-    creates: Mutex<usize>,
+    creates: Creates,
     pub(crate) answers: Mutex<Vec<SteeringAnswer>>,
 }
 
@@ -74,7 +92,7 @@ impl<'a> AuthorAt<'a> {
             store,
             moment,
             action,
-            creates: Mutex::new(/*value*/ 0),
+            creates: Creates::default(),
             answers: Mutex::new(Vec::new()),
         }
     }
@@ -189,14 +207,7 @@ impl ModelProviderAdapter for AuthorAt<'_> {
         &self,
         request: &DestinationRequest,
     ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
-        let create = match request {
-            DestinationRequest::Create(_) => {
-                let mut creates = self.creates.lock().unwrap();
-                *creates += 1;
-                Some(*creates)
-            }
-            DestinationRequest::Retrieve(_) | DestinationRequest::Abort(_) => None,
-        };
+        let create = self.creates.count(request);
         if let (Some(count), Moment::BeforeRequest(at)) = (create, self.moment)
             && count == at
         {

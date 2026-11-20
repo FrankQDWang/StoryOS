@@ -24,9 +24,7 @@ use crate::shared_tests::command_sequence_proposal_decision::{
 use crate::shared_tests::command_sequence_support::issued;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
-};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run_offering};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
 /// Completes the first Run of a new Project of `destination`, then completes one Run with
@@ -41,16 +39,12 @@ async fn revise_run(
     let (scope, chapter_id, first) =
         queued_run_offering(store, prefixes[0], destination.clone(), None).await;
     complete(store, admin, &scope, &first).await;
-    let run_id = admit_run_in(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
+    let run_id = Admission {
         destination,
-        &format!("{REVISE}{script}"),
-        ConversationSelection::New,
-        None,
-    )
+        message: &format!("{REVISE}{script}"),
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[1])
     .await;
     complete(store, admin, &scope, &run_id).await;
     (scope, run_id)
@@ -462,16 +456,13 @@ async fn a_successor_call_or_a_later_refusal_keeps_the_proposal_of_the_decision_
             queued_run_offering(&store, prefixes[0], destination.clone(), None).await;
         complete(&store, &admin, &scope, &first).await;
         let new = ConversationSelection::New;
-        let run_id = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            prefixes[1],
+        let run_id = Admission {
             destination,
             message,
-            new,
-            None,
-        )
+            conversation: new,
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, prefixes[1])
         .await;
         let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
         let adapter = ReviseScript {

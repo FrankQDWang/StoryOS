@@ -17,7 +17,7 @@ use crate::shared_tests::agent_run_finish_rule::tool_loop_run;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run, queued_run};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run};
 
 /// An author message that asks the Host fake to compact at RunSteps 0 and 1.
 fn compact_twice() -> String {
@@ -167,18 +167,15 @@ async fn compact_twice_with_change(
     complete_agent_run(&store, &fake, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
+    let run_id = Admission {
         destination,
-        &compact_twice(),
-        ConversationSelection::Existing {
+        message: &compact_twice(),
+        conversation: ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, prefixes[1])
     .await;
     let adapter = ChangingFake {
         admin: &admin,

@@ -4,10 +4,10 @@ use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_steering::queued;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::admit_selected_run;
+use crate::shared_tests::model_gateway::Admission;
 use serde_json::Value;
 use std::sync::Arc;
-use storyos_application::{ConversationSelection, ProjectScope};
+use storyos_application::ProjectScope;
 use storyos_core::{SKILL_MD_PATH, SkillPackage, SkillSet};
 use tokio_postgres::Client;
 
@@ -27,15 +27,12 @@ pub(crate) async fn loaded_run(
 ) -> (ProjectScope, String) {
     let (scope, chapter_id, first) = queued(store, prefixes[0]).await;
     complete(store, admin, &scope, &first).await;
-    let run_id = admit_selected_run(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
+    let run_id = Admission {
         message,
-        ConversationSelection::New,
-        (skills, Vec::new()),
-    )
+        skills: (skills, Vec::new()),
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[1])
     .await;
     complete(store, admin, &scope, &run_id).await;
     (scope, run_id)

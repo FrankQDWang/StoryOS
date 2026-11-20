@@ -9,7 +9,7 @@ use tokio_postgres::Client;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::admit_embedding_run;
+use crate::shared_tests::model_gateway::Admission;
 use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
 use crate::shared_tests::project_research_binding::park_queued_runs;
 
@@ -40,9 +40,19 @@ async fn create_agent_run_binds_embedding_only_with_a_configuration_and_in_its_p
     let (store, admin) = stores().await;
     let (first, chapter_id, _) = embedding_project(&store, &admin, ["ab1", "ab2"], None).await;
     let unconfigured = embedding_records(&admin, &first).await;
-    admit_embedding_run(&store, &first, &chapter_id, "ab3", FAKE).await;
+    Admission {
+        embedding: FAKE,
+        ..Default::default()
+    }
+    .admit(&store, &first, &chapter_id, "ab3")
+    .await;
     let bound = embedding_records(&admin, &first).await;
-    admit_embedding_run(&store, &first, &chapter_id, "ab4", FAKE).await;
+    Admission {
+        embedding: FAKE,
+        ..Default::default()
+    }
+    .admit(&store, &first, &chapter_id, "ab4")
+    .await;
     let again = embedding_records(&admin, &first).await;
     let (second, ..) = embedding_project(&store, &admin, ["ab5", "ab6"], FAKE).await;
     park_queued_runs(&admin, &first).await;

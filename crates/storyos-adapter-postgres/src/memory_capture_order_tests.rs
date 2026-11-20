@@ -13,7 +13,7 @@ use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{project, run_capture, start};
 use crate::shared_tests::memory_capture_loop::{script, settlement};
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_with_id};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock};
 
 fn newer_id() -> String {
     uuid::Uuid::now_v7().to_string()
@@ -58,7 +58,13 @@ async fn a_run_of_the_author_goes_first_and_the_capture_continues_at_the_same_ru
     .await
     .unwrap();
     // The identity of the Run of the author is newer than the identity of the capture Run.
-    let first = admit_run_with_id(&store, &scope, &chapter_id, "fdf", "Help.", newer_id()).await;
+    let first = Admission {
+        message: "Help.",
+        run_id: Some(newer_id()),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "fdf")
+    .await;
     let claimed = claim_in_project(&store, &scope).await.unwrap();
     complete_agent_run(
         &store,
@@ -70,7 +76,13 @@ async fn a_run_of_the_author_goes_first_and_the_capture_continues_at_the_same_ru
     .await
     .unwrap();
     let capture = claim_in_project(&store, &scope).await.unwrap();
-    let second = admit_run_with_id(&store, &scope, &chapter_id, "fd7", "Help.", newer_id()).await;
+    let second = Admission {
+        message: "Help.",
+        run_id: Some(newer_id()),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "fd7")
+    .await;
     complete_agent_run(
         &store,
         &FakeDestination,

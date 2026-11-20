@@ -12,7 +12,7 @@ use crate::shared_tests::agent_run_compaction_summary::{
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::RuntimeClock;
-use crate::shared_tests::model_gateway::{admit_run_in, claim_run, queued_run};
+use crate::shared_tests::model_gateway::{Admission, claim_run, queued_run};
 
 /// Settles the first AgentRun of a new Conversation, then settles one compaction request in the
 /// same Conversation, and returns the identity of the second AgentRun.
@@ -29,18 +29,15 @@ async fn compact_after_first_run(
     complete_agent_run(store, adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    let run_id = admit_run_in(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
+    let run_id = Admission {
         destination,
-        ACTIVE_COMPACTION_REQUEST_PREFIX,
-        ConversationSelection::Existing {
+        message: ACTIVE_COMPACTION_REQUEST_PREFIX,
+        conversation: ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[1])
     .await;
     admin
         .batch_execute(&before_compaction.replace("{project}", scope.project_id.as_ref()))
@@ -286,18 +283,14 @@ async fn compact_with_change(
     )
     .await
     .unwrap();
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
-        DeploymentDestination::HostFakeToolLoop,
-        ACTIVE_COMPACTION_REQUEST_PREFIX,
-        ConversationSelection::Existing {
+    let run_id = Admission {
+        message: ACTIVE_COMPACTION_REQUEST_PREFIX,
+        conversation: ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, prefixes[1])
     .await;
     let adapter = ChangingFake {
         admin: &admin,

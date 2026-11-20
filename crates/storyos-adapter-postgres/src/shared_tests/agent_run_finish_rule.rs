@@ -1,9 +1,7 @@
 //! The shared test support from `agent_run_finish_rule_tests.rs`.
 
 use crate::PostgresProjectReader;
-use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
-};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run_offering};
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::{FakeDestination, FakeEmbeddings};
 use storyos_application::{
@@ -56,16 +54,14 @@ pub(crate) async fn tool_loop_run(
         true => conversation_of(prefixes[0]),
         false => ConversationSelection::New,
     };
-    let run_id = admit_run_in(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
+    let run_id = Admission {
         destination,
-        author_message,
+        message: author_message,
         conversation,
         research,
-    )
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[1])
     .await;
     complete(store, admin, &scope, &run_id).await;
     (scope, chapter_id, first, run_id)
