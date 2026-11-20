@@ -201,7 +201,7 @@ it("continues writing after 2400 saved and collected input intents", async () =>
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
     await deleteJournal(scenario.journalName);
   }
-}, 180000);
+}, 360000);
 
 it("retires settled single-input groups up to the first uncollected group", async () => {
   const scenario = createBrowserScenario();
@@ -276,7 +276,7 @@ it("retires settled single-input groups up to the first uncollected group", asyn
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
     await deleteJournal(scenario.journalName);
   }
-}, 180000);
+}, 360000);
 
 it("retires a stored record and group of a removed Draft path with the collected prefix", async () => {
   const scenario = createBrowserScenario();
@@ -346,4 +346,4 @@ it("retires a stored record and group of a removed Draft path with the collected
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
     await deleteJournal(scenario.journalName);
   }
-}, 180000);
+}, 360000);

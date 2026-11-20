@@ -18,6 +18,7 @@ use crate::shared_tests::agent_run_steering::cancellation;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::model_gateway::conversation as conversation_of;
 use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, queued_run_offering};
 
 const MESSAGES: [&str; 4] = [
@@ -33,13 +34,6 @@ async fn complete(store: &PostgresProjectReader, admin: &Client, scope: &Project
     complete_agent_run(store, destination.0, destination.1, destination.2, &claim)
         .await
         .unwrap();
-}
-
-async fn conversation_of(admin: &Client, run_id: &str) -> String {
-    let query =
-        "SELECT conversation_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid";
-    let row = admin.query_one(query, &[&run_id]).await.unwrap();
-    row.get(/*idx*/ 0)
 }
 
 /// The completed Runs A1, B1, C1, and A2, in this order, of the Conversations A, B, and C of a
