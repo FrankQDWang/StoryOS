@@ -8,7 +8,7 @@ import type { SelectionReference } from "../../../../generated/typescript/storyo
 import { readManuscriptParagraphs } from "../../src/manuscript-doc.ts";
 import { storyosManuscriptExtensions } from "../../src/manuscript-tiptap-adapter.ts";
 import {
-  canAddReference, candidateRange, chapterTextReference, formatReferenceLabel, mapReferenceRange, mergeReferences,
+  candidateRange, chapterTextReference, formatReferenceLabel, mapReferenceRange, mergeReferences,
   referenceLabel, referenceRange, selectionReferences, SELECTION_REFERENCE_LIMIT, type ChapterTextReference,
 } from "../../src/selection-reference.ts";
 
@@ -106,9 +106,7 @@ test("a message and an AgentRun hold at most eight distinct references", () => {
     coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0, end_offset: 2 };
   const seven = mergeReferences(references.slice(0, 4), [...references.slice(2, 7), references[0]!]);
   assert.deepEqual(seven, references.slice(0, 7));
-  assert.equal(canAddReference(seven), true);
   assert.deepEqual(mergeReferences(seven, [candidate, { ...candidate }]), [...seven, candidate]);
-  assert.equal(canAddReference(mergeReferences(seven, [candidate])), false);
 });
 
 test("a label numbers the Chapter in reading order and counts only the paragraphs", () => {

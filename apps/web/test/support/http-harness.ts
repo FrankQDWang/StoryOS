@@ -43,7 +43,7 @@ export function freshNamespace(): string {
 export const SESSIONS: Readonly<Record<string, string>> = { "session-a": USER_A, "session-b": USER_B, "session-c": USER_A };
 
 /** The options of `startServer`. The default sessions are `SESSIONS`. */
-export type ServerOptions = Omit<Parameters<typeof startStoryOSServer>[0], "repositoryRoot" | "serverBinary">;
+type ServerOptions = Omit<Parameters<typeof startStoryOSServer>[0], "repositoryRoot" | "serverBinary">;
 
 /** Starts one packaged Server process. */
 export function startServer(options: ServerOptions = {}): Promise<StoryOSServer> {
@@ -127,7 +127,7 @@ export type ProjectCommandId = {
     : never;
 }[keyof Client];
 type Options<Op extends ProjectCommandId> = Parameters<Client[Op]>[0];
-export type CommandRequest<Op extends ProjectCommandId> = Options<Op>["request"];
+type CommandRequest<Op extends ProjectCommandId> = Options<Op>["request"];
 export type CommandResponse<Op extends ProjectCommandId> = Awaited<ReturnType<Client[Op]>>;
 type CommandPath<Op extends ProjectCommandId> = Omit<Options<Op>, keyof CommandOptions | "fetchImpl" | "signal">;
 /** The request of one project command, its path parameters, and an optional fixed idempotency key. */
@@ -135,13 +135,13 @@ export type CommandInput<Op extends ProjectCommandId> = { request: CommandReques
   & (keyof CommandPath<Op> extends never ? { path?: undefined } : { path: CommandPath<Op> });
 
 /** One response of a project command with the exact bytes of its body. */
-export interface Delivered<Op extends ProjectCommandId> {
+interface Delivered<Op extends ProjectCommandId> {
   readonly response: CommandResponse<Op>;
   readonly body: string;
 }
 
 /** One project command with a solved Command Challenge. Each `send` uses the same idempotency key and nonce. */
-export interface Challenged<Op extends ProjectCommandId> {
+interface Challenged<Op extends ProjectCommandId> {
   readonly key: string;
   readonly nonce: string;
   send(options?: { request?: CommandRequest<Op>; session?: string; fetchImpl?: typeof fetch }): Promise<Delivered<Op>>;
@@ -605,7 +605,7 @@ export async function openEditorSession(baseUrl: string, correlationId: string,
 // Activity streams
 
 /** One Server-Sent Event frame. */
-export interface SseFrame {
+interface SseFrame {
   data: unknown;
   event: string;
   id: string;
@@ -677,19 +677,6 @@ export async function inspectFirstRunStep(baseUrl: string,
   return inspectRun(baseUrl, prepared, runId, await queryStoryOSPostgres(`
     SELECT model_attempt_id::text FROM storyos.model_attempts
      WHERE run_id = '${runId}'::uuid AND attempt_role = 'decision' ORDER BY decision_position LIMIT 1;`));
-}
-
-/** Waits until the AgentRun has an opened Proposal for which `match` holds, and returns that Proposal. */
-export async function waitForOpenedProposal(baseUrl: string,
-  prepared: { readonly projectId: string; readonly fetchImpl: typeof fetch }, runId: string,
-  match: (opened: GetProposalResponse) => boolean): Promise<GetProposalResponse> {
-  const opened = await waitFor(async () => {
-    const queried = await inspectRun(baseUrl, prepared, runId);
-    if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present") return undefined;
-    return client.getProposal({ baseUrl, projectId: prepared.projectId,
-      proposalId: queried.decision.opened_proposal.proposal_id, fetchImpl: prepared.fetchImpl });
-  }, (current) => current !== undefined && match(current));
-  return opened as GetProposalResponse;
 }
 
 /** Waits until the command of this key has its settled outcome, also when the Server holds its response. */

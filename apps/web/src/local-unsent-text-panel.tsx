@@ -1,6 +1,6 @@
 import type { LocalUnsentText } from "./local-unsent-text.ts";
 
-export const LOCAL_UNSENT_TEXT_FILE_NAME = "storyos-local-unsent-text.txt";
+const LOCAL_UNSENT_TEXT_FILE_NAME = "storyos-local-unsent-text.txt";
 
 /** The file text. Each Chapter body, then each unsent Proposal candidate text, under its label. */
 export function localUnsentTextFile(text: LocalUnsentText, chapterTitles: ReadonlyMap<string, string>): string {

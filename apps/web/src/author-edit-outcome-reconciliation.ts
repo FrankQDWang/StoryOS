@@ -83,7 +83,7 @@ const transactionResult = (transaction: IDBTransaction): Promise<void> => new Pr
   },
 );
 
-export function groupEvidenceRank(group: GroupEvidenceView | undefined): number {
+function groupEvidenceRank(group: GroupEvidenceView | undefined): number {
   const settlement = group?.settlement?.kind;
   if (settlement === "applied_receipt_settled"
     || settlement === "zero_authority_receipt_settled"
@@ -98,7 +98,7 @@ export function groupEvidenceRank(group: GroupEvidenceView | undefined): number 
   return 0;
 }
 
-export function sameTerminalIdentity(
+function sameTerminalIdentity(
   left: GroupEvidenceView | undefined,
   right: GroupEvidenceView | undefined,
 ): boolean {
@@ -410,7 +410,7 @@ function closedOutcome(payload: unknown): ClosedOutcome | null {
   return null;
 }
 
-export function reduceStrongest(
+function reduceStrongest(
   prior: OutcomeQueryReconciliation | undefined,
   nextClosed?: ClosedStillUnknown,
 ): OutcomeQueryReconciliation {

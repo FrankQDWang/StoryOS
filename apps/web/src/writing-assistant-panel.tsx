@@ -36,9 +36,9 @@ import { clearDraftReferences, draftEntries, draftLabels, setRunReferences } fro
 import { SKILL_UNAVAILABLE_SENTENCE, skillSelectionUnavailable } from "./skill-selection.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
-export const CONVERSATION_NOT_FOUND_SENTENCE = "找不到这段对话。";
-export const CONVERSATION_OPEN_FAILED_SENTENCE = "无法打开这段对话，请稍后再试。";
-export const EARLIER_TURNS_EXPIRED_SENTENCE = "这段对话已超过 72 小时，助手可能不记得之前的内容。";
+const CONVERSATION_NOT_FOUND_SENTENCE = "找不到这段对话。";
+const CONVERSATION_OPEN_FAILED_SENTENCE = "无法打开这段对话，请稍后再试。";
+const EARLIER_TURNS_EXPIRED_SENTENCE = "这段对话已超过 72 小时，助手可能不记得之前的内容。";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type TranscriptExchange = {
@@ -90,7 +90,7 @@ export type SentReferences = { references: SelectionReference[]; labels: string[
 export type SentSkills = { references: SkillPackageReference[]; unavailable: () => void };
 
 /** Calls `refresh` later, and returns a function that cancels the call. */
-export type RefreshSchedule = (refresh: () => void) => () => void;
+type RefreshSchedule = (refresh: () => void) => () => void;
 
 const RUN_REFRESH_MS = 2000;
 

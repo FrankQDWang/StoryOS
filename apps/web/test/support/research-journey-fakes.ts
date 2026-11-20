@@ -4,10 +4,10 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
 /** The JSON body of one request that a fake received. */
-export type ReceivedBody = Record<string, unknown>;
+type ReceivedBody = Record<string, unknown>;
 
 /** The SSE events of one Agent Plan response, made from the request body and the earlier bodies. */
-export type ModelReply = (body: ReceivedBody, earlier: readonly ReceivedBody[]) => readonly unknown[];
+type ModelReply = (body: ReceivedBody, earlier: readonly ReceivedBody[]) => readonly unknown[];
 
 export interface FakeDestination {
   readonly base: string;
@@ -81,7 +81,7 @@ function completed(id: string, output: readonly unknown[]): unknown[] {
 }
 
 /** One `[call_id, function name, arguments]` function call. */
-export type ModelCall = readonly [string, string, unknown];
+type ModelCall = readonly [string, string, unknown];
 
 /** One response that requests each call in order. A function makes the calls from the request bodies. */
 export function callsReply(id: string,
@@ -146,7 +146,7 @@ function callText(params: { name: string; arguments: { urls?: string[] } }): str
 
 /** A held answer of one `tools/call`. `release` sends it and tells whether the connection of the caller was
  * still open. */
-export interface HeldAnswer {
+interface HeldAnswer {
   readonly release: () => { readonly connectionOpen: boolean };
 }
 

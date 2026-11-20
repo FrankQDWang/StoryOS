@@ -331,29 +331,6 @@ export async function reviseCandidate(
   return { session, revised };
 }
 
-/** Moves the Chapter Head to a new Revision with these Blocks, as an author change outside the editor. */
-export async function advanceChapterHead(projectId: string, chapterId: string, fromRevisionId: string,
-  revisionId: string, blocks: { manuscript_block_id: string; text: string }[]) {
-  const payload = blocks.length === 1 ? blocks[0]!.text : JSON.stringify({
-    format: "storyos.manuscript-payload.v1", schema_version: 1, coordinate_version: 1,
-    blocks: blocks.map((block) => ({ ...block, block_kind: "paragraph" })) });
-  const from = `FROM storyos.authoritative_revisions WHERE project_id = '${projectId}'::uuid
-    AND revision_id = '${fromRevisionId}'::uuid`;
-  await queryPostgres([
-    ...blocks.map((block) => `INSERT INTO storyos.manuscript_blocks SELECT owner_user_id, project_id,
-      '${block.manuscript_block_id}'::uuid, manuscript_object_id, 'paragraph' ${from} ON CONFLICT DO NOTHING;`),
-    `INSERT INTO storyos.authoritative_payloads SELECT owner_user_id, project_id, '${revisionId}'::uuid,
-      convert_to('${payload.replaceAll("'", "''")}', 'UTF8') ${from};`,
-    `INSERT INTO storyos.authoritative_revisions SELECT owner_user_id, project_id, manuscript_object_id,
-      '${revisionId}'::uuid, '${revisionId}'::uuid ${from};`,
-    ...blocks.map((block, index) => `INSERT INTO storyos.manuscript_revision_members SELECT owner_user_id,
-      project_id, manuscript_object_id, '${revisionId}'::uuid, '${block.manuscript_block_id}'::uuid, ${index + 1} ${from};`),
-    `UPDATE storyos.authoritative_heads SET current_revision_id = '${revisionId}'::uuid
-      WHERE project_id = '${projectId}'::uuid AND manuscript_object_id = '${chapterId}'::uuid;`,
-  ].join("\n"));
-  await alignWriterBase(projectId, chapterId, revisionId, revisionId);
-}
-
 /** Moves the editor session base of the current writer to the Chapter Head, as an Author Edit does. */
 export async function alignWriterBase(projectId: string, chapterId: string,
   nextRevision: string, snapshotId: string): Promise<void> {
@@ -527,7 +504,7 @@ export function operations(proposal: Proposal) {
 }
 
 /** The Proposal ownership that one author edit observes: none, an acknowledged head, or an explicit target. */
-export type EditOwnership = { kind: "authoritative" } | { kind: "acknowledged" | "targeted"; proposal: Proposal };
+type EditOwnership = { kind: "authoritative" } | { kind: "acknowledged" | "targeted"; proposal: Proposal };
 
 type AuthorEditContext = {
   prepared: { projectId: string; fetchImpl: typeof fetch };

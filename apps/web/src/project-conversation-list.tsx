@@ -5,7 +5,7 @@ import type {
   ListProjectConversationsResponse, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 
-export const CONVERSATION_LIST_UNAVAILABLE_SENTENCE = "无法读取历史对话，请稍后再试。";
+const CONVERSATION_LIST_UNAVAILABLE_SENTENCE = "无法读取历史对话，请稍后再试。";
 
 /**
  * The Project Conversations of the Project, the newest first (ADR 0094 section 10). The list reads the Host each time

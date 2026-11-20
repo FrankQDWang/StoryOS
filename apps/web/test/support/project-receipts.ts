@@ -5,7 +5,7 @@ import { queryStoryOSPostgres } from "./node-integration";
 const USER_A = "018f0000-0000-7001-8000-000000000001";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
-export type ProjectReceiptExpectation = Readonly<{
+type ProjectReceiptExpectation = Readonly<{
   /** The count of the Projects that the journey made. */
   projects: number;
   /** The Receipt count of each command kind. */

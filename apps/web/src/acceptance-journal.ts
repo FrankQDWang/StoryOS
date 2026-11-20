@@ -64,7 +64,7 @@ export function decisionRoute(kind: DecisionFlight["command_kind"]): string {
   return `/api/v1/projects/{project_id}/proposals/{proposal_id}/${kind === "acceptProposal"
     ? "acceptances" : "rejections"}`;
 }
-export function decisionSchema(kind: DecisionFlight["command_kind"]): string {
+function decisionSchema(kind: DecisionFlight["command_kind"]): string {
   return kind === "acceptProposal" ? "storyos.command.accept-proposal.request.v1"
     : "storyos.command.reject-proposal-operations.request.v1";
 }
@@ -74,23 +74,23 @@ export function decisionDigestProfile(kind: DecisionFlight["command_kind"]): str
 }
 const MAX_ACCEPTANCE_RECORDS = 2400;
 
-export function decisionPrefix(flight: DecisionFlight): string {
+function decisionPrefix(flight: DecisionFlight): string {
   return flight.command_kind === "acceptProposal" ? "acceptance" : "rejection";
 }
-export function digestDecision(flight: DecisionFlight, cryptoImpl: Crypto): Promise<DigestValue> {
+function digestDecision(flight: DecisionFlight, cryptoImpl: Crypto): Promise<DigestValue> {
   return flight.command_kind === "acceptProposal"
     ? digestAcceptProposal(flight.request, cryptoImpl)
     : digestRejectProposalOperations(flight.request, cryptoImpl);
 }
 export type AcceptanceRefusal = Extract<BlockProposalInspect["latest_acceptance_refusal"],
   { kind: "present" }>;
-export type AcceptancePreAdmissionProblem = {
+type AcceptancePreAdmissionProblem = {
   status: number;
   code: string;
   message: string;
   responseBody: string;
 };
-export type AcceptanceReceiptSettlement =
+type AcceptanceReceiptSettlement =
   | { kind: "settled"; response: AcceptProposalResponse }
   | { kind: "refused"; refusal: AcceptanceRefusal };
 export type AcceptanceSettlement = AcceptanceReceiptSettlement
