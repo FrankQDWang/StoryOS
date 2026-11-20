@@ -6,7 +6,7 @@
 use serde_json::{Map, Value, json};
 
 use crate::{
-    ContractDifference, ExternalRead, ExternalWrite, GrantScope, IntakeField, RegisteredTool,
+    ContractDifference, ExternalRead, GrantScope, IntakeField, RegisteredTool,
     ToolCompatibilityDecision, ToolIntake, ToolRegistration, ToolRegistrationLifecycle, ToolSpec,
 };
 
@@ -61,7 +61,6 @@ impl ToolCallState {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ToolEffectRequest {
     pub external_read: ExternalRead,
-    pub external_write: ExternalWrite,
     pub outbound_disclosure: IntakeField,
     /// The values of the disclosed field: the query, or the URLs.
     pub disclosed: Vec<String>,
@@ -91,7 +90,6 @@ impl ToolEffectRequest {
         };
         Some(Self {
             external_read: envelope.external_read,
-            external_write: envelope.external_write,
             outbound_disclosure: envelope.outbound_disclosure,
             disclosed,
         })
@@ -104,9 +102,8 @@ impl ToolEffectRequest {
                 ExternalRead::OneSearch => "one_search",
                 ExternalRead::GivenUrls => "given_urls",
             },
-            "external_write": match self.external_write {
-                ExternalWrite::None => "none",
-            },
+            // The evidence keeps its `external_write` member: no ToolSpec declares a write.
+            "external_write": "none",
             "outbound_disclosure": self.outbound_disclosure.source_class(),
             "disclosed": self.disclosed,
         })
@@ -129,11 +126,10 @@ impl GrantScope {
     pub fn covers(self, effect: &ToolEffectRequest) -> bool {
         match self {
             Self::ResearchToolV1 => {
-                effect.external_write == ExternalWrite::None
-                    && matches!(
-                        effect.outbound_disclosure,
-                        IntakeField::Query | IntakeField::UrlList
-                    )
+                matches!(
+                    effect.outbound_disclosure,
+                    IntakeField::Query | IntakeField::UrlList
+                )
             }
             Self::ProjectWritingAssistanceV1
             | Self::ProjectWritingAssistanceV2

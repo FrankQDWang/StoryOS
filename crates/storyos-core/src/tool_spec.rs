@@ -73,19 +73,12 @@ pub enum ExternalRead {
     GivenUrls,
 }
 
-/// The external write that a ToolSpec declares. No research ToolSpec declares one.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ExternalWrite {
-    None,
-}
-
-/// The upper bound of the effects of one ToolCall: one external read, the declared external
-/// write, and one Outbound Disclosure of one intake field. The type has no project read,
+/// The upper bound of the effects of one ToolCall: one external read and one Outbound Disclosure
+/// of one intake field. No ToolSpec declares an external write. The type has no project read,
 /// Artifact write, or Authoritative State mutation, and a server annotation never changes it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ToolEffectEnvelope {
     pub external_read: ExternalRead,
-    pub external_write: ExternalWrite,
     pub outbound_disclosure: IntakeField,
 }
 
@@ -108,7 +101,6 @@ pub const WEB_SEARCH_TOOL_SPEC: ToolSpec = ToolSpec {
     intake_contract: &[IntakeField::Query, IntakeField::ResultCount],
     envelope: Some(ToolEffectEnvelope {
         external_read: ExternalRead::OneSearch,
-        external_write: ExternalWrite::None,
         outbound_disclosure: IntakeField::Query,
     }),
     result_text_max_bytes: TOOL_RESULT_TEXT_MAX_BYTES,
@@ -120,7 +112,6 @@ pub const WEB_FETCH_TOOL_SPEC: ToolSpec = ToolSpec {
     intake_contract: &[IntakeField::UrlList],
     envelope: Some(ToolEffectEnvelope {
         external_read: ExternalRead::GivenUrls,
-        external_write: ExternalWrite::None,
         outbound_disclosure: IntakeField::UrlList,
     }),
     result_text_max_bytes: TOOL_RESULT_TEXT_MAX_BYTES,
