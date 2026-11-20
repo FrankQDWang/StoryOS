@@ -261,7 +261,7 @@ impl<'a> Resolution<'a> {
         Self::host(ToolCallState::Settled, /*refusal*/ None, Some(result))
     }
 
-    /// A call that ends in `state` with no Destination Attempt and no effect outcome: a Host Tool
+    /// A call that ends in `state` with no Destination Attempt and no Tool Effect Outcome: a Host Tool
     /// call, or an external ToolCall that `refuse` settles before the dispatch claim.
     pub(crate) fn host(
         state: ToolCallState,
