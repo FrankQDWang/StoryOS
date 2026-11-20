@@ -3,8 +3,8 @@ import { cancelAgentRun, createProjectCommandChallenge, digestCancelAgentRun, di
 import type { CancelAgentRunRequest, GetAgentRunResponse, PauseAgentRunRequest, ProjectScope, SelectionReference,
   SteerAgentRunRequest } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { uuidV7 } from "./acceptance-journal.ts";
 import type { AssistantContext } from "./writing-assistant-panel.tsx";
+import { uuidV7 } from "./client-identity.ts";
 
 type Target = { scope: ProjectScope; runId: string; conversationId: string; idempotencyKey: string };
 export type RunControlIntent = Target & (

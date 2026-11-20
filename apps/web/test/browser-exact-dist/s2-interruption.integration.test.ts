@@ -6,15 +6,14 @@ import {
   focusManuscriptEnd,
   manuscriptBody,
   manuscriptEditor,
-  MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
 import {
   appRoot,
   applicationWindow,
   closeApplicationFrame,
-  nextFrameLoad,
   openApplicationFrame,
   openFirstChapterForm,
+  reloadProject,
   submitChapterForm,
   submitProjectForm,
   submitVolumeForm,
@@ -32,22 +31,6 @@ afterEach(async () => {
 
 function saveNode(root: Element): Element | null {
   return root.querySelector("[data-save-state]");
-}
-
-async function reloadProject(
-  frame: HTMLIFrameElement,
-  projectId: string,
-): Promise<Element> {
-  const reopened = nextFrameLoad(frame);
-  frame.src = `/projects/${projectId}`;
-  await reopened;
-  await expect.poll(() => {
-    const root = frame.contentDocument?.querySelector("#app");
-    if (root === null || root === undefined) return false;
-    return root.getAttribute("data-boot-state") === "project-ready"
-      && root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
-  }, { timeout: 10_000 }).toBe(true);
-  return appRoot(frame);
 }
 
 it("recovers Local Edit Journal text after reload without a second Author Edit", async () => {

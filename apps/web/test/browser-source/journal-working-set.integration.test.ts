@@ -7,13 +7,14 @@ import { openEditorWorkspace, appendAuthorEdit, submitOnePendingAuthorEdit }
   from "../../src/editor-session.ts";
 import { collectEligibleJournalPayload } from "../../src/journal-payload-collection.ts";
 import type { JournalIntentRecord, JournalSnapshot, JournalSubmissionGroup } from "../../src/editor-types.ts";
-import { createJournalUuid, readJournalSnapshot, rebuildPendingProjection }
+import { readJournalSnapshot, rebuildPendingProjection }
   from "../../src/local-edit-journal.ts";
 import {
   OWNER, PROJECT, SESSION, chapterRevision, createAppliedAuthorEditResponse,
   createBrowserScenario, deleteJournal, jsonResponse, requestHeaders,
   requireDigestValue, requireEditorReady, requireRequestBody, requestResult,
 } from "./scenario.ts";
+import { uuidV7 } from "../../src/client-identity.ts";
 
 function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserScenario>,
   currentBody: () => string) {
@@ -39,19 +40,19 @@ function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserSce
       const request = requireRequestBody(init);
       const idempotencyKey = requestHeaders(init).get("idempotency-key");
       if (!commandDigest || !idempotencyKey) throw new Error("missing admitted identity");
-      const revisionId = createJournalUuid();
+      const revisionId = uuidV7();
       const response = createAppliedAuthorEditResponse({ request, commandDigest,
         idempotencyKey, body, projectActivityPosition: String(++position),
         priorRevisionId: session.base_snapshot.authoritative_head_revision_id,
-        authoritativeRevisionId: revisionId, commandId: createJournalUuid(),
-        authorCommandAdmissionId: createJournalUuid(), receiptId: createJournalUuid(),
-        authoritativeCommitId: createJournalUuid(),
+        authoritativeRevisionId: revisionId, commandId: uuidV7(),
+        authorCommandAdmissionId: uuidV7(), receiptId: uuidV7(),
+        authoritativeCommitId: uuidV7(),
       });
       const digest = new Uint8Array(await crypto.subtle.digest(
         "SHA-256", new TextEncoder().encode(body),
       ));
       session = { ...session, base_snapshot: { ...session.base_snapshot,
-        snapshot_id: createJournalUuid(), project_activity_position: String(position),
+        snapshot_id: uuidV7(), project_activity_position: String(position),
         authoritative_head_revision_id: revisionId,
         materialized_revision: chapterRevision(revisionId, body),
         materialized_payload_digest: { algorithm: "sha256",
@@ -79,7 +80,7 @@ it("continues writing after 2400 saved and collected input intents", async () =>
   requireEditorReady(workspace);
   try {
     for (let batch = 0; batch < 10; batch++) {
-      const undoGroupId = createJournalUuid();
+      const undoGroupId = uuidV7();
       for (let offset = 0; offset < 240; offset++) {
         const from = body.length;
         body += "a";
@@ -217,7 +218,7 @@ it("retires settled single-input groups up to the first uncollected group", asyn
   const uncollected = 60;
   try {
     for (const [group, size] of sizes.entries()) {
-      const undoGroupId = createJournalUuid();
+      const undoGroupId = uuidV7();
       for (let offset = 0; offset < size; offset++) {
         const from = body.length;
         body += "a";
@@ -295,7 +296,7 @@ it("retires a stored record and group of a removed Draft path with the collected
       coordinate_profile: "storyos.draft-replacement.block-utf16.v1", from: { block_index: 0, offset: 0 },
       to: { block_index: 0, offset: 1 }, slice_digest: "b".repeat(64) } } as const;
   let createdAt = Date.UTC(2026, 7, 15, 8);
-  let undoGroupId = createJournalUuid();
+  let undoGroupId = uuidV7();
   const append = (text: string) => appendAuthorEdit(workspace, { from: body.length, to: body.length, text,
     resultingBody: body + text, inputOrigin: "typing", undoGroupId, createdAt: new Date(createdAt++).toISOString() });
   // An earlier client stored a Draft retry. The Server never applied its text, so the body stays.
@@ -318,7 +319,7 @@ it("retires a stored record and group of a removed Draft path with the collected
     await append("x");
     await storeDraftRetry();
     for (const [index, size] of [238, 0, ...Array.from({ length: 9 }, () => 240)].entries()) {
-      undoGroupId = createJournalUuid();
+      undoGroupId = uuidV7();
       if (index === 1) {
         await append("x");
         await storeDraftRetry(await freezeOneIntentSubmission(workspace));

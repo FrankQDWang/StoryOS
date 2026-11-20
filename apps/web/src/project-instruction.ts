@@ -8,10 +8,9 @@ import type { ProjectScope, UpdateProjectInstructionRequest }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 
-import { uuidV7 } from "./acceptance-journal.ts";
 import { challengeRefused, refusedWith } from "./refused-command.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 
-const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
 /** The text and the revision of the current Project Instruction. Revision "0" is a Project with no Revision. */
 export type SavedInstruction = { text: string; revision: string };

@@ -6,7 +6,7 @@ import { expect } from "playwright/test";
 import type { BrowserContext } from "playwright";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { uuidV7 } from "../../src/acceptance-journal.ts";
+import { uuidV7 } from "../../src/client-identity.ts";
 import { createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun, getChapter, getProposal, pauseAgentRun, digestPauseAgentRun,
   updateProjectAssistance } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";

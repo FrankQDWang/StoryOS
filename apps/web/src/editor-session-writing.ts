@@ -6,7 +6,6 @@ import {
   AUTHOR_EDIT_MAX_UNITS,
   appendAuthorEdit,
   candidateTextsFromJournal,
-  createJournalUuid,
   readJournalSnapshot,
   rebuildPendingProjection,
   reconfirmLegacyReplaceSelection,
@@ -22,6 +21,7 @@ import { flattenChapterBody, type ManuscriptParagraph } from "./manuscript-doc.t
 import type { UndoLatestAuthorActionUnavailableReason }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
+import { uuidV7 } from "./client-identity.ts";
 
 /** One edit that the editor captures. The controller adds the input origin, the undo group, and the time. */
 type CapturedEdit = JournalAuthorEdit;
@@ -358,7 +358,7 @@ export function createEditorSessionWritingController({
     // A settlement above can give the candidate a new Proposal Revision.
     const edit = rebind(capturedEdit);
     const target = targetOf(edit);
-    undoGroupId ??= createJournalUuid(cryptoImpl);
+    undoGroupId ??= uuidV7(cryptoImpl);
     let projection: PendingEditProjection;
     try {
       projection = await appendAuthorEdit(workspace, { ...edit, inputOrigin: origin, undoGroupId, createdAt }, cryptoImpl);

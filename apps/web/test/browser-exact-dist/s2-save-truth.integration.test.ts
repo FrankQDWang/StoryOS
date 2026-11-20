@@ -13,6 +13,7 @@ import {
 import {
   appRoot,
   applicationWindow,
+  chapterButton,
   closeApplicationFrame,
   nextFrameLoad,
   openApplicationFrame,
@@ -28,12 +29,6 @@ afterEach(async () => {
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
-
-function chapterButton(root: Element, title: string): HTMLButtonElement | undefined {
-  return [...root.querySelectorAll<HTMLButtonElement>(
-    'nav[aria-label="稿件目录"] button[data-chapter-id]',
-  )].find((button) => button.textContent === title);
-}
 
 function saveNode(root: Element): Element | null {
   return root.querySelector("[data-save-state]");

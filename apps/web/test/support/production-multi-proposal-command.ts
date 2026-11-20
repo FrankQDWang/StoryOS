@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "playwright/test";
@@ -11,13 +10,9 @@ import type { CreateAgentRunRequest, CreateAgentRunResponse, AcceptProposalReque
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch } from "./node-integration.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
+import { uuidV7 } from "../../src/client-identity.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-function id() {
-  const value = randomUUID();
-  const time = Date.now().toString(16).padStart(12, "0");
-  return `${time.slice(0, 8)}-${time.slice(8)}-7${value.slice(15)}`;
-}
 
 export async function verifyProductionMultiProposal(context: BrowserContext, origin: string) {
   const page = await context.newPage();
@@ -26,7 +21,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
   let phase = "setup";
   try {
     await page.goto(origin);
-    await page.locator('input[name="title"]').fill(`Multi-location ${id()}`);
+    await page.locator('input[name="title"]').fill(`Multi-location ${uuidV7()}`);
     await page.locator('input[name="title"]').press("Enter");
     await page.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
     const projectId = await page.locator('.project-heading[data-project-id]').getAttribute('data-project-id');
@@ -40,8 +35,8 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const request: UpdateProjectAssistanceRequest = { command_schema: "storyos.command.update-project-assistance.request.v1",
       update_project_assistance_input: { availability: "available", expected_assistance_revision: "0",
         client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-        security_policy_revision: "storyos.web-security-policy.release-1.v1", correlation_id: id() } };
-    const key = id();
+        security_policy_revision: "storyos.web-security-policy.release-1.v1", correlation_id: uuidV7() } };
+    const key = uuidV7();
     const challenge = await createProjectCommandChallenge({ ...options, request: { method: "PUT",
       route_template: "/api/v1/projects/{project_id}/assistance", command_schema: request.command_schema,
       canonical_command_digest: await digestUpdateProjectAssistance(request), idempotency_key: key } });
@@ -142,8 +137,8 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
         const response = await route.fetch();
         const body = await response.json();
         if (fault === 'stale' && !switched) return route.fulfill({ response });
-        if (fault === 'stale') body.proposal.revision_id = id();
-        if (fault === 'wrong_scope') body.project_scope.project_id = id();
+        if (fault === 'stale') body.proposal.revision_id = uuidV7();
+        if (fault === 'wrong_scope') body.project_scope.project_id = uuidV7();
         await route.fulfill(fault === 'deleted' ? { status: 404, json: { code: 'not_found' } } : { response, json: body });
         observedFault = true;
       });
@@ -370,8 +365,8 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
         expected_authoritative_revision_id: proposal.base_authoritative_revision_id,
         editor_session_id: editorSessionId,
         client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-        security_policy_revision: 'storyos.web-security-policy.release-1.v1', correlation_id: id() } };
-    const frozenKey = id();
+        security_policy_revision: 'storyos.web-security-policy.release-1.v1', correlation_id: uuidV7() } };
+    const frozenKey = uuidV7();
     const deliver = async () => {
       const challenge = await createProjectCommandChallenge({ ...options, request: { method: 'POST',
         route_template: '/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances',

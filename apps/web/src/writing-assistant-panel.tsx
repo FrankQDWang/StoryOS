@@ -34,8 +34,8 @@ import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { mergeReferences } from "./selection-reference.ts";
 import { clearDraftReferences, draftEntries, draftLabels, setRunReferences } from "./selection-reference-draft.ts";
 import { SKILL_UNAVAILABLE_SENTENCE, skillSelectionUnavailable } from "./skill-selection.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 
-const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const CONVERSATION_NOT_FOUND_SENTENCE = "找不到这段对话。";
 const CONVERSATION_OPEN_FAILED_SENTENCE = "无法打开这段对话，请稍后再试。";
 const EARLIER_TURNS_EXPIRED_SENTENCE = "这段对话已超过 72 小时，助手可能不记得之前的内容。";
@@ -108,18 +108,6 @@ export type AssistantContext = {
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
 };
-
-function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
-  const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
-  for (let offset = 5; offset >= 0; offset -= 1) {
-    bytes[offset] = now & 0xff;
-    now = Math.floor(now / 256);
-  }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 function storageKey(scope: ProjectScope): string {
   return `prose_request:${scope.owner_user_id}:${scope.project_id}`;

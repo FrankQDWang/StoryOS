@@ -2,6 +2,7 @@ import type { EditorBaseSnapshot, ProjectScope } from "../../../generated/typesc
 import type { EditorWorkspace, JournalIntentRecord, JournalPartition, ValidatedJournalSnapshot } from "./editor-types.ts";
 import { JOURNAL_OBJECT_STORES, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 import { isRemovedDraftGroup, isRemovedDraftRecord } from "./removed-draft-path.ts";
+import { requestResult } from "./indexed-db-request.ts";
 
 /** The unsent text of a Local Edit Journal that cannot upgrade (contract 3.2). */
 export interface LocalUnsentText {
@@ -33,11 +34,6 @@ function unsavedTexts(snapshot: ValidatedJournalSnapshot) {
     return { record, text };
   });
 }
-
-const requestResult = <T>(request: IDBRequest<T>): Promise<T> => new Promise((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-});
 
 /**
  * Opens the Journal with no version request, so the open does not upgrade it, and reads it in read-only

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { webcrypto } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +13,7 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/sto
 import { queryStoryOSPostgres, sessionFetch, startStoryOSServer, stopStoryOSServer }
   from "./node-integration.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
+import { uuidV7 } from "../../src/client-identity.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const USER = "018f0000-0000-7001-8000-000000000001";
@@ -21,19 +21,6 @@ const BINDING = {
   client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
   security_policy_revision: "storyos.web-security-policy.release-1.v1",
 };
-
-function uuidV7(): string {
-  const bytes = webcrypto.getRandomValues(new Uint8Array(16));
-  let now = Date.now();
-  for (let offset = 5; offset >= 0; offset -= 1) {
-    bytes[offset] = now & 0xff;
-    now = Math.floor(now / 256);
-  }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 export async function verifyProductionCapturedMemory(context: BrowserContext): Promise<void> {
   const owned = await startStoryOSServer({ repositoryRoot,

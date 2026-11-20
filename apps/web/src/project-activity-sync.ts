@@ -10,6 +10,7 @@ import {
   ingestProjectActivityFrames,
   resyncProjectActivityFromSnapshot,
 } from "./project-activity-ingest.ts";
+import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
 export type ProjectActivitySyncResult =
   | {
@@ -39,22 +40,6 @@ interface ActivityStreamCursor {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-});
-const transactionResult = (transaction: IDBTransaction): Promise<void> => new Promise(
-  (resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction aborted"),
-    );
-    transaction.onerror = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction failed"),
-    );
-  },
-);
-
 function cursorKey(workspace: EditorWorkspace): string {
   const scope = workspace.partition.project_scope;
   return `project_activity_stream:${scope.owner_user_id}:${scope.project_id}`;

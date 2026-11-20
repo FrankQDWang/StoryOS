@@ -4,6 +4,7 @@ import { afterEach, expect, it } from "vitest";
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
 import {
   applicationWindow,
+  chapterButton,
   closeApplicationFrame,
   nextFrameLoad,
   openApplicationFrame,
@@ -21,12 +22,6 @@ afterEach(async () => {
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
-
-function chapterButton(root: Element | null | undefined, title: string): HTMLButtonElement | undefined {
-  return [...(root?.querySelectorAll<HTMLButtonElement>(
-    'nav[aria-label="稿件目录"] button[data-chapter-id]',
-  ) ?? [])].find((button) => button.textContent === title);
-}
 
 async function createThreeChapterProject(frame: HTMLIFrameElement): Promise<void> {
   await submitProjectForm(frame, "Navigate Reopen Novel");

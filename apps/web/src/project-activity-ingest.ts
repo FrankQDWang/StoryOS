@@ -14,6 +14,7 @@ import type {
 } from "./editor-types.ts";
 import { JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
 import { MAX_WORKING_JOURNAL_ITEMS } from "./journal-working-set.ts";
+import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
@@ -22,22 +23,6 @@ const boundedU64 = (value: unknown): value is string => typeof value === "string
 const isoInstant = (value: unknown): value is string => typeof value === "string"
   && !Number.isNaN(Date.parse(value))
   && new Date(Date.parse(value)).toISOString() === value;
-
-const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-});
-const transactionResult = (transaction: IDBTransaction): Promise<void> => new Promise(
-  (resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction aborted"),
-    );
-    transaction.onerror = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction failed"),
-    );
-  },
-);
 
 function ingestKey(scope: ProjectScope): string {
   return `project_activity_ingest:${scope.owner_user_id}:${scope.project_id}`;

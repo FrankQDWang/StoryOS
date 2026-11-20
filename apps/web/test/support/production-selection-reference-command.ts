@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "playwright/test";
@@ -12,12 +11,7 @@ import type { CreateAgentRunRequest, CreateAgentRunResponse, SelectionReference,
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { runStoryOSWorker, sessionFetch } from "./node-integration.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
-
-function uuidV7() {
-  const value = randomUUID();
-  const time = Date.now().toString(16).padStart(12, "0");
-  return `${time.slice(0, 8)}-${time.slice(8)}-7${value.slice(15)}`;
-}
+import { uuidV7 } from "../../src/client-identity.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const PARAGRAPHS = ["雨夜。渡口无人。", "船夫在等着。", "灯灭了。"];
