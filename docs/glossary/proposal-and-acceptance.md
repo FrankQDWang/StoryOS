@@ -97,7 +97,7 @@ An author's non-destructive decision not to apply selected pending Proposal Oper
 _Avoid_: Withdrawal, deletion
 
 **Proposal Withdrawal**:
-A non-destructive removal of a Proposal from active review by the author or by its producer: its source AgentRun and Decision. A Proposal Revision records no producer, so an author candidate edit does not change this producer. Withdrawal is not represented as an author rejection. Author Undo keeps a Withdrawal by the producer of the Proposal. The Undo restores the content, and the Proposal stays `withdrawn` until the author reopens it. The Undo of an author reopen gives the Withdrawal back, so the author can reopen it again ([ADR 0069](../adr/0069-keep-a-producer-withdrawal-through-author-undo.md)).
+A non-destructive removal of a Proposal from active review by the author or by its producer: its source AgentRun and Decision. A Proposal Revision records no producer, so an author candidate edit does not change this producer. Withdrawal is not represented as an author rejection. Author Undo keeps a Withdrawal by the producer of the Proposal. The Undo restores the content, and the Proposal stays `withdrawn` ([ADR 0069](../adr/0069-keep-a-producer-withdrawal-through-author-undo.md)). No command opens a Proposal that its producer withdrew. Author Undo of an author Withdrawal opens the Proposal again in a new Revision ([ADR 0098](../adr/0098-remove-the-three-proposal-recovery-commands-that-no-client-sends.md)).
 _Avoid_: Rejection, deletion
 
 **Safe Compensation Head**:

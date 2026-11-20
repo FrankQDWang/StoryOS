@@ -6,16 +6,16 @@ use storyos_core::{TransitionOutcome, WithdrawProposalNoEffect};
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_producer_withdrawal_undo::{
-    head_state, producer_withdraw, producer_withdrawal, undo_and_retry,
+    head_state, producer_withdraw, producer_withdrawal,
 };
 use crate::shared_tests::command_sequence_proposal_undo_chain::{
-    compensated, edit, head_closure, on, undo_latest, withdraw,
+    compensated, edit, head_closure, on, undo_call, undo_latest, withdraw,
 };
 use crate::shared_tests::command_sequence_secondary_operation::{
     operation_candidates, two_operation_proposal,
 };
-use crate::shared_tests::command_sequence_support::stores;
-use crate::shared_tests::command_sequence_undo::latest_forward;
+use crate::shared_tests::command_sequence_support::{stores, with_new_request_ids};
+use crate::shared_tests::command_sequence_undo::{latest_forward, undo};
 
 /// `state` with the closure `closure` and the validation `validation`.
 fn with_axes(mut state: [String; 5], validation: &str, closure: &str) -> [String; 5] {
@@ -45,7 +45,17 @@ async fn author_undo_of_a_candidate_edit_keeps_a_producer_withdrawal() {
     )
     .await;
     producer_withdraw(&store, &admin, &proposal, /*suffix*/ 0x4f0a).await;
-    let (undo_edit, retried) = undo_and_retry(&store, &admin, &proposal, /*suffix*/ 0x4f0b).await;
+    let call = undo_call(
+        &store,
+        &admin,
+        &proposal.scope,
+        &proposal.editor_session_id,
+        &proposal.chapter_revision_id,
+        /*suffix*/ 0x4f0b,
+    )
+    .await;
+    let undo_edit = undo(&store, &call).await.unwrap();
+    let retried = undo(&store, &with_new_request_ids(&call)).await.unwrap();
     let after_undo = head_state(&admin, &proposal.proposal_id).await;
 
     assert_eq!(

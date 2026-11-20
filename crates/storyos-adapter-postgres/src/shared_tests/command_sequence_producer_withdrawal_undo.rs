@@ -2,18 +2,11 @@
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::command_sequence_proposal_decision::WITHDRAW_PROPOSAL;
-use crate::shared_tests::command_sequence_proposal_undo_chain::undo_call;
 use crate::shared_tests::command_sequence_secondary_operation::{
     TwoOperationProposal, proposal_head_revision,
 };
-use crate::shared_tests::command_sequence_support::{
-    challenge_issue, command_call, with_new_request_ids,
-};
-use crate::shared_tests::command_sequence_undo::undo;
-use storyos_application::{
-    CurrentProducerWithdrawal, CurrentProducerWithdrawalSettlement,
-    UndoLatestAuthorActionSettlement,
-};
+use crate::shared_tests::command_sequence_support::{challenge_issue, command_call};
+use storyos_application::{CurrentProducerWithdrawal, CurrentProducerWithdrawalSettlement};
 use storyos_core::TransitionOutcome;
 use tokio_postgres::Client;
 
@@ -94,28 +87,4 @@ pub(crate) async fn head_state(admin: &Client, proposal_id: &str) -> [String; 5]
         .await
         .unwrap();
     std::array::from_fn(|idx| row.get(idx))
-}
-
-/// Undo of the current Author Undo Frontier and an exact retry of the same Undo.
-pub(crate) async fn undo_and_retry(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    proposal: &TwoOperationProposal,
-    suffix: u16,
-) -> (
-    UndoLatestAuthorActionSettlement,
-    UndoLatestAuthorActionSettlement,
-) {
-    let call = undo_call(
-        store,
-        admin,
-        &proposal.scope,
-        &proposal.editor_session_id,
-        &proposal.chapter_revision_id,
-        suffix,
-    )
-    .await;
-    let settled = undo(store, &call).await.unwrap();
-    let retried = undo(store, &with_new_request_ids(&call)).await.unwrap();
-    (settled, retried)
 }

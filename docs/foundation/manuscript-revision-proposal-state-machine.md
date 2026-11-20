@@ -330,6 +330,7 @@ Unlisted transitions are invalid.
 | validation | `valid`, `invalid`, or `conflicted` | `valid` or `conflicted` | author edits pending content in a new Proposal Revision, and Core validates it in the same Transition |
 | validation | `conflicted` | `pending` | an explicit Replan in a new Proposal Revision (historical, ADR 0098) |
 | closure | `open` | `withdrawn` | `WithdrawProposal` |
+| closure | `withdrawn` | `open` | Author Undo of an author Withdrawal in a new Revision (ADR 0098) |
 | closure | `withdrawn` | `open` | explicit reopen with new Revision (historical, ADR 0098) |
 | closure | `open` or `withdrawn` | `superseded` | `SupersedeProposal` |
 | resolution | `pending` | `applied` | successful Acceptance |

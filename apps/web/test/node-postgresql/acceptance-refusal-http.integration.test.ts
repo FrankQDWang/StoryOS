@@ -265,3 +265,90 @@ test("acceptProposal retains altered_candidate across reload and refuses another
     await server.stop();
   }
 });
+
+test("getProposal and the Project archive keep a seeded Proposal Conflict condition", async () => {
+  const server = await TestServer.start();
+  try {
+    await drainLeftoverWork();
+    const story = await createStory(server, { title: "Proposal Conflict Condition Novel", assistance: true });
+    const chapterId = story.chapterIds[0] ?? "";
+    const chapter = async () => (await getChapter({ baseUrl: story.baseUrl, projectId: story.projectId,
+      chapterId, fetchImpl: story.fetchImpl })).chapter;
+    const inspect = async (proposalId: string) => (await getProposal({ baseUrl: story.baseUrl,
+      projectId: story.projectId, proposalId, fetchImpl: story.fetchImpl })).proposal;
+    let before = await chapter();
+    // openProposal refuses a decision that is not an opened prose change.
+    const opened = await openProposal(story);
+    assert.deepEqual(opened.proposal.source_condition, { kind: "absent" });
+    const { session, revised } = await reviseCandidate(story.baseUrl, story.fetchImpl, story.projectId, opened,
+      freshNamespace());
+    if (revised.proposal.validation_receipt.kind !== "present") {
+      throw new Error("expected validation receipt");
+    }
+    const headId = story.key();
+    await queryStoryOSPostgres(`INSERT INTO storyos.authoritative_revisions
+      SELECT owner_user_id, project_id, manuscript_object_id, '${headId}'::uuid, payload_id
+      FROM storyos.authoritative_revisions WHERE project_id = '${story.projectId}'::uuid
+        AND revision_id = '${before.current_revision.revision_id}'::uuid;
+      INSERT INTO storyos.manuscript_revision_members
+      SELECT owner_user_id, project_id, manuscript_object_id, '${headId}'::uuid,
+        manuscript_block_id, block_order FROM storyos.manuscript_revision_members
+      WHERE project_id = '${story.projectId}'::uuid
+        AND revision_id = '${before.current_revision.revision_id}'::uuid;
+      UPDATE storyos.authoritative_heads SET current_revision_id = '${headId}'::uuid
+      WHERE project_id = '${story.projectId}'::uuid
+        AND manuscript_object_id = '${chapterId}'::uuid`);
+    before = await chapter();
+    const { conflictRef, receiptId } = await seedAcceptanceCondition(story.baseUrl, story.fetchImpl,
+      story.projectId, revised.proposal, session.editor_session.editor_session_id,
+      before.current_revision.revision_id, "proposal_conflict", freshNamespace());
+    const afterConflict = await inspect(revised.proposal.proposal_id);
+    assert.equal(afterConflict.validation, "conflicted");
+    assert.equal(afterConflict.revision_id, revised.proposal.revision_id);
+    assert.deepEqual(afterConflict.source_condition, {
+      kind: "proposal_conflict",
+      proposal_conflict_ref: conflictRef,
+    });
+    await queryStoryOSPostgres(`UPDATE storyos.proposal_validation_conditions
+      SET condition_kind = 'proposal_recovery_conflict'
+      WHERE conflict_id = '${conflictRef}'::uuid`);
+    assert.deepEqual((await inspect(revised.proposal.proposal_id)).source_condition, {
+      kind: "proposal_recovery_conflict",
+      proposal_recovery_conflict_ref: conflictRef,
+    });
+    await queryStoryOSPostgres(`UPDATE storyos.proposal_validation_conditions
+      SET condition_kind = 'proposal_conflict'
+      WHERE conflict_id = '${conflictRef}'::uuid`);
+    assert.deepEqual((await inspect(revised.proposal.proposal_id)).source_condition, {
+      kind: "proposal_conflict",
+      proposal_conflict_ref: conflictRef,
+    });
+    const archive = await story.send("exportProjectArchive", { request: {
+      command_schema: "storyos.command.export-project-archive.request.v1",
+      export_project_archive_input: { ...story.binding(), archive_profile: "storyos.project-export.v1",
+        archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" },
+    } });
+    if (archive.response.effect.kind !== "admitted") throw new Error("expected admitted archive");
+    const exportId = archive.response.effect.export_id;
+    await settleOnce();
+    assert.equal((await getExportOperation({ baseUrl: story.baseUrl, projectId: story.projectId, exportId,
+      fetchImpl: story.fetchImpl })).status, "ready");
+    const download = await story.fetchImpl(`${story.baseUrl}/api/v1/projects/${story.projectId}/exports/${exportId}`,
+      { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+    assert.equal(download.status, 200);
+    const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+    const conditions = JSON.parse(new TextDecoder().decode(files.get("canonical/proposal_validation_conditions.json")));
+    assert.deepEqual(conditions, [{
+      owner_user_id: USER_A,
+      project_id: story.projectId,
+      proposal_id: afterConflict.proposal_id,
+      proposal_revision_id: afterConflict.revision_id,
+      acceptance_receipt_id: receiptId,
+      validation: "conflicted",
+      conflict_id: conflictRef,
+      condition_kind: "proposal_conflict",
+    }]);
+  } finally {
+    await server.stop();
+  }
+});
