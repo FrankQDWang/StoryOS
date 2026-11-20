@@ -285,18 +285,49 @@ class FunctionTests(unittest.TestCase):
         self.assertEqual(len(watched), 2, f"the lane or its child did not start before the stop\n{text}")
         self.assertEqual(remaining, [], text)
 
-    def test_a_lane_that_the_runner_finds_ended_after_the_time_limit_fails_the_run(self):
-        # The check of the first lane takes 4 s. The second lane ends with exit code 0 in that time, before the limit
-        # of 2 s or after it, and the runner finds it only after the check.
+    def test_the_time_limit_uses_the_end_time_of_the_lane_and_not_the_time_when_the_runner_finds_it(self):
         module = runner_module()
-        module.LANE_TIME_LIMIT_SECONDS = 2
-        lanes = [module.Lane("lanes-test-slow-check", ["true"], passed=lambda _log: time.sleep(4) or []),
-                 module.Lane("lanes-test-ends-late", ["sleep", "1"])]
-        code, text, _ = self.run_lanes(module, lanes)
-        self.assertEqual(code, 1, text)
-        self.assertIn("Lane lanes-test-slow-check: PASS", text)
-        self.assertRegex(text, r"Lane lanes-test-ends-late: FAIL after \d+ s \(the lane ran longer than the time "
-                               r"limit of 2 s, then ended with exit code 0\)")
+        (ROOT / "target/check").mkdir(parents=True, exist_ok=True)
+        lane = module.Lane("lanes-test-ends-at-once", ["true"])
+        module.start(ROOT, lane, [], "token")
+        # The watcher records the end time also when the runner finds the lane only much later.
+        lane.watcher.join(timeout=60)
+        lane.process.wait()
+        lane.log.close()
+        self.assertIsNotNone(lane.ended)
+        self.assertFalse(module.over_time_limit(lane, now=lane.started + 10 * module.LANE_TIME_LIMIT_SECONDS))
+        limit = module.LANE_TIME_LIMIT_SECONDS
+        cases = (((None, 100 + limit - 1), False), ((None, 100 + limit), True),
+                 ((100 + limit - 1, 100 + 2 * limit), False), ((100 + limit, 100 + limit), True))
+        for (ended, now), expected in cases:
+            lane.started, lane.ended = 100, ended
+            self.assertEqual(module.over_time_limit(lane, now), expected, (ended, now))
+
+    def test_a_stop_whose_scan_of_the_processes_fails_still_ends_the_lanes(self):
+        module = runner_module()
+
+        def process_table():
+            raise subprocess.TimeoutExpired(["ps"], module.TOOL_SECONDS)
+
+        module.process_table, module.remove_run_resources = process_table, lambda _token: True
+        # The lane does not obey SIGTERM, so only the SIGKILL ends it. It writes a line after it ignores SIGTERM.
+        lane = module.Lane("lanes-test-scan-fails", [])
+        lane.process = subprocess.Popen([sys.executable, "-c", (
+            "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); print('ready', flush=True); "
+            "time.sleep(287)")], start_new_session=True, stdout=subprocess.PIPE, text=True)
+        self.assertEqual(lane.process.stdout.readline(), "ready\n")
+        handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertFalse(module.stop([lane], "token"))
+            self.assertEqual(lane.process.wait(timeout=30), -signal.SIGKILL)
+        finally:
+            for number, handler in handlers.items():
+                signal.signal(number, handler)
+            if lane.process.poll() is None:
+                os.killpg(lane.process.pid, signal.SIGKILL)
+                lane.process.wait()
+            lane.process.stdout.close()
 
     def test_a_command_of_the_runner_that_does_not_end_fails_in_its_time_limit(self):
         module = runner_module()
