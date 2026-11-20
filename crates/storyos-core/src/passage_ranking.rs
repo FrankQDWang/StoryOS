@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::json;
 
-use crate::read_chapter::{kept_prefix, text_cost};
+use crate::read_chapter::bounded_result;
 use crate::{PassageBlock, ToolResultText, cut_passages, exact_matches};
 
 /// The number of passages in the result. The coordinator set the initial values on 2026-11-16
@@ -326,20 +326,7 @@ pub fn admit_passage_ranking(
             count - kept
         )
     };
-    let costs: Vec<u64> = parts.iter().map(|part| text_cost(part)).collect();
-    let kept = kept_prefix(
-        &costs,
-        |kept| match kept < count {
-            true => text_cost(&header(kept)) + text_cost(&more(kept)),
-            false => text_cost(&header(kept)),
-        },
-        call_id,
-    );
-    let tail = match kept < count {
-        true => more(kept),
-        false => String::new(),
-    };
-    crate::host_tool_result(&format!("{}{}{tail}", header(kept), parts[..kept].concat()))
+    bounded_result(&parts, header, more, call_id)
 }
 
 #[cfg(test)]

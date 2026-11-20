@@ -16,21 +16,57 @@ pub(crate) async fn load(
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Vec<ManuscriptUse>, CreateAgentRunError> {
-    let (owner_user_id, project_id) = (scope.owner_user_id.as_ref(), scope.project_id.as_ref());
+    let stored = stored_calls(
+        client,
+        scope,
+        run_id,
+        &[
+            READ_CHAPTER_TOOL_SPEC.revision,
+            SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
+            HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
+        ],
+    )
+    .await?;
+    let calls: Vec<StoredManuscriptCall<'_>> = stored
+        .iter()
+        .map(|call| StoredManuscriptCall {
+            tool_spec_revision: &call.tool_spec_revision,
+            state: call.state,
+            arguments: &call.arguments,
+            result_text: call.result_text.as_deref(),
+        })
+        .collect();
+    Ok(storyos_core::manuscript_uses(&calls))
+}
+
+/// One stored ToolCall of a Run, for a read of the Tool uses of the Run.
+pub(crate) struct StoredCall {
+    pub(crate) tool_spec_revision: String,
+    pub(crate) state: ToolCallState,
+    pub(crate) arguments: serde_json::Value,
+    pub(crate) result_text: Option<String>,
+}
+
+/// The stored ToolCalls of the Run `run_id` with a Tool Spec revision in `revisions`, in the
+/// order of their RunSteps and calls.
+pub(crate) async fn stored_calls(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    run_id: &str,
+    revisions: &[&str],
+) -> Result<Vec<StoredCall>, CreateAgentRunError> {
     let rows = client
         .query(
             "SELECT tool_spec_revision, state, arguments::text, result_text
                FROM storyos.tool_calls
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND tool_spec_revision IN ($4, $5, $6)
+                AND run_id = $3::text::uuid AND tool_spec_revision = ANY($4::text[])
               ORDER BY decision_position, call_position",
             &[
-                &owner_user_id,
-                &project_id,
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
                 &run_id,
-                &READ_CHAPTER_TOOL_SPEC.revision,
-                &SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
-                &HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
+                &revisions,
             ],
         )
         .await
@@ -42,27 +78,14 @@ pub(crate) async fn load(
                 "The ToolCall state is unknown",
             )))
         })?;
-        let arguments: serde_json::Value =
-            serde_json::from_str(row.get(/*idx*/ 2)).map_err(agent_run_parse_error)?;
-        stored.push((
-            row.get::<_, String>(/*idx*/ 0),
+        stored.push(StoredCall {
+            tool_spec_revision: row.get(/*idx*/ 0),
             state,
-            arguments,
-            row.get::<_, Option<String>>(/*idx*/ 3),
-        ));
+            arguments: serde_json::from_str(row.get(/*idx*/ 2)).map_err(agent_run_parse_error)?,
+            result_text: row.get(/*idx*/ 3),
+        });
     }
-    let calls: Vec<StoredManuscriptCall<'_>> = stored
-        .iter()
-        .map(
-            |(revision, state, arguments, result)| StoredManuscriptCall {
-                tool_spec_revision: revision,
-                state: *state,
-                arguments,
-                result_text: result.as_deref(),
-            },
-        )
-        .collect();
-    Ok(storyos_core::manuscript_uses(&calls))
+    Ok(stored)
 }
 
 #[cfg(test)]

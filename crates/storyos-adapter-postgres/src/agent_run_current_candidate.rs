@@ -7,7 +7,7 @@ use storyos_core::{
     SelectionReference,
 };
 
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 
 /// Moves the candidate target and the candidate references of the requirement of `retained` to the current
 /// revision of each candidate that is still pending. A candidate that is no longer pending stays
@@ -150,7 +150,7 @@ async fn unchanged_since(
         )
         .await
         .map(|row| row.get(/*idx*/ 0))
-        .map_err(complete_database_error)
+        .map_err(complete_unavailable)
 }
 
 fn current_candidates(rows: &[tokio_postgres::Row]) -> Vec<CurrentCandidate<'_>> {
@@ -204,7 +204,7 @@ async fn current_rows(
             ],
         )
         .await
-        .map_err(complete_database_error)
+        .map_err(complete_unavailable)
 }
 
 #[cfg(test)]

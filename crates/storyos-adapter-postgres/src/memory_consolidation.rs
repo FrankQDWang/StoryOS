@@ -9,22 +9,21 @@ use storyos_application::{
     StartedMemoryConsolidation,
 };
 use storyos_core::{
-    AgentRunKind, AssistanceAvailability, CaptureRefusal, CaptureRunEnd,
-    MemoryConsolidationAssembly, MemoryOperationCandidate, PassConflict, PassMemoryEntry,
-    ToolCallState,
+    AgentRunKind, CaptureRefusal, CaptureRunEnd, MemoryConsolidationAssembly,
+    MemoryOperationCandidate, PassConflict, PassMemoryEntry,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
+use crate::memory_capture::{admitted_assistance, insert_background_run};
 use crate::memory_consolidation_versions::{
     PassItem, pass_entries, pass_item, split_items, unused_entries, write_admitted,
 };
 use crate::memory_entries::lock_memory_head;
 use crate::memory_observation_return::{add_return_refusals, returned_observations};
 use crate::read_error;
-use crate::update_project_assistance::read_assistance_record;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -37,32 +36,17 @@ pub(crate) async fn start(
     scope: &ProjectScope,
 ) -> Result<Result<StartedMemoryConsolidation, CaptureRefusal>, ProjectReadError> {
     let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
-    let assistance = read_assistance_record(client, scope).await?;
-    let grant_scope: Option<String> = match &assistance {
-        Some(record) => client
-            .query_opt(
-                "SELECT grant_scope FROM storyos.project_destination_grants
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND grant_id = $3::text::uuid",
-                &[&keys[0], &keys[1], &record.grant_id],
-            )
-            .await
-            .map_err(read_error)?
-            .and_then(|row| row.get(/*idx*/ 0)),
-        None => None,
-    };
-    let available = assistance
-        .as_ref()
-        .is_some_and(|record| record.availability == AssistanceAvailability::Available);
-    let admission = storyos_core::admit_memory_consolidation(
-        assistance.is_some(),
-        available,
-        grant_scope.as_deref(),
-    );
-    let assistance = match (admission, assistance) {
-        (Ok(()), Some(assistance)) => assistance,
-        (Err(refusal), _) => return Ok(Err(refusal)),
-        (Ok(()), None) => return Ok(Err(CaptureRefusal::NoModelUseBinding)),
+    let admission = admitted_assistance(client, scope, |facts| {
+        storyos_core::admit_memory_consolidation(
+            facts.binding,
+            facts.assistance_available,
+            facts.grant_scope,
+        )
+    })
+    .await?;
+    let assistance = match admission {
+        Ok(assistance) => assistance,
+        Err(refusal) => return Ok(Err(refusal)),
     };
     let unavailable = |error: BoxError| ProjectReadError::unavailable(std::io::Error::other(error));
     let revision = crate::memory_entries::memory_head(client, scope)
@@ -117,29 +101,14 @@ pub(crate) async fn start(
         &assistance.model_registration_revision,
         &budget_bounds,
     );
-    // Background work writes no grant and no binding: the Run pins the current ones. The first
-    // Run of the author made the Agent of the Project.
-    client
-        .execute(
-            "INSERT INTO storyos.agent_runs
-               (owner_user_id, project_id, run_id, project_agent_id, grant_id,
-                project_model_use_binding_revision, status, model_registration_revision, run_kind)
-             SELECT agent.owner_user_id, agent.project_id, $3::text::uuid, agent.project_agent_id,
-                    $4::text::uuid, $5::text::uuid, 'queued', $6::text::uuid, $7
-               FROM storyos.project_agents AS agent
-              WHERE agent.owner_user_id = $1::text::uuid AND agent.project_id = $2::text::uuid",
-            &[
-                &keys[0],
-                &keys[1],
-                &run_id,
-                &assistance.grant_id,
-                &assistance.project_model_use_binding_revision,
-                &assistance.model_registration_revision,
-                &AgentRunKind::MemoryConsolidation.name(),
-            ],
-        )
-        .await
-        .map_err(read_error)?;
+    insert_background_run(
+        client,
+        scope,
+        &run_id,
+        &assistance,
+        AgentRunKind::MemoryConsolidation,
+    )
+    .await?;
     // Each conflict that waits is in the input after the observations of the request.
     let input: Vec<Value> = (keys_of[..taken].iter())
         .chain(conflicts.iter().map(|(key, _)| key))
@@ -334,21 +303,9 @@ pub(crate) async fn execute(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
-    resolve(
-        client,
-        claim,
-        row,
-        Resolution {
-            state: ToolCallState::Settled,
-            refusal: None,
-            attempt: None,
-            outcome: None,
-            result: Some(&settlement.result),
-        },
-    )
-    .await?;
+    resolve(client, claim, row, Resolution::settled(&settlement.result)).await?;
     crate::agent_run_work::complete(client, claim).await?;
     Ok(())
 }
@@ -378,7 +335,7 @@ pub(crate) async fn settle_end(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     if failed > 0 {
         crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
     }

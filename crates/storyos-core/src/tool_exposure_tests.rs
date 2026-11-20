@@ -436,7 +436,6 @@ fn only_an_ordinary_response_without_a_decision_and_with_a_complete_call_request
         kind: AgentDecisionKind::Advisory {
             text: "Keep it.".to_owned(),
         },
-        selected: true,
         advances_continuation: true,
     };
     let disposition = |probe: bool, outcome: &AgentDecisionOutcome, items: &[NativeStreamItem]| {

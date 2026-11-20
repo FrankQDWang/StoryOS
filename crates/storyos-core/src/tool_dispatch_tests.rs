@@ -13,7 +13,6 @@ const OUTSIDE_GRANT_SPEC: ToolSpec = ToolSpec {
     intake_contract: &[IntakeField::Query],
     envelope: Some(ToolEffectEnvelope {
         external_read: ExternalRead::OneSearch,
-        external_write: ExternalWrite::None,
         outbound_disclosure: IntakeField::ResultCount,
     }),
     result_text_max_bytes: 16,

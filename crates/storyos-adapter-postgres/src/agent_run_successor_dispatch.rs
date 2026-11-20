@@ -11,12 +11,12 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
+use crate::agent_run_attempt::{AttemptRole, NewModelAttempt};
 use crate::agent_run_create_dispatch::PriorContext;
 use crate::agent_run_successor::{
-    DecisionRow, SuccessorWork, flag, load_decision, seal, text, unavailable,
-    write_decision_payload,
+    DecisionRow, SuccessorWork, flag, load_decision, seal, text, write_decision_payload,
 };
-use crate::agent_run_work::{RunPhaseRow, WorkPhase, update_run};
+use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_unavailable, update_run};
 
 /// The one successor Create of the fenced predecessor. It repeats the same request, or
 /// re-observes the successor Attempt that a lost claim committed.
@@ -26,7 +26,7 @@ pub(crate) async fn successor_request(
     run: &RunPhaseRow,
 ) -> Result<CreateRequest, CompleteAgentRunError> {
     let record: serde_json::Value =
-        serde_json::from_str(&run.assembly_payload).map_err(unavailable)?;
+        serde_json::from_str(&run.assembly_payload).map_err(complete_unavailable)?;
     let attempt = match client
         .query_opt(
             "SELECT model_attempt_id::text FROM storyos.model_attempts
@@ -41,7 +41,7 @@ pub(crate) async fn successor_request(
             ],
         )
         .await
-        .map_err(unavailable)?
+        .map_err(complete_unavailable)?
     {
         Some(row) => RequestAttempt::Claimed(DispatchClaim {
             model_attempt_id: row.get(0),
@@ -163,36 +163,28 @@ pub(crate) async fn commit(
     if let Some(wire) = crate::agent_run_continuation::parse_wire(&row.payload) {
         successor_payload["continuation"] = crate::agent_run_continuation::encode_wire(&wire);
     }
-    client
-        .execute(
-            "INSERT INTO storyos.model_attempts
-               (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
-                outbound_disclosure_event_id, destination_context_manifest_id,
-                outbound_disclosure_manifest_id, wire_payload_projection_id,
-                model_invocation_id, conversation_id, dispatch_state, payload, attempt_role,
-                decision_position)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                     $9::text::uuid, $10::text::uuid, $11::text::uuid, 'uncertain',
-                     $12::text::jsonb, 'successor', $13::text::numeric)",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &attempt_id,
-                &Uuid::now_v7().to_string(),
-                &Uuid::now_v7().to_string(),
-                &manifests.destination,
-                &manifests.outbound,
-                &Uuid::now_v7().to_string(),
-                &row.invocation_id,
-                &row.conversation_id,
-                &successor_payload.to_string(),
-                &run.decision_position,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
+    let [destination_attempt_id, outbound_disclosure_event_id] =
+        [(); 2].map(|()| Uuid::now_v7().to_string());
+    let wire_payload_projection_id = Uuid::now_v7().to_string();
+    crate::agent_run_attempt::insert_model_attempt(
+        client,
+        &NewModelAttempt {
+            claim,
+            model_attempt_id: &attempt_id,
+            destination_attempt_id: &destination_attempt_id,
+            outbound_disclosure_event_id: &outbound_disclosure_event_id,
+            destination_context_manifest_id: &manifests.destination,
+            outbound_disclosure_manifest_id: &manifests.outbound,
+            wire_payload_projection_id: &wire_payload_projection_id,
+            model_invocation_id: &row.invocation_id,
+            conversation_id: row.conversation_id.as_deref(),
+            payload: &successor_payload,
+            role: AttemptRole::Successor,
+            decision_position: &run.decision_position,
+        },
+    )
+    .await
+    .map_err(complete_unavailable)?;
     Ok(Some(DispatchClaim {
         model_attempt_id: attempt_id,
     }))
@@ -215,7 +207,9 @@ pub(crate) async fn record(
         .payload
         .get("unknown_create_successor")
         .cloned()
-        .ok_or_else(|| unavailable(std::io::Error::other("The successor marker is missing")))?;
+        .ok_or_else(|| {
+            complete_unavailable(std::io::Error::other("The successor marker is missing"))
+        })?;
     let loaded = client
         .query_one(
             "SELECT payload::text, dispatch_state FROM storyos.model_attempts
@@ -228,7 +222,7 @@ pub(crate) async fn record(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     if loaded.get::<_, &str>(1) == "settled" {
         return Ok(WorkPhase::Hold(
             if late_check_reference(&row.payload, &marker).is_some() {
@@ -239,7 +233,7 @@ pub(crate) async fn record(
         ));
     }
     let mut payload: serde_json::Value =
-        serde_json::from_str(&loaded.get::<_, String>(0)).map_err(unavailable)?;
+        serde_json::from_str(&loaded.get::<_, String>(0)).map_err(complete_unavailable)?;
     let mut opens_next_run_step = false;
     let (dispatch_state, decision_id, binding_id, function_requested) = match observation {
         Observation::Terminal(mut response) => {
@@ -294,7 +288,6 @@ pub(crate) async fn record(
             match outcome {
                 AgentDecisionOutcome::Decision {
                     kind,
-                    selected: true,
                     advances_continuation,
                 } => {
                     let decision_id = Uuid::now_v7().to_string();
@@ -320,7 +313,6 @@ pub(crate) async fn record(
                     payload["decision"] = crate::agent_run_observation::encode_decision(
                         &kind,
                         &decision_id,
-                        /*selected*/ true,
                         advances_continuation,
                     );
                     if let (Some(binding_id), Some(wire)) = (
@@ -362,9 +354,7 @@ pub(crate) async fn record(
                 {
                     ("settled", None, None, true)
                 }
-                AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => {
-                    ("settled", None, None, false)
-                }
+                AgentDecisionOutcome::NoDecision => ("settled", None, None, false),
             }
         }
         Observation::OutcomeUnknown { response_reference } => {
@@ -400,7 +390,7 @@ pub(crate) async fn record(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     let manifest_id: String = client
         .query_one(
             "SELECT context_assembly_manifest_id::text FROM storyos.context_assembly_manifests
@@ -415,7 +405,7 @@ pub(crate) async fn record(
             ],
         )
         .await
-        .map_err(unavailable)?
+        .map_err(complete_unavailable)?
         .get(0);
     marker["successor_model_attempt_id"] = serde_json::json!(dispatch.model_attempt_id);
     marker["successor_manifest_id"] = serde_json::json!(manifest_id);
@@ -467,7 +457,7 @@ pub(crate) async fn finish_dispatched(
                 ],
             )
             .await
-            .map_err(unavailable)?;
+            .map_err(complete_unavailable)?;
         return Ok(SuccessorWork::Retrieve(RetrieveRequest {
             route: crate::model_registration::request_route(client, claim).await?,
             attempt: match existing {
@@ -504,7 +494,7 @@ pub(crate) async fn finish_dispatched(
         let (attempt_id, payload) = successor_payload(client, claim, marker).await?;
         if !opens_next_run_step {
             text(marker, "successor_decision_id").ok_or_else(|| {
-                unavailable(std::io::Error::other("The successor Decision is missing"))
+                complete_unavailable(std::io::Error::other("The successor Decision is missing"))
             })?;
         }
         crate::agent_run_continuation::bind_produced_continuation(
@@ -559,8 +549,9 @@ async fn successor_payload<'a>(
     claim: &ClaimedAgentRun,
     marker: &'a serde_json::Value,
 ) -> Result<(&'a str, serde_json::Value), CompleteAgentRunError> {
-    let attempt_id = text(marker, "successor_model_attempt_id")
-        .ok_or_else(|| unavailable(std::io::Error::other("The successor Attempt is missing")))?;
+    let attempt_id = text(marker, "successor_model_attempt_id").ok_or_else(|| {
+        complete_unavailable(std::io::Error::other("The successor Attempt is missing"))
+    })?;
     let row = client
         .query_one(
             "SELECT payload::text FROM storyos.model_attempts
@@ -573,8 +564,8 @@ async fn successor_payload<'a>(
             ],
         )
         .await
-        .map_err(unavailable)?;
-    let payload = serde_json::from_str(&row.get::<_, String>(0)).map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
+    let payload = serde_json::from_str(&row.get::<_, String>(0)).map_err(complete_unavailable)?;
     Ok((attempt_id, payload))
 }
 

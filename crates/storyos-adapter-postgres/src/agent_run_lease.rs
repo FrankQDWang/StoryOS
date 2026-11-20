@@ -5,7 +5,7 @@ use std::time::Duration;
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 
 use crate::PostgresProjectReader;
-use crate::agent_run_work::{complete_challenge_error, complete_database_error};
+use crate::agent_run_work::complete_unavailable;
 
 /// The renewals in each lease period. A renewal that is late by up to two delays keeps the lease.
 const RENEWALS_PER_LEASE: u32 = 3;
@@ -22,7 +22,7 @@ impl PostgresProjectReader {
         let transaction = self
             .begin_project_command_transaction(&claim.project_scope)
             .await
-            .map_err(complete_challenge_error)?;
+            .map_err(complete_unavailable)?;
         let renewed = transaction
             .client
             .execute(
@@ -43,7 +43,7 @@ impl PostgresProjectReader {
                 ],
             )
             .await
-            .map_err(complete_database_error);
+            .map_err(complete_unavailable);
         let renewed = match renewed {
             Ok(renewed) => renewed,
             Err(error) => {
@@ -51,10 +51,7 @@ impl PostgresProjectReader {
                 return Err(error);
             }
         };
-        transaction
-            .commit()
-            .await
-            .map_err(complete_challenge_error)?;
+        transaction.commit().await.map_err(complete_unavailable)?;
         Ok((renewed == 1).then(|| self.readable_export_lease_ttl / RENEWALS_PER_LEASE))
     }
 }

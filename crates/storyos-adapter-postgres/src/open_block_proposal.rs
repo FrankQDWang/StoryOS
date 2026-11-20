@@ -3,6 +3,7 @@ use storyos_core::{OpenBlockProposal, open_block_proposal};
 use uuid::Uuid;
 
 use crate::admitted_proposal_target::{load_admitted_targets, load_current_target};
+use crate::agent_run_work::complete_unavailable;
 
 pub(crate) struct ProseOpening {
     pub proposal_id: Option<String>,
@@ -225,7 +226,7 @@ async fn persist_applied_proposal(
     let ordered = bundle_policy == "atomic" || persist.author_message.contains("in order");
     let lineage = crate::agent_run_tool_result::proposal_source_lineage(client, claim)
         .await
-        .map_err(database_error)?;
+        .map_err(complete_unavailable)?;
     client
         .execute(
             "INSERT INTO storyos.proposals
@@ -247,7 +248,7 @@ async fn persist_applied_proposal(
             ],
         )
         .await
-        .map_err(database_error)?;
+        .map_err(complete_unavailable)?;
     client
         .execute(
             "INSERT INTO storyos.proposal_revisions
@@ -265,7 +266,7 @@ async fn persist_applied_proposal(
             ],
         )
         .await
-        .map_err(database_error)?;
+        .map_err(complete_unavailable)?;
     client
         .execute(
             "INSERT INTO storyos.proposal_heads
@@ -274,7 +275,7 @@ async fn persist_applied_proposal(
             &[&owner, &project, &proposal_id, &proposal_revision_id],
         )
         .await
-        .map_err(database_error)?;
+        .map_err(complete_unavailable)?;
     let mut predecessor_ids: Vec<String> = Vec::new();
     let mut operations = Vec::new();
     let candidates: std::collections::BTreeMap<_, _> = persist
@@ -319,7 +320,7 @@ async fn persist_applied_proposal(
                 ],
             )
             .await
-            .map_err(database_error)?;
+            .map_err(complete_unavailable)?;
         operations.push((target.block_id.clone(), operation_id.clone()));
         predecessor_ids.push(operation_id);
     }
@@ -344,15 +345,11 @@ async fn persist_applied_proposal(
             ],
         )
         .await
-        .map_err(database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(PersistedProposal {
         proposal_id,
         revision_id: proposal_revision_id,
         validation_receipt_id,
         operations,
     })
-}
-
-fn database_error(error: tokio_postgres::Error) -> CompleteAgentRunError {
-    CompleteAgentRunError::Unavailable(Box::new(error))
 }

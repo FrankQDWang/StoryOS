@@ -11,7 +11,8 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
-use super::{load_chain_source, unavailable, work_error, write};
+use super::{complete_unavailable, load_chain_source, unavailable, write};
+use crate::agent_run_attempt::{AttemptRole, NewModelAttempt, insert_model_attempt};
 use crate::agent_run_work::{RunPhaseRow, WorkPhase, route_facts};
 use crate::update_project_assistance::read_assistance_record;
 
@@ -45,7 +46,7 @@ pub(crate) async fn load_summary_attempt(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     Ok(row.map(|row| SummaryAttempt {
         model_attempt_id: row.get(/*idx*/ 0),
         prior_reference: row.get(/*idx*/ 1),
@@ -109,7 +110,7 @@ pub(crate) async fn prior_chain(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     Ok(row.map(|row| PriorChain {
         model_attempt_id: row.get(/*idx*/ 0),
         reference: row.get(/*idx*/ 1),
@@ -278,15 +279,11 @@ pub(crate) async fn commit_claim(
             ],
         )
         .await
-        .map_err(work_error)?
+        .map_err(complete_unavailable)?
     else {
         return Ok(None);
     };
     let manifest_id: String = manifest.get(/*idx*/ 0);
-    let scope = [
-        &claim.project_scope.owner_user_id.as_ref(),
-        &claim.project_scope.project_id.as_ref(),
-    ];
     let model_attempt_id = Uuid::now_v7().to_string();
     let mut payload = serde_json::json!({
         "execution_profile": {
@@ -313,35 +310,29 @@ pub(crate) async fn commit_claim(
     if let Some(setting) = projection.cache_setting {
         payload["cache"] = crate::provider_evidence::encode_cache_setting(setting);
     }
-    client
-        .execute(
-            "INSERT INTO storyos.model_attempts
-               (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
-                outbound_disclosure_event_id, destination_context_manifest_id,
-                outbound_disclosure_manifest_id, wire_payload_projection_id, model_invocation_id,
-                conversation_id, dispatch_state, payload, attempt_role, decision_position)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                     $9::text::uuid, $10::text::uuid, $11::text::uuid, 'uncertain',
-                     $12::text::jsonb, 'compaction', $13::text::numeric)",
-            &[
-                scope[0],
-                scope[1],
-                &claim.run_id,
-                &model_attempt_id,
-                &Uuid::now_v7().to_string(),
-                &Uuid::now_v7().to_string(),
-                &destination_manifest_id,
-                &outbound_manifest_id,
-                &Uuid::now_v7().to_string(),
-                &Uuid::now_v7().to_string(),
-                &run.conversation_id,
-                &payload.to_string(),
-                &run.decision_position,
-            ],
-        )
-        .await
-        .map_err(work_error)?;
+    let [destination_attempt_id, outbound_disclosure_event_id] =
+        [(); 2].map(|()| Uuid::now_v7().to_string());
+    let [wire_payload_projection_id, model_invocation_id] =
+        [(); 2].map(|()| Uuid::now_v7().to_string());
+    insert_model_attempt(
+        client,
+        &NewModelAttempt {
+            claim,
+            model_attempt_id: &model_attempt_id,
+            destination_attempt_id: &destination_attempt_id,
+            outbound_disclosure_event_id: &outbound_disclosure_event_id,
+            destination_context_manifest_id: &destination_manifest_id,
+            outbound_disclosure_manifest_id: &outbound_manifest_id,
+            wire_payload_projection_id: &wire_payload_projection_id,
+            model_invocation_id: &model_invocation_id,
+            conversation_id: run.conversation_id.as_deref(),
+            payload: &payload,
+            role: AttemptRole::Compaction,
+            decision_position: &run.decision_position,
+        },
+    )
+    .await
+    .map_err(complete_unavailable)?;
     Ok(Some(DispatchClaim { model_attempt_id }))
 }
 
@@ -370,7 +361,7 @@ pub(crate) async fn commit_assembly(
             &[scope[0], scope[1], &claim.run_id, &run.decision_position],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     if committed.is_some() {
         return Ok(());
     }
@@ -380,55 +371,22 @@ pub(crate) async fn commit_assembly(
     manifest_payload["operation_requirement"]["operation_requirement_id"] =
         serde_json::json!(requirement_id);
     manifest_payload["operation_requirement"]["input_snapshot_id"] = serde_json::json!(snapshot_id);
-    let inserted = client
-        .execute(
-            "INSERT INTO storyos.operation_requirements
-               (owner_user_id, project_id, operation_requirement_id, run_id, input_snapshot_id,
-                receipt_id, payload, requirement_role, decision_position)
-             SELECT owner_user_id, project_id, $4::text::uuid, run_id, $5::text::uuid,
-                    receipt_id, $6::text::jsonb, 'compaction', decision_position
-               FROM storyos.operation_requirements
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND operation_requirement_id = $3::text::uuid",
-            &[
-                scope[0],
-                scope[1],
-                &decision_record
-                    .operation_requirement
-                    .operation_requirement_id,
-                &requirement_id,
-                &snapshot_id,
-                &manifest_payload["operation_requirement"].to_string(),
-            ],
-        )
-        .await
-        .map_err(work_error)?;
-    let manifest = client
-        .execute(
-            "INSERT INTO storyos.context_assembly_manifests
-               (owner_user_id, project_id, context_assembly_manifest_id,
-                operation_requirement_id, run_id, sufficiency, payload, receipt_id, manifest_role,
-                decision_position)
-             SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::jsonb, receipt_id, 'compaction', decision_position
-               FROM storyos.context_assembly_manifests
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND context_assembly_manifest_id = $3::text::uuid",
-            &[
-                scope[0],
-                scope[1],
-                &run.assembly_manifest_id,
-                &manifest_id,
-                &requirement_id,
-                &manifest_payload.to_string(),
-            ],
-        )
-        .await
-        .map_err(work_error)?;
-    if inserted != 1 || manifest != 1 {
-        return Err(unavailable("The decision Context Assembly is missing"));
-    }
-    Ok(())
+    super::write::insert_derived_assembly(
+        client,
+        claim,
+        &super::write::DerivedAssembly {
+            role: super::write::DerivedRole::Compaction,
+            decision_requirement_id: &decision_record
+                .operation_requirement
+                .operation_requirement_id,
+            decision_manifest_id: &run.assembly_manifest_id,
+            requirement_id: &requirement_id,
+            snapshot_id: &snapshot_id,
+            manifest_id: &manifest_id,
+            payload: &manifest_payload,
+        },
+    )
+    .await
 }
 
 /// The current admission of the summary request: the pinned route and the grant scope over its
@@ -513,7 +471,7 @@ pub(crate) async fn record(
             ],
         )
         .await
-        .map_err(work_error)?
+        .map_err(complete_unavailable)?
         .get::<_, Option<String>>(/*idx*/ 0)
         .unwrap_or_else(|| "[]".to_owned());
     let stored: serde_json::Value = serde_json::from_str(&stored)
@@ -541,7 +499,7 @@ pub(crate) async fn record(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     let mut payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(/*idx*/ 0))
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     if let (Some(cache), Some(cache_use)) = (payload.get_mut("cache"), cache_use) {
@@ -559,7 +517,7 @@ pub(crate) async fn record(
                 ],
             )
             .await
-            .map_err(work_error)?;
+            .map_err(complete_unavailable)?;
     }
     let registration = model_registration(&run.model_registration_revision)
         .ok_or_else(|| unavailable("The Model Registration revision is unknown"))?;

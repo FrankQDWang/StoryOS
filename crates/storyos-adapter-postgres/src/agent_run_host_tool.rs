@@ -3,7 +3,7 @@
 //! Assembly, no Destination Attempt, no Outbound Disclosure Event, and no source capture.
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::{ToolCallState, ToolIntake, ToolSpec};
+use storyos_core::{ToolIntake, ToolSpec};
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
 
@@ -93,23 +93,11 @@ pub(crate) async fn execute(
             ],
         )
         .await
-        .map_err(crate::agent_run_work::complete_database_error)?
+        .map_err(crate::agent_run_work::complete_unavailable)?
         .get(0);
     let result = storyos_core::execute_host_tool(&intake, refused_beside)
         .ok_or_else(|| damaged("The Host ToolCall is damaged"))?;
-    resolve(
-        client,
-        claim,
-        row,
-        Resolution {
-            state: ToolCallState::Settled,
-            refusal: None,
-            attempt: None,
-            outcome: None,
-            result: Some(&result),
-        },
-    )
-    .await
+    resolve(client, claim, row, Resolution::settled(&result)).await
 }
 
 #[cfg(test)]

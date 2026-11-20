@@ -9,7 +9,7 @@ use storyos_core::{
 };
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
-use crate::agent_run_work::{complete_database_error, load_run_phase};
+use crate::agent_run_work::{complete_unavailable, load_run_phase};
 
 /// Validates the pending `submit_research` call `row`, records its Research Artifact, and
 /// settles it. A refused call gets the reason as its result and writes no Artifact.
@@ -46,7 +46,7 @@ pub(crate) async fn execute(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let (attempt_id, decision_id): (String, String) = (facts.get(/*idx*/ 0), facts.get(/*idx*/ 1));
     let same_response: Vec<String> = facts.get(/*idx*/ 4);
     let refusal = if facts.get(/*idx*/ 2) {
@@ -98,13 +98,7 @@ pub(crate) async fn execute(
         client,
         claim,
         row,
-        Resolution {
-            state,
-            refusal: label,
-            attempt: None,
-            outcome: None,
-            result: Some(&result),
-        },
+        Resolution::host(state, label, Some(&result)),
     )
     .await
 }

@@ -1,4 +1,4 @@
-use super::agent_run_work::complete_database_error as database_error;
+use super::agent_run_work::complete_unavailable as database_error;
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_contracts::{ProseChangeLocationInspect, ProseChangeLocationOutcome};
 use storyos_core::{

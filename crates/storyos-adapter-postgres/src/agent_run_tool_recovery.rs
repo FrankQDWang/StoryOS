@@ -16,7 +16,7 @@ use crate::agent_run_tool_authority::{
     Resolution, ToolCallRow, append_event, damaged, locked, refuse,
 };
 use crate::agent_run_tool_dispatch::settled_attempt;
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 
 /// What fenced a dispatched ToolCall, with the Run fence token that the fence committed with.
 #[derive(Clone, Copy)]
@@ -74,7 +74,7 @@ pub(crate) async fn fence_on_cancel(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     for found in unresolved {
         let tool_call_id: String = found.get(/*idx*/ 0);
         let state = ToolCallState::parse(found.get(/*idx*/ 1))
@@ -181,7 +181,7 @@ pub(crate) async fn record_late(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     append_event(
         client,
         claim,

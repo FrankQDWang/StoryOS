@@ -72,7 +72,6 @@ fn only_a_complete_closing_response_gives_its_text_as_the_final_answer() {
             kind: AgentDecisionKind::Advisory {
                 text: "The answer.".to_owned()
             },
-            selected: true,
             advances_continuation: true,
         })
     );
@@ -146,7 +145,6 @@ fn a_response_with_a_call_that_no_output_can_answer_does_not_advance_the_continu
                 refusal: crate::CallValidationRefusal::Unexposed,
             })],
         },
-        selected: true,
         advances_continuation: false,
     };
     let answer = |advances_continuation| {
@@ -154,7 +152,6 @@ fn a_response_with_a_call_that_no_output_can_answer_does_not_advance_the_continu
             kind: AgentDecisionKind::Advisory {
                 text: "The answer.".to_owned(),
             },
-            selected: true,
             advances_continuation,
         })
     };

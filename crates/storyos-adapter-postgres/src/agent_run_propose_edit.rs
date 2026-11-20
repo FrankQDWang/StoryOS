@@ -15,7 +15,7 @@ use storyos_core::{
 
 use crate::agent_run_observation::open_selected_proposal;
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
 
 /// Refuses each `propose_edit` call of `batch` from `response` that the limits of the Run or the
@@ -50,7 +50,7 @@ pub(crate) async fn screen(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .get(/*idx*/ 0);
     let steered = crate::agent_run_steering::last_read_position(client, claim, &active).await?;
     let row = client
@@ -70,7 +70,7 @@ pub(crate) async fn screen(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let history = ProposeEditHistory {
         refused: usize::try_from(row.get::<_, i64>(/*idx*/ 0)).unwrap_or(usize::MAX),
         proposal_open: row.get(/*idx*/ 1),
@@ -106,7 +106,7 @@ pub(crate) async fn execute(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let (attempt_id, decision_id): (String, String) = (owner.get(0), owner.get(1));
     let declared: Vec<DeclaredLocation> =
         crate::agent_run_create_dispatch::declared_targets(client, claim, run.chapter()?)
@@ -137,16 +137,11 @@ pub(crate) async fn execute(
         bytes: text.len(),
         text,
     };
-    let resolution = Resolution {
-        state: match refusal {
-            Some(_) => ToolCallState::Refused,
-            None => ToolCallState::Settled,
-        },
-        refusal: refusal.map(ProposeEditRefusal::label),
-        attempt: None,
-        outcome: None,
-        result: Some(&result),
+    let state = match refusal {
+        Some(_) => ToolCallState::Refused,
+        None => ToolCallState::Settled,
     };
+    let resolution = Resolution::host(state, refusal.map(ProposeEditRefusal::label), Some(&result));
     resolve(client, claim, row, resolution).await
 }
 
@@ -208,7 +203,7 @@ async fn open(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(None)
 }
 

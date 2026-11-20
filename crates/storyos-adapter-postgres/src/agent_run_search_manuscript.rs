@@ -5,7 +5,6 @@
 //! Disclosure Event.
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::ToolCallState;
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
 
@@ -19,19 +18,7 @@ pub(crate) async fn execute(
 ) -> Result<(), CompleteAgentRunError> {
     let chapters = crate::agent_run_read_chapter::readable_chapters(client, claim).await?;
     let result = storyos_core::admit_manuscript_search(&chapters, query, &row.call_id);
-    resolve(
-        client,
-        claim,
-        row,
-        Resolution {
-            state: ToolCallState::Settled,
-            refusal: None,
-            attempt: None,
-            outcome: None,
-            result: Some(&result),
-        },
-    )
-    .await
+    resolve(client, claim, row, Resolution::settled(&result)).await
 }
 
 #[cfg(test)]

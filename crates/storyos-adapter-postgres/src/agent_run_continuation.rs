@@ -165,7 +165,7 @@ pub(crate) async fn bind_produced_continuation(
             ],
         )
         .await
-        .map_err(crate::agent_run_work::complete_database_error)?;
+        .map_err(crate::agent_run_work::complete_unavailable)?;
     Ok(())
 }
 

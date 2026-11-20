@@ -7,7 +7,7 @@ use storyos_core::{
     BoundTool, ExposureFacts, ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle,
 };
 
-use crate::agent_run_work::{RunPhaseRow, complete_database_error};
+use crate::agent_run_work::{RunPhaseRow, complete_unavailable};
 
 /// The Exposure of `run` at this RunStep. A Registration revision without a lifecycle row is the
 /// active constant; a row with an unknown lifecycle is damaged.
@@ -37,7 +37,7 @@ pub(crate) async fn tool_exposure(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let mut bound = Vec::new();
     for row in rows {
         let Some(registration_revision) = row.get::<_, Option<String>>(/*idx*/ 1) else {
@@ -70,7 +70,7 @@ pub(crate) async fn tool_exposure(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .get(/*idx*/ 0);
     // The captured Conversation Memory Settings of the Run decide the Memory read (ADR 0094
     // section 4). A background Run has no settings.
@@ -92,7 +92,7 @@ pub(crate) async fn tool_exposure(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .get(/*idx*/ 0);
     let hybrid_search = crate::agent_run_hybrid_search::possible(client, claim).await?;
     Ok(ToolExposure::compute(&ExposureFacts {

@@ -5,7 +5,7 @@ use storyos_core::{
     CurrentPassageAssemblyRecord, EarlierAuthorMessage, EarlierAuthorMessageSource,
 };
 
-use super::{CompactionState, unavailable, work_error};
+use super::{CompactionState, complete_unavailable, unavailable};
 
 /// The author message and each steering input that a RunStep read, of each earlier completed Run
 /// of the Conversation of the claimed Run, oldest first. The prior response chain of a
@@ -47,7 +47,7 @@ pub(super) async fn load(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     Ok(rows
         .iter()
         .map(|row| EarlierAuthorMessage {
@@ -89,7 +89,7 @@ pub(super) async fn record(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     if updated != 1 {
         return Err(unavailable("The staged compaction is missing"));
     }

@@ -240,9 +240,9 @@ pub use load_skill::{
     skill_load_result,
 };
 pub use manuscript_payload::{
-    ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
-    COORDINATE_VERSION, MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind,
-    ManuscriptPayload, VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
+    ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, COORDINATE_VERSION,
+    MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
+    VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
     upgrade_legacy_manuscript,
 };
 pub use manuscript_use::{ManuscriptUse, StoredManuscriptCall, manuscript_uses};
@@ -473,9 +473,9 @@ pub use tool_result_context::{
 };
 pub use tool_result_stub::TOOL_RESULT_STUB_TOKEN_LIMIT;
 pub use tool_spec::{
-    ExternalRead, ExternalWrite, FINISH_TOOL_SPEC, IntakeField, IntakeRefusal,
-    PROPOSE_EDIT_TOOL_SPEC, ServerArguments, TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope,
-    ToolIntake, ToolOperation, ToolSpec, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC, tool_spec,
+    ExternalRead, FINISH_TOOL_SPEC, IntakeField, IntakeRefusal, PROPOSE_EDIT_TOOL_SPEC,
+    ServerArguments, TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope, ToolIntake, ToolOperation,
+    ToolSpec, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC, tool_spec,
 };
 pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{

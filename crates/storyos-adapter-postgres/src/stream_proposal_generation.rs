@@ -1,5 +1,6 @@
 //! Writes one complete Proposal generation batch of a candidate revision (ADR 0062, ADR 0071).
 
+use crate::agent_run_work::complete_unavailable;
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::hex_sha256;
 use tokio_postgres::Client;
@@ -34,7 +35,7 @@ pub(crate) async fn persist_batch(
             AND proposal.proposal_id=$3::text::uuid
             AND operation.manuscript_block_id=proposal.manuscript_block_id",
         &[&owner, &project, &loaded.proposal_id, &operation_id, &text],
-    ).await.map_err(stream_err)?;
+    ).await.map_err(complete_unavailable)?;
     let summary_text: &str = summary.get(1);
     append_revision(
         client,
@@ -57,7 +58,7 @@ pub(crate) async fn persist_batch(
             &[&owner, &project, &loaded.proposal_id, &text, &operation_id],
         )
         .await
-        .map_err(stream_err)?;
+        .map_err(complete_unavailable)?;
     client
         .execute(
             "INSERT INTO storyos.proposal_stream_events
@@ -77,7 +78,7 @@ pub(crate) async fn persist_batch(
             ],
         )
         .await
-        .map_err(stream_err)?;
+        .map_err(complete_unavailable)?;
     client
         .execute(
             "UPDATE storyos.proposal_generations
@@ -87,7 +88,7 @@ pub(crate) async fn persist_batch(
             &[&owner, &project, &loaded.generation_id, &seq],
         )
         .await
-        .map_err(stream_err)?;
+        .map_err(complete_unavailable)?;
     let validation_id = Uuid::now_v7().to_string();
     client
         .execute(
@@ -109,7 +110,7 @@ pub(crate) async fn persist_batch(
             ],
         )
         .await
-        .map_err(stream_err)?;
+        .map_err(complete_unavailable)?;
     Ok((revision_id, validation_id))
 }
 
@@ -146,7 +147,7 @@ async fn append_revision(
             ],
         )
         .await
-        .map_err(stream_err)?;
+        .map_err(complete_unavailable)?;
     if inserted != 1 {
         return Err(unavailable("Proposal revision was not appended"));
     }
@@ -165,7 +166,7 @@ async fn append_revision(
             ],
         )
         .await
-        .map_err(stream_err)?;
+        .map_err(complete_unavailable)?;
     if updated != 1 {
         return Err(unavailable("Proposal head did not advance"));
     }
@@ -178,8 +179,4 @@ fn digest(text: &str) -> String {
 
 fn unavailable(message: impl Into<String>) -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(message.into())))
-}
-
-fn stream_err(error: tokio_postgres::Error) -> CompleteAgentRunError {
-    CompleteAgentRunError::Unavailable(Box::new(error))
 }
