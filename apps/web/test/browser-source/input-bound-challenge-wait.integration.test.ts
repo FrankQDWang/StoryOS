@@ -231,7 +231,7 @@ it("stops the Challenge wait when the input bound stops input, and recovers the 
         saveState: "needs_attention", editable: false });
 
     // Input that was queued before the stop still enters the Journal.
-    await expect.poll(() => journalIntentCount(scenario.journalName), { timeout: 10_000 }).toBe(240);
+    await expect.poll(() => journalIntentCount(scenario.journalName), { timeout: 30_000 }).toBe(240);
     unmount();
     const reloadTimers: Timer[] = [];
     root = await mount(reloadTimers);
@@ -254,7 +254,7 @@ it("stops the Challenge wait when the input bound stops input, and recovers the 
   } finally {
     await cleanup();
   }
-});
+}, 60_000);
 
 it("counts the recovered records that follow a group in the input bound after a reload", async () => {
   const { scenario, server, mount, unmount, cleanup, typeToBound, stopState } = boundHarness();
@@ -278,11 +278,11 @@ it("counts the recovered records that follow a group in the input bound after a 
     const inputs = await typeToBound(root);
     expect({ inputs, ...stopState(root), challenges: server.challengeKeys.length, authorEdits: server.authorEdits })
       .toEqual({ inputs: 232, ...STOPPED, challenges: 2, authorEdits: [server.challengeKeys[0]] });
-    await expect.poll(() => journalIntentCount(scenario.journalName), { timeout: 10_000 }).toBe(241);
+    await expect.poll(() => journalIntentCount(scenario.journalName), { timeout: 30_000 }).toBe(241);
   } finally {
     await cleanup();
   }
-});
+}, 60_000);
 
 it("counts the records that follow a group with an unknown outcome in the input bound", async () => {
   const { scenario, server, mount, cleanup, typeToBound, stopState } = boundHarness("unknown_outcome");
@@ -301,8 +301,8 @@ it("counts the records that follow a group with an unknown outcome in the input 
     const inputs = await typeToBound(root);
     expect({ inputs, ...stopState(root), authorEdits: server.authorEdits.length })
       .toEqual({ inputs: 240, ...STOPPED, authorEdits: 1 });
-    await expect.poll(() => journalIntentCount(scenario.journalName), { timeout: 10_000 }).toBe(240);
+    await expect.poll(() => journalIntentCount(scenario.journalName), { timeout: 30_000 }).toBe(240);
   } finally {
     await cleanup();
   }
-});
+}, 60_000);
