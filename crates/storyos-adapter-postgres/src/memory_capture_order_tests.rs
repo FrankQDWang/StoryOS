@@ -7,10 +7,11 @@ use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{NoContractFaults, complete_agent_run};
 use tokio_postgres::Client;
 
-use super::loop_tests::{script, settlement};
-use super::tests::{project, run_capture, start};
-use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_with_id, stores};
-use crate::command_sequence::tests::background_run::claim_in_project;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_background_run::claim_in_project;
+use crate::shared_tests::memory_capture::{project, run_capture, start};
+use crate::shared_tests::memory_capture_loop::{script, settlement};
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_with_id, stores};
 
 fn newer_id() -> String {
     uuid::Uuid::now_v7().to_string()
@@ -42,9 +43,7 @@ async fn request_order(admin: &Client, project_id: &str) -> Vec<Value> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_of_the_author_goes_first_and_the_capture_continues_at_the_same_run_step() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "fde").await;
     let refused = ("propose_edit", json!({"reason": "改写"}));

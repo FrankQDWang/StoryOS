@@ -7,173 +7,26 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ChapterId, ClaimedMemoryWork, CreateChapterInput, DeleteChapterInput, DiagnosticField,
-    EditorSessionId, EditorSessionStore, MemoryCaptureSource, MemoryWorkOutcome,
-    MemoryWorkScheduleStore, MemoryWorkSource, NoContractFaults, ProjectScope,
-    StartedMemoryCapture, complete_agent_run,
+    EditorSessionStore, MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource,
+    NoContractFaults, StartedMemoryCapture, complete_agent_run,
 };
 use storyos_core::{CreateChapterPlacement, TransitionOutcome};
-use tokio_postgres::Client;
 
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::NoEmbeddings;
-use crate::agent_run_dispatch::tests::{assisted_chapter, stores};
-use crate::agent_run_read_chapter::tests::{project, write_blocks};
-use crate::agent_run_steering::tests::{cancellation, claim_duties, queued};
-use crate::command_sequence::tests::{
-    CREATE_CHAPTER, DELETE_CHAPTER, create_chapter, delete_chapter, issued,
+use crate::shared_tests::agent_run_steering::{cancellation, claim_duties, queued};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_capture_schedule::{
+    Fixture, due_state, fixture, input_of, make_chapter_due, row,
 };
-use crate::create_agent_run::context::chapter_list_tests::{head, select};
-use crate::memory_capture::loop_tests::{record, script};
-use crate::memory_capture::tests::run_capture;
-use crate::project_research_binding::tests::park_queued_runs;
-use crate::set_current_chapter_authority_tests::open_session_request;
-
-/// Makes the row of the Chapter due `seconds` ago, and each other row not due, so that the
-/// claim takes this row. A Chapter with no commit gets its row.
-pub(crate) async fn make_chapter_due(
-    admin: &Client,
-    scope: &ProjectScope,
-    chapter_id: &str,
-    seconds: i32,
-) {
-    let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
-    let others = "UPDATE storyos.memory_work_schedules SET due_at = NULL
-                   WHERE due_at IS NOT NULL AND project_id <> $1::text::uuid";
-    admin.execute(others, &[&keys[1]]).await.unwrap();
-    admin
-        .execute(
-            "INSERT INTO storyos.memory_work_schedules
-               (owner_user_id, project_id, work_kind, source_id, chapter_id, due_at)
-             VALUES ($1::text::uuid, $2::text::uuid, 'chapter_capture', $3::text::uuid,
-                     $3::text::uuid, clock_timestamp() - make_interval(secs => $4))
-             ON CONFLICT (owner_user_id, project_id, work_kind, source_id)
-             DO UPDATE SET due_at = EXCLUDED.due_at, held = false",
-            &[&keys[0], &keys[1], &chapter_id, &f64::from(seconds)],
-        )
-        .await
-        .unwrap();
-}
-
-/// The row of the Chapter: `held`, and its due time in seconds after the start of the last Chapter
-/// capture of the Project, or `null`.
-async fn row(admin: &Client, chapter_id: &str) -> Value {
-    admin
-        .query_one(
-            "SELECT jsonb_build_array(work.held,
-                      extract(epoch FROM work.due_at - (
-                        SELECT max(capture.started_at) FROM storyos.memory_captures AS capture
-                         WHERE capture.project_id = work.project_id
-                           AND capture.source_kind = 'chapter'))::bigint)::text
-               FROM storyos.memory_work_schedules AS work
-              WHERE work.work_kind = 'chapter_capture' AND work.source_id = $1::text::uuid",
-            &[&chapter_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-        .unwrap()
-}
-
-/// Whether the row of the Chapter is due now, due later, or not due.
-async fn due_state(admin: &Client, chapter_id: &str) -> Value {
-    admin
-        .query_one(
-            "SELECT CASE WHEN due_at <= clock_timestamp() THEN 'due'
-                         WHEN due_at IS NOT NULL THEN 'later' END
-               FROM storyos.memory_work_schedules
-              WHERE work_kind = 'chapter_capture' AND source_id = $1::text::uuid",
-            &[&chapter_id],
-        )
-        .await
-        .map(|row| json!(row.get::<_, Option<String>>(/*idx*/ 0)))
-        .unwrap()
-}
-
-/// One test Project: its stores, its Scope, and its writer Editor Session.
-struct Fixture {
-    store: PostgresProjectReader,
-    admin: Client,
-    scope: ProjectScope,
-    session: String,
-}
-
-impl Fixture {
-    /// Claims the due row of the Chapter. Returns the label of the outcome and the row after it.
-    async fn decide(&self, chapter_id: &str) -> (&'static str, Value) {
-        make_chapter_due(&self.admin, &self.scope, chapter_id, /*seconds*/ 1).await;
-        let claimed = self.store.claim_due_memory_work().await.unwrap().unwrap();
-        let source = MemoryWorkSource::Chapter(chapter_id.to_owned());
-        assert_eq!(
-            (&claimed.project_scope, &claimed.source),
-            (&self.scope, &source)
-        );
-        park_queued_runs(&self.admin, &self.scope).await;
-        (
-            claimed.outcome.diagnostic(),
-            row(&self.admin, chapter_id).await,
-        )
-    }
-
-    /// Moves each capture start of the Project 3 minutes back, so that the rate permits a start.
-    async fn move_starts_back(&self) {
-        let moved =
-            "UPDATE storyos.memory_captures SET started_at = started_at - interval '3 minutes'
-                      WHERE project_id = $1::text::uuid";
-        let project_id = self.scope.project_id.as_ref();
-        self.admin.execute(moved, &[&project_id]).await.unwrap();
-    }
-
-    /// One Author Edit with the local intent `sequence` and the challenge `suffix` that writes
-    /// `sentences` at the start of the first Block of `chapter_id`, one Block each.
-    async fn edit(&self, (sequence, suffix): (u64, u16), chapter_id: &str, sentences: &[&str]) {
-        let suffix = format!("{suffix:04x}");
-        let edit = (self.session.as_str(), sequence, suffix.as_str());
-        let (store, admin, scope) = (&self.store, &self.admin, &self.scope);
-        let write = write_blocks(store, admin, scope, edit, chapter_id, sentences).await;
-        store.apply_author_edit(&write).await.unwrap();
-    }
-
-    /// Selects `chapter_id` as the Current Chapter after `from`, so that the next edit can
-    /// change it.
-    async fn select(&self, suffix: u16, chapter_id: &str, from: &str) {
-        let writer = EditorSessionId::new(self.session.as_str());
-        let (store, admin, scope) = (&self.store, &self.admin, &self.scope);
-        let call = select(store, admin, scope, (&writer, suffix), chapter_id, from).await;
-        store
-            .set_current_chapter(&call.envelope, &call.input)
-            .await
-            .unwrap();
-    }
-
-    /// Starts one capture of the Chapter at its head with no observation.
-    async fn start_capture(&self, chapter_id: &str) -> StartedMemoryCapture {
-        let source = MemoryCaptureSource::Chapter {
-            chapter_id: chapter_id.to_owned(),
-            revision_id: head(&self.admin, chapter_id).await.0,
-        };
-        let input = script(&[record(json!([]))]);
-        crate::memory_capture::tests::start(&self.store, &self.scope, &source, &input)
-            .await
-            .unwrap()
-    }
-
-    async fn run_capture(&self, started: &StartedMemoryCapture) {
-        run_capture(&self.store, &self.admin, &self.scope, &started.run_id).await;
-    }
-}
-
-/// A Project of `lead` whose Chapter A has the Blocks `sentences`, with a second empty Chapter
-/// `Fog` and an open Editor Session. `suffix` to `suffix + 2` are its challenges.
-async fn fixture(lead: &str, suffix: u16, sentences: &[&str]) -> (Fixture, String, String) {
-    let (store, admin) = stores().await;
-    let (scope, chapter_a, fog, session) = project(&store, &admin, lead, suffix, sentences).await;
-    let fixture = Fixture {
-        store,
-        admin,
-        scope,
-        session,
-    };
-    (fixture, chapter_a, fog)
-}
+use crate::shared_tests::chapter_list_context::head;
+use crate::shared_tests::command_sequence_structure::{
+    CREATE_CHAPTER, DELETE_CHAPTER, create_chapter, delete_chapter,
+};
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::memory_capture_loop::{record, script};
+use crate::shared_tests::model_gateway::NoEmbeddings;
+use crate::shared_tests::model_gateway::{assisted_chapter, stores};
+use crate::shared_tests::project_research_binding::park_queued_runs;
+use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
 /// Each row of the decision table of S7-D5 for one claimed row, in the order of the table. The
 /// settlement of a completed or a failed capture that read an earlier Revision sets the due time
@@ -182,9 +35,7 @@ async fn fixture(lead: &str, suffix: u16, sentences: &[&str]) -> (Fixture, Strin
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_claimed_chapter_row_follows_the_rows_of_the_decision_table() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (f, chapter_a, fog) = fixture("832", 0x8390, &["雨夜。"]).await;
     let mut decisions = vec![f.decide(&fog).await];
     let project_id = f.scope.project_id.as_ref();
@@ -266,9 +117,7 @@ async fn a_claimed_chapter_row_follows_the_rows_of_the_decision_table() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_project_with_no_completed_run_holds_the_row() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let mut projects = Vec::new();
     let cases = [
         ("89f", 0x89e4, Runs::None),
@@ -289,7 +138,7 @@ async fn a_project_with_no_completed_run_holds_the_row() {
             let cancelled = store.cancel_agent_run(&cancel.envelope, &cancel.input);
             cancelled.await.unwrap();
             if let Some(claim) = claim_duties(&admin, &scope, &run_id).await {
-                let clock = &crate::agent_run_dispatch::tests::RuntimeClock;
+                let clock = &crate::shared_tests::model_gateway::RuntimeClock;
                 let destination = (&FakeDestination, &NoContractFaults);
                 let duties =
                     complete_agent_run(&store, destination.0, destination.1, clock, &claim);
@@ -355,9 +204,7 @@ enum Runs {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn three_due_chapters_start_in_chapter_order_at_the_rate_of_the_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (f, chapter_a, fog) = fixture("833", 0x83a0, &["雨。"]).await;
     let (store, admin, scope) = (&f.store, &f.admin, &f.scope);
     f.select(0x83a6, &fog, &chapter_a).await;
@@ -452,9 +299,7 @@ async fn three_due_chapters_start_in_chapter_order_at_the_rate_of_the_project() 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_locked_row_of_an_earlier_chapter_stays_first_in_order() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (mut f, chapter_a, fog) = fixture("835", 0x83c0, &["雨。"]).await;
     f.select(0x83c4, &fog, &chapter_a).await;
     f.edit((2, 0x83c3), &fog, &["雾。"]).await;
@@ -505,37 +350,12 @@ async fn a_locked_row_of_an_earlier_chapter_stays_first_in_order() {
 #[path = "chapter_capture_release_tests.rs"]
 mod release_tests;
 
-/// The context item of the first RunStep of the capture Run `run_id`: its projection mode and its
-/// content. The capture row has the Chapter and the head Revision of the Chapter.
-async fn input_of(admin: &Client, run_id: &str, chapter_id: &str) -> (String, String) {
-    let row = admin
-        .query_one(
-            "SELECT manifest.payload #>> '{selected,0,projection_mode}',
-                    manifest.payload #>> '{selected,0,content}',
-                    capture.chapter_revision_id = head.current_revision_id
-               FROM storyos.context_assembly_manifests AS manifest
-               JOIN storyos.memory_captures AS capture USING (owner_user_id, project_id, run_id)
-               JOIN storyos.authoritative_heads AS head
-                 ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
-                    (capture.owner_user_id, capture.project_id, capture.chapter_id)
-              WHERE manifest.run_id = $1::text::uuid AND manifest.manifest_role = 'decision'
-                AND manifest.decision_position = 0 AND capture.chapter_id = $2::text::uuid",
-            &[&run_id, &chapter_id],
-        )
-        .await
-        .unwrap();
-    assert!(row.get::<_, bool>(/*idx*/ 2));
-    (row.get(/*idx*/ 0), row.get(/*idx*/ 1))
-}
-
 /// The input of a Chapter capture is the title, the number in the Chapter list, and the text at
 /// the pinned Revision. A text above the Context item limit gives a Deterministic Excerpt.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_input_is_the_title_the_number_and_the_text_with_its_excerpt() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let sentences = ["雨夜。", "林舟撑船。"];
     let (f, chapter_a, fog) = fixture("834", 0x83b0, &sentences).await;
     let half = usize::try_from(storyos_core::CONTEXT_ITEM_TOKEN_LIMIT).unwrap() / 2 + 1_000;

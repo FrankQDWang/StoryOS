@@ -5,25 +5,28 @@
 
 use serde_json::{Value, json};
 use storyos_application::{
-    AgentRunControlRefusal, AgentRunReadSelection, AgentRunReadStore, AgentRunWorkStore,
-    CancelAgentRunInput, ConversationSelection, IssueProjectCommandChallenge, PauseAgentRunInput,
+    AgentRunControlRefusal, AgentRunReadSelection, AgentRunReadStore, CancelAgentRunInput,
+    ConversationSelection, IssueProjectCommandChallenge, PauseAgentRunInput,
     ProjectConversationReader, ProjectScope, RefusableCommandError, ResearchSourceReadStore,
     SteerAgentRunInput, VerifiedExportArchive, claim_next_archive_export, complete_archive_export,
     get_verified_export_archive, issue_project_command_challenge,
 };
-use storyos_core::{ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination, ModelAdapter};
-use tokio_postgres::{Client, NoTls};
+use storyos_core::{ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination};
+use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::admit_run_in;
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::queued;
 use crate::command_sequence::settle_project_command;
-use crate::project_archive_build::tests::{export_command, zip_store_files};
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::model_gateway::admit_run_in;
+use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
 
-use super::agent_run::{CANCEL_AGENT_RUN, PAUSE_AGENT_RUN, create_agent_run_call, request_rows};
-use super::steer_agent_run::STEER_AGENT_RUN;
-use super::support::{issued, seed_project, stores};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_agent_run::{
+    CANCEL_AGENT_RUN, PAUSE_AGENT_RUN, create_agent_run_call, request_rows,
+};
+use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::{issued, seed_project, stores};
 
 /// Inserts the background Run `run_id` with `status` in the Project of the Run of the author
 /// `like`, with the Agent, the grant, and the Model Registration of that Run.
@@ -177,9 +180,7 @@ async fn visible_rows(store: &PostgresProjectReader, scope: &ProjectScope, run_i
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_database_check_refuses_each_other_form_of_an_agent_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let call = create_agent_run_call(&store, /*base*/ 0x7700).await;
     store
@@ -257,9 +258,7 @@ async fn a_database_check_refuses_each_other_form_of_an_agent_run() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_background_run_is_not_a_run_that_the_author_can_see_or_control() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let call = create_agent_run_call(&store, /*base*/ 0x7710).await;
     store
@@ -422,34 +421,6 @@ async fn a_background_run_is_not_a_run_that_the_author_can_see_or_control() {
     );
 }
 
-/// Claims as another Worker. An admin transaction locks each AgentRun outside the Project, so
-/// that the claim can take only a Run of this Project and changes no other test data.
-pub(crate) async fn claim_in_project(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-) -> Option<storyos_application::ClaimedAgentRun> {
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL").unwrap();
-    let (others, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
-    tokio::spawn(connection);
-    others.batch_execute("BEGIN").await.unwrap();
-    others
-        .execute(
-            "SELECT 1 FROM storyos.agent_runs WHERE project_id <> $1::text::uuid FOR UPDATE",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    let claimed = store
-        .claim_next_agent_run(&[
-            ModelAdapter::HostFake,
-            ModelAdapter::VolcengineAgentPlanResponses,
-        ])
-        .await
-        .unwrap();
-    others.batch_execute("ROLLBACK").await.unwrap();
-    claimed
-}
-
 /// The Continuation Binding that the first decision request of the Run names as its prior
 /// response, and the binding that the last decision response of the Run `previous` produced.
 async fn prior_response(admin: &Client, run_id: &str, previous: &str) -> [Option<String>; 2] {
@@ -486,9 +457,7 @@ async fn earlier_messages(admin: &Client, run_id: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_background_run_changes_nothing_for_a_project_conversation() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "774").await;
     complete(&store, &admin, &scope, &first).await;

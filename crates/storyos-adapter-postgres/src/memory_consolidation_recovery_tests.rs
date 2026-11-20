@@ -13,18 +13,19 @@ use storyos_core::{AGENT_PLAN_REGISTRATION, MemoryEntryOrigin};
 use tokio::sync::Mutex;
 use tokio_postgres::Client;
 
-use super::tests::{
+use crate::PostgresProjectReader;
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
+use crate::shared_tests::agent_run_write_memory::first_index;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::delete_memory_entry::delete;
+use crate::shared_tests::memory_capture::project;
+use crate::shared_tests::memory_consolidation::{
     capture, create, delete as delete_operation, run_pass, scripted, settled, update, versions,
 };
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_tool_recovery::tests::{Fault, FaultAt};
-use crate::agent_run_write_memory::tests::first_index;
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::delete_memory_entry::tests::delete;
-use crate::memory_capture::tests::project;
-use crate::memory_entries::tests::write_versions;
+use crate::shared_tests::memory_entries::write_versions;
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
 
 /// The pass takes the oldest observations whose expected input stays below the window after the
 /// output bound of the binding. The pass row records them, and the other observations wait. The
@@ -34,9 +35,7 @@ use crate::memory_entries::tests::write_versions;
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_pass_takes_the_oldest_observations_that_fit_the_request() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "610").await;
     let first = json!([{ "type": "other", "title": "渡口", "text": "渡口在河边。" }]);
@@ -132,7 +131,7 @@ async fn pass_with_author_entry(
     .await;
     let script = json!([scripted("灯", &[create("foreshadowing", "灯", json!([1]))])]);
     capture(store, admin, &scope, &source, script).await;
-    let started = crate::memory_consolidation::tests::start_pass(store, &scope)
+    let started = crate::shared_tests::memory_consolidation::start_pass(store, &scope)
         .await
         .unwrap();
     (scope, chapter_id, started)
@@ -162,9 +161,7 @@ impl ContractFaultObserver for DeleteAtDispatch<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_delete_of_the_author_during_a_pass_makes_the_pass_stale() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, started) = pass_with_author_entry(&store, &admin, "611").await;
     let observer = DeleteAtDispatch {
@@ -219,9 +216,7 @@ async fn wait_for_blocked(admin: &Client, count: i64) {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_delete_of_the_author_waits_on_the_lock_of_the_settlement() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (_, holder) = stores().await;
     let (scope, _, started) = pass_with_author_entry(&store, &admin, "612").await;
@@ -334,9 +329,7 @@ fn applied_one_time() -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_lost_lease_after_the_response_applies_the_list_one_time() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let ended = lost_lease("613", ContractFaultPoint::StreamCommitted).await;
     assert_eq!(ended, applied_one_time());
 }
@@ -345,9 +338,7 @@ async fn a_lost_lease_after_the_response_applies_the_list_one_time() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_lost_lease_before_the_settlement_applies_the_list_one_time() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let ended = lost_lease("614", ContractFaultPoint::ToolCallsCommitted).await;
     assert_eq!(ended, applied_one_time());
 }
@@ -357,9 +348,7 @@ async fn a_lost_lease_before_the_settlement_applies_the_list_one_time() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_pass_changes_only_the_entries_and_observations_of_its_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut projects = Vec::new();
     for prefix in ["615", "616"] {
@@ -415,9 +404,7 @@ async fn observation_states(admin: &Client, scope: &ProjectScope) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_next_run_and_the_settings_page_read_the_entries_of_a_pass() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "617").await;
     let created = [

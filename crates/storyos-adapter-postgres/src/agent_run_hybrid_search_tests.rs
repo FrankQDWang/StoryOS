@@ -28,22 +28,25 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::NoEmbeddings;
-use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_load_skill::tests::calls;
-use crate::agent_run_read_chapter::tests::{
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_load_skill::calls;
+use crate::shared_tests::agent_run_read_chapter::{
     boundary, call_ids, finish, no_public_call, outputs_record, sent,
 };
-use crate::agent_run_steering::tests::{cancellation, queued, step_requests};
-use crate::agent_run_tool_recovery::tests::{Fault, FaultAt};
-use crate::command_sequence::tests::{PAUSE_AGENT_RUN, STEER_AGENT_RUN, issued};
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::passage_ranking::tests::rank_passages;
-use crate::passage_vectors::tests::{
+use crate::shared_tests::agent_run_steering::{cancellation, queued, step_requests};
+use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
+use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::model_gateway::NoEmbeddings;
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::passage_ranking::rank_passages;
+use crate::shared_tests::passage_vectors::{
     Chapter, SHORE, chapter, index, prepend, texts, vector_table_visible,
 };
-use crate::project_embedding_binding::tests::{FAKE, embedding_project};
+use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
 
 const QUESTION: &str = "谁在早上回到了港口？";
 
@@ -169,9 +172,7 @@ async fn scripted(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_call_before_a_keyword_search_settles_with_the_fused_result_of_its_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let ours = chapter(&store, &admin, ["541", "542"], "543", &texts()).await;
@@ -229,9 +230,7 @@ async fn a_call_before_a_keyword_search_settles_with_the_fused_result_of_its_pro
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_settled_request_with_no_vector_gives_the_exact_term_list() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["bb1", "bb2"], "bb3", &texts()).await;
@@ -275,9 +274,7 @@ async fn a_settled_request_with_no_vector_gives_the_exact_term_list() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_refused_call_has_its_label_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (plain, admin) = stores().await;
     let store = configured(&plain);
     let chapter = chapter(&store, &admin, ["548", "549"], "54a", &texts()).await;
@@ -379,9 +376,7 @@ async fn each_refused_call_has_its_label_and_the_run_continues() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_term_with_u0000_refuses_only_its_call_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (plain, admin) = stores().await;
     let store = configured(&plain);
     let chapter = chapter(&store, &admin, ["a2c", "a2d"], "a2e", &texts()).await;
@@ -423,9 +418,7 @@ async fn a_term_with_u0000_refuses_only_its_call_and_the_run_continues() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_tool_is_not_declared_with_no_configuration_or_no_binding() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (plain, admin) = stores().await;
     let store = configured(&plain);
     // The Project has the binding, and the deployment of the Worker has no configuration.
@@ -470,9 +463,7 @@ async fn the_tool_is_not_declared_with_no_configuration_or_no_binding() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_tool_follows_the_vector_store_of_the_database() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["b53", "b54"], "b55", &texts()).await;
@@ -504,9 +495,7 @@ async fn the_tool_follows_the_vector_store_of_the_database() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_compaction_after_a_call_keeps_the_exact_result() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["b57", "b58"], "b59", &texts()).await;
@@ -636,9 +625,7 @@ impl EmbeddingProviderAdapter for NotFinite {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_question_vector_that_is_not_finite_gives_the_exact_term_list() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["c7a", "c7b"], "c7c", &texts()).await;
@@ -687,9 +674,7 @@ async fn conversation(admin: &Client, run_id: &str) -> String {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_edit_or_a_steering_input_during_the_question_request_does_not_wait() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["bb6", "bb7"], "bb8", &texts()).await;
@@ -752,9 +737,7 @@ async fn an_edit_or_a_steering_input_during_the_question_request_does_not_wait()
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_cancellation_or_a_pause_during_the_question_request_keeps_the_result_out() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["ba5", "ba6"], "ba7", &texts()).await;
@@ -822,9 +805,7 @@ async fn a_cancellation_or_a_pause_during_the_question_request_keeps_the_result_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_next_claim_after_a_stopped_worker_sends_a_new_question_request() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["ba1", "ba2"], "ba3", &texts()).await;

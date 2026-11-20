@@ -10,11 +10,12 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use super::tests::{calls, loaded_run, record, skill_md};
-use crate::agent_run_dispatch::tests::{admit_selected_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::queued;
-use crate::create_agent_run_tests::skill_tests::{fixture, package, set};
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_load_skill::{calls, loaded_run, record, skill_md};
+use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
+use crate::shared_tests::model_gateway::{admit_selected_run, stores};
 
 /// The Skills `skill-1` to `skill-<count>`, each with a short `SKILL.md`.
 fn numbered(count: usize) -> Vec<SkillPackage> {
@@ -87,9 +88,7 @@ async fn sent(admin: &Client, run_id: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn nine_loads_of_one_response_settle_eight_and_refuse_the_ninth_at_the_limit() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let packages = numbered(9);
     let message = format!("SCRIPT:load_skill {}", names(1..=9));
@@ -114,9 +113,7 @@ async fn nine_loads_of_one_response_settle_eight_and_refuse_the_ninth_at_the_lim
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_second_load_of_a_skill_and_a_load_of_a_selected_skill_are_refused() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let dialogue = fixture("dialogue-style-guide");
     let (_, twice) = loaded_run(
@@ -170,9 +167,7 @@ const EXPIRES: &str = "SCRIPT:step-reference-expires";
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn two_loads_are_two_outputs_in_call_order_and_each_full_input_sends_both_again() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let dialogue = fixture("dialogue-style-guide");
     let comms = fixture("internal-comms");
@@ -268,9 +263,7 @@ async fn two_loads_are_two_outputs_in_call_order_and_each_full_input_sends_both_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_compaction_after_the_loads_keeps_each_load_output_exact_and_names_no_load_stub() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let dialogue = fixture("dialogue-style-guide");
     let comms = fixture("internal-comms");

@@ -4,8 +4,9 @@ use storyos_application::{
 use tokio_postgres::NoTls;
 
 use crate::PostgresProjectReader;
-use crate::create_volume_authority_tests::{NamedEdit, apply_named_edit};
-use crate::set_current_chapter_authority_tests::{open_session_request, seed_two_chapters};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};
+use crate::shared_tests::set_current_chapter_authority::{open_session_request, seed_two_chapters};
 
 const OWNER: &str = "018f0000-0000-7001-8000-000000000001";
 
@@ -30,9 +31,7 @@ fn exact_retry(request: &OpenEditorSession, suffix: &str) -> OpenEditorSession {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_exact_retry_after_an_author_edit_returns_the_first_editor_session() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let store = store();
     let (scope, _volume_id, chapter_a, _chapter_b) =
         seed_two_chapters(&store, OWNER, "e120", "e121", "e122", "e123").await;
@@ -64,9 +63,7 @@ async fn an_exact_retry_after_an_author_edit_returns_the_first_editor_session() 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_exact_retry_separates_a_pre_capture_fence_from_a_damaged_acknowledgement() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let store = store();
     let (admin, connection) = tokio_postgres::connect(
         &std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")

@@ -1,6 +1,8 @@
 //! PostgreSQL implementation of StoryOS Application ports.
 
 #[cfg(test)]
+mod shared_tests;
+#[cfg(test)]
 #[path = "project_command_challenge_tests.rs"]
 mod tests;
 

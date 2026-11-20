@@ -2,25 +2,19 @@
 //! settled load, the request after it, the refused loads, and the summary request of a
 //! compaction that waits for the output of a load.
 
-use std::sync::Arc;
-
 use serde_json::{Value, json};
-use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-    ProjectScope,
-};
+use storyos_application::{AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore};
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CallValidationRefusal,
     FINISH_DOES_NOT_COUNT_RESULT, IntakeRefusal, LoadSkillRefusal, SKILL_MD_PATH, SkillFileInput,
-    SkillPackage, SkillSet, count_stored_text,
+    SkillPackage, count_stored_text,
 };
 use tokio_postgres::Client;
 
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_selected_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::queued;
-use crate::create_agent_run_tests::skill_tests::{fixture, package, set};
+use crate::shared_tests::agent_run_load_skill::{TOOLS, calls, loaded_run, record, skill_md};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
+use crate::shared_tests::model_gateway::stores;
 
 /// A package whose `SKILL.md` has exactly 32,000 counted tokens, the limit of ADR 0089 section
 /// 9, with `<`, `&`, and `"` in its text.
@@ -43,56 +37,6 @@ fn long_package() -> SkillPackage {
     )
 }
 
-pub(crate) fn skill_md(package: &SkillPackage) -> String {
-    let file = package.files.iter().find(|file| file.path == SKILL_MD_PATH);
-    String::from_utf8(file.unwrap().bytes.clone()).unwrap()
-}
-
-/// Completes the first Run of a new Project of the tool loop profile, then admits and completes
-/// one Run with `message` that pins the catalog of `skills` and selects no Skill.
-pub(crate) async fn loaded_run(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    prefixes: [&str; 2],
-    message: &str,
-    skills: Arc<SkillSet>,
-) -> (ProjectScope, String) {
-    let (scope, chapter_id, first) = queued(store, prefixes[0]).await;
-    complete(store, admin, &scope, &first).await;
-    let run_id = admit_selected_run(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
-        message,
-        ConversationSelection::New,
-        (skills, Vec::new()),
-    )
-    .await;
-    complete(store, admin, &scope, &run_id).await;
-    (scope, run_id)
-}
-
-/// The status of the Run, and each ToolCall as its function name, state, refusal, Host result,
-/// and whether it has no Destination Attempt and pins the current Host Tool Registration.
-pub(crate) async fn calls(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(run.status, (SELECT jsonb_agg(jsonb_build_array(
-                      call.function_name, call.state, call.refusal, call.result_text,
-                      COALESCE(call.destination_attempt_id IS NULL AND call.attempt IS NULL
-                        AND call.registration_id = 'host_tools'
-                        AND call.tool_registration_revision::text = $2, false))
-                      ORDER BY call.decision_position, call.call_position)
-                      FROM storyos.tool_calls AS call WHERE call.run_id = run.run_id))::text
-               FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-            &[&run_id, &storyos_core::HOST_TOOL_REGISTRATION.revision],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
-}
-
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, the
 /// Tools that it declared, the Tool outputs that it sent, and whether it sent the current input.
 async fn requests(admin: &Client, run_id: &str) -> Value {
@@ -111,44 +55,10 @@ async fn requests(admin: &Client, run_id: &str) -> Value {
     serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
 }
 
-/// The Tool sources of the Operation Requirement and each selected `skill_instruction` item of
-/// the Context Assembly with `role` at `position`.
-pub(super) async fn record(admin: &Client, run_id: &str, role: &str, position: i32) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(payload #> '{operation_requirement,tool_results}',
-                      jsonb_path_query_array(payload,
-                        '$.selected[*] ? (@.source_class == \"skill_instruction\")'))::text
-               FROM storyos.context_assembly_manifests
-              WHERE run_id = $1::text::uuid AND manifest_role = $2
-                AND decision_position = $3::text::numeric",
-            &[&run_id, &role, &position.to_string()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
-}
-
-pub(crate) const TOOLS: [&str; 11] = [
-    "propose_edit",
-    "submit_research",
-    "read_tool_result",
-    "load_skill",
-    "read_skill_resource",
-    "read_chapter",
-    "search_manuscript",
-    "write_memory",
-    "read_memory_entry",
-    "search_memory",
-    "finish",
-];
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_load_settles_with_the_exact_skill_md_and_the_next_request_sends_it_as_the_call_output() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let long = long_package();
     let text = skill_md(&long);
@@ -247,9 +157,7 @@ async fn a_load_settles_with_the_exact_skill_md_and_the_next_request_sends_it_as
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_refused_load_gives_its_reason_and_a_run_with_no_skill_declares_no_load_skill() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let skills = || set(vec![fixture("dialogue-style-guide")]);
     let (_, unknown) = loaded_run(
@@ -361,9 +269,7 @@ async fn each_refused_load_gives_its_reason_and_a_run_with_no_skill_declares_no_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_summary_request_of_a_compaction_at_the_step_of_the_load_sends_the_load_output() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let dialogue = fixture("dialogue-style-guide");
     let text = skill_md(&dialogue);

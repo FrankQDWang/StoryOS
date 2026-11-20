@@ -1,12 +1,9 @@
-use std::sync::Mutex;
-
 use serde_json::{Value, json};
 use storyos_adapter_mcp_client::McpExchange;
 use storyos_application::{
-    CancelAgentRunInput, CompleteAgentRunError, ContractFaultObserver, ContractFaultPoint,
-    ConversationSelection, NoContractFaults, PreDispatchRefusal, PreparedRequest, ProjectScope,
-    ResearchSourceReadStore, ToolCallRequest, ToolDestinationAdapter,
-    complete_agent_run_with_tools,
+    CancelAgentRunInput, CompleteAgentRunError, ContractFaultPoint, ConversationSelection,
+    NoContractFaults, PreDispatchRefusal, PreparedRequest, ProjectScope, ResearchSourceReadStore,
+    ToolCallRequest, ToolDestinationAdapter, complete_agent_run_with_tools,
 };
 use storyos_core::{DeploymentDestination, ToolObservation};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -14,19 +11,22 @@ use tokio::sync::oneshot;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, stores};
-use crate::agent_run_lease::tests::SteppedClock;
-use crate::agent_run_retrieval::tests::{
+use crate::shared_tests::agent_run_lease::SteppedClock;
+use crate::shared_tests::agent_run_retrieval::{
     adapter, broken_stream, destination, not_found, research_run,
 };
-use crate::agent_run_tool_call::tests::text_and_call_stream;
-use crate::agent_run_tool_dispatch::tests::{
+use crate::shared_tests::agent_run_tool_call::text_and_call_stream;
+use crate::shared_tests::agent_run_tool_dispatch::{
     POST, RESULT, SEARCH, attempt, client, exa_tools, interrupted_attempt, mcp_replies, point_mcp,
     reply, settled_event, tool_facts, tool_run,
 };
-use crate::agent_run_tool_exposure::tests::advisory_stream;
-use crate::command_sequence::tests::{CANCEL_AGENT_RUN, CommandCall, issued};
-use crate::research_source::tests::calls_stream;
+use crate::shared_tests::agent_run_tool_exposure::advisory_stream;
+use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_agent_run::CANCEL_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::{CommandCall, issued};
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run, stores};
+use crate::shared_tests::research_source::calls_stream;
 
 /// The result of the one search, as the fake MCP server sends it.
 fn search_result() -> String {
@@ -53,67 +53,6 @@ async fn cancel_call(
         },
     )
     .await
-}
-
-pub(crate) enum Fault<'a> {
-    /// The author cancels the Run.
-    Cancel {
-        store: &'a PostgresProjectReader,
-        call: Box<CommandCall<CancelAgentRunInput>>,
-    },
-    /// Another Worker takes the Run over, as after a crash of this Worker.
-    TakeOver { admin: &'a Client, run_id: String },
-}
-
-/// The Contract Fault Point observer: it injects `fault` when the Tool Gateway reaches `point`
-/// for the `nth` time.
-pub(crate) struct FaultAt<'a> {
-    point: ContractFaultPoint,
-    nth: usize,
-    fault: Fault<'a>,
-    reached: Mutex<usize>,
-}
-
-impl<'a> FaultAt<'a> {
-    pub(crate) fn new(point: ContractFaultPoint, nth: usize, fault: Fault<'a>) -> Self {
-        Self {
-            point,
-            nth,
-            fault,
-            reached: Mutex::new(/*value*/ 0),
-        }
-    }
-}
-
-impl ContractFaultObserver for FaultAt<'_> {
-    async fn reached(&self, point: ContractFaultPoint) {
-        let count = {
-            let mut reached = self.reached.lock().unwrap();
-            *reached += usize::from(point == self.point);
-            *reached
-        };
-        if point != self.point || count != self.nth {
-            return;
-        }
-        match &self.fault {
-            Fault::Cancel { store, call } => {
-                store
-                    .cancel_agent_run(&call.envelope, &call.input)
-                    .await
-                    .unwrap();
-            }
-            Fault::TakeOver { admin, run_id } => {
-                admin
-                    .execute(
-                        "UPDATE storyos.agent_runs SET fence_token = fence_token + 1
-                          WHERE run_id = $1::text::uuid",
-                        &[run_id],
-                    )
-                    .await
-                    .unwrap();
-            }
-        }
-    }
 }
 
 /// The real MCP client, and the cancellation of the Run by the author after the exchange
@@ -250,9 +189,7 @@ fn unknown_search() -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_cancel_after_the_claim_sends_nothing_and_the_next_message_asks_with_a_new_tool_call() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (model_base, _model) = destination(vec![
         text_and_call_stream("resp_081", "call_01", "web_search", SEARCH, "completed"),
@@ -363,9 +300,7 @@ async fn a_cancel_after_the_claim_sends_nothing_and_the_next_message_asks_with_a
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_cancel_during_the_exchange_drops_it_locally_and_keeps_the_tool_call_unknown() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (mcp_base, received, release, mcp) =
         held_mcp(mcp_replies(exa_tools(|_| {}), None), search_result()).await;
@@ -416,9 +351,7 @@ async fn a_cancel_during_the_exchange_drops_it_locally_and_keeps_the_tool_call_u
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_result_after_the_cancellation_fence_is_kept_as_evidence_only() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(search_result()))).await;
     let (scope, run_id) = tool_run(&store, &admin, "084", &mcp_base).await;
@@ -479,9 +412,7 @@ async fn a_result_after_the_cancellation_fence_is_kept_as_evidence_only() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_cancel_between_two_tool_calls_keeps_the_settled_one_and_refuses_the_pending_one() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let calls = [
         ("call_01", "web_search", SEARCH),
@@ -551,9 +482,7 @@ async fn a_cancel_between_two_tool_calls_keeps_the_settled_one_and_refuses_the_p
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_takeover_after_the_claim_settles_unknown_at_the_next_claim_with_no_successor() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (model_base, model) = destination(vec![
         text_and_call_stream("resp_086", "call_01", "web_search", SEARCH, "completed"),
@@ -629,9 +558,7 @@ async fn a_takeover_after_the_claim_settles_unknown_at_the_next_claim_with_no_su
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_answer_with_no_result_after_the_fence_keeps_the_tool_call_unknown() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let failed = "HTTP/1.1 502 Bad Gateway\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
     let (mcp_base, mcp) =

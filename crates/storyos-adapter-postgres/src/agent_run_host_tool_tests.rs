@@ -11,7 +11,8 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::{
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{
     RuntimeClock, admit_run_in, claim_run, queued_run, queued_run_offering, stores,
 };
 
@@ -65,9 +66,7 @@ async fn run_facts(admin: &Client, run_id: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_finish_call_settles_in_process_and_reenters_as_one_tool_result() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) =
         queued_run(&store, "1e1", DeploymentDestination::HostFakeToolLoop).await;
@@ -130,9 +129,7 @@ async fn a_finish_call_settles_in_process_and_reenters_as_one_tool_result() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_process_with_no_tool_adapter_executes_finish_and_refuses_the_research_call() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let research = Some(&RESEARCH_TOOL_OFFER);
     let (scope, chapter_id, first) = queued_run_offering(

@@ -6,41 +6,21 @@ use std::time::Duration;
 use storyos_application::{ProjectId, ProjectScope, QuestionVector, UserId};
 use storyos_core::{
     AuthorEditPrimitive, HOST_FAKE_EMBEDDING_REGISTRATION, PASSAGE_CUT_REVISION, PassageBlock,
-    PassageTerms, ToolResultText, TransitionOutcome, cut_passages,
+    PassageTerms, TransitionOutcome, cut_passages,
 };
 use tokio_postgres::Client;
 
 use super::NEAREST_PASSAGES_SQL;
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::stores;
-use crate::command_sequence::tests::titled_chapter;
-use crate::delete_structure_tests::settle_delete_chapter;
-use crate::passage_vectors::tests::{
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::titled_chapter;
+use crate::shared_tests::delete_structure::settle_delete_chapter;
+use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::passage_ranking::rank_passages;
+use crate::shared_tests::passage_vectors::{
     BOATS, Chapter, SHORE, TIDE, WIND, chapter, edit_at, head, index, prepend, texts,
     vector_table_visible,
 };
-
-/// The ranked passages of `terms` and `question` in one read-only transaction of `scope`, as the
-/// result text of the native call `call_id`, or `None` when the Project is not visible. With no
-/// question vector, the result is the exact-term list.
-pub(crate) async fn rank_passages(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    terms: &PassageTerms,
-    question: Option<QuestionVector<'_>>,
-    call_id: &str,
-) -> Option<ToolResultText> {
-    let client = store.connect().await.unwrap();
-    client
-        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .await
-        .unwrap();
-    let facts = super::read_facts(&*client, scope, question).await.unwrap();
-    client.batch_execute("COMMIT").await.unwrap();
-    facts.map(|facts| {
-        storyos_core::hybrid_search_result(&facts.chapters, Some(&facts.nearest), terms, call_id)
-    })
-}
 
 /// The result text of the ranking of `terms` and `question` in `scope`, or `None` when the Project
 /// is not visible.
@@ -136,9 +116,7 @@ async fn apply(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_result_joins_the_exact_term_list_and_the_vector_list_of_the_current_passages() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let chapter = chapter(&store, &admin, ["951", "952"], "953", &texts()).await;
     let no_vector = vec![0.25; 1_024];
@@ -191,9 +169,7 @@ async fn the_result_joins_the_exact_term_list_and_the_vector_list_of_the_current
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_stale_vector_row_does_not_return_from_the_vector_list() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut chapter = chapter(&store, &admin, ["954", "955"], "956", &texts()).await;
     index(&store, &admin, &chapter).await;
@@ -269,9 +245,7 @@ async fn a_stale_vector_row_does_not_return_from_the_vector_list() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_result_is_one_consistent_state_of_the_manuscript() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut chapter = chapter(&store, &admin, ["95a", "95b"], "95c", &texts()).await;
     index(&store, &admin, &chapter).await;
@@ -337,9 +311,7 @@ async fn the_result_is_one_consistent_state_of_the_manuscript() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_in_one_project_scope_returns_nothing_of_another_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let own = chapter(&store, &admin, ["95d", "95e"], "95f", &texts()).await;
     let mut other_texts = texts();
@@ -400,9 +372,7 @@ async fn a_read_in_one_project_scope_returns_nothing_of_another_project() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_result_with_no_vector_store_is_the_exact_term_list() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let chapter = chapter(&store, &admin, ["691", "692"], "693", &texts()).await;
     let offered: bool = admin

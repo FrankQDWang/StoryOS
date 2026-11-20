@@ -1,8 +1,5 @@
-use std::convert::Infallible;
-
 use storyos_application::{
-    ProjectInstructionRevision, ProjectInstructionSaved, ProjectScope, RefusableCommandError,
-    UpdateProjectInstructionInput, open_project_instruction,
+    ProjectInstructionRevision, ProjectInstructionSaved, ProjectScope, open_project_instruction,
 };
 use storyos_core::{
     CONTEXT_ITEM_TOKEN_LIMIT, TransitionOutcome, UpdateProjectInstructionConflict,
@@ -10,52 +7,11 @@ use storyos_core::{
 };
 use tokio_postgres::{Client, NoTls};
 
-use crate::PostgresProjectReader;
-use crate::command_sequence::tests::{
-    UPDATE_PROJECT_INSTRUCTION, issued, seed_owned_project, seed_project, stores,
-};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::{seed_owned_project, seed_project, stores};
+use crate::shared_tests::project_instruction::{applied, save};
 
 const OTHER_USER: &str = "018f0000-0000-7001-8000-000000000101";
-
-type Outcome = Result<
-    TransitionOutcome<
-        ProjectInstructionSaved,
-        UpdateProjectInstructionNoEffect,
-        UpdateProjectInstructionConflict,
-        Infallible,
-    >,
-    UpdateProjectInstructionRefusal,
->;
-
-/// Saves `text` in the Project of `scope` with the Command Challenge `suffix`.
-pub(crate) async fn save(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    suffix: u16,
-    text: &str,
-    expected_revision: u64,
-) -> Outcome {
-    let input = UpdateProjectInstructionInput {
-        text: text.to_owned(),
-        expected_revision,
-    };
-    let call = issued(store, scope, suffix, &UPDATE_PROJECT_INSTRUCTION, input).await;
-    match store
-        .update_project_instruction(&call.envelope, &call.input)
-        .await
-    {
-        Ok(settlement) => Ok(settlement.outcome.map_applied(|applied| applied.effect)),
-        Err(RefusableCommandError::RefusedBeforeAdmission(refusal)) => Err(refusal),
-        Err(RefusableCommandError::Command(error)) => panic!("the save must settle: {error:?}"),
-    }
-}
-
-pub(crate) fn applied(outcome: &Outcome) -> ProjectInstructionSaved {
-    match outcome {
-        Ok(TransitionOutcome::Applied(saved)) => saved.clone(),
-        other => panic!("expected an applied save, got {other:?}"),
-    }
-}
 
 /// The Revision rows of the Project of `scope`, in revision order, read as the admin role.
 async fn revision_rows(admin: &Client, scope: &ProjectScope) -> Vec<ProjectInstructionRevision> {
@@ -89,9 +45,7 @@ fn revision(saved: &ProjectInstructionSaved, text: &str) -> ProjectInstructionRe
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_save_keeps_its_exact_text_as_one_immutable_revision() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, "ee00").await;
     assert_eq!(
@@ -156,9 +110,7 @@ async fn each_save_keeps_its_exact_text_as_one_immutable_revision() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_save_writes_and_reads_only_its_own_project_scope() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let project_a = seed_project(&store, "ee10").await;
     let project_b = seed_project(&store, "ee20").await;
@@ -194,9 +146,7 @@ async fn a_save_writes_and_reads_only_its_own_project_scope() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_runtime_role_cannot_change_or_delete_a_revision() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, "ee40").await;
     let saved = applied(&save(&store, &scope, 0xee41, "Kept text.", 0).await);

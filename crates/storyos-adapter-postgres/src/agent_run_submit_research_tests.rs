@@ -1,147 +1,20 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-    NoContractFaults, ProjectScope, ResearchArtifactReadStore, complete_agent_run,
-    complete_agent_run_with_tools,
+    AgentRunDecisionInspect, ConversationSelection, NoContractFaults, ResearchArtifactReadStore,
+    complete_agent_run,
 };
 use storyos_core::{
     Citation, DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT, RESEARCH_RECORDED_RESULT,
-    RESEARCH_TOOL_OFFER, ResearchClaim, ResearchSynthesis, SubmitResearchRefusal, SynthesisRefusal,
+    ResearchClaim, ResearchSynthesis, SubmitResearchRefusal, SynthesisRefusal,
 };
-use tokio_postgres::Client;
 
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
-};
-use crate::agent_run_retrieval::tests::destination;
-use crate::agent_run_tool_dispatch::tests::{Hooked, exa_tools, mcp_replies, point_mcp, reply};
-use crate::research_source::tests::SEARCH_TEXT;
+use crate::shared_tests::agent_run_submit_research::research_project;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
+use crate::shared_tests::research_source::SEARCH_TEXT;
 
 const FAILED_PAGE: &str = "Error fetching https://example.org/c: CRAWL_NOT_FOUND";
-
-/// One Project of the tool loop profile with the research offer. Its `first` Run completed.
-pub(crate) struct ResearchProject {
-    pub store: PostgresProjectReader,
-    pub admin: Client,
-    pub scope: ProjectScope,
-    chapter_id: String,
-    first: String,
-}
-
-pub(crate) async fn research_project(prefix: &str) -> ResearchProject {
-    let (store, admin) = stores().await;
-    let (scope, chapter_id, first) = queued_run_offering(
-        &store,
-        prefix,
-        DeploymentDestination::HostFakeToolLoop,
-        Some(&RESEARCH_TOOL_OFFER),
-    )
-    .await;
-    let claim = claim_run(&admin, scope.clone(), first.clone()).await;
-    complete_agent_run(
-        &store,
-        &FakeDestination,
-        &NoContractFaults,
-        &RuntimeClock,
-        &claim,
-    )
-    .await
-    .unwrap();
-    ResearchProject {
-        store,
-        admin,
-        scope,
-        chapter_id,
-        first,
-    }
-}
-
-impl ResearchProject {
-    /// Settles one Run with `message` through the fake model and the real MCP client. The fake
-    /// MCP server answers the one research call of the Run with `text`.
-    pub(crate) async fn settle(&self, prefix: &str, message: &str, text: &str) -> String {
-        let run_id = admit_run_in(
-            &self.store,
-            &self.scope,
-            &self.chapter_id,
-            prefix,
-            DeploymentDestination::HostFakeToolLoop,
-            message,
-            ConversationSelection::New,
-            Some(&RESEARCH_TOOL_OFFER),
-        )
-        .await;
-        let result = reply(
-            /*id*/ 0,
-            json!({"content": [{"type": "text", "text": text}], "isError": false}),
-        );
-        let (mcp_base, _mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(result))).await;
-        point_mcp(&self.admin, &self.scope, &mcp_base).await;
-        let claim = claim_run(&self.admin, self.scope.clone(), run_id.clone()).await;
-        let tools = Hooked {
-            admin: &self.admin,
-            after_prepare: String::new(),
-            after_exchange: String::new(),
-        };
-        complete_agent_run_with_tools(
-            &self.store,
-            &FakeDestination,
-            &tools,
-            &NoContractFaults,
-            &RuntimeClock,
-            &claim,
-        )
-        .await
-        .unwrap();
-        run_id
-    }
-
-    /// The status of the Run, the decision kind and `tool_choice` of each RunStep, each ToolCall
-    /// as its function name, state, refusal, and Host result, and the citation kinds of each
-    /// Research Artifact of the Run.
-    pub(crate) async fn facts(&self, run_id: &str) -> Value {
-        let row = self
-            .admin
-            .query_one(
-                "SELECT jsonb_build_object(
-                          'status', run.status,
-                          'steps', (SELECT jsonb_agg(jsonb_build_array(
-                                      attempt.payload #>> '{decision,kind}',
-                                      (attempt.payload #>> '{wire,serialized_payload}')::jsonb
-                                        ->> 'tool_choice')
-                                      ORDER BY attempt.model_attempt_id)
-                                      FROM storyos.model_attempts AS attempt
-                                     WHERE attempt.run_id = run.run_id),
-                          'calls', (SELECT jsonb_agg(jsonb_build_array(
-                                      call.function_name, call.state, call.refusal,
-                                      CASE WHEN call.registration_id = 'host_tools'
-                                           THEN call.result_text END)
-                                      ORDER BY call.decision_position, call.call_position)
-                                      FROM storyos.tool_calls AS call
-                                     WHERE call.run_id = run.run_id),
-                          'artifacts', (SELECT jsonb_agg(jsonb_path_query_array(
-                                          artifact.content, '$.claims[*].citations[*].kind'))
-                                          FROM storyos.research_artifacts AS artifact
-                                         WHERE artifact.run_id = run.run_id))::text
-                   FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap();
-        serde_json::from_str(row.get::<_, &str>(0)).unwrap()
-    }
-
-    async fn decision(&self, run_id: &str) -> AgentRunDecisionInspect {
-        self.store
-            .read_agent_run(&self.scope, run_id, &AgentRunReadSelection::Current)
-            .await
-            .unwrap()
-            .unwrap()
-            .decision
-    }
-}
 
 fn script(variant: &str, first_tool: &str, arguments: Value) -> String {
     format!("SCRIPT:submit_research {variant} {first_tool} {arguments}")
@@ -165,9 +38,7 @@ fn completed(research: &str, required: usize, calls: Value, artifacts: Value) ->
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decision() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let project = research_project("870").await;
     let arguments = synthesis("The tides of 1890.", json!(["$SOURCE"]));
     let run_id = project
@@ -360,9 +231,7 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_refused_call_gives_its_reason_and_one_run_records_one_artifact() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let project = research_project("874").await;
     let refused = |refusal: SubmitResearchRefusal| {
         json!([

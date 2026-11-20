@@ -9,14 +9,17 @@ use storyos_application::{
 use storyos_core::{AuthorEditPrimitive, DeploymentDestination, SelectionReference, TextPoint};
 use tokio_postgres::Client;
 
-use crate::agent_run_current_candidate::tests::settled;
-use crate::agent_run_dispatch::tests::{admit_referenced_run, stores};
-use crate::agent_run_propose_edit::revise_tests::Fixture;
-use crate::agent_run_propose_edit::tests::{REVISE, opened, propose_edit_calls};
-use crate::agent_run_steering::tests::{
+use crate::shared_tests::agent_run_current_candidate::settled;
+use crate::shared_tests::agent_run_propose_edit::{REVISE, opened, propose_edit_calls};
+use crate::shared_tests::agent_run_propose_edit_revise::Fixture;
+use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, settle, steering, step_references,
 };
-use crate::command_sequence::tests::{ACCEPT_PROPOSAL, DELETE_CHAPTER, issued, named_call};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_acceptance::ACCEPT_PROPOSAL;
+use crate::shared_tests::command_sequence_structure::{DELETE_CHAPTER, named_call};
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::model_gateway::{admit_referenced_run, stores};
 
 const MESSAGE: &str = "Help with this passage.";
 const EDITED: &str = "Still, ";
@@ -128,9 +131,7 @@ async fn outcome(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_closing_run_step_reads_the_chapter_head_after_an_author_edit_of_another_block() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0x2c0, tool_loop.clone()).await;
@@ -221,9 +222,7 @@ async fn candidate_text(admin: &Client, reference: &SelectionReference) -> Strin
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_changed_start_or_end_block_moves_the_range_and_the_next_run_step_sends_the_current_text()
 {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
     let mut expected = Vec::new();
@@ -345,9 +344,7 @@ async fn a_changed_start_or_end_block_moves_the_range_and_the_next_run_step_send
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_steering_reference_moves_to_the_chapter_head_that_the_author_edited() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let fixture = Fixture::new(
         &store,
@@ -415,9 +412,7 @@ async fn a_steering_reference_moves_to_the_chapter_head_that_the_author_edited()
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_run_drops_a_reference_whose_covered_text_the_author_removed_and_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
     // First the author joins the covered Block to the Block before it, then the author removes
@@ -487,9 +482,7 @@ async fn the_run_drops_a_reference_whose_covered_text_the_author_removed_and_con
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_later_propose_edit_call_on_the_moved_reference_opens_the_proposal_on_the_current_head() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let fixture = Fixture::new(
         &store,
@@ -554,9 +547,7 @@ async fn a_later_propose_edit_call_on_the_moved_reference_opens_the_proposal_on_
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_removed_chapter_a_chapter_over_the_item_limit_an_invalid_range_and_the_first_run_step_keep_the_rule_of_today()
  {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
     let mut expected = Vec::new();

@@ -5,6 +5,7 @@ use super::{
     blocks_from_stored_payload, display_body_from_stored, parse_versioned_payload,
     persist_canonical_bytes, persist_revision_members_from_blocks,
 };
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 
 const USER: &str = "018f0000-0000-7001-8000-000000000001";
 const PROJECT: &str = "018f0000-0000-7001-8000-000000000002";
@@ -90,9 +91,7 @@ struct OrderedRevisionMember {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn several_ordered_blocks_persist_complete_payload_and_member_rows() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();

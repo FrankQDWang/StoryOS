@@ -1,6 +1,7 @@
 //! The command kind and event kind domains of the baseline hold the kinds of the embedded Route
 //! Catalog (ADR 0079).
 
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::storage_activation::ROUTE_CATALOG_JSON;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -33,9 +34,7 @@ fn catalog_strings<'a>(entries: impl Iterator<Item = &'a Value>, field: &str) ->
 #[tokio::test]
 #[ignore = "run through scripts/dev-postgres.sh with"]
 async fn the_command_and_event_kind_domains_equal_the_route_catalog() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (client, connection) = tokio_postgres::connect(
         &std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
             .expect("run through scripts/dev-postgres.sh with"),

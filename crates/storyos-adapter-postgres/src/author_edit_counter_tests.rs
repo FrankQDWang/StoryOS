@@ -8,8 +8,10 @@ use storyos_core::AuthorEditPrimitive;
 use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
 
-use super::tests::{AUTHOR_EDIT_TEST_LOCK, author_command, bind_canonical_payload, binding};
 use super::*;
+use crate::shared_tests::author_edit::{
+    AUTHOR_EDIT_TEST_LOCK, author_command, bind_canonical_payload, binding,
+};
 
 const MAX_COUNTER: &str = "18446744073709551614";
 

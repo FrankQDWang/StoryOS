@@ -1,5 +1,6 @@
 use super::*;
-use crate::command_sequence::tests::{create_project_command, create_project_issue};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::{create_project_command, create_project_issue};
 use storyos_application::{
     GetManuscriptTree, ProjectId, ProjectScope, UserId, create_project, get_manuscript_tree,
     issue_create_project_challenge,
@@ -12,9 +13,7 @@ const PROJECT_B: &str = "018f0000-0000-7001-8000-000000000102";
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn empty_canonical_tree_is_scope_safe_and_snapshot_bound() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);

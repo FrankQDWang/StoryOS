@@ -10,16 +10,17 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_load_skill::tests::calls;
-use crate::agent_run_read_chapter::tests::{
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_load_skill::calls;
+use crate::shared_tests::agent_run_read_chapter::{
     boundary, finish, no_public_call, outputs_record, sent,
 };
-use crate::agent_run_steering::tests::queued;
-use crate::agent_run_write_memory::tests::first_index;
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::memory_entries::tests::write_versions;
+use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::agent_run_write_memory::first_index;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::memory_entries::write_versions;
+use crate::shared_tests::model_gateway::stores;
 
 fn settled(text: &str) -> Value {
     json!(["search_memory", "settled", null, text, true])
@@ -47,9 +48,7 @@ async fn read_rows(admin: &Client, run_id: &str) -> i64 {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_search_finds_the_current_entries_and_the_request_sends_its_result() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "7f1").await;
     complete(&store, &admin, &scope, &first).await;
@@ -122,9 +121,7 @@ async fn a_search_finds_the_current_entries_and_the_request_sends_its_result() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_run_searches_its_own_project_and_no_match_and_a_refused_query_have_one_sentence() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "7f3").await;
     complete(&store, &admin, &scope, &first).await;
@@ -223,9 +220,7 @@ async fn each_run_searches_its_own_project_and_no_match_and_a_refused_query_have
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_compaction_after_a_large_search_keeps_the_exact_bounded_result() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "7f9").await;
     complete(&store, &admin, &scope, &first).await;

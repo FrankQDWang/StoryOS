@@ -13,33 +13,19 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{
+use crate::shared_tests::agent_run_propose_edit::{
+    REVISE, complete, opened, proposal_records, propose_edit_calls,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_acceptance::ACCEPT_PROPOSAL;
+use crate::shared_tests::command_sequence_proposal_decision::{
+    REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL,
+};
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::model_gateway::{
     RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
 };
-use crate::command_sequence::tests::{
-    ACCEPT_PROPOSAL, REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL, issued,
-};
-use crate::set_current_chapter_authority_tests::open_session_request;
-
-pub(crate) const REVISE: &str = "Revise these passages in the narrator voice.";
-
-pub(crate) async fn complete(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    run: &str,
-) {
-    let claim = claim_run(admin, scope.clone(), run.to_owned()).await;
-    complete_agent_run(
-        store,
-        &FakeDestination,
-        &NoContractFaults,
-        &RuntimeClock,
-        &claim,
-    )
-    .await
-    .unwrap();
-}
+use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
 /// Completes the first Run of a new Project of `destination`, then completes one Run with
 /// `REVISE` and `script` in a new Conversation. `prefixes` give the identities of the two Runs.
@@ -68,66 +54,10 @@ async fn revise_run(
     (scope, run_id)
 }
 
-/// The Proposal records of the Run with no identity: the Proposal, its Revisions, its
-/// Operations, and its Validation Receipts.
-pub(super) async fn proposal_records(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT COALESCE(jsonb_agg(jsonb_build_object(
-                      'proposal', jsonb_build_array(proposal.kind, proposal.bundle_policy),
-                      'revisions', (SELECT jsonb_agg(jsonb_build_array(revision.generation,
-                                      revision.validation, revision.closure, revision.candidate_text)
-                                      ORDER BY revision.revision_id)
-                                      FROM storyos.proposal_revisions AS revision
-                                     WHERE revision.proposal_id = proposal.proposal_id),
-                      'operations', (SELECT jsonb_agg(jsonb_build_array(operation.resolution,
-                                       operation.reservation_state, operation.candidate_text,
-                                       cardinality(operation.predecessor_operation_ids))
-                                       ORDER BY operation.operation_id)
-                                       FROM storyos.proposal_operations AS operation
-                                      WHERE operation.proposal_id = proposal.proposal_id),
-                      'receipts', (SELECT jsonb_agg(jsonb_build_array(receipt.result,
-                                     receipt.candidate_text, receipt.reservation_state))
-                                     FROM storyos.validation_receipts AS receipt
-                                    WHERE receipt.proposal_id = proposal.proposal_id))
-                      ORDER BY proposal.proposal_id), '[]')::text
-               FROM storyos.proposals AS proposal
-              WHERE proposal.source_run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
-}
-
-/// Each `propose_edit` call of the Run in RunStep and item order: its RunStep, state, refusal,
-/// and result.
-pub(crate) async fn propose_edit_calls(admin: &Client, run_id: &str) -> Vec<Value> {
-    admin
-        .query(
-            "SELECT jsonb_build_array(decision_position, state, refusal, result_text)::text
-               FROM storyos.tool_calls
-              WHERE run_id = $1::text::uuid AND function_name = 'propose_edit'
-              ORDER BY decision_position, call_position",
-            &[&run_id],
-        )
-        .await
-        .unwrap()
-        .iter()
-        .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-        .collect()
-}
-
-pub(crate) fn opened(position: u64) -> Value {
-    json!([position, "settled", null, PROPOSAL_WAITS_RESULT])
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_valid_call_opens_one_proposal_and_the_run_shows_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let (scope, run_id) = revise_run(&store, &admin, ["6b2", "6b3"], tool_loop, "").await;
@@ -192,9 +122,7 @@ async fn a_valid_call_opens_one_proposal_and_the_run_shows_it() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_refused_call_gives_its_reason_and_the_limits_keep_one_proposal_for_each_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let refused = |position: u64, label: &str, reason: &str| {
         let text = format!("The Host refused this call because {reason}, so no Proposal opened.");
@@ -322,9 +250,7 @@ async fn a_refused_call_gives_its_reason_and_the_limits_keep_one_proposal_for_ea
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_author_accepts_rejects_and_withdraws_the_proposal_with_the_commands_of_today() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut states = Vec::new();
     for (prefixes, suffix, command) in [
@@ -495,9 +421,7 @@ impl ModelProviderAdapter for ReviseScript {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_successor_call_or_a_later_refusal_keeps_the_proposal_of_the_decision_of_the_call() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let undeclared = json!([
         0,
@@ -604,9 +528,7 @@ async fn a_successor_call_or_a_later_refusal_keeps_the_proposal_of_the_decision_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_finish_call_settles_after_the_other_host_calls_of_its_response() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let uncaptured = storyos_core::SubmitResearchRefusal::Synthesis(

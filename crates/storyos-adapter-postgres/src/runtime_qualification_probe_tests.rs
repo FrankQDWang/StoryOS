@@ -4,6 +4,10 @@ use storyos_application::{CreatePurpose, ToolProbeRequest};
 use storyos_core::{NativeStreamItem, StreamItemRole, StreamItemState, ToolProbe};
 
 use super::*;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::runtime_qualification::{
+    AUTHORIZATION, ScriptedAgentPlan, authorized, settle,
+};
 
 /// Pins the Registration with the pending function calling entry to `run_id` and its Project,
 /// with an authorized qualification Decision, and makes it the head of its adapter.
@@ -91,9 +95,7 @@ async fn probe_evidence(admin: &Client, run_id: &str) -> [Option<String>; 5] {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_decision() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) = queued_run(&store, "b4a", authorized()).await;
     let response = |reference: &str, items| {
@@ -242,7 +244,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
     .await;
     let ordinary_adapter = response(
         "resp_b4d",
-        vec![crate::agent_run_finish_rule::tests::text_item(
+        vec![crate::shared_tests::agent_run_finish_rule::text_item(
             "storyos-probe",
         )],
     );

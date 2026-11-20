@@ -7,11 +7,14 @@ use storyos_application::{
 };
 use storyos_core::{TransitionOutcome, UpdateVolumeApplied};
 
-use crate::command_sequence::tests::{
-    UPDATE_VOLUME, applied, durable_project_rows, named_call, seed_project, stores, titled_volume,
-    update_volume,
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::{
+    UPDATE_VOLUME, named_call, titled_volume, update_volume,
 };
-use crate::delete_structure_tests::settle_delete_volume;
+use crate::shared_tests::command_sequence_support::{
+    applied, durable_project_rows, seed_project, stores,
+};
+use crate::shared_tests::delete_structure::settle_delete_volume;
 
 async fn removed_volume_state(
     admin: &tokio_postgres::Client,
@@ -39,9 +42,7 @@ async fn removed_volume_state(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (mut store, admin) = stores().await;
     store.challenge_rate_clock_unix_seconds = Some(60);
     let scope = seed_project(&store, "6870").await;

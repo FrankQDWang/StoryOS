@@ -8,8 +8,9 @@ use storyos_application::{
 use storyos_core::{AGENT_PLAN_REGISTRATION, DeploymentDestination, ModelAdapter, RetrievalBounds};
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::RuntimeClock;
-use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::RuntimeClock;
+use crate::shared_tests::model_gateway::{claim_run, queued_run, stores};
 
 const REFERENCE: &str = "resp_c45";
 
@@ -92,9 +93,7 @@ impl ModelProviderAdapter for CancelledStream<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_refused_abort_keeps_the_fenced_retrieval_of_the_late_result() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued_run(
         &store,
