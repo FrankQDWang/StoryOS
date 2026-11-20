@@ -536,8 +536,13 @@ async fn a_request_with_no_vector_keeps_the_mark_and_the_next_try_waits_for_the_
             stored("not_submitted"),
         ]
     );
-    // The rows of the passages that got a vector stay.
-    assert_eq!(rows(&admin, &scope).await, 2);
+    // The rows of the passages that got a vector stay: each passage that the marker does not
+    // change.
+    let unmarked = digests(&crate::passage_vectors::tests::texts());
+    let mut kept = digests(&texts);
+    kept.retain(|digest| unmarked.contains(digest));
+    assert_eq!(kept.len(), 2);
+    assert_eq!(digest_rows(&admin, &scope).await, kept);
     assert_eq!(work(&admin, &scope).await, vec![(id, 1, 4, 0, true)]);
 }
 
@@ -801,6 +806,7 @@ async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
     let two = titled_chapter(&unconfigured, &scope, "f3fc", &volume, "第二章", tree).await;
     assert_eq!(work(&admin, &scope).await.len(), 1);
 
+    let before = head(&admin, &id).await;
     // A loss of the vector rows. The rebuild marks the work with no wait, makes the missing row,
     // and sends no request.
     admin
@@ -824,6 +830,8 @@ async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
         steps(&store, &claimed).await;
     }
     assert_eq!(digest_rows(&admin, &scope).await, digests(&texts()));
+    // The rebuild does not change the Chapter.
+    assert_eq!(head(&admin, &id).await, before);
     assert_eq!(settlements(&admin, &scope).await.len(), 6);
     assert_eq!(
         work(&admin, &scope).await,
