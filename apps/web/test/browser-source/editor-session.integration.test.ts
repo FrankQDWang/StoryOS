@@ -31,8 +31,8 @@ import {
 } from "../../src/local-edit-journal.ts";
 import { FIRST_APPEND_EDIT, openJournalAppendTestWorkspace, withDigest } from "./local-edit-journal-append-fixture.ts";
 import { restoreJournalVersion } from "./journal-version-fixture.ts";
-import { readLocalRecovery, type LocalRecoveryMaterial } from "../../src/local-edit-recovery.ts";
-import { recoveryKey } from "../../src/local-recovery-record.ts";
+import { readLocalRecovery } from "../../src/local-edit-recovery.ts";
+import { recoveryPrefix } from "../../src/local-recovery-record.ts";
 import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
 import {
   CHAPTER,
@@ -159,13 +159,14 @@ it("fails closed for a retained recovery record of a Draft retry of an earlier c
   try {
     await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
     const group = await freezeOneIntentSubmission(test.workspace, crypto);
-    const retained = { ...group, journal_partition_id: createJournalUuid(),
+    const partitionId = createJournalUuid();
+    const retained = { ...group, journal_partition_id: partitionId,
       frozen_request_body: { ...group.frozen_request_body, retry_source: { kind: "draft_retry" } },
-      settlement: { kind: "outcome_query_requires_reconfirmation" } } as unknown as JournalSubmissionGroup;
-    const material: LocalRecoveryMaterial = { disposition: "retained_for_manual_reentry", format_version: 1,
+      settlement: { kind: "outcome_query_requires_reconfirmation" } };
+    const material = { disposition: "retained_for_manual_reentry", format_version: 1,
       group: retained, records: [], chains: [], text: "Draft retry text", blocks: [] };
     await requestResult(test.workspace.database.transaction("metadata", "readwrite").objectStore("metadata")
-      .put({ key: recoveryKey(material), value: material }));
+      .put({ key: `${recoveryPrefix}${partitionId}:${group.journal_submission_group_id}`, value: material }));
     await expect(readLocalRecovery(test.workspace)).rejects.toThrow("Local recovery record is corrupt");
   } finally { await test.close(); }
 });
