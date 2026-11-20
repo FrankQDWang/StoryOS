@@ -10,7 +10,10 @@ use crate::shared_tests::command_sequence_support::{
     challenge_issue, command_call, with_new_request_ids,
 };
 use crate::shared_tests::command_sequence_undo::undo;
-use storyos_application::{CurrentProducerWithdrawal, UndoLatestAuthorActionSettlement};
+use storyos_application::{
+    CurrentProducerWithdrawal, CurrentProducerWithdrawalSettlement,
+    UndoLatestAuthorActionSettlement,
+};
 use storyos_core::TransitionOutcome;
 use tokio_postgres::Client;
 
@@ -22,6 +25,23 @@ pub(crate) async fn producer_withdraw(
     proposal: &TwoOperationProposal,
     suffix: u16,
 ) -> String {
+    match producer_withdrawal(store, admin, proposal, suffix)
+        .await
+        .outcome
+    {
+        TransitionOutcome::Applied(withdrawn) => withdrawn.withdrawal_event_id,
+        other => panic!("the producer must withdraw the Proposal, got {other:?}"),
+    }
+}
+
+/// The settlement of a Withdrawal of the current head by the AgentRun decision that produced
+/// the Proposal.
+pub(crate) async fn producer_withdrawal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    proposal: &TwoOperationProposal,
+    suffix: u16,
+) -> CurrentProducerWithdrawalSettlement {
     let producer = admin
         .query_one(
             "SELECT source_run_id::text, source_decision_id::text FROM storyos.proposals
@@ -52,14 +72,10 @@ pub(crate) async fn producer_withdraw(
         b"{}",
         withdrawal,
     );
-    let settlement = store
+    store
         .withdraw_proposal_as_current_producer(&call.envelope, &call.input)
         .await
-        .unwrap();
-    match settlement.outcome {
-        TransitionOutcome::Applied(withdrawn) => withdrawn.withdrawal_event_id,
-        other => panic!("the producer must withdraw the Proposal, got {other:?}"),
-    }
+        .unwrap()
 }
 
 /// The state axes, the candidate, and the base of the current head of one Proposal.

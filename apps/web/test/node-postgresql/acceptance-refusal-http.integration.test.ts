@@ -265,4 +265,3 @@ test("acceptProposal retains altered_candidate across reload and refuses another
     await server.stop();
   }
 });
-

@@ -1,12 +1,15 @@
 //! Author Undo after a Withdrawal by the current producer (ADR 0069). The Undo restores the
-//! content and keeps the Proposal `withdrawn`.
+//! content and keeps the Proposal `withdrawn`. The producer cannot withdraw a Proposal that the
+//! author withdrew (ADR 0098).
+
+use storyos_core::{TransitionOutcome, WithdrawProposalNoEffect};
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_producer_withdrawal_undo::{
-    head_state, producer_withdraw, undo_and_retry,
+    head_state, producer_withdraw, producer_withdrawal, undo_and_retry,
 };
 use crate::shared_tests::command_sequence_proposal_undo_chain::{
-    compensated, edit, head_closure, on, undo_latest,
+    compensated, edit, head_closure, on, undo_latest, withdraw,
 };
 use crate::shared_tests::command_sequence_secondary_operation::{
     operation_candidates, two_operation_proposal,
@@ -107,6 +110,42 @@ async fn author_undo_of_an_earlier_candidate_edit_keeps_a_producer_withdrawal() 
             "withdrawn".to_owned(),
             with_axes(before_edits, "valid", "withdrawn"),
             candidates
+        )
+    );
+}
+
+/// The producer cannot withdraw a Proposal that the author withdrew: each Withdrawal needs the
+/// closure `open`. Thus no producer Withdrawal comes after an author Withdrawal, and the Undo of
+/// the author Withdrawal opens the Proposal (ADR 0098).
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_producer_cannot_withdraw_a_proposal_that_the_author_withdrew() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4f60).await;
+    withdraw(&store, &admin, &proposal, /*suffix*/ 0x4f69).await;
+    let producer = producer_withdrawal(&store, &admin, &proposal, /*suffix*/ 0x4f6a).await;
+    let producer_withdrawals: i64 = admin
+        .query_one(
+            "SELECT count(*) FROM storyos.proposal_withdrawals
+              WHERE proposal_id = $1::text::uuid
+                AND withdrawal_reason = 'current_producer_withdrew'",
+            &[&proposal.proposal_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+
+    assert_eq!(
+        (
+            producer.outcome,
+            producer_withdrawals,
+            head_closure(&admin, &proposal.proposal_id).await,
+        ),
+        (
+            TransitionOutcome::NoEffect(WithdrawProposalNoEffect::ClosureNotOpen),
+            0,
+            "withdrawn".to_owned(),
         )
     );
 }
