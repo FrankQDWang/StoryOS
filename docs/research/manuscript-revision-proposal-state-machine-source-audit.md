@@ -1,5 +1,7 @@
 # Manuscript revision and Proposal state-machine source audit
 
+The Git tag `evidence/prototypes-and-test-asset-audit-2026-11-20` keeps the removed directory `prototypes/tiptap-proposal-lab/`, and `git checkout evidence/prototypes-and-test-asset-audit-2026-11-20 -- prototypes/tiptap-proposal-lab` restores it.
+
 - Audited: 2026-07-16
 - Status: research complete; decision input for [Specify the Manuscript Revision and Proposal State Machine](https://github.com/FrankQDWang/StoryOS/issues/46), not an implementation or domain decision
 - Scope: external facts still needed after the accepted StoryOS domain model and the existing Tiptap / ProseMirror research

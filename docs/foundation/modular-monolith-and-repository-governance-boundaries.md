@@ -51,8 +51,8 @@ The following inputs are settled and are not reopened here:
 ### 2.1 Foundation Monorepo
 
 The Foundation uses one repository for the Rust workspace, production Web
-Client, contracts source, checked-in generated contract artifacts,
-documentation, and frozen Prototype Evidence Assets. A compatible product
+Client, contracts source, checked-in generated contract artifacts, and
+documentation. A compatible product
 change is reviewed and reproduced as one unit.
 
 The contracts crate is the only editable source for external contract shapes.
@@ -77,11 +77,14 @@ source of truth.
 
 ### 2.3 Prototype Evidence Assets
 
-`prototypes/**` contains frozen, disposable evidence assets. Each prototype
-states its bounded question, exact commands, environment or lockfile,
-observations, limitations, and the accepted contract it informed. A prototype
-may be rerun to inspect or reproduce that evidence, but is not a production
-source tree and must not be evolved into one.
+The repository has no prototype directory. The Git tag
+`evidence/prototypes-and-test-asset-audit-2026-11-20` keeps the Prototype
+Evidence Assets that `prototypes/` had until #1725 removed it, and
+`git checkout evidence/prototypes-and-test-asset-audit-2026-11-20 -- prototypes`
+restores them. Each prototype states its bounded question, exact commands,
+environment or lockfile, observations, limitations, and the accepted contract
+it informed. A prototype may be rerun from the tag to inspect or reproduce that
+evidence, but is not a production source tree and must not be evolved into one.
 
 No production workspace, dependency graph, build, test, package, release, or
 runtime may include a prototype. Production code independently implements the
@@ -160,7 +163,6 @@ moving files must not conceal a cross-zone merge.
 ├── packages/
 │   └── storyos-client/                # generated TypeScript client/types package
 ├── docs/                              # normative specs, ADRs, research, design
-├── prototypes/                        # frozen Prototype Evidence Assets only
 └── .reference/                        # read-only evidence; never a production member
 ```
 
@@ -370,7 +372,7 @@ the Foundation specification, code review, or the relevant implementation plan.
 | `crates/**`, `apps/web/**`, generated packages | Production implementation and checked-in derived contracts | Prototype/reference source or unreviewed local state |
 | `docs/foundation/**`, `GLOSSARY.md`, `docs/adr/**` | Accepted contracts, vocabulary, and hard-tradeoff rationale | Unpinned upstream source copy or implementation runtime |
 | `docs/research/**` | Source-backed observations and limitations | Accepted contract merely by existing; production dependency |
-| `prototypes/**` | Frozen reproducible risk evidence | Production source, test suite, workspace member, runtime, release artifact |
+| A prototype, on the tag `evidence/prototypes-and-test-asset-audit-2026-11-20` only | Frozen reproducible risk evidence | Production source, test suite, workspace member, runtime, release artifact |
 | `.reference/**` | Read-only upstream evidence only when independently locatable | Workspace/dependency/build/test/package/release/runtime input or hidden source copy |
 
 An accepted Foundation contract may cite research, but states the StoryOS-local
@@ -394,7 +396,7 @@ The final entrypoint must at least cover:
   ownership zones;
 - clean regeneration and generated-drift gates;
 - dependency/layering checks enforcing this document's forbidden edges;
-- checks excluding `prototypes/**` and `.reference/**` from production
+- checks excluding `.reference/**` from production
   workspace, dependency, build, test, package, release, and runtime paths; and
 - accepted protocol, storage, recovery, isolation, and secret-boundary proof
   obligations once executable suites exist.

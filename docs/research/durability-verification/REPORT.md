@@ -1,5 +1,7 @@
 # StoryOS durability verification
 
+The Git tag `evidence/prototypes-and-test-asset-audit-2026-11-20` keeps the removed directory `prototypes/durability-verification/`, and `git checkout evidence/prototypes-and-test-asset-audit-2026-11-20 -- prototypes/durability-verification` restores it.
+
 ## Conclusions
 
 D1 holds in the executed local matrix. D2, D3, and D4 fail. The three findings

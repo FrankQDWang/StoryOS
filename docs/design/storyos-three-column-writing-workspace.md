@@ -1,5 +1,7 @@
 # StoryOS three-column writing workspace
 
+The Git tag `evidence/prototypes-and-test-asset-audit-2026-11-20` keeps the removed directories `prototypes/fixed-workspace-shell/` and `prototypes/tiptap-proposal-lab/`, and `git checkout evidence/prototypes-and-test-asset-audit-2026-11-20 -- prototypes/fixed-workspace-shell prototypes/tiptap-proposal-lab` restores them.
+
 ![Approved StoryOS three-column writing workspace](storyos-three-column-writing-workspace.png)
 
 ## Status

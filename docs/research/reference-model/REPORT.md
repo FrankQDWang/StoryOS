@@ -1,5 +1,7 @@
 # Reference Model Report
 
+The Git tag `evidence/prototypes-and-test-asset-audit-2026-11-20` keeps the removed directory `prototypes/reference-model/`, and `git checkout evidence/prototypes-and-test-asset-audit-2026-11-20 -- prototypes/reference-model` restores it.
+
 > Complete evidence: the Git tag `evidence/reference-model-2026-10-05` holds the full study, including the files that are not in `main` (the `evidence/` directory, compressed batches, and files above 64 KB). Read them with `git show evidence/reference-model-2026-10-05:docs/research/reference-model/<path>`.
 
 ## Conclusion

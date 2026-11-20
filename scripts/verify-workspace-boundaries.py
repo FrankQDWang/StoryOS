@@ -22,9 +22,7 @@ expected = [
     root / "crates/storyos-worker/Cargo.toml",
     root / "crates/storyos-worker-bin/Cargo.toml",
 ]
-forbidden = [
-    path for path in manifests if "/prototypes/" in str(path) or "/.reference/" in str(path)
-]
+forbidden = [path for path in manifests if "/.reference/" in str(path)]
 if manifests != expected or forbidden:
     raise SystemExit(f"unexpected workspace manifests: {manifests}; forbidden: {forbidden}")
 
