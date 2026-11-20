@@ -371,55 +371,22 @@ pub(crate) async fn commit_assembly(
     manifest_payload["operation_requirement"]["operation_requirement_id"] =
         serde_json::json!(requirement_id);
     manifest_payload["operation_requirement"]["input_snapshot_id"] = serde_json::json!(snapshot_id);
-    let inserted = client
-        .execute(
-            "INSERT INTO storyos.operation_requirements
-               (owner_user_id, project_id, operation_requirement_id, run_id, input_snapshot_id,
-                receipt_id, payload, requirement_role, decision_position)
-             SELECT owner_user_id, project_id, $4::text::uuid, run_id, $5::text::uuid,
-                    receipt_id, $6::text::jsonb, 'compaction', decision_position
-               FROM storyos.operation_requirements
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND operation_requirement_id = $3::text::uuid",
-            &[
-                scope[0],
-                scope[1],
-                &decision_record
-                    .operation_requirement
-                    .operation_requirement_id,
-                &requirement_id,
-                &snapshot_id,
-                &manifest_payload["operation_requirement"].to_string(),
-            ],
-        )
-        .await
-        .map_err(work_error)?;
-    let manifest = client
-        .execute(
-            "INSERT INTO storyos.context_assembly_manifests
-               (owner_user_id, project_id, context_assembly_manifest_id,
-                operation_requirement_id, run_id, sufficiency, payload, receipt_id, manifest_role,
-                decision_position)
-             SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::jsonb, receipt_id, 'compaction', decision_position
-               FROM storyos.context_assembly_manifests
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND context_assembly_manifest_id = $3::text::uuid",
-            &[
-                scope[0],
-                scope[1],
-                &run.assembly_manifest_id,
-                &manifest_id,
-                &requirement_id,
-                &manifest_payload.to_string(),
-            ],
-        )
-        .await
-        .map_err(work_error)?;
-    if inserted != 1 || manifest != 1 {
-        return Err(unavailable("The decision Context Assembly is missing"));
-    }
-    Ok(())
+    super::write::insert_derived_assembly(
+        client,
+        claim,
+        &super::write::DerivedAssembly {
+            role: super::write::DerivedRole::Compaction,
+            decision_requirement_id: &decision_record
+                .operation_requirement
+                .operation_requirement_id,
+            decision_manifest_id: &run.assembly_manifest_id,
+            requirement_id: &requirement_id,
+            snapshot_id: &snapshot_id,
+            manifest_id: &manifest_id,
+            payload: &manifest_payload,
+        },
+    )
+    .await
 }
 
 /// The current admission of the summary request: the pinned route and the grant scope over its

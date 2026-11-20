@@ -268,6 +268,57 @@ async fn insert_later_request(
     record.operation_requirement.operation_requirement_id = requirement_id.clone();
     record.operation_requirement.input_snapshot_id = snapshot_id.clone();
     let payload = encode_assembly_record(record);
+    insert_derived_assembly(
+        client,
+        claim,
+        &DerivedAssembly {
+            role: DerivedRole::LaterRequest,
+            decision_requirement_id: &decision_requirement_id,
+            decision_manifest_id: &run.assembly_manifest_id,
+            requirement_id: &requirement_id,
+            snapshot_id: &snapshot_id,
+            manifest_id: &manifest_id,
+            payload: &payload,
+        },
+    )
+    .await
+}
+
+/// The role of a Context Assembly that a compaction derives from the decision Context Assembly.
+#[derive(Clone, Copy)]
+pub(super) enum DerivedRole {
+    Compaction,
+    LaterRequest,
+}
+
+impl DerivedRole {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Compaction => "compaction",
+            Self::LaterRequest => "later_request",
+        }
+    }
+}
+
+/// A Context Assembly that a compaction derives from the decision Context Assembly.
+pub(super) struct DerivedAssembly<'a> {
+    pub(super) role: DerivedRole,
+    pub(super) decision_requirement_id: &'a str,
+    pub(super) decision_manifest_id: &'a str,
+    pub(super) requirement_id: &'a str,
+    pub(super) snapshot_id: &'a str,
+    pub(super) manifest_id: &'a str,
+    /// The new manifest payload. Its `operation_requirement` member is the requirement payload.
+    pub(super) payload: &'a serde_json::Value,
+}
+
+/// Commits the operation requirement and the Context Assembly Manifest of `assembly`. The
+/// receipt, the sufficiency, and the position come from the decision records.
+pub(super) async fn insert_derived_assembly(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    assembly: &DerivedAssembly<'_>,
+) -> Result<(), CompleteAgentRunError> {
     let scope = [
         &claim.project_scope.owner_user_id.as_ref(),
         &claim.project_scope.project_id.as_ref(),
@@ -278,17 +329,18 @@ async fn insert_later_request(
                (owner_user_id, project_id, operation_requirement_id, run_id, input_snapshot_id,
                 receipt_id, payload, requirement_role, decision_position)
              SELECT owner_user_id, project_id, $4::text::uuid, run_id, $5::text::uuid,
-                    receipt_id, $6::text::jsonb, 'later_request', decision_position
+                    receipt_id, $6::text::jsonb, $7::text, decision_position
                FROM storyos.operation_requirements
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND operation_requirement_id = $3::text::uuid",
             &[
                 scope[0],
                 scope[1],
-                &decision_requirement_id,
-                &requirement_id,
-                &snapshot_id,
-                &payload["operation_requirement"].to_string(),
+                &assembly.decision_requirement_id,
+                &assembly.requirement_id,
+                &assembly.snapshot_id,
+                &assembly.payload["operation_requirement"].to_string(),
+                &assembly.role.as_str(),
             ],
         )
         .await
@@ -300,17 +352,18 @@ async fn insert_later_request(
                 operation_requirement_id, run_id, sufficiency, payload, receipt_id,
                 manifest_role, decision_position)
              SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::jsonb, receipt_id, 'later_request', decision_position
+                    sufficiency, $6::text::jsonb, receipt_id, $7::text, decision_position
                FROM storyos.context_assembly_manifests
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND context_assembly_manifest_id = $3::text::uuid",
             &[
                 scope[0],
                 scope[1],
-                &run.assembly_manifest_id,
-                &manifest_id,
-                &requirement_id,
-                &payload.to_string(),
+                &assembly.decision_manifest_id,
+                &assembly.manifest_id,
+                &assembly.requirement_id,
+                &assembly.payload.to_string(),
+                &assembly.role.as_str(),
             ],
         )
         .await
