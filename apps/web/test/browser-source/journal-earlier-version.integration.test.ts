@@ -1,0 +1,139 @@
+import { expect, it } from "vitest";
+
+import exportedFixture from "../../../../generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.json";
+import readyExportFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json";
+import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { loadStoryOSWebState } from "../../src/app.ts";
+import { appendAuthorEdit, openEditorWorkspace } from "../../src/editor-session.ts";
+import { mountStage1View } from "../../src/stage1-view.tsx";
+import { FIRST_APPEND_EDIT } from "./local-edit-journal-append-fixture.ts";
+import { restoreJournalVersion } from "./journal-version-fixture.ts";
+import {
+  CHAPTER,
+  OWNER,
+  PROJECT,
+  SESSION,
+  closeTrackedDatabases,
+  createBrowserScenario,
+  deleteJournal,
+  emptyActivityStream,
+  jsonResponse,
+  requestResult,
+  requireEditorReady,
+  trackDatabase,
+} from "./scenario.ts";
+
+// A Journal of an earlier version has no upgrade path (ADR 0099). The page opens the Server text read-only, and the
+// Journal stays as it is.
+const VOLUME = "018f0000-0000-7001-8000-000000000816";
+const FIXTURE_PROJECT = exportedFixture.project_scope.project_id;
+const forProject = <T,>(value: T): T => JSON.parse(JSON.stringify(value).replaceAll(FIXTURE_PROJECT, PROJECT)) as T;
+
+async function journalRows(name: string, openDatabases: Set<IDBDatabase>) {
+  const kept = await requestResult(indexedDB.open(name));
+  trackDatabase(kept, openDatabases);
+  const transaction = kept.transaction([...kept.objectStoreNames]);
+  return { version: kept.version, rows: Object.fromEntries(await Promise.all([...kept.objectStoreNames].map(async (store) =>
+    [store, await requestResult(transaction.objectStore(store).getAll())]))) };
+}
+
+it.each([3, 4] as const)("shows the Server text read-only for a version %i Journal, exports it, and keeps the Journal",
+  async (version) => {
+    const scenario = createBrowserScenario();
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const path = new URL(input instanceof Request ? input.url : input).pathname;
+      const method = init?.method ?? "GET";
+      if (path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
+      if (path === "/api/v1/projects") {
+        return jsonResponse({
+          schema_id: "storyos.query.project-list.response.v1",
+          correlation_id: "018f0000-0000-7001-8000-000000000817",
+          owner_user_id: OWNER,
+          projects: [{
+            project_scope: { owner_user_id: OWNER, project_id: PROJECT },
+            title: "Project A",
+            revision: "1",
+            open: { kind: "current_chapter", current_chapter_id: CHAPTER },
+          }],
+        });
+      }
+      if (path === `/api/v1/projects/${PROJECT}`) return jsonResponse(scenario.project);
+      if (path === `/api/v1/projects/${PROJECT}/chapters/${CHAPTER}`) return jsonResponse(scenario.chapter);
+      if (path === `/api/v1/projects/${PROJECT}/manuscript/tree`) {
+        return jsonResponse({
+          schema_id: "storyos.query.manuscript-tree.response.v1",
+          correlation_id: "018f0000-0000-7001-8000-000000000818",
+          project_scope: { owner_user_id: OWNER, project_id: PROJECT },
+          tree_revision: "2",
+          snapshot: {
+            snapshot_id: "018f0000-0000-7001-8000-000000000032",
+            project_scope: { owner_user_id: OWNER, project_id: PROJECT },
+          },
+          volumes: [{ volume_id: VOLUME, title: "Volume A", order: "1",
+            chapters: [{ chapter_id: CHAPTER, title: "Chapter A", order: "1" }] }],
+        });
+      }
+      if (path === `/api/v1/projects/${PROJECT}/manuscript/statistics`) {
+        return jsonResponse({ schema_id: "storyos.problem.v1", code: "projection_not_ready",
+          message: "The statistics projection is not ready." }, 409);
+      }
+      if (path.endsWith("/anti-forgery-challenges")) {
+        return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-09-12T00:00:00.000Z",
+          limit_profile_revision: "storyos.foundation.absolute.v1" });
+      }
+      if (path.endsWith("/editor-sessions")) return jsonResponse(scenario.session);
+      if (path.endsWith(`/editor-sessions/${SESSION}`)) {
+        return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+      }
+      if (path.endsWith("/activity")) return emptyActivityStream();
+      if (path === `/api/v1/projects/${PROJECT}/manuscript/exports` && method === "POST") {
+        return jsonResponse(forProject(exportedFixture));
+      }
+      if (path === `/api/v1/projects/${PROJECT}/manuscript/exports/${readyExportFixture.export_id}`) {
+        return jsonResponse(forProject(readyExportFixture));
+      }
+      throw new Error(`unexpected request: ${method} ${path}`);
+    };
+
+    const openDatabases = new Set<IDBDatabase>();
+    await deleteJournal(scenario.journalName);
+    try {
+      const writing = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
+        chapter: scenario.chapter, profile: scenario.profile, fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
+      requireEditorReady(writing);
+      trackDatabase(writing.database, openDatabases);
+      await appendAuthorEdit(writing, FIRST_APPEND_EDIT);
+      const rows = await restoreJournalVersion(writing.database, version);
+      expect(rows.intents).toHaveLength(1);
+
+      document.body.innerHTML = '<main id="app"></main>';
+      const loaded = await loadStoryOSWebState({ documentImpl: document,
+        locationImpl: { origin: location.origin, pathname: `/projects/${PROJECT}` },
+        fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
+      if (loaded.state.kind === "project-ready" && loaded.state.editor.kind === "editor-ready") {
+        trackDatabase(loaded.state.editor.database, openDatabases);
+      }
+      expect(loaded.state).toMatchObject({ kind: "project-ready",
+        editor: { kind: "editor-read-only-recovery", code: "local_journal_unavailable" } });
+      mountStage1View(loaded.root, loaded);
+      await expect.poll(() => loaded.root.querySelector("[data-save-state]")?.getAttribute("data-save-state"))
+        .toBe("needs_attention");
+      // The editor shows the Server text and not the text of the Journal ("Base!").
+      const editor = loaded.root.querySelector("[data-manuscript-editor]");
+      expect({ editable: editor?.getAttribute("contenteditable"), text: editor?.textContent })
+        .toEqual({ editable: "false", text: "Base" });
+
+      await expect.poll(() => loaded.root.querySelector("[data-readable-export] button") !== null).toBe(true);
+      loaded.root.querySelector<HTMLButtonElement>("[data-readable-export] button")?.click();
+      await expect.poll(() => loaded.root.querySelector("[data-readable-export-bytes]")?.textContent)
+        .toBe(readyExportFixture.manuscript_utf8);
+
+      // The open did not upgrade or change the Journal.
+      expect(await journalRows(scenario.journalName, openDatabases)).toEqual({ version, rows });
+    } finally {
+      closeTrackedDatabases(openDatabases);
+      document.body.replaceChildren();
+      sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+      await deleteJournal(scenario.journalName);
+    }
+  });

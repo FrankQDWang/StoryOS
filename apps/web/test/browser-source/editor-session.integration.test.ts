@@ -31,6 +31,8 @@ import {
 } from "../../src/local-edit-journal.ts";
 import { FIRST_APPEND_EDIT, openJournalAppendTestWorkspace, withDigest } from "./local-edit-journal-append-fixture.ts";
 import { restoreJournalVersion } from "./journal-version-fixture.ts";
+import { readLocalRecovery, type LocalRecoveryMaterial } from "../../src/local-edit-recovery.ts";
+import { recoveryKey } from "../../src/local-recovery-record.ts";
 import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
 import {
   CHAPTER,
@@ -135,6 +137,37 @@ it.each([3, 4] as const)("keeps a version %i Journal and does not open it", asyn
     kept?.close();
     await test.close();
   }
+});
+
+// A stored shape of the removed Draft path is not a shape of the current contract, so it fails closed (ADR 0099).
+it("fails closed for a stored group that an earlier client settled with refused_to_draft", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  try {
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
+    const group = await freezeOneIntentSubmission(test.workspace, crypto);
+    const groups = test.workspace.database.transaction("submission_groups", "readwrite").objectStore("submission_groups");
+    await requestResult(groups.put({ ...group, settlement: { kind: "zero_authority_receipt_settled",
+      command_id: createJournalUuid(), author_command_admission_id: createJournalUuid(), receipt: {},
+      effect: { kind: "refused_to_draft" } } }));
+    await expect(rebuildPendingProjection(test.workspace)).rejects.toThrow("Journal Submission Group is corrupt");
+    await expect(test.reopen()).rejects.toThrow("workspace unavailable: local_journal_unavailable");
+  } finally { await test.close(); }
+});
+
+it("fails closed for a retained recovery record of a Draft retry of an earlier client", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  try {
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
+    const group = await freezeOneIntentSubmission(test.workspace, crypto);
+    const retained = { ...group, journal_partition_id: createJournalUuid(),
+      frozen_request_body: { ...group.frozen_request_body, retry_source: { kind: "draft_retry" } },
+      settlement: { kind: "outcome_query_requires_reconfirmation" } } as unknown as JournalSubmissionGroup;
+    const material: LocalRecoveryMaterial = { disposition: "retained_for_manual_reentry", format_version: 1,
+      group: retained, records: [], chains: [], text: "Draft retry text", blocks: [] };
+    await requestResult(test.workspace.database.transaction("metadata", "readwrite").objectStore("metadata")
+      .put({ key: recoveryKey(material), value: material }));
+    await expect(readLocalRecovery(test.workspace)).rejects.toThrow("Local recovery record is corrupt");
+  } finally { await test.close(); }
 });
 
 // A record that follows a group must name an earlier frozen authoritative group (ADR 0065).

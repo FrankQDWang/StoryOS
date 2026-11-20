@@ -343,6 +343,27 @@ function isAppliedSettlement(group: JournalSubmissionGroup) {
   return kind === "applied_receipt_settled" || kind === "receipt_settled";
 }
 
+const AUTHOR_EDIT_PRIMITIVE_KINDS = new Set(["replace_selection", "replace_block_selection", "split_block",
+  "join_blocks", "move_block", "retype_block"]);
+const ZERO_AUTHORITY_EFFECT_KINDS = new Set(["proposal_revised", "no_effect", "conflicted", "refused"]);
+
+/**
+ * True when a group and its records have only the shapes of the current contract. A stored shape of a removed path,
+ * for example a Draft retry, a structured primitive, or a settlement `refused_to_draft`, is false (ADR 0099).
+ */
+export function hasCurrentSubmissionShape(group: JournalSubmissionGroup, records: JournalIntentRecord[] = []) {
+  const request = group.frozen_request_body as JournalSubmissionGroup["frozen_request_body"] & { retry_source?: unknown };
+  const settlement = group.settlement as { kind?: unknown; effect?: { kind?: unknown } };
+  const knownPrimitives = (primitives: { kind: unknown }[] | undefined) =>
+    (primitives ?? []).every((primitive) => AUTHOR_EDIT_PRIMITIVE_KINDS.has(String(primitive.kind)));
+  return request.retry_source === undefined
+    && (request.author_edit_units ?? []).every((unit) => knownPrimitives(unit.normalized_primitives))
+    && (settlement.kind !== "zero_authority_receipt_settled"
+      || ZERO_AUTHORITY_EFFECT_KINDS.has(String(settlement.effect?.kind)))
+    && records.every((record) => record.retry_source?.kind === "fresh_editor_intent"
+      && knownPrimitives(record.author_edit_unit?.normalized_primitives));
+}
+
 function isZeroAuthoritySettlement(group: JournalSubmissionGroup) {
   return group?.settlement?.kind === "zero_authority_receipt_settled"
     || group?.settlement?.kind === "outcome_query_rejected_no_admission"
@@ -579,6 +600,7 @@ async function validateCoverage(
         "outcome_query_rejected_no_admission",
         "outcome_query_requires_reconfirmation"].includes(group.settlement?.kind)
       || !closedReconciliation(group)
+      || !hasCurrentSubmissionShape(group)
       || !Number.isSafeInteger(first)
       || !Number.isSafeInteger(last)
       || first !== coveredRecords[0]?.local_intent_sequence

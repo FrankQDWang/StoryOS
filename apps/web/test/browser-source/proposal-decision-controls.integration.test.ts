@@ -9,7 +9,7 @@ import type { EditorReadyState } from "../../src/editor-types.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
 import { candidateFor, proposalTransport, renderTab, withActEnvironment, type Proposal }
   from "./proposal-display-harness.ts";
-import { jsonResponse, requestResult, withOpenProposalList, type OpenProposalListAnswer } from "./scenario.ts";
+import { jsonResponse, withOpenProposalList, type OpenProposalListAnswer } from "./scenario.ts";
 import proposalFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-proposal.json";
 
 const EARLIER_BASE = "018f0000-0000-7001-8000-000000000e01";

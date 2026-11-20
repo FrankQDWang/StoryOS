@@ -1,5 +1,5 @@
 import type { EditorWorkspace, JournalSnapshot, JournalSubmissionGroup } from "./editor-types.ts";
-import { readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
+import { hasCurrentSubmissionShape, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 import { MAX_WORKING_JOURNAL_ITEMS } from "./journal-working-set.ts";
 import { readRecoveryDispositions, recoveryKey, recoveryPrefix, recoveryMaterial, recoveryRequest as result, RECOVERY_PAGE_SIZE, type LocalRecoveryMaterial } from "./local-recovery-record.ts";
 export type { LocalRecoveryMaterial } from "./local-recovery-record.ts";
@@ -53,7 +53,8 @@ export async function readLocalRecovery(workspace: EditorWorkspace, after?: Loca
     const page = rows.map((row) => row.value);
     if (page.some((item) => item.format_version !== 1 || item.disposition !== "retained_for_manual_reentry"
       || item.group.settlement.kind !== "outcome_query_requires_reconfirmation"
-      || !equal(item.group.project_scope, workspace.partition.project_scope))) throw new Error("Local recovery record is corrupt");
+      || !equal(item.group.project_scope, workspace.partition.project_scope)
+      || !hasCurrentSubmissionShape(item.group, item.records))) throw new Error("Local recovery record is corrupt");
     retained.push(...page);
     if (page.length < limit) break;
     cursor = page.at(-1);
