@@ -1,5 +1,4 @@
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import { digestCancelAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CancelAgentRunRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -95,8 +94,7 @@ async function cancelFrom(state: RunState, acknowledgement: "received" | "lost" 
       if (acknowledgement === "lost") {
         unacknowledged = view();
         // A reload keeps `sessionStorage` and starts a new page.
-        await act(async () => panel.root.unmount());
-        panel.root = createRoot(host);
+        await panel.reload();
         await mount();
       }
     }

@@ -3,6 +3,7 @@ import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
 import {
+  applicationWindow,
   closeApplicationFrame,
   nextFrameLoad,
   openApplicationFrame,
@@ -63,9 +64,8 @@ it("the author opens each Chapter from the tree and reopens the current Chapter"
 
   const projectId = root?.querySelector("[data-project-id]")?.getAttribute("data-project-id");
   const chapterBId = chapterIds.get("Chapter B");
-  const childWindow = frame.contentWindow;
+  const childWindow = applicationWindow(frame);
   if (root === null || root === undefined
-    || childWindow === null
     || projectId === null || projectId === undefined
     || chapterBId === undefined) {
     throw new Error("the Project or Chapter identity is missing");

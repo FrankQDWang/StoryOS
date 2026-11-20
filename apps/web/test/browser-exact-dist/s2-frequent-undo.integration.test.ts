@@ -9,6 +9,8 @@ import {
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
 import {
+  appRoot,
+  applicationWindow,
   closeApplicationFrame,
   openApplicationFrame,
   openFirstChapterForm,
@@ -30,8 +32,7 @@ it("keeps the editor writable through frequent Author Undo between Author Edit b
   timeout: 180_000,
 }, async () => {
   const frame = await openApplicationFrame("StoryOS exact-dist frequent undo");
-  const childWindow = frame.contentWindow as (Window & typeof globalThis) | null;
-  if (childWindow === null) throw new Error("the production page realm is unavailable");
+  const childWindow = applicationWindow(frame);
   childWindow.performance.setResourceTimingBufferSize(2_000);
   await submitProjectForm(frame, "Frequent Undo Novel");
   await submitVolumeForm(frame, "Volume A");
@@ -43,7 +44,7 @@ it("keeps the editor writable through frequent Author Undo between Author Edit b
       && root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null
       && root.querySelector('nav[aria-label="稿件目录"] button[aria-current="true"]') !== null;
   }, { timeout: 10_000 }).toBe(true);
-  const root = frame.contentDocument!.querySelector("#app")!;
+  const root = appRoot(frame);
   const projectId = root.querySelector("[data-project-id]")!.getAttribute("data-project-id")!;
   const chapterId = root.querySelector('nav[aria-label="稿件目录"] button[aria-current="true"]')!
     .getAttribute("data-chapter-id")!;

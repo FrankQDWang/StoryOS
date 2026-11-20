@@ -1,5 +1,4 @@
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
@@ -139,9 +138,8 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
     }
     if (held !== undefined) {
       // A reload keeps `sessionStorage` and starts a new page.
-      await act(async () => panel.root.unmount());
+      await panel.reload();
       held = undefined;
-      panel.root = createRoot(host);
       await mount();
     }
     if (interruption === "edit-before-reply") {

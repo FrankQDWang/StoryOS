@@ -1,10 +1,8 @@
 import { selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
-import { applyTrustedInput, settleWorkerOnce, updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { settleWorkerOnce, updateClientSessionCookie } from "../support/browser-command-client.ts";
 import {
-  focusManuscriptEnd,
-  manuscriptBody,
   manuscriptEditor,
   manuscriptIsEditable,
   MANUSCRIPT_EDITOR_SELECTOR,
@@ -18,6 +16,7 @@ import {
   submitChapterForm,
   submitProjectForm,
   submitVolumeForm,
+  typeIntoCurrent,
 } from "../support/exact-dist-frame.ts";
 
 const CHAPTER_A = "Hello world";
@@ -35,34 +34,10 @@ async function typeIntoEditableChapter(frame: HTMLIFrameElement, text: string): 
     const editor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
     return editor !== null && editor !== undefined && manuscriptIsEditable(editor);
   }, { timeout: 10_000 }).toBe(true);
-  const root = appRoot(frame);
   const realm = applicationWindow(frame);
   realm.focus();
-  const editor = manuscriptEditor(root, realm);
-  const previousRevision = root.querySelector("[data-save-state]")
-    ?.getAttribute("data-authoritative-revision-id");
-  if (previousRevision === null || previousRevision === undefined) {
-    throw new Error("the authoritative revision is missing");
-  }
-  editor.click();
-  editor.focus();
-  focusManuscriptEnd(editor, realm);
-  await applyTrustedInput({ operation: "insert_text", text });
-  // A new authoritative revision proves that the input reached the saved manuscript.
-  await expect.poll(() => {
-    const save = root.querySelector("[data-save-state]");
-    return {
-      body: manuscriptBody(editor),
-      saveState: save?.getAttribute("data-save-state"),
-      unsettledIntentCount: save?.getAttribute("data-unsettled-intent-count"),
-      revisionChanged: save?.getAttribute("data-authoritative-revision-id") !== previousRevision,
-    };
-  }, { timeout: 10_000 }).toEqual({
-    body: text,
-    saveState: "saved",
-    unsettledIntentCount: "0",
-    revisionChanged: true,
-  });
+  manuscriptEditor(appRoot(frame), realm).click();
+  await typeIntoCurrent(frame, text);
 }
 
 async function requestExport(root: Element): Promise<void> {

@@ -1,4 +1,3 @@
-import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -10,8 +9,11 @@ import {
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
 import {
+  appRoot,
+  applicationWindow,
   closeApplicationFrame,
   openApplicationFrame,
+  openFirstChapterForm,
   submitChapterForm,
   submitProjectForm,
   submitVolumeForm,
@@ -42,15 +44,11 @@ async function typeThroughSaving(frame: HTMLIFrameElement, text: string): Promis
     const editor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
     return editor !== null && editor !== undefined && manuscriptIsEditable(editor);
   }, { timeout: 10_000 }).toBe(true);
-  const root = frame.contentDocument?.querySelector("#app");
-  if (root === null || root === undefined) {
-    throw new Error("the production page root is missing");
-  }
-  const realm = frame.contentWindow;
-  if (realm === null) throw new Error("the exact-dist application realm is unavailable");
-  const editor = manuscriptEditor(root, realm as Window & typeof globalThis);
+  const root = appRoot(frame);
+  const realm = applicationWindow(frame);
+  const editor = manuscriptEditor(root, realm);
   editor.focus();
-  focusManuscriptEnd(editor, realm as Window & typeof globalThis);
+  focusManuscriptEnd(editor, realm);
   await applyTrustedInput({ operation: "insert_text", text });
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(text);
   await expect.poll(() => {
@@ -91,11 +89,7 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
   await submitProjectForm(frame, "Delete Novel");
 
   await submitVolumeForm(frame, "Volume A");
-  await beginInlineChapterCreation(frame.contentDocument);
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app form[data-create-chapter] input[name="chapter-title"]')
-      ?.tagName
-  ).toBe("INPUT");
+  await openFirstChapterForm(frame);
 
   await submitChapterForm(frame, "Chapter A");
   await expect.poll(() =>
@@ -106,12 +100,6 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
     ["Chapter B", "Chapter A\nChapter B"],
     ["Chapter C", "Chapter A\nChapter B\nChapter C"],
   ] as const) {
-    await beginInlineChapterCreation(frame.contentDocument);
-    await expect.poll(() =>
-      frame.contentDocument?.querySelector(
-        '#app form[data-create-chapter] input[name="chapter-title"]',
-      )?.tagName
-    ).toBe("INPUT");
     await submitChapterForm(frame, name);
     await expect.poll(() => {
       const root = frame.contentDocument?.querySelector("#app");

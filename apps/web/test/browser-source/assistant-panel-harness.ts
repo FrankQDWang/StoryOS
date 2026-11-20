@@ -5,8 +5,10 @@ import { OWNER, PROJECT } from "./scenario.ts";
 
 interface PanelHost {
   readonly host: HTMLDivElement;
-  /** The current root on `host`. A test that reloads the panel puts a new root here. */
-  root: Root;
+  /** The current root on `host`. `reload` replaces it. */
+  readonly root: Root;
+  /** Unmounts the root and puts a new root on the host, as a page reload does. The session storage stays. */
+  reload(): Promise<void>;
   /** Unmounts the root, removes the host, clears the session storage, and puts the earlier act flag back. */
   close(): Promise<void>;
 }
@@ -34,15 +36,19 @@ export function openPanelHost(): PanelHost {
   document.body.append(host);
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  const panel: PanelHost = {
+  let root = createRoot(host);
+  return {
     host,
-    root: createRoot(host),
+    get root() { return root; },
+    async reload() {
+      await act(async () => root.unmount());
+      root = createRoot(host);
+    },
     async close() {
-      await act(async () => panel.root.unmount());
+      await act(async () => root.unmount());
       host.remove();
       sessionStorage.clear();
       Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
     },
   };
-  return panel;
 }

@@ -1,5 +1,4 @@
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
@@ -148,8 +147,7 @@ async function openPanel(setup: Setup) {
       await settle();
     },
     reload: async () => {
-      await act(async () => panelHost.root.unmount());
-      panelHost.root = createRoot(host);
+      await panelHost.reload();
       await mount();
     },
     list: () => {

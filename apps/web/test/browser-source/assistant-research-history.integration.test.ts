@@ -1,5 +1,4 @@
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
@@ -55,8 +54,7 @@ async function renderPanel(fetchImpl: typeof fetch) {
       await settle();
     },
     remount: async () => {
-      await act(async () => host.root.unmount());
-      host.root = createRoot(host.host);
+      await host.reload();
       await act(async () => host.root.render(panel()));
       await settle();
     },

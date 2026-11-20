@@ -23,7 +23,7 @@ type Scenario = ReturnType<typeof createBrowserScenario>;
 type Volume = { volume_id: string; title: string; order: string; chapters: Chapter[] };
 type Chapter = { chapter_id: string; title: string; order: string };
 /** Gives the response of one request, or `undefined` when the route does not know the request. */
-export type Route = (method: string, path: string) => Response | undefined | Promise<Response | undefined>;
+type Route = (method: string, path: string) => Response | undefined | Promise<Response | undefined>;
 
 export function listedEmptyProject(revision = "1") {
   return {
