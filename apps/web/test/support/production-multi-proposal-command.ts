@@ -365,7 +365,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
         expected_authoritative_revision_id: proposal.base_authoritative_revision_id,
         editor_session_id: editorSessionId,
         client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-        security_policy_revision: 'storyos.web-security-policy.release-1.v1', correlation_id: id() } };
+        security_policy_revision: SECURITY_POLICY_REVISION, correlation_id: id() } };
     const frozenKey = id();
     const deliver = async () => {
       const challenge = await createProjectCommandChallenge({ ...options, request: { method: 'POST',

@@ -8,7 +8,7 @@ import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
 import { challengeRefused, forgetFlight, forgettingRefusedFlight } from "./refused-command.ts";
 
-/** The keys of one command intent. The retry and each later call of the same intent use them again. */
+/** The keys of one command intent. While the flight is in the map, the retry and each later call use them. */
 export type CommandFlight = {
   idempotencyKey: string;
   correlationId: string;
