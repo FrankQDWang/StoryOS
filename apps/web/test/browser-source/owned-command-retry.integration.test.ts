@@ -72,6 +72,16 @@ const methodNotAllowed = () => new Response(null, { status: 405 });
 /** `crates/storyos-server/src/project_command_challenge.rs:81`: the author has no Project on another path. */
 const resourceUnavailable = () => problem("resource_unavailable", "The requested resource is unavailable.", 404);
 const CHALLENGE_PATH = /^\/api\/v1\/projects\/([^/]+)\/anti-forgery-challenges$/;
+const PROJECT_PATH = /^\/api\/v1\/projects\/([^/]+)\//;
+/** The forms that `Uuid::parse_str` reads: simple, hyphenated, braced, and URN. */
+const HYPHENATED = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const UUID_TEXT = new RegExp(`^(?:urn:uuid:)?(?:[0-9a-f]{32}|${HYPHENATED}|\\{${HYPHENATED}\\})$`, "i");
+/**
+ * `crates/storyos-server/src/lib.rs:757`: the first step of `authenticate_scope` (`lib.rs:657`) refuses a Project
+ * identity that is not a UUID, before the Server reads the body.
+ */
+const identityRefusal = (projectId: string) => UUID_TEXT.test(projectId) ? undefined
+  : problem("invalid_request", "The request identity is invalid.", 400);
 
 /**
  * The applied response of the Server (`crates/storyos-server/src/delete_chapter.rs:85`, `delete_volume.rs:82`). The
@@ -121,6 +131,8 @@ function fakeServer(kind: Kind, projectId: string) {
     const challengeProject = CHALLENGE_PATH.exec(path)?.[1];
     if (challengeProject !== undefined) {
       if (init?.method !== "POST") return methodNotAllowed();
+      const identity = identityRefusal(challengeProject);
+      if (identity !== undefined) return identity;
       const challenge = JSON.parse(String(init?.body)) as Challenge;
       sent.push({ step: "challenge", key: challenge.idempotency_key, nonce: null });
       const refusal = challengeRefusal(challenge);
@@ -138,6 +150,8 @@ function fakeServer(kind: Kind, projectId: string) {
       return jsonResponse({ nonce: NONCE, expires_at: "2026-11-20T12:05:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
+    const identity = identityRefusal(PROJECT_PATH.exec(path)?.[1] ?? "");
+    if (identity !== undefined) return identity;
     const headers = new Headers(init?.headers);
     const key = headers.get("idempotency-key");
     const nonce = headers.get("x-storyos-anti-forgery");
@@ -189,7 +203,8 @@ it.each([
     ] });
   });
 
-it("refuses a Challenge request with another method or on another Project, and a command on another Project",
+// A Challenge request with another method, on another Project, or with a Project identity that is not a UUID.
+it("refuses each Challenge request that the Server refuses, and a command on another Project",
   async () => {
     const projectId = "018f0000-0000-7001-8000-000000172011";
     const otherProject = "018f0000-0000-7001-8000-000000172013";
@@ -209,12 +224,16 @@ it("refuses a Challenge request with another method or on another Project, and a
     expect({
       challengeGet: await outcome(await server.fetchImpl(challenge.url, { method: "GET" })),
       challengeOfOtherProject: await outcome(await server.fetchImpl(other(challenge.url), challenge.init)),
+      challengeOfInvalidProject: await outcome(await server.fetchImpl(challenge.url.replace(projectId, "project"),
+        challenge.init)),
       commandOfOtherProject: await outcome(await server.fetchImpl(other(command.url), command.init)),
       commandOfProject: (await server.fetchImpl(command.url, command.init)).status,
     }).toEqual({
       challengeGet: { status: 405, body: "" },
       challengeOfOtherProject: { status: 404, body: JSON.stringify({ schema_id: "storyos.problem.v1",
         code: "resource_unavailable", message: "The requested resource is unavailable." }) },
+      challengeOfInvalidProject: { status: 400, body: JSON.stringify({ schema_id: "storyos.problem.v1",
+        code: "invalid_request", message: "The request identity is invalid." }) },
       commandOfOtherProject: { status: 422, body: JSON.stringify({ schema_id: "storyos.problem.v1",
         code: "challenge_invalid", message: "The Delete Chapter challenge is invalid." }) },
       commandOfProject: 200,

@@ -33,15 +33,19 @@ const FIXTURE_PROJECT = exportedFixture.project_scope.project_id;
 const forProject = <T,>(value: T): T => JSON.parse(JSON.stringify(value).replaceAll(FIXTURE_PROJECT, PROJECT)) as T;
 const EXPORT_ROUTE = "/api/v1/projects/{project_id}/manuscript/exports";
 const { operations } = routeCatalog as { operations: {
-  kind: string; method: string; path: string; schemas: { request: string } }[] };
+  operation_id: string; kind: string; method: string; path: string; schemas: { request: string } }[] };
 /** The rows of the route catalog that are the Project command targets of the Server. */
 const PROJECT_COMMANDS = operations.filter(({ kind, path }) =>
   kind === "command" && path.startsWith("/api/v1/projects/{project_id}"));
 const NONCE = "a".repeat(64);
 const OTHER_PROJECT = "018f0000-0000-7001-8000-000000000819";
-const CHALLENGE_PATH = /^\/api\/v1\/projects\/[^/]+\/anti-forgery-challenges$/;
+const CHALLENGE_PATH = /^\/api\/v1\/projects\/([^/]+)\/anti-forgery-challenges$/;
+/** The forms that `Uuid::parse_str` reads: simple, hyphenated, braced, and URN. */
+const HYPHENATED = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const UUID_TEXT = new RegExp(`^(?:urn:uuid:)?(?:[0-9a-f]{32}|${HYPHENATED}|\\{${HYPHENATED}\\})$`, "i");
+const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 type Challenge = { method: string; route_template: string; command_schema: string; idempotency_key: string;
-  canonical_command_digest: unknown };
+  canonical_command_digest: { algorithm: string; profile: string; value_hex_lowercase: string } };
 const EXPORT_TEXT = "# Volume A\n\n## Chapter A\n\nBase\n";
 const EXPORT_SHA256 = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(EXPORT_TEXT)))]
   .map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -99,16 +103,26 @@ it.each([3, 4] as const)("shows the Server text read-only for a version %i Journ
         return jsonResponse({ schema_id: "storyos.problem.v1", code: "projection_not_ready",
           message: "The statistics projection is not ready." }, 409);
       }
-      if (CHALLENGE_PATH.test(path)) {
+      const challengeProject = CHALLENGE_PATH.exec(path)?.[1];
+      if (challengeProject !== undefined) {
         // `crates/storyos-server/src/lib.rs:528`: the Challenge route has only its POST filter and no fallback, so
         // axum gives 405 with no body.
         if (method !== "POST") return new Response(null, { status: 405 });
+        // `lib.rs:757`: the first step of `authenticate_scope` refuses a Project identity that is not a UUID.
+        if (!UUID_TEXT.test(challengeProject)) return problem("invalid_request", "The request identity is invalid.", 400);
         challengeBodies.push(String(init?.body));
         const challenge = JSON.parse(String(init?.body)) as Challenge;
         // `crates/storyos-server/src/lib.rs:881`: a target that is not a Project command of the route catalog.
-        if (!PROJECT_COMMANDS.some((operation) => operation.method === challenge.method
-          && operation.path === challenge.route_template && operation.schemas.request === challenge.command_schema)) {
+        const target = PROJECT_COMMANDS.find((operation) => operation.method === challenge.method
+          && operation.path === challenge.route_template && operation.schemas.request === challenge.command_schema);
+        if (target === undefined) {
           return problem("command_target_refused", "The command target is not in the closed Release 1 contract.", 422);
+        }
+        // `project_command_challenge.rs:70`: a digest of another profile or form, or a key that is not UUID v7.
+        const { algorithm, profile, value_hex_lowercase: value } = challenge.canonical_command_digest;
+        if (algorithm !== "sha256" || profile !== `storyos.command.${target.operation_id}.jcs.v1`
+          || !/^[0-9a-f]{64}$/.test(value) || !UUID_V7.test(challenge.idempotency_key)) {
+          return problem("invalid_request", "The request is invalid.", 400);
         }
         // `crates/storyos-server/src/project_command_challenge.rs:81`: the author has no Project on another path.
         if (path !== `/api/v1/projects/${PROJECT}/anti-forgery-challenges`) {
@@ -189,17 +203,26 @@ it.each([3, 4] as const)("shows the Server text read-only for a version %i Journ
       // The open did not upgrade or change the Journal.
       expect(await journalRows(scenario.journalName, openDatabases)).toEqual({ version, rows });
 
-      // The fake Server refuses a Challenge request with another method or on the path of another Project.
+      // The fake Server refuses a Challenge request with another method, with a Project identity that is not a UUID,
+      // with a digest of another profile, or on the path of another Project.
       const challengeUrl = (projectId: string) => `${location.origin}/api/v1/projects/${projectId}/anti-forgery-challenges`;
       const outcome = async (response: Response) => ({ status: response.status, body: await response.text() });
       const exportChallenge = challengeBodies.find((body) => (JSON.parse(body) as Challenge).route_template === EXPORT_ROUTE);
       if (exportChallenge === undefined) throw new Error("The export sent no Challenge");
+      const otherProfile = JSON.stringify({ ...JSON.parse(exportChallenge) as Challenge, canonical_command_digest: {
+        ...(JSON.parse(exportChallenge) as Challenge).canonical_command_digest, profile: "storyos.command.other.jcs.v1" } });
       expect({
         get: await outcome(await fetchImpl(challengeUrl(PROJECT), { method: "GET" })),
+        invalidProject: await outcome(await fetchImpl(challengeUrl("project"), { method: "POST", body: exportChallenge })),
+        otherProfile: await outcome(await fetchImpl(challengeUrl(PROJECT), { method: "POST", body: otherProfile })),
         otherProject: await outcome(await fetchImpl(challengeUrl(OTHER_PROJECT),
           { method: "POST", body: exportChallenge })),
       }).toEqual({
         get: { status: 405, body: "" },
+        invalidProject: { status: 400, body: JSON.stringify({ schema_id: "storyos.problem.v1", code: "invalid_request",
+          message: "The request identity is invalid." }) },
+        otherProfile: { status: 400, body: JSON.stringify({ schema_id: "storyos.problem.v1", code: "invalid_request",
+          message: "The request is invalid." }) },
         otherProject: { status: 404, body: JSON.stringify({ schema_id: "storyos.problem.v1",
           code: "resource_unavailable", message: "The requested resource is unavailable." }) },
       });
