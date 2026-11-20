@@ -106,8 +106,6 @@ pub struct McpClient<R> {
 pub struct McpExchange {
     request: McpRequest,
     credential: ResolvedCredential,
-    /// The exact `tools/call` body of a Dispatch, which the projection records.
-    call_body: Option<String>,
 }
 
 impl<R: CredentialResolver> McpClient<R> {
@@ -168,7 +166,6 @@ impl<R: CredentialResolver> McpClient<R> {
             prepared: McpExchange {
                 request: request.clone(),
                 credential,
-                call_body,
             },
         })
     }
@@ -179,17 +176,9 @@ impl<R: CredentialResolver> McpClient<R> {
         let McpExchange {
             request,
             credential,
-            call_body,
         } = prepared;
         let server_url = request.server_url();
-        let observation = session::run(
-            server_url,
-            &credential,
-            &request,
-            call_body.as_deref(),
-            self.timeout,
-        )
-        .await;
+        let observation = session::run(server_url, &credential, &request, self.timeout).await;
         tracing::info!(
             server_url = DiagnosticId(server_url).diagnostic(),
             observation = observation.category().diagnostic(),

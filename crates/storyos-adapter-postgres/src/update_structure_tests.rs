@@ -6,7 +6,6 @@ use storyos_application::{
     CanonicalManuscriptTree, ChapterId, GetManuscriptTree, OpenChapter, ProjectScope,
     StructureAuthority, UndoApplied, UndoRecords, UpdateChapterInput, UpdateChapterSettlement,
     UpdateVolumeInput, UpdateVolumeSettlement, UserId, VolumeId, get_manuscript_tree, open_chapter,
-    open_current_chapter,
 };
 use storyos_core::{ReceiptResult, TransitionOutcome};
 
@@ -15,6 +14,7 @@ use crate::command_sequence::tests::{
     UPDATE_CHAPTER, UPDATE_VOLUME, applied, named_call, outcome_code, seed_project, stores,
     titled_chapter, titled_volume, undo_named, update_chapter, update_volume,
 };
+use crate::create_structure_tests::current_chapter;
 use crate::set_current_chapter_authority_tests::open_session;
 
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -289,7 +289,7 @@ async fn each_update_classifies_its_outcomes_and_writes_its_effect_rows() {
         // An update keeps the current Chapter and every Chapter Head.
         assert_eq!(chapter_identity(&admin, &scope).await, identity);
         // The current Chapter reads the new title only when the update renames it.
-        let current = open_current_chapter(&store, &scope, &ChapterId::new(chapter.clone()))
+        let current = current_chapter(&store, &scope, &ChapterId::new(chapter.clone()))
             .await
             .unwrap()
             .expect("the current Chapter identity is unchanged");

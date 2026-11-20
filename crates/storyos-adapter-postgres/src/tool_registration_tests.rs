@@ -1,113 +1,30 @@
-use serde_json::{Value, json};
 use storyos_core::{
-    ContractDifference, EXA_TOOL_REGISTRATION, ToolCallRefusal, ToolRegistration,
-    ToolRegistrationLifecycle,
+    ContractDifference, EXA_TOOL_REGISTRATION, ToolRegistration, ToolRegistrationLifecycle,
 };
+use tokio_postgres::Client;
 
-use super::QuarantineOutcome;
 use crate::agent_run_dispatch::tests::stores;
 
-const PINNED: ToolRegistration = ToolRegistration {
-    revision: "018f0000-0000-7001-8000-0000000e0f01",
-    ..EXA_TOOL_REGISTRATION
-};
-const SUCCESSOR: ToolRegistration = ToolRegistration {
-    revision: "018f0000-0000-7001-8000-0000000e0f02",
-    ..EXA_TOOL_REGISTRATION
-};
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn drift_quarantines_one_revision_once_and_a_new_revision_carries_no_authority_from_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    store.insert_tool_registration(&PINNED).await.unwrap();
-    store.insert_tool_registration(&PINNED).await.unwrap();
-    let tools: Vec<(String, String)> = admin
-        .query(
-            "SELECT tool_name, input_schema_digest FROM storyos.tool_registration_tools
-              WHERE tool_registration_revision = $1::text::uuid ORDER BY tool_name",
-            &[&PINNED.revision],
-        )
-        .await
-        .unwrap()
-        .iter()
-        .map(|row| (row.get(0), row.get(1)))
-        .collect();
-    let drift = [ContractDifference::ToolRemoved {
-        tool: "web_fetch_exa".to_owned(),
-    }];
-    let later = [ContractDifference::ServerName {
-        pinned: "exa-search-server".to_owned(),
-        observed: "other-server".to_owned(),
-    }];
-
-    let first = store
-        .quarantine_tool_registration(PINNED.revision, &drift)
+/// Inserts the revision and its tools in one transaction, as the binding of a research offer does.
+async fn insert(client: &Client, registration: &ToolRegistration) {
+    client.batch_execute("BEGIN").await.unwrap();
+    super::insert_registration_rows(client, registration)
         .await
         .unwrap();
-    let second = store
-        .quarantine_tool_registration(PINNED.revision, &later)
-        .await
-        .unwrap();
-    store.insert_tool_registration(&SUCCESSOR).await.unwrap();
-    let lifecycle = |revision| store.tool_registration_lifecycle(revision);
-    let pinned = lifecycle(PINNED.revision).await.unwrap().unwrap();
-    let record: String = admin
-        .query_one(
-            "SELECT quarantine_differences::text FROM storyos.tool_registration_revisions
+    client.batch_execute("COMMIT").await.unwrap();
+}
+
+/// The lifecycle of a stored revision. `None` is an unknown revision.
+async fn lifecycle(client: &Client, revision: &str) -> Option<ToolRegistrationLifecycle> {
+    client
+        .query_opt(
+            "SELECT lifecycle FROM storyos.tool_registration_revisions
               WHERE tool_registration_revision = $1::text::uuid",
-            &[&PINNED.revision],
+            &[&revision],
         )
         .await
         .unwrap()
-        .get(0);
-
-    assert_eq!(
-        tools,
-        [
-            (
-                "web_fetch_exa".to_owned(),
-                EXA_TOOL_REGISTRATION.tools[1]
-                    .input_schema_digest
-                    .to_owned()
-            ),
-            (
-                "web_search_exa".to_owned(),
-                EXA_TOOL_REGISTRATION.tools[0]
-                    .input_schema_digest
-                    .to_owned()
-            ),
-        ]
-    );
-    assert_eq!(
-        (first, second),
-        (
-            QuarantineOutcome::Quarantined,
-            QuarantineOutcome::AlreadyUnavailable
-        )
-    );
-    assert_eq!(
-        serde_json::from_str::<Value>(&record).unwrap(),
-        json!([{"kind": "tool_removed", "tool": "web_fetch_exa"}])
-    );
-    assert_eq!(
-        pinned.admit_new_tool_call().map_err(ToolCallRefusal::code),
-        Err("tool_registration_unavailable")
-    );
-    assert_eq!(
-        lifecycle(SUCCESSOR.revision).await.unwrap(),
-        Some(ToolRegistrationLifecycle::Active)
-    );
-    assert_eq!(
-        store
-            .quarantine_tool_registration("018f0000-0000-7001-8000-0000000e0f03", &drift)
-            .await
-            .unwrap(),
-        QuarantineOutcome::UnknownRevision
-    );
+        .map(|row| ToolRegistrationLifecycle::parse(row.get(/*idx*/ 0)).unwrap())
 }
 
 #[tokio::test]
@@ -125,17 +42,24 @@ async fn the_runtime_role_never_reactivates_edits_or_extends_a_registration_revi
         revision: "018f0000-0000-7001-8000-0000000e0f05",
         ..EXA_TOOL_REGISTRATION
     };
-    store.insert_tool_registration(&REVISION).await.unwrap();
-    store.insert_tool_registration(&ACTIVE).await.unwrap();
+    let client = store.connect().await.unwrap();
+    insert(&client, &REVISION).await;
+    insert(&client, &ACTIVE).await;
     let drift = [ContractDifference::ProtocolRevision {
         pinned: "2025-11-25".to_owned(),
         observed: "2026-06-18".to_owned(),
     }];
-    store
-        .quarantine_tool_registration(REVISION.revision, &drift)
+    // The quarantine of the Tool Gateway on Tool Contract Drift.
+    client
+        .execute(
+            "UPDATE storyos.tool_registration_revisions
+                SET lifecycle = 'quarantined', quarantine_differences = $2::text::jsonb,
+                    quarantined_at = clock_timestamp()
+              WHERE tool_registration_revision = $1::text::uuid AND lifecycle = 'active'",
+            &[&REVISION.revision, &serde_json::to_string(&drift).unwrap()],
+        )
         .await
         .unwrap();
-    let client = store.connect().await.unwrap();
 
     let reactivated = client
         .execute(
@@ -173,10 +97,7 @@ async fn the_runtime_role_never_reactivates_edits_or_extends_a_registration_revi
     assert_eq!(reactivated, 0);
     assert_eq!(identity_edit, Err(Some("42501".to_owned())));
     assert_eq!(
-        store
-            .tool_registration_lifecycle(REVISION.revision)
-            .await
-            .unwrap(),
+        lifecycle(&client, REVISION.revision).await,
         Some(ToolRegistrationLifecycle::Quarantined)
     );
 }

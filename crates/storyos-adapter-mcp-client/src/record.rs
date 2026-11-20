@@ -29,61 +29,11 @@ pub struct DiscoveredTool {
     pub(crate) annotations: Option<Value>,
 }
 
-impl ToolDiscoveryRecord {
-    pub fn server_url(&self) -> &str {
-        &self.server_url
-    }
-
-    pub fn server_name(&self) -> &str {
-        &self.server_name
-    }
-
-    pub fn server_version(&self) -> &str {
-        &self.server_version
-    }
-
-    pub fn protocol_revision(&self) -> &str {
-        &self.protocol_revision
-    }
-
-    pub fn tools(&self) -> &[DiscoveredTool] {
-        &self.tools
-    }
-}
-
-impl DiscoveredTool {
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn description(&self) -> Option<&str> {
-        self.description.as_deref()
-    }
-
-    pub fn input_schema(&self) -> &Value {
-        &self.input_schema
-    }
-
-    pub fn input_schema_digest(&self) -> &str {
-        &self.input_schema_digest
-    }
-
-    pub fn output_schema(&self) -> Option<&Value> {
-        self.output_schema.as_ref()
-    }
-
-    pub fn annotations(&self) -> Option<&Value> {
-        self.annotations.as_ref()
-    }
-}
-
 /// A Call result that passed the shape check. Semantic validation belongs to S5-03.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CallResult {
     pub text: Vec<String>,
     pub is_error: bool,
-    /// The `structuredContent` of the result, kept as data.
-    pub structured_content: Option<Value>,
 }
 
 /// The server name, the server version, and the protocol revision of an `initialize` result.
@@ -157,7 +107,7 @@ pub(crate) fn digest(value: &Value) -> String {
 
 /// Text blocks only, a boolean or absent `isError`, and at most `MAX_TEXT_BYTES` of text. The
 /// body decoder already refused bytes that are not UTF-8.
-pub(crate) fn call_result(mut result: Value) -> Result<CallResult, &'static str> {
+pub(crate) fn call_result(result: Value) -> Result<CallResult, &'static str> {
     let blocks = result
         .get("content")
         .and_then(Value::as_array)
@@ -177,9 +127,5 @@ pub(crate) fn call_result(mut result: Value) -> Result<CallResult, &'static str>
         Some(Value::Bool(is_error)) => *is_error,
         Some(_) => return Err("is_error"),
     };
-    Ok(CallResult {
-        text,
-        is_error,
-        structured_content: result.get_mut("structuredContent").map(Value::take),
-    })
+    Ok(CallResult { text, is_error })
 }

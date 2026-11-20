@@ -6,7 +6,6 @@ use super::{ProjectPresence, TransitionOutcome};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AssistanceAdmission {
-    Missing,
     Unavailable,
     Available,
 }

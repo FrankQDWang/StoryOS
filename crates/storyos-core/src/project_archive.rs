@@ -148,18 +148,6 @@ pub fn package_verified_project_archive_zip(
     crate::archive_zip::store_zip(&files)
 }
 
-/// Classify one supplied digest against the exact uncompressed entry bytes.
-pub fn verify_entry_digest(
-    bytes: &[u8],
-    digest_hex: &str,
-) -> Result<(), ProjectArchiveBuildRefusal> {
-    if hex_sha256(bytes) == digest_hex {
-        Ok(())
-    } else {
-        Err(ProjectArchiveBuildRefusal::CorruptDigest)
-    }
-}
-
 /// Classify one candidate archive record against exact Scope and gap facts.
 pub fn classify_export_record(
     row_owner_user_id: &str,

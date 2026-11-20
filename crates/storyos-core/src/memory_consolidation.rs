@@ -293,8 +293,6 @@ pub enum ConsolidationOutcome {
     NoOperation,
     /// The Memory revision at the settlement is not the pinned revision, so nothing applied.
     Stale,
-    /// The Run ended with no settled output call.
-    Failed,
 }
 
 impl ConsolidationOutcome {
@@ -304,7 +302,6 @@ impl ConsolidationOutcome {
             Self::Applied => "applied",
             Self::NoOperation => "no_operation",
             Self::Stale => "stale",
-            Self::Failed => "failed",
         }
     }
 }

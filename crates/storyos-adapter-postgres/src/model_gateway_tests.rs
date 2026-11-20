@@ -36,6 +36,34 @@ pub(crate) struct DispatchEvidence {
     pub(crate) decision_id: Option<String>,
 }
 
+/// The embedding destination of a process with no embedding adapter. Each request refuses before
+/// the claim.
+pub(crate) struct NoEmbeddings;
+
+impl storyos_application::EmbeddingProviderAdapter for NoEmbeddings {
+    const REGISTRATIONS: &'static [&'static storyos_core::EmbeddingRegistration] = &[];
+    type Prepared = std::convert::Infallible;
+
+    async fn prepare(
+        &self,
+        _registration: &'static storyos_core::EmbeddingRegistration,
+        _route: &storyos_application::EmbeddingRoute,
+        _input: &storyos_core::EmbeddingInput,
+    ) -> Result<
+        storyos_application::PreparedEmbeddingRequest<Self::Prepared>,
+        storyos_application::PreDispatchRefusal,
+    > {
+        Err(storyos_application::PreDispatchRefusal::CredentialUnavailable)
+    }
+
+    async fn exchange(
+        &self,
+        prepared: Self::Prepared,
+    ) -> storyos_application::EmbeddingObservation {
+        match prepared {}
+    }
+}
+
 /// The runtime timer, as the Worker supplies it.
 pub(crate) struct RuntimeClock;
 

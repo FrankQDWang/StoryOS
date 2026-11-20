@@ -13,6 +13,7 @@ use storyos_core::ConversationCaptureSkip;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
+use crate::agent_run_dispatch::tests::NoEmbeddings;
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
 use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_retrieval::tests::{adapter, destination, real_run};
@@ -420,7 +421,7 @@ async fn run_once_captures_two_completed_runs_into_stored_observations() {
         adapter: FakeDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
+        embeddings: NoEmbeddings,
     };
     // One step claims the row and starts the capture. The next steps claim its Run, also after
     // work that other tests left.

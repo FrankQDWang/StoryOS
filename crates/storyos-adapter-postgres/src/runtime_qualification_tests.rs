@@ -797,7 +797,8 @@ async fn real_attempt_evidence(
     complete_agent_run(store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    let record = storyos_application::open_agent_run(store, &scope, &run_id)
+    let current = storyos_application::AgentRunReadSelection::Current;
+    let record = storyos_application::inspect_agent_run(store, &scope, &run_id, &current)
         .await
         .unwrap()
         .unwrap();

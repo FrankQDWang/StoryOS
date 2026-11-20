@@ -4,7 +4,7 @@
 
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, MemoryCaptureSource, MemoryCaptureStartRefusal,
-    MemoryCaptureStore, ProjectReadError, ProjectScope, StartedMemoryCapture,
+    ProjectReadError, ProjectScope, StartedMemoryCapture,
 };
 use storyos_core::{
     AgentRunKind, AssistanceAvailability, CaptureAdmissionFacts, CaptureRefusal,
@@ -16,40 +16,8 @@ use uuid::Uuid;
 
 use crate::agent_run_tool_authority::damaged;
 use crate::agent_run_work::complete_database_error;
+use crate::read_error;
 use crate::update_project_assistance::read_assistance_record;
-use crate::{PostgresProjectReader, read_error};
-
-impl MemoryCaptureStore for PostgresProjectReader {
-    async fn start_memory_capture(
-        &self,
-        scope: &ProjectScope,
-        source: &MemoryCaptureSource,
-        input: &str,
-    ) -> Result<Result<StartedMemoryCapture, MemoryCaptureStartRefusal>, ProjectReadError> {
-        let transaction = self
-            .begin_serializable_project_command_transaction(scope)
-            .await
-            .map_err(ProjectReadError::unavailable)?;
-        let started = start(
-            &transaction.client,
-            scope,
-            source,
-            input,
-            ProjectionMode::ExactRequired,
-        )
-        .await;
-        match &started {
-            Ok(Ok(_)) => transaction
-                .commit()
-                .await
-                .map_err(ProjectReadError::unavailable)?,
-            Ok(Err(_)) | Err(_) => {
-                let _rollback = transaction.rollback().await;
-            }
-        }
-        started
-    }
-}
 
 /// Pins the current Model Use Binding, its grant, and its Model Registration, and writes the
 /// queued Run, the capture, and the first RunStep. A refused start writes no row. The capture of a

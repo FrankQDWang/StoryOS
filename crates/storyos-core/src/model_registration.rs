@@ -114,10 +114,6 @@ pub enum CapabilityEvidence {
     Qualified {
         evidence: &'static str,
     },
-    /// Attributable evidence from the exact route and model that it does not have the capability.
-    Unsupported {
-        evidence: &'static str,
-    },
 }
 
 const fn documented(source: &'static str) -> CapabilityEvidence {

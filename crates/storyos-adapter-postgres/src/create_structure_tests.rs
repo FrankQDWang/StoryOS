@@ -6,8 +6,9 @@ use storyos_application::{
     CreateChapterInput, CreateChapterPublicOrder, CreateChapterSettlement, CreateVolumeInput,
     CreateVolumePublicOrder, CreateVolumeSettlement, GetManuscriptTree, OpenChapter, ProjectScope,
     SnapshotLookup, UndoApplied, UndoRecords, UserId, VolumeCreated, VolumeId, VolumeNode,
-    get_manuscript_tree, get_snapshot, open_chapter, open_current_chapter, open_project,
+    get_manuscript_tree, get_snapshot, open_chapter, open_project,
 };
+use storyos_application::{Chapter, ProjectReadError, ProjectReader};
 use storyos_contracts::CommandKind;
 use storyos_core::{
     CreateChapterCurrent, CreateChapterPlacement, ManuscriptBlockKind, ReceiptResult,
@@ -26,6 +27,21 @@ use crate::set_current_chapter_authority_tests::open_session;
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const MISSING: &str = "018f0000-0000-7001-8000-00000000ffff";
+
+/// The Chapter `chapter_id` when it is the current Chapter of the Project of `scope`.
+pub(crate) async fn current_chapter(
+    reader: &impl ProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &ChapterId,
+) -> Result<Option<Chapter>, ProjectReadError> {
+    let Some(project) = reader.read_project(scope).await? else {
+        return Ok(None);
+    };
+    if project.current_chapter_id.as_ref() != Some(chapter_id) {
+        return Ok(None);
+    }
+    reader.read_chapter(scope, chapter_id).await
+}
 
 async fn settle_volume(
     store: &PostgresProjectReader,
@@ -280,7 +296,7 @@ async fn create_chapter_classifies_its_outcomes_and_writes_its_effect_rows() {
             .current_chapter_id,
         Some(ChapterId::new(chapter_a.clone()))
     );
-    let current = open_current_chapter(&store, &scope, &ChapterId::new(chapter_a.clone()))
+    let current = current_chapter(&store, &scope, &ChapterId::new(chapter_a.clone()))
         .await
         .unwrap()
         .expect("Chapter A is the current Chapter");
@@ -327,13 +343,13 @@ async fn create_chapter_classifies_its_outcomes_and_writes_its_effect_rows() {
 
     // Scope isolation.
     assert_eq!(
-        open_current_chapter(&store, &scope, &ChapterId::new(chapter_b.clone()))
+        current_chapter(&store, &scope, &ChapterId::new(chapter_b.clone()))
             .await
             .unwrap(),
         None
     );
     assert_eq!(
-        open_current_chapter(&store, &foreign, &ChapterId::new(chapter_a.clone()))
+        current_chapter(&store, &foreign, &ChapterId::new(chapter_a.clone()))
             .await
             .unwrap(),
         None

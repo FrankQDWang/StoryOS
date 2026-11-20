@@ -13,8 +13,8 @@ use storyos_adapter_fake_destination::{
 };
 use storyos_application::{
     ClaimedPassageIndex, EmbeddingObservation, EmbeddingProviderAdapter, EmbeddingRoute,
-    NoEmbeddingDestination, PassageIndexStep, PassageIndexWorkStore, PassageVectorKey,
-    PassageVectorRow, PreDispatchRefusal, PreparedEmbeddingRequest, ProjectId, ProjectScope,
+    PassageIndexStep, PassageIndexWorkStore, PassageVectorKey, PassageVectorRow,
+    PreDispatchRefusal, PreparedEmbeddingRequest, ProjectId, ProjectScope,
     claim_next_passage_index_work, step_passage_index_work,
 };
 use storyos_core::{
@@ -25,6 +25,7 @@ use tokio_postgres::Client;
 
 use super::{MarkedChapters, claim_passage_index_row, mark_passage_index_work};
 use crate::PostgresProjectReader;
+use crate::agent_run_dispatch::tests::NoEmbeddings;
 use crate::agent_run_dispatch::tests::{admit_embedding_run, stores};
 use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_steering::tests::cancellation;
@@ -74,7 +75,7 @@ pub(crate) async fn work(
 }
 
 /// Ends the quiet time of each work row of the Project.
-async fn wake(admin: &Client, scope: &ProjectScope) {
+pub(crate) async fn wake(admin: &Client, scope: &ProjectScope) {
     admin
         .execute(
             "UPDATE storyos.passage_index_work
@@ -87,7 +88,7 @@ async fn wake(admin: &Client, scope: &ProjectScope) {
 }
 
 /// Moves the work of each other Project one day later, so that a claim takes only this Project.
-async fn park_other_work(admin: &Client, scope: &ProjectScope) {
+pub(crate) async fn park_other_work(admin: &Client, scope: &ProjectScope) {
     admin
         .execute(
             "UPDATE storyos.passage_index_work
@@ -721,7 +722,7 @@ async fn the_editor_and_each_run_work_while_each_embedding_request_fails() {
     park_other_work(&admin, &scope).await;
     wake(&admin, &scope).await;
     let first = claim(&store, FAKE_ONLY).await.unwrap();
-    let released = step_with(&store, &NoEmbeddingDestination, &first).await;
+    let released = step_with(&store, &NoEmbeddings, &first).await;
     assert!(matches!(released, PassageIndexStep::Released(_)));
 
     // An Author Edit and a Run settle while the embedding destination is not available.
@@ -735,7 +736,7 @@ async fn the_editor_and_each_run_work_while_each_embedding_request_fails() {
     // The next try after the quiet time fails again, and the mark stays.
     wake(&admin, &scope).await;
     let again = claim(&store, FAKE_ONLY).await.unwrap();
-    let released = step_with(&store, &NoEmbeddingDestination, &again).await;
+    let released = step_with(&store, &NoEmbeddings, &again).await;
     assert!(matches!(released, PassageIndexStep::Released(_)));
     assert_eq!(rows(&admin, &scope).await, 0);
     assert_eq!(work(&admin, &scope).await, vec![(id, 1, 3, 0, true)]);

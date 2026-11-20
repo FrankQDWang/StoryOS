@@ -426,16 +426,6 @@ pub trait AgentRunReadStore: Sync {
     ) -> impl Future<Output = Result<Option<AgentRunRecord>, CreateAgentRunError>> + Send;
 }
 
-pub async fn open_agent_run(
-    store: &impl AgentRunReadStore,
-    scope: &ProjectScope,
-    run_id: &str,
-) -> Result<Option<AgentRunRecord>, CreateAgentRunError> {
-    store
-        .read_agent_run(scope, run_id, &AgentRunReadSelection::Current)
-        .await
-}
-
 pub async fn inspect_agent_run(
     store: &impl AgentRunReadStore,
     scope: &ProjectScope,

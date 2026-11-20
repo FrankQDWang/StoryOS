@@ -3,9 +3,8 @@
 //! empty list, and each refusal. Each pass Run completes, and no pass writes a record of AP-22.
 
 use serde_json::{Value, json};
-use storyos_application::{
-    MemoryCaptureSource, MemoryConsolidationStore, ProjectScope, StartedMemoryConsolidation,
-};
+use storyos_application::{MemoryCaptureSource, ProjectScope, StartedMemoryConsolidation};
+use storyos_core::CaptureRefusal;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -58,17 +57,31 @@ pub(super) fn delete(entry: u64) -> Value {
     })
 }
 
+/// Starts one pass of the observations that wait in the Project of `scope` in one transaction, as
+/// the claim of a schedule row does.
+pub(crate) async fn start_pass(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+) -> Result<StartedMemoryConsolidation, CaptureRefusal> {
+    let transaction = store
+        .begin_serializable_project_command_transaction(scope)
+        .await
+        .unwrap();
+    let started = super::start(&transaction.client, scope).await.unwrap();
+    match started {
+        Ok(_) => transaction.commit().await.unwrap(),
+        Err(_) => transaction.rollback().await.unwrap(),
+    }
+    started
+}
+
 /// Starts a pass of the Project of `scope` with a direct call and completes its Run.
 pub(crate) async fn run_pass(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
 ) -> StartedMemoryConsolidation {
-    let started = store
-        .start_memory_consolidation(scope)
-        .await
-        .unwrap()
-        .unwrap();
+    let started = start_pass(store, scope).await.unwrap();
     run_capture(store, admin, scope, &started.run_id).await;
     started
 }

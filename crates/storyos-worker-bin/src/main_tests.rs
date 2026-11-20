@@ -201,36 +201,12 @@ impl EmbeddingDispatchStore for RecordingStore {
 }
 
 impl PassageVectorStore for RecordingStore {
-    async fn vector_store_available(
-        &self,
-        _scope: &ProjectScope,
-    ) -> Result<bool, ProjectReadError> {
-        unreachable!("a one-shot command reads no Chapter")
-    }
-
     async fn read_passage_index_facts(
         &self,
         _scope: &ProjectScope,
         _chapter_id: &str,
     ) -> Result<PassageIndexFacts, ProjectReadError> {
         unreachable!("a one-shot command reads no Chapter")
-    }
-
-    async fn remove_passage_vectors(
-        &self,
-        _scope: &ProjectScope,
-        _chapter_id: &str,
-        _keys: &[PassageVectorKey],
-    ) -> Result<u64, ProjectReadError> {
-        unreachable!("a one-shot command writes no vector row")
-    }
-
-    async fn write_passage_vector(
-        &self,
-        _scope: &ProjectScope,
-        _row: &PassageVectorRow<'_>,
-    ) -> Result<(), ProjectReadError> {
-        unreachable!("a one-shot command writes no vector row")
     }
 }
 

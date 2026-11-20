@@ -82,8 +82,7 @@ pub use public_origin::{
 };
 pub use session_bootstrap::{
     CLIENT_SESSION_BINDING_LIFETIME_SECS, MultipleMappingAllowance, PackagedSessionBootstrapError,
-    TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS, TrustedLocalSessionBootstrap,
-    packaged_session_mappings,
+    TrustedLocalSessionBootstrap, packaged_session_mappings,
 };
 pub use settings::ServerSettings;
 pub use skill_directory::{SkillDirectoryRefusal, read_skill_directory};

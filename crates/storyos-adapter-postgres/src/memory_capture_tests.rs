@@ -5,10 +5,10 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    ConversationSelection, MemoryCaptureSource, MemoryCaptureStartRefusal, MemoryCaptureStore,
-    NoContractFaults, ProjectScope, StartedMemoryCapture, complete_agent_run,
+    ConversationSelection, MemoryCaptureSource, MemoryCaptureStartRefusal, NoContractFaults,
+    ProjectScope, StartedMemoryCapture, complete_agent_run,
 };
-use storyos_core::CaptureRefusal;
+use storyos_core::{CaptureRefusal, ProjectionMode};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -85,16 +85,31 @@ pub(crate) async fn run_capture(
     panic!("the capture {run_id} did not end");
 }
 
+/// Starts one capture of `source` with the input `input` in one transaction, as a trigger does.
 pub(crate) async fn start(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     source: &MemoryCaptureSource,
     input: &str,
 ) -> Result<StartedMemoryCapture, MemoryCaptureStartRefusal> {
-    store
-        .start_memory_capture(scope, source, input)
+    let transaction = store
+        .begin_serializable_project_command_transaction(scope)
         .await
-        .unwrap()
+        .unwrap();
+    let started = super::start(
+        &transaction.client,
+        scope,
+        source,
+        input,
+        ProjectionMode::ExactRequired,
+    )
+    .await
+    .unwrap();
+    match started {
+        Ok(_) => transaction.commit().await.unwrap(),
+        Err(_) => transaction.rollback().await.unwrap(),
+    }
+    started
 }
 
 /// The Run of the capture as its kind and status, the capture as its source and state, the

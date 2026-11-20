@@ -1,7 +1,7 @@
 use storyos_adapter_postgres::PostgresProjectReader;
 use storyos_application::{
-    Chapter, ChapterId, OpenChapter, Project, ProjectId, ProjectListItem, ProjectReader,
-    ProjectScope, RevisionId, UserId, list_owned_projects, open_chapter, open_current_chapter,
+    Chapter, ChapterId, OpenChapter, Project, ProjectId, ProjectListItem, ProjectReadError,
+    ProjectReader, ProjectScope, RevisionId, UserId, list_owned_projects, open_chapter,
     open_project,
 };
 use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
@@ -16,6 +16,21 @@ const STALE_CHAPTER_A: &str = "018f0000-0000-7001-8000-000000000006";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const PROJECT_B: &str = "018f0000-0000-7001-8000-000000000102";
 const CHAPTER_B: &str = "018f0000-0000-7001-8000-000000000103";
+
+/// The Chapter `chapter_id` when it is the current Chapter of the Project of `scope`.
+async fn current_chapter(
+    reader: &impl ProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &ChapterId,
+) -> Result<Option<Chapter>, ProjectReadError> {
+    let Some(project) = reader.read_project(scope).await? else {
+        return Ok(None);
+    };
+    if project.current_chapter_id.as_ref() != Some(chapter_id) {
+        return Ok(None);
+    }
+    reader.read_chapter(scope, chapter_id).await
+}
 
 #[tokio::test]
 async fn database_error_keeps_its_cause_without_exposing_it_in_display() {
@@ -48,7 +63,7 @@ async fn two_users_and_projects_are_isolated_at_application_and_rls_boundaries()
         })
     );
     assert_eq!(
-        open_current_chapter(&reader, &scope_a, &ChapterId::new(CHAPTER_A))
+        current_chapter(&reader, &scope_a, &ChapterId::new(CHAPTER_A))
             .await
             .unwrap(),
         Some(Chapter {
@@ -85,13 +100,13 @@ async fn two_users_and_projects_are_isolated_at_application_and_rls_boundaries()
         None
     );
     assert_eq!(
-        open_current_chapter(&reader, &scope_a, &ChapterId::new(STALE_CHAPTER_A))
+        current_chapter(&reader, &scope_a, &ChapterId::new(STALE_CHAPTER_A))
             .await
             .unwrap(),
         None
     );
     assert_eq!(
-        open_current_chapter(&reader, &scope_b, &ChapterId::new(CHAPTER_A))
+        current_chapter(&reader, &scope_b, &ChapterId::new(CHAPTER_A))
             .await
             .unwrap(),
         None

@@ -106,7 +106,6 @@ impl ToolEffectRequest {
             },
             "external_write": match self.external_write {
                 ExternalWrite::None => "none",
-                ExternalWrite::Declared => "declared",
             },
             "outbound_disclosure": self.outbound_disclosure.source_class(),
             "disclosed": self.disclosed,

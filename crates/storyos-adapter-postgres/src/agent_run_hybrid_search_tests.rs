@@ -16,9 +16,9 @@ use storyos_adapter_fake_destination::{
 use storyos_application::{
     CompleteAgentRun, CompleteAgentRunError, ContractFaultPoint, ConversationSelection,
     EmbeddingObservation, EmbeddingProviderAdapter, EmbeddingRoute, NoContractFaults,
-    NoEmbeddingDestination, NoToolDestination, PassageVectorStore, PauseAgentRunInput,
-    PreDispatchRefusal, PreparedEmbeddingRequest, ProjectScope, QuestionVector, SteerAgentRunInput,
-    complete_agent_run, complete_agent_run_with_destinations, rank_manuscript_passages,
+    NoToolDestination, PauseAgentRunInput, PreDispatchRefusal, PreparedEmbeddingRequest,
+    ProjectScope, QuestionVector, SteerAgentRunInput, complete_agent_run,
+    complete_agent_run_with_destinations,
 };
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CallValidationRefusal,
@@ -28,6 +28,7 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
+use crate::agent_run_dispatch::tests::NoEmbeddings;
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
 use crate::agent_run_finish_rule::tests::complete;
 use crate::agent_run_load_skill::tests::calls;
@@ -38,7 +39,10 @@ use crate::agent_run_steering::tests::{cancellation, queued, step_requests};
 use crate::agent_run_tool_recovery::tests::{Fault, FaultAt};
 use crate::command_sequence::tests::{PAUSE_AGENT_RUN, STEER_AGENT_RUN, issued};
 use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::passage_vectors::tests::{Chapter, SHORE, chapter, index, prepend, texts};
+use crate::passage_ranking::tests::rank_passages;
+use crate::passage_vectors::tests::{
+    Chapter, SHORE, chapter, index, prepend, texts, vector_table_visible,
+};
 use crate::project_embedding_binding::tests::{FAKE, embedding_project};
 
 const QUESTION: &str = "谁在早上回到了港口？";
@@ -71,9 +75,8 @@ async fn ranked(
         values: &values,
     });
     let call_id = "call_hybrid_search_manuscript_0";
-    let text = rank_manuscript_passages(store, scope, &terms, question, call_id)
+    let text = rank_passages(store, scope, &terms, question, call_id)
         .await
-        .unwrap()
         .unwrap()
         .text;
     match vector {
@@ -172,12 +175,12 @@ async fn a_call_before_a_keyword_search_settles_with_the_fused_result_of_its_pro
     let (store, admin) = stores().await;
     let store = configured(&store);
     let ours = chapter(&store, &admin, ["541", "542"], "543", &texts()).await;
-    index(&store, &FakeEmbeddings, &ours).await;
+    index(&store, &admin, &ours).await;
     // A second Project holds the same term and a passage that is the question.
     let mut nearer = texts();
     nearer[1] = QUESTION.repeat(/*n*/ 20);
     let other = chapter(&store, &admin, ["544", "545"], "546", &nearer).await;
-    index(&store, &FakeEmbeddings, &other).await;
+    index(&store, &admin, &other).await;
     let message = format!("{}\nSCRIPT:search_manuscript 渔船", script(&["渔船"]));
     let run_id = scripted(&store, &admin, &ours, "547", &message).await;
 
@@ -232,7 +235,7 @@ async fn a_settled_request_with_no_vector_gives_the_exact_term_list() {
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["bb1", "bb2"], "bb3", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let message: Vec<String> = [
         EMBEDDING_REJECTION_MARKER,
         EMBEDDING_NOT_SUBMITTED_MARKER,
@@ -308,7 +311,7 @@ async fn each_refused_call_has_its_label_and_the_run_continues() {
     let new = ConversationSelection::New;
     let no_credential = admitted(&store, scope, chapter_id, "bb5", &script(&[]), new).await;
     let claim = claim_run(&admin, scope.clone(), no_credential.clone()).await;
-    let no_embeddings = (&NoToolDestination, &NoEmbeddingDestination);
+    let no_embeddings = (&NoToolDestination, &NoEmbeddings);
     complete_agent_run_with_destinations(
         &store,
         fake.0,
@@ -474,7 +477,7 @@ async fn the_tool_follows_the_vector_store_of_the_database() {
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["b53", "b54"], "b55", &texts()).await;
     let run_id = scripted(&store, &admin, &chapter, "b56", &script(&["渔船"])).await;
-    let available = store.vector_store_available(&chapter.scope).await.unwrap();
+    let available = vector_table_visible(&store, &chapter.scope).await;
 
     let (state, refusal) = match available {
         true => ("settled", Value::Null),
@@ -639,7 +642,7 @@ async fn a_question_vector_that_is_not_finite_gives_the_exact_term_list() {
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["c7a", "c7b"], "c7c", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let (scope, chapter_id) = (&chapter.scope, &chapter.chapter_id);
     let new = ConversationSelection::New;
     let run_id = admitted(&store, scope, chapter_id, "c8b", &script(&["渔船"]), new).await;
@@ -690,7 +693,7 @@ async fn an_edit_or_a_steering_input_during_the_question_request_does_not_wait()
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["bb6", "bb7"], "bb8", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let (scope, chapter_id) = (&chapter.scope, &chapter.chapter_id);
     let message = script(&["渔船"]);
     let run = |prefix: &'static str| {
@@ -755,7 +758,7 @@ async fn a_cancellation_or_a_pause_during_the_question_request_keeps_the_result_
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["ba5", "ba6"], "ba7", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let (scope, chapter_id) = (&chapter.scope, &chapter.chapter_id);
     let message = script(&["渔船"]);
     let run = |prefix: &'static str| {
@@ -825,7 +828,7 @@ async fn the_next_claim_after_a_stopped_worker_sends_a_new_question_request() {
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["ba1", "ba2"], "ba3", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let (scope, chapter_id) = (&chapter.scope, &chapter.chapter_id);
     let new = ConversationSelection::New;
     let run_id = admitted(&store, scope, chapter_id, "ba4", &script(&["渔船"]), new).await;
