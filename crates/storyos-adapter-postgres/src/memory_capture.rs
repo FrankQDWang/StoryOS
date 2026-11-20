@@ -15,7 +15,7 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::damaged;
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 use crate::read_error;
 use crate::update_project_assistance::read_assistance_record;
 
@@ -305,7 +305,7 @@ pub(crate) async fn input_kind(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .map(|row| row.get(/*idx*/ 0));
     source_kind
         .as_deref()
@@ -339,7 +339,7 @@ pub(crate) async fn record_observations(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .ok_or_else(|| damaged("The running capture of the Run is missing"))?
         .get(/*idx*/ 0);
     crate::memory_work_schedule::mark_due_after_capture(client, claim, &capture_id, outcome)
@@ -376,7 +376,7 @@ pub(crate) async fn record_observations(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     if !observations.is_empty() {
         crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
     }
@@ -411,7 +411,7 @@ pub(crate) async fn settle_end(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     if let Some(settled) = settled {
         let capture_id: String = settled.get(/*idx*/ 0);
         crate::chapter_capture_schedule::mark_due_after_capture(client, claim, &capture_id).await?;

@@ -6,7 +6,7 @@ use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{PriorStepCall, ToolCallState, ToolChoice};
 
 use crate::agent_run_tool_authority::damaged;
-use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_database_error};
+use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_unavailable};
 
 /// The `tool_choice` of the request of the active RunStep of `run`. A capture has no `finish`
 /// call, so its kind decides: each of its requests requires a call (ADR 0094 section 5).
@@ -37,7 +37,7 @@ pub(crate) async fn tool_choice(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .iter()
         .map(|row| {
             // A refused call with a name that the Run does not expose pins no ToolSpec.

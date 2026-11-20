@@ -256,7 +256,7 @@ pub(crate) async fn load_run_phase(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
     else {
         return Err(CompleteAgentRunError::StaleFence);
     };
@@ -639,7 +639,7 @@ pub(crate) async fn update_run(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     // A capture or a pass that the Run ends before an output call settled gets its outcome in the
     // same transaction (ADR 0094 sections 5 and 6). A stale fence changes nothing.
     if updated == 1 {
@@ -673,12 +673,6 @@ pub(crate) async fn hold_if_requested(kind: &str) {
     }
 }
 
-pub(crate) fn complete_challenge_error(
-    error: storyos_application::ProjectCommandChallengeError,
-) -> CompleteAgentRunError {
-    CompleteAgentRunError::Unavailable(Box::new(error))
-}
-
 /// The error of a read that only a Run of the author has.
 fn author_only(fact: &str) -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(format!(
@@ -686,6 +680,9 @@ fn author_only(fact: &str) -> CompleteAgentRunError {
     ))))
 }
 
-pub(crate) fn complete_database_error(error: tokio_postgres::Error) -> CompleteAgentRunError {
+/// The error of a step of the work of a Run that the store cannot do.
+pub(crate) fn complete_unavailable(
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(error))
 }

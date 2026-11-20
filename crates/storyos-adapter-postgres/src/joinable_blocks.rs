@@ -64,7 +64,7 @@ pub(crate) async fn mark(
             ],
         )
         .await
-        .map_err(crate::agent_run_work::complete_database_error)?;
+        .map_err(crate::agent_run_work::complete_unavailable)?;
     let blocks: Vec<(String, Option<String>, Option<String>)> = rows
         .iter()
         .map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1), row.get(/*idx*/ 2)))

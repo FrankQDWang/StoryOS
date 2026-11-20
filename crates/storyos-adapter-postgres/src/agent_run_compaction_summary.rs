@@ -11,7 +11,7 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
-use super::{load_chain_source, unavailable, work_error, write};
+use super::{complete_unavailable, load_chain_source, unavailable, write};
 use crate::agent_run_attempt::{AttemptRole, NewModelAttempt, insert_model_attempt};
 use crate::agent_run_work::{RunPhaseRow, WorkPhase, route_facts};
 use crate::update_project_assistance::read_assistance_record;
@@ -46,7 +46,7 @@ pub(crate) async fn load_summary_attempt(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     Ok(row.map(|row| SummaryAttempt {
         model_attempt_id: row.get(/*idx*/ 0),
         prior_reference: row.get(/*idx*/ 1),
@@ -110,7 +110,7 @@ pub(crate) async fn prior_chain(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     Ok(row.map(|row| PriorChain {
         model_attempt_id: row.get(/*idx*/ 0),
         reference: row.get(/*idx*/ 1),
@@ -279,7 +279,7 @@ pub(crate) async fn commit_claim(
             ],
         )
         .await
-        .map_err(work_error)?
+        .map_err(complete_unavailable)?
     else {
         return Ok(None);
     };
@@ -332,7 +332,7 @@ pub(crate) async fn commit_claim(
         },
     )
     .await
-    .map_err(work_error)?;
+    .map_err(complete_unavailable)?;
     Ok(Some(DispatchClaim { model_attempt_id }))
 }
 
@@ -361,7 +361,7 @@ pub(crate) async fn commit_assembly(
             &[scope[0], scope[1], &claim.run_id, &run.decision_position],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     if committed.is_some() {
         return Ok(());
     }
@@ -471,7 +471,7 @@ pub(crate) async fn record(
             ],
         )
         .await
-        .map_err(work_error)?
+        .map_err(complete_unavailable)?
         .get::<_, Option<String>>(/*idx*/ 0)
         .unwrap_or_else(|| "[]".to_owned());
     let stored: serde_json::Value = serde_json::from_str(&stored)
@@ -499,7 +499,7 @@ pub(crate) async fn record(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     let mut payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(/*idx*/ 0))
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     if let (Some(cache), Some(cache_use)) = (payload.get_mut("cache"), cache_use) {
@@ -517,7 +517,7 @@ pub(crate) async fn record(
                 ],
             )
             .await
-            .map_err(work_error)?;
+            .map_err(complete_unavailable)?;
     }
     let registration = model_registration(&run.model_registration_revision)
         .ok_or_else(|| unavailable("The Model Registration revision is unknown"))?;

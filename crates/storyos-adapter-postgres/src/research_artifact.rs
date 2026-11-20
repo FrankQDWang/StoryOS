@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_tool_authority::damaged;
-use crate::agent_run_work::{RunPhaseRow, complete_database_error};
+use crate::agent_run_work::{RunPhaseRow, complete_unavailable};
 use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
 use crate::research_source::{GAP_COLUMNS, SNAPSHOT_COLUMNS, gap, snapshot};
 
@@ -51,7 +51,7 @@ pub(crate) async fn run_sources(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     rows.iter()
         .map(|row| {
             let cited = match row.get::<_, Option<&str>>(/*idx*/ 2) {
@@ -122,7 +122,7 @@ pub(crate) async fn record(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(research_artifact_id)
 }
 

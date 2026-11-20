@@ -9,18 +9,18 @@ use storyos_application::{
     StartedMemoryConsolidation,
 };
 use storyos_core::{
-    AgentRunKind, CaptureRefusal, CaptureRunEnd,
-    MemoryConsolidationAssembly, MemoryOperationCandidate, PassConflict, PassMemoryEntry,
+    AgentRunKind, CaptureRefusal, CaptureRunEnd, MemoryConsolidationAssembly,
+    MemoryOperationCandidate, PassConflict, PassMemoryEntry,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
+use crate::memory_capture::{admitted_assistance, insert_background_run};
 use crate::memory_consolidation_versions::{
     PassItem, pass_entries, pass_item, split_items, unused_entries, write_admitted,
 };
-use crate::memory_capture::{admitted_assistance, insert_background_run};
 use crate::memory_entries::lock_memory_head;
 use crate::memory_observation_return::{add_return_refusals, returned_observations};
 use crate::read_error;
@@ -303,15 +303,9 @@ pub(crate) async fn execute(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
-    resolve(
-        client,
-        claim,
-        row,
-        Resolution::settled(&settlement.result),
-    )
-    .await?;
+    resolve(client, claim, row, Resolution::settled(&settlement.result)).await?;
     crate::agent_run_work::complete(client, claim).await?;
     Ok(())
 }
@@ -341,7 +335,7 @@ pub(crate) async fn settle_end(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     if failed > 0 {
         crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
     }

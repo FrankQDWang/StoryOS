@@ -420,7 +420,7 @@ pub(crate) async fn binding_reference(
             ],
         )
         .await
-        .map_err(crate::agent_run_work::complete_database_error)?
+        .map_err(crate::agent_run_work::complete_unavailable)?
         .and_then(|row| row.get(0)))
 }
 
@@ -474,7 +474,7 @@ async fn record_continuation_rejection(
             ],
         )
         .await
-        .map_err(crate::agent_run_work::complete_database_error)?;
+        .map_err(crate::agent_run_work::complete_unavailable)?;
     Ok(WorkPhase::Hold("rejection"))
 }
 

@@ -1,3 +1,4 @@
+use crate::agent_run_work::complete_unavailable;
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{ContextSourceClass, ContextSufficiency, decode_assembly_record};
 
@@ -41,7 +42,7 @@ pub(crate) async fn load_admitted_targets(
             ],
         )
         .await
-        .map_err(database_error)?;
+        .map_err(complete_unavailable)?;
     let Some(row) = row else {
         return Ok(Vec::new());
     };
@@ -138,7 +139,7 @@ async fn load_record_targets(
             ],
         )
         .await
-        .map_err(database_error)?;
+        .map_err(complete_unavailable)?;
     let Some(row) = row else {
         return Ok(Vec::new());
     };
@@ -213,7 +214,7 @@ pub(crate) async fn load_current_target(
             ],
         )
         .await
-        .map_err(database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(match row {
         Some(row) => CurrentTarget {
             revision_id: Some(row.get(0)),
@@ -224,8 +225,4 @@ pub(crate) async fn load_current_target(
             reserved: false,
         },
     })
-}
-
-fn database_error(error: tokio_postgres::Error) -> CompleteAgentRunError {
-    CompleteAgentRunError::Unavailable(Box::new(error))
 }

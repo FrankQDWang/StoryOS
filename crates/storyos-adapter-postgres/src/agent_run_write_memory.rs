@@ -41,7 +41,7 @@ pub(crate) async fn execute(
                     ],
                 )
                 .await
-                .map_err(crate::agent_run_work::complete_database_error)?
+                .map_err(crate::agent_run_work::complete_unavailable)?
                 .get::<_, Option<String>>(0)
                 .ok_or_else(|| damaged("A Memory write needs the Conversation of its Run"))?;
             let source = VersionSource {

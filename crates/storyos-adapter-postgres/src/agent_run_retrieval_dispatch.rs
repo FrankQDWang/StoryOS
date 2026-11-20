@@ -16,9 +16,8 @@ use crate::agent_run_observation::{
 };
 use crate::agent_run_retrieval::{
     RecordedRetrieval, RetrievalAdvance, RetrievalRunWrite, SettledRetrieval, decide, settle,
-    unavailable,
 };
-use crate::agent_run_work::{RunPhaseRow, WorkPhase};
+use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_unavailable};
 
 /// Commits the Destination Attempt and Outbound Disclosure Event of one Retrieve request.
 pub(crate) async fn commit(
@@ -43,7 +42,7 @@ pub(crate) async fn commit(
     };
     let payload: serde_json::Value =
         serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
-            .map_err(unavailable)?;
+            .map_err(complete_unavailable)?;
     let bounds = payload
         .pointer("/original_result_retrieval/bounds")
         .and_then(serde_json::Value::as_str)
@@ -117,7 +116,7 @@ pub(crate) async fn commit(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     Ok(DispatchClaim {
         model_attempt_id: attempt_id,
     })
@@ -133,10 +132,10 @@ pub(crate) async fn record_original_result(
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let payload: serde_json::Value =
         serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
-            .map_err(unavailable)?;
-    let subject = payload
-        .get("original_result_retrieval")
-        .ok_or_else(|| unavailable(std::io::Error::other("The retrieval subject is missing")))?;
+            .map_err(complete_unavailable)?;
+    let subject = payload.get("original_result_retrieval").ok_or_else(|| {
+        complete_unavailable(std::io::Error::other("The retrieval subject is missing"))
+    })?;
     let advance = RetrievalAdvance::of(run);
     let fenced = run.status == "cancelled";
     let declared: Vec<_> =
@@ -194,7 +193,7 @@ pub(crate) async fn record_original_result(
             ],
         )
         .await
-        .map_err(unavailable)?
+        .map_err(complete_unavailable)?
         .get(0);
     let sealed = settle(
         client,
@@ -261,7 +260,7 @@ pub(crate) async fn record_original_result(
         }
         (AgentDecisionOutcome::Decision { .. }, true, _)
         | (AgentDecisionOutcome::NoDecision, false, None) => {
-            return Err(unavailable(std::io::Error::other(
+            return Err(complete_unavailable(std::io::Error::other(
                 "A selected original result has no Agent Decision",
             )));
         }
@@ -300,7 +299,9 @@ pub(crate) async fn record_late_result(
         .payload
         .get("unknown_create_successor")
         .cloned()
-        .ok_or_else(|| unavailable(std::io::Error::other("The successor marker is missing")))?;
+        .ok_or_else(|| {
+            complete_unavailable(std::io::Error::other("The successor marker is missing"))
+        })?;
     let declared: Vec<_> =
         crate::agent_run_create_dispatch::run_declared_targets(client, claim, run)
             .await?
@@ -339,7 +340,7 @@ pub(crate) async fn record_late_result(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     if retrieved.kind == RetrievedOriginalResult::CompleteSelected {
         let adapter = storyos_core::model_registration(&run.model_registration_revision)
             .map_or("unknown", |registration| registration.adapter.kind());
@@ -565,7 +566,7 @@ pub(crate) async fn copy_active_context(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     let manifested = client
         .execute(
             "INSERT INTO storyos.context_assembly_manifests
@@ -604,9 +605,9 @@ pub(crate) async fn copy_active_context(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     if inserted != 1 || manifested != 1 {
-        return Err(unavailable(std::io::Error::other(
+        return Err(complete_unavailable(std::io::Error::other(
             "The decision Context Assembly is missing",
         )));
     }
@@ -636,7 +637,7 @@ async fn retrieval_manifests(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     Ok(RetrievalManifests {
         assembly: None,
         destination: row.get(0),

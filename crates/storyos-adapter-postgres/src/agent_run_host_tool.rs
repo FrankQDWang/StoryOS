@@ -93,17 +93,11 @@ pub(crate) async fn execute(
             ],
         )
         .await
-        .map_err(crate::agent_run_work::complete_database_error)?
+        .map_err(crate::agent_run_work::complete_unavailable)?
         .get(0);
     let result = storyos_core::execute_host_tool(&intake, refused_beside)
         .ok_or_else(|| damaged("The Host ToolCall is damaged"))?;
-    resolve(
-        client,
-        claim,
-        row,
-        Resolution::settled(&result),
-    )
-    .await
+    resolve(client, claim, row, Resolution::settled(&result)).await
 }
 
 #[cfg(test)]

@@ -6,7 +6,7 @@ use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{ReadTarget, StoredCall, ToolCallState};
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 
 /// Reads the ToolCall `call_id` for the pending call `row`, and settles or refuses `row`.
 pub(crate) async fn execute(
@@ -34,7 +34,7 @@ pub(crate) async fn execute(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let sources = match &found {
         Some(found) if found.get::<_, bool>(/*idx*/ 1) => {
             let tool_call_id: String = found.get(/*idx*/ 0);

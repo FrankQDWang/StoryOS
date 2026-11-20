@@ -11,7 +11,7 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 use crate::tool_registration::quarantine_revision;
 
 /// One ToolCall row that the transaction locked.
@@ -86,7 +86,7 @@ pub(crate) async fn next_unresolved(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     row.as_ref().map(ToolCallRow::decode).transpose()
 }
 
@@ -114,7 +114,7 @@ pub(crate) async fn locked(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     row.as_ref().map(ToolCallRow::decode).transpose()
 }
 
@@ -221,7 +221,7 @@ pub(crate) async fn read_authority(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let lifecycle = match row.get::<_, Option<&str>>(/*idx*/ 7) {
         None => ToolRegistrationLifecycle::Active,
         Some(lifecycle) => ToolRegistrationLifecycle::parse(lifecycle)
@@ -311,7 +311,7 @@ pub(crate) async fn resolve(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     append_event(
         client,
         claim,
@@ -363,7 +363,7 @@ pub(crate) async fn quarantine(
     );
     let changed = quarantine_revision(client, &row.registration_revision, &differences)
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     if changed == 0 {
         return Ok(());
     }
@@ -424,7 +424,7 @@ pub(crate) async fn append_event(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(())
 }
 

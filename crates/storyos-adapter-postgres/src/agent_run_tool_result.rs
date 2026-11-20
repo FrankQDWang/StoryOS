@@ -12,7 +12,7 @@ use storyos_core::{
 };
 
 use crate::agent_run_tool_authority::damaged;
-use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_database_error};
+use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_unavailable};
 use crate::create_agent_run::context::{PassageContextInput, persist_current_passage_assembly};
 
 /// One stored ToolCall of the Run.
@@ -115,7 +115,7 @@ pub(crate) async fn open_next_step(
                 ],
             )
             .await
-            .map_err(complete_database_error)?
+            .map_err(complete_unavailable)?
             .get(/*idx*/ 0),
     };
     let results = RunToolResults::load(client, claim).await?;
@@ -179,7 +179,7 @@ async fn activate_step(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(WorkPhase::Hold("tool_result_continuation"))
 }
 
@@ -280,7 +280,7 @@ async fn stored_tool_calls(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let sources = crate::research_artifact::run_sources(client, claim).await?;
     rows.into_iter()
         .map(|row| {
@@ -354,7 +354,7 @@ pub(crate) async fn tool_outputs(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .into_iter()
         .map(|row| (row.get(/*idx*/ 0), row))
         .collect();
@@ -428,7 +428,7 @@ pub(crate) async fn continuation_input_changed(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
     else {
         return Ok(false);
     };

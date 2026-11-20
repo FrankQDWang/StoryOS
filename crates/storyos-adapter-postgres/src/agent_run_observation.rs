@@ -7,7 +7,7 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_database_error, update_run};
+use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_unavailable, update_run};
 use crate::open_block_proposal::ProseOpening;
 
 /// The validated result of one Create exchange for the active decision Model Attempt.
@@ -141,7 +141,7 @@ pub(crate) async fn persist_create_result(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     // The ToolCalls of a durable function request Decision, in the same transaction.
     if let (
         Some(decision_id),

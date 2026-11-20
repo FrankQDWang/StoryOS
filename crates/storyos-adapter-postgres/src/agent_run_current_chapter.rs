@@ -4,7 +4,7 @@
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{ChapterHeadPlace, CurrentPassageAssemblyRecord, SelectionReference};
 
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 
 /// Moves each Chapter text reference of the requirement of `retained` to the head of its
 /// Chapter, and drops a reference with no covered text in the head. A reference of a removed
@@ -96,7 +96,7 @@ async fn place(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .map(|row| row.get::<_, String>(/*idx*/ 0))
     else {
         return Ok(None);
@@ -144,7 +144,7 @@ async fn revision_blocks(
             .map(|block| (block.manuscript_block_id, block.text))
             .collect()
     })
-    .map_err(complete_database_error)
+    .map_err(complete_unavailable)
 }
 
 #[cfg(test)]

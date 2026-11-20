@@ -3,7 +3,7 @@
 //! retained it, or after the input before it. That RunStep reads the retained records of the
 //! active RunStep, also its Tool results.
 
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 use crate::create_agent_run::context::{PassageContextInput, persist_current_passage_assembly};
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{CurrentPassageAssemblyRecord, SelectionReference};
@@ -46,7 +46,7 @@ pub(crate) async fn read_next(
             &[&claim.project_scope.owner_user_id.as_ref(), &claim.project_scope.project_id.as_ref(), &claim.run_id, &active_position],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
     else {
         return Ok(None);
     };
@@ -58,7 +58,7 @@ pub(crate) async fn read_next(
             AND payload->>'run_id'=$3 AND (payload->>'input_position')::numeric <= $4::text::numeric
           ORDER BY (payload->>'input_position')::numeric",
         &[&claim.project_scope.owner_user_id.as_ref(), &claim.project_scope.project_id.as_ref(), &claim.run_id, &position],
-    ).await.map_err(complete_database_error)?;
+    ).await.map_err(complete_unavailable)?;
     let mut author_message: String = row.get(/*idx*/ 3);
     for message in messages {
         author_message.push('\n');
@@ -117,7 +117,7 @@ pub(crate) async fn last_read_position(
         )
         .await
         .map(|row| row.get(/*idx*/ 0))
-        .map_err(complete_database_error)
+        .map_err(complete_unavailable)
 }
 
 /// Moves the candidate target and the references of the requirement of `retained` to each
@@ -142,7 +142,7 @@ async fn move_revised_candidates(
             &[&claim.project_scope.owner_user_id.as_ref(), &claim.project_scope.project_id.as_ref(), &claim.run_id, &position],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let locations = records
         .iter()
         .map(|row| serde_json::from_str(row.get(/*idx*/ 0)))
@@ -209,7 +209,7 @@ pub(crate) async fn reads_input(
         )
         .await
         .map(|row| row.get(/*idx*/ 0))
-        .map_err(complete_database_error)
+        .map_err(complete_unavailable)
 }
 
 /// Opens the RunStep that reads the next steering input before the active RunStep sends its
@@ -245,7 +245,7 @@ pub(crate) async fn advance(
           WHERE run.owner_user_id=$1::text::uuid AND run.project_id=$2::text::uuid AND run.run_id=$3::text::uuid
             AND run.status IN ('claimed','completed') AND run.fence_token=$4",
         &[&claim.project_scope.owner_user_id.as_ref(), &claim.project_scope.project_id.as_ref(), &claim.run_id, &claim.fence_token],
-    ).await.map_err(complete_database_error)? else { return Ok(false); };
+    ).await.map_err(complete_unavailable)? else { return Ok(false); };
     let active: String = row.get(/*idx*/ 1);
     let limit = active
         .parse::<u64>()
@@ -303,7 +303,7 @@ pub(crate) async fn advance(
     client.execute(
         "UPDATE storyos.agent_runs SET active_decision_position=$4::text::numeric, status='claimed', lease_expires_at=COALESCE(lease_expires_at, clock_timestamp()+($5::bigint * interval '1 second')) WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND run_id=$3::text::uuid",
         &[&claim.project_scope.owner_user_id.as_ref(), &claim.project_scope.project_id.as_ref(), &claim.run_id, &position, &lease_seconds],
-    ).await.map_err(complete_database_error)?;
+    ).await.map_err(complete_unavailable)?;
     Ok(true)
 }
 

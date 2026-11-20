@@ -91,7 +91,10 @@ pub(crate) async fn insert_binding(
         BoundRegistration::Embedding(revision) => (None, None, Some(revision)),
     };
     let kind = record.decision.as_ref().map(|made| made.decision_kind);
-    let qualification = record.decision.as_ref().and_then(|made| made.runtime_qualification);
+    let qualification = record
+        .decision
+        .as_ref()
+        .and_then(|made| made.runtime_qualification);
     let authorization = record
         .decision
         .as_ref()

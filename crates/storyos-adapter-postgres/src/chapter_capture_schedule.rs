@@ -13,7 +13,7 @@ use storyos_application::{
 use storyos_core::{ChapterCaptureFacts, ChapterCaptureSkip, ChapterRowChange};
 use tokio_postgres::Client;
 
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 use crate::manuscript_search::{LiveChapterReadExtent, read_live_chapter_blocks};
 use crate::read_error;
 
@@ -74,7 +74,7 @@ pub(crate) async fn mark_due_after_capture(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
     else {
         return Ok(());
     };
@@ -85,7 +85,7 @@ pub(crate) async fn mark_due_after_capture(
     let due_at = storyos_core::chapter_capture_due(committed_at, row.get(/*idx*/ 2));
     write_due(client, scope, &chapter_id, due_at)
         .await
-        .map_err(complete_database_error)
+        .map_err(complete_unavailable)
 }
 
 /// Makes each `held` row of a Chapter of the Project due by the rule of Core, in the transaction of
@@ -121,7 +121,7 @@ pub(crate) async fn release_held(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     for row in held {
         let chapter_id: String = row.get(/*idx*/ 0);
         // A row has a commit of its Chapter, because a commit writes the row.
@@ -131,7 +131,7 @@ pub(crate) async fn release_held(
         let due_at = storyos_core::chapter_capture_due(committed_at, row.get(/*idx*/ 2));
         set_row(client, scope, &chapter_id, (false, Some(due_at)))
             .await
-            .map_err(complete_database_error)?;
+            .map_err(complete_unavailable)?;
     }
     Ok(())
 }

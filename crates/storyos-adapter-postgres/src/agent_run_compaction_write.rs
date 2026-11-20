@@ -11,8 +11,8 @@ use crate::agent_run_work::RunPhaseRow;
 use crate::create_agent_run::context::load_working_target;
 
 use super::{
-    ChainSource, CompactionState, json_string, load_chain_source, parse_json, unavailable,
-    work_error,
+    ChainSource, CompactionState, complete_unavailable, json_string, load_chain_source, parse_json,
+    unavailable,
 };
 
 /// The summary Attempt that produced one compaction result.
@@ -92,7 +92,7 @@ pub(super) async fn insert_staged(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     Ok(())
 }
 
@@ -226,7 +226,7 @@ async fn refuse(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     if updated != 1 {
         return Err(unavailable("The staged compaction did not refuse"));
     }
@@ -344,7 +344,7 @@ pub(super) async fn insert_derived_assembly(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     let manifest = client
         .execute(
             "INSERT INTO storyos.context_assembly_manifests
@@ -367,7 +367,7 @@ pub(super) async fn insert_derived_assembly(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     if requirement != 1 || manifest != 1 {
         return Err(unavailable("The decision Context Assembly is missing"));
     }
@@ -407,7 +407,7 @@ pub(crate) async fn mark_installed(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     if updated != 1 {
         return Err(unavailable("The staged compaction did not install"));
     }

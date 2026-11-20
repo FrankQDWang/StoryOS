@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::agent_run_continuation::clear_prior;
 use crate::agent_run_expiry::RebuildDispatch;
-use crate::agent_run_work::{RunPhaseRow, complete_database_error};
+use crate::agent_run_work::{RunPhaseRow, complete_unavailable};
 
 /// Commits the dispatch claim: the Model Attempt, its Wire Payload Projection, and its
 /// Outbound Disclosure Event, which starts as OutcomeUnknown. `None` means that the prior
@@ -172,7 +172,7 @@ pub(crate) async fn persist_uncertain_attempt(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     insert_model_attempt(
         client,
         &NewModelAttempt {
@@ -191,7 +191,7 @@ pub(crate) async fn persist_uncertain_attempt(
         },
     )
     .await
-    .map_err(complete_database_error)?;
+    .map_err(complete_unavailable)?;
     Ok(Some(model_attempt_id))
 }
 

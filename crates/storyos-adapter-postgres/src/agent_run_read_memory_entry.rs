@@ -39,7 +39,7 @@ pub(crate) async fn execute(
                     ],
                 )
                 .await
-                .map_err(crate::agent_run_work::complete_database_error)?;
+                .map_err(crate::agent_run_work::complete_unavailable)?;
             (ToolCallState::Settled, None, read.result())
         }
         None => (

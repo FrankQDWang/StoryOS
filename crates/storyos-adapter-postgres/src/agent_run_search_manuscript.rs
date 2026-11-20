@@ -18,13 +18,7 @@ pub(crate) async fn execute(
 ) -> Result<(), CompleteAgentRunError> {
     let chapters = crate::agent_run_read_chapter::readable_chapters(client, claim).await?;
     let result = storyos_core::admit_manuscript_search(&chapters, query, &row.call_id);
-    resolve(
-        client,
-        claim,
-        row,
-        Resolution::settled(&result),
-    )
-    .await
+    resolve(client, claim, row, Resolution::settled(&result)).await
 }
 
 #[cfg(test)]

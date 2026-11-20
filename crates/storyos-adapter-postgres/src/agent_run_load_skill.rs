@@ -7,7 +7,7 @@ use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{LOAD_SKILL_TOOL_SPEC, SkillLoadFacts, SkillPackageReference, ToolCallState};
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 
 /// Loads the Skill `skill` for the pending call `row`, and settles or refuses `row`.
 pub(crate) async fn execute(
@@ -20,7 +20,7 @@ pub(crate) async fn execute(
     let catalog: Vec<SkillPackageReference> =
         crate::skill_package_snapshot::run_skill_catalog(client, scope, &claim.run_id)
             .await
-            .map_err(complete_database_error)?
+            .map_err(complete_unavailable)?
             .into_iter()
             .map(|entry| entry.reference)
             .collect();
@@ -34,7 +34,7 @@ pub(crate) async fn execute(
         Ok(reference) => {
             let skill_md = crate::skill_package_snapshot::skill_md(client, scope, reference)
                 .await
-                .map_err(complete_database_error)?;
+                .map_err(complete_unavailable)?;
             let result = storyos_core::skill_load_result(skill_md)
                 .ok_or_else(|| damaged("The SkillPackage Snapshot has no SKILL.md text"))?;
             (ToolCallState::Settled, None, result)
@@ -108,7 +108,7 @@ pub(crate) async fn held_skills(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok((row.get(/*idx*/ 0), row.get(/*idx*/ 1)))
 }
 

@@ -19,13 +19,7 @@ pub(crate) async fn execute(
         .await
         .map_err(CompleteAgentRunError::Unavailable)?;
     let result = storyos_core::search_memory(&entries, query, &row.call_id);
-    resolve(
-        client,
-        claim,
-        row,
-        Resolution::settled(&result),
-    )
-    .await
+    resolve(client, claim, row, Resolution::settled(&result)).await
 }
 
 #[cfg(test)]

@@ -144,7 +144,7 @@ pub(crate) async fn declared(
                 ],
             )
             .await
-            .map_err(super::agent_run_work::complete_database_error)?
+            .map_err(super::agent_run_work::complete_unavailable)?
         else {
             continue;
         };
@@ -182,7 +182,7 @@ pub(crate) async fn active_record(
             ],
         )
         .await
-        .map_err(super::agent_run_work::complete_database_error)?;
+        .map_err(super::agent_run_work::complete_unavailable)?;
     let payload: serde_json::Value =
         serde_json::from_str(&row.get::<_, String>(0)).map_err(|error| {
             storyos_application::CompleteAgentRunError::Unavailable(Box::new(error))

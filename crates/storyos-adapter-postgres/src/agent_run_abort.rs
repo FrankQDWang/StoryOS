@@ -6,7 +6,7 @@ use storyos_application::{
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_database_error};
+use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_unavailable};
 
 /// The next committed cancellation of a cancelled Run: a decision or successor Attempt that was
 /// dispatched, has an unknown outcome, and has no recorded Abort yet. Decision Attempts come first.
@@ -46,7 +46,7 @@ pub(crate) async fn pending(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let Some(row) = row else {
         return Ok(None);
     };
@@ -129,7 +129,7 @@ pub(crate) async fn commit(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok((inserted == 1).then_some(DispatchClaim {
         model_attempt_id: attempt_id,
     }))
@@ -173,7 +173,7 @@ pub(crate) async fn record(
             &parameters,
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(WorkPhase::Hold("recovery"))
 }
 
@@ -206,7 +206,7 @@ pub(crate) async fn record_unsupported(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(())
 }
 

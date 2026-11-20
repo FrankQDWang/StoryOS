@@ -13,7 +13,7 @@ use storyos_core::{
 };
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, locked, resolve};
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 
 /// The revision of the deployment Embedding Registration in the transaction setting, or `NULL`.
 pub(crate) const DEPLOYMENT_REGISTRATION: &str =
@@ -47,7 +47,7 @@ pub(crate) async fn possible(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .get(/*idx*/ 0))
 }
 
@@ -94,7 +94,7 @@ pub(crate) async fn execute(
             &[],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .get(/*idx*/ 0);
     let Err(refusal) = storyos_core::admit_hybrid_search(configured, vector_store(client).await?)
     else {
@@ -144,13 +144,7 @@ pub(crate) async fn record(
     let nearest = values.map(|_| passages.nearest.as_slice());
     let result =
         storyos_core::hybrid_search_result(&passages.chapters, nearest, &terms, &row.call_id);
-    resolve(
-        client,
-        claim,
-        &row,
-        Resolution::settled(&result),
-    )
-    .await
+    resolve(client, claim, &row, Resolution::settled(&result)).await
 }
 
 async fn vector_store(client: &tokio_postgres::Client) -> Result<bool, CompleteAgentRunError> {
@@ -160,7 +154,7 @@ async fn vector_store(client: &tokio_postgres::Client) -> Result<bool, CompleteA
             &[],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .get(/*idx*/ 0))
 }
 

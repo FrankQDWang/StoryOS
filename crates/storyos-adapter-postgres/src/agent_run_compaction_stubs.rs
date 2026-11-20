@@ -7,7 +7,7 @@ use storyos_core::{
     stub_tool_call_ids,
 };
 
-use super::{CompactionState, unavailable, work_error};
+use super::{CompactionState, complete_unavailable, unavailable};
 
 /// The Context Assembly of the later request of `staged`. The summary request continued its
 /// prior response and sent the outputs of the calls of that response, so they keep their exact
@@ -58,7 +58,7 @@ pub(super) async fn record(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     if updated != 1 {
         return Err(unavailable("The staged compaction is missing"));
     }
