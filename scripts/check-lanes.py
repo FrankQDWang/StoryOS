@@ -27,7 +27,7 @@ import uuid
 
 # Selected from measured runs of `make check` on an Apple M4 with 10 cores and 32 GB (issue 1711).
 LANE_LIMIT = 6
-# No run holds the heavy-run slot for an unlimited time; the longest measured lane took 419 s (issue 1728).
+# No run holds the heavy-run slot for an unlimited time; the longest measured lane took 532 s (issue 1728).
 LANE_TIME_LIMIT_SECONDS = 900
 # A command that the runner itself starts and waits for (ps, docker, the list of a test binary) fails after this
 # time, so that the examinations of the lanes and the stop cannot wait for an unlimited time.
