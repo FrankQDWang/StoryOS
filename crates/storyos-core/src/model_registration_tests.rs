@@ -1,4 +1,5 @@
 use super::*;
+use crate::shared_tests::UNQUALIFIED_PROFILE;
 use crate::{
     AGENT_PLAN_REGISTRATION, HOST_FAKE_TOOL_LOOP_REGISTRATION, PROBE_FIXTURE_REGISTRATION,
 };
@@ -27,14 +28,6 @@ fn qualified_entries(combinations: &'static [CapabilityCombination]) -> ModelCap
     }
 }
 
-/// A profile of the test with the current entries and no qualified combination, as of a later
-/// provider version before its qualification.
-const UNQUALIFIED_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
-    revision: "test.unqualified",
-    combinations: &[],
-    ..AGENT_PLAN_CAPABILITY_PROFILE
-};
-
 #[test]
 fn qualified_members_qualify_only_with_a_qualified_combination() {
     let documented = qualified_entries(&[CapabilityCombination {
@@ -50,6 +43,8 @@ fn qualified_members_qualify_only_with_a_qualified_combination() {
         [
             documented.qualifies(COMPACTION_REQUIREMENT),
             qualified.qualifies(COMPACTION_REQUIREMENT),
+            // The same profile refuses a larger requirement than its qualified combination.
+            qualified.qualifies(RECOVERY_REQUIREMENT),
             UNQUALIFIED_PROFILE.qualifies(AGENT_PLAN_REGISTRATION.requirement),
             UNQUALIFIED_PROFILE.qualifies(&[ModelCapability::Continuation]),
             AGENT_PLAN_REGISTRATION.qualified(),
@@ -58,7 +53,9 @@ fn qualified_members_qualify_only_with_a_qualified_combination() {
             HOST_FAKE_TOOL_LOOP_REGISTRATION.compacts(),
             PROBE_FIXTURE_REGISTRATION.qualified(),
         ],
-        [false, true, false, false, true, true, true, true, true]
+        [
+            false, true, false, false, false, true, true, true, true, true
+        ]
     );
 }
 
@@ -94,9 +91,17 @@ fn only_a_qualified_profile_or_an_authorized_qualification_of_its_requirement_re
             AGENT_PLAN_REGISTRATION.retrieves(Qualified),
             PROBE_FIXTURE_REGISTRATION.retrieves(QualificationAuthorized),
             // The rule for a profile that does not qualify retrieval.
-            super::retrieval_admitted(false, true, Qualified),
-            super::retrieval_admitted(false, true, QualificationAuthorized),
-            super::retrieval_admitted(false, false, QualificationAuthorized),
+            super::retrieval_admitted(&UNQUALIFIED_PROFILE, RECOVERY_REQUIREMENT, Qualified),
+            super::retrieval_admitted(
+                &UNQUALIFIED_PROFILE,
+                RECOVERY_REQUIREMENT,
+                QualificationAuthorized
+            ),
+            super::retrieval_admitted(
+                &UNQUALIFIED_PROFILE,
+                COMPACTION_REQUIREMENT,
+                QualificationAuthorized
+            ),
         ],
         [true, true, true, false, true, false]
     );
@@ -106,10 +111,14 @@ fn only_a_qualified_profile_or_an_authorized_qualification_of_its_requirement_re
 /// revision to its own Registration. Each revision of a removed Registration resolves to nothing.
 #[test]
 fn only_the_current_registrations_resolve_and_the_head_pins_a_dated_version() {
+    // Each input revision with the Registration that it resolves to.
     let resolved: Vec<_> = (1..=23)
         .map(|number| format!("018f0000-0000-7001-8000-00000000fa{number:02}"))
-        .filter_map(|revision| model_registration(&revision))
+        .filter_map(|revision| {
+            model_registration(&revision).map(|registration| (revision, registration))
+        })
         .collect();
+    let revision = |suffix: &str| format!("018f0000-0000-7001-8000-00000000{suffix}");
 
     assert_eq!(
         (
@@ -120,25 +129,13 @@ fn only_the_current_registrations_resolve_and_the_head_pins_a_dated_version() {
         ),
         (
             vec![
-                &PROBE_FIXTURE_REGISTRATION,
-                &HOST_FAKE_TOOL_LOOP_REGISTRATION,
-                &AGENT_PLAN_REGISTRATION,
+                (revision("fa16"), &PROBE_FIXTURE_REGISTRATION),
+                (revision("fa18"), &HOST_FAKE_TOOL_LOOP_REGISTRATION),
+                (revision("fa23"), &AGENT_PLAN_REGISTRATION),
             ],
             "doubao-seed-2-1-pro-260915",
             "storyos.volcengine-agent-plan.responses.create.v9",
             "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v4",
         )
-    );
-    assert_eq!(
-        [
-            PROBE_FIXTURE_REGISTRATION.revision,
-            HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
-            AGENT_PLAN_REGISTRATION.revision,
-        ],
-        [
-            "018f0000-0000-7001-8000-00000000fa16",
-            "018f0000-0000-7001-8000-00000000fa18",
-            "018f0000-0000-7001-8000-00000000fa23",
-        ]
     );
 }

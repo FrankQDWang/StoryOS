@@ -1,4 +1,5 @@
 use super::*;
+use crate::shared_tests::UNQUALIFIED_PROFILE;
 use crate::{
     AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_REGISTRATION, DeploymentDestination,
     HOST_FAKE_TOOL_LOOP_REGISTRATION, PROBE_FIXTURE_CAPABILITY_PROFILE, PROBE_FIXTURE_REGISTRATION,
@@ -54,11 +55,9 @@ fn the_link_authorizes_a_registration_only_while_it_awaits_qualification() {
 
     assert_eq!(
         (
-            // An unqualified Registration, as of a later provider version.
-            awaits(
-                false,
-                AGENT_PLAN_CAPABILITY_PROFILE.entries.function_calling
-            ),
+            // An unqualified profile with qualified function calling, as of a later provider
+            // version.
+            awaits(&UNQUALIFIED_PROFILE, AGENT_PLAN_REGISTRATION.requirement),
             PROBE_FIXTURE_REGISTRATION.awaits_qualification(),
             AGENT_PLAN_REGISTRATION.awaits_qualification(),
             authorized.registration().revision,

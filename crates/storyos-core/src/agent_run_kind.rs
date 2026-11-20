@@ -54,15 +54,16 @@ impl AgentRunKind {
     pub fn compacts_before_decision(self, model_registration_revision: &str) -> bool {
         self.compacts_on(
             crate::model_registration(model_registration_revision)
-                .map(crate::ModelRegistration::compacts),
+                .map(|registration| registration.requirement),
         )
     }
 
-    /// The gate of `compacts_before_decision` for the compaction rule of the Registration, or
-    /// `None` for an unknown revision. Each Registration of the one list compacts now, but a
-    /// later one can have a mapping that does not (ADR 0097).
-    fn compacts_on(self, registration_compacts: Option<bool>) -> bool {
-        self.has_conversation() && registration_compacts == Some(true)
+    /// The gate of `compacts_before_decision` for the requirement of the Registration, or `None`
+    /// for an unknown revision. Each Registration of the one list compacts now, but a later one
+    /// can have a mapping that does not (ADR 0097).
+    fn compacts_on(self, requirement: Option<&[crate::ModelCapability]>) -> bool {
+        self.has_conversation()
+            && requirement.is_some_and(crate::model_registration::requirement_compacts)
     }
 
     /// Whether the dispatch of the Run rebuilds an expired prior response. A background Run has

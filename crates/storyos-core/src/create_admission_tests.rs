@@ -1,5 +1,5 @@
 use super::{RouteFacts, admit_qualified, admit_route};
-use crate::shared_tests::targeted_passage_assembly;
+use crate::shared_tests::{UNQUALIFIED_PROFILE, targeted_passage_assembly};
 use crate::{
     AGENT_PLAN_REGISTRATION, BudgetBounds, GrantFacts, HOST_FAKE_TOOL_LOOP_REGISTRATION,
     RuntimeQualification, assemble_current_passage_context,
@@ -40,7 +40,8 @@ fn a_qualified_profile_or_an_authorized_qualification_with_known_bounds_admits_c
     // An unqualified profile, as of a later provider version before its qualification.
     let unqualified = |qualification, budget_bounds| {
         admit_qualified(
-            false,
+            &UNQUALIFIED_PROFILE,
+            AGENT_PLAN_REGISTRATION.requirement,
             &route(
                 AGENT_PLAN_REGISTRATION.revision,
                 qualification,

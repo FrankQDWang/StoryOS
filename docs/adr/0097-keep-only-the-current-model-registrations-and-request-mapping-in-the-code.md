@@ -41,4 +41,4 @@ A superseded Registration, and its mapping branch, stays in the code while a sto
 
 - [ADR 0053](0053-continue-the-agent-plan-conversation-with-the-prior-response.md), [ADR 0059](0059-pin-a-dated-provider-model-version-in-each-model-registration.md), and [ADR 0093](0093-compact-a-run-more-than-one-time-keep-tool-results-as-stubs-and-keep-the-recent-author-messages.md) name Registrations and mappings that the code no longer has. Their decisions stay, and each links to this ADR.
 - The research records under `docs/research/` keep the earlier revisions as evidence.
-- A digest compare of the request bytes of the mapping `v9`, at the base and at the head of #1722, shows that the current requests do not change.
+- The current requests do not change: the request bytes of the mapping `v9` for 912 request forms have the same digests at the base `c22b066c` and at the heads of [PR #1743](https://github.com/FrankQDWang/StoryOS/pull/1743).

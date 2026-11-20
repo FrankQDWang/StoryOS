@@ -55,30 +55,33 @@ impl ModelRegistration {
 
     /// Whether the mapping can replace the prior response with a Host-managed summary.
     pub fn compacts(&self) -> bool {
-        self.requirement.contains(&ModelCapability::HostCompaction)
+        requirement_compacts(self.requirement)
     }
 
     /// Whether the Host may read a stored response of an unknown create. Either the profile
     /// qualifies retrieval, or an authorized runtime qualification examines a route that needs it.
     pub fn retrieves(&self, qualification: crate::RuntimeQualification) -> bool {
-        retrieval_admitted(
-            self.capability_profile
-                .qualifies(&[ModelCapability::Retrieval]),
-            self.requirement.contains(&ModelCapability::Retrieval),
-            qualification,
-        )
+        retrieval_admitted(self.capability_profile, self.requirement, qualification)
     }
 }
 
-/// The retrieval rule of `ModelRegistration::retrieves`: the profile qualifies retrieval, or an
-/// authorized qualification examines a requirement that has retrieval. No Registration of the one
-/// list needs the second branch now, but a later provider version can (ADR 0097).
+/// The compaction rule of `ModelRegistration::compacts`: the mapping of `requirement` can replace
+/// the prior response with a Host-managed summary.
+pub(crate) fn requirement_compacts(requirement: &[ModelCapability]) -> bool {
+    requirement.contains(&ModelCapability::HostCompaction)
+}
+
+/// The retrieval rule of `ModelRegistration::retrieves`: `profile` qualifies retrieval, or an
+/// authorized qualification examines a `requirement` that has retrieval. No Registration of the
+/// one list needs the second branch now, but a later provider version can (ADR 0097).
 fn retrieval_admitted(
-    qualified: bool,
-    required: bool,
+    profile: &ModelCapabilityProfile,
+    requirement: &[ModelCapability],
     qualification: crate::RuntimeQualification,
 ) -> bool {
-    qualified || (qualification == crate::RuntimeQualification::QualificationAuthorized && required)
+    profile.qualifies(&[ModelCapability::Retrieval])
+        || (qualification == crate::RuntimeQualification::QualificationAuthorized
+            && requirement.contains(&ModelCapability::Retrieval))
 }
 
 /// One capability of a Model Capability Profile. Each capability has its own evidence.

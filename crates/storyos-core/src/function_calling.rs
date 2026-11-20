@@ -2,8 +2,8 @@
 //! qualification probe on the Agent Plan route (ADR 0049).
 
 use crate::{
-    CapabilityEvidence, ModelCapabilityProfile, ModelRegistration, RuntimeQualification,
-    model_registration,
+    CapabilityEvidence, ModelCapability, ModelCapabilityProfile, ModelRegistration,
+    RuntimeQualification, model_registration,
 };
 
 impl ModelRegistration {
@@ -11,17 +11,19 @@ impl ModelRegistration {
     /// function calling entry of this Registration to qualify. Documentation alone leaves the
     /// entry pending.
     pub fn awaits_qualification(&self) -> bool {
-        awaits(
-            self.qualified(),
-            self.capability_profile.entries.function_calling,
-        )
+        awaits(self.capability_profile, self.requirement)
     }
 }
 
-/// The rule of `ModelRegistration::awaits_qualification` for a Registration that is `qualified`
-/// and has the function calling entry `function_calling`.
-fn awaits(qualified: bool, function_calling: CapabilityEvidence) -> bool {
-    !qualified || matches!(function_calling, CapabilityEvidence::Documented { .. })
+/// The rule of `ModelRegistration::awaits_qualification` for a Registration with `profile` and
+/// `requirement`: the profile does not qualify the requirement, or its function calling entry is
+/// only documented.
+fn awaits(profile: &ModelCapabilityProfile, requirement: &[ModelCapability]) -> bool {
+    !profile.qualifies(requirement)
+        || matches!(
+            profile.entries.function_calling,
+            CapabilityEvidence::Documented { .. }
+        )
 }
 
 /// One request of the function calling probe. The author message is its constant probe input,
