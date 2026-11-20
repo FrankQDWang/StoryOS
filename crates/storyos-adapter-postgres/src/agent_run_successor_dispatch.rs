@@ -288,7 +288,6 @@ pub(crate) async fn record(
             match outcome {
                 AgentDecisionOutcome::Decision {
                     kind,
-                    selected: true,
                     advances_continuation,
                 } => {
                     let decision_id = Uuid::now_v7().to_string();
@@ -314,7 +313,6 @@ pub(crate) async fn record(
                     payload["decision"] = crate::agent_run_observation::encode_decision(
                         &kind,
                         &decision_id,
-                        /*selected*/ true,
                         advances_continuation,
                     );
                     if let (Some(binding_id), Some(wire)) = (
@@ -356,9 +354,7 @@ pub(crate) async fn record(
                 {
                     ("settled", None, None, true)
                 }
-                AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => {
-                    ("settled", None, None, false)
-                }
+                AgentDecisionOutcome::NoDecision => ("settled", None, None, false),
             }
         }
         Observation::OutcomeUnknown { response_reference } => {

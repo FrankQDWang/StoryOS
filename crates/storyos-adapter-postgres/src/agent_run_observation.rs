@@ -52,12 +52,11 @@ pub(crate) async fn persist_create_result(
     let (decision_id, hold) = match &result.outcome {
         AgentDecisionOutcome::NoDecision => (None, None),
         AgentDecisionOutcome::Decision {
-            selected,
             advances_continuation,
             ..
         } => (
-            (*selected).then(|| Uuid::now_v7().to_string()),
-            (*selected && *advances_continuation).then_some("decision"),
+            Some(Uuid::now_v7().to_string()),
+            advances_continuation.then_some("decision"),
         ),
     };
     let mut payload = retained_payload;
@@ -66,11 +65,10 @@ pub(crate) async fn persist_create_result(
         (
             AgentDecisionOutcome::Decision {
                 kind,
-                selected,
                 advances_continuation,
             },
             Some(decision_id),
-        ) => encode_decision(kind, decision_id, *selected, *advances_continuation),
+        ) => encode_decision(kind, decision_id, *advances_continuation),
         _ => serde_json::Value::Null,
     };
     payload["usage"] = encode_usage(result.usage);
@@ -342,14 +340,14 @@ fn storable_text(text: Option<&str>) -> Option<(String, bool)> {
 pub(crate) fn encode_decision(
     kind: &AgentDecisionKind,
     decision_id: &str,
-    selected: bool,
     advances_continuation: bool,
 ) -> serde_json::Value {
+    // The stored Decision keeps its `selected` member: each stored Decision is selected.
     match kind {
         AgentDecisionKind::Advisory { text } => serde_json::json!({
             "kind": "advisory",
             "decision_id": decision_id,
-            "selected": selected,
+            "selected": true,
             "text": text,
             "authoritative": false,
             "advances_continuation": advances_continuation
@@ -357,7 +355,7 @@ pub(crate) fn encode_decision(
         AgentDecisionKind::ToolRequest { calls } => serde_json::json!({
             "kind": "tool_request",
             "decision_id": decision_id,
-            "selected": selected,
+            "selected": true,
             "call_ids": calls
                 .iter()
                 .map(storyos_core::RequestedToolCall::call_id)

@@ -346,7 +346,6 @@ fn a_valid_batch_is_the_decision_and_an_invalid_batch_makes_none() {
                 kind: AgentDecisionKind::ToolRequest {
                     calls: vec![RequestedToolCall::Validated(search_call("call_01"))],
                 },
-                selected: true,
                 advances_continuation: false,
             },
             AgentDecisionOutcome::NoDecision,

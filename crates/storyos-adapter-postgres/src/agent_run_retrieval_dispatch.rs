@@ -453,7 +453,7 @@ impl RetrievedResult {
                 usage,
                 batch_evidence,
             },
-            outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {
+            outcome @ AgentDecisionOutcome::Decision { .. } if complete => Self {
                 kind: RetrievedOriginalResult::CompleteSelected,
                 items,
                 selected: Some(SelectedResult {
