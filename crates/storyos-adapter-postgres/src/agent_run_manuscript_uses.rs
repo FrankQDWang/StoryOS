@@ -47,7 +47,7 @@ pub(crate) struct StoredCall {
     pub(crate) result_text: Option<String>,
 }
 
-/// The stored ToolCalls of the Run `run_id` with a Tool Spec revision in `revisions`, in the
+/// The stored ToolCalls of the Run `run_id` with a ToolSpec revision in `revisions`, in the
 /// order of their RunSteps and calls.
 pub(crate) async fn stored_calls(
     client: &tokio_postgres::Client,

@@ -38,6 +38,8 @@ const { operations } = routeCatalog as { operations: {
 const PROJECT_COMMANDS = operations.filter(({ kind, path }) =>
   kind === "command" && path.startsWith("/api/v1/projects/{project_id}"));
 const NONCE = "a".repeat(64);
+const OTHER_PROJECT = "018f0000-0000-7001-8000-000000000819";
+const CHALLENGE_PATH = /^\/api\/v1\/projects\/[^/]+\/anti-forgery-challenges$/;
 type Challenge = { method: string; route_template: string; command_schema: string; idempotency_key: string;
   canonical_command_digest: unknown };
 const EXPORT_TEXT = "# Volume A\n\n## Chapter A\n\nBase\n";
@@ -59,6 +61,7 @@ it.each([3, 4] as const)("shows the Server text read-only for a version %i Journ
     const scenario = createBrowserScenario();
     const issued = new Map<string, { challenge: Challenge; expiresAt: number }>();
     let admitted = false;
+    const challengeBodies: string[] = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const path = new URL(input instanceof Request ? input.url : input).pathname;
       const method = init?.method ?? "GET";
@@ -96,12 +99,20 @@ it.each([3, 4] as const)("shows the Server text read-only for a version %i Journ
         return jsonResponse({ schema_id: "storyos.problem.v1", code: "projection_not_ready",
           message: "The statistics projection is not ready." }, 409);
       }
-      if (path.endsWith("/anti-forgery-challenges")) {
+      if (CHALLENGE_PATH.test(path)) {
+        // `crates/storyos-server/src/lib.rs:528`: the Challenge route has only its POST filter and no fallback, so
+        // axum gives 405 with no body.
+        if (method !== "POST") return new Response(null, { status: 405 });
+        challengeBodies.push(String(init?.body));
         const challenge = JSON.parse(String(init?.body)) as Challenge;
-        // `crates/storyos-server/src/lib.rs:908`: a target that is not a Project command of the route catalog.
+        // `crates/storyos-server/src/lib.rs:881`: a target that is not a Project command of the route catalog.
         if (!PROJECT_COMMANDS.some((operation) => operation.method === challenge.method
           && operation.path === challenge.route_template && operation.schemas.request === challenge.command_schema)) {
           return problem("command_target_refused", "The command target is not in the closed Release 1 contract.", 422);
+        }
+        // `crates/storyos-server/src/project_command_challenge.rs:81`: the author has no Project on another path.
+        if (path !== `/api/v1/projects/${PROJECT}/anti-forgery-challenges`) {
+          return problem("resource_unavailable", "The requested resource is unavailable.", 404);
         }
         // The Server issues a nonce that is valid for five minutes (`project_command_challenge.rs:142`).
         const expiresAt = Date.now() + 300_000;
@@ -177,6 +188,21 @@ it.each([3, 4] as const)("shows the Server text read-only for a version %i Journ
 
       // The open did not upgrade or change the Journal.
       expect(await journalRows(scenario.journalName, openDatabases)).toEqual({ version, rows });
+
+      // The fake Server refuses a Challenge request with another method or on the path of another Project.
+      const challengeUrl = (projectId: string) => `${location.origin}/api/v1/projects/${projectId}/anti-forgery-challenges`;
+      const outcome = async (response: Response) => ({ status: response.status, body: await response.text() });
+      const exportChallenge = challengeBodies.find((body) => (JSON.parse(body) as Challenge).route_template === EXPORT_ROUTE);
+      if (exportChallenge === undefined) throw new Error("The export sent no Challenge");
+      expect({
+        get: await outcome(await fetchImpl(challengeUrl(PROJECT), { method: "GET" })),
+        otherProject: await outcome(await fetchImpl(challengeUrl(OTHER_PROJECT),
+          { method: "POST", body: exportChallenge })),
+      }).toEqual({
+        get: { status: 405, body: "" },
+        otherProject: { status: 404, body: JSON.stringify({ schema_id: "storyos.problem.v1",
+          code: "resource_unavailable", message: "The requested resource is unavailable." }) },
+      });
     } finally {
       closeTrackedDatabases(openDatabases);
       document.body.replaceChildren();

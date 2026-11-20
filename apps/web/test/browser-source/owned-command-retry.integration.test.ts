@@ -60,8 +60,18 @@ const digest = (kind: Kind, request: Delete) => kind === "chapter"
   ? digestDeleteChapter(request as DeleteChapterRequest, crypto)
   : digestDeleteVolume(request as DeleteVolumeRequest, crypto);
 
-/** The problem of `crates/storyos-server/src/lib.rs:931` for a command that does not match its Challenge. */
-const challengeInvalid = () => problem("challenge_invalid", "The command challenge is invalid or expired.", 422);
+/**
+ * The problem of `crates/storyos-server/src/command_admission.rs:576` for a command that does not match its Challenge.
+ * The Server uses the Challenge before it reads the Project (`storyos-adapter-postgres/src/command_sequence/skeleton.rs:55`),
+ * and the Challenge binds the Project Scope, so a command on the path of another Project also gets this problem.
+ */
+const challengeInvalid = (kind: Kind) => problem("challenge_invalid",
+  `The ${kind === "chapter" ? "Delete Chapter" : "Delete Volume"} challenge is invalid.`, 422);
+/** `crates/storyos-server/src/lib.rs:528`: the Challenge route has only its POST filter and no fallback, so axum gives 405. */
+const methodNotAllowed = () => new Response(null, { status: 405 });
+/** `crates/storyos-server/src/project_command_challenge.rs:81`: the author has no Project on another path. */
+const resourceUnavailable = () => problem("resource_unavailable", "The requested resource is unavailable.", 404);
+const CHALLENGE_PATH = /^\/api\/v1\/projects\/([^/]+)\/anti-forgery-challenges$/;
 
 /**
  * The applied response of the Server (`crates/storyos-server/src/delete_chapter.rs:85`, `delete_volume.rs:82`). The
@@ -98,7 +108,9 @@ async function applied(kind: Kind, projectId: string, request: Delete, key: stri
 /**
  * As the Server (ADR 0076): a Challenge request that the Server refuses gets its refusal. Of the other Challenges,
  * the first gets a rate limit with Retry-After 1, and the next a nonce.
- * A command is applied only when its nonce, key, method, route, schema, and digest match the Challenge of the nonce.
+ * The Challenge route serves only POST on the path of the Project of the test.
+ * A command is applied only when its nonce, key, method, route, schema, and digest match the Challenge of the nonce,
+ * and its path is a path of the same Project.
  */
 function fakeServer(kind: Kind, projectId: string) {
   const sent: Exchange[] = [];
@@ -106,14 +118,17 @@ function fakeServer(kind: Kind, projectId: string) {
   let challenges = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
-    if (path.endsWith("/anti-forgery-challenges")) {
+    const challengeProject = CHALLENGE_PATH.exec(path)?.[1];
+    if (challengeProject !== undefined) {
+      if (init?.method !== "POST") return methodNotAllowed();
       const challenge = JSON.parse(String(init?.body)) as Challenge;
       sent.push({ step: "challenge", key: challenge.idempotency_key, nonce: null });
       const refusal = challengeRefusal(challenge);
       if (refusal !== undefined) return refusal;
+      if (challengeProject !== projectId) return resourceUnavailable();
       challenges += 1;
       if (challenges === 1) {
-        // `crates/storyos-server/src/lib.rs:936`: status 429, Retry-After, and the problem `challenge_rate_limited`.
+        // `crates/storyos-server/src/lib.rs:926`: status 429, Retry-After, and the problem `challenge_rate_limited`.
         return new Response(JSON.stringify({ schema_id: "storyos.problem.v1", code: "challenge_rate_limited",
           message: "The command challenge rate limit is exceeded." }),
         { status: 429, headers: { "content-type": "application/json", "retry-after": "1" } });
@@ -129,11 +144,12 @@ function fakeServer(kind: Kind, projectId: string) {
     sent.push({ step: "command", key, nonce });
     const request = JSON.parse(String(init?.body)) as Delete;
     const binding = nonce === null ? undefined : issued.get(nonce);
-    const route = new RegExp(`^${binding?.route_template.replace(/\{[a-z_]+\}/g, "[^/]+") ?? "$^"}$`);
+    const route = new RegExp(`^${binding?.route_template.replace("{project_id}", projectId)
+      .replace(/\{[a-z_]+\}/g, "[^/]+") ?? "$^"}$`);
     if (binding === undefined || binding.idempotency_key !== key || binding.method !== init?.method
       || !route.test(path) || binding.command_schema !== request.command_schema
       || JSON.stringify(binding.canonical_command_digest) !== JSON.stringify(await digest(kind, request))) {
-      return challengeInvalid();
+      return challengeInvalid(kind);
     }
     return jsonResponse(await applied(kind, projectId, request, key ?? ""));
   };
@@ -171,4 +187,36 @@ it.each([
       { step: "challenge", key, nonce: null },
       { step: "command", key, nonce: NONCE },
     ] });
+  });
+
+it("refuses a Challenge request with another method or on another Project, and a command on another Project",
+  async () => {
+    const projectId = "018f0000-0000-7001-8000-000000172011";
+    const otherProject = "018f0000-0000-7001-8000-000000172013";
+    const server = fakeServer("chapter", projectId);
+    const calls: { url: string; init: RequestInit }[] = [];
+    const recording: typeof fetch = (input, init) => {
+      calls.push({ url: input instanceof Request ? input.url : String(input), init: init ?? {} });
+      return server.fetchImpl(input, init);
+    };
+    await deleteOwnedChapter({ ...connection(projectId, recording), chapterId: CHAPTER, expectedTreeRevision: "4" });
+    const challenge = calls.find(({ url }) => CHALLENGE_PATH.test(new URL(url).pathname));
+    const command = calls.at(-1);
+    if (challenge === undefined || command === undefined) throw new Error("The module sent no Challenge or command");
+    const other = (url: string) => url.replace(projectId, otherProject);
+    const outcome = async (response: Response) => ({ status: response.status, body: await response.text() });
+
+    expect({
+      challengeGet: await outcome(await server.fetchImpl(challenge.url, { method: "GET" })),
+      challengeOfOtherProject: await outcome(await server.fetchImpl(other(challenge.url), challenge.init)),
+      commandOfOtherProject: await outcome(await server.fetchImpl(other(command.url), command.init)),
+      commandOfProject: (await server.fetchImpl(command.url, command.init)).status,
+    }).toEqual({
+      challengeGet: { status: 405, body: "" },
+      challengeOfOtherProject: { status: 404, body: JSON.stringify({ schema_id: "storyos.problem.v1",
+        code: "resource_unavailable", message: "The requested resource is unavailable." }) },
+      commandOfOtherProject: { status: 422, body: JSON.stringify({ schema_id: "storyos.problem.v1",
+        code: "challenge_invalid", message: "The Delete Chapter challenge is invalid." }) },
+      commandOfProject: 200,
+    });
   });

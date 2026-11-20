@@ -108,6 +108,11 @@ The rules of a Host Tool apply ([ADR 0091](0091-replace-the-typed-reply-form-wit
 - **The rows.** One row for each passage: the Project Scope, the Chapter, the Embedding Registration revision, the cut revision, the digest, the `vector(1024)` value, and the time. The row has no text, no block identity, and no position. The table has forced row level security with the exact Scope policy and no vector index.
 - **The function.** The application function `index_chapter_passages` makes the rows of one Chapter equal to its current passages for the current Registration and cut revision. It sends one embedding request with the cause `passage_index` for each passage with no row, and it deletes each other row of the Chapter. For a Chapter that is not live in the Project Scope, it deletes each row. A refused or failed request writes no row, and the result names the passage.
 
+Note of 2026-11-20 ([#1716](https://github.com/FrankQDWang/StoryOS/issues/1716)): the store read `vector_store_available` and the application function `index_chapter_passages` are removed, because no product code used them. The rules of the two items above stay. The code that does the work now:
+
+- The statements that start a use of the vector table test `to_regclass('storyos.passage_vectors') IS NOT NULL` themselves, in `storyos-adapter-postgres`: the admission of the hybrid search (`agent_run_hybrid_search.rs`), the ranking (`passage_ranking.rs`), and the mark and the claim of the index work (`passage_index_work.rs`).
+- The Worker makes the rows of one Chapter through the index work: `claim_next_passage_index_work` and `step_passage_index_work` in `storyos-application/src/passage_index_work.rs`. Each step removes the rows that are not a current passage and sends the request of the first passage with no row. After the fence check, the adapter writes through `insert_passage_vector` and `delete_passage_vectors` in `passage_vectors.rs`.
+
 ### 3. The embedding source
 
 - The embedding model is `doubao-embedding-vision-251215` of Volcengine Ark, with text input only and 1,024 dimensions. The request goes through the model destination that the operator of the deployment configures ([ADR 0048](0048-use-the-deployment-model-destination-by-default.md)).
