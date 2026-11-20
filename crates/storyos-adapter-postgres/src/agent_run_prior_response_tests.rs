@@ -13,8 +13,7 @@ use storyos_application::{
     complete_agent_run,
 };
 use storyos_core::{
-    ACTIVE_COMPACTION_REQUEST_PREFIX, AgentRunStatus, DeploymentDestination, RequestBounds,
-    UNEXECUTED_CALL_OUTPUT,
+    ACTIVE_COMPACTION_REQUEST_PREFIX, AgentRunStatus, RequestBounds, UNEXECUTED_CALL_OUTPUT,
 };
 
 use crate::shared_tests::agent_run_finish_rule::tool_loop_run;
@@ -23,7 +22,7 @@ use crate::shared_tests::agent_run_steering::{
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 
 /// The adapter `inner`, which also keeps the input of each Create request in the body that the
 /// tool loop wire of the Agent Plan route builds for it.
@@ -201,18 +200,14 @@ async fn the_next_run_answers_each_call_of_the_last_run_step_with_the_unexecuted
     for ([first, limited, next], script, message, expected) in cases {
         let (scope, chapter_id, _, _) =
             tool_loop_run(&store, &admin, [first, limited], script, None, false).await;
-        let run_id = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            next,
-            DeploymentDestination::HostFakeToolLoop,
-            &message,
-            ConversationSelection::Existing {
+        let run_id = Admission {
+            message: &message,
+            conversation: ConversationSelection::Existing {
                 conversation_id: format!("018f0000-0000-7001-8000-00000006{limited}6"),
             },
-            None,
-        )
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, next)
         .await;
         let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
         let adapter = RealWire::new(FakeDestination);

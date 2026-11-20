@@ -16,11 +16,10 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_steering::cancellation;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::conversation as conversation_of;
-use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
-};
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, queued_run_offering};
 
 const MESSAGES: [&str; 4] = [
     "Help with this passage.",
@@ -35,28 +34,6 @@ async fn complete(store: &PostgresProjectReader, admin: &Client, scope: &Project
     complete_agent_run(store, destination.0, destination.1, destination.2, &claim)
         .await
         .unwrap();
-}
-
-/// Admits a Run with `message` in `conversation` on the Chapter of the tool loop profile.
-async fn admit(
-    store: &PostgresProjectReader,
-    (scope, chapter_id): (&ProjectScope, &str),
-    prefix: &str,
-    message: &str,
-    conversation: Selection,
-) -> String {
-    let destination = HostFakeToolLoop;
-    admit_run_in(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        destination,
-        message,
-        conversation,
-        None,
-    )
-    .await
 }
 
 /// The completed Runs A1, B1, C1, and A2, in this order, of the Conversations A, B, and C of a
@@ -78,8 +55,15 @@ async fn three_conversations(
             },
             _ => Selection::New,
         };
-        let place = (&scope, chapter_id.as_str());
-        let run = admit(store, place, prefix, MESSAGES[index], conversation).await;
+        let run = admitted(
+            store,
+            &scope,
+            &chapter_id,
+            prefix,
+            MESSAGES[index],
+            conversation,
+        )
+        .await;
         complete(store, admin, &scope, &run).await;
         runs.push(run);
     }
@@ -291,7 +275,7 @@ async fn cancelled_run(
 ) -> String {
     let (scope, run) = (
         place.0,
-        admit(store, place, prefix, MESSAGES[3], conversation).await,
+        admitted(store, place.0, place.1, prefix, MESSAGES[3], conversation).await,
     );
     let cancel = cancellation(store, scope, suffix, &run).await;
     store

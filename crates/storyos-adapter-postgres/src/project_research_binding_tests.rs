@@ -1,7 +1,6 @@
 use serde_json::{Value, json};
 use storyos_application::{
-    ConversationSelection, NoContractFaults, ProjectScope, complete_agent_run,
-    complete_agent_run_with_tools,
+    NoContractFaults, ProjectScope, complete_agent_run, complete_agent_run_with_tools,
 };
 use storyos_core::{DeploymentDestination, RESEARCH_TOOL_OFFER, ResearchToolOffer};
 use tokio_postgres::Client;
@@ -17,9 +16,7 @@ use crate::shared_tests::agent_run_tool_exposure::{advisory_stream, finish_strea
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
-};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run_offering};
 use crate::shared_tests::project_research_binding::park_queued_runs;
 
 /// The same research destination with another Credential Reference.
@@ -153,16 +150,12 @@ async fn a_later_run_writes_research_records_only_when_the_offer_changed() {
         ("6e4", &CHANGED_OFFER),
         ("6e5", &CHANGED_OFFER),
     ] {
-        admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            prefix,
-            plan.clone(),
-            "Help with this passage.",
-            ConversationSelection::New,
-            Some(offer),
-        )
+        Admission {
+            destination: plan.clone(),
+            research: Some(offer),
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, prefix)
         .await;
         counts.push(project_facts(&admin, &scope).await.1);
     }

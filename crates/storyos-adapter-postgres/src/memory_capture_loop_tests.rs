@@ -16,7 +16,7 @@ use crate::shared_tests::memory_capture::{park_queued_author_runs, project, run_
 use crate::shared_tests::memory_capture_loop::{
     other_records, record, requests, script, settlement,
 };
-use crate::shared_tests::model_gateway::{admit_selected_run, queued_run_offering};
+use crate::shared_tests::model_gateway::{Admission, queued_run_offering};
 
 /// The Tool Exposure of each RunStep of a capture (ADR 0094 section 5).
 pub(crate) const CAPTURE_TOOLS: [&str; 4] = [
@@ -50,7 +50,14 @@ async fn bound_project(
     complete(store, admin, &scope, &first).await;
     let new = ConversationSelection::New;
     let skills = (set(vec![fixture("dialogue-style-guide")]), Vec::new());
-    let second = admit_selected_run(store, &scope, &chapter_id, "fd9", "Help.", new, skills).await;
+    let second = Admission {
+        message: "Help.",
+        conversation: new,
+        skills,
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, "fd9")
+    .await;
     complete(store, admin, &scope, &second).await;
     let conversation_id: String = admin
         .query_one(

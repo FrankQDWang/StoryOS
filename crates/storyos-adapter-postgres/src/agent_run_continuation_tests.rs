@@ -19,9 +19,7 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::conversation;
-use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_referenced_run, admit_run_in, claim_run,
-};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 
 async fn complete(
     store: &PostgresProjectReader,
@@ -101,18 +99,15 @@ async fn the_request_after_an_opened_proposal_continues_the_prior_response_with_
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0xcd0, tool_loop.clone()).await;
     let (scope, first) = (&fixture.scope, &fixture.source_run);
-    let edit = admit_run_in(
-        &store,
-        scope,
-        &fixture.chapter_id,
-        "cd8",
-        tool_loop,
-        REVISE,
-        ConversationSelection::Existing {
+    let edit = Admission {
+        destination: tool_loop,
+        message: REVISE,
+        conversation: ConversationSelection::Existing {
             conversation_id: conversation(&admin, first).await,
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, scope, &fixture.chapter_id, "cd8")
     .await;
     complete(&store, &admin, scope, &edit).await;
     let first_closing = requests(&admin, first).await.last().unwrap()[3].clone();
@@ -207,15 +202,13 @@ async fn a_run_step_after_a_steering_input_an_author_edit_or_a_head_move_continu
     // An Author Edit of the referenced candidate while the first request is out.
     let candidate = Fixture::new(&store, &admin, 0xce0, tool_loop.clone()).await;
     let reference = candidate.candidates(&admin).await.remove(0);
-    let candidate_run = admit_referenced_run(
-        &store,
-        &candidate.scope,
-        &candidate.chapter_id,
-        "ce8",
-        tool_loop.clone(),
+    let candidate_run = Admission {
+        destination: tool_loop.clone(),
         message,
-        vec![reference.clone()],
-    )
+        references: Some(vec![reference.clone()]),
+        ..Default::default()
+    }
+    .admit(&store, &candidate.scope, &candidate.chapter_id, "ce8")
     .await;
     let edit = candidate
         .candidate_edit(
@@ -237,15 +230,13 @@ async fn a_run_step_after_a_steering_input_an_author_edit_or_a_head_move_continu
     // An Author Edit of a referenced Chapter Block, which moves the head, while the first request
     // is out.
     let chapter = Fixture::new(&store, &admin, 0xcc0, tool_loop.clone()).await;
-    let chapter_run = admit_referenced_run(
-        &store,
-        &chapter.scope,
-        &chapter.chapter_id,
-        "cc8",
-        tool_loop,
+    let chapter_run = Admission {
+        destination: tool_loop,
         message,
-        vec![chapter.chapter_text(1, 2)],
-    )
+        references: Some(vec![chapter.chapter_text(1, 2)]),
+        ..Default::default()
+    }
+    .admit(&store, &chapter.scope, &chapter.chapter_id, "cc8")
     .await;
     let edit = chapter
         .chapter_edit(

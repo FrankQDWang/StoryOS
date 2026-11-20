@@ -2,9 +2,7 @@
 //! with the fake model of the tool loop profile.
 
 use serde_json::{Value, json};
-use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-};
+use storyos_application::{AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore};
 use storyos_core::DeploymentDestination;
 use tokio_postgres::Client;
 
@@ -13,7 +11,7 @@ use crate::shared_tests::agent_run_propose_edit_revise::Fixture;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::admit_run_in;
+use crate::shared_tests::model_gateway::Admission;
 
 /// The message of Run 3 of the live run record of 2026-11-14. It has an edit word, and no clause
 /// names a Chapter, so the passage request does not resolve.
@@ -44,16 +42,12 @@ async fn an_unresolved_passage_request_works_on_the_current_chapter() {
     let fixture = Fixture::new(&store, &admin, 0x470, tool_loop.clone()).await;
     let scope = fixture.scope.clone();
     // The fake proposes a change of the third paragraph, as the model of Run 3 did.
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &fixture.chapter_id,
-        "478",
-        tool_loop,
-        &format!("{UNRESOLVED} SCRIPT:propose_block {}", fixture.block(2)),
-        ConversationSelection::New,
-        None,
-    )
+    let run_id = Admission {
+        destination: tool_loop,
+        message: &format!("{UNRESOLVED} SCRIPT:propose_block {}", fixture.block(2)),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &fixture.chapter_id, "478")
     .await;
     complete(&store, &admin, &scope, &run_id).await;
     let record = store
