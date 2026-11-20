@@ -1,5 +1,7 @@
 # Chinese long-form baseline progress
 
+The Git tag `evidence/prototypes-and-test-asset-audit-2026-11-20` keeps the removed directory `prototypes/chinese-long-form-baseline/`, and `git checkout evidence/prototypes-and-test-asset-audit-2026-11-20 -- prototypes/chinese-long-form-baseline` restores it.
+
 ## Resume here
 
 - Status: complete. Three part reports, ranked final report, and reproducible evidence are committed.
