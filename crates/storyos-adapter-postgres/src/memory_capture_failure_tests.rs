@@ -5,10 +5,11 @@
 use serde_json::{Value, json};
 use tokio_postgres::Client;
 
-use super::loop_tests::{other_records, record, script, settlement};
-use super::tests::{project, run_capture, start};
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_finish_rule::tests::calls;
+use crate::shared_tests::agent_run_finish_rule::calls;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::memory_capture::{project, run_capture, start};
+use crate::shared_tests::memory_capture_loop::{other_records, record, script, settlement};
 
 /// The count of the capture Runs of the Project of `project_id`.
 async fn captures(admin: &Client, project_id: &str) -> i64 {
@@ -29,9 +30,7 @@ async fn captures(admin: &Client, project_id: &str) -> i64 {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_refused_request_fails_the_capture_with_the_reason_of_its_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "fdd").await;
     let project_id = scope.project_id.as_ref();
@@ -83,9 +82,7 @@ async fn a_refused_request_fails_the_capture_with_the_reason_of_its_run() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_capture_obeys_no_instruction_in_its_input() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "fe0").await;
     let before = other_records(&admin, &scope).await;

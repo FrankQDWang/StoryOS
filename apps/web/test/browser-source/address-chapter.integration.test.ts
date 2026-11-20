@@ -9,6 +9,7 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/sto
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { HISTORICAL_ACKNOWLEDGEMENT_MESSAGE } from "../../src/historical-acknowledgement.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
+import { historicalProblem } from "./historical-acknowledgement-fixture.ts";
 import {
   CHAPTER, OWNER, PROJECT, SESSION, chapterRevision, closeTrackedDatabases, createBrowserScenario, deleteJournal,
   emptyActivityStream, jsonResponse, trackDatabase,
@@ -97,8 +98,7 @@ function fakeServer({ writer = { kind: "current_writer", writer_generation: "1" 
         current = CHAPTER_B;
         return jsonResponse(setCurrentChapterFixture);
       }
-      return jsonResponse({ schema_id: "storyos.problem.v1", code: "historical_acknowledgement_unavailable",
-        message: "The original Set Current Chapter acknowledgement cannot be recovered." }, 409);
+      return historicalProblem("The original Set Current Chapter acknowledgement cannot be recovered.");
     }
     if (path === `/api/v1/projects/${PROJECT}/assistance`) return jsonResponse({ ...assistanceFixture, project_scope: scope });
     if (path === `/api/v1/projects/${PROJECT}/conversations/${CONVERSATION}`) {

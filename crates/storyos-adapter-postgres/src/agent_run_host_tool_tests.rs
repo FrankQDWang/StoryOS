@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-    NoContractFaults, complete_agent_run,
+    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, NoContractFaults,
+    complete_agent_run,
 };
 use storyos_contracts::{ToolCallInspect, ToolCallOutcomeInspect};
 use storyos_core::{
@@ -11,8 +11,11 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::{
-    RuntimeClock, admit_run_in, claim_run, queued_run, queued_run_offering, stores,
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::{
+    Admission, RuntimeClock, claim_run, queued_run, queued_run_offering,
 };
 
 /// The `tool_result` projection of an empty result (ADR 0085).
@@ -22,9 +25,9 @@ const EMPTY_OUTPUT: &str = r#"<tool_result source="call_finish" state="empty">Th
 /// the sent function outputs, and the `tool_result` sources of the Operation Requirement, each
 /// ToolCall row without its identities, and each Activity Run Event.
 async fn run_facts(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    json_of(
+        admin,
+        "SELECT jsonb_build_object(
                       'status', run.status, 'position', run.active_decision_position,
                       'steps', (SELECT jsonb_agg(jsonb_build_object(
                           'position', attempt.decision_position,
@@ -55,19 +58,15 @@ async fn run_facts(admin: &Client, run_id: &str) -> Value {
                                    FROM storyos.agent_run_events AS event
                                   WHERE event.run_id = run.run_id))::text
                FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_finish_call_settles_in_process_and_reenters_as_one_tool_result() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) =
         queued_run(&store, "1e1", DeploymentDestination::HostFakeToolLoop).await;
@@ -130,9 +129,7 @@ async fn a_finish_call_settles_in_process_and_reenters_as_one_tool_result() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_process_with_no_tool_adapter_executes_finish_and_refuses_the_research_call() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let research = Some(&RESEARCH_TOOL_OFFER);
     let (scope, chapter_id, first) = queued_run_offering(
@@ -152,16 +149,12 @@ async fn a_process_with_no_tool_adapter_executes_finish_and_refuses_the_research
     )
     .await
     .unwrap();
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "1e3",
-        DeploymentDestination::HostFakeToolLoop,
-        "Search the web: tide tables of 1890",
-        ConversationSelection::New,
+    let run_id = Admission {
+        message: "Search the web: tide tables of 1890",
         research,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "1e3")
     .await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
 

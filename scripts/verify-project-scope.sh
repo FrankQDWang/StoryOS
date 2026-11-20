@@ -459,12 +459,14 @@ run_activation_checks() {
         passage_vectors::tests::the_vector_store_is_available_exactly_when_the_database_offers_the_extension
   done
   # The ranked passages need no vector store: on the database without pgvector the result is the
-  # exact-term list, and no request declares the hybrid search.
+  # exact-term list, and no request declares the hybrid search. The mark of the Worker path gives
+  # no passage index work.
   load_controlled_fixture "$legacy_activation_container"
   STORYOS_TEST_DATABASE_URL=$(postgres_runtime_url "$legacy_activation_container") \
   STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$legacy_activation_container") \
     run_postgres_tests \
       passage_ranking::tests::the_result_with_no_vector_store_is_the_exact_term_list \
+      passage_vectors::tests::the_passage_index_work_follows_the_vector_store_of_the_database \
       agent_run_hybrid_search::tests::the_tool_follows_the_vector_store_of_the_database
   docker rm -fv "$legacy_activation_container" >/dev/null
   activation_runtime=$(postgres_runtime_url "$activation_container")

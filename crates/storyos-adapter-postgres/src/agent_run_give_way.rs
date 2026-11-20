@@ -6,7 +6,7 @@ use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{AgentRunKind, ModelAdapter};
 
 use super::PostgresProjectReader;
-use crate::agent_run_work::{complete_challenge_error, complete_database_error, update_run};
+use crate::agent_run_work::{complete_unavailable, update_run};
 
 impl PostgresProjectReader {
     /// Whether a queued Run of the author waits for a Worker with `adapters`: its Model
@@ -25,17 +25,11 @@ impl PostgresProjectReader {
         client
             .batch_execute("BEGIN")
             .await
-            .map_err(complete_database_error)?;
+            .map_err(complete_unavailable)?;
         client
-            .execute(
-                "SELECT set_config('storyos.scope_mode', 'worker', true),
-                        set_config('storyos.owner_user_id', '', true),
-                        set_config('storyos.project_id', '', true),
-                        set_config('storyos.user_id', '', true)",
-                &[],
-            )
+            .execute(crate::export_work::WORKER_SCOPE, &[])
             .await
-            .map_err(complete_database_error)?;
+            .map_err(complete_unavailable)?;
         let queued = client
             .query_opt(
                 "SELECT 1
@@ -49,12 +43,12 @@ impl PostgresProjectReader {
                 &[&AgentRunKind::Author.name(), &model_kinds],
             )
             .await
-            .map_err(complete_database_error)?
+            .map_err(complete_unavailable)?
             .is_some();
         client
             .batch_execute("COMMIT")
             .await
-            .map_err(complete_database_error)?;
+            .map_err(complete_unavailable)?;
         Ok(queued)
     }
 
@@ -67,7 +61,7 @@ impl PostgresProjectReader {
         let transaction = self
             .begin_serializable_project_command_transaction(&claim.project_scope)
             .await
-            .map_err(complete_challenge_error)?;
+            .map_err(complete_unavailable)?;
         let given = update_run(
             &transaction.client,
             claim,
@@ -77,7 +71,7 @@ impl PostgresProjectReader {
         )
         .await;
         match given {
-            Ok(()) => transaction.commit().await.map_err(complete_challenge_error),
+            Ok(()) => transaction.commit().await.map_err(complete_unavailable),
             Err(error) => {
                 let _rollback = transaction.rollback().await;
                 Err(error)

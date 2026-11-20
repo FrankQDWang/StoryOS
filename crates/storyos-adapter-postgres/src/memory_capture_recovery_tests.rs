@@ -13,12 +13,14 @@ use storyos_application::{
 use storyos_core::{NativeStreamItem, StreamItemRole, StreamItemState};
 use tokio_postgres::Client;
 
-use super::loop_tests::{record, script, settlement};
-use super::tests::{project, run_capture, start};
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_tool_recovery::tests::{Fault, FaultAt};
-use crate::create_agent_run::context::chapter_list_tests::replace_text;
+use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::replace_text;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::memory_capture::{project, run_capture, start};
+use crate::shared_tests::memory_capture_loop::{record, script, settlement};
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 
 /// What the destination does with the first create of one RunStep of a capture.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -216,9 +218,7 @@ fn one_set() -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_lost_lease_and_a_second_delivery_give_one_set_of_observations() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut projects = Vec::new();
     for prefix in ["fe1", "fe5"] {
@@ -239,9 +239,7 @@ async fn a_lost_lease_and_a_second_delivery_give_one_set_of_observations() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_chapter_capture_that_loses_its_lease_ends_with_one_set_of_observations() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut projects = Vec::new();
     for prefix in ["a22", "a23"] {
@@ -275,9 +273,7 @@ async fn a_chapter_capture_that_loses_its_lease_ends_with_one_set_of_observation
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_unknown_result_recovers_and_a_rejected_request_fails_the_capture() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "fe2").await;
     let item = json!({"type": "character", "title": "林舟", "text": "撑船的人。"});
@@ -358,14 +354,18 @@ async fn an_unknown_result_recovers_and_a_rejected_request_fails_the_capture() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_edit_of_a_chapter_does_not_change_a_capture() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, _, session) =
-        crate::agent_run_read_chapter::tests::project(&store, &admin, "fe3", 0xfe40, &["Lin ran."])
-            .await;
-    let source = super::tools_tests::conversation_source(&admin, &scope).await;
+    let (scope, chapter_id, _, session) = crate::shared_tests::agent_run_read_chapter::project(
+        &store,
+        &admin,
+        "fe3",
+        0xfe40,
+        &["Lin ran."],
+    )
+    .await;
+    let source =
+        crate::shared_tests::memory_capture_tools::conversation_source(&admin, &scope).await;
     let read = json!({"chapter": 1, "first_block": null, "last_block": null});
     let input = script(&[("read_chapter", read)]);
     let started = start(&store, &scope, &source, &input).await.unwrap();

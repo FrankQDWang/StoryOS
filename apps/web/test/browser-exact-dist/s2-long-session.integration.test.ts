@@ -1,4 +1,3 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation, selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -11,79 +10,33 @@ import {
   focusManuscriptEnd,
   manuscriptBody,
   manuscriptEditor,
-  manuscriptIsEditable,
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
+import {
+  appRoot,
+  applicationWindow,
+  chapterButton,
+  closeApplicationFrame,
+  makeCurrent,
+  nextFrameLoad,
+  openApplicationFrame,
+  openFirstChapterForm,
+  submitChapterForm,
+  submitProjectForm,
+  submitVolumeForm,
+  waitLastChapter,
+  waitSaved,
+} from "../support/exact-dist-frame.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SETTLED_A = "Alpha 中文 EN";
 const LONG_A = `Alpha${"a".repeat(2401)}`;
 
-let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist long-session page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
-
 afterEach(async () => {
-  if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
-
-function applicationWindow(frame: HTMLIFrameElement): Window & typeof globalThis {
-  const result = frame.contentWindow;
-  if (result === null) throw new Error("the production page realm is unavailable");
-  return result as Window & typeof globalThis;
-}
-
-function appRoot(frame: HTMLIFrameElement): Element {
-  const root = frame.contentDocument?.querySelector("#app");
-  if (root === null || root === undefined) {
-    throw new Error("the production page root is missing");
-  }
-  return root;
-}
-
-function chapterButton(root: Element, title: string): HTMLButtonElement | undefined {
-  return [...root.querySelectorAll<HTMLButtonElement>(
-    'nav[aria-label="稿件目录"] button[data-chapter-id]',
-  )].find((button) => button.textContent === title);
-}
-
-async function waitSaved(root: Element, previousRevisionId?: string): Promise<void> {
-  await expect.poll(() => {
-    const node = root.querySelector("[data-save-state]");
-    const revision = node?.getAttribute("data-authoritative-revision-id") ?? "";
-    const failure = node?.getAttribute("data-editor-failure") ?? "";
-    const save = node?.getAttribute("data-save-state");
-    const unsettled = node?.getAttribute("data-unsettled-intent-count");
-    if (save === "saved"
-      && unsettled === "0"
-      && failure === ""
-      && (previousRevisionId === undefined || revision !== previousRevisionId)) {
-      return { ok: true as const, failure: "" };
-    }
-    return { ok: false as const, save, unsettled, failure, revision };
-  }, { timeout: 30_000 }).toEqual({ ok: true, failure: "" });
-}
 
 async function typeExpected(
   frame: HTMLIFrameElement,
@@ -98,84 +51,20 @@ async function typeExpected(
   focusManuscriptEnd(editor, applicationWindow(frame));
   await applyTrustedInput({ operation: "insert_text", text: inserted });
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(expected);
-  await waitSaved(root, before);
-}
-
-async function makeCurrent(
-  frame: HTMLIFrameElement,
-  chapterId: string,
-  heading: string,
-): Promise<void> {
-  await selectTreeChapter(appRoot(frame), chapterId);
-  await expect.poll(() => {
-    const root = appRoot(frame);
-    const editor = root.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
-    return root.querySelector("h2")?.textContent === heading
-      && editor !== null
-      && editor !== undefined
-      && manuscriptIsEditable(editor);
-  }, { timeout: 15_000 }).toBe(true);
+  await waitSaved(root, before, { timeout: 30_000 });
 }
 
 it("repeats Chapter switching, Undo, search, and reload without losing work", {
   timeout: 300_000,
 }, async () => {
   const started = performance.now();
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = "StoryOS exact-dist long session";
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName
-  ).toBe("INPUT");
-  const title = frame.contentDocument?.querySelector<HTMLInputElement>('#app input[name="title"]');
-  const form = title?.form;
-  if (title === null || title === undefined || form === null || form === undefined) {
-    throw new Error("the protected-ready form is missing");
-  }
-  title.value = "Long Session Novel";
-  form.requestSubmit();
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
-  ).toBe("empty-project-ready");
-  await beginInlineVolumeCreation(frame.contentDocument);
-  const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
-    '#app form[data-create-volume] input[name="volume-title"]',
-  );
-  const volumeForm = volumeTitle?.form;
-  if (volumeTitle === null || volumeTitle === undefined
-    || volumeForm === null || volumeForm === undefined) {
-    throw new Error("the Create Volume form is missing");
-  }
-  volumeTitle.value = "Volume A";
-  volumeForm.requestSubmit();
-  await beginInlineChapterCreation(frame.contentDocument);
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
-  ).toBe(true);
+  const frame = await openApplicationFrame("StoryOS exact-dist long session");
+  await submitProjectForm(frame, "Long Session Novel");
+  await submitVolumeForm(frame, "Volume A");
+  await openFirstChapterForm(frame);
   for (const name of ["Chapter A", "Chapter B"] as const) {
-    await beginInlineChapterCreation(frame.contentDocument);
-    const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
-      '#app form[data-create-chapter] input[name="chapter-title"]',
-    );
-    const chapterForm = chapterTitle?.form;
-    if (chapterTitle === null || chapterTitle === undefined
-      || chapterForm === null || chapterForm === undefined) {
-      throw new Error("the Create Chapter form is missing");
-    }
-    chapterTitle.value = name;
-    chapterForm.requestSubmit();
-    await expect.poll(() => {
-      const root = frame.contentDocument?.querySelector("#app");
-      const titles = [...(root?.querySelectorAll(
-        'nav[aria-label="稿件目录"] button[data-chapter-id]',
-      ) ?? [])].map((button) => button.textContent);
-      return root?.getAttribute("data-boot-state") === "project-ready"
-        && titles[titles.length - 1] === name;
-    }).toBe(true);
+    await submitChapterForm(frame, name);
+    await waitLastChapter(frame, name);
   }
   const coldOpenMs = Math.round(performance.now() - started);
 
@@ -199,7 +88,7 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
   await applyTrustedInput({ operation: "undo_latest_author_action" });
   await expect.poll(() => manuscriptBody(manuscriptEditor(appRoot(frame), applicationWindow(frame))))
     .toBe("Alpha");
-  await waitSaved(appRoot(frame));
+  await waitSaved(appRoot(frame), undefined, { timeout: 30_000 });
   const longEditor = manuscriptEditor(appRoot(frame), applicationWindow(frame));
   longEditor.focus();
   focusManuscriptEnd(longEditor, applicationWindow(frame));
@@ -213,7 +102,7 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
     for (let input = 0; input < count; input++) {
       await applyTrustedInput({ operation: "insert_text", text: "a" });
     }
-    await waitSaved(appRoot(frame));
+    await waitSaved(appRoot(frame), undefined, { timeout: 30_000 });
   }
   expect(manuscriptBody(longEditor)).toBe(LONG_A);
   await makeCurrent(frame, chapterBId, "Chapter B");
@@ -264,7 +153,7 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
   expect(reopenedRoot.querySelector("h2")?.textContent).toBe("Chapter A");
   expect(manuscriptBody(manuscriptEditor(reopenedRoot, applicationWindow(frame)))).toBe(LONG_A);
   await typeExpected(frame, "+", `${LONG_A}+`);
-  await waitSaved(reopenedRoot);
+  await waitSaved(reopenedRoot, undefined, { timeout: 30_000 });
   const childWindow = applicationWindow(frame);
   const [authoritativeA, authoritativeB] = await Promise.all([
     getChapter({

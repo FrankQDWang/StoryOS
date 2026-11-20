@@ -4,17 +4,24 @@
 use serde_json::{Value, json};
 use storyos_application::{ChapterId, ConversationSelection, ProjectScope, UpdateChapterInput};
 use storyos_core::{
-    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination,
-    hex_sha256,
+    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, hex_sha256,
 };
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_run_in, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
-use crate::command_sequence::tests::{UPDATE_CHAPTER, issued};
-use crate::memory_entries::tests::write_versions;
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_finish_rule::conversation_of;
+use crate::shared_tests::agent_run_steering::{
+    AuthorAction, AuthorAt, Moment, queued, settle, steering,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_structure::UPDATE_CHAPTER;
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::memory_entries::write_versions;
+use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
 
 /// The Index of the two entries that `seeded` writes at the Memory revision 2.
 const INDEX: &str = "{\"type\":\"foreshadowing\"}\n\
@@ -38,41 +45,12 @@ async fn seeded(
     (scope, chapter_id)
 }
 
-/// Admits one Run of the tool loop profile with `message` in `conversation` of the Project.
-async fn admitted(
-    store: &PostgresProjectReader,
-    (scope, chapter_id): &(ProjectScope, String),
-    prefix: &str,
-    message: &str,
-    conversation: ConversationSelection,
-) -> String {
-    let destination = DeploymentDestination::HostFakeToolLoop;
-    admit_run_in(
-        store,
-        scope,
-        chapter_id,
-        prefix,
-        destination,
-        message,
-        conversation,
-        None,
-    )
-    .await
-}
-
-/// The Conversation of the first Run of the Project of `prefix`.
-fn conversation_of(prefix: &str) -> ConversationSelection {
-    ConversationSelection::Existing {
-        conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
-    }
-}
-
 /// For each decision RunStep of the Run in order: its position, the pinned Memory revision of
 /// its Operation Requirement, and its selected `memory_index` items.
 async fn recorded(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(manifest.decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(manifest.decision_position,
                       requirement.payload #> '{operation_requirement,memory_revision}',
                       (SELECT COALESCE(jsonb_agg(jsonb_build_array(item->>'projection_mode',
                                                                    item->>'source_version',
@@ -85,32 +63,22 @@ async fn recorded(admin: &Client, run_id: &str) -> Value {
                  ON (requirement.run_id, requirement.decision_position) =
                     (manifest.run_id, manifest.decision_position)
               WHERE manifest.run_id = $1::text::uuid AND manifest.manifest_role = 'decision'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, the
 /// text of each `memory_index` item that the fake destination received, and the replaced input
 /// label.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
-                      jsonb_path_query_array(wire,
-                        '$.context[*] ? (@.source_class == \"memory_index\").content'),
-                      wire->'replaces_earlier_input')
-                      ORDER BY model_attempt_id)::text
-               FROM storyos.model_attempts,
-                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
-              WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+    sent_context(
+        admin,
+        run_id,
+        &["memory_index"],
+        ReplacedInputLabel::Include,
+    )
+    .await
 }
 
 /// The recorded `memory_index` item with `text`.
@@ -125,12 +93,18 @@ fn item(text: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_keeps_its_pinned_index_and_a_later_run_gets_the_new_index() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let project = seeded(&store, &admin, "c54").await;
-    let pinned = admitted(&store, &project, "c55", "Help.", conversation_of("c54")).await;
+    let pinned = admitted(
+        &store,
+        &project.0,
+        &project.1,
+        "c55",
+        "Help.",
+        conversation_of("c54"),
+    )
+    .await;
     // A later transaction deletes the entry 2 and writes the entry 3 before the second RunStep.
     let changes = [
         (2, 2, 3, "deleted", "foreshadowing", "铃", "铃声。"),
@@ -138,7 +112,15 @@ async fn a_run_keeps_its_pinned_index_and_a_later_run_gets_the_new_index() {
     ];
     write_versions(&admin, &project.0, &changes).await;
     complete(&store, &admin, &project.0, &pinned).await;
-    let later = admitted(&store, &project, "c56", "Help.", conversation_of("c54")).await;
+    let later = admitted(
+        &store,
+        &project.0,
+        &project.1,
+        "c56",
+        "Help.",
+        conversation_of("c54"),
+    )
+    .await;
     complete(&store, &admin, &project.0, &later).await;
     let new = "{\"type\":\"character\"}\n{\"description\":\"沉默的船夫。\",\"id\":1,\"title\":\"林舟\"}\n\
                {\"description\":\"林舟的妹妹。\",\"id\":3,\"title\":\"阿青\"}";
@@ -162,26 +144,48 @@ async fn a_run_keeps_its_pinned_index_and_a_later_run_gets_the_new_index() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_full_input_a_compaction_a_steering_input_and_a_chapter_edit_send_the_same_index() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The destination lost the closing reference of the Run before the second Run, so the second
     // Run sends its full input again.
     let project = seeded(&store, &admin, "c57").await;
     let message = "Help with this passage. SCRIPT:reference-expires";
-    let expiring = admitted(&store, &project, "c58", message, conversation_of("c57")).await;
+    let expiring = admitted(
+        &store,
+        &project.0,
+        &project.1,
+        "c58",
+        message,
+        conversation_of("c57"),
+    )
+    .await;
     complete(&store, &admin, &project.0, &expiring).await;
-    let expired = admitted(&store, &project, "c59", "Help.", conversation_of("c57")).await;
+    let expired = admitted(
+        &store,
+        &project.0,
+        &project.1,
+        "c59",
+        "Help.",
+        conversation_of("c57"),
+    )
+    .await;
     complete(&store, &admin, &project.0, &expired).await;
     let project = seeded(&store, &admin, "c5a").await;
     let compacting = format!(
         "{ACTIVE_COMPACTION_REQUEST_PREFIX} {ACTIVE_COMPACTION_POSITIONS_PREFIX} 1. Help again."
     );
     let new = ConversationSelection::New;
-    let compacted = admitted(&store, &project, "c5b", &compacting, new).await;
+    let compacted = admitted(&store, &project.0, &project.1, "c5b", &compacting, new).await;
     complete(&store, &admin, &project.0, &compacted).await;
-    let steered = admitted(&store, &project, "c5c", "Help.", ConversationSelection::New).await;
+    let steered = admitted(
+        &store,
+        &project.0,
+        &project.1,
+        "c5c",
+        "Help.",
+        ConversationSelection::New,
+    )
+    .await;
     let input = steering(
         &store,
         &project.0,
@@ -200,7 +204,15 @@ async fn a_full_input_a_compaction_a_steering_input_and_a_chapter_edit_send_the_
         .await
         .unwrap();
     let project = seeded(&store, &admin, "c5d").await;
-    let renamed = admitted(&store, &project, "c5e", "Help.", ConversationSelection::New).await;
+    let renamed = admitted(
+        &store,
+        &project.0,
+        &project.1,
+        "c5e",
+        "Help.",
+        ConversationSelection::New,
+    )
+    .await;
     let rename = UpdateChapterInput {
         chapter_id: ChapterId::new(&project.1),
         title: "Harbor".to_owned(),
@@ -250,9 +262,7 @@ async fn a_full_input_a_compaction_a_steering_input_and_a_chapter_edit_send_the_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_without_use_or_without_a_current_entry_has_no_index() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The first Run of `seeded` starts before each entry, so it has no pin.
     let (scope, chapter_id, first) = queued(&store, "c5f").await;
@@ -274,7 +284,15 @@ async fn a_run_without_use_or_without_a_current_entry_has_no_index() {
         .await
         .unwrap();
     let project = (scope.clone(), chapter_id);
-    let unused = admitted(&store, &project, "cf1", "Help.", conversation_of("c5f")).await;
+    let unused = admitted(
+        &store,
+        &project.0,
+        &project.1,
+        "cf1",
+        "Help.",
+        conversation_of("c5f"),
+    )
+    .await;
     complete(&store, &admin, &scope, &unused).await;
     // Each entry of the second Project is deleted, so the pin has no current entry.
     let (deleted, chapter_id, earlier) = queued(&store, "cf2").await;
@@ -285,7 +303,15 @@ async fn a_run_without_use_or_without_a_current_entry_has_no_index() {
     ];
     write_versions(&admin, &deleted, &versions).await;
     let project = (deleted.clone(), chapter_id);
-    let empty = admitted(&store, &project, "cf3", "Help.", ConversationSelection::New).await;
+    let empty = admitted(
+        &store,
+        &project.0,
+        &project.1,
+        "cf3",
+        "Help.",
+        ConversationSelection::New,
+    )
+    .await;
     complete(&store, &admin, &deleted, &empty).await;
 
     assert_eq!(

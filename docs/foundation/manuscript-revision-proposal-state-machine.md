@@ -10,6 +10,8 @@
 
 > **Superseded note:** [ADR 0092](../adr/0092-remove-streamed-proposal-generation.md) removes streamed Proposal generation. The rules of this document for these items are historical: the generation values `generating` and `ready_partial`, the pause of a Proposal Generation, the two fences, `ContinueProposalGeneration`, and `CompleteReadyPartialProposal`. The two fences are the Editor Input Fence and the Proposal Pause Fence. A Proposal opens complete, and each Proposal Revision is `ready`.
 
+> **Superseded note:** [ADR 0098](../adr/0098-remove-the-three-proposal-recovery-commands-that-no-client-sends.md) removes `ReplanProposal`, the explicit reopen of a withdrawn Proposal (`ReopenWithdrawnProposal`), and the explicit reopen of rejected Operations (`ReopenRejectedOperations`). The rules of this document for these commands, their transitions, their events, and the Author Undo of each are historical.
+
 ## 1. Scope and authority
 
 This specification defines the logical StoryOS Core contract for manuscript
@@ -326,13 +328,14 @@ Unlisted transitions are invalid.
 | validation | `pending` | `invalid` | current content violates its own contract |
 | validation | `pending`, `valid`, or `invalid` | `conflicted` | exact target proof no longer holds |
 | validation | `valid`, `invalid`, or `conflicted` | `valid` or `conflicted` | author edits pending content in a new Proposal Revision, and Core validates it in the same Transition |
-| validation | `conflicted` | `pending` | an explicit Replan in a new Proposal Revision |
+| validation | `conflicted` | `pending` | an explicit Replan in a new Proposal Revision (historical, ADR 0098) |
 | closure | `open` | `withdrawn` | `WithdrawProposal` |
-| closure | `withdrawn` | `open` | explicit reopen with new Revision |
+| closure | `withdrawn` | `open` | Author Undo of an author Withdrawal in a new Revision (ADR 0098) |
+| closure | `withdrawn` | `open` | explicit reopen with new Revision (historical, ADR 0098) |
 | closure | `open` or `withdrawn` | `superseded` | `SupersedeProposal` |
 | resolution | `pending` | `applied` | successful Acceptance |
 | resolution | `pending` | `rejected` | `RejectProposalOperations` |
-| resolution | `rejected` | `pending` | explicit reopen in a new Revision |
+| resolution | `rejected` | `pending` | explicit reopen in a new Revision (historical, ADR 0098) |
 | resolution | `applied` | `pending` | successful Undo Acceptance in a new Revision |
 
 The validation `conflicted` does not block Acceptance
@@ -1383,9 +1386,8 @@ Author Undo keeps a Withdrawal by the producer of the Proposal
 ([ADR 0069](../adr/0069-keep-a-producer-withdrawal-through-author-undo.md)).
 When the current head is `withdrawn`, the Compensation of a candidate edit, a
 Replan, or a reopen of rejected Operations keeps the closure `withdrawn`. It
-restores the content as before. The Compensation of an author Withdrawal keeps
-the closure `withdrawn` when a producer Withdrawal still keeps the head
-withdrawn.
+restores the content as before. The Compensation of an author Withdrawal writes
+the closure `open` (ADR 0098).
 
 The explicit reopen accepts a Withdrawal event that still keeps the head
 withdrawn. A walk from the `withdrawn` head finds these Withdrawals. From a

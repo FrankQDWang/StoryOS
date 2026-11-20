@@ -1,5 +1,4 @@
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
@@ -7,6 +6,7 @@ import challengeFixture from "../../../../generated/golden-wire/storyos-public-r
 import createFixture from "../../../../generated/golden-wire/storyos-public-release-1/create-agent-run.json";
 import treeFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
+import { openPanelHost } from "./assistant-panel-harness.ts";
 import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 
 const RUN = createFixture.effect.run_id;
@@ -43,11 +43,8 @@ async function sendThroughRateLimit() {
     throw new Error(`Unexpected request ${path}`);
   };
   const timers: Array<{ callback: () => void; timeout: number; cleared: boolean }> = [];
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
-  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const panel = openPanelHost();
+  const { host, root } = panel;
   const settle = async () => {
     for (let turn = 0; turn < 40; turn += 1) await act(async () => { await Promise.resolve(); });
   };
@@ -79,10 +76,7 @@ async function sendThroughRateLimit() {
       runId: host.querySelector("[data-writing-assistant]")?.getAttribute("data-assistant-run-id"),
     }),
     async close() {
-      await act(async () => root.unmount());
-      host.remove();
-      sessionStorage.clear();
-      Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
+      await panel.close();
     },
   };
 }

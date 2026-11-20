@@ -1,9 +1,9 @@
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
+import { openPanelHost, seedProseRequest } from "./assistant-panel-harness.ts";
 import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 
 const RUN = "018f0000-0000-7001-8000-000000000c71";
@@ -22,11 +22,11 @@ it.each([
   ["a prose Advisory", "Keep the second sentence."],
 ])("shows %s as the author result and changes no chapter", async (_, text) => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
-  sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
+  seedProseRequest({
     scope, message: "Help with this passage.", chapterId: CHAPTER,
     correlationId: "018f0000-0000-7001-8000-000000000c72", idempotencyKey: "018f0000-0000-7001-8000-000000000c73",
     snapshotId: "018f0000-0000-7001-8000-000000000c74", runId: RUN, conversationId: agentRunFixture.conversation_id,
-  }));
+  });
   const requests: string[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
@@ -41,11 +41,8 @@ it.each([
     throw new Error(`Unexpected request ${path}`);
   };
   let openedProposals = 0;
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
-  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const panel = openPanelHost();
+  const { host, root } = panel;
   try {
     await act(async () => {
       root.render(createElement(WritingAssistantPanel, {
@@ -63,9 +60,6 @@ it.each([
       openedProposals,
     }).toEqual({ result: text, writes: [], openedProposals: 0 });
   } finally {
-    await act(async () => root.unmount());
-    host.remove();
-    sessionStorage.clear();
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
+    await panel.close();
   }
 });

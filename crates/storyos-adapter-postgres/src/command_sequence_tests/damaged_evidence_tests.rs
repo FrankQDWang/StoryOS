@@ -1,98 +1,35 @@
-use std::fmt::Debug;
-
-use storyos_application::ProjectCommandError;
 use storyos_core::ReceiptResult;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 
-use super::acceptance::accept_proposal_call;
-use super::agent_run::{
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_acceptance::accept_proposal_call;
+use crate::shared_tests::command_sequence_agent_run::{
     cancel_agent_run_call, create_agent_run_call, park_run, pause_agent_run_call,
 };
-use super::memory_entry::delete_memory_entry_call;
-use super::project_session::{
+use crate::shared_tests::command_sequence_damaged_evidence::{
+    ReplayError, evidence_replays, replay_past_checks,
+};
+use crate::shared_tests::command_sequence_memory_entry::delete_memory_entry_call;
+use crate::shared_tests::command_sequence_project_session::{
     update_project_assistance_call, update_project_call, update_project_instruction_call,
 };
-use super::proposal_decision::{
-    reject_proposal_operations_call, reopen_rejected_operations_call,
-    reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
+use crate::shared_tests::command_sequence_proposal_decision::{
+    reject_proposal_operations_call, withdraw_proposal_call,
 };
-use super::steer_agent_run::steer_agent_run_call;
-use super::structure::{
+use crate::shared_tests::command_sequence_steer_agent_run::steer_agent_run_call;
+use crate::shared_tests::command_sequence_structure::{
     create_chapter_call, create_volume_call, delete_chapter_call, delete_volume_call,
     set_current_chapter_call, update_chapter_call, update_volume_call,
 };
-use super::support::{
-    CommandCall, SequenceError, run_without_foreign_keys, stores, with_new_request_ids,
-};
-
-/// The replay error of one exact retry.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) enum ReplayError {
-    BindingConflict,
-    HistoricalAcknowledgementUnavailable,
-    InvalidChallenge,
-    MissingProject,
-    WriterIneligible,
-    Unavailable,
-}
-
-/// Settles the call, then replays it with pre-capture and then with damaged acknowledgement evidence.
-pub(super) async fn evidence_replays<C: ProjectCommand<Error: SequenceError> + Clone>(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    call: &CommandCall<C>,
-) -> (ReceiptResult, [ReplayError; 2]) {
-    let Ok(settled) = settle_project_command(store, &call.envelope, &call.input).await else {
-        panic!("the project command must settle");
-    };
-    let key = &call.envelope.challenge_binding.idempotency_key;
-    let mut errors = Vec::new();
-    for evidence in [
-        "acknowledgement_format = NULL, response_project = NULL, response_assistance = NULL",
-        "acknowledgement_format = 'command_response_project.v1',
-         response_project = '{\"broken\":true}'::jsonb, response_assistance = NULL",
-    ] {
-        admin
-            .batch_execute(&format!(
-                "UPDATE storyos.command_idempotency SET {evidence}
-                  WHERE idempotency_key = '{key}'"
-            ))
-            .await
-            .unwrap();
-        let retry = with_new_request_ids(call);
-        let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
-            panic!("a replay without complete evidence must fail");
-        };
-        errors.push(error.sequence().into());
-    }
-    let errors: [ReplayError; 2] = errors.try_into().unwrap();
-    (settled.outcome.receipt_result(), errors)
-}
-
-impl From<ProjectCommandError> for ReplayError {
-    fn from(error: ProjectCommandError) -> Self {
-        match error {
-            ProjectCommandError::BindingConflict => Self::BindingConflict,
-            ProjectCommandError::HistoricalAcknowledgementUnavailable => {
-                Self::HistoricalAcknowledgementUnavailable
-            }
-            ProjectCommandError::InvalidChallenge => Self::InvalidChallenge,
-            ProjectCommandError::MissingProject => Self::MissingProject,
-            ProjectCommandError::WriterIneligible => Self::WriterIneligible,
-            ProjectCommandError::Unavailable(_) => Self::Unavailable,
-        }
-    }
-}
+use crate::shared_tests::command_sequence_support::{CommandCall, SequenceError, stores};
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn every_replay_separates_pre_capture_from_damaged_evidence() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let create = create_agent_run_call(&store, /*base*/ 0xb350).await;
     let observed = vec![
@@ -165,25 +102,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         evidence_replays(
             &store,
             &admin,
-            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x6ad0).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
             &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7b50).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
-            &replan_proposal_call(&store, &admin, /*base*/ 0x7280).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
-            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7290).await,
         )
         .await,
         evidence_replays(
@@ -228,77 +147,10 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ],
         )
     };
-    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 19];
+    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 16];
     expected.push(separated(ReceiptResult::NoEffect));
     expected.push(separated(ReceiptResult::AuthoritativeApplied));
     assert_eq!(observed, expected);
-}
-
-/// Settles the call, damages its records with `damage` that takes the Receipt identity, and
-/// replays it.
-pub(super) async fn damaged_replay<C: ProjectCommand<Error: SequenceError> + Clone>(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    call: &CommandCall<C>,
-    damage: fn(&str) -> String,
-) -> ReplayError {
-    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
-        panic!("the project command must settle");
-    };
-    run_without_foreign_keys(admin, &damage(&call.envelope.ids.receipt_id)).await;
-    let retry = with_new_request_ids(call);
-    let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
-        panic!("a replay with damaged records must fail");
-    };
-    error.sequence().into()
-}
-
-/// Settles the call and replays it once after `damage`, which the CHECK constraints of `table`
-/// whose definition contains `checked` refuse.
-///
-/// The helper drops those constraints for the replay. Then it runs `repair` and restores them.
-pub(super) async fn replay_past_checks<C: ProjectCommand<Error: SequenceError> + Clone>(
-    admin: &Client,
-    store: &PostgresProjectReader,
-    call: &CommandCall<C>,
-    table: &str,
-    checked: &str,
-    damage: &str,
-    repair: &str,
-) -> ReplayError {
-    let checks = admin
-        .query(
-            "SELECT conname::text, pg_get_constraintdef(oid) FROM pg_constraint
-              WHERE conrelid = $1::text::regclass AND contype = 'c'
-                AND strpos(pg_get_constraintdef(oid), $2) > 0",
-            &[&format!("storyos.{table}"), &checked],
-        )
-        .await
-        .unwrap()
-        .iter()
-        .map(|row| {
-            (
-                row.get::<_, String>(/*idx*/ 0),
-                row.get::<_, String>(/*idx*/ 1),
-            )
-        })
-        .collect::<Vec<_>>();
-    let dropped = checks
-        .iter()
-        .map(|(name, _)| format!("ALTER TABLE storyos.{table} DROP CONSTRAINT {name};"))
-        .collect::<String>();
-    run_without_foreign_keys(admin, &format!("{dropped} {damage}")).await;
-    let retry = with_new_request_ids(call);
-    let replayed = settle_project_command(store, &retry.envelope, &retry.input).await;
-    let restored = checks
-        .iter()
-        .map(|(name, check)| format!("ALTER TABLE storyos.{table} ADD CONSTRAINT {name} {check};"))
-        .collect::<String>();
-    run_without_foreign_keys(admin, &format!("{repair}; {restored}")).await;
-    let Err(error) = replayed else {
-        panic!("a replay with a damaged stored value must fail");
-    };
-    error.sequence().into()
 }
 
 /// Settles the call and replays it once with its Receipt payload set to `changed`, an SQL
@@ -343,9 +195,7 @@ pub(super) async fn replay_with_receipt_payload<C: ProjectCommand<Error: Sequenc
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_applied_replay_requires_the_payload_field_of_its_receipt() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let observed = vec![
         replay_with_receipt_payload(
@@ -362,37 +212,14 @@ async fn an_applied_replay_requires_the_payload_field_of_its_receipt() {
             "result_payload - 'transition'",
         )
         .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &replan_proposal_call(&store, &admin, /*base*/ 0x9c20).await,
-            "result_payload - 'transition'",
-        )
-        .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x9c30).await,
-            "result_payload - 'transition'",
-        )
-        .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x9c40).await,
-            "result_payload - 'transition'",
-        )
-        .await,
     ];
-    assert_eq!(observed, vec![ReplayError::Unavailable; 5]);
+    assert_eq!(observed, vec![ReplayError::Unavailable; 2]);
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_receipt_replay_refuses_a_null_or_zero_historical_order_and_a_zero_shape_value() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let observed = vec![
         replay_with_receipt_payload(

@@ -1,7 +1,4 @@
-use super::{
-    MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference,
-    MemorySourceReferenceRead, memory_revision_pin, read_memory_source_references,
-};
+use super::{MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, memory_revision_pin};
 
 /// The closed lists of the baseline (ADR 0094 section 3) and their tokens.
 #[test]
@@ -43,51 +40,6 @@ fn each_closed_list_has_its_tokens_and_refuses_another_token() {
             None,
             None,
             None,
-        )
-    );
-}
-
-/// Memory contract section 10: a reference that names a record that the Project does not have
-/// now, or that does not decode, is unavailable, and the read does not fail.
-#[test]
-fn a_reference_to_a_missing_record_reads_as_unavailable() {
-    let references = serde_json::json!([
-        {"kind": "conversation", "conversation_id": "conversation-a", "run_id": "run-a",
-         "tool_call_id": "call-a"},
-        {"kind": "chapter", "chapter_id": "chapter-a"},
-        {"kind": "chapter", "chapter_id": "chapter-removed"},
-        {"kind": "conversation", "conversation_id": "conversation-b"},
-        {"kind": "fiction_assertion", "assertion_id": "assertion-a"},
-    ]);
-    let present = |reference: &MemorySourceReference| match reference {
-        MemorySourceReference::Chapter { chapter_id } => chapter_id == "chapter-a",
-        MemorySourceReference::Conversation { .. } => true,
-    };
-
-    assert_eq!(
-        (
-            read_memory_source_references(&references, present),
-            read_memory_source_references(&serde_json::json!({"kind": "chapter"}), present),
-        ),
-        (
-            vec![
-                MemorySourceReferenceRead::Available(MemorySourceReference::Conversation {
-                    conversation_id: "conversation-a".to_owned(),
-                    run_id: Some("run-a".to_owned()),
-                    tool_call_id: Some("call-a".to_owned()),
-                }),
-                MemorySourceReferenceRead::Available(MemorySourceReference::Chapter {
-                    chapter_id: "chapter-a".to_owned(),
-                }),
-                MemorySourceReferenceRead::Unavailable,
-                MemorySourceReferenceRead::Available(MemorySourceReference::Conversation {
-                    conversation_id: "conversation-b".to_owned(),
-                    run_id: None,
-                    tool_call_id: None,
-                }),
-                MemorySourceReferenceRead::Unavailable,
-            ],
-            Vec::new(),
         )
     );
 }

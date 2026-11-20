@@ -13,13 +13,16 @@ use storyos_application::{
     complete_agent_run,
 };
 use storyos_core::{
-    ACTIVE_COMPACTION_REQUEST_PREFIX, AgentRunStatus, DeploymentDestination, RequestBounds,
-    UNEXECUTED_CALL_OUTPUT,
+    ACTIVE_COMPACTION_REQUEST_PREFIX, AgentRunStatus, RequestBounds, UNEXECUTED_CALL_OUTPUT,
 };
 
-use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, stores};
-use crate::agent_run_finish_rule::tests::tool_loop_run;
-use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
+use crate::shared_tests::agent_run_finish_rule::tool_loop_run;
+use crate::shared_tests::agent_run_steering::{
+    AuthorAction, AuthorAt, Moment, queued, settle, steering,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 
 /// The adapter `inner`, which also keeps the input of each Create request in the body that the
 /// tool loop wire of the Agent Plan route builds for it.
@@ -59,7 +62,7 @@ impl<A: ModelProviderAdapter + Sync> ModelProviderAdapter for RealWire<A> {
                     model_attempt_id: "018f0000-0000-7001-8000-000000057f00".to_owned(),
                 }),
                 route: RequestRoute {
-                    mapping_revision: storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION
+                    mapping_revision: storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION
                         .to_owned(),
                     endpoint: Some("http://127.0.0.1:9".to_owned()),
                     bounds: Some(RequestBounds {
@@ -70,7 +73,7 @@ impl<A: ModelProviderAdapter + Sync> ModelProviderAdapter for RealWire<A> {
                 },
                 ..create.clone()
             };
-            let prepared = crate::agent_run_retrieval::tests::adapter()
+            let prepared = crate::shared_tests::agent_run_retrieval::adapter()
                 .prepare(&DestinationRequest::Create(wire))
                 .await
                 .ok()
@@ -119,9 +122,7 @@ impl<A: ModelProviderAdapter + Sync> ModelProviderAdapter for RealWire<A> {
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_request_after_a_steering_input_between_two_requests_answers_each_call_of_its_prior_response()
  {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued(&store, "570").await;
     let input = steering(&store, &scope, 0x57f0, &run_id, "Keep the voice.", None).await;
@@ -164,9 +165,7 @@ async fn a_request_after_a_steering_input_between_two_requests_answers_each_call
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_next_run_answers_each_call_of_the_last_run_step_with_the_unexecuted_output() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let unexecuted = json!([
         ["unexecuted", "call_look_up_notes_23"],
@@ -201,18 +200,14 @@ async fn the_next_run_answers_each_call_of_the_last_run_step_with_the_unexecuted
     for ([first, limited, next], script, message, expected) in cases {
         let (scope, chapter_id, _, _) =
             tool_loop_run(&store, &admin, [first, limited], script, None, false).await;
-        let run_id = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            next,
-            DeploymentDestination::HostFakeToolLoop,
-            &message,
-            ConversationSelection::Existing {
+        let run_id = Admission {
+            message: &message,
+            conversation: ConversationSelection::Existing {
                 conversation_id: format!("018f0000-0000-7001-8000-00000006{limited}6"),
             },
-            None,
-        )
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, next)
         .await;
         let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
         let adapter = RealWire::new(FakeDestination);

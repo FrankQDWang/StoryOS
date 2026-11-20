@@ -1,25 +1,18 @@
 use super::{GrantFacts, GrantScope, admit_disclosure};
 use crate::assemble_context::{ProjectionMode, SelectedProjection};
+use crate::shared_tests::targeted_passage_assembly;
 use crate::{
-    ContextSourceClass, CurrentPassageAssembly, CurrentPassageAssemblyRecord,
-    InstructionBindingInput, PassageContextTarget, assemble_current_passage_context,
-    assemble_passage_collection, decode_assembly_record, encode_assembly_record,
+    ContextSourceClass, CurrentPassageAssembly, CurrentPassageAssemblyRecord, PassageContextTarget,
+    assemble_current_passage_context, assemble_passage_collection, decode_assembly_record,
+    encode_assembly_record,
 };
 
 fn passage(chapter_id: &str, body: &str) -> CurrentPassageAssembly {
     CurrentPassageAssembly {
-        operation_requirement_id: "req-1".to_owned(),
-        input_snapshot_id: "snap-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "user-1".to_owned(),
-        project_id: "proj-1".to_owned(),
-        author_message: "Help with this passage.".to_owned(),
         chapter_id: chapter_id.to_owned(),
         chapter_revision_id: Some(format!("{chapter_id}-rev")),
         proposal_target_block_ids: Some(vec![format!("{chapter_id}-block")]),
-        chapter_body: body.to_owned(),
-        instruction: InstructionBindingInput::Absent,
-        destination_identity: "dest-1".to_owned(),
+        ..targeted_passage_assembly("Help with this passage.", body)
     }
 }
 

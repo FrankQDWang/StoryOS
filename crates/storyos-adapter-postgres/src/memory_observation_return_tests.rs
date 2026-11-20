@@ -2,14 +2,17 @@
 //! a pass on the fake destination. The lead of these tests is `51`.
 
 use serde_json::{Value, json};
-use storyos_application::{MemoryConsolidationStore, ProjectScope};
+use storyos_application::ProjectScope;
 use tokio_postgres::Client;
 
-use super::schedule_tests::pass_due;
-use super::tests::{capture, create, run_pass, scripted, settled, update};
-use crate::agent_run_dispatch::tests::stores;
-use crate::memory_capture::tests::{project, run_capture};
-use crate::memory_entries::tests::write_versions;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::memory_capture::{project, run_capture};
+use crate::shared_tests::memory_consolidation::{
+    capture, create, run_pass, scripted, settled, update,
+};
+use crate::shared_tests::memory_consolidation_schedule::pass_due;
+use crate::shared_tests::memory_entries::write_versions;
 
 /// The state of each observation of the Project, from the settlement of the pass of `run_id`.
 async fn states(admin: &Client, run_id: &str) -> Value {
@@ -61,9 +64,7 @@ async fn captured(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_refused_observation_returns_with_its_label_and_an_applied_operation_consumes_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let observations = json!([
         scripted("林舟", &[refused_update(1)]),
         scripted("林雪", &[create("character", "林舟", json!([2]))]),
@@ -105,9 +106,7 @@ async fn a_refused_observation_returns_with_its_label_and_an_applied_operation_c
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_observation_that_a_second_pass_refuses_again_is_consumed() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let operations = [create("unknown", "桥", json!([1])), refused_update(999)];
     let observations = json!([scripted("桥", &operations)]);
     let (store, admin, scope) = captured("511", observations).await;
@@ -143,9 +142,7 @@ async fn an_observation_that_a_second_pass_refuses_again_is_consumed() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_observation_that_an_applied_operation_also_names_is_consumed() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let operations = [refused_update(999), create("character", "林舟", json!([1]))];
     let observations = json!([scripted("林舟", &operations)]);
     let (store, admin, scope) = captured("512", observations).await;
@@ -173,9 +170,7 @@ async fn an_observation_that_an_applied_operation_also_names_is_consumed() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_observation_of_a_stale_pass_still_returns_one_time() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let observations = json!([scripted("桥", &[refused_update(999)])]);
     let (store, admin, scope) = captured("513", observations).await;
     write_versions(
@@ -184,10 +179,8 @@ async fn an_observation_of_a_stale_pass_still_returns_one_time() {
         &[(1, 1, 1, "current", "other", "阿青", "船夫")],
     )
     .await;
-    let stale = store
-        .start_memory_consolidation(&scope)
+    let stale = crate::shared_tests::memory_consolidation::start_pass(&store, &scope)
         .await
-        .unwrap()
         .unwrap();
     let id: String = admin
         .query_one(
@@ -198,7 +191,8 @@ async fn an_observation_of_a_stale_pass_still_returns_one_time() {
         .await
         .unwrap()
         .get(/*idx*/ 0);
-    let deleted = crate::delete_memory_entry::tests::delete(&store, &scope, 0x513a, &id, 1).await;
+    let deleted =
+        crate::shared_tests::delete_memory_entry::delete(&store, &scope, 0x513a, &id, 1).await;
     run_capture(&store, &admin, &scope, &stale.run_id).await;
     let stale_pass = settled(&admin, &stale.run_id).await;
 

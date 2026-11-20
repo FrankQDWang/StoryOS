@@ -2,8 +2,8 @@ use serde_json::{Value, json};
 use storyos_core::{ContractCheck, ContractDifference, EXA_TOOL_REGISTRATION};
 
 use super::without_descriptions;
+use crate::ToolDiscoveryRecord;
 use crate::record::{digest, tools_page};
-use crate::{DiscoveredTool, ToolDiscoveryRecord};
 
 type Edit = fn(&mut Value);
 
@@ -67,7 +67,7 @@ fn tool<'a>(recorded: &'a mut Value, name: &str) -> &'a mut Value {
 fn the_pinned_digests_match_the_discovery_record_and_an_extra_unapproved_tool_is_not_drift() {
     let recorded = recorded_json();
     let record = record_of(&recorded);
-    let names: Vec<&str> = record.tools().iter().map(DiscoveredTool::name).collect();
+    let names: Vec<&str> = record.tools.iter().map(|tool| tool.name.as_str()).collect();
     let recorded_digests: Vec<Value> = recorded["tools"]
         .as_array()
         .unwrap()
@@ -75,9 +75,9 @@ fn the_pinned_digests_match_the_discovery_record_and_an_extra_unapproved_tool_is
         .map(|tool| tool["input_schema_digest"].clone())
         .collect();
     let computed_digests: Vec<Value> = record
-        .tools()
+        .tools
         .iter()
-        .map(|tool| json!(tool.input_schema_digest()))
+        .map(|tool| json!(tool.input_schema_digest))
         .collect();
 
     assert_eq!(names, ["web_search_exa", "web_fetch_exa", "agent_run"]);
@@ -113,8 +113,8 @@ fn add_fetch_output_schema(recorded: &mut Value) {
 
 fn observed_contract_digest(edit: Edit, name: &str) -> String {
     let record = edited(edit);
-    let observed = record.tools().iter().find(|tool| tool.name() == name);
-    digest(&without_descriptions(observed.unwrap().input_schema()))
+    let observed = record.tools.iter().find(|tool| tool.name == name);
+    digest(&without_descriptions(&observed.unwrap().input_schema))
 }
 
 #[test]
@@ -170,9 +170,9 @@ fn a_changed_identity_schema_or_removed_approved_tool_is_drift_that_names_the_di
 #[test]
 fn a_changed_description_annotation_or_server_version_is_provenance_only() {
     let record = record_of(&recorded_json());
-    let contracts: Vec<String> = record.tools()[..2]
+    let contracts: Vec<String> = record.tools[..2]
         .iter()
-        .map(|tool| digest(&without_descriptions(tool.input_schema())))
+        .map(|tool| digest(&without_descriptions(&tool.input_schema)))
         .collect();
     let pinned: Vec<&str> = EXA_TOOL_REGISTRATION
         .tools

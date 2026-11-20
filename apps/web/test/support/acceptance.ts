@@ -4,13 +4,13 @@ import { fileURLToPath } from "node:url";
 import { acceptProposal, applyAuthorEdit, createAgentRun, createChapter, createEditorSession, createProject,
   createProjectChallenge, createProjectCommandChallenge, createVolume, digestAcceptProposal, digestApplyAuthorEdit,
   digestCreateAgentRun, digestCreateChapter, digestCreateEditorSession, digestCreateVolume,
-  digestRejectProposalOperations, digestUpdateProjectAssistance, getAgentRun, getChapter, getEditorSession, getProposal,
-  rejectProposalOperations, updateProjectAssistance,
+  digestUpdateProjectAssistance, getAgentRun, getChapter, getEditorSession, getProposal, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, ApplyAuthorEditRequest, AuthorEditPrimitive, CreateAgentRunRequest,
-  CreateEditorSessionRequest, GetAgentRunResponse, RejectProposalOperationsRequest, SelectionReference,
+  CreateEditorSessionRequest, GetAgentRunResponse, SelectionReference,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { SECURITY_POLICY_REVISION } from "../../src/client-identity.ts";
 import { queryStoryOSPostgres as queryPostgres, runStoryOSWorkerStderr,
   sessionFetch as browserFetch, withChallengeBudget } from "./node-integration.ts";
 
@@ -20,7 +20,7 @@ export const USER_A = "018f0000-0000-7001-8000-000000000001";
 export const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const BINDING = {
   client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-  security_policy_revision: "storyos.web-security-policy.release-1.v1",
+  security_policy_revision: SECURITY_POLICY_REVISION,
 };
 export const PROSE = "Guard the narrator voice in this passage.";
 export const REVISED = "Keep the narrator voice in this passage.";
@@ -331,29 +331,6 @@ export async function reviseCandidate(
   return { session, revised };
 }
 
-/** Moves the Chapter Head to a new Revision with these Blocks, as an author change outside the editor. */
-export async function advanceChapterHead(projectId: string, chapterId: string, fromRevisionId: string,
-  revisionId: string, blocks: { manuscript_block_id: string; text: string }[]) {
-  const payload = blocks.length === 1 ? blocks[0]!.text : JSON.stringify({
-    format: "storyos.manuscript-payload.v1", schema_version: 1, coordinate_version: 1,
-    blocks: blocks.map((block) => ({ ...block, block_kind: "paragraph" })) });
-  const from = `FROM storyos.authoritative_revisions WHERE project_id = '${projectId}'::uuid
-    AND revision_id = '${fromRevisionId}'::uuid`;
-  await queryPostgres([
-    ...blocks.map((block) => `INSERT INTO storyos.manuscript_blocks SELECT owner_user_id, project_id,
-      '${block.manuscript_block_id}'::uuid, manuscript_object_id, 'paragraph' ${from} ON CONFLICT DO NOTHING;`),
-    `INSERT INTO storyos.authoritative_payloads SELECT owner_user_id, project_id, '${revisionId}'::uuid,
-      convert_to('${payload.replaceAll("'", "''")}', 'UTF8') ${from};`,
-    `INSERT INTO storyos.authoritative_revisions SELECT owner_user_id, project_id, manuscript_object_id,
-      '${revisionId}'::uuid, '${revisionId}'::uuid ${from};`,
-    ...blocks.map((block, index) => `INSERT INTO storyos.manuscript_revision_members SELECT owner_user_id,
-      project_id, manuscript_object_id, '${revisionId}'::uuid, '${block.manuscript_block_id}'::uuid, ${index + 1} ${from};`),
-    `UPDATE storyos.authoritative_heads SET current_revision_id = '${revisionId}'::uuid
-      WHERE project_id = '${projectId}'::uuid AND manuscript_object_id = '${chapterId}'::uuid;`,
-  ].join("\n"));
-  await alignWriterBase(projectId, chapterId, revisionId, revisionId);
-}
-
 /** Moves the editor session base of the current writer to the Chapter Head, as an Author Edit does. */
 export async function alignWriterBase(projectId: string, chapterId: string,
   nextRevision: string, snapshotId: string): Promise<void> {
@@ -457,47 +434,6 @@ export async function openedBlockProposal(started: Started, ns: string) {
     validationReceiptId: revised.proposal.validation_receipt.validation_receipt_id };
 }
 
-export function acceptRequest(opened: Awaited<ReturnType<typeof openedBlockProposal>>, expectedRevisionId: string,
-  correlation: string): AcceptProposalRequest {
-  return {
-    command_schema: "storyos.command.accept-proposal.request.v1",
-    accept_proposal_input: {
-      proposal_revision_id: opened.revised.revision_id, validation_receipt_id: opened.validationReceiptId,
-      selected_operation_ids: [opened.revised.operation_id], expected_authoritative_revision_id: expectedRevisionId,
-      editor_session_id: opened.session.editor_session.editor_session_id, ...BINDING, correlation_id: id(correlation),
-    },
-  };
-}
-
-export async function accept(started: Started, opened: Awaited<ReturnType<typeof openedBlockProposal>>,
-  request: AcceptProposalRequest, key: string) {
-  const options = { baseUrl: started.baseUrl, projectId: opened.prepared.projectId,
-    proposalId: opened.revised.proposal_id, fetchImpl: opened.prepared.fetchImpl, idempotencyKey: id(key), request };
-  let nonce = "";
-  const accepted = await challenged(started.baseUrl, opened.prepared.fetchImpl, opened.prepared.projectId, "POST",
-    "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", request.command_schema,
-    await digestAcceptProposal(request), id(key), (antiForgery) => acceptProposal({ ...options, antiForgery: (nonce = antiForgery) }));
-  return { accepted, replay: () => acceptProposal({ ...options, antiForgery: nonce }) };
-}
-
-export async function reject(started: Started, opened: Awaited<ReturnType<typeof openedBlockProposal>>,
-  headRevisionId: string, key: string) {
-  const request: RejectProposalOperationsRequest = {
-    command_schema: "storyos.command.reject-proposal-operations.request.v1",
-    reject_proposal_operations_input: { ...BINDING, correlation_id: id(`${key}1`),
-      editor_session_id: opened.session.editor_session.editor_session_id,
-      proposal_revision_id: opened.revised.revision_id,
-      selected_pending_operation_ids: [opened.revised.operation_id],
-      expected_target_revisions: [headRevisionId],
-      rejection_reason: { kind: "author_declined", note: { kind: "omitted" } } },
-  };
-  return challenged(started.baseUrl, opened.prepared.fetchImpl, opened.prepared.projectId, "POST",
-    "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections", request.command_schema,
-    await digestRejectProposalOperations(request), id(`${key}2`), (antiForgery) => rejectProposalOperations({
-      baseUrl: started.baseUrl, projectId: opened.prepared.projectId, proposalId: opened.revised.proposal_id,
-      request, fetchImpl: opened.prepared.fetchImpl, antiForgery, idempotencyKey: id(`${key}2`) }));
-}
-
 type Proposal = Awaited<ReturnType<typeof getProposal>>["proposal"];
 
 /** Reads one Proposal of a seeded Project. */
@@ -527,7 +463,7 @@ export function operations(proposal: Proposal) {
 }
 
 /** The Proposal ownership that one author edit observes: none, an acknowledged head, or an explicit target. */
-export type EditOwnership = { kind: "authoritative" } | { kind: "acknowledged" | "targeted"; proposal: Proposal };
+type EditOwnership = { kind: "authoritative" } | { kind: "acknowledged" | "targeted"; proposal: Proposal };
 
 type AuthorEditContext = {
   prepared: { projectId: string; fetchImpl: typeof fetch };

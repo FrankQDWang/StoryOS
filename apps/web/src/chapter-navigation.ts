@@ -11,13 +11,13 @@ import type { PendingEditProjection } from "./editor-types.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type OpenSelectedChapter =
+type OpenSelectedChapter =
   | { kind: "opened"; chapter: GetChapterResponse }
   | { kind: "missing" }
   | { kind: "snapshot_expired" }
   | { kind: "unavailable" };
 
-export interface SelectedChapterSurface {
+interface SelectedChapterSurface {
   title: string;
   body: string;
   save_state: PendingEditProjection["save_state"];

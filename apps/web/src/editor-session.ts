@@ -1,5 +1,4 @@
-import { upgradeJournalWorkingIndexes } from "./journal-working-set.ts";
-import { readLocalUnsentText } from "./local-unsent-text.ts";
+import { createJournalWorkingIndexes } from "./journal-working-set.ts";
 import {
   createEditorSession,
   createProjectCommandChallenge,
@@ -31,46 +30,21 @@ import {
   stageProjectActivitySnapshot,
   validatedCanonicalSnapshot,
 } from "./project-activity-ingest.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
+import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
 export {
   freezeOneIntentSubmission,
   submitOnePendingAuthorEdit,
 } from "./author-edit-submission.ts";
-export { appendAuthorEdit, rebuildPendingProjection, reconfirmLegacyReplaceSelection }
-  from "./local-edit-journal.ts";
+export { appendAuthorEdit, rebuildPendingProjection } from "./local-edit-journal.ts";
 
-const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const boundedU64 = (value: unknown): value is string => typeof value === "string" && U64.test(value)
   && BigInt(value) <= 18446744073709551615n;
 const positiveU64 = (value: unknown): value is string => boundedU64(value) && BigInt(value) > 0n
   && BigInt(value) <= 18446744073709551615n;
-
-const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-});
-const transactionResult = (transaction: IDBTransaction): Promise<void> => new Promise(
-  (resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction aborted"),
-    );
-    transaction.onerror = () => reject(
-      transaction.error ?? new Error("IndexedDB transaction failed"),
-    );
-  },
-);
-
-function uuidV7(cryptoImpl: Crypto = globalThis.crypto, now = Date.now()): string {
-  const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
-  for (let offset = 5; offset >= 0; offset -= 1) { bytes[offset] = now & 0xff; now = Math.floor(now / 256); }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 async function openJournalDatabase(
   indexedDBImpl: IDBFactory | undefined,
@@ -80,18 +54,7 @@ async function openJournalDatabase(
   const name = `storyos-local-edit-journal:${scope.owner_user_id}:${scope.project_id}`;
   const request = indexedDBImpl.open(name, JOURNAL_DATABASE_VERSION);
   request.onupgradeneeded = (event) => {
-    // Version 5 keeps each version 4 row. Version 3 also gets the working index of version 4.
-    if (event.oldVersion === 3 || event.oldVersion === 4) {
-      const transaction = request.transaction!;
-      if (event.oldVersion === 3) upgradeJournalWorkingIndexes(transaction);
-      const schema = transaction.objectStore("metadata").get("schema");
-      schema.onsuccess = () => {
-        const value: unknown = schema.result;
-        if (value === null || typeof value !== "object" || Reflect.get(value, "version") !== event.oldVersion) transaction.abort();
-        else transaction.objectStore("metadata").put({ key: "schema", version: JOURNAL_DATABASE_VERSION });
-      };
-      return;
-    }
+    // A Journal of an earlier version has no upgrade path (ADR 0099). The abort keeps it, and the open fails.
     if (event.oldVersion !== 0) {
       request.transaction!.abort();
       return;
@@ -122,7 +85,7 @@ async function openJournalDatabase(
     database.createObjectStore("outcome_query_observations", {
       keyPath: "outcome_query_observation_id",
     }).createIndex("group", "journal_submission_group_id", { unique: false });
-    upgradeJournalWorkingIndexes(request.transaction!);
+    createJournalWorkingIndexes(request.transaction!);
     request.transaction!.objectStore("metadata")
       .put({ key: "schema", version: JOURNAL_DATABASE_VERSION });
   };
@@ -472,10 +435,7 @@ export async function openEditorWorkspace({
       database.close();
       return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error };
     }
-    // The Journal did not open, for example after a failed upgrade. Read its unsent text with no write (contract 3.2).
-    const localUnsentText = indexedDBImpl === undefined ? undefined
-      : await readLocalUnsentText(indexedDBImpl, scope, cryptoImpl, profile.max_json_string_utf8_bytes);
-    return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error,
-      ...(localUnsentText === undefined ? {} : { localUnsentText }) };
+    // The Journal did not open, for example a Journal of an earlier version (ADR 0099).
+    return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error };
   }
 }

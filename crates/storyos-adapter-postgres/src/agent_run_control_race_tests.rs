@@ -1,7 +1,6 @@
 //! A control command that loses a serialization race with the Worker (#1484).
 
 use std::fmt::Debug;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -17,9 +16,15 @@ use tokio::sync::Notify;
 use tokio_postgres::{Client, NoTls};
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, stores};
-use crate::agent_run_steering::tests::{cancellation, claim_duties, queued, settle, steering};
-use crate::command_sequence::tests::{CommandCall, PAUSE_AGENT_RUN, issued};
+use crate::shared_tests::agent_run_steering::Creates;
+use crate::shared_tests::agent_run_steering::{
+    cancellation, claim_duties, queued, settle, steering,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::command_sequence_support::{CommandCall, issued};
+use crate::shared_tests::model_gateway::RuntimeClock;
 
 /// The control command of the author.
 enum Control {
@@ -70,7 +75,7 @@ struct RaceAt<'a> {
     race: usize,
     start: &'a Notify,
     answered: &'a Notify,
-    creates: Mutex<usize>,
+    creates: Creates,
     released: AtomicBool,
 }
 
@@ -135,14 +140,7 @@ impl ModelProviderAdapter for RaceAt<'_> {
         &self,
         request: &DestinationRequest,
     ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
-        let create = match request {
-            DestinationRequest::Create(_) => {
-                let mut creates = self.creates.lock().unwrap();
-                *creates += 1;
-                Some(*creates)
-            }
-            DestinationRequest::Retrieve(_) | DestinationRequest::Abort(_) => None,
-        };
+        let create = self.creates.count(request);
         if create == Some(self.race + 1) {
             self.release().await;
             tokio::time::timeout(Duration::from_secs(/*secs*/ 30), self.answered.notified())
@@ -189,9 +187,7 @@ enum Kind {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_control_command_that_loses_a_race_with_the_worker_answers_the_committed_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL").unwrap();
     // Request 1 is the first RunStep, and request 2 is the closing RunStep. The Worker commits
@@ -246,7 +242,7 @@ async fn a_control_command_that_loses_a_race_with_the_worker_answers_the_committ
             race,
             start: &start,
             answered: &answered,
-            creates: Mutex::new(/*value*/ 0),
+            creates: Creates::default(),
             released: AtomicBool::new(false),
         };
         let worker = async {

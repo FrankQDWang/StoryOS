@@ -27,18 +27,18 @@ impl ExportWorkStore for PostgresProjectReader {
     }
 }
 
+/// The statement that sets the Worker scope in the open transaction.
+pub(crate) const WORKER_SCOPE: &str = "SELECT set_config('storyos.scope_mode', 'worker', true),
+            set_config('storyos.owner_user_id', '', true),
+            set_config('storyos.project_id', '', true),
+            set_config('storyos.user_id', '', true)";
+
 /// Sets the Worker scope in the open transaction of `client`.
 pub(crate) async fn set_worker_scope(
     client: &impl tokio_postgres::GenericClient,
 ) -> Result<(), ProjectReadError> {
     client
-        .execute(
-            "SELECT set_config('storyos.scope_mode', 'worker', true),
-                    set_config('storyos.owner_user_id', '', true),
-                    set_config('storyos.project_id', '', true),
-                    set_config('storyos.user_id', '', true)",
-            &[],
-        )
+        .execute(WORKER_SCOPE, &[])
         .await
         .map(|_| ())
         .map_err(read_error)

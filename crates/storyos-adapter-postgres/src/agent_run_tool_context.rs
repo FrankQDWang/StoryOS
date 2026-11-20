@@ -14,7 +14,7 @@ use storyos_core::{GrantScope, ToolCallPlan};
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::{ToolCallRow, damaged};
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 
 /// The manifest identities that the Destination Attempt of the ToolCall refers to.
 pub(crate) struct ToolContextManifests {
@@ -136,7 +136,7 @@ pub(crate) async fn commit_tool_context(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     if inserted != 1 {
         return Err(damaged(
             "The primary Operation Requirement of the Run is missing",
@@ -177,7 +177,7 @@ pub(crate) async fn committed_tool_context(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(found.map(|found| ToolContextManifests {
         assembly: manifest_id.to_owned(),
         destination: found.get(0),

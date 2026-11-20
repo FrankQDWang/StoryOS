@@ -2,102 +2,39 @@
 //! work rows with the admin connection, and they park the work of other Projects. Test prefix
 //! leads `f3`, `2f`, and `59`.
 
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Mutex;
 use std::time::Duration;
 
 use storyos_adapter_fake_destination::{
     EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER, EMBEDDING_UNKNOWN_MARKER,
-    FakeEmbeddings,
 };
 use storyos_application::{
-    ClaimedPassageIndex, EmbeddingObservation, EmbeddingProviderAdapter, EmbeddingRoute,
-    NoEmbeddingDestination, PassageIndexStep, PassageIndexWorkStore, PassageVectorKey,
-    PassageVectorRow, PreDispatchRefusal, PreparedEmbeddingRequest, ProjectId, ProjectScope,
-    claim_next_passage_index_work, step_passage_index_work,
+    ClaimedPassageIndex, PassageIndexStep, PassageIndexWorkStore, PassageVectorKey,
+    PassageVectorRow, ProjectId, ProjectScope,
 };
 use storyos_core::{
-    AGENT_PLAN_EMBEDDING_REGISTRATION, EmbeddingInput, EmbeddingRegistration,
-    HOST_FAKE_EMBEDDING_REGISTRATION, PASSAGE_CUT_REVISION, TransitionOutcome,
+    AGENT_PLAN_EMBEDDING_REGISTRATION, HOST_FAKE_EMBEDDING_REGISTRATION, PASSAGE_CUT_REVISION,
+    TransitionOutcome,
 };
 use tokio_postgres::Client;
 
 use super::{MarkedChapters, claim_passage_index_row, mark_passage_index_work};
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_embedding_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::cancellation;
-use crate::command_sequence::tests::{titled_chapter, undo_named};
-use crate::delete_structure_tests::settle_delete_chapter;
-use crate::passage_vectors::tests::{chapter, digests, head, prepend, rows as digest_rows, texts};
-use crate::project_embedding_binding::tests::{FAKE, embedding_project};
-
-const FAKE_ONLY: &[&EmbeddingRegistration] = &[&HOST_FAKE_EMBEDDING_REGISTRATION];
-
-/// The stores of a deployment with the fake embedding configuration.
-pub(crate) async fn configured() -> (PostgresProjectReader, Client) {
-    let (store, admin) = stores().await;
-    (store.with_embedding_registration(FAKE), admin)
-}
-
-/// Gives the open transaction of `admin` the fake embedding configuration of the deployment.
-pub(crate) async fn deploy(admin: &Client) {
-    admin
-        .execute(
-            "SELECT set_config('storyos.embedding_registration', $1, true)",
-            &[&HOST_FAKE_EMBEDDING_REGISTRATION.revision],
-        )
-        .await
-        .unwrap();
-}
-
-/// The work rows of the Project in Chapter order: the Chapter, its order, its mark generation,
-/// its completed generation, and whether its quiet time runs.
-pub(crate) async fn work(
-    admin: &Client,
-    scope: &ProjectScope,
-) -> Vec<(String, i64, i64, i64, bool)> {
-    admin
-        .query(
-            "SELECT chapter_id::text, chapter_order, mark_generation, completed_generation,
-                    not_before > clock_timestamp()
-               FROM storyos.passage_index_work WHERE project_id = $1::text::uuid
-              ORDER BY chapter_order",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap()
-        .iter()
-        .map(|row| (row.get(0), row.get(1), row.get(2), row.get(3), row.get(4)))
-        .collect()
-}
-
-/// Ends the quiet time of each work row of the Project.
-async fn wake(admin: &Client, scope: &ProjectScope) {
-    admin
-        .execute(
-            "UPDATE storyos.passage_index_work
-                SET not_before = clock_timestamp() - interval '1 second'
-              WHERE project_id = $1::text::uuid",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-}
-
-/// Moves the work of each other Project one day later, so that a claim takes only this Project.
-async fn park_other_work(admin: &Client, scope: &ProjectScope) {
-    admin
-        .execute(
-            "UPDATE storyos.passage_index_work
-                SET not_before = clock_timestamp() + interval '1 day'
-              WHERE project_id <> $1::text::uuid",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-}
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_steering::cancellation;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::titled_chapter;
+use crate::shared_tests::command_sequence_support::undo_named;
+use crate::shared_tests::delete_structure::settle_delete_chapter;
+use crate::shared_tests::model_gateway::Admission;
+use crate::shared_tests::model_gateway::NoEmbeddings;
+use crate::shared_tests::passage_index_work::During;
+use crate::shared_tests::passage_index_work::{
+    FAKE_ONLY, claim, configured, deploy, park_other_work, step, step_with, steps, wake, work,
+};
+use crate::shared_tests::passage_vectors::{
+    chapter, digests, head, prepend, rows as digest_rows, texts,
+};
+use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
 
 /// Ends each lease of the Project.
 async fn expire(admin: &Client, scope: &ProjectScope) {
@@ -139,70 +76,6 @@ async fn settlements(admin: &Client, scope: &ProjectScope) -> Vec<Option<String>
         .collect()
 }
 
-async fn claim(
-    store: &PostgresProjectReader,
-    registrations: &[&'static EmbeddingRegistration],
-) -> Option<ClaimedPassageIndex> {
-    claim_next_passage_index_work(store, registrations)
-        .await
-        .unwrap()
-}
-
-async fn step(store: &PostgresProjectReader, claim: &ClaimedPassageIndex) -> PassageIndexStep {
-    step_with(store, &FakeEmbeddings, claim).await
-}
-
-/// One step of the claim with `adapter`, with a bounded wait: an action of the author that waits
-/// for the work ends the test.
-async fn step_with(
-    store: &PostgresProjectReader,
-    adapter: &impl EmbeddingProviderAdapter,
-    claim: &ClaimedPassageIndex,
-) -> PassageIndexStep {
-    let step = step_passage_index_work(store, adapter, FAKE_ONLY, claim);
-    tokio::time::timeout(Duration::from_secs(/*secs*/ 60), step)
-        .await
-        .expect("the step ends")
-        .unwrap()
-}
-
-/// The fake embedding destination with a deterministic hold in the exchange. The first exchange
-/// runs `action` to its end before the fake gives the vector, so the action occurs during the
-/// work of the claim.
-struct During<'a> {
-    action: Mutex<Option<Pin<Box<dyn Future<Output = ()> + Send + 'a>>>>,
-}
-
-impl<'a> During<'a> {
-    fn new(action: impl Future<Output = ()> + Send + 'a) -> Self {
-        Self {
-            action: Mutex::new(Some(Box::pin(action))),
-        }
-    }
-}
-
-impl EmbeddingProviderAdapter for During<'_> {
-    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
-    type Prepared = <FakeEmbeddings as EmbeddingProviderAdapter>::Prepared;
-
-    async fn prepare(
-        &self,
-        registration: &'static EmbeddingRegistration,
-        route: &EmbeddingRoute,
-        input: &EmbeddingInput,
-    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
-        FakeEmbeddings.prepare(registration, route, input).await
-    }
-
-    async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
-        let action = self.action.lock().unwrap().take();
-        if let Some(action) = action {
-            action.await;
-        }
-        FakeEmbeddings.exchange(prepared).await
-    }
-}
-
 async fn run_status(admin: &Client, run_id: &str) -> String {
     admin
         .query_one(
@@ -220,24 +93,6 @@ async fn waits(store: &PostgresProjectReader, revisions: &[&str]) -> bool {
         .passage_index_work_waits(revisions, PASSAGE_CUT_REVISION)
         .await
         .unwrap()
-}
-
-/// The steps of one claim until a step does not write.
-async fn steps(store: &PostgresProjectReader, claim: &ClaimedPassageIndex) -> Vec<&'static str> {
-    let mut steps = Vec::new();
-    for _ in 0..8 {
-        let result = step(store, claim).await;
-        steps.push(match result {
-            PassageIndexStep::Written => "written",
-            PassageIndexStep::Completed => "completed",
-            PassageIndexStep::Released(_) => "released",
-            PassageIndexStep::StaleFence => "stale_fence",
-        });
-        if result != PassageIndexStep::Written {
-            break;
-        }
-    }
-    steps
 }
 
 async fn latest_forward(admin: &Client, scope: &ProjectScope) -> u64 {
@@ -272,9 +127,7 @@ async fn volume_and_tree(admin: &Client, scope: &ProjectScope, chapter_id: &str)
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_change_of_a_chapter_marks_its_work_in_the_transaction_of_the_change() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     let mut chapter = chapter(&store, &admin, ["f30", "f31"], "f32", &texts()).await;
     let scope = chapter.scope.clone();
@@ -345,9 +198,7 @@ async fn each_change_of_a_chapter_marks_its_work_in_the_transaction_of_the_chang
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn one_claim_holds_the_work_after_the_quiet_time_and_its_steps_complete_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     let mut chapter = chapter(&store, &admin, ["f33", "f34"], "f35", &texts()).await;
     let scope = chapter.scope.clone();
@@ -486,9 +337,7 @@ async fn one_claim_holds_the_work_after_the_quiet_time_and_its_steps_complete_it
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_request_with_no_vector_keeps_the_mark_and_the_next_try_waits_for_the_quiet_time() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     let mut texts = texts();
     texts[4].push_str(EMBEDDING_REJECTION_MARKER);
@@ -535,17 +384,20 @@ async fn a_request_with_no_vector_keeps_the_mark_and_the_next_try_waits_for_the_
             stored("not_submitted"),
         ]
     );
-    // The rows of the passages that got a vector stay.
-    assert_eq!(rows(&admin, &scope).await, 2);
+    // The rows of the passages that got a vector stay: each passage that the marker does not
+    // change.
+    let unmarked = digests(&crate::shared_tests::passage_vectors::texts());
+    let mut kept = digests(&texts);
+    kept.retain(|digest| unmarked.contains(digest));
+    assert_eq!(kept.len(), 2);
+    assert_eq!(digest_rows(&admin, &scope).await, kept);
     assert_eq!(work(&admin, &scope).await, vec![(id, 1, 4, 0, true)]);
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_manuscript_that_exists_gets_its_work_in_chapter_order_with_the_first_binding() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     // A deployment with no embedding configuration makes no binding and writes no mark.
     let (scope, one, run_id) = embedding_project(&store, &admin, ["f39", "f3a"], None).await;
@@ -555,7 +407,12 @@ async fn a_manuscript_that_exists_gets_its_work_in_chapter_order_with_the_first_
     let three = titled_chapter(&store, &scope, "f3b1", &volume, "第三章", tree + 1).await;
     assert_eq!(work(&admin, &scope).await, Vec::new());
 
-    let run_id = admit_embedding_run(&store, &scope, &one, "f3c", FAKE).await;
+    let run_id = Admission {
+        embedding: FAKE,
+        ..Default::default()
+    }
+    .admit(&store, &scope, &one, "f3c")
+    .await;
     complete(&store, &admin, &scope, &run_id).await;
     let live = |id: &str, order| (id.to_owned(), order, 1, 0, false);
     assert_eq!(
@@ -618,9 +475,7 @@ async fn a_manuscript_that_exists_gets_its_work_in_chapter_order_with_the_first_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_edit_during_the_work_does_not_wait_and_the_work_sends_only_the_changed_passage() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     let chapter = chapter(&store, &admin, ["2f0", "2f1"], "2f2", &texts()).await;
     let scope = chapter.scope.clone();
@@ -672,13 +527,16 @@ async fn an_edit_during_the_work_does_not_wait_and_the_work_sends_only_the_chang
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_cancel_of_a_run_during_the_work_does_not_change_the_work() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     let chapter = chapter(&store, &admin, ["2f3", "2f4"], "2f5", &texts()).await;
     let scope = chapter.scope.clone();
-    let run_id = admit_embedding_run(&store, &scope, &chapter.chapter_id, "2f6", FAKE).await;
+    let run_id = Admission {
+        embedding: FAKE,
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter.chapter_id, "2f6")
+    .await;
     let cancel = cancellation(&store, &scope, 0xf3f5, &run_id).await;
     park_other_work(&admin, &scope).await;
     wake(&admin, &scope).await;
@@ -711,9 +569,7 @@ async fn a_cancel_of_a_run_during_the_work_does_not_change_the_work() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_editor_and_each_run_work_while_each_embedding_request_fails() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     let chapter = chapter(&store, &admin, ["2f7", "2f8"], "2f9", &texts()).await;
     let scope = chapter.scope.clone();
@@ -721,21 +577,26 @@ async fn the_editor_and_each_run_work_while_each_embedding_request_fails() {
     park_other_work(&admin, &scope).await;
     wake(&admin, &scope).await;
     let first = claim(&store, FAKE_ONLY).await.unwrap();
-    let released = step_with(&store, &NoEmbeddingDestination, &first).await;
+    let released = step_with(&store, &NoEmbeddings, &first).await;
     assert!(matches!(released, PassageIndexStep::Released(_)));
 
     // An Author Edit and a Run settle while the embedding destination is not available.
     let command = prepend(&store, &chapter, ("2f92", 2), 0, "新的一句。").await;
     store.apply_author_edit(&command).await.unwrap();
     assert_ne!(head(&admin, &id).await, chapter.head);
-    let run_id = admit_embedding_run(&store, &scope, &id, "2fd", FAKE).await;
+    let run_id = Admission {
+        embedding: FAKE,
+        ..Default::default()
+    }
+    .admit(&store, &scope, &id, "2fd")
+    .await;
     complete(&store, &admin, &scope, &run_id).await;
     assert_eq!(run_status(&admin, &run_id).await, "completed");
 
     // The next try after the quiet time fails again, and the mark stays.
     wake(&admin, &scope).await;
     let again = claim(&store, FAKE_ONLY).await.unwrap();
-    let released = step_with(&store, &NoEmbeddingDestination, &again).await;
+    let released = step_with(&store, &NoEmbeddings, &again).await;
     assert!(matches!(released, PassageIndexStep::Released(_)));
     assert_eq!(rows(&admin, &scope).await, 0);
     assert_eq!(work(&admin, &scope).await, vec![(id, 1, 3, 0, true)]);
@@ -744,9 +605,7 @@ async fn the_editor_and_each_run_work_while_each_embedding_request_fails() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_stopped_worker_leaves_whole_rows_and_the_next_claim_continues_the_chapter() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     let chapter = chapter(&store, &admin, ["2fa", "2fb"], "2fc", &texts()).await;
     let scope = chapter.scope.clone();
@@ -783,9 +642,7 @@ async fn a_stopped_worker_leaves_whole_rows_and_the_next_claim_continues_the_cha
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     let chapter = chapter(&store, &admin, ["f3d", "2fe"], "2ff", &texts()).await;
     let scope = chapter.scope.clone();
@@ -800,6 +657,7 @@ async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
     let two = titled_chapter(&unconfigured, &scope, "f3fc", &volume, "第二章", tree).await;
     assert_eq!(work(&admin, &scope).await.len(), 1);
 
+    let before = head(&admin, &id).await;
     // A loss of the vector rows. The rebuild marks the work with no wait, makes the missing row,
     // and sends no request.
     admin
@@ -823,6 +681,8 @@ async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
         steps(&store, &claimed).await;
     }
     assert_eq!(digest_rows(&admin, &scope).await, digests(&texts()));
+    // The rebuild does not change the Chapter.
+    assert_eq!(head(&admin, &id).await, before);
     assert_eq!(settlements(&admin, &scope).await.len(), 6);
     assert_eq!(
         work(&admin, &scope).await,
@@ -836,9 +696,7 @@ async fn the_rebuild_marks_each_work_row_and_the_work_makes_each_row_again() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_read_of_waiting_work_sees_only_work_that_a_claim_can_take() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     let chapter = chapter(&store, &admin, ["591", "592"], "593", &texts()).await;
     let scope = chapter.scope.clone();
@@ -865,9 +723,7 @@ async fn the_read_of_waiting_work_sees_only_work_that_a_claim_can_take() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_deployment_with_no_embedding_configuration_claims_no_work_and_the_mark_stays() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     let chapter = chapter(&store, &admin, ["a29", "a2a"], "a2b", &texts()).await;
     let scope = chapter.scope.clone();

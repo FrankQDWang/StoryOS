@@ -8,47 +8,22 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_finish_rule::tests::{finish_item, text_item};
-use crate::agent_run_retrieval::tests::{AfterExchange, adapter, destination, research_run};
-use crate::agent_run_tool_exposure::tests::advisory_stream;
+use crate::shared_tests::agent_run_finish_rule::{finish_item, text_item};
+use crate::shared_tests::agent_run_retrieval::{AfterExchange, adapter, destination, research_run};
+use crate::shared_tests::agent_run_tool_call::{
+    quarantine_statement, reactivate_research_revision, text_and_call_stream,
+};
+use crate::shared_tests::agent_run_tool_exposure::advisory_stream;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 
 const SEARCH_ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 /// The digest of the validated arguments of `SEARCH_ARGUMENTS`.
 const SEARCH_DIGEST: &str =
     "sha256:012398a6d5fe487115a70022409a7dd2e27bfbcfdbb9930129b6d2ea5f84d9b2";
 const SIX_URLS: &str = r#"{"urls":["https://e.org/1","https://e.org/2","https://e.org/3","https://e.org/4","https://e.org/5","https://e.org/6"]}"#;
-
-/// A stream that reports `reference`, one complete message, and one complete function call with
-/// `call_id`, and ends with the terminal `status` of the response.
-pub(crate) fn text_and_call_stream(
-    reference: &str,
-    call_id: &str,
-    name: &str,
-    arguments: &str,
-    status: &str,
-) -> String {
-    let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
-        "status": "completed", "content": [{"type": "output_text", "text": "Looking it up."}]});
-    let call = json!({"id": "fc_01", "type": "function_call", "status": "completed",
-        "call_id": call_id, "name": name, "arguments": arguments});
-    let events = [
-        json!({"type": "response.created",
-               "response": {"id": reference, "status": "in_progress", "output": []}}),
-        json!({"type": "response.output_item.done", "output_index": 0, "item": message}),
-        json!({"type": "response.output_item.done", "output_index": 1, "item": call}),
-        json!({"type": format!("response.{status}"), "response": {
-            "id": reference, "status": status, "output": [message, call],
-            "usage": {"input_tokens": 90, "output_tokens": 30}}}),
-    ];
-    let mut reply = String::from(
-        "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n",
-    );
-    for event in events {
-        reply.push_str(&format!("data: {event}\n\n"));
-    }
-    reply
-}
 
 /// The ToolCall rows of the Run that are not Host Tool calls, without their row identity.
 async fn tool_call_rows(admin: &Client, run_id: &str) -> Vec<serde_json::Value> {
@@ -70,9 +45,9 @@ async fn tool_call_rows(admin: &Client, run_id: &str) -> Vec<serde_json::Value> 
 /// The status and settlement of the Run, and the decision identity, dispatch state, decision
 /// record, batch evidence, and item count of its decision Attempt.
 async fn decision_facts(admin: &Client, run_id: &str) -> serde_json::Value {
-    admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    json_of(
+        admin,
+        "SELECT jsonb_build_object(
                       'status', run.status, 'settlement', run.settlement,
                       'model_attempt_id', attempt.model_attempt_id,
                       'decision_id', attempt.decision_id,
@@ -85,11 +60,9 @@ async fn decision_facts(admin: &Client, run_id: &str) -> serde_json::Value {
                  ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
                 AND attempt.decision_position = 0
               WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get::<_, &str>(0)).unwrap())
-        .unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The one member of the batch of a complete `web_search` call, validated against the pinned
@@ -137,9 +110,7 @@ fn validated_search_call() -> storyos_core::RequestedToolCall {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_durable_function_request_decision_derives_one_tool_call_once() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![
         text_and_call_stream(
@@ -290,9 +261,7 @@ fn refused_call_facts(facts: &serde_json::Value, rows: &[serde_json::Value]) -> 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_intake_violation_is_a_refused_call_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![
         text_and_call_stream("resp_f76", "call_01", "web_fetch", SIX_URLS, "completed"),
@@ -324,9 +293,7 @@ async fn an_intake_violation_is_a_refused_call_and_the_run_continues() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_incomplete_response_with_a_complete_function_call_derives_no_tool_call() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![text_and_call_stream(
         "resp_f77",
@@ -480,9 +447,7 @@ fn stored_call_item(call_id: &str, arguments: &str, escaped: &[&str]) -> serde_j
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_null_character_in_the_arguments_is_a_refused_call_and_keeps_the_raw_item() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The arguments text escapes U+0000, so the parsed query holds it.
     let escaped = r#"{"query":"tide\u0000tables","result_count":null}"#;
@@ -535,9 +500,7 @@ async fn a_null_character_in_the_arguments_is_a_refused_call_and_keeps_the_raw_i
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_null_character_in_the_call_identifier_rejects_the_batch_and_keeps_the_raw_item() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The call identifier holds U+0000 itself. The arguments are valid.
     let facts = create_with_call(
@@ -557,32 +520,6 @@ async fn a_null_character_in_the_call_identifier_rejects_the_batch_and_keeps_the
             stored_call_item(r"call_\u000001", SEARCH_ARGUMENTS, &["call_id"]),
         )
     );
-}
-
-/// The administration statement of a Tool Contract Drift that quarantines the pinned research
-/// revision while the model response is pending.
-pub(crate) fn quarantine_statement() -> String {
-    format!(
-        "UPDATE storyos.tool_registration_revisions
-            SET lifecycle = 'quarantined', quarantined_at = clock_timestamp(),
-                quarantine_differences = '[{{\"kind\": \"tool_removed\", \"tool\": \"web_fetch_exa\"}}]'
-          WHERE tool_registration_revision = '{}'",
-        EXA_TOOL_REGISTRATION.revision
-    )
-}
-
-/// Makes the shared research revision active again after a quarantine, so that later tests
-/// expose it.
-pub(crate) async fn reactivate_research_revision(admin: &Client) {
-    admin
-        .execute(
-            "UPDATE storyos.tool_registration_revisions
-                SET lifecycle = 'active', quarantine_differences = NULL, quarantined_at = NULL
-              WHERE tool_registration_revision = $1::text::uuid",
-            &[&EXA_TOOL_REGISTRATION.revision],
-        )
-        .await
-        .unwrap();
 }
 
 /// Runs one real Create whose response requests a valid `web_search` call, and quarantines the
@@ -626,9 +563,7 @@ async fn revoked_create(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_tool_authority_revoked_before_the_create_record_derives_no_decision() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let quarantined = revoked_create(&store, &admin, "f7a").await;
 
@@ -845,7 +780,7 @@ async fn successor_run(
     Vec<(serde_json::Value, serde_json::Value, serde_json::Value)>,
     Option<bool>,
 ) {
-    let (scope, _, run_id) = crate::agent_run_dispatch::tests::queued_run_offering(
+    let (scope, _, run_id) = crate::shared_tests::model_gateway::queued_run_offering(
         store,
         prefix,
         storyos_core::DeploymentDestination::VolcengineAgentPlan {
@@ -867,9 +802,9 @@ async fn successor_run(
         .await
         .unwrap();
     reactivate_research_revision(admin).await;
-    let facts: serde_json::Value = admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    let facts: serde_json::Value = json_of(
+        admin,
+        "SELECT jsonb_build_object(
                       'status', run.status, 'settlement', run.settlement,
                       'successor_decision_id', successor.decision_id,
                       'marker_decision_id',
@@ -889,11 +824,9 @@ async fn successor_run(
                JOIN storyos.model_attempts AS successor
                  ON successor.run_id = run.run_id AND successor.attempt_role = 'successor'
               WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get::<_, &str>(0)).unwrap())
-        .unwrap();
+        &[&run_id],
+    )
+    .await;
     let rows = tool_call_rows(admin, &run_id)
         .await
         .into_iter()
@@ -912,9 +845,7 @@ async fn successor_run(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (facts, rows, delivered_twice) =
         successor_run(&store, &admin, "f78", /*revocation*/ None).await;
@@ -954,9 +885,7 @@ async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_tool_authority_revoked_before_the_successor_record_derives_no_decision() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let quarantined = successor_run(&store, &admin, "f7c", Some(quarantine_statement())).await;
 

@@ -1,6 +1,6 @@
 //! Proposal Growth: the joined blocks of one candidate revision (ADR 0071).
 
-use super::agent_run_work::complete_database_error as database_error;
+use super::agent_run_work::complete_unavailable as database_error;
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{OpenBlockProposal, OpenBlockProposalResult, ProseChangeCandidate};
 

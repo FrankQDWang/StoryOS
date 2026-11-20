@@ -12,8 +12,12 @@ use storyos_core::{
 use tokio_postgres::NoTls;
 
 use crate::PostgresProjectReader;
-use crate::command_sequence::tests::{
-    CommandCall, Route, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE, issued, seed_project, stores,
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_project_session::{
+    UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE,
+};
+use crate::shared_tests::command_sequence_support::{
+    CommandCall, Route, issued, seed_project, stores,
 };
 
 const OTHER_USER: &str = "018f0000-0000-7001-8000-000000000101";
@@ -75,9 +79,7 @@ async fn rows_for_other_user(scope: &ProjectScope, table: &str) -> i64 {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn update_project_renames_only_its_own_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, "9800").await;
     let settled = settle_each(
@@ -131,9 +133,7 @@ async fn update_project_renames_only_its_own_project() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn update_project_assistance_initializes_and_toggles_only_its_own_binding() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, "9820").await;
     let other_scope = seed_project(&store, "9830").await;

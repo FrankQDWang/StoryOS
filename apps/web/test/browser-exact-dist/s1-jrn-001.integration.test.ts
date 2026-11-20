@@ -31,6 +31,13 @@ import {
   expectedStage1Journey,
   normalizeStage1Journey,
 } from "./stage1-journey-expectation.ts";
+import {
+  applicationWindow,
+  closeApplicationFrame,
+  nextFrameLoad,
+  openApplicationFrame,
+} from "../support/exact-dist-frame.ts";
+import { requestResult } from "../../src/indexed-db-request.ts";
 
 interface PendingSurface {
   readonly authoritative_revision_id: string | null;
@@ -41,8 +48,6 @@ interface PendingSurface {
 
 const JOURNAL_NAME = `storyos-local-edit-journal:${USER_A}:${PROJECT_A}`;
 const ACTIVE_SESSION_KEY = `active_session:${USER_A}:${PROJECT_A}`;
-let applicationFrame: HTMLIFrameElement | undefined;
-
 function isRow(value: unknown): value is JourneyRow {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -75,18 +80,6 @@ function first<Value>(values: readonly Value[], label: string): Value {
   return value;
 }
 
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist Stage 1 application frame did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
 async function waitFor(
   label: string,
   condition: () => boolean | Promise<boolean>,
@@ -100,12 +93,6 @@ async function waitFor(
     });
   }
   throw new Error(`the exact-dist Stage 1 journey timed out while waiting for ${label}`);
-}
-
-function applicationWindow(frame: HTMLIFrameElement): Window & typeof globalThis {
-  const result = frame.contentWindow;
-  if (result === null) throw new Error("the exact-dist application realm is unavailable");
-  return result as Window & typeof globalThis;
 }
 
 function editor(frame: HTMLIFrameElement): HTMLElement {
@@ -153,13 +140,6 @@ function focusAtEnd(frame: HTMLIFrameElement): number {
   const currentEditor = editor(frame);
   focusManuscriptEnd(currentEditor, applicationWindow(frame));
   return manuscriptBody(currentEditor).length;
-}
-
-function requestResult<Result>(request: IDBRequest<Result>): Promise<Result> {
-  return new Promise((resolve, reject) => {
-    request.addEventListener("success", () => resolve(request.result), { once: true });
-    request.addEventListener("error", () => reject(request.error), { once: true });
-  });
 }
 
 async function readJourneyJournal(childWindow: Window): Promise<JourneyJournal> {
@@ -288,18 +268,9 @@ async function deleteJournalDatabase(): Promise<void> {
   });
 }
 
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
-
 afterEach(async () => {
   await updateAuthorEditSubmissionHold({ action: "release" });
-  if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   await updateClipboardPermission({ action: "clear" });
   sessionStorage.removeItem(ACTIVE_SESSION_KEY);
@@ -310,13 +281,10 @@ afterEach(async () => {
 it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core, and PostgreSQL", async () => {
   await updateClipboardPermission({ action: "grant" });
 
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = "StoryOS exact-dist Stage 1 application";
-  const loaded = nextFrameLoad(frame);
-  frame.src = `/projects/${PROJECT_A}`;
-  document.body.append(frame);
-  await loaded;
+  const frame = await openApplicationFrame(
+    "StoryOS exact-dist Stage 1 application",
+    `/projects/${PROJECT_A}`,
+  );
   await waitFor("the Project-ready editor", () =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state") === "project-ready"
     && frame.contentDocument?.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null);

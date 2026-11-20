@@ -32,6 +32,8 @@ These rules of the earlier profile stay:
   record in an active partition fails current validation and enters the
   existing `local_journal_unavailable` read-only recovery state. Validation does
   not delete or collect it, and it cannot cause automatic replay.
-- The Local Edit Journal read rule of ADR 0073 applies to a stored record of a
-  removed Draft path. Such a record counts as resolved, and the Journal never
-  sends it.
+- A stored record or group of the removed Draft path is not a shape of the
+  current contract
+  ([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)).
+  It fails current validation and enters the `local_journal_unavailable`
+  read-only recovery state, and the Journal never sends it.

@@ -101,3 +101,7 @@ The live run records of 2026-11-14 for [#1464](../research/agent-tool-loop-live-
 ## Amendment 2026-11-18: the head Registration takes the mapping v9
 
 [ADR 0094](0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md) sections 5 and 6 ([#1700](https://github.com/FrankQDWang/StoryOS/issues/1700)) give the mapping `storyos.volcengine-agent-plan.responses.create.v9` to the new head Registration `018f0000-0000-7001-8000-00000000fa23`. It is Registration `fa22` with the mapping `v9`, and it keeps the profile, the requirement, and the request bounds of `fa22`, so it needs no new qualification. The mapping `v9` is the mapping `v8` with three changes of the Host instructions: the paragraph of `write_memory`, the instructions of a capture, and the instructions of a pass. The declared schema of each function does not change, so the mapping `v9` declares the Host Tool Registration `018f0000-0000-7001-8000-0000000e0104` of the mapping `v8`. An AgentRun that pinned `fa22` keeps the mapping `v8`. It refuses with Registration drift after the deployment offers `fa23`, and with `model_use_binding_stale` after its own Project binds `fa23`.
+
+## Amendment 2026-11-20: the code keeps only the current Registration
+
+[ADR 0097](0097-keep-only-the-current-model-registrations-and-request-mapping-in-the-code.md) removes the earlier Registrations and mapping branches from the code, because no stored Run names them. The rule for later is in that ADR.

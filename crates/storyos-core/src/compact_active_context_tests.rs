@@ -6,8 +6,9 @@ use super::{
     CompactionTrigger, HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER,
     StagedCompaction, SummaryObservation, active_context_input_digest, compaction_due,
     compaction_threshold, conversation_too_long, decide_compaction_install, later_request_record,
-    next_compaction_step, requests_active_compaction, stage_compaction,
+    next_compaction_step, stage_compaction,
 };
+use crate::shared_tests::passage_assembly;
 
 fn facts(
     source_restricted: bool,
@@ -22,12 +23,6 @@ fn facts(
         current_input_digest: current_input_digest.to_owned(),
         summary_within_item_limit: true,
     }
-}
-
-#[test]
-fn ordinary_assistance_does_not_request_active_compaction() {
-    assert!(requests_active_compaction(ACTIVE_COMPACTION_REQUEST_PREFIX));
-    assert!(!requests_active_compaction("Help with this passage."));
 }
 
 #[test]
@@ -179,20 +174,8 @@ fn the_threshold_is_eighty_percent_of_the_window_after_the_output_bound() {
 
 #[test]
 fn the_later_request_selects_the_summary_first_as_a_derived_summary() {
-    let decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Help again.".to_owned(),
-        chapter_id: "chapter-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: "Passage.".to_owned(),
-        instruction: crate::InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
-    });
+    let decision =
+        crate::assemble_current_passage_context(&passage_assembly("Help again.", "Passage."));
     let later = later_request_record(&decision, "compaction-1", "The author keeps the rain.", &[]);
     let first = &later.selected[0];
 
@@ -336,8 +319,7 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
         compacted_earlier: false,
     };
     let agent_plan = crate::AGENT_PLAN_REGISTRATION.revision;
-    let undated = crate::AGENT_PLAN_RECOVERY_REGISTRATION.revision;
-    let host_fake = crate::HOST_FAKE_REGISTRATION.revision;
+    let host_fake = crate::HOST_FAKE_TOOL_LOOP_REGISTRATION.revision;
     let near_window = facts(agent_plan, "Help again.", Some(1_015_900));
 
     assert_eq!(
@@ -345,7 +327,6 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
             [
                 facts(agent_plan, "Help again.", Some(812_646)),
                 facts(agent_plan, "Help again.", Some(812_645)),
-                facts(undated, "Help again.", Some(183_500)),
                 facts(agent_plan, "Help again.", Some(183_500)),
                 facts(agent_plan, ACTIVE_COMPACTION_REQUEST_PREFIX, Some(10)),
                 facts(host_fake, ACTIVE_COMPACTION_REQUEST_PREFIX, Some(10)),
@@ -365,7 +346,7 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
             ],
         ),
         (
-            [true, false, true, false, false, true, false],
+            [true, false, false, false, true, false],
             [
                 super::DecisionRequestKind::Later,
                 super::DecisionRequestKind::TooLong,
@@ -380,20 +361,8 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
 #[test]
 fn the_text_of_overlapping_selection_references_counts_toward_compaction() {
     let chapter_body = "雨".repeat(/*n*/ 32_000);
-    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Help again.".to_owned(),
-        chapter_id: "chapter-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: chapter_body.clone(),
-        instruction: crate::InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
-    });
+    let mut decision =
+        crate::assemble_current_passage_context(&passage_assembly("Help again.", &chapter_body));
     let due = |decision: &crate::CurrentPassageAssemblyRecord| {
         super::compaction_requested(&super::CompactionRequestFacts {
             model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
@@ -436,7 +405,7 @@ fn the_text_of_overlapping_selection_references_counts_toward_compaction() {
 fn the_host_fake_compacts_one_time_or_at_each_named_run_step() {
     let requested = |message: &str, decision_position, compacted_earlier| {
         super::compaction_requested(&super::CompactionRequestFacts {
-            model_registration_revision: crate::HOST_FAKE_REGISTRATION.revision,
+            model_registration_revision: crate::HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
             budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
             author_message: message,
             decision: None,
@@ -468,20 +437,8 @@ fn the_host_fake_compacts_one_time_or_at_each_named_run_step() {
 
 #[test]
 fn a_later_request_whose_full_input_reaches_the_window_is_too_long() {
-    let decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Help again.".to_owned(),
-        chapter_id: "chapter-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: "Rain.".to_owned(),
-        instruction: crate::InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
-    });
+    let decision =
+        crate::assemble_current_passage_context(&passage_assembly("Help again.", "Rain."));
     let others: u64 = decision.selected.iter().map(|item| item.token_count).sum();
     let targets = ["Target.".to_owned()];
     // The window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens.
@@ -501,7 +458,7 @@ fn a_later_request_whose_full_input_reaches_the_window_is_too_long() {
         [
             too_long(crate::AGENT_PLAN_REGISTRATION.revision, at_window),
             too_long(crate::AGENT_PLAN_REGISTRATION.revision, at_window - 1),
-            too_long(crate::HOST_FAKE_REGISTRATION.revision, at_window),
+            too_long(crate::HOST_FAKE_TOOL_LOOP_REGISTRATION.revision, at_window),
         ],
         [true, false, false]
     );
@@ -510,20 +467,8 @@ fn a_later_request_whose_full_input_reaches_the_window_is_too_long() {
 /// ADR 0093 section 5: the full input of a later request counts the stubs, not the exact results.
 #[test]
 fn the_full_input_of_a_later_request_counts_each_stub_and_not_its_exact_result() {
-    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Research the tides.".to_owned(),
-        chapter_id: "chapter-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: "Rain.".to_owned(),
-        instruction: crate::InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
-    });
+    let mut decision =
+        crate::assemble_current_passage_context(&passage_assembly("Research the tides.", "Rain."));
     // 32 results at the item limit are above the window after the output bound.
     let text = "Tide. ".repeat(6_000);
     let ids: Vec<String> = (0..32).map(|index| format!("call_{index:02}")).collect();
@@ -576,20 +521,8 @@ fn the_full_input_of_a_later_request_counts_each_stub_and_not_its_exact_result()
 /// request sends the current input.
 #[test]
 fn the_expected_input_counts_the_chapter_list_with_the_current_input() {
-    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Write the quarrel.".to_owned(),
-        chapter_id: "chapter-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: "Rain.".to_owned(),
-        instruction: crate::InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
-    });
+    let mut decision =
+        crate::assemble_current_passage_context(&passage_assembly("Write the quarrel.", "Rain."));
     let without_list: u64 = decision.selected.iter().map(|item| item.token_count).sum();
     crate::assemble_chapter_list(
         &mut decision,
@@ -623,20 +556,8 @@ fn the_expected_input_counts_the_chapter_list_with_the_current_input() {
 /// request sends the current input.
 #[test]
 fn the_expected_input_counts_the_memory_index_with_the_current_input() {
-    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Write the quarrel.".to_owned(),
-        chapter_id: "chapter-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: "Rain.".to_owned(),
-        instruction: crate::InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
-    });
+    let mut decision =
+        crate::assemble_current_passage_context(&passage_assembly("Write the quarrel.", "Rain."));
     let without_index: u64 = decision.selected.iter().map(|item| item.token_count).sum();
     crate::assemble_memory_index(
         &mut decision,
@@ -672,20 +593,8 @@ fn the_expected_input_counts_the_memory_index_with_the_current_input() {
 /// each such output in its exact form, because a load output and a read output have no stub.
 #[test]
 fn the_expected_input_counts_the_skill_catalog_and_each_exact_load_and_read_output() {
-    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Write the quarrel.".to_owned(),
-        chapter_id: "chapter-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: "Rain.".to_owned(),
-        instruction: crate::InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
-    });
+    let mut decision =
+        crate::assemble_current_passage_context(&passage_assembly("Write the quarrel.", "Rain."));
     let without_catalog: u64 = decision.selected.iter().map(|item| item.token_count).sum();
     let references = ["dialogue", "plot-notes"].map(|name| crate::SkillPackageReference {
         name: name.to_owned(),
@@ -796,20 +705,8 @@ fn the_expected_input_counts_the_skill_catalog_and_each_exact_load_and_read_outp
 /// each such output in its exact form, because a read or a search of the manuscript has no stub.
 #[test]
 fn the_expected_input_counts_each_exact_chapter_read_and_search_output() {
-    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
-        operation_requirement_id: "requirement-1".to_owned(),
-        input_snapshot_id: "snapshot-1".to_owned(),
-        run_id: "run-1".to_owned(),
-        owner_user_id: "owner-1".to_owned(),
-        project_id: "project-1".to_owned(),
-        author_message: "Write the quarrel.".to_owned(),
-        chapter_id: "chapter-1".to_owned(),
-        chapter_revision_id: Some("rev-1".to_owned()),
-        proposal_target_block_ids: None,
-        chapter_body: "Rain.".to_owned(),
-        instruction: crate::InstructionBindingInput::Absent,
-        destination_identity: "destination-1".to_owned(),
-    });
+    let mut decision =
+        crate::assemble_current_passage_context(&passage_assembly("Write the quarrel.", "Rain."));
     let current: u64 = decision.selected.iter().map(|item| item.token_count).sum();
     let sent = |decision: &crate::CurrentPassageAssemblyRecord, prior_input| {
         CompactionTrigger::from_facts(&super::CompactionRequestFacts {

@@ -4,12 +4,11 @@ import type { DigestValue, ProjectScope, WithdrawProposalRequest, WithdrawPropos
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE }
   from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { uuidV7 } from "./acceptance-journal.ts";
 import type { EditorReadyState, EditorWorkspace } from "./editor-types.ts";
 import { challengeRefused } from "./refused-command.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 
 const SCHEMA = "storyos.local-edit-journal.withdraw-proposal.v1";
-const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
 type WithdrawRecord = {
   key: string;
@@ -27,7 +26,7 @@ type WithdrawRecord = {
   response?: WithdrawProposalResponse;
 };
 
-export type WithdrawTarget = {
+type WithdrawTarget = {
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
@@ -189,7 +188,7 @@ export async function withdrawDisplayedBlockProposal(options: WithdrawTarget): P
     });
 }
 
-export async function retryPendingDisplayedWithdraw(options: Pick<WithdrawTarget, "baseUrl"
+async function retryPendingDisplayedWithdraw(options: Pick<WithdrawTarget, "baseUrl"
   | "fetchImpl" | "cryptoImpl" | "workspace" | "proposalId">): Promise<WithdrawProposalResponse> {
   if (globalThis.navigator?.locks === undefined) {
     throw new Error("Protected Withdrawal transport lock is unavailable");

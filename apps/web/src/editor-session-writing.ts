@@ -6,10 +6,8 @@ import {
   AUTHOR_EDIT_MAX_UNITS,
   appendAuthorEdit,
   candidateTextsFromJournal,
-  createJournalUuid,
   readJournalSnapshot,
   rebuildPendingProjection,
-  reconfirmLegacyReplaceSelection,
 } from "./local-edit-journal.ts";
 import type { JournalAuthorEdit } from "./local-edit-journal.ts";
 import type {
@@ -22,17 +20,18 @@ import { flattenChapterBody, type ManuscriptParagraph } from "./manuscript-doc.t
 import type { UndoLatestAuthorActionUnavailableReason }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
+import { uuidV7 } from "./client-identity.ts";
 
 /** One edit that the editor captures. The controller adds the input origin, the undo group, and the time. */
-export type CapturedEdit = JournalAuthorEdit;
+type CapturedEdit = JournalAuthorEdit;
 
 /** The text of one Proposal operation that the controller shows, and the Revisions that this text continues. */
-export interface CandidateText {
+interface CandidateText {
   readonly revisions: readonly string[];
   readonly text: string;
 }
 
-export interface EditorWritingSnapshot {
+interface EditorWritingSnapshot {
   readonly projection: PendingEditProjection;
   /** True while the projection shows input that is not in the Journal yet. */
   readonly local: boolean;
@@ -71,7 +70,6 @@ export interface EditorSessionWritingController {
    */
   runAfterQuiesce<Result>(condition: "journaled" | "settled", command: (projection: PendingEditProjection) => Promise<Result>)
     : Promise<{ kind: "ran"; result: Result } | { kind: "refused"; reason: QuietRefusal }>;
-  reconfirmLegacyBlocks(): Promise<void>;
   /** True during an IME composition, and while captured input waits outside the Journal. */
   hasIncompleteInput(): boolean;
   canAcceptInput(hardBoundary: boolean, candidate?: { proposalId: string; operationId: string }): boolean;
@@ -358,7 +356,7 @@ export function createEditorSessionWritingController({
     // A settlement above can give the candidate a new Proposal Revision.
     const edit = rebind(capturedEdit);
     const target = targetOf(edit);
-    undoGroupId ??= createJournalUuid(cryptoImpl);
+    undoGroupId ??= uuidV7(cryptoImpl);
     let projection: PendingEditProjection;
     try {
       projection = await appendAuthorEdit(workspace, { ...edit, inputOrigin: origin, undoGroupId, createdAt }, cryptoImpl);
@@ -544,10 +542,6 @@ export function createEditorSessionWritingController({
         return { kind: "refused", reason: "unsettled_input" };
       }
       return { kind: "ran", result: await command(projection) };
-    },
-    async reconfirmLegacyBlocks() {
-      await reconfirmLegacyReplaceSelection(workspace, cryptoImpl);
-      await refresh();
     },
     hasIncompleteInput,
     canAcceptInput(hardBoundary, candidate) {

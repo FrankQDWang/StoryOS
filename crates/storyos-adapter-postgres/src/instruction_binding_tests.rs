@@ -2,18 +2,25 @@
 //! section 2, ADR 0085, ADR 0093).
 
 use serde_json::{Value, json};
-use storyos_application::{ConversationSelection, ProjectScope};
+use storyos_application::ProjectScope;
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination,
 };
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_run, admit_run_in, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
-use crate::project_instruction_tests::{applied, save};
-use crate::project_research_binding::tests::park_queued_runs;
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_finish_rule::conversation_of;
+use crate::shared_tests::agent_run_steering::{
+    AuthorAction, AuthorAt, Moment, queued, settle, steering,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::Admission;
+use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
+use crate::shared_tests::project_instruction::{applied, save};
+use crate::shared_tests::project_research_binding::park_queued_runs;
 
 const FAKE: DeploymentDestination = DeploymentDestination::HostFakeToolLoop;
 
@@ -45,47 +52,26 @@ async fn binding(admin: &Client, run_id: &str) -> Option<String> {
 /// Operation Requirement value of the instruction, the version of each considered
 /// `instruction_binding` source, and the source class of each selected item.
 async fn assemblies(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(manifest_role, decision_position,
+    json_of(admin, "SELECT jsonb_agg(jsonb_build_array(manifest_role, decision_position,
                       payload #> '{operation_requirement,instruction}',
                       jsonb_path_query_array(payload,
                         '$.considered[*] ? (@.source_class == \"instruction_binding\").source_version'),
                       jsonb_path_query_array(payload, '$.selected[*].source_class'))
                       ORDER BY context_assembly_manifest_id)::text
                FROM storyos.context_assembly_manifests
-              WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+              WHERE run_id = $1::text::uuid", &[&run_id]).await
 }
 
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, and
 /// the text of each `instruction_binding` item that the fake destination received.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
-                      jsonb_path_query_array(wire,
-                        '$.context[*] ? (@.source_class == \"instruction_binding\").content'))
-                      ORDER BY model_attempt_id)::text
-               FROM storyos.model_attempts,
-                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
-              WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
-}
-
-/// The Conversation of the Run that `admit_run` admitted with `prefix`.
-fn conversation_of(prefix: &str) -> ConversationSelection {
-    ConversationSelection::Existing {
-        conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
-    }
+    sent_context(
+        admin,
+        run_id,
+        &["instruction_binding"],
+        ReplacedInputLabel::Omit,
+    )
+    .await
 }
 
 fn required(revision_id: &str) -> Value {
@@ -95,16 +81,26 @@ fn required(revision_id: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_binds_only_a_current_revision_with_text_other_than_white_space() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, none) = queued(&store, "bc1").await;
     let blank = saved(&store, &scope, 0xdd11, " \n\u{3000}", 0).await;
-    let white_space = admit_run(&store, &scope, &chapter_id, "bc2", FAKE, "Help again.").await;
+    let white_space = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bc2")
+    .await;
     let text = " Write in the past tense.\n";
     let current = saved(&store, &scope, 0xdd12, text, 1).await;
-    let bound = admit_run(&store, &scope, &chapter_id, "bc3", FAKE, "Help again.").await;
+    let bound = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bc3")
+    .await;
     let context = |run_id: String| {
         let admin = &admin;
         async move { assemblies(admin, &run_id).await }
@@ -148,15 +144,19 @@ async fn a_run_binds_only_a_current_revision_with_text_other_than_white_space() 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_binds_the_revision_of_its_own_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (project_a, chapter_a, _) = queued(&store, "bc4").await;
     let (project_b, _, _) = queued(&store, "bc5").await;
     let revision_a = saved(&store, &project_a, 0xdd41, "Rule of Project A.", 0).await;
     saved(&store, &project_b, 0xdd51, "Rule of Project B.", 0).await;
-    let run_id = admit_run(&store, &project_a, &chapter_a, "bc6", FAKE, "Help again.").await;
+    let run_id = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        ..Default::default()
+    }
+    .admit(&store, &project_a, &chapter_a, "bc6")
+    .await;
     let payloads: String = admin
         .query_one(
             "SELECT string_agg(payload::text, ' ') FROM storyos.context_assembly_manifests
@@ -194,15 +194,19 @@ async fn versions(admin: &Client, run_id: &str) -> Vec<Value> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "bc7").await;
     complete(&store, &admin, &scope, &first).await;
     let first_text = "Write in the past tense.";
     let first_revision = saved(&store, &scope, 0xdd71, first_text, 0).await;
-    let steered = admit_run(&store, &scope, &chapter_id, "bc8", FAKE, "Help again.").await;
+    let steered = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bc8")
+    .await;
     // The author saves a new text after the admission of the Run.
     let next_text = "Write in the present tense.";
     let next_revision = saved(&store, &scope, 0xdd72, next_text, 1).await;
@@ -215,16 +219,13 @@ async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
     settle(&store, &admin, &scope, &steered, &author)
         .await
         .unwrap();
-    let next = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "bc9",
-        FAKE,
-        "Help again.",
-        conversation_of("bc8"),
-        None,
-    )
+    let next = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        conversation: conversation_of("bc8"),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bc9")
     .await;
     complete(&store, &admin, &scope, &next).await;
     park_queued_runs(&admin, &scope).await;
@@ -260,28 +261,29 @@ async fn a_run_keeps_its_revision_and_the_next_run_binds_the_current_one() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_next_run_after_a_removal_sends_no_project_instruction() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "bcd").await;
     complete(&store, &admin, &scope, &first).await;
     let text = "Write in the past tense.";
     saved(&store, &scope, 0xddd1, text, 0).await;
-    let bound = admit_run(&store, &scope, &chapter_id, "bce", FAKE, "Help again.").await;
+    let bound = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bce")
+    .await;
     complete(&store, &admin, &scope, &bound).await;
     // The author removes the Project Instruction.
     saved(&store, &scope, 0xddd2, "", 1).await;
-    let removed = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "bcf",
-        FAKE,
-        "Help again.",
-        conversation_of("bce"),
-        None,
-    )
+    let removed = Admission {
+        destination: FAKE,
+        message: "Help again.",
+        conversation: conversation_of("bce"),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bcf")
     .await;
     complete(&store, &admin, &scope, &removed).await;
     park_queued_runs(&admin, &scope).await;
@@ -303,9 +305,7 @@ async fn the_next_run_after_a_removal_sends_no_project_instruction() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_request_does_not() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "bcb").await;
     complete(&store, &admin, &scope, &first).await;
@@ -314,7 +314,13 @@ async fn the_later_request_of_a_compaction_sends_the_bound_text_and_the_summary_
     let message = format!(
         "{ACTIVE_COMPACTION_REQUEST_PREFIX} {ACTIVE_COMPACTION_POSITIONS_PREFIX} 1. Help again."
     );
-    let compacted = admit_run(&store, &scope, &chapter_id, "bcc", FAKE, &message).await;
+    let compacted = Admission {
+        destination: FAKE,
+        message: &message,
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "bcc")
+    .await;
     // The author saves a new text after the admission of the Run.
     saved(&store, &scope, 0xddb2, "Write in the present tense.", 1).await;
     complete(&store, &admin, &scope, &compacted).await;

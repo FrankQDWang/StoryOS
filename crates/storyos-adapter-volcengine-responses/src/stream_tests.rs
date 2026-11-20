@@ -35,7 +35,7 @@ impl ModelStreamSink for BatchSink {
 
 fn streaming_route(base: &str) -> RequestRoute {
     RequestRoute {
-        mapping_revision: storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION.to_owned(),
+        mapping_revision: storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION.to_owned(),
         bounds: Some(storyos_application::RequestBounds {
             max_output_tokens: 8192,
             timeout: std::time::Duration::from_secs(/*secs*/ 60),
@@ -131,7 +131,7 @@ fn unknown(reference: &str) -> Observation {
                 owner_user_id: None,
                 conversation_id: None,
                 destination_identity: None,
-                mapping_revision: storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION.to_owned(),
+                mapping_revision: storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION.to_owned(),
             },
         }),
     }
@@ -269,7 +269,7 @@ async fn a_stalled_stream_commits_its_pending_events_and_learns_a_stop_after_the
     };
     let observation = super::observe(
         response,
-        storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
+        storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION,
         policy,
         &mut sink,
     )

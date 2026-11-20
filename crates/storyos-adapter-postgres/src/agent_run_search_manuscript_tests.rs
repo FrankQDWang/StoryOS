@@ -6,14 +6,15 @@
 use serde_json::{Value, json};
 use storyos_application::{ConversationSelection, EditorSessionId};
 
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_load_skill::tests::calls;
-use crate::agent_run_read_chapter::tests::{
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_load_skill::calls;
+use crate::shared_tests::agent_run_read_chapter::{
     boundary, call_ids, finish, no_public_call, outputs_record, project, read_text, sent,
     write_blocks,
 };
-use crate::create_agent_run::context::chapter_list_tests::{admitted, head, replace_text, select};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::{admitted, head, replace_text, select};
+use crate::shared_tests::command_sequence_support::stores;
 
 const NO_MATCH: &str = "No Block of the manuscript has this exact text, and this is not a failure.";
 
@@ -58,9 +59,7 @@ fn settled(text: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn searches_settle_with_the_head_text_and_the_next_request_sends_each_as_a_search_result() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let a_blocks = ["Lin <ran>. Lin & \"Mei\".", "No one.", "Then Lin."];
     let (scope, chapter_a, fog, session) = project(&store, &admin, "191", 0x1a10, &a_blocks).await;
@@ -146,9 +145,7 @@ async fn searches_settle_with_the_head_text_and_the_next_request_sends_each_as_a
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_later_search_finds_the_new_head_and_the_earlier_result_stays() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_a, _, session) =
         project(&store, &admin, "193", 0x1a20, &["Lin ran."]).await;
@@ -184,9 +181,7 @@ async fn a_later_search_finds_the_new_head_and_the_earlier_result_stays() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_search_above_the_match_limit_gives_its_whole_blocks_that_fit_the_item() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The Chapter fits as the Working text. The search has 1 match in the first Block and 600 in
     // the second, so it stops at 500, and its result with both Blocks does not fit in the item.
@@ -227,9 +222,7 @@ async fn a_search_above_the_match_limit_gives_its_whole_blocks_that_fit_the_item
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_full_input_after_an_expired_reference_sends_each_search_output_again() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_a, _, _) = project(&store, &admin, "198", 0x1a40, &["Lin ran."]).await;
     let message = "SCRIPT:search_manuscript Lin\nSCRIPT:step-reference-expires";
@@ -265,9 +258,7 @@ async fn a_full_input_after_an_expired_reference_sends_each_search_output_again(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_search_finds_only_the_text_of_the_project_of_its_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut results = Vec::new();
     for (lead, suffix, prefix, text) in [

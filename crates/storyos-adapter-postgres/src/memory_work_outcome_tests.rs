@@ -12,16 +12,19 @@ use storyos_application::{
 };
 use tokio_postgres::Client;
 
-use super::tests::{claim_due, make_due};
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::{
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, cancellation, claim_duties, queued, settle, steering,
 };
-use crate::create_agent_run::context::chapter_list_tests::{admitted, rename};
-use crate::memory_capture::loop_tests::{record, script, settlement};
-use crate::memory_capture::tests::{project, run_capture};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::{admitted, rename};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::memory_capture::{project, run_capture};
+use crate::shared_tests::memory_capture_loop::{record, script, settlement};
+use crate::shared_tests::memory_work_outcome::stopped_at_the_start;
+use crate::shared_tests::memory_work_schedule::{claim_due, make_due};
+use crate::shared_tests::model_gateway::RuntimeClock;
 
 /// The state of the schedule row of the Conversation: `none` (no row), `empty`, `now` (due), or
 /// `quiet` (due at the end of the quiet time).
@@ -118,55 +121,6 @@ async fn ends(admin: &Client, run_id: &str) -> Value {
     json!([settled[0], settled[2], read[2], read[3]])
 }
 
-/// Runs `claim` while a lock holds the start of a capture after the claim of a row, and ends the
-/// session of the claim at that point. This is the stop of the Worker. Returns the result of
-/// `claim`.
-pub(crate) async fn stopped_at_the_start<T>(
-    admin: &Client,
-    claim: impl std::future::Future<Output = T>,
-) -> T {
-    // The lock holds the start of the capture after the claim of the row. The end of the session
-    // of the claim is the stop of the Worker.
-    admin
-        .batch_execute("BEGIN; LOCK TABLE storyos.memory_captures IN SHARE ROW EXCLUSIVE MODE")
-        .await
-        .unwrap();
-    let stop = async {
-        // A blocked session gives no signal, so this is the one wait with a sleep. The lock goes
-        // only after the session of the claim ended.
-        let mut stopped: Option<i32> = None;
-        for _ in 0..1_000 {
-            let session: Option<i32> = match stopped {
-                None => admin
-                    .query_opt(
-                        "SELECT waiting.pid
-                           FROM (SELECT pid FROM pg_locks
-                                  WHERE NOT granted
-                                    AND relation = 'storyos.memory_captures'::regclass
-                                 OFFSET 0) AS waiting
-                          WHERE pg_terminate_backend(waiting.pid)",
-                        &[],
-                    )
-                    .await
-                    .unwrap(),
-                Some(pid) => admin
-                    .query_opt("SELECT pid FROM pg_stat_activity WHERE pid = $1", &[&pid])
-                    .await
-                    .unwrap(),
-            }
-            .map(|row| row.get(/*idx*/ 0));
-            match (stopped, session) {
-                (None, Some(pid)) => stopped = Some(pid),
-                (Some(_), None) => break,
-                _ => tokio::time::sleep(std::time::Duration::from_millis(/*millis*/ 10)).await,
-            }
-        }
-        admin.batch_execute("ROLLBACK").await.unwrap();
-    };
-    let (claimed, ()) = tokio::join!(claim, stop);
-    claimed
-}
-
 /// A Worker that stops after the claim of the row of the Conversation and before the start of its
 /// capture leaves the row due, because the claim and the start are one transaction. The next
 /// claim starts one capture, and a second delivery starts no second capture for the same
@@ -207,9 +161,7 @@ async fn stopped_claim(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_capture_reads_the_completed_runs_of_its_conversation_and_no_cancelled_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (other_scope, _, other) = project(&store, &admin, "583").await;
     let (scope, chapter_id, first) = queued(&store, "580").await;
@@ -302,9 +254,7 @@ async fn each_capture_reads_the_completed_runs_of_its_conversation_and_no_cancel
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_bounded_input_reads_the_oldest_runs_that_fit_and_its_settlement_makes_the_row_due() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "584").await;
     let (conversation_id, first) = source_runs(&source);
@@ -357,9 +307,7 @@ async fn a_bounded_input_reads_the_oldest_runs_that_fit_and_its_settlement_makes
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_new_message_during_a_capture_does_not_wait_and_the_settlement_makes_the_row_due() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "589").await;
     let (conversation_id, first) = source_runs(&source);
@@ -427,9 +375,7 @@ async fn a_new_message_during_a_capture_does_not_wait_and_the_settlement_makes_t
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_failed_or_step_limit_capture_sets_no_due_time_and_the_next_capture_reads_its_runs() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "58c").await;
     let (conversation_id, first) = source_runs(&source);

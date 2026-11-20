@@ -1,55 +1,22 @@
 use serde_json::{Value, json};
 use storyos_application::{
-    ExportProjectArchiveInput, IssueProjectCommandChallenge, NoContractFaults, ProjectScope,
-    ResearchSourceReadStore, VerifiedExportArchive, claim_next_archive_export,
-    complete_agent_run_with_tools, complete_archive_export, get_verified_export_archive,
-    issue_project_command_challenge,
+    NoContractFaults, ProjectScope, ResearchSourceReadStore, complete_agent_run_with_tools,
 };
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, destination};
-use crate::agent_run_tool_dispatch::tests::{Hooked, exa_tools, mcp_replies, point_mcp, reply};
-use crate::agent_run_tool_exposure::tests::{advisory_stream, sse};
-use crate::command_sequence::tests::seed_project;
-use crate::project_archive_build::tests::{export_command, zip_store_files};
-
-/// A search result in the text format of the research Tool: two entries with a URL each.
-pub(crate) const SEARCH_TEXT: &str = "Title: Liverpool tide table 1890\nURL: https://example.org/tides\n\
-Published: 1890-01-01T00:00:00.000Z\nAuthor: N/A\nHighlights:\nHigh water at 10.42.\n\n---\n\n\
-Title: Port log\nURL: https://example.org/port\nPublished: N/A\nAuthor: N/A\nHighlights:\n\
-The port log.";
-
-/// One response that requests each `(call_id, name, arguments)` call in order.
-pub(crate) fn calls_stream(reference: &str, calls: &[(&str, &str, &str)]) -> String {
-    calls_stream_in(reference, calls, "completed")
-}
-
-/// As `calls_stream`, with the terminal event and the response in `status`.
-pub(crate) fn calls_stream_in(
-    reference: &str,
-    calls: &[(&str, &str, &str)],
-    status: &str,
-) -> String {
-    let items: Vec<Value> = calls
-        .iter()
-        .enumerate()
-        .map(|(index, (call_id, name, arguments))| {
-            json!({"id": format!("fc_{index}"), "type": "function_call", "status": "completed",
-                   "call_id": call_id, "name": name, "arguments": arguments})
-        })
-        .collect();
-    let mut events = vec![json!({"type": "response.created",
-        "response": {"id": reference, "status": "in_progress", "output": []}})];
-    events.extend(items.iter().enumerate().map(|(index, item)| {
-        json!({"type": "response.output_item.done", "output_index": index, "item": item})
-    }));
-    events.push(json!({"type": format!("response.{status}"), "response": {
-        "id": reference, "status": status, "output": items,
-        "usage": {"input_tokens": 90, "output_tokens": 30}}}));
-    sse(&events)
-}
+use crate::shared_tests::agent_run_retrieval::{adapter, destination};
+use crate::shared_tests::agent_run_tool_dispatch::{
+    Hooked, exa_tools, mcp_replies, point_mcp, reply,
+};
+use crate::shared_tests::agent_run_tool_exposure::advisory_stream;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::seed_project;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::memory_entries::{archived_files, canonical};
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
+use crate::shared_tests::research_source::{SEARCH_TEXT, calls_stream};
 
 /// Settles one Run whose first response requests `calls`. The fake MCP server answers the calls
 /// in order with `texts`, and the continuation gets an Advisory.
@@ -66,7 +33,8 @@ async fn settled_research_run(
     ])
     .await;
     let (scope, run_id) =
-        crate::agent_run_retrieval::tests::research_run(store, admin, prefix, &model_base).await;
+        crate::shared_tests::agent_run_retrieval::research_run(store, admin, prefix, &model_base)
+            .await;
     let replies = texts
         .iter()
         .flat_map(|text| {
@@ -237,9 +205,7 @@ async fn snapshot_ids(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_settled_search_captures_one_snapshot_per_entry_that_its_continuation_names() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let search = r#"{"query":"tide tables of 1890","result_count":null}"#;
     let (scope, run_id) = settled_research_run(
@@ -258,9 +224,9 @@ async fn a_settled_search_captures_one_snapshot_per_entry_that_its_continuation_
         .unwrap();
     // The continuation records the Snapshot identities, and its selected tool_result item
     // names them as its Context Source Version.
-    let continuation: Value = admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    let continuation: Value = json_of(
+        &admin,
+        "SELECT jsonb_build_object(
                       'recorded', requirement.payload
                                   #> '{operation_requirement,tool_results,0,source_snapshot_ids}',
                       'versions', (SELECT jsonb_agg(DISTINCT item -> 'source_version')
@@ -273,11 +239,9 @@ async fn a_settled_search_captures_one_snapshot_per_entry_that_its_continuation_
                     (requirement.run_id, requirement.decision_position, 'decision')
               WHERE requirement.run_id = $1::text::uuid AND requirement.decision_position = 1
                 AND requirement.requirement_role = 'primary'",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get::<_, &str>(0)).unwrap())
-        .unwrap();
+        &[&run_id],
+    )
+    .await;
 
     assert_eq!(
         (
@@ -305,9 +269,7 @@ async fn a_settled_search_captures_one_snapshot_per_entry_that_its_continuation_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn metadata_above_the_store_bounds_keeps_the_settlement_and_reads_as_absent() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let search = r#"{"query":"tide tables of 1890","result_count":null}"#;
     let text = format!(
@@ -349,9 +311,7 @@ async fn metadata_above_the_store_bounds_keeps_the_settlement_and_reads_as_absen
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_fetch_records_a_failed_a_missing_and_an_empty_url_as_gaps_and_never_as_snapshots() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let urls = r#"{"urls":["https://example.org/a","https://example.org/c","https://example.org/d","https://example.org/e"]}"#;
     let page = "# Tide table\nURL: https://example.org/a\n\nHigh water at 10.42.\n\n\
@@ -386,9 +346,7 @@ async fn a_fetch_records_a_failed_a_missing_and_an_empty_url_as_gaps_and_never_a
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_page_read_above_the_result_bound_fails_with_one_gap_for_each_url_and_cuts_nothing() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let urls = r#"{"urls":["https://example.org/a","https://example.org/b"]}"#;
     // One byte above the bound of the whole Tool result (S5-03), which is the bound of a source.
@@ -432,9 +390,7 @@ async fn a_page_read_above_the_result_bound_fails_with_one_gap_for_each_url_and_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_page_that_quotes_a_header_is_unattributed_and_the_call_stays_settled() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let urls = r#"{"urls":["https://example.org/a"]}"#;
     let page = "# Page\nURL: https://example.org/a\n\nBefore.\n\n\
@@ -472,9 +428,7 @@ async fn a_page_that_quotes_a_header_is_unattributed_and_the_call_stays_settled(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_second_fetch_of_one_url_is_a_new_revision_and_no_snapshot_changes() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let url = r#"{"urls":["https://example.org/tides"]}"#;
     let (scope, run_id) = settled_research_run(
@@ -559,9 +513,7 @@ async fn a_second_fetch_of_one_url_is_a_new_revision_and_no_snapshot_changes() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_in_another_project_scope_finds_no_run_and_no_snapshot() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let search = r#"{"query":"tide tables of 1890","result_count":null}"#;
     let (scope, run_id) = settled_research_run(
@@ -588,9 +540,7 @@ async fn a_read_in_another_project_scope_finds_no_run_and_no_snapshot() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_project_export_packs_the_sources_and_a_reload_reads_them_unchanged() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let urls = r#"{"urls":["https://example.org/a","https://example.org/d"]}"#;
     let (scope, run_id) = settled_research_run(
@@ -608,33 +558,10 @@ async fn the_project_export_packs_the_sources_and_a_reload_reads_them_unchanged(
             .await
             .unwrap(),
     );
-    let (export, input): (_, ExportProjectArchiveInput) = export_command(&scope, "5a");
-    issue_project_command_challenge(
-        &store,
-        &IssueProjectCommandChallenge {
-            binding: export.challenge_binding.clone(),
-            nonce: "nonce-export-5a".to_owned(),
-            nonce_digest: export.nonce_digest.clone(),
-            earlier_revision_nonces: Vec::new(),
-        },
-    )
-    .await
-    .unwrap();
-    store.export_project_archive(&export, &input).await.unwrap();
-    let claimed = claim_next_archive_export(&store).await.unwrap().unwrap();
-    complete_archive_export(&store, &claimed).await.unwrap();
-    let VerifiedExportArchive::Ready(zip) =
-        get_verified_export_archive(&store, &scope, &input.export_id)
-            .await
-            .unwrap()
-    else {
-        panic!("the Project Export must return verified ZIP bytes");
-    };
-    let files = zip_store_files(&zip);
+    let files = archived_files(&store, &scope, "5a").await;
     let mut packed = Vec::new();
     for table in ["source_snapshots", "source_gaps"] {
-        let path = format!("canonical/{table}.json");
-        let bytes = &files.iter().find(|(name, _)| *name == path).unwrap().1;
+        let bytes = canonical(&files, table);
         let rows: Vec<Value> = serde_json::from_slice(bytes).unwrap();
         packed.push((
             table,

@@ -43,12 +43,10 @@ mod model_lease_renewal;
 mod model_stream_commit;
 mod tool_gateway;
 mod tool_gateway_ports;
-pub use author_edit_wire::{author_edit_units_from_wire, author_edit_units_to_wire};
+pub use author_edit_wire::author_edit_units_from_wire;
 mod author_edit_outcome;
 mod diagnostics;
-pub use diagnostics::{
-    DiagnosticField, DiagnosticId, SqlState, SqlStateLookup, register_sql_state,
-};
+pub use diagnostics::{DiagnosticField, DiagnosticId, SqlState, register_sql_state};
 mod challenge_rate_class;
 pub use challenge_rate_class::ChallengeRateClass;
 mod chapter_query;
@@ -82,9 +80,6 @@ mod project_settings;
 mod readable_export;
 mod readable_export_work;
 mod reject_proposal_operations;
-mod reopen_rejected_operations;
-mod reopen_withdrawn_proposal;
-mod replan_proposal;
 mod research_source;
 mod set_current_chapter;
 mod snapshot;
@@ -129,7 +124,7 @@ pub use create_agent_run::{
     CreateAgentRunSettlement, EvidenceAvailability, OriginalResultRetrievalDisposition,
     OriginalResultRetrievalInspect, ReferenceRecoveryDisposition, ReferenceRecoveryInspect,
     UnknownCreateSuccessorDisposition, UnknownCreateSuccessorInspect, WorkingTargetAvailability,
-    inspect_agent_run, open_agent_run, wire_agent_run_status,
+    inspect_agent_run, wire_agent_run_status,
 };
 pub use create_project::{
     CreateProjectCommand, CreateProjectError, CreateProjectSettlement, CreateProjectStore,
@@ -145,7 +140,7 @@ pub use delete_memory_entry::{
 pub use embedding_gateway::{
     EmbeddingClaim, EmbeddingDispatchStore, EmbeddingObservation, EmbeddingProjection,
     EmbeddingProviderAdapter, EmbeddingRecord, EmbeddingResult, EmbeddingRoute, EmbeddingUsage,
-    NoEmbeddingDestination, PreparedEmbeddingRequest, dispatch_embedding,
+    PreparedEmbeddingRequest, dispatch_embedding,
 };
 pub use export_work::{ClaimedExportWork, ExportWorkStore, claim_next_export_work};
 pub use get_proposal::{
@@ -155,14 +150,12 @@ pub use list_projects::{ProjectLibrary, ProjectListItem, list_owned_projects};
 pub use manuscript_search::{
     MANUSCRIPT_SEARCH_LIMIT_PROFILE_REVISION, ManuscriptSearchBlockFact,
     ManuscriptSearchChapterFact, ManuscriptSearchCompleteness, ManuscriptSearchFactExtent,
-    ManuscriptSearchFacts, ManuscriptSearchMatch, ManuscriptSearchPage, ManuscriptSearchRead,
-    ManuscriptSearchReader, ManuscriptSearchRequest, ManuscriptSearchSelection, SearchManuscript,
-    search_manuscript,
+    ManuscriptSearchFacts, ManuscriptSearchMatch, ManuscriptSearchRead, ManuscriptSearchReader,
+    ManuscriptSearchRequest, ManuscriptSearchSelection, SearchManuscript, search_manuscript,
 };
 pub use manuscript_statistics::{
     ChapterStatistics, GetManuscriptStatistics, MANUSCRIPT_STATISTICS_LIMIT_PROFILE_REVISION,
-    MANUSCRIPT_STATISTICS_PROJECTION_KIND, ManuscriptStatisticsPage, ManuscriptStatisticsRequest,
-    ManuscriptTotals, get_manuscript_statistics,
+    ManuscriptStatisticsRequest, ManuscriptTotals, get_manuscript_statistics,
 };
 pub use manuscript_structure::{
     ChapterCreated, ChapterDeleted, CreateChapterInput, CreateChapterPublicOrder,
@@ -175,10 +168,8 @@ pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterNode,
     GetManuscriptTree, ManuscriptTreeReader, VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
 };
-pub use memory_capture::{
-    MemoryCaptureSource, MemoryCaptureStartRefusal, MemoryCaptureStore, StartedMemoryCapture,
-};
-pub use memory_consolidation::{MemoryConsolidationStore, StartedMemoryConsolidation};
+pub use memory_capture::{MemoryCaptureSource, MemoryCaptureStartRefusal, StartedMemoryCapture};
+pub use memory_consolidation::StartedMemoryConsolidation;
 pub use memory_entries::{
     MemoryEntryFlagItem, MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem,
     list_memory_entries,
@@ -190,32 +181,28 @@ pub use model_gateway::{
     complete_agent_run, complete_agent_run_with_destinations, complete_agent_run_with_tools,
 };
 pub use model_gateway_ports::{
-    AbortRequest, AbortTicket, CacheSetting, CacheUse, CommittedCancellation,
-    ContractFaultObserver, ContractFaultPoint, CreatePurpose, CreateRequest, CredentialReference,
-    CredentialResolver, CurrentInput, DeclaredTarget, DestinationRequest, DispatchClaim,
-    DispatchRecord, GatewayClock, ModelDispatchStore, ModelProviderAdapter, ModelResponse,
-    ModelStreamSink, ModelUsage, NextDispatchWork, NoContractFaults, Observation,
-    PROVISIONAL_STREAM_COMMIT_INTERVAL, PROVISIONAL_STREAM_EVENT_BOUND, PreDispatchRefusal,
-    PreparedRequest, PriorInput, ReferenceRetrieval, ReportedBinding, RequestAttempt,
-    RequestBounds, RequestContextItem, RequestRoute, ResolvedCredential, ResponseReference,
-    RetrievePurpose, RetrieveRequest, StreamControl, StreamStop, ToolOutput, ToolOutputOrigin,
-    ToolProbeRequest, WirePayloadProjection,
+    AbortRequest, CacheSetting, CacheUse, CommittedCancellation, ContractFaultObserver,
+    ContractFaultPoint, CreatePurpose, CreateRequest, CredentialReference, CredentialResolver,
+    CurrentInput, DeclaredTarget, DestinationRequest, DispatchClaim, DispatchRecord, GatewayClock,
+    ModelDispatchStore, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
+    NextDispatchWork, NoContractFaults, Observation, PROVISIONAL_STREAM_COMMIT_INTERVAL,
+    PROVISIONAL_STREAM_EVENT_BOUND, PreDispatchRefusal, PreparedRequest, PriorInput,
+    ReferenceRetrieval, ReportedBinding, RequestAttempt, RequestBounds, RequestContextItem,
+    RequestRoute, ResolvedCredential, ResponseReference, RetrievePurpose, RetrieveRequest,
+    StreamControl, StreamStop, ToolOutput, ToolOutputOrigin, ToolProbeRequest,
+    WirePayloadProjection,
 };
 pub use open_proposal_list::{
     OpenProposalList, OpenProposalListItem, OpenProposalListReader, list_open_proposals,
 };
 pub use passage_index::{
-    ChapterPassageSource, PassageIndexFacts, PassageIndexFailure, PassageIndexReport,
-    PassageIndexResult, PassageVectorKey, PassageVectorRow, PassageVectorStore,
-    index_chapter_passages,
+    ChapterPassageSource, PassageIndexFacts, PassageVectorKey, PassageVectorRow, PassageVectorStore,
 };
 pub use passage_index_work::{
     ClaimedPassageIndex, PASSAGE_INDEX_LEASE, PASSAGE_INDEX_QUIET_TIME, PassageIndexStep,
     PassageIndexWorkStore, claim_next_passage_index_work, step_passage_index_work,
 };
-pub use passage_ranking::{
-    PassageRankingFacts, PassageRankingStore, QuestionVector, rank_manuscript_passages,
-};
+pub use passage_ranking::{PassageRankingFacts, QuestionVector};
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,
     render_readable_manuscript_from_pinned_source,
@@ -229,15 +216,14 @@ pub use project_command::{
 pub use project_conversations::{
     ProjectConversationList, ProjectConversationListItem, ProjectConversationRead,
     ProjectConversationReader, ProjectConversationRunItem, StoredProjectConversationRuns,
-    list_project_conversations, project_conversation_label, read_project_conversation,
+    list_project_conversations, read_project_conversation,
 };
 pub use project_export::{
     ArchiveExportOperation, ArchiveExportRefusal, ExportOperationPage, ExportOperationProgress,
     ExportOperationReader, ExportProjectArchiveAdmission, ExportProjectArchiveError,
     ExportProjectArchiveInput, GetExportOperation, PROJECT_ARCHIVE_ZIP_MEDIA_TYPE,
-    PROJECT_EXPORT_ARCHIVE_PATH_PROFILE, PROJECT_EXPORT_ARCHIVE_PROFILE,
-    PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE, PROJECT_EXPORT_REQUEST_SCHEMA,
-    PROJECT_EXPORT_ROUTE, VerifiedExportArchive, get_export_operation, get_verified_export_archive,
+    PROJECT_EXPORT_ARCHIVE_PATH_PROFILE, PROJECT_EXPORT_ARCHIVE_PROFILE, VerifiedExportArchive,
+    get_export_operation, get_verified_export_archive,
 };
 pub use project_export_work::{
     ArchiveExportWorkStore, ClaimedArchiveExport, CompleteArchiveExport,
@@ -247,12 +233,9 @@ pub use project_settings::{UpdateProjectInput, UpdateProjectSettlement};
 pub use readable_export::{
     ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError,
     ExportHumanReadableManuscriptInput, GetHumanReadableManuscriptExport,
-    HUMAN_READABLE_EXPORT_COMMAND_KIND, HUMAN_READABLE_EXPORT_DIGEST_PROFILE,
-    HUMAN_READABLE_EXPORT_REQUEST_SCHEMA, HUMAN_READABLE_EXPORT_ROUTE,
     HumanReadableManuscriptExportPage, HumanReadableManuscriptExportProgress,
     HumanReadableManuscriptExportReader, ReadableExportOperation,
     get_human_readable_manuscript_export, readable_volumes_from_canonical_facts,
-    render_readable_manuscript_from_facts,
 };
 pub use readable_export_work::{
     ClaimedReadableExport, CompleteReadableExport, CompleteReadableExportError,
@@ -262,13 +245,6 @@ pub use reject_proposal_operations::{
     ProposalOperationsRejected, RejectProposalOperationsInput, RejectProposalOperationsSettlement,
     RejectionNote,
 };
-pub use reopen_rejected_operations::{
-    RejectedOperationsReopened, ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
-};
-pub use reopen_withdrawn_proposal::{
-    ProposalReopened, ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
-};
-pub use replan_proposal::{ProposalReplanned, ReplanProposalInput, ReplanProposalSettlement};
 pub use research_source::{
     ResearchArtifactReadStore, ResearchSourceReadStore, ResearchSourceText, ResearchSources,
 };
@@ -597,18 +573,4 @@ pub async fn open_project_instruction(
     scope: &ProjectScope,
 ) -> Result<Option<ProjectInstructionRevision>, ProjectReadError> {
     reader.read_project_instruction(scope).await
-}
-
-pub async fn open_current_chapter(
-    reader: &impl ProjectReader,
-    scope: &ProjectScope,
-    chapter_id: &ChapterId,
-) -> Result<Option<Chapter>, ProjectReadError> {
-    let Some(project) = reader.read_project(scope).await? else {
-        return Ok(None);
-    };
-    if project.current_chapter_id.as_ref() != Some(chapter_id) {
-        return Ok(None);
-    }
-    reader.read_chapter(scope, chapter_id).await
 }

@@ -5,7 +5,9 @@ use storyos_core::{
     ProjectionMode, RESEARCH_RECORDED_RESULT, ReadToolResultRefusal, ToolResultProjection,
 };
 
-use crate::agent_run_submit_research::tests::{ResearchProject, research_project};
+use crate::shared_tests::agent_run_submit_research::{ResearchProject, research_project};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::json_row::json_of;
 
 /// A search result of 30 entries, so that its exact form is larger than a stub.
 fn long_search() -> String {
@@ -53,10 +55,9 @@ async fn sent_outputs(project: &ResearchProject, run_id: &str, position: u32) ->
 /// function name of each call that its later request sent as a stub, and the projection mode of
 /// each `tool_result` item of its later request.
 async fn stub_records(project: &ResearchProject, run_id: &str) -> Value {
-    let row = project
-        .admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(record.decision_position, record.install_state,
+    json_of(
+        &project.admin,
+        "SELECT jsonb_agg(jsonb_build_array(record.decision_position, record.install_state,
                       (SELECT jsonb_agg(call.function_name ORDER BY stub.ordinal)
                          FROM jsonb_array_elements_text(record.stub_tool_call_ids)
                               WITH ORDINALITY AS stub(id, ordinal)
@@ -71,11 +72,9 @@ async fn stub_records(project: &ResearchProject, run_id: &str) -> Value {
                       ORDER BY record.decision_position)::text
                FROM storyos.active_context_compactions AS record
               WHERE record.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The ToolCall identity of each call of the Run with the provider call identifier of `calls`.
@@ -103,9 +102,7 @@ fn output(call_id: &str, output: &Value) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_model_reads_a_stub_result_again_and_a_later_compaction_makes_the_read_a_stub() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let project = research_project("850").await;
     // RunStep 0 searches, RunStep 1 reads an unknown call, RunStep 2 reads the search after it
     // got its stub, RunStep 3 submits and finishes, and RunStep 4 answers. The Run compacts at
@@ -260,9 +257,7 @@ async fn the_model_reads_a_stub_result_again_and_a_later_compaction_makes_the_re
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn after_a_compaction_submit_research_cites_a_source_of_a_stub() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let project = research_project("852").await;
     let synthesis = json!({"summary": "The tides of 1890.",
                            "claims": [{"text": "High water came at 10.01.",

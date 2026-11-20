@@ -10,7 +10,11 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::{RunPhaseRow, update_run};
+use crate::agent_run_successor::{flag, read_error, required_text, text};
+use crate::agent_run_work::{RunPhaseRow, complete_unavailable, update_run};
+
+/// The error of a retrieval record with no text in a required field.
+const INCOMPLETE: &str = "The retrieval record is incomplete";
 use crate::update_project_assistance::read_assistance_record;
 
 pub(crate) enum RetrievalFence {
@@ -114,9 +118,9 @@ pub(crate) async fn advance_original_result_retrieval(
     run_write: RetrievalRunWrite,
 ) -> Result<RetrievalWork, CompleteAgentRunError> {
     let fenced = matches!(fence, RetrievalFence::Fenced);
-    let subject = payload
-        .get("original_result_retrieval")
-        .ok_or_else(|| unavailable(std::io::Error::other("The retrieval subject is missing")))?;
+    let subject = payload.get("original_result_retrieval").ok_or_else(|| {
+        complete_unavailable(std::io::Error::other("The retrieval subject is missing"))
+    })?;
     if flag(subject, "reconciled") {
         if !fenced && matches!(run_write, RetrievalRunWrite::Write) {
             restore_reconciled(client, claim, subject).await?;
@@ -167,7 +171,7 @@ pub(crate) async fn advance_original_result_retrieval(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     Ok(RetrievalWork::Retrieve(Box::new(RetrieveRequest {
         route: crate::model_registration::request_route(client, claim).await?,
         attempt: match existing {
@@ -199,9 +203,9 @@ pub(crate) async fn decide(
 ) -> Result<OriginalResultRetrievalDecision, CompleteAgentRunError> {
     let assistance = read_assistance_record(client, &claim.project_scope)
         .await
-        .map_err(unavailable)?
+        .map_err(complete_unavailable)?
         .ok_or_else(|| {
-            unavailable(std::io::Error::other(
+            complete_unavailable(std::io::Error::other(
                 "Retrieval requires current assistance admission",
             ))
         })?;
@@ -272,10 +276,11 @@ pub(crate) async fn load_original_result_retrieval(
         }
     };
     Ok(Some(storyos_application::OriginalResultRetrievalInspect {
-        reconciliation_id: required_text(subject, "reconciliation_id").map_err(read_error)?,
+        reconciliation_id: required_text(subject, "reconciliation_id", INCOMPLETE)
+            .map_err(read_error)?,
         disposition,
         keep_reason: text(subject, "keep_reason").map(str::to_owned),
-        original_model_attempt_id: required_text(subject, "original_model_attempt_id")
+        original_model_attempt_id: required_text(subject, "original_model_attempt_id", INCOMPLETE)
             .map_err(read_error)?,
         response_reference_id: text(subject, "response_reference_id").map(str::to_owned),
         retrieval_attempt_id: text(subject, "retrieval_attempt_id").map(str::to_owned),
@@ -322,9 +327,9 @@ pub(crate) async fn settle(
         run_write,
     } = settled;
     let defer_run_status = matches!(run_write, RetrievalRunWrite::Defer);
-    let subject = payload
-        .get("original_result_retrieval")
-        .ok_or_else(|| unavailable(std::io::Error::other("The retrieval subject is missing")))?;
+    let subject = payload.get("original_result_retrieval").ok_or_else(|| {
+        complete_unavailable(std::io::Error::other("The retrieval subject is missing"))
+    })?;
     let retrieval_attempt_id = retrieval
         .as_ref()
         .map(|recorded| recorded.attempt_id.clone());
@@ -418,9 +423,9 @@ async fn write_unsettled_payload(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     if updated != 1 {
-        return Err(unavailable(std::io::Error::other(
+        return Err(complete_unavailable(std::io::Error::other(
             "The original Attempt could not record retrieval",
         )));
     }
@@ -493,38 +498,6 @@ fn facts(
         retrieved,
         run_fenced,
     }
-}
-
-pub(crate) fn text<'a>(value: &'a serde_json::Value, field: &str) -> Option<&'a str> {
-    value
-        .get(field)
-        .and_then(serde_json::Value::as_str)
-        .filter(|text| !text.is_empty())
-}
-
-fn required_text(value: &serde_json::Value, field: &str) -> Result<String, std::io::Error> {
-    text(value, field)
-        .map(str::to_owned)
-        .ok_or_else(|| std::io::Error::other("The retrieval record is incomplete"))
-}
-
-fn flag(value: &serde_json::Value, field: &str) -> bool {
-    value
-        .get(field)
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
-}
-
-pub(crate) fn unavailable(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> CompleteAgentRunError {
-    CompleteAgentRunError::Unavailable(Box::new(error))
-}
-
-fn read_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> storyos_application::CreateAgentRunError {
-    storyos_application::CreateAgentRunError::Unavailable(Box::new(error))
 }
 
 #[cfg(test)]

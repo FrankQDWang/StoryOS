@@ -7,23 +7,28 @@ use storyos_application::MemoryEntrySourceItem;
 use storyos_core::MemoryEntryOrigin;
 
 use super::*;
-use crate::agent_run_finish_rule::tests::complete;
-use crate::memory_capture::loop_tests::settlement;
-use crate::memory_consolidation::tests::{create, scripted};
-use crate::memory_work_schedule::outcome_tests::stopped_at_the_start;
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_capture_schedule::{
+    Fixture, due_state, fixture, input_of, make_chapter_due, row,
+};
+use crate::shared_tests::memory_capture_loop::settlement;
+use crate::shared_tests::memory_consolidation::{create, scripted};
+use crate::shared_tests::memory_work_outcome::stopped_at_the_start;
+use crate::shared_tests::model_gateway::NoEmbeddings;
 
 /// The fake destination with no Tool destination and no embedding destination.
 fn destination() -> storyos_worker::ModelDestination<
     FakeDestination,
     NoContractFaults,
     storyos_application::NoToolDestination,
-    storyos_application::NoEmbeddingDestination,
+    NoEmbeddings,
 > {
     storyos_worker::ModelDestination {
         adapter: FakeDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
+        embeddings: NoEmbeddings,
     }
 }
 
@@ -61,9 +66,7 @@ fn observation_text() -> [String; 2] {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn five_chapters_written_before_the_first_run_get_one_capture_each_in_chapter_order() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_a, first) = queued(&store, "891").await;
     let request = open_session_request(&store, &scope, "89b0").await;
@@ -290,9 +293,7 @@ fn chapter_entry(chapter_id: &str, title: Option<&str>, available: bool) -> Vec<
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn run_once_takes_a_changed_chapter_through_a_capture_and_a_pass_to_an_entry() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let text = observation_text();
     let (f, chapter_a, _) = fixture("892", 0x89c0, &[&text[0], &text[1]]).await;
 
@@ -311,9 +312,7 @@ async fn run_once_takes_a_changed_chapter_through_a_capture_and_a_pass_to_an_ent
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_edit_during_a_capture_is_admitted_and_a_later_capture_reads_the_new_text() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let text = observation_text();
     let (f, chapter_a, _) = fixture("893", 0x89c3, &[&text[0], &text[1]]).await;
     let pinned = head(&f.admin, &chapter_a).await.0;
@@ -353,9 +352,7 @@ async fn an_edit_during_a_capture_is_admitted_and_a_later_capture_reads_the_new_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_delete_during_a_capture_keeps_an_unavailable_source_and_starts_no_capture() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let text = observation_text();
     let (f, chapter_a, _) = fixture("894", 0x89c7, &[&text[0], &text[1]]).await;
     let path = to_entry(&f, &chapter_a, During::Delete).await;
@@ -375,9 +372,7 @@ async fn a_delete_during_a_capture_keeps_an_unavailable_source_and_starts_no_cap
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_capture_reads_the_authoritative_text_and_not_a_waiting_proposal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let sentences = ["雨夜。", "林舟撑船。"];
     let (f, chapter_a, _) = fixture("895", 0x89cb, &sentences).await;
     let revision = head(&f.admin, &chapter_a).await.0;
@@ -435,9 +430,7 @@ async fn a_capture_reads_the_authoritative_text_and_not_a_waiting_proposal() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn after_a_failed_capture_only_the_next_commit_sets_the_due_time_again() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let max = usize::try_from(storyos_core::MEMORY_CAPTURE_MAX_RUN_STEPS).unwrap();
     let edits = script(&vec![
         ("propose_edit", json!({"reason": "改写"}));
@@ -483,9 +476,7 @@ async fn after_a_failed_capture_only_the_next_commit_sets_the_due_time_again() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_capture_reads_only_the_chapter_of_its_row_in_its_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let mut inputs = Vec::new();
     for (lead, suffix, text) in [("897", 0x89d5, "甲。"), ("898", 0x89d8, "乙。")] {
         let (f, chapter_a, _) = fixture(lead, suffix, &[text]).await;
@@ -509,9 +500,7 @@ async fn a_capture_reads_only_the_chapter_of_its_row_in_its_project() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_stopped_worker_leaves_the_chapter_row_due_and_the_next_claim_starts_one_capture() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (f, chapter_a, _) = fixture("899", 0x89db, &["雨。"]).await;
     make_chapter_due(&f.admin, &f.scope, &chapter_a, /*seconds*/ 1).await;
     let stopped = stopped_at_the_start(&f.admin, f.store.claim_due_memory_work()).await;

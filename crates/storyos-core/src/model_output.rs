@@ -46,12 +46,12 @@ pub enum AgentDecisionKind {
     },
 }
 
+/// The outcome of a model response. Each Decision is the selected Decision of its response.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AgentDecisionOutcome {
     NoDecision,
     Decision {
         kind: AgentDecisionKind,
-        selected: bool,
         advances_continuation: bool,
     },
 }
@@ -63,7 +63,6 @@ pub fn validate_agent_decision(batch: crate::ToolCallBatch) -> AgentDecisionOutc
     match batch {
         crate::ToolCallBatch::Valid(calls) if !calls.is_empty() => AgentDecisionOutcome::Decision {
             kind: AgentDecisionKind::ToolRequest { calls },
-            selected: true,
             advances_continuation: false,
         },
         crate::ToolCallBatch::Valid(_) | crate::ToolCallBatch::Invalid(_) => {

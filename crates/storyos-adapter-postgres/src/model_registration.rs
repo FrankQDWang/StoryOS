@@ -4,7 +4,7 @@ use storyos_application::{
 use storyos_core::{BudgetBounds, ModelAdapter, ModelRegistration};
 use tokio_postgres::Client;
 
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 
 /// The adapter and model of the Registration that the claimed AgentRun pinned, and the endpoint,
 /// Credential Reference, and request bounds of its use binding.
@@ -39,7 +39,7 @@ pub(crate) async fn request_route(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(RequestRoute {
         adapter: ModelAdapter::parse(row.get(/*idx*/ 0)).ok_or_else(|| {
             CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(

@@ -9,7 +9,7 @@ use storyos_core::{READ_SKILL_RESOURCE_TOOL_SPEC, SkillResourceReadFacts, ToolCa
 
 use crate::agent_run_load_skill::{CountedLoads, held_skills};
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 
 /// Reads the file `path` of the Skill `skill` for the pending call `row`, and settles or refuses
 /// `row`. A load of the response of `row` does not count, because its output is not in the
@@ -25,7 +25,7 @@ pub(crate) async fn execute(
     let catalog: Vec<_> =
         crate::skill_package_snapshot::run_skill_catalog(client, scope, &claim.run_id)
             .await
-            .map_err(complete_database_error)?
+            .map_err(complete_unavailable)?
             .into_iter()
             .map(|entry| entry.reference)
             .collect();
@@ -59,7 +59,7 @@ pub(crate) async fn execute(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let settled_reads: i64 = stored.get(/*idx*/ 0);
     let file: Option<Vec<u8>> = stored.get(/*idx*/ 1);
     let facts = SkillResourceReadFacts {
@@ -82,13 +82,7 @@ pub(crate) async fn execute(
         client,
         claim,
         row,
-        Resolution {
-            state,
-            refusal,
-            attempt: None,
-            outcome: None,
-            result: Some(&result),
-        },
+        Resolution::host(state, refusal, Some(&result)),
     )
     .await
 }

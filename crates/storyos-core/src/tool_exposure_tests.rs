@@ -4,9 +4,9 @@ use super::{
     BoundTool, ExposedTool, ExposureFacts, ResponseDisposition, ResponseFacts,
     ToolCompatibilityDecision, ToolExposure, requests_function, response_disposition,
 };
+use crate::shared_tests::exposure_facts;
 use crate::{
-    AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, AgentDecisionKind,
-    AgentDecisionOutcome, EXA_TOOL_REGISTRATION, HOST_FAKE_REGISTRATION,
+    AGENT_PLAN_REGISTRATION, AgentDecisionKind, AgentDecisionOutcome, EXA_TOOL_REGISTRATION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION, HOST_TOOL_REGISTRATION, NativeStreamItem, StreamItemRole,
     StreamItemState, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
 };
@@ -25,11 +25,7 @@ fn bound(
 fn exposure(bound: &[BoundTool], model_registration_revision: &str) -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
         bound,
-        model_registration_revision,
-        skill_catalog: false,
-        memory_use: false,
-        hybrid_search: false,
-        run_kind: crate::AgentRunKind::Author,
+        ..exposure_facts(model_registration_revision)
     })
 }
 
@@ -98,10 +94,11 @@ fn each_other_binding_or_registration_exposes_nothing() {
     for (bound, revision) in cases {
         assert_eq!(exposure(bound, revision), host_tools);
     }
-    // A Model Registration with no qualified function calling exposes no Tool.
+    // A Model Registration with no qualified function calling, or an unknown revision, exposes no
+    // Tool.
     for revision in [
-        HOST_FAKE_REGISTRATION.revision,
-        AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION.revision,
+        crate::PROBE_FIXTURE_REGISTRATION.revision,
+        "an unknown revision",
     ] {
         assert_eq!(
             exposure(
@@ -140,12 +137,10 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
     };
     let with_catalog = |revision: &str| {
         ToolExposure::compute(&ExposureFacts {
-            bound: &[],
-            model_registration_revision: revision,
             skill_catalog: true,
             memory_use: true,
             hybrid_search: true,
-            run_kind: crate::AgentRunKind::Author,
+            ..exposure_facts(revision)
         })
     };
     let without_skill = |registration| {
@@ -162,80 +157,44 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
         });
         exposure
     };
-    // The mapping `v8` and the fake tool loop mapping declare `…0e0104`, and a Run that pinned
-    // the Registration of the mapping `v7` keeps `…0e0103`. Each declares `load_skill` and
-    // `read_skill_resource` only for a Run whose pinned catalog has a Skill (ADR 0089 section 3),
-    // `read_memory_entry` and `search_memory` only for a Run whose captured settings have use
-    // (ADR 0094 section 4), and `hybrid_search_manuscript` only when the search by meaning is
-    // possible (ADR 0095 section 4).
-    for (revision, registration) in [
-        (
-            HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
-            &HOST_TOOL_REGISTRATION,
-        ),
-        (AGENT_PLAN_REGISTRATION.revision, &HOST_TOOL_REGISTRATION),
-        (
-            crate::AGENT_PLAN_SKILL_REGISTRATION.revision,
-            &crate::SKILL_HOST_TOOL_REGISTRATION,
-        ),
+    // The current mapping and the fake tool loop mapping declare `…0e0104`. Each declares
+    // `load_skill` and `read_skill_resource` only for a Run whose pinned catalog has a Skill (ADR
+    // 0089 section 3), `read_memory_entry` and `search_memory` only for a Run whose captured
+    // settings have use (ADR 0094 section 4), and `hybrid_search_manuscript` only when the search
+    // by meaning is possible (ADR 0095 section 4).
+    for revision in [
+        HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
+        AGENT_PLAN_REGISTRATION.revision,
     ] {
-        assert_eq!(with_catalog(revision), host(registration));
-        assert_eq!(exposure(&[], revision), without_skill(registration));
-    }
-    // A Run that pinned the Registration of the mapping `v6` keeps four Host Tools, and a Run
-    // that pinned the Registration of the mapping `v5` keeps three (ADR 0093).
-    let v6 = crate::AGENT_PLAN_READ_RESULT_REGISTRATION.revision;
-    let v5 = crate::AGENT_PLAN_TOOL_LOOP_REGISTRATION.revision;
-    for (revision, registration) in [
-        (v6, &crate::READ_RESULT_HOST_TOOL_REGISTRATION),
-        (v5, &crate::FIRST_HOST_TOOL_REGISTRATION),
-    ] {
-        assert_eq!(exposure(&[], revision), host(registration));
-        assert_eq!(with_catalog(revision), host(registration));
+        assert_eq!(with_catalog(revision), host(&HOST_TOOL_REGISTRATION));
+        assert_eq!(
+            exposure(&[], revision),
+            without_skill(&HOST_TOOL_REGISTRATION)
+        );
     }
     assert_eq!(
-        (
-            names(exposure(&[], v5)),
-            names(exposure(&[], v6)),
-            names(with_catalog(AGENT_PLAN_REGISTRATION.revision)),
-        ),
-        (
-            vec!["propose_edit", "submit_research", "finish"],
-            vec![
-                "propose_edit",
-                "submit_research",
-                "read_tool_result",
-                "finish"
-            ],
-            vec![
-                "propose_edit",
-                "submit_research",
-                "read_tool_result",
-                "load_skill",
-                "read_skill_resource",
-                "read_chapter",
-                "search_manuscript",
-                "hybrid_search_manuscript",
-                "write_memory",
-                "read_memory_entry",
-                "search_memory",
-                "finish"
-            ]
-        )
+        names(with_catalog(AGENT_PLAN_REGISTRATION.revision)),
+        vec![
+            "propose_edit",
+            "submit_research",
+            "read_tool_result",
+            "load_skill",
+            "read_skill_resource",
+            "read_chapter",
+            "search_manuscript",
+            "hybrid_search_manuscript",
+            "write_memory",
+            "read_memory_entry",
+            "search_memory",
+            "finish"
+        ]
     );
     assert_eq!(
         (
             HOST_TOOL_REGISTRATION.revision,
-            crate::SKILL_HOST_TOOL_REGISTRATION.revision,
-            crate::READ_RESULT_HOST_TOOL_REGISTRATION.revision,
             HOST_TOOL_REGISTRATION.tools.len(),
         ),
-        (
-            "018f0000-0000-7001-8000-0000000e0104",
-            "018f0000-0000-7001-8000-0000000e0103",
-            "018f0000-0000-7001-8000-0000000e0102",
-            14,
-        )
+        ("018f0000-0000-7001-8000-0000000e0104", 14)
     );
     let declared = host(&HOST_TOOL_REGISTRATION);
     assert_eq!(
@@ -441,7 +400,6 @@ fn only_an_ordinary_response_without_a_decision_and_with_a_complete_call_request
         kind: AgentDecisionKind::Advisory {
             text: "Keep it.".to_owned(),
         },
-        selected: true,
         advances_continuation: true,
     };
     let disposition = |probe: bool, outcome: &AgentDecisionOutcome, items: &[NativeStreamItem]| {
@@ -482,11 +440,11 @@ fn a_background_run_gets_only_the_tools_of_its_kind() {
     let names = |run_kind, memory_use| -> Vec<&str> {
         ToolExposure::compute(&ExposureFacts {
             bound: &active,
-            model_registration_revision: HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
             skill_catalog: true,
             memory_use,
             hybrid_search: true,
             run_kind,
+            ..exposure_facts(HOST_FAKE_TOOL_LOOP_REGISTRATION.revision)
         })
         .tools
         .iter()

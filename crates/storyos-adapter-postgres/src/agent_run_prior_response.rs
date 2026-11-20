@@ -6,7 +6,7 @@
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ToolOutput, ToolOutputOrigin};
 
 use crate::agent_run_tool_authority::damaged;
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 
 /// The record that names the prior response of a request.
 #[derive(Clone, Copy)]
@@ -56,7 +56,7 @@ impl PriorResponse {
                 ],
             )
             .await
-            .map_err(complete_database_error)?
+            .map_err(complete_unavailable)?
             .ok_or_else(|| damaged("The prior response of the request is missing"))?;
         let call_ids: Vec<Option<String>> = serde_json::from_str(row.get(/*idx*/ 2))
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;

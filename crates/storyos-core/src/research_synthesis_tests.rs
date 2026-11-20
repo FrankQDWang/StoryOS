@@ -67,7 +67,7 @@ fn a_synthesis_that_cites_captured_sources_or_only_gaps_is_valid() {
 }
 
 #[test]
-fn a_synthesis_with_an_uncited_claim_an_uncaptured_citation_or_an_unstorable_text_is_refused() {
+fn a_synthesis_with_an_uncited_claim_or_an_uncaptured_citation_is_refused() {
     let refusal = |summary: &str, claims: &[ClaimCandidate]| {
         validate_research_synthesis(summary, claims, &citable()).err()
     };
@@ -86,8 +86,6 @@ fn a_synthesis_with_an_uncited_claim_an_uncaptured_citation_or_an_unstorable_tex
             ),
             refusal("Tides.", &[claim("High water.", &["s1", "s9"])]),
             refusal("Tides.", &[claim("High water.", &["x1"])]),
-            refusal("Tides.\0", &[claim("High water.", &["s1"])]),
-            refusal("Tides.", &[claim("High\0water.", &["s1"])]),
         ],
         [
             Some(SynthesisRefusal::NoClaim),
@@ -96,8 +94,6 @@ fn a_synthesis_with_an_uncited_claim_an_uncaptured_citation_or_an_unstorable_tex
             Some(SynthesisRefusal::UncitedClaim),
             Some(SynthesisRefusal::UncapturedCitation),
             Some(SynthesisRefusal::OtherScopeCitation),
-            Some(SynthesisRefusal::UnstorableText),
-            Some(SynthesisRefusal::UnstorableText),
         ]
     );
 }

@@ -5,7 +5,8 @@ use storyos_application::{
     RequestAttempt,
 };
 
-use crate::agent_run_work::RunPhaseRow;
+use crate::agent_run_successor::read_error;
+use crate::agent_run_work::{RunPhaseRow, complete_unavailable};
 use storyos_core::{
     CompactionRecordState, CompactionRequestFacts, CompactionStep, DecisionRequestKind,
     compaction_requested, decision_request_kind, next_compaction_step,
@@ -42,7 +43,7 @@ async fn compacted_earlier(
             ],
         )
         .await
-        .map_err(work_error)?
+        .map_err(complete_unavailable)?
         .get(/*idx*/ 0))
 }
 
@@ -283,7 +284,7 @@ async fn load_compaction_state(
             ],
         )
         .await
-        .map_err(work_error)?;
+        .map_err(complete_unavailable)?;
     Ok(row.map(|row| CompactionState {
         compaction_id: row.get(/*idx*/ 0),
         install_state: row.get(/*idx*/ 1),
@@ -327,7 +328,7 @@ async fn load_chain_source(
             ],
         )
         .await
-        .map_err(work_error)?
+        .map_err(complete_unavailable)?
         .ok_or_else(|| unavailable("The prior decision Attempt is missing"))?;
     Ok(ChainSource {
         model_attempt_id: model_attempt_id.to_owned(),
@@ -477,14 +478,6 @@ fn parse_json(value: &str) -> Result<serde_json::Value, CompleteAgentRunError> {
 
 fn unavailable(message: &str) -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(message)))
-}
-
-fn work_error(error: tokio_postgres::Error) -> CompleteAgentRunError {
-    CompleteAgentRunError::Unavailable(Box::new(error))
-}
-
-fn read_error(error: impl std::error::Error + Send + Sync + 'static) -> CreateAgentRunError {
-    CreateAgentRunError::Unavailable(Box::new(error))
 }
 
 #[cfg(test)]

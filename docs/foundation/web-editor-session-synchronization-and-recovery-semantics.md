@@ -316,34 +316,16 @@ and the editor enters read-only local recovery with `needs_attention`. A reader
 that finds a binding that names no earlier group also enters local
 recovery. The records stay immutable in each case.
 
-The version 5 upgrade runs in one version-change transaction. It keeps each
-version 4 row under its primary key with its bytes, and it writes only the schema
-version. Thus a version 4 Journal with one unsettled group has the same meaning
-at version 5. A version 3 Journal first gets the version 4 working index in the
-same transaction.
-
-A Journal that cannot upgrade keeps its earlier version and each
-row, and the editor enters read-only local recovery with `needs_attention`. The
-readable export of the Server text stays available.
-
-The editor also opens the
-version 4 Journal with no version request, so the open does not upgrade or write
-it. It reads the records of each partition in read-only transactions.
-The author can download the unsent text of each Chapter as one file that the
-editor labels as local unsent text. The file also holds the unsent candidate
-text of each Proposal, after the Chapter text. When the editor cannot read the
-records, for example in a version 3 Journal, it tells the author that local text
-exists. The earlier Journal stays unchanged, so a later reader can open it.
-
-The file holds the text of each record that has no proof of save. Only an
-applied group and a group that gives a Proposal Revision prove a save. A conflicted,
-refused, or no-effect group is not a save. A group that needs a new confirmation
-by the author is also not a save. When the editor cannot read one partition, it
-tells the author that local text exists, and the file keeps the text of each
-other partition.
+The Web has no upgrade from an earlier Journal version
+([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)). When IndexedDB asks for an upgrade from an earlier Journal version,
+the Web aborts the version-change transaction. The open fails, and the earlier Journal keeps its
+version and each row. The editor enters read-only local recovery with
+`local_journal_unavailable`, as for a Journal of an unknown version. It does
+not show the text of that Journal, and the readable export of the Server text
+stays available.
 
 An `ExplicitEditorCommandRecord` durably represents takeover, Acceptance,
-rejection, withdrawal, reopen, supersede, continuation, completion,
+rejection, withdrawal, supersede, continuation, completion,
 Author Undo, or another explicit editor command before network
 submission. It is never coalesced. Before Admission, its protected transport
 attempts may only finish that same already-confirmed submission; after
@@ -1162,8 +1144,9 @@ separate axes and never override one another.
 
 Release 1 has no Refused Edit Draft
 ([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)).
-A stored Local Edit Journal group that an earlier client settled with
-`refused_to_draft` counts as resolved, and the Journal never sends it.
+The Local Edit Journal has no reader of a stored record or group of that path
+([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)). A record with a `draft_retry` source or a
+`replace_structured_selection` primitive fails the Journal validation.
 
 For Block Proposal candidate input, the frozen Journal group retains the exact
 Proposal, Operation, current Proposal Revision, and manuscript Block target.
@@ -1556,12 +1539,9 @@ The result consumer is likewise closed:
 | `AcceptProposal.Invalid` | project current Proposal with validation `invalid`; remove accept until a new current Revision validates |
 | `AcceptProposal.Conflicted` | project its exact `ProposalConflict`; expose accept/reject/copy as the `ProposalConflict` row above |
 | `AcceptProposal.Refused` | project the exact returned current target; expose only controls permitted by that current state and never imply Acceptance. After a Core refusal, the status line of the open Proposal shows the refusal text until the next decision or a new Proposal Revision. For `missing_target`, the text tells that the target paragraph is not in the Chapter and that Reject closes the Proposal. getProposal does not return the Core refusal, so the text stays through a reload only from the Local Edit Journal of the same browser profile and journal partition. |
-| `RejectProposalOperations` applied | selected Operations become `rejected`; remove their accept/reject controls and expose reopen only against the exact rejection events |
-| `WithdrawProposal` applied | closure becomes `withdrawn`; remove accept/reject/continue/complete and expose only exact reopen or supersede when current state permits |
-| `ReplanProposal` applied | the editor has no Replan control and sends no Replan (ADR 0064); it projects a new pending Revision from another client as any current Proposal Revision |
-| `ReopenWithdrawnProposal` applied | project the new open, validation-pending Revision; remove the stale reopen control |
+| `RejectProposalOperations` applied | selected Operations become `rejected`; remove their accept/reject controls |
+| `WithdrawProposal` applied | closure becomes `withdrawn`; remove accept/reject/continue/complete and expose only supersede when current state permits |
 | `SupersedeProposal` applied | project terminal `superseded`; remove every active Proposal control |
-| `ReopenRejectedOperations` applied | selected Operations become pending in the new validation-pending Revision; remove stale rejection-event controls |
 | `ContinueProposalGeneration` applied | project the new Generation ID and `generating`; remove controls bound to the prior Generation ID and disable Acceptance until a later exact ready/valid state |
 | `CompleteReadyPartialProposal` applied | project `ready` for the same current Revision with every other returned axis preserved; remove the stale complete control and derive Acceptance only from current validation/closure/resolution |
 | any explicit decision `Refused`, `Conflicted`, or `NoEffect` | project the returned `DecisionCurrentTarget` and condition exactly; allocate no lifecycle change locally and derive controls only from that returned current target |

@@ -5,6 +5,7 @@ use super::{
     RequestedToolCall, ToolCallBatch, ToolCallBatchRefusal, ValidatedToolCall,
     validate_tool_call_batch,
 };
+use crate::shared_tests::exposure_facts;
 use crate::{
     AgentDecisionKind, AgentDecisionOutcome, BoundTool, EXA_TOOL_REGISTRATION, ExposureFacts,
     IntakeRefusal, NativeStreamItem, StreamItemRole, StreamItemState, ToolCompatibilityDecision,
@@ -19,11 +20,7 @@ fn pinned() -> ExposureSnapshot {
             lifecycle: ToolRegistrationLifecycle::Active,
             compatibility: Some(ToolCompatibilityDecision::Compatible),
         }],
-        model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
-        skill_catalog: false,
-        memory_use: false,
-        hybrid_search: false,
-        run_kind: crate::AgentRunKind::Author,
+        ..exposure_facts(crate::AGENT_PLAN_REGISTRATION.revision)
     });
     ExposureSnapshot::decode(Some(&exposure.snapshot())).unwrap()
 }
@@ -349,7 +346,6 @@ fn a_valid_batch_is_the_decision_and_an_invalid_batch_makes_none() {
                 kind: AgentDecisionKind::ToolRequest {
                     calls: vec![RequestedToolCall::Validated(search_call("call_01"))],
                 },
-                selected: true,
                 advances_continuation: false,
             },
             AgentDecisionOutcome::NoDecision,

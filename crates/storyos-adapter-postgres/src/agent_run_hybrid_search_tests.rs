@@ -5,41 +5,48 @@
 //! question vector that is not finite. Test prefix leads `54`, `b5`, `bb`, and `ba`, and the
 //! prefixes `a2c`, `a2d`, `a2e`, `a31`, `c7a`, `c7b`, `c7c`, and `c8b`.
 
-use std::future::Future;
-use std::pin::Pin;
-
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::{
     EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER, EMBEDDING_UNKNOWN_MARKER,
-    FakeDestination, FakeEmbeddingExchange, FakeEmbeddings, fake_vector,
+    FakeDestination, fake_vector,
 };
 use storyos_application::{
     CompleteAgentRun, CompleteAgentRunError, ContractFaultPoint, ConversationSelection,
-    EmbeddingObservation, EmbeddingProviderAdapter, EmbeddingRoute, NoContractFaults,
-    NoEmbeddingDestination, NoToolDestination, PassageVectorStore, PauseAgentRunInput,
-    PreDispatchRefusal, PreparedEmbeddingRequest, ProjectScope, QuestionVector, SteerAgentRunInput,
-    complete_agent_run, complete_agent_run_with_destinations, rank_manuscript_passages,
+    EmbeddingObservation, EmbeddingProviderAdapter, NoContractFaults, NoToolDestination,
+    PauseAgentRunInput, ProjectScope, QuestionVector, SteerAgentRunInput, complete_agent_run,
+    complete_agent_run_with_destinations,
 };
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CallValidationRefusal,
-    EmbeddingInput, EmbeddingRegistration, FINISH_DOES_NOT_COUNT_RESULT, HybridSearchRefusal,
-    IntakeRefusal, NO_SEARCH_BY_MEANING, PassageTerms,
+    FINISH_DOES_NOT_COUNT_RESULT, HybridSearchRefusal, IntakeRefusal, NO_SEARCH_BY_MEANING,
+    PassageTerms,
 };
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_load_skill::tests::calls;
-use crate::agent_run_read_chapter::tests::{
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_load_skill::calls;
+use crate::shared_tests::agent_run_read_chapter::{
     boundary, call_ids, finish, no_public_call, outputs_record, sent,
 };
-use crate::agent_run_steering::tests::{cancellation, queued, step_requests};
-use crate::agent_run_tool_recovery::tests::{Fault, FaultAt};
-use crate::command_sequence::tests::{PAUSE_AGENT_RUN, STEER_AGENT_RUN, issued};
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::passage_vectors::tests::{Chapter, SHORE, chapter, index, prepend, texts};
-use crate::project_embedding_binding::tests::{FAKE, embedding_project};
+use crate::shared_tests::agent_run_steering::{cancellation, queued, step_requests};
+use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
+use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::NoEmbeddings;
+use crate::shared_tests::model_gateway::conversation;
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
+use crate::shared_tests::passage_index_work::During;
+use crate::shared_tests::passage_ranking::rank_passages;
+use crate::shared_tests::passage_vectors::{
+    Chapter, SHORE, chapter, index, prepend, texts, vector_table_visible,
+};
+use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
 
 const QUESTION: &str = "谁在早上回到了港口？";
 
@@ -71,9 +78,8 @@ async fn ranked(
         values: &values,
     });
     let call_id = "call_hybrid_search_manuscript_0";
-    let text = rank_manuscript_passages(store, scope, &terms, question, call_id)
+    let text = rank_passages(store, scope, &terms, question, call_id)
         .await
-        .unwrap()
         .unwrap()
         .text;
     match vector {
@@ -93,34 +99,30 @@ async fn shape(admin: &Client, run_id: &str) -> Value {
 
 /// The function names that the first decision request of the Run declares.
 async fn declared(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'tools')::text
+    json_of(
+        admin,
+        "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'tools')::text
                FROM storyos.model_attempts
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
               ORDER BY model_attempt_id LIMIT 1",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The settlement and the ToolCall of each Embedding Attempt of a question in the Project, in
 /// the order of the attempts.
 async fn question_attempts(admin: &Client, scope: &ProjectScope) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT COALESCE(jsonb_agg(jsonb_build_array(settlement,
+    json_of(
+        admin,
+        "SELECT COALESCE(jsonb_agg(jsonb_build_array(settlement,
                       jsonb_path_query_first(attempt, '$.**.tool_call_id'))
                       ORDER BY embedding_attempt_id), '[]')::text
                FROM storyos.embedding_attempts
               WHERE project_id = $1::text::uuid AND cause = 'search_question'",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&scope.project_id.as_ref()],
+    )
+    .await
 }
 
 /// The Tool names of a Run of a new Conversation, with the search by meaning or without it.
@@ -166,18 +168,16 @@ async fn scripted(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_call_before_a_keyword_search_settles_with_the_fused_result_of_its_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let ours = chapter(&store, &admin, ["541", "542"], "543", &texts()).await;
-    index(&store, &FakeEmbeddings, &ours).await;
+    index(&store, &admin, &ours).await;
     // A second Project holds the same term and a passage that is the question.
     let mut nearer = texts();
     nearer[1] = QUESTION.repeat(/*n*/ 20);
     let other = chapter(&store, &admin, ["544", "545"], "546", &nearer).await;
-    index(&store, &FakeEmbeddings, &other).await;
+    index(&store, &admin, &other).await;
     let message = format!("{}\nSCRIPT:search_manuscript 渔船", script(&["渔船"]));
     let run_id = scripted(&store, &admin, &ours, "547", &message).await;
 
@@ -226,13 +226,11 @@ async fn a_call_before_a_keyword_search_settles_with_the_fused_result_of_its_pro
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_settled_request_with_no_vector_gives_the_exact_term_list() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["bb1", "bb2"], "bb3", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let message: Vec<String> = [
         EMBEDDING_REJECTION_MARKER,
         EMBEDDING_NOT_SUBMITTED_MARKER,
@@ -272,9 +270,7 @@ async fn a_settled_request_with_no_vector_gives_the_exact_term_list() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_refused_call_has_its_label_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (plain, admin) = stores().await;
     let store = configured(&plain);
     let chapter = chapter(&store, &admin, ["548", "549"], "54a", &texts()).await;
@@ -308,7 +304,7 @@ async fn each_refused_call_has_its_label_and_the_run_continues() {
     let new = ConversationSelection::New;
     let no_credential = admitted(&store, scope, chapter_id, "bb5", &script(&[]), new).await;
     let claim = claim_run(&admin, scope.clone(), no_credential.clone()).await;
-    let no_embeddings = (&NoToolDestination, &NoEmbeddingDestination);
+    let no_embeddings = (&NoToolDestination, &NoEmbeddings);
     complete_agent_run_with_destinations(
         &store,
         fake.0,
@@ -376,9 +372,7 @@ async fn each_refused_call_has_its_label_and_the_run_continues() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_term_with_u0000_refuses_only_its_call_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (plain, admin) = stores().await;
     let store = configured(&plain);
     let chapter = chapter(&store, &admin, ["a2c", "a2d"], "a2e", &texts()).await;
@@ -420,9 +414,7 @@ async fn a_term_with_u0000_refuses_only_its_call_and_the_run_continues() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_tool_is_not_declared_with_no_configuration_or_no_binding() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (plain, admin) = stores().await;
     let store = configured(&plain);
     // The Project has the binding, and the deployment of the Worker has no configuration.
@@ -467,14 +459,12 @@ async fn the_tool_is_not_declared_with_no_configuration_or_no_binding() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_tool_follows_the_vector_store_of_the_database() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["b53", "b54"], "b55", &texts()).await;
     let run_id = scripted(&store, &admin, &chapter, "b56", &script(&["渔船"])).await;
-    let available = store.vector_store_available(&chapter.scope).await.unwrap();
+    let available = vector_table_visible(&store, &chapter.scope).await;
 
     let (state, refusal) = match available {
         true => ("settled", Value::Null),
@@ -501,9 +491,7 @@ async fn the_tool_follows_the_vector_store_of_the_database() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_compaction_after_a_call_keeps_the_exact_result() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["b57", "b58"], "b59", &texts()).await;
@@ -534,50 +522,6 @@ async fn a_compaction_after_a_call_keeps_the_exact_result() {
     );
 }
 
-type Action<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
-
-/// The fake embedding destination that runs one author action in the exchange of the first
-/// question, while the Worker holds the Run, and then answers. With `stop`, the exchange never
-/// answers, as for a stopped Worker.
-struct Held<'a> {
-    action: std::sync::Mutex<Option<Action<'a>>>,
-    stop: bool,
-}
-
-impl<'a> Held<'a> {
-    fn new(action: impl Future<Output = ()> + Send + 'a, stop: bool) -> Self {
-        Self {
-            action: std::sync::Mutex::new(Some(Box::pin(action))),
-            stop,
-        }
-    }
-}
-
-impl EmbeddingProviderAdapter for Held<'_> {
-    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
-    type Prepared = FakeEmbeddingExchange;
-
-    async fn prepare(
-        &self,
-        registration: &'static EmbeddingRegistration,
-        route: &EmbeddingRoute,
-        input: &EmbeddingInput,
-    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
-        FakeEmbeddings.prepare(registration, route, input).await
-    }
-
-    async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
-        let action = self.action.lock().unwrap().take();
-        if let Some(action) = action {
-            action.await;
-        }
-        if self.stop {
-            std::future::pending::<()>().await;
-        }
-        FakeEmbeddings.exchange(prepared).await
-    }
-}
-
 /// Claims and completes the Run `run_id` with the embedding destination `held`.
 async fn complete_held(
     store: &PostgresProjectReader,
@@ -600,31 +544,15 @@ async fn complete_held(
     .await
 }
 
-/// The fake embedding destination with one component above the range of `f32` in each vector.
-/// The cast of the adapter makes the component infinite.
-struct NotFinite;
-
-impl EmbeddingProviderAdapter for NotFinite {
-    const REGISTRATIONS: &'static [&'static EmbeddingRegistration] = FakeEmbeddings::REGISTRATIONS;
-    type Prepared = FakeEmbeddingExchange;
-
-    async fn prepare(
-        &self,
-        registration: &'static EmbeddingRegistration,
-        route: &EmbeddingRoute,
-        input: &EmbeddingInput,
-    ) -> Result<PreparedEmbeddingRequest<Self::Prepared>, PreDispatchRefusal> {
-        FakeEmbeddings.prepare(registration, route, input).await
-    }
-
-    async fn exchange(&self, prepared: Self::Prepared) -> EmbeddingObservation {
-        match FakeEmbeddings.exchange(prepared).await {
-            EmbeddingObservation::Vector { mut values, usage } => {
-                values[0] = 1e39_f64 as f32;
-                EmbeddingObservation::Vector { values, usage }
-            }
-            other => other,
+/// One component above the range of `f32` in each vector of the fake embedding destination. The
+/// cast of the adapter makes the component infinite.
+fn not_finite(observation: EmbeddingObservation) -> EmbeddingObservation {
+    match observation {
+        EmbeddingObservation::Vector { mut values, usage } => {
+            values[0] = 1e39_f64 as f32;
+            EmbeddingObservation::Vector { values, usage }
         }
+        other => other,
     }
 }
 
@@ -633,19 +561,26 @@ impl EmbeddingProviderAdapter for NotFinite {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_question_vector_that_is_not_finite_gives_the_exact_term_list() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["c7a", "c7b"], "c7c", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let (scope, chapter_id) = (&chapter.scope, &chapter.chapter_id);
     let new = ConversationSelection::New;
     let run_id = admitted(&store, scope, chapter_id, "c8b", &script(&["渔船"]), new).await;
-    complete_held(&store, &admin, scope, &run_id, &NotFinite)
-        .await
-        .unwrap();
+    complete_held(
+        &store,
+        &admin,
+        scope,
+        &run_id,
+        &During {
+            change: not_finite,
+            ..During::new(async {})
+        },
+    )
+    .await
+    .unwrap();
 
     let text = ranked(&store, scope, &["渔船"], false).await;
     let ids = call_ids(&admin, &run_id, None).await;
@@ -667,30 +602,17 @@ async fn a_question_vector_that_is_not_finite_gives_the_exact_term_list() {
     );
 }
 
-async fn conversation(admin: &Client, run_id: &str) -> String {
-    admin
-        .query_one(
-            "SELECT conversation_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0)
-}
-
 /// ADR 0095 section 1: the author acts while the question request is in progress. An Author Edit
 /// does not wait, and the record ranks the current text, so the changed passage returns only from
 /// the exact-term list. A steering input goes to the next RunStep with the result.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_edit_or_a_steering_input_during_the_question_request_does_not_wait() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["bb6", "bb7"], "bb8", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let (scope, chapter_id) = (&chapter.scope, &chapter.chapter_id);
     let message = script(&["渔船"]);
     let run = |prefix: &'static str| {
@@ -704,7 +626,7 @@ async fn an_edit_or_a_steering_input_during_the_question_request_does_not_wait()
     let edit = async {
         store.apply_author_edit(&command).await.unwrap();
     };
-    let edit = complete_held(&store, &admin, scope, &edited, &Held::new(edit, false)).await;
+    let edit = complete_held(&store, &admin, scope, &edited, &During::new(edit)).await;
     let edited_text = ranked(&store, scope, &["渔船"], true).await;
 
     let steered = run("bbb").await;
@@ -718,7 +640,7 @@ async fn an_edit_or_a_steering_input_during_the_question_request_does_not_wait()
     let action = async {
         (store.steer_agent_run(&steer.envelope, &steer.input).await).unwrap();
     };
-    let steer = complete_held(&store, &admin, scope, &steered, &Held::new(action, false)).await;
+    let steer = complete_held(&store, &admin, scope, &steered, &During::new(action)).await;
 
     let steps = step_requests(&admin, &steered).await;
     assert_eq!(
@@ -749,13 +671,11 @@ async fn an_edit_or_a_steering_input_during_the_question_request_does_not_wait()
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_cancellation_or_a_pause_during_the_question_request_keeps_the_result_out() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["ba5", "ba6"], "ba7", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let (scope, chapter_id) = (&chapter.scope, &chapter.chapter_id);
     let message = script(&["渔船"]);
     let run = |prefix: &'static str| {
@@ -771,7 +691,7 @@ async fn a_cancellation_or_a_pause_during_the_question_request_keeps_the_result_
             .await)
             .unwrap();
     };
-    let cancel = complete_held(&store, &admin, scope, &cancelled, &Held::new(action, false)).await;
+    let cancel = complete_held(&store, &admin, scope, &cancelled, &During::new(action)).await;
 
     let paused = run("ba9").await;
     let input = PauseAgentRunInput {
@@ -781,7 +701,7 @@ async fn a_cancellation_or_a_pause_during_the_question_request_keeps_the_result_
     let action = async {
         (store.pause_agent_run(&pause.envelope, &pause.input).await).unwrap();
     };
-    let pause = complete_held(&store, &admin, scope, &paused, &Held::new(action, false)).await;
+    let pause = complete_held(&store, &admin, scope, &paused, &During::new(action)).await;
 
     let ok_or_stale = |result: Result<CompleteAgentRun, CompleteAgentRunError>| {
         matches!(result, Ok(_) | Err(CompleteAgentRunError::StaleFence))
@@ -819,23 +739,21 @@ async fn a_cancellation_or_a_pause_during_the_question_request_keeps_the_result_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_next_claim_after_a_stopped_worker_sends_a_new_question_request() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let store = configured(&store);
     let chapter = chapter(&store, &admin, ["ba1", "ba2"], "ba3", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let (scope, chapter_id) = (&chapter.scope, &chapter.chapter_id);
     let new = ConversationSelection::New;
     let run_id = admitted(&store, scope, chapter_id, "ba4", &script(&["渔船"]), new).await;
     let (reached, reached_rx) = tokio::sync::oneshot::channel();
-    let held = Held::new(
-        async {
+    let held = During {
+        stop: true,
+        ..During::new(async {
             let _reported = reached.send(());
-        },
-        /*stop*/ true,
-    );
+        })
+    };
     tokio::select! {
         _ = complete_held(&store, &admin, scope, &run_id, &held) => {
             panic!("the held exchange does not answer")

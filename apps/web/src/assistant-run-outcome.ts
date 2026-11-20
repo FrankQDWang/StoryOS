@@ -20,7 +20,7 @@ export const CONVERSATION_TOO_LONG_SENTENCE = "这段对话已经太长，请开
 export const RESEARCH_TOOL_UNAVAILABLE_SENTENCE = "联网检索现在不可用，正文没有改动。你可以重试，或继续手动写作。";
 
 /** The line of a research call that did not give a result (ADR 0040). */
-export const TOOL_CALL_FAILED_SENTENCE = "有一次联网检索没有完成。";
+const TOOL_CALL_FAILED_SENTENCE = "有一次联网检索没有完成。";
 
 /** One line for each research call of a function request, in order, with no identifier (ADR 0040).
  * A call with an unknown outcome may have run, and its line says so (ADR 0086). */
@@ -42,7 +42,7 @@ function toolCallLine(call: ToolCallInspect): string {
 }
 
 /** The words for a requested page that StoryOS could not capture (ADR 0040). */
-export const SOURCE_NOT_AVAILABLE = "无法获取";
+const SOURCE_NOT_AVAILABLE = "无法获取";
 
 /** The reason words of a Source Gap. The source list and the citation list use the same words. */
 const gapReasons: Record<SourceGapReason, string> = {

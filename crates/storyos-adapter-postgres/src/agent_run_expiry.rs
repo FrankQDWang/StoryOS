@@ -10,7 +10,8 @@ use storyos_core::{
 use uuid::Uuid;
 
 use crate::agent_run_continuation::{current_identity, parse_identity};
-use crate::agent_run_work::RunPhaseRow;
+use crate::agent_run_successor::read_error;
+use crate::agent_run_work::{RunPhaseRow, complete_unavailable};
 
 pub(crate) struct RecoveryDraft {
     pub recovery_id: String,
@@ -61,7 +62,8 @@ pub(crate) async fn plan_expiry_rebuild(
     let Some(prior) = load_latest_attempt(client, claim, conversation_id).await? else {
         return Ok(ExpiryAdmission::Dispatch(None));
     };
-    let payload = serde_json::from_str::<serde_json::Value>(&prior.payload).map_err(unavailable)?;
+    let payload =
+        serde_json::from_str::<serde_json::Value>(&prior.payload).map_err(complete_unavailable)?;
     let identity = payload.get("produced_binding").and_then(parse_identity);
     let reference = if prior.dispatch_state == "uncertain" {
         ContinuationReferenceCondition::UnknownCreate
@@ -149,7 +151,7 @@ pub(crate) async fn plan_expiry_rebuild(
             }))));
         }
         ExpiryRebuildDisposition::Rebuilt => {
-            return Err(unavailable(std::io::Error::other(
+            return Err(complete_unavailable(std::io::Error::other(
                 "Confirmed expiry rebuild requires a new Run Step and Invocation",
             )));
         }
@@ -223,7 +225,7 @@ pub(crate) async fn insert_recovery(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     Ok(())
 }
 
@@ -309,7 +311,7 @@ async fn run_has_decision_attempt(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     Ok(row.get(0))
 }
 
@@ -341,7 +343,7 @@ async fn load_latest_attempt(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     let Some(row) = row else {
         return Ok(None);
     };
@@ -379,14 +381,4 @@ fn block_labels(reason: ExpiryRebuildBlock) -> (&'static str, &'static str) {
             "expiry_rebuild_required_input_missing",
         ),
     }
-}
-
-fn unavailable(error: impl std::error::Error + Send + Sync + 'static) -> CompleteAgentRunError {
-    CompleteAgentRunError::Unavailable(Box::new(error))
-}
-
-fn read_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> storyos_application::CreateAgentRunError {
-    storyos_application::CreateAgentRunError::Unavailable(Box::new(error))
 }

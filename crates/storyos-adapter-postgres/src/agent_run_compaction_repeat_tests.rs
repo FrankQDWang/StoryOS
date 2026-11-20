@@ -9,12 +9,15 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_compaction::summary::tests::{
+use crate::shared_tests::agent_run_compaction_summary::{
     ADVICE, ChangingFake, finish_events, near_threshold, second_run_on_agent_plan,
     second_run_on_agent_plan_after, streamed, with_usage,
 };
-use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, queued_run, stores};
-use crate::agent_run_finish_rule::tests::tool_loop_run;
+use crate::shared_tests::agent_run_finish_rule::tool_loop_run;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run};
 
 /// An author message that asks the Host fake to compact at RunSteps 0 and 1.
 fn compact_twice() -> String {
@@ -43,27 +46,23 @@ async fn records(admin: &Client, run_id: &str) -> Vec<Value> {
 
 /// The status of the Run, the capability of its refusal, and its count of decision Attempts.
 async fn settlement(admin: &Client, run_id: &str) -> Value {
-    admin
-        .query_one(
-            "SELECT jsonb_build_array(run.status, run.settlement->>'capability',
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(run.status, run.settlement->>'capability',
                       (SELECT count(*) FROM storyos.model_attempts AS decision
                         WHERE decision.run_id = run.run_id
                           AND decision.attempt_role = 'decision'))::text
                FROM storyos.agent_runs AS run
               WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-        .unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn one_run_compacts_at_two_run_steps_and_the_second_summary_continues_the_first() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // RunStep 0 continues the response of the first Run of the Conversation. RunStep 1 continues
     // the later request of RunStep 0, and it waits for the output of its `finish` call.
@@ -168,18 +167,15 @@ async fn compact_twice_with_change(
     complete_agent_run(&store, &fake, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
+    let run_id = Admission {
         destination,
-        &compact_twice(),
-        ConversationSelection::Existing {
+        message: &compact_twice(),
+        conversation: ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, prefixes[1])
     .await;
     let adapter = ChangingFake {
         admin: &admin,
@@ -215,9 +211,7 @@ async fn compact_twice_with_change(
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_install_check_refuses_a_changed_input_or_a_restricted_source_at_the_second_compaction()
 {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let changed_input = "UPDATE storyos.authoritative_payloads AS payload
             SET canonical_bytes = convert_to('An edit during the second summary.', 'UTF8')
            FROM storyos.authoritative_heads AS head
@@ -282,9 +276,7 @@ const SECOND_SUMMARY: &str = "The author keeps the rain scene and the open lette
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_that_crosses_the_threshold_two_times_compacts_two_times() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // RunStep 0 compacts: the closing response of the first Run puts the new turn above the
     // threshold of 812,646 tokens. The later request is a full input, and its response reports
@@ -319,9 +311,9 @@ async fn a_run_that_crosses_the_threshold_two_times_compacts_two_times() {
         ]
         .concat();
         let run_id = second_run_on_agent_plan(&store, &admin, prefixes, &message, replies).await;
-        let sent: Value = admin
-            .query_one(
-                "SELECT jsonb_build_array(
+        let sent: Value = json_of(
+            &admin,
+            "SELECT jsonb_build_array(
                           (summary.payload #>> '{wire,serialized_payload}')::jsonb
                             ->> 'previous_response_id',
                           (later.payload #>> '{wire,serialized_payload}')::jsonb
@@ -334,11 +326,9 @@ async fn a_run_that_crosses_the_threshold_two_times_compacts_two_times() {
                     AND summary.decision_position = 1
                   WHERE later.run_id = $1::text::uuid AND later.attempt_role = 'decision'
                     AND later.decision_position = 1",
-                &[&run_id],
-            )
-            .await
-            .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-            .unwrap();
+            &[&run_id],
+        )
+        .await;
         let first_text = sent[2].as_str().unwrap_or_default();
         let mut expected_records = vec![json!([0, "installed", null])];
         if second.is_some() {
@@ -371,9 +361,7 @@ async fn a_run_that_crosses_the_threshold_two_times_compacts_two_times() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_that_a_compaction_cannot_fit_ends_as_too_long() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens.
     let mut dropped = streamed("resp_dropped", "The author keeps the rain.");

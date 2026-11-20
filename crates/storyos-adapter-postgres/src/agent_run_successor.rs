@@ -11,7 +11,10 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::{RunPhaseRow, update_run};
+use crate::agent_run_work::{RunPhaseRow, complete_unavailable, update_run};
+
+/// The error of a successor record with no text in a required field.
+const INCOMPLETE: &str = "The successor record is incomplete";
 
 pub(crate) struct SuccessorOrigin<'a> {
     pub predecessor_attempt_id: &'a str,
@@ -136,7 +139,7 @@ pub(crate) async fn advance(
 ) -> Result<SuccessorWork, CompleteAgentRunError> {
     let mut row = load_decision(client, claim).await?;
     let Some(mut marker) = row.payload.get("unknown_create_successor").cloned() else {
-        return Err(unavailable(std::io::Error::other(
+        return Err(complete_unavailable(std::io::Error::other(
             "The unknown-create successor subject is missing",
         )));
     };
@@ -253,13 +256,13 @@ pub(crate) async fn prohibit_automatic_successor(
             ],
         )
         .await
-        .map_err(unavailable)?
+        .map_err(complete_unavailable)?
     else {
         return Ok(());
     };
     let attempt_id: String = row.get(0);
     let mut payload: serde_json::Value =
-        serde_json::from_str(&row.get::<_, String>(1)).map_err(unavailable)?;
+        serde_json::from_str(&row.get::<_, String>(1)).map_err(complete_unavailable)?;
     let Some(marker) = payload.get_mut("unknown_create_successor") else {
         return Ok(());
     };
@@ -313,14 +316,19 @@ pub(crate) async fn load_unknown_create_successor(
         UnknownCreateSuccessorDisposition::Fenced
     };
     Ok(Some(UnknownCreateSuccessorInspect {
-        recovery_id: required_text(marker, "recovery_id").map_err(read_error)?,
+        recovery_id: required_text(marker, "recovery_id", INCOMPLETE).map_err(read_error)?,
         disposition,
         pause_reason: text(marker, "pause_reason").map(str::to_owned),
         lookup_unavailable_reason: text(marker, "lookup_unavailable_reason").map(str::to_owned),
-        predecessor_model_attempt_id: required_text(marker, "predecessor_model_attempt_id")
-            .map_err(read_error)?,
+        predecessor_model_attempt_id: required_text(
+            marker,
+            "predecessor_model_attempt_id",
+            INCOMPLETE,
+        )
+        .map_err(read_error)?,
         successor_model_attempt_id,
-        model_invocation_id: required_text(marker, "model_invocation_id").map_err(read_error)?,
+        model_invocation_id: required_text(marker, "model_invocation_id", INCOMPLETE)
+            .map_err(read_error)?,
         predecessor_fenced: flag(marker, "predecessor_fenced"),
         allowance_consumed: flag(marker, "allowance_consumed"),
         predecessor_usage_kind: text(marker, "predecessor_usage_kind")
@@ -438,13 +446,13 @@ pub(crate) async fn load_decision(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     Ok(DecisionRow {
         status: row.get(0),
         attempt_id: row.get(1),
         invocation_id: row.get(2),
         conversation_id: row.get(3),
-        payload: serde_json::from_str(&row.get::<_, String>(4)).map_err(unavailable)?,
+        payload: serde_json::from_str(&row.get::<_, String>(4)).map_err(complete_unavailable)?,
     })
 }
 
@@ -500,9 +508,9 @@ pub(crate) async fn write_decision_payload(
             ],
         )
         .await
-        .map_err(unavailable)?;
+        .map_err(complete_unavailable)?;
     if updated != 1 {
-        return Err(unavailable(std::io::Error::other(
+        return Err(complete_unavailable(std::io::Error::other(
             "The predecessor Attempt could not record the successor fence",
         )));
     }
@@ -590,10 +598,22 @@ pub(crate) fn text<'a>(value: &'a serde_json::Value, field: &str) -> Option<&'a 
         .filter(|text| !text.is_empty())
 }
 
-fn required_text(value: &serde_json::Value, field: &str) -> Result<String, std::io::Error> {
+/// The error of a read of the stored work of a Run that the store cannot do.
+pub(crate) fn read_error(
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> storyos_application::CreateAgentRunError {
+    storyos_application::CreateAgentRunError::Unavailable(Box::new(error))
+}
+
+/// The text of `field`. A missing or empty text is the error `incomplete`.
+pub(crate) fn required_text(
+    value: &serde_json::Value,
+    field: &str,
+    incomplete: &'static str,
+) -> Result<String, std::io::Error> {
     text(value, field)
         .map(str::to_owned)
-        .ok_or_else(|| std::io::Error::other("The successor record is incomplete"))
+        .ok_or_else(|| std::io::Error::other(incomplete))
 }
 
 pub(crate) fn flag(value: &serde_json::Value, field: &str) -> bool {
@@ -601,16 +621,4 @@ pub(crate) fn flag(value: &serde_json::Value, field: &str) -> bool {
         .get(field)
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false)
-}
-
-pub(crate) fn unavailable(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> CompleteAgentRunError {
-    CompleteAgentRunError::Unavailable(Box::new(error))
-}
-
-fn read_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> storyos_application::CreateAgentRunError {
-    storyos_application::CreateAgentRunError::Unavailable(Box::new(error))
 }

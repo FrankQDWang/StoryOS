@@ -20,9 +20,7 @@ use crate::agent_run_tool_authority::{
 };
 use crate::agent_run_tool_context::{ToolContext, commit_tool_context, committed_tool_context};
 use crate::agent_run_tool_recovery::{ToolCallFence, record_late, settle_interrupted};
-use crate::agent_run_work::{
-    WorkPhase, complete_challenge_error, complete_database_error, load_run_phase,
-};
+use crate::agent_run_work::{WorkPhase, complete_unavailable, load_run_phase};
 
 impl ToolDispatchStore for PostgresProjectReader {
     #[tracing::instrument(skip_all, level = "debug")]
@@ -225,7 +223,7 @@ impl ToolDispatchStore for PostgresProjectReader {
                     ],
                 )
                 .await
-                .map_err(complete_database_error)?;
+                .map_err(complete_unavailable)?;
             Ok(Some(ToolDispatchClaim {
                 destination_attempt_id,
             }))
@@ -326,13 +324,10 @@ impl PostgresProjectReader {
         let transaction = self
             .begin_serializable_project_command_transaction(&claim.project_scope)
             .await
-            .map_err(complete_challenge_error)?;
+            .map_err(complete_unavailable)?;
         match body(&transaction.client).await {
             Ok(value) => {
-                transaction
-                    .commit()
-                    .await
-                    .map_err(complete_challenge_error)?;
+                transaction.commit().await.map_err(complete_unavailable)?;
                 Ok(value)
             }
             Err(error) => {

@@ -14,18 +14,21 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use super::{
-    catalog, conversation_of, of_conversation, pinned, recorded, requirements, selected,
-    selected_run, sent, texts,
-};
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_selected_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::{
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_finish_rule::conversation_of;
+use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, cancellation, queued, settle,
 };
-use crate::command_sequence::tests::{STEER_AGENT_RUN, issued};
-use crate::create_agent_run_tests::skill_tests::{package, set};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::create_agent_run_skill::{package, set};
+use crate::shared_tests::model_gateway::Admission;
+use crate::shared_tests::skill_instruction_context::{
+    catalog, of_conversation, pinned, recorded, requirements, selected, selected_run, sent, texts,
+};
 
 /// A Skill set of the deployment that has neither fixture Skill.
 fn other_set() -> (SkillPackage, Arc<SkillSet>) {
@@ -55,15 +58,13 @@ async fn later_run(
     let (scope, chapter_id, selected) =
         selected_run(store, admin, [prefixes[0], prefixes[1]], first, new).await;
     complete(store, admin, &scope, &selected).await;
-    let later = admit_selected_run(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[2],
+    let later = Admission {
         message,
-        conversation_of(prefixes[1]),
-        (skills, own),
-    )
+        conversation: conversation_of(prefixes[1]),
+        skills: (skills, own),
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[2])
     .await;
     (scope, later)
 }
@@ -71,9 +72,7 @@ async fn later_run(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_later_run_sends_each_skill_of_the_conversation_only_with_a_full_input() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (packages, skills, _) = selected();
     let (text, catalog) = (texts(&packages), [catalog(&packages)]);
@@ -147,7 +146,12 @@ async fn a_later_run_sends_each_skill_of_the_conversation_only_with_a_full_input
     };
 
     let outline = std::slice::from_ref(&outline);
-    let (other_catalog, other_pinned) = ([super::catalog(outline)], pinned(outline));
+    let (other_catalog, other_pinned) = (
+        [crate::shared_tests::skill_instruction_context::catalog(
+            outline,
+        )],
+        pinned(outline),
+    );
 
     assert_eq!(
         (
@@ -202,9 +206,7 @@ async fn a_later_run_sends_each_skill_of_the_conversation_only_with_a_full_input
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn only_an_earlier_run_of_the_conversation_with_a_selection_gives_a_skill() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (packages, skills, selections) = selected();
     // A new Conversation of the same Project gets no Skill of another Conversation.
@@ -217,73 +219,59 @@ async fn only_an_earlier_run_of_the_conversation_with_a_selection_gives_a_skill(
     )
     .await;
     complete(&store, &admin, &scope, &earlier).await;
-    let new = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "cac",
-        "Help again.",
-        ConversationSelection::New,
-        (Arc::clone(&skills), Vec::new()),
-    )
+    let new = Admission {
+        message: "Help again.",
+        skills: (Arc::clone(&skills), Vec::new()),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "cac")
     .await;
     complete(&store, &admin, &scope, &new).await;
     // The Agent loaded a Skill in the earlier Run. The full input of the later Run sends no text
     // of it.
     let (scope, chapter_id, first) = queued(&store, "cad").await;
     complete(&store, &admin, &scope, &first).await;
-    let loaded = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "cae",
-        &format!(
+    let loaded = Admission {
+        message: &format!(
             "SCRIPT:load_skill {}\nSCRIPT:reference-expires",
             packages[0].name
         ),
-        ConversationSelection::New,
-        (Arc::clone(&skills), Vec::new()),
-    )
+        skills: (Arc::clone(&skills), Vec::new()),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "cae")
     .await;
     complete(&store, &admin, &scope, &loaded).await;
-    let after_load = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "caf",
-        "Help again.",
-        conversation_of("cae"),
-        (Arc::clone(&skills), Vec::new()),
-    )
+    let after_load = Admission {
+        message: "Help again.",
+        conversation: conversation_of("cae"),
+        skills: (Arc::clone(&skills), Vec::new()),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "caf")
     .await;
     complete(&store, &admin, &scope, &after_load).await;
     // A cancelled Run gives its selection.
     let (scope, chapter_id, first) = queued(&store, "c9a").await;
     complete(&store, &admin, &scope, &first).await;
-    let cancelled = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "c9b",
-        "Help with this passage.",
-        ConversationSelection::New,
-        (Arc::clone(&skills), selections),
-    )
+    let cancelled = Admission {
+        skills: (Arc::clone(&skills), selections),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "c9b")
     .await;
     let cancel = cancellation(&store, &scope, 0xc900, &cancelled).await;
     store
         .cancel_agent_run(&cancel.envelope, &cancel.input)
         .await
         .unwrap();
-    let after_cancel = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "c9c",
-        "Help again.",
-        conversation_of("c9b"),
-        (skills, Vec::new()),
-    )
+    let after_cancel = Admission {
+        message: "Help again.",
+        conversation: conversation_of("c9b"),
+        skills: (skills, Vec::new()),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "c9c")
     .await;
     let catalog = catalog(&packages);
     let status: String = admin

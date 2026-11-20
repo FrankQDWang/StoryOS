@@ -16,7 +16,7 @@ use storyos_core::{
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
 
 /// Writes the capture of one settled ToolCall of the claimed Run.
@@ -58,7 +58,7 @@ pub(crate) async fn capture(
                 ],
             )
             .await
-            .map_err(complete_database_error)?;
+            .map_err(complete_unavailable)?;
     }
     for (position, gap) in capture.gaps.iter().enumerate() {
         client
@@ -82,7 +82,7 @@ pub(crate) async fn capture(
                 ],
             )
             .await
-            .map_err(complete_database_error)?;
+            .map_err(complete_unavailable)?;
     }
     Ok(())
 }

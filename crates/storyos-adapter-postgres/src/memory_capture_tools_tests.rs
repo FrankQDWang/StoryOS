@@ -3,49 +3,30 @@
 //! The manuscript and Memory reads execute as in a Run of the author.
 
 use serde_json::{Value, json};
-use storyos_application::{ChapterId, DeleteChapterInput, MemoryCaptureSource, ProjectScope};
+use storyos_application::{ChapterId, DeleteChapterInput, ProjectScope};
 use tokio_postgres::Client;
 
-use super::loop_tests::{record, script, settlement};
-use super::tests::{run_capture, start};
-use crate::agent_run_dispatch::tests::stores;
-use crate::command_sequence::tests::{DELETE_CHAPTER, delete_chapter, issued};
-use crate::memory_entries::tests::write_versions;
-
-/// The Conversation of the first Run of the author of the Project, as the source of a capture.
-pub(crate) async fn conversation_source(
-    admin: &Client,
-    scope: &ProjectScope,
-) -> MemoryCaptureSource {
-    let row = admin
-        .query_one(
-            "SELECT run_id::text, conversation_id::text FROM storyos.agent_runs
-              WHERE project_id = $1::text::uuid AND run_kind = 'author'
-              ORDER BY run_id LIMIT 1",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    MemoryCaptureSource::Conversation {
-        conversation_id: row.get(/*idx*/ 1),
-        first_run_id: row.get(/*idx*/ 0),
-        last_run_id: row.get(/*idx*/ 0),
-    }
-}
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::{DELETE_CHAPTER, delete_chapter};
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::memory_capture::{run_capture, start};
+use crate::shared_tests::memory_capture_loop::{record, script, settlement};
+use crate::shared_tests::memory_capture_tools::conversation_source;
+use crate::shared_tests::memory_entries::write_versions;
 
 /// The source class and the content of each Context item of the first request of the Run.
 async fn first_request_items(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
+    json_of(
+        admin,
+        "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
                FROM storyos.model_attempts
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
                 AND decision_position = 0",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// Gives the last version of the entry `number` the cause `kind`.
@@ -70,11 +51,10 @@ async fn set_cause(admin: &Client, scope: &ProjectScope, number: u64, kind: &str
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_first_request_of_a_capture_sends_its_reference_items() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let (scope, _, source) = super::tests::project(&store, &admin, "fe7").await;
+    let (scope, _, source) =
+        crate::shared_tests::memory_capture::project(&store, &admin, "fe7").await;
     let input = "林舟在雨夜撑船。";
     let before = start(&store, &scope, &source, input).await.unwrap();
     run_capture(&store, &admin, &scope, &before.run_id).await;
@@ -92,7 +72,8 @@ async fn the_first_request_of_a_capture_sends_its_reference_items() {
     set_cause(&admin, &scope, 3, "author_request").await;
     let after = start(&store, &scope, &source, input).await.unwrap();
     run_capture(&store, &admin, &scope, &after.run_id).await;
-    let (empty, chapter_id, empty_source) = super::tests::project(&store, &admin, "fea").await;
+    let (empty, chapter_id, empty_source) =
+        crate::shared_tests::memory_capture::project(&store, &admin, "fea").await;
     let remove = DeleteChapterInput {
         chapter_id: ChapterId::new(chapter_id.as_str()),
         expected_tree_revision: 3,
@@ -138,11 +119,9 @@ async fn the_first_request_of_a_capture_sends_its_reference_items() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_read_only_tools_of_a_capture_execute_as_for_the_author() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let project = crate::agent_run_read_chapter::tests::project;
+    let project = crate::shared_tests::agent_run_read_chapter::project;
     let (scope, ..) = project(&store, &admin, "fe6", 0xfe90, &["Lin ran.", "Lin swam."]).await;
     let (other, ..) = project(&store, &admin, "fe8", 0xfe94, &["Wei ran."]).await;
     let entry = |number, title| {
@@ -177,11 +156,12 @@ async fn the_read_only_tools_of_a_capture_execute_as_for_the_author() {
         .unwrap();
     run_capture(&store, &admin, &scope, &started.run_id).await;
 
-    let states: Vec<Value> = crate::agent_run_finish_rule::tests::calls(&admin, &started.run_id)
-        .await
-        .iter()
-        .map(|call| json!([call[0], call[1], call[2], call[3]]))
-        .collect();
+    let states: Vec<Value> =
+        crate::shared_tests::agent_run_finish_rule::calls(&admin, &started.run_id)
+            .await
+            .iter()
+            .map(|call| json!([call[0], call[1], call[2], call[3]]))
+            .collect();
     let reads: Vec<String> = admin
         .query(
             "SELECT run_id::text FROM storyos.memory_entry_reads WHERE project_id = $1::text::uuid",

@@ -39,13 +39,7 @@ pub(crate) async fn execute(
         client,
         claim,
         row,
-        Resolution {
-            state: settlement.call_state(),
-            refusal,
-            attempt: None,
-            outcome: None,
-            result: Some(result),
-        },
+        Resolution::host(settlement.call_state(), refusal, Some(result)),
     )
     .await?;
     if settlement.completes_run() {

@@ -148,15 +148,14 @@ pub fn apply_finish_rule(
                     }
                 );
             match closing_answer(response_state, &answer) {
-                FinishRuleOutcome::Settle(AgentDecisionOutcome::Decision {
-                    kind,
-                    selected,
-                    ..
-                }) if !answerable => FinishRuleOutcome::Settle(AgentDecisionOutcome::Decision {
-                    kind,
-                    selected,
-                    advances_continuation: false,
-                }),
+                FinishRuleOutcome::Settle(AgentDecisionOutcome::Decision { kind, .. })
+                    if !answerable =>
+                {
+                    FinishRuleOutcome::Settle(AgentDecisionOutcome::Decision {
+                        kind,
+                        advances_continuation: false,
+                    })
+                }
                 FinishRuleOutcome::NoResult if !answerable => {
                     FinishRuleOutcome::Settle(AgentDecisionOutcome::NoDecision)
                 }
@@ -198,7 +197,6 @@ fn closing_answer(
     }
     FinishRuleOutcome::Settle(AgentDecisionOutcome::Decision {
         kind: AgentDecisionKind::Advisory { text },
-        selected: true,
         advances_continuation: true,
     })
 }

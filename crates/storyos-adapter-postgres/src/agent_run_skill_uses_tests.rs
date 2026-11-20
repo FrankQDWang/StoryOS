@@ -1,19 +1,19 @@
 //! The Skills that a Run used, in the Run read (ADR 0089 section 8).
 
-use storyos_application::{AgentRunReadSelection, AgentRunReadStore, ConversationSelection};
+use storyos_application::{AgentRunReadSelection, AgentRunReadStore};
 use storyos_core::{SKILL_MD_PATH, SkillFileInput, SkillUse};
 
-use crate::agent_run_dispatch::tests::{admit_selected_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::queued;
-use crate::create_agent_run_tests::skill_tests::{fixture, package, set};
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
+use crate::shared_tests::model_gateway::Admission;
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_run_read_names_each_selected_skill_then_each_settled_load_with_its_reason() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let outline = package(
         "plot-outline",
@@ -31,15 +31,12 @@ async fn the_run_read_names_each_selected_skill_then_each_settled_load_with_its_
     complete(&store, &admin, &scope, &first).await;
     // The author selects two Skills out of name order. The Agent loads one Skill, and the Host
     // refuses its load of a name that the catalog does not have.
-    let run_id = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "ae2",
-        "SCRIPT:load_skill plot-outline,no-such-skill",
-        ConversationSelection::New,
-        (skills, selections),
-    )
+    let run_id = Admission {
+        message: "SCRIPT:load_skill plot-outline,no-such-skill",
+        skills: (skills, selections),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "ae2")
     .await;
     complete(&store, &admin, &scope, &run_id).await;
     let read = |selection| {

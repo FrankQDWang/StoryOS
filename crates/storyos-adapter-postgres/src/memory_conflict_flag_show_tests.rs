@@ -4,23 +4,19 @@
 //! these tests is `90`.
 
 use serde_json::{Value, json};
-use storyos_application::{
-    ConversationSelection, MemoryCaptureSource, MemoryEntryFlagItem, MemoryEntrySourceItem,
-    ProjectScope, list_memory_entries,
-};
+use storyos_application::{MemoryCaptureSource, MemoryEntrySourceItem};
 use storyos_core::{DeleteMemoryEntryConflict, TransitionOutcome};
 
-use super::super::tests::{capture, delete as delete_operation, run_pass};
-use super::conflict_tests::{conflict, entry_id};
-use super::{flag_lines, pass_on, seed};
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_load_skill::tests::calls;
-use crate::agent_run_write_memory::tests::first_index;
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::delete_memory_entry::tests::delete;
-use crate::memory_capture::tests::project;
+use crate::shared_tests::agent_run_load_skill::calls;
+use crate::shared_tests::agent_run_write_memory::first_index;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::delete_memory_entry::delete;
+use crate::shared_tests::memory_capture::project;
+use crate::shared_tests::memory_conflict_flag_show::{listed_flags, run, write};
+use crate::shared_tests::memory_consolidation::{capture, delete as delete_operation, run_pass};
+use crate::shared_tests::memory_consolidation_conflict::{conflict, entry_id};
+use crate::shared_tests::memory_consolidation_merge::{flag_lines, pass_on, seed};
 
 /// The items of one capture: one fact with no script, and the conflict items `conflicts`. The
 /// fact makes the pass request have an observation.
@@ -30,41 +26,6 @@ fn with_fact(conflicts: &[(u64, &str)]) -> Value {
         .iter()
         .map(|(entry, reason)| conflict(*entry, reason));
     Value::from_iter([fact].into_iter().chain(items))
-}
-
-/// The fake script line of one `write_memory` call.
-pub(super) fn write(action: &str, arguments: Value) -> String {
-    format!("SCRIPT:write_memory {action} {arguments}")
-}
-
-/// Admits a Run of the author with `message` in a new Conversation and completes it.
-pub(super) async fn run(
-    store: &PostgresProjectReader,
-    admin: &tokio_postgres::Client,
-    (scope, chapter_id): (&ProjectScope, &str),
-    prefix: &str,
-    message: &str,
-) -> String {
-    let new = ConversationSelection::New;
-    let run_id = admitted(store, scope, chapter_id, prefix, message, new).await;
-    complete(store, admin, scope, &run_id).await;
-    run_id
-}
-
-/// The flag of each entry in the list of the settings page, in the order of the list.
-pub(super) async fn listed_flags(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-) -> Vec<Option<(String, MemoryEntrySourceItem)>> {
-    let entries = list_memory_entries(store, scope).await.unwrap().unwrap();
-    let flag = |flag: MemoryEntryFlagItem| {
-        assert!(flag.flagged_at.ends_with('Z'));
-        (flag.reason, flag.source)
-    };
-    entries
-        .into_iter()
-        .map(|entry| entry.flag.map(flag))
-        .collect()
 }
 
 fn conversation_of(source: &MemoryCaptureSource) -> MemoryEntrySourceItem {
@@ -87,9 +48,7 @@ fn conversation_of(source: &MemoryCaptureSource) -> MemoryEntrySourceItem {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_whole_path_flags_an_entry_of_the_author_and_a_change_removes_the_flag() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "900").await;
     let project = (&scope, chapter_id.as_str());
@@ -161,9 +120,7 @@ async fn the_whole_path_flags_an_entry_of_the_author_and_a_change_removes_the_fl
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_change_with_the_same_text_and_each_delete_remove_the_flag() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "905").await;
     let rows = [
@@ -219,9 +176,7 @@ async fn a_change_with_the_same_text_and_each_delete_remove_the_flag() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_pass_with_no_conflict_keeps_the_flag_and_a_later_pass_flags_again() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "907").await;
     let rows = [

@@ -142,11 +142,35 @@ fn target() -> DeclaredTarget {
     }
 }
 
+/// A mapping that no current Registration binds. The adapter refuses its request (ADR 0097).
+pub(crate) const EARLIER_MAPPING: &str = "storyos.volcengine-agent-plan.responses.create.v8";
+
+/// The Host instructions of the first request of the current mapping with no Skill, Chapter,
+/// or Memory item and no Tool output.
+pub(crate) fn tool_loop_instructions() -> String {
+    format!(
+        "{}\n\n{}\n\n{}",
+        crate::wire::TOOL_LOOP_INSTRUCTIONS,
+        crate::wire::READ_TOOL_RESULT_INSTRUCTION,
+        crate::wire::TOOL_RESULT_STUB_INSTRUCTION
+    )
+}
+
+/// The paragraph of the current mapping for a request that declares `write_memory`. Each request
+/// of the author declares it (ADR 0094 section 5).
+pub(crate) fn write_memory_paragraph() -> String {
+    format!(
+        "{} {}",
+        crate::wire::WRITE_MEMORY_INSTRUCTION,
+        crate::wire::WRITE_MEMORY_WORDS_INSTRUCTION
+    )
+}
+
 pub(crate) fn route(endpoint: &str) -> RequestRoute {
     RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
         provider_model_id: "doubao-seed-2.1-pro".to_owned(),
-        mapping_revision: storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION.to_owned(),
+        mapping_revision: storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION.to_owned(),
         endpoint: Some(endpoint.to_owned()),
         credential_reference: Some(CredentialReference(
             storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned(),
@@ -327,7 +351,7 @@ async fn a_continuation_sends_the_prior_reference_with_the_current_instructions_
     };
     // A decision request of an earlier mapping held the reply form.
     let earlier_mapping = RequestRoute {
-        mapping_revision: storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
+        mapping_revision: EARLIER_MAPPING.to_owned(),
         ..route(&base)
     };
     let refused = adapter.prepare(&continued(earlier_mapping)).await.err();
@@ -352,7 +376,7 @@ async fn a_continuation_sends_the_prior_reference_with_the_current_instructions_
             projection.mapping_revision,
             projection.cache_setting,
             sent["previous_response_id"].clone(),
-            sent["instructions"] == json!(crate::wire::TOOL_LOOP_INSTRUCTIONS),
+            sent["instructions"] == json!(tool_loop_instructions()),
             sent["input"][0]["content"][0]["text"]
                 .as_str()
                 .is_some_and(|text| text.ends_with("The rain fell hard on the old roof.")),
@@ -361,7 +385,7 @@ async fn a_continuation_sends_the_prior_reference_with_the_current_instructions_
         ),
         (
             Some(PreDispatchRefusal::UnsupportedRequest),
-            storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION.to_owned(),
+            storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION.to_owned(),
             Some(CacheSetting::DestinationDefault),
             json!("resp_01"),
             true,
@@ -439,17 +463,14 @@ async fn a_summary_request_sends_only_the_summary_instruction_and_the_prior_refe
             ..request
         })
     };
-    let compaction = storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION;
+    let compaction = storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION;
     let refused = [
         adapter
             .prepare(&summary(compaction, /*reference*/ None))
             .await
             .err(),
         adapter
-            .prepare(&summary(
-                storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION,
-                Some("resp_02"),
-            ))
+            .prepare(&summary(EARLIER_MAPPING, Some("resp_02")))
             .await
             .err(),
     ];
@@ -467,7 +488,11 @@ async fn a_summary_request_sends_only_the_summary_instruction_and_the_prior_refe
             [Some(PreDispatchRefusal::UnsupportedRequest); 2],
             json!({
                 "model": "doubao-seed-2.1-pro",
-                "instructions": crate::wire::SUMMARY_INSTRUCTIONS,
+                "instructions": format!(
+                    "{}\n\n{}",
+                    crate::wire::SUMMARY_INSTRUCTIONS,
+                    crate::wire::SUMMARY_TOPICS_INSTRUCTION
+                ),
                 "input": [{"role": "user", "content": [
                     {"type": "input_text", "text": "Summarize the conversation so far."}
                 ]}],
@@ -565,7 +590,7 @@ async fn each_transport_outcome_maps_to_rejected_not_submitted_or_outcome_unknow
     );
 }
 
-fn retrieve(base: &str, attempt: RequestAttempt) -> DestinationRequest {
+pub(crate) fn retrieve(base: &str, attempt: RequestAttempt) -> DestinationRequest {
     DestinationRequest::Retrieve(RetrieveRequest {
         attempt,
         route: route(base),

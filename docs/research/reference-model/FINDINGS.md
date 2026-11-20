@@ -1,5 +1,7 @@
 # Reference Model Findings
 
+The Git tag `evidence/prototypes-and-test-asset-audit-2026-11-20` keeps the removed directory `prototypes/reference-model/`, and `git checkout evidence/prototypes-and-test-asset-audit-2026-11-20 -- prototypes/reference-model` restores it.
+
 The fixed product base is `479224809cdaae997cda51cb8853e3fafa242b65`. These findings do not describe later main. Product source is unchanged.
 
 ## D-001: Project changes are missing from Author Undo order (P2)

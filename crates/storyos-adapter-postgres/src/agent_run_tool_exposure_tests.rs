@@ -1,76 +1,21 @@
 use serde_json::json;
-use storyos_adapter_volcengine_responses::AgentPlanExchange;
-use storyos_application::{
-    ConversationSelection, DestinationRequest, ModelProviderAdapter, ModelStreamSink,
-    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, complete_agent_run,
-};
+use storyos_application::{ConversationSelection, NoContractFaults, complete_agent_run};
 use storyos_core::{
-    BoundTool, DeploymentDestination, EXA_TOOL_REGISTRATION, ExposureFacts, ModelAdapter,
-    RESEARCH_TOOL_OFFER, ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle,
+    BoundTool, DeploymentDestination, EXA_TOOL_REGISTRATION, ExposureFacts, RESEARCH_TOOL_OFFER,
+    ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle,
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, queued_run, stores};
-use crate::agent_run_retrieval::tests::{
+use crate::shared_tests::agent_run_retrieval::{
     adapter, broken_stream, destination, real_run, recovery, research_run,
 };
-
-/// The final answer of a closing response.
-const ADVISORY: &str = "Keep it.";
-const ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
-
-pub(crate) fn sse(events: &[serde_json::Value]) -> String {
-    let mut reply = String::from(
-        "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n",
-    );
-    for event in events {
-        reply.push_str(&format!("data: {event}\n\n"));
-    }
-    reply
-}
-
-/// A stream that reports `reference` and ends with one complete final answer.
-pub(crate) fn advisory_stream(reference: &str) -> String {
-    let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
-        "status": "completed", "content": [{"type": "output_text", "text": ADVISORY}]});
-    sse(&[
-        json!({"type": "response.created",
-               "response": {"id": reference, "status": "in_progress", "output": []}}),
-        json!({"type": "response.output_item.done", "output_index": 0, "item": message}),
-        json!({"type": "response.completed", "response": {
-            "id": reference, "status": "completed", "output": [message],
-            "usage": {"input_tokens": 40, "output_tokens": 12}}}),
-    ])
-}
-
-/// A stream that reports `reference` and ends with one complete `finish` call.
-pub(crate) fn finish_stream(reference: &str) -> String {
-    let call = json!({"id": "fc_finish", "type": "function_call", "status": "completed",
-        "call_id": format!("call_finish_{reference}"), "name": "finish", "arguments": "{}"});
-    sse(&[
-        json!({"type": "response.created",
-               "response": {"id": reference, "status": "in_progress", "output": []}}),
-        json!({"type": "response.output_item.done", "output_index": 0, "item": call}),
-        json!({"type": "response.completed", "response": {
-            "id": reference, "status": "completed", "output": [call],
-            "usage": {"input_tokens": 40, "output_tokens": 4}}}),
-    ])
-}
-
-/// The two streams of a model that ends its Run: a `finish` call in `reference`, then the
-/// closing Advisory in `reference` with `_closing`.
-pub(crate) fn finish_then_advisory(reference: &str) -> [String; 2] {
-    [
-        finish_stream(reference),
-        advisory_stream(&format!("{reference}_closing")),
-    ]
-}
-
-/// One function call item with `arguments` and `status`.
-fn call(arguments: &str, status: &str) -> serde_json::Value {
-    json!({"id": "fc_01", "type": "function_call", "status": status, "call_id": "call_01",
-           "name": "web_search", "arguments": arguments})
-}
+use crate::shared_tests::agent_run_tool_exposure::{
+    ARGUMENTS, QuarantineBeforeClaim, call, finish_then_advisory, function_call_stream,
+    host_exposure,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run};
 
 /// The stored complete response that a Retrieve reads: one complete function call.
 fn stored_function_call(reference: &str) -> String {
@@ -84,26 +29,6 @@ fn stored_function_call(reference: &str) -> String {
     )
 }
 
-/// A stream that reports `reference`, streams the arguments of one function call, and ends
-/// with the complete call.
-pub(crate) fn function_call_stream(reference: &str) -> String {
-    sse(&[
-        json!({"type": "response.created",
-               "response": {"id": reference, "status": "in_progress", "output": []}}),
-        json!({"type": "response.output_item.added", "output_index": 0,
-               "item": call("", "in_progress")}),
-        json!({"type": "response.function_call_arguments.delta", "output_index": 0,
-               "item_id": "fc_01", "delta": &ARGUMENTS[..20]}),
-        json!({"type": "response.function_call_arguments.delta", "output_index": 0,
-               "item_id": "fc_01", "delta": &ARGUMENTS[20..]}),
-        json!({"type": "response.output_item.done", "output_index": 0,
-               "item": call(ARGUMENTS, "completed")}),
-        json!({"type": "response.completed", "response": {
-            "id": reference, "status": "completed", "output": [call(ARGUMENTS, "completed")],
-            "usage": {"input_tokens": 90, "output_tokens": 30}}}),
-    ])
-}
-
 /// The Exposure of the research Tool and the Host Tools on the current Agent Plan Registration,
 /// for a Run with Memory use.
 fn research_exposure() -> ToolExposure {
@@ -113,19 +38,6 @@ fn research_exposure() -> ToolExposure {
             lifecycle: ToolRegistrationLifecycle::Active,
             compatibility: Some(ToolCompatibilityDecision::Compatible),
         }],
-        model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
-        skill_catalog: false,
-        memory_use: true,
-        hybrid_search: false,
-        run_kind: storyos_core::AgentRunKind::Author,
-    })
-}
-
-/// The Exposure of the Host Tools alone on the current Agent Plan Registration, for a Run with
-/// Memory use.
-pub(crate) fn host_exposure() -> ToolExposure {
-    ToolExposure::compute(&ExposureFacts {
-        bound: &[],
         model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
         skill_catalog: false,
         memory_use: true,
@@ -181,9 +93,7 @@ async fn attempt_facts(admin: &Client, run_id: &str) -> [Option<serde_json::Valu
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_bound_tool_is_declared_on_a_new_transport_and_its_function_call_settles_the_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut replies = finish_then_advisory("resp_t1").to_vec();
     replies.push(function_call_stream("resp_t2"));
@@ -209,18 +119,16 @@ async fn a_bound_tool_is_declared_on_a_new_transport_and_its_function_call_settl
         .unwrap();
     // The deployment starts to offer the research destination between the two requests of one
     // Conversation, so the second createAgentRun binds it.
-    let second = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "f72",
-        plan,
-        "Check the tide tables of 1890.",
-        ConversationSelection::Existing {
+    let second = Admission {
+        destination: plan,
+        message: "Check the tide tables of 1890.",
+        conversation: ConversationSelection::Existing {
             conversation_id: "018f0000-0000-7001-8000-00000006f716".to_owned(),
         },
-        Some(&RESEARCH_TOOL_OFFER),
-    )
+        research: Some(&RESEARCH_TOOL_OFFER),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "f72")
     .await;
     let claim = claim_run(&admin, scope, second.clone()).await;
     complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
@@ -314,9 +222,7 @@ async fn retrieval_facts(admin: &Client, run_id: &str) -> (Option<String>, Optio
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_retrieved_call_of_an_unexposed_name_is_a_refused_call_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut replies = vec![broken_stream("resp_f73"), stored_function_call("resp_f73")];
     replies.extend(finish_then_advisory("resp_f73b"));
@@ -384,63 +290,10 @@ async fn a_retrieved_call_of_an_unexposed_name_is_a_refused_call_and_the_run_con
     );
 }
 
-/// The real adapter. Before the claim of the first Create that is a successor when `successor`
-/// is set, and that is not a successor when it is not, a Tool Contract Drift quarantines the
-/// research revision. Each prepared Create keeps its Exposure Snapshot and the `tools` field of
-/// its body.
-pub(crate) struct QuarantineBeforeClaim<'a> {
-    pub admin: &'a Client,
-    pub successor: bool,
-    pub quarantined: std::sync::atomic::AtomicBool,
-    pub prepared: std::sync::Mutex<Vec<(serde_json::Value, Option<serde_json::Value>)>>,
-}
-
-impl ModelProviderAdapter for QuarantineBeforeClaim<'_> {
-    const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
-    type Prepared = AgentPlanExchange;
-
-    async fn prepare(
-        &self,
-        request: &DestinationRequest,
-    ) -> Result<PreparedRequest<AgentPlanExchange>, PreDispatchRefusal> {
-        let prepared = adapter().prepare(request).await?;
-        if let DestinationRequest::Create(create) = request {
-            let body: serde_json::Value =
-                serde_json::from_str(prepared.projection.serialized_payload.as_deref().unwrap())
-                    .unwrap();
-            self.prepared
-                .lock()
-                .unwrap()
-                .push((create.tool_exposure.snapshot(), body.get("tools").cloned()));
-            if create.successor_of.is_some() == self.successor
-                && !self
-                    .quarantined
-                    .swap(/*val*/ true, std::sync::atomic::Ordering::Relaxed)
-            {
-                self.admin
-                    .batch_execute(&crate::agent_run_tool_call::tests::quarantine_statement())
-                    .await
-                    .unwrap();
-            }
-        }
-        Ok(prepared)
-    }
-
-    async fn exchange(
-        &self,
-        prepared: AgentPlanExchange,
-        sink: &mut impl ModelStreamSink,
-    ) -> Observation {
-        adapter().exchange(prepared, sink).await
-    }
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_exposure_change_before_the_claim_sends_the_request_again_with_the_current_exposure() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (base, served) = destination(finish_then_advisory("resp_f79").to_vec()).await;
     let (scope, run_id) = research_run(&store, &admin, "f79", &base).await;
@@ -454,7 +307,7 @@ async fn an_exposure_change_before_the_claim_sends_the_request_again_with_the_cu
     complete_agent_run(&store, &route, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    crate::agent_run_tool_call::tests::reactivate_research_revision(&admin).await;
+    crate::shared_tests::agent_run_tool_call::reactivate_research_revision(&admin).await;
     let attempts: i64 = admin
         .query_one(
             "SELECT count(*) FROM storyos.model_attempts WHERE run_id = $1::text::uuid",

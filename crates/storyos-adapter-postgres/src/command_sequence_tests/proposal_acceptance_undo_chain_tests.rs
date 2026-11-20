@@ -10,16 +10,16 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 
-use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal};
-use super::agent_run::seed_run;
-use super::proposal_decision_undo_chain::{conflict_and_replan, head_state};
-use super::proposal_undo_chain::{compensated, edit, on, undo_call};
-use super::secondary_operation::{
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_acceptance::{ACCEPT_PROPOSAL, accept_proposal};
+use crate::shared_tests::command_sequence_agent_run::seed_run;
+use crate::shared_tests::command_sequence_proposal_undo_chain::{compensated, edit, on, undo_call};
+use crate::shared_tests::command_sequence_secondary_operation::{
     PRIMARY_TEXT, SECONDARY_TEXT, TwoOperationProposal, chapter_blocks, proposal_head,
     proposal_head_revision, two_operation_proposal,
 };
-use super::support::{issued, run_without_foreign_keys, stores};
-use super::undo::{latest_forward, undo};
+use crate::shared_tests::command_sequence_support::{issued, run_without_foreign_keys, stores};
+use crate::shared_tests::command_sequence_undo::{latest_forward, undo};
 
 /// The Proposal fixture with its AgentRun, which a derived Proposal copies.
 async fn derivable_proposal(
@@ -191,9 +191,7 @@ async fn operation_resolutions(admin: &Client, proposal: &TwoOperationProposal) 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_reverses_a_candidate_edit_after_the_undo_of_its_acceptance() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4e00).await;
     let before = operation_candidates(&admin, &proposal).await;
@@ -240,9 +238,7 @@ async fn author_undo_reverses_a_candidate_edit_after_the_undo_of_its_acceptance(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_walk_goes_through_an_undone_acceptance_in_the_middle_of_the_lineage() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4e20).await;
     let before = operation_candidates(&admin, &proposal).await;
@@ -291,9 +287,7 @@ async fn the_walk_goes_through_an_undone_acceptance_in_the_middle_of_the_lineage
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_derived_or_unlinked_acceptance_undo_makes_the_earlier_edit_a_barrier() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut stopped = Vec::new();
     for (base, drift) in [
@@ -379,9 +373,7 @@ async fn a_derived_or_unlinked_acceptance_undo_makes_the_earlier_edit_a_barrier(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_undo_of_an_unselected_edit_compensates_after_a_derived_acceptance_undo() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut proposal = derivable_proposal(&store, &admin, /*base*/ 0x4ea0).await;
     let before = operation_candidates(&admin, &proposal).await;
@@ -420,51 +412,6 @@ async fn the_undo_of_an_unselected_edit_compensates_after_a_derived_acceptance_u
             before,
             vec!["applied".to_owned(), "pending".to_owned()]
         )
-    );
-}
-
-/// Replan D, candidate edit E, Acceptance, Undo of the Acceptance, Undo of E, Undo of D. The edit
-/// gives the replanned Proposal a Validation Receipt, so the Acceptance is possible. The Undo of D
-/// restores the Revision before D with its base.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn author_undo_restores_a_replan_after_the_undo_of_an_acceptance_of_its_edit() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let mut proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4ec0).await;
-    let before = operation_candidates(&admin, &proposal).await;
-    let (replanned, before_replan) =
-        conflict_and_replan(&store, &admin, &proposal, /*suffix*/ 0x4ec9).await;
-    let edited = edit(
-        &store,
-        &admin,
-        &proposal,
-        on(
-            /*operation*/ 0, /*suffix*/ 0x4eca, /*local_intent_sequence*/ 3,
-        ),
-    )
-    .await;
-    accept(
-        &store,
-        &admin,
-        &mut proposal,
-        &[0, 1],
-        /*suffix*/ 0x4ecb,
-    )
-    .await;
-    undo_source(&store, &admin, &mut proposal, /*suffix*/ 0x4ecc).await;
-    let undo_edit = undo_source(&store, &admin, &mut proposal, /*suffix*/ 0x4ecd).await;
-    let undo_replan = undo_source(&store, &admin, &mut proposal, /*suffix*/ 0x4ece).await;
-
-    assert_eq!(
-        (
-            (undo_edit, undo_replan),
-            head_state(&admin, &proposal.proposal_id).await,
-            operation_candidates(&admin, &proposal).await,
-        ),
-        ((edited, replanned), before_replan, before)
     );
 }
 
@@ -540,9 +487,7 @@ fn placed_proposal(settled: &UndoLatestAuthorActionSettlement) -> (&'static str,
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_undo_of_an_acceptance_reopens_the_proposal_for_a_new_acceptance() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut proposal = two_operation_proposal(&store, &admin, /*base*/ 0x8b00).await;
     let before = chapter_blocks(&store, &proposal.scope, &proposal.chapter_id).await;
@@ -618,9 +563,7 @@ async fn the_undo_of_an_acceptance_reopens_the_proposal_for_a_new_acceptance() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_drifted_acceptance_undo_places_a_derived_or_a_reversal_proposal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut drifted = derivable_proposal(&store, &admin, /*base*/ 0x8b20).await;
     let before = chapter_blocks(&store, &drifted.scope, &drifted.chapter_id).await;
@@ -708,17 +651,15 @@ async fn a_drifted_acceptance_undo_places_a_derived_or_a_reversal_proposal() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_acceptance_marks_the_passage_index_work_of_its_chapter() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = crate::passage_index_work::tests::configured().await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = crate::shared_tests::passage_index_work::configured().await;
     let mut proposal = derivable_proposal(&store, &admin, 0xf3e0).await;
     let (scope, accepted) = (proposal.scope.clone(), proposal.chapter_id.clone());
-    let work = || crate::passage_index_work::tests::work(&admin, &scope);
+    let work = || crate::shared_tests::passage_index_work::work(&admin, &scope);
     // The Project has no embedding use binding, so its edits marked nothing.
     assert_eq!(work().await, Vec::new());
     admin.batch_execute("BEGIN").await.unwrap();
-    crate::passage_index_work::tests::deploy(&admin).await;
+    crate::shared_tests::passage_index_work::deploy(&admin).await;
     crate::project_embedding_binding::insert_embedding_binding(
         &admin,
         &scope,

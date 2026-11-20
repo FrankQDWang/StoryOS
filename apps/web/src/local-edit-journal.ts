@@ -20,21 +20,18 @@ import type {
   JournalSubmissionGroup,
   PendingEditProjection,
   ReplaceSelectionEdit,
-  StoredApplyAuthorEditRequest,
   ValidatedJournalSnapshot,
 } from "./editor-types.ts";
 import { flattenChapterBody } from "./manuscript-doc.ts";
-import type { CapturedManuscriptEdit, ContiguousReplacementPrimitive } from "./manuscript-doc.ts";
+import type { CapturedManuscriptEdit } from "./manuscript-doc.ts";
 
 import {
   MAX_WORKING_JOURNAL_ITEMS, readJournalWorkingBoundary, retireCollectedJournalPrefix,
 } from "./journal-working-set.ts";
-import { isRemovedDraftGroup, isRemovedDraftRecord } from "./removed-draft-path.ts";
+import { uuidV7 } from "./client-identity.ts";
+import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
 export const JOURNAL_DATABASE_VERSION = 5;
-/** The schema version that a read of this workspace accepts. Writes always need the current version. */
-export const journalReadVersion = (workspace: EditorWorkspace): number =>
-  workspace.readOnlyJournalVersion ?? JOURNAL_DATABASE_VERSION;
 export const JOURNAL_OBJECT_STORES = Object.freeze([
   "metadata",
   "partitions",
@@ -47,7 +44,7 @@ export const JOURNAL_OBJECT_STORES = Object.freeze([
   "outcome_query_attempts",
   "outcome_query_observations",
 ]);
-export const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v3";
+const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v3";
 export const AUTHOR_EDIT_BATCH_POLICY_REVISION =
   "storyos.author-edit-batch.release-1.preview.v1";
 export const AUTHOR_EDIT_BATCH_IDLE_MS = 250;
@@ -155,7 +152,7 @@ function followedBase(
   if (prior === undefined) return snapshot.workingBoundary === undefined ? "unbound" : "retired";
   const group = snapshot.groups.find((item) => item.ordered_coverage?.some((coverage) =>
     coverage.local_intent_sequence === prior.local_intent_sequence));
-  if (group === undefined || (group.settlement.kind === "unsettled" && !isRemovedDraftGroup(group))) return "waiting";
+  if (group === undefined || group.settlement.kind === "unsettled") return "waiting";
   if (group.settlement.kind === "applied_receipt_settled") return { base: group.settlement.installed_base_snapshot };
   return proposalSuccessors([group]).size === 1
     ? { revisedHead: group.frozen_request_body.expected_authoritative_revision_id } : "unbound";
@@ -307,55 +304,24 @@ function manuscriptBlocksEqual(
       && block.text === right[index]?.text);
 }
 
-const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-});
-const transactionResult = (transaction: IDBTransaction) => new Promise<void>((resolve, reject) => {
-  transaction.oncomplete = () => resolve();
-  transaction.onabort = () => reject(
-    transaction.error ?? new Error("IndexedDB transaction aborted"),
-  );
-  transaction.onerror = () => reject(
-    transaction.error ?? new Error("IndexedDB transaction failed"),
-  );
-});
-
-export function createJournalUuid(cryptoImpl: Crypto = globalThis.crypto, now = Date.now()) {
-  const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
-  for (let offset = 5; offset >= 0; offset -= 1) {
-    bytes[offset] = now & 0xff;
-    now = Math.floor(now / 256);
-  }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-export async function digestJournalValue(value: unknown, cryptoImpl: Crypto): Promise<DigestValue> {
+async function journalDigest(value: unknown, profile: string, cryptoImpl: Crypto): Promise<DigestValue> {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
   const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
   return {
     algorithm: "sha256",
-    profile: "storyos.local-edit-journal.payload.sha256.v1",
+    profile,
     value_hex_lowercase: [...digest]
       .map((byte) => byte.toString(16).padStart(2, "0")).join(""),
   };
 }
 
-async function digestSubmissionCoverage(
-  coverage: unknown,
-  cryptoImpl: Crypto,
-): Promise<DigestValue> {
-  const bytes = new TextEncoder().encode(JSON.stringify(coverage));
-  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
-  return {
-    algorithm: "sha256",
-    profile: "storyos.local-edit-journal.submission-coverage.sha256.v1",
-    value_hex_lowercase: [...digest]
-      .map((byte) => byte.toString(16).padStart(2, "0")).join(""),
-  };
+export function digestJournalValue(value: unknown, cryptoImpl: Crypto): Promise<DigestValue> {
+  return journalDigest(value, "storyos.local-edit-journal.payload.sha256.v1", cryptoImpl);
+}
+
+/** The digest of the ordered coverage and the covered sequence range of one submission group. */
+export function digestSubmissionCoverage(coverage: unknown, cryptoImpl: Crypto): Promise<DigestValue> {
+  return journalDigest(coverage, "storyos.local-edit-journal.submission-coverage.sha256.v1", cryptoImpl);
 }
 
 function cloneBlocks(blocks: readonly ManuscriptBlock[]): ManuscriptBlock[] {
@@ -371,29 +337,45 @@ function applyAuthorEditPrimitiveOnCopy(
   return owned;
 }
 
-function isLegacyReplaceSelectionPrimitive(value: unknown) {
-  return typeof value === "object"
-    && value !== null
-    && Reflect.get(value, "kind") === "replace_selection";
-}
-
-export function journalHasIncompatiblePendingReplaceSelection(
-  records: JournalIntentRecord[],
-  coveredSequences: Set<number>,
-  base: EditorBaseSnapshot,
-) {
-  return records.some((record) =>
-    recordTargetsCurrentBase(record, base)
-    && record.proposal_target === undefined
-    && !coveredSequences.has(record.local_intent_sequence)
-    && (record.author_edit_unit?.normalized_primitives ?? [])
-      .some(isLegacyReplaceSelectionPrimitive));
-}
-
 function isAppliedSettlement(group: JournalSubmissionGroup) {
   const settlement: Record<string, unknown> = group.settlement;
   const kind = settlement.kind;
   return kind === "applied_receipt_settled" || kind === "receipt_settled";
+}
+
+const AUTHOR_EDIT_PRIMITIVE_KINDS = new Set(["replace_selection", "replace_block_selection", "split_block",
+  "join_blocks", "move_block", "retype_block"]);
+const ZERO_AUTHORITY_EFFECT_KINDS = new Set(["proposal_revised", "no_effect", "conflicted", "refused"]);
+
+/**
+ * True when the primitives have only the kinds of the current contract. The Web writes `replace_selection` only for a
+ * Proposal candidate. An authoritative `replace_selection` of an earlier client has no Block identity, so it is false.
+ */
+function currentPrimitives(primitives: { kind: unknown }[] | undefined, candidate: boolean) {
+  return (primitives ?? []).every((primitive) => AUTHOR_EDIT_PRIMITIVE_KINDS.has(String(primitive.kind))
+    && (candidate || primitive.kind !== "replace_selection"));
+}
+
+/** True when an intent record has only the shapes of the current contract (ADR 0099). */
+export function hasCurrentRecordShape(record: JournalIntentRecord) {
+  return record.retry_source?.kind === "fresh_editor_intent"
+    && currentPrimitives(record.author_edit_unit?.normalized_primitives, record.proposal_target !== undefined);
+}
+
+/**
+ * True when a group and its records have only the shapes of the current contract. A stored shape of a removed path,
+ * for example a Draft retry, a structured primitive, or a Draft settlement, is false (ADR 0099). The check only
+ * refuses: no reader converts or sends an earlier shape.
+ */
+export function hasCurrentSubmissionShape(group: JournalSubmissionGroup, records: JournalIntentRecord[] = []) {
+  const request = group.frozen_request_body as JournalSubmissionGroup["frozen_request_body"] & { retry_source?: unknown };
+  const settlement = group.settlement as { kind?: unknown; effect?: { kind?: unknown } };
+  return request.retry_source === undefined
+    && (request.author_edit_units ?? []).every((unit) =>
+      currentPrimitives(unit.normalized_primitives, request.proposal_target !== undefined))
+    && (settlement.kind !== "zero_authority_receipt_settled"
+      || ZERO_AUTHORITY_EFFECT_KINDS.has(String(settlement.effect?.kind)))
+    && records.every(hasCurrentRecordShape);
 }
 
 function isZeroAuthoritySettlement(group: JournalSubmissionGroup) {
@@ -461,7 +443,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
   const groups = groupsValue as JournalSubmissionGroup[];
   const storedFences = storedFencesValue as { value?: unknown[] } | undefined;
   const fences = storedFences?.value ?? [];
-  if (schema?.version !== journalReadVersion(workspace)
+  if (schema?.version !== JOURNAL_DATABASE_VERSION
     || records.length > MAX_WORKING_JOURNAL_ITEMS
     || payloadChains.length > MAX_WORKING_JOURNAL_ITEMS
     || groups.length > MAX_WORKING_JOURNAL_ITEMS) {
@@ -620,24 +602,19 @@ async function validateCoverage(
   workingBoundary: JournalSnapshot["workingBoundary"],
 ) {
   const covered = new Set<number>();
-  const grouped = new Set(groups.flatMap((group) =>
-    (group.ordered_coverage ?? []).map((item) => item.local_intent_sequence)));
-  // A pending record of a removed Draft path never gets a group, so it counts as covered (ADR 0073).
-  const removed = records.filter((record) =>
-    !grouped.has(record.local_intent_sequence) && isRemovedDraftRecord(record));
-  const coverable = records.filter((record) => !removed.includes(record));
   let coveredRecordCount = 0;
   for (const group of groups) {
     const first = group.covered_sequence_range?.first;
     const last = group.covered_sequence_range?.last;
     const coverage = group.ordered_coverage ?? [];
-    const coveredRecords = coverable.slice(coveredRecordCount, coveredRecordCount + coverage.length);
+    const coveredRecords = records.slice(coveredRecordCount, coveredRecordCount + coverage.length);
     if (group.journal_partition_id !== workspace.partition.journal_partition_id
       || group.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
       || !["unsettled", "applied_receipt_settled", "zero_authority_receipt_settled",
         "outcome_query_rejected_no_admission",
         "outcome_query_requires_reconfirmation"].includes(group.settlement?.kind)
       || !closedReconciliation(group)
+      || !hasCurrentSubmissionShape(group)
       || !Number.isSafeInteger(first)
       || !Number.isSafeInteger(last)
       || first !== coveredRecords[0]?.local_intent_sequence
@@ -695,7 +672,6 @@ async function validateCoverage(
         !== firstRecord?.expected_authoritative_heads[0]
       || JSON.stringify(request?.expected_proposal_head_revision_ids)
         !== JSON.stringify(firstRecord?.expected_proposal_heads)
-      || JSON.stringify((request as StoredApplyAuthorEditRequest | undefined)?.retry_source) !== JSON.stringify(firstRecord?.retry_source.kind === "draft_retry" ? firstRecord.retry_source : undefined)
       || JSON.stringify(request?.proposal_target)
         !== JSON.stringify(firstRecord?.proposal_target)
       || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord?.target_refs)
@@ -732,7 +708,6 @@ async function validateCoverage(
     }
     coveredRecordCount += coverage.length;
   }
-  for (const record of removed) covered.add(record.local_intent_sequence);
   return covered;
 }
 
@@ -753,7 +728,7 @@ export async function validateJournalSnapshot(
       || record.projection_dependency?.prior_sequence !== priorSequence
       || record.projection_dependency?.snapshot_id !== record.base_snapshot_id
       || !validFollowsBinding(record, groups, snapshot.workingBoundary)
-      || (record.retry_source?.kind !== "fresh_editor_intent" && record.retry_source?.kind !== "draft_retry")
+      || !hasCurrentRecordShape(record)
       || record.editor_contract_revision !== EDITOR_CONTRACT_REVISION
       || record.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
       || record.undo_group_binding?.kind !== "direct_author_input"
@@ -891,16 +866,10 @@ function pendingProjectionFromSnapshot(
   const pendingAcceptanceCount = snapshot.explicitAcceptance?.groups.filter((group) =>
     (group.settlement as { kind?: string })?.kind === "unsettled").length ?? 0;
   const resolvedSequences = retainedRecoverySequences(snapshot);
-  for (const record of snapshot.records) {
-    if (isRemovedDraftRecord(record)) resolvedSequences.add(record.local_intent_sequence);
-  }
   let hasZeroAuthoritySettlement = false;
   const base = workspace.session.base_snapshot;
   for (const group of snapshot.groups) {
     const groupTargetsCurrentChapter = group.frozen_request_body.chapter_id === base.chapter_id;
-    if (isRemovedDraftGroup(group)) {
-      for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
-    }
     if (group.ordered_coverage.every((item) => resolvedSequences.has(item.local_intent_sequence))) continue;
     if (isAppliedSettlement(group)) {
       for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
@@ -929,18 +898,13 @@ function pendingProjectionFromSnapshot(
   const body = (authoritativeRecords.length === 0
     ? base.materialized_revision.body
     : snapshot.bodyBySequence.get(authoritativeRecords.at(-1)!.local_intent_sequence))!;
-  const hasLegacyReplaceSelection = journalHasIncompatiblePendingReplaceSelection(
-    snapshot.records,
-    snapshot.covered,
-    base,
-  );
   return {
     body,
     ...(snapshot.groups.some((group) => group.settlement.kind === "outcome_query_requires_reconfirmation"
       && !group.ordered_coverage.every((item) => resolvedSequences.has(item.local_intent_sequence)))
       ? { requires_local_reconfirmation: true } : {}),
     blocks: cloneBlocks(blocks),
-    save_state: pendingAcceptanceCount > 0 || hasZeroAuthoritySettlement || hasLegacyReplaceSelection || unboundFollower
+    save_state: pendingAcceptanceCount > 0 || hasZeroAuthoritySettlement || unboundFollower
       ? "needs_attention"
       : pendingRecordCount
         ? "saving"
@@ -971,31 +935,59 @@ async function prepareJournalAppend(workspace: EditorWorkspace) {
   return snapshot;
 }
 
-async function persistReplaceSelection(
+type ResultingBlock = { manuscript_block_id: string; text: string; block_kind?: "paragraph" | "heading" };
+
+/** The parts of one Block edit that differ by edit kind. */
+type BlockEdit = {
+  /** Gives the primitives of the edit on `projection`. It throws when the edit is over a limit. */
+  primitives: (projection: PendingEditProjection) => AuthorEditPrimitive[];
+  from: number;
+  to: number;
+  extraUtf8: string;
+  inputOrigin: InputOrigin;
+  resultingBody: string;
+  /** The Blocks that the editor shows after the edit. When they are given, the applied primitives must give them. */
+  resultingBlocks?: readonly ResultingBlock[] | undefined;
+  /** Whether the comparison with `resultingBlocks` includes the Block kind. */
+  compareBlockKind?: true;
+  undoGroupId?: string | undefined;
+  createdAt?: string | undefined;
+};
+
+function sameResultingBlocks(
+  expected: readonly ManuscriptBlock[],
+  resulting: readonly ResultingBlock[],
+  compareBlockKind: boolean,
+): boolean {
+  const shape = (block: ResultingBlock, blockKind: ResultingBlock["block_kind"]) => compareBlockKind
+    ? { manuscript_block_id: block.manuscript_block_id, block_kind: blockKind, text: block.text }
+    : { manuscript_block_id: block.manuscript_block_id, text: block.text };
+  return JSON.stringify(expected.map((block) => shape(block, block.block_kind)))
+    === JSON.stringify(resulting.map((block) => shape(block, block.block_kind ?? "paragraph")));
+}
+
+/** Stores one Author Edit unit for `edit`, or throws when its primitives do not give `edit.resultingBlocks`. */
+async function persistBlockEdit(
   workspace: EditorWorkspace,
-  edit: ReplaceSelectionEdit,
-  cryptoImpl: Crypto = globalThis.crypto,
+  edit: BlockEdit,
+  cryptoImpl: Crypto,
 ): Promise<PendingEditProjection> {
   const snapshot = await prepareJournalAppend(workspace);
   const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const targetId = edit.manuscript_block_id
-    ?? (projection.blocks.length === 1 ? projection.blocks[0]?.manuscript_block_id : undefined);
-  if (targetId === undefined || !UUID.test(targetId)) {
-    throw new Error("Local Edit Journal limit failed");
+  const primitives = edit.primitives(projection);
+  const expectedBlocks = cloneBlocks(projection.blocks);
+  for (const primitive of primitives) {
+    applyAuthorEditPrimitive(expectedBlocks, primitive);
   }
-  const primitive: AuthorEditPrimitive = {
-    kind: "replace_block_selection",
-    manuscript_block_id: targetId ?? "",
-    from: edit.from,
-    to: edit.to,
-    text: edit.text,
-  };
-  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
+  if (edit.resultingBlocks !== undefined
+    && !sameResultingBlocks(expectedBlocks, edit.resultingBlocks, edit.compareBlockKind === true)) {
+    throw new Error("Local Edit Journal reconstruction failed");
+  }
   return persistAuthorEditUnit(workspace, {
     snapshot,
     projection,
     authorEditUnit: {
-      normalized_primitives: [primitive],
+      normalized_primitives: primitives,
       selection_snapshot: {
         coordinate_profile: "storyos.editor.utf16-code-unit.v1",
         from: edit.from,
@@ -1004,12 +996,39 @@ async function persistReplaceSelection(
     },
     expectedBody: flattenChapterBody(expectedBlocks),
     expectedBlocks,
-    extraUtf8: edit.text,
+    extraUtf8: edit.extraUtf8,
     resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "typing",
+    inputOrigin: edit.inputOrigin,
     undoGroupId: edit.undoGroupId,
     createdAt: edit.createdAt,
   }, cryptoImpl);
+}
+
+/** A selection replacement in one Block. The Blocks of the editor are not compared. */
+function replaceSelectionEdit(edit: ReplaceSelectionEdit): BlockEdit {
+  return {
+    primitives: (projection) => {
+      const targetId = edit.manuscript_block_id
+        ?? (projection.blocks.length === 1 ? projection.blocks[0]?.manuscript_block_id : undefined);
+      if (targetId === undefined || !UUID.test(targetId)) {
+        throw new Error("Local Edit Journal limit failed");
+      }
+      return [{
+        kind: "replace_block_selection",
+        manuscript_block_id: targetId ?? "",
+        from: edit.from,
+        to: edit.to,
+        text: edit.text,
+      }];
+    },
+    from: edit.from,
+    to: edit.to,
+    extraUtf8: edit.text,
+    inputOrigin: edit.inputOrigin ?? "typing",
+    resultingBody: edit.resultingBody,
+    undoGroupId: edit.undoGroupId,
+    createdAt: edit.createdAt,
+  };
 }
 
 export interface CandidateSelectionEdit {
@@ -1106,284 +1125,6 @@ export async function candidateTextsFromJournal(
   return texts;
 }
 
-async function persistSplitBlock(
-  workspace: EditorWorkspace,
-  edit: {
-    manuscript_block_id: string;
-    offset: number;
-    new_manuscript_block_id: string;
-    resultingBody: string;
-    resultingBlocks?: readonly { manuscript_block_id: string; text: string }[];
-    inputOrigin?: InputOrigin;
-    undoGroupId?: string;
-    createdAt?: string;
-  },
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const primitive: AuthorEditPrimitive = {
-    kind: "split_block",
-    manuscript_block_id: edit.manuscript_block_id,
-    offset: edit.offset,
-    new_manuscript_block_id: edit.new_manuscript_block_id,
-  };
-  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
-  if (edit.resultingBlocks !== undefined
-    && JSON.stringify(expectedBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    })))) {
-    throw new Error("Local Edit Journal reconstruction failed");
-  }
-  return persistAuthorEditUnit(workspace, {
-    snapshot,
-    projection,
-    authorEditUnit: {
-      normalized_primitives: [primitive],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: edit.offset,
-        to: edit.offset,
-      },
-    },
-    expectedBody: flattenChapterBody(expectedBlocks),
-    expectedBlocks,
-    extraUtf8: edit.new_manuscript_block_id,
-    resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "split_block",
-    undoGroupId: edit.undoGroupId,
-    createdAt: edit.createdAt,
-  }, cryptoImpl);
-}
-
-async function persistJoinBlocks(
-  workspace: EditorWorkspace,
-  edit: {
-    left_manuscript_block_id: string;
-    right_manuscript_block_id: string;
-    caret: number;
-    resultingBody: string;
-    resultingBlocks?: readonly { manuscript_block_id: string; text: string }[];
-    inputOrigin?: InputOrigin;
-    undoGroupId?: string;
-    createdAt?: string;
-  },
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const primitive: AuthorEditPrimitive = {
-    kind: "join_blocks",
-    left_manuscript_block_id: edit.left_manuscript_block_id,
-    right_manuscript_block_id: edit.right_manuscript_block_id,
-  };
-  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
-  if (edit.resultingBlocks !== undefined
-    && JSON.stringify(expectedBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    })))) {
-    throw new Error("Local Edit Journal reconstruction failed");
-  }
-  return persistAuthorEditUnit(workspace, {
-    snapshot,
-    projection,
-    authorEditUnit: {
-      normalized_primitives: [primitive],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: edit.caret,
-        to: edit.caret,
-      },
-    },
-    expectedBody: flattenChapterBody(expectedBlocks),
-    expectedBlocks,
-    extraUtf8: "",
-    resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "join_blocks",
-    undoGroupId: edit.undoGroupId,
-    createdAt: edit.createdAt,
-  }, cryptoImpl);
-}
-
-async function persistMoveBlock(
-  workspace: EditorWorkspace,
-  edit: {
-    manuscript_block_id: string;
-    to_index: number;
-    resultingBody: string;
-    resultingBlocks?: readonly {
-      manuscript_block_id: string;
-      text: string;
-      block_kind?: "paragraph" | "heading";
-    }[];
-    inputOrigin?: InputOrigin;
-    undoGroupId?: string;
-    createdAt?: string;
-  },
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const primitive: AuthorEditPrimitive = {
-    kind: "move_block",
-    manuscript_block_id: edit.manuscript_block_id,
-    to_index: edit.to_index,
-  };
-  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
-  if (edit.resultingBlocks !== undefined
-    && JSON.stringify(expectedBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      block_kind: block.block_kind,
-      text: block.text,
-    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      block_kind: block.block_kind ?? "paragraph",
-      text: block.text,
-    })))) {
-    throw new Error("Local Edit Journal reconstruction failed");
-  }
-  return persistAuthorEditUnit(workspace, {
-    snapshot,
-    projection,
-    authorEditUnit: {
-      normalized_primitives: [primitive],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: 0,
-        to: 0,
-      },
-    },
-    expectedBody: flattenChapterBody(expectedBlocks),
-    expectedBlocks,
-    extraUtf8: "",
-    resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "move_block",
-    undoGroupId: edit.undoGroupId,
-    createdAt: edit.createdAt,
-  }, cryptoImpl);
-}
-
-async function persistRetypeBlock(
-  workspace: EditorWorkspace,
-  edit: {
-    manuscript_block_id: string;
-    block_kind: "paragraph" | "heading";
-    resultingBody: string;
-    resultingBlocks?: readonly {
-      manuscript_block_id: string;
-      text: string;
-      block_kind?: "paragraph" | "heading";
-    }[];
-    inputOrigin?: InputOrigin;
-    undoGroupId?: string;
-    createdAt?: string;
-  },
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const primitive: AuthorEditPrimitive = {
-    kind: "retype_block",
-    manuscript_block_id: edit.manuscript_block_id,
-    block_kind: edit.block_kind,
-  };
-  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
-  if (edit.resultingBlocks !== undefined
-    && JSON.stringify(expectedBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      block_kind: block.block_kind,
-      text: block.text,
-    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      block_kind: block.block_kind ?? "paragraph",
-      text: block.text,
-    })))) {
-    throw new Error("Local Edit Journal reconstruction failed");
-  }
-  return persistAuthorEditUnit(workspace, {
-    snapshot,
-    projection,
-    authorEditUnit: {
-      normalized_primitives: [primitive],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: 0,
-        to: 0,
-      },
-    },
-    expectedBody: flattenChapterBody(expectedBlocks),
-    expectedBlocks,
-    extraUtf8: "",
-    resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "retype_block",
-    undoGroupId: edit.undoGroupId,
-    createdAt: edit.createdAt,
-  }, cryptoImpl);
-}
-
-async function persistContiguousReplacement(
-  workspace: EditorWorkspace,
-  edit: {
-    primitives: readonly ContiguousReplacementPrimitive[];
-    from: number;
-    to: number;
-    resultingBody: string;
-    resultingBlocks?: readonly { manuscript_block_id: string; text: string }[];
-    inputOrigin?: InputOrigin;
-    undoGroupId?: string;
-    createdAt?: string;
-  },
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  const primitives = edit.primitives.map((primitive): AuthorEditPrimitive => primitive);
-  if (primitives.length < 1 || primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES) {
-    throw new Error("Local Edit Journal limit failed");
-  }
-  const expectedBlocks = cloneBlocks(projection.blocks);
-  for (const primitive of primitives) {
-    applyAuthorEditPrimitive(expectedBlocks, primitive);
-  }
-  if (edit.resultingBlocks !== undefined
-    && JSON.stringify(expectedBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      text: block.text,
-    })))) {
-    throw new Error("Local Edit Journal reconstruction failed");
-  }
-  return persistAuthorEditUnit(workspace, {
-    snapshot,
-    projection,
-    authorEditUnit: {
-      normalized_primitives: primitives,
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: edit.from,
-        to: edit.to,
-      },
-    },
-    expectedBody: flattenChapterBody(expectedBlocks),
-    expectedBlocks,
-    extraUtf8: "",
-    resultingBody: edit.resultingBody,
-    inputOrigin: edit.inputOrigin ?? "selection_replacement",
-    undoGroupId: edit.undoGroupId,
-    createdAt: edit.createdAt,
-  }, cryptoImpl);
-}
-
 async function persistAuthorEditUnit(
   workspace: EditorWorkspace,
   edit: {
@@ -1411,7 +1152,7 @@ async function persistAuthorEditUnit(
   }
   const createdAt = edit.createdAt ?? new Date().toISOString();
   const inputOrigin = edit.inputOrigin;
-  const undoGroupId = edit.undoGroupId ?? createJournalUuid(cryptoImpl);
+  const undoGroupId = edit.undoGroupId ?? uuidV7(cryptoImpl);
   const { snapshot, projection } = edit;
   const baseBlocks = workspace.session.base_snapshot.materialized_revision.blocks;
   if (baseBlocks.length === 0
@@ -1436,8 +1177,8 @@ async function persistAuthorEditUnit(
     throw new Error("Local Edit Journal limit failed");
   }
   const base = workspace.session.base_snapshot;
-  const completedIntentRecordId = createJournalUuid(cryptoImpl);
-  const patchId = createJournalUuid(cryptoImpl);
+  const completedIntentRecordId = uuidV7(cryptoImpl);
+  const patchId = uuidV7(cryptoImpl);
   const authorEditUnit = edit.authorEditUnit;
   if (authorEditUnit.normalized_primitives.length < 1
     || authorEditUnit.normalized_primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES) {
@@ -1451,8 +1192,7 @@ async function persistAuthorEditUnit(
       : digestJournalValue(edit.candidate.checkpointText, cryptoImpl),
   ]);
   const coveredSequences = snapshot.covered;
-  const frozenGroup = snapshot.groups.find((group) =>
-    group.settlement?.kind === "unsettled" && !isRemovedDraftGroup(group));
+  const frozenGroup = snapshot.groups.find((group) => group.settlement?.kind === "unsettled");
   const lastRecord = snapshot.records.at(-1);
   // Input while a group is unsettled, or after records that follow it, follows the latest group (ADR 0065).
   const followsGroup = frozenGroup !== undefined || snapshot.records.some((record) =>
@@ -1559,8 +1299,6 @@ async function persistAuthorEditUnit(
     throw new Error("Local Edit Journal schema or partition is incompatible");
   }
   const retainedChains = new Set((snapshot.localRecovery ?? []).flatMap((item) => item.chains.map((chain) => chain.payload_chain_id)));
-  // A chain with a record of a removed Draft path holds text that the Server never applied (ADR 0073).
-  for (const record of snapshot.records) if (isRemovedDraftRecord(record)) retainedChains.add(record.payload_chain_ref);
   const activeChains = chains.filter((chain) => !retainedChains.has(chain.payload_chain_id));
   // Each run of records that follow a group has its own chain, so each later group collects alone (ADR 0065).
   const followerChain = followsGroup && lastRecord?.follows_submission_group !== undefined
@@ -1593,7 +1331,7 @@ async function persistAuthorEditUnit(
   const isNewChain = existingPayloadChain === undefined;
   const payloadChain: JournalPayloadChain = existingPayloadChain ?? {
       working_set_partition_id: partitionId,
-    payload_chain_id: createJournalUuid(cryptoImpl),
+    payload_chain_id: uuidV7(cryptoImpl),
       journal_partition_id: partitionId,
       checkpoint_ref: {
         chapter_object_id: base.chapter_id,
@@ -1669,83 +1407,6 @@ async function persistAuthorEditUnit(
   };
 }
 
-export async function reconfirmLegacyReplaceSelection(
-  workspace: EditorWorkspace,
-  cryptoImpl: Crypto = globalThis.crypto,
-): Promise<PendingEditProjection> {
-  if (workspace.partition.disposition !== "current_writer_open") {
-    throw new Error("Editor Session is read only");
-  }
-  const block = workspace.session.base_snapshot.materialized_revision.blocks[0];
-  if (workspace.session.base_snapshot.materialized_revision.blocks.length !== 1
-    || block?.block_kind !== "paragraph"
-    || block.text !== workspace.session.base_snapshot.materialized_revision.body
-    || !UUID.test(block.manuscript_block_id)) {
-    throw new Error("Local Edit Journal limit failed");
-  }
-  const snapshot = await prepareJournalAppend(workspace);
-  const covered = snapshot.covered;
-  if (snapshot.groups.some((group) => group.settlement?.kind === "unsettled" && !isRemovedDraftGroup(group))) {
-    throw new Error("Local Edit Journal requires prior group settlement");
-  }
-  const pendingLegacy = snapshot.records.filter((record) =>
-    recordTargetsCurrentBase(record, workspace.session.base_snapshot)
-    && !covered.has(record.local_intent_sequence)
-    && (record.author_edit_unit?.normalized_primitives ?? [])
-      .some(isLegacyReplaceSelectionPrimitive));
-  if (pendingLegacy.length === 0) {
-    return pendingProjectionFromSnapshot(workspace, snapshot);
-  }
-  const rewrittenRecords = new Map<string, JournalIntentRecord>();
-  for (const record of pendingLegacy) {
-    const authorEditUnit = {
-      ...record.author_edit_unit!,
-      normalized_primitives: record.author_edit_unit!.normalized_primitives.map((primitive) =>
-        primitive.kind === "replace_selection"
-          ? {
-              kind: "replace_block_selection" as const,
-              manuscript_block_id: block.manuscript_block_id,
-              from: primitive.from,
-              to: primitive.to,
-              text: primitive.text,
-            }
-          : primitive),
-    };
-    rewrittenRecords.set(record.completed_intent_record_id, {
-      ...record,
-      author_edit_unit: authorEditUnit,
-      payload_digest: await digestJournalValue(authorEditUnit, cryptoImpl),
-    });
-  }
-  const transaction = workspace.database.transaction(
-    ["intents", "payload_chains"],
-    "readwrite",
-    { durability: "strict" },
-  );
-  const intents = transaction.objectStore("intents");
-  const chains = transaction.objectStore("payload_chains");
-  for (const record of rewrittenRecords.values()) {
-    intents.put(record);
-  }
-  for (const chain of snapshot.payloadChains) {
-    let changed = false;
-    const orderedPatchRefs = chain.ordered_patch_refs.map((patch) => {
-      const rewritten = rewrittenRecords.get(patch.completed_intent_record_id);
-      if (!rewritten) return patch;
-      changed = true;
-      return {
-        ...patch,
-        normalized_primitives: rewritten.author_edit_unit!.normalized_primitives,
-      };
-    });
-    if (changed) {
-      chains.put({ ...chain, ordered_patch_refs: orderedPatchRefs });
-    }
-  }
-  await transactionResult(transaction);
-  return rebuildPendingProjection(workspace);
-}
-
 type EditInputFields = { inputOrigin?: InputOrigin; undoGroupId?: string; createdAt?: string };
 
 /** One author edit for the Journal. An edit without `kind` replaces a selection. */
@@ -1760,14 +1421,78 @@ export async function appendAuthorEdit(
   edit: JournalAuthorEdit,
   cryptoImpl: Crypto = globalThis.crypto,
 ): Promise<PendingEditProjection> {
-  if (!("kind" in edit)) return persistReplaceSelection(workspace, edit, cryptoImpl);
+  if (!("kind" in edit)) return persistBlockEdit(workspace, replaceSelectionEdit(edit), cryptoImpl);
+  if (edit.kind === "candidate_selection") return persistCandidateSelection(workspace, edit, cryptoImpl);
+  if (edit.kind === "replace_block_selection") {
+    return persistBlockEdit(workspace, replaceSelectionEdit(edit), cryptoImpl);
+  }
+  const input = { resultingBody: edit.resultingBody, resultingBlocks: edit.resultingBlocks,
+    undoGroupId: edit.undoGroupId, createdAt: edit.createdAt };
   switch (edit.kind) {
-    case "candidate_selection": return persistCandidateSelection(workspace, edit, cryptoImpl);
-    case "split_block": return persistSplitBlock(workspace, edit, cryptoImpl);
-    case "join_blocks": return persistJoinBlocks(workspace, edit, cryptoImpl);
-    case "move_block": return persistMoveBlock(workspace, edit, cryptoImpl);
-    case "retype_block": return persistRetypeBlock(workspace, edit, cryptoImpl);
-    case "contiguous_replacement": return persistContiguousReplacement(workspace, edit, cryptoImpl);
-    case "replace_block_selection": return persistReplaceSelection(workspace, edit, cryptoImpl);
+    case "split_block": return persistBlockEdit(workspace, {
+      ...input,
+      primitives: () => [{
+        kind: "split_block",
+        manuscript_block_id: edit.manuscript_block_id,
+        offset: edit.offset,
+        new_manuscript_block_id: edit.new_manuscript_block_id,
+      }],
+      from: edit.offset,
+      to: edit.offset,
+      extraUtf8: edit.new_manuscript_block_id,
+      inputOrigin: edit.inputOrigin ?? "split_block",
+    }, cryptoImpl);
+    case "join_blocks": return persistBlockEdit(workspace, {
+      ...input,
+      primitives: () => [{
+        kind: "join_blocks",
+        left_manuscript_block_id: edit.left_manuscript_block_id,
+        right_manuscript_block_id: edit.right_manuscript_block_id,
+      }],
+      from: edit.caret,
+      to: edit.caret,
+      extraUtf8: "",
+      inputOrigin: edit.inputOrigin ?? "join_blocks",
+    }, cryptoImpl);
+    case "move_block": return persistBlockEdit(workspace, {
+      ...input,
+      primitives: () => [{
+        kind: "move_block",
+        manuscript_block_id: edit.manuscript_block_id,
+        to_index: edit.to_index,
+      }],
+      from: 0,
+      to: 0,
+      extraUtf8: "",
+      inputOrigin: edit.inputOrigin ?? "move_block",
+      compareBlockKind: true,
+    }, cryptoImpl);
+    case "retype_block": return persistBlockEdit(workspace, {
+      ...input,
+      primitives: () => [{
+        kind: "retype_block",
+        manuscript_block_id: edit.manuscript_block_id,
+        block_kind: edit.block_kind,
+      }],
+      from: 0,
+      to: 0,
+      extraUtf8: "",
+      inputOrigin: edit.inputOrigin ?? "retype_block",
+      compareBlockKind: true,
+    }, cryptoImpl);
+    case "contiguous_replacement": return persistBlockEdit(workspace, {
+      ...input,
+      primitives: () => {
+        const primitives = edit.primitives.map((primitive): AuthorEditPrimitive => primitive);
+        if (primitives.length < 1 || primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES) {
+          throw new Error("Local Edit Journal limit failed");
+        }
+        return primitives;
+      },
+      from: edit.from,
+      to: edit.to,
+      extraUtf8: "",
+      inputOrigin: edit.inputOrigin ?? "selection_replacement",
+    }, cryptoImpl);
   }
 }

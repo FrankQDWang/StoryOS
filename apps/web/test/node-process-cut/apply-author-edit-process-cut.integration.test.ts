@@ -21,6 +21,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
+import { SECURITY_POLICY_REVISION } from "../../src/client-identity.ts";
 
 const PROJECT = "018f0000-0000-7001-8000-000000000002";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -84,7 +85,7 @@ function authorEditRequest(session: GetEditorSessionResponse): ApplyAuthorEditRe
   return {
     command_schema: "storyos.command.apply-author-edit.request.v1",
     client_contract_revision: "storyos.web-client.release-1.v3",
-    security_policy_revision: "storyos.web-security-policy.release-1.v1",
+    security_policy_revision: SECURITY_POLICY_REVISION,
     correlation_id: "018f0000-0000-7001-8000-000000002100",
     editor_session_id: session.editor_session.editor_session_id,
     writer_generation: session.writer.writer_generation,

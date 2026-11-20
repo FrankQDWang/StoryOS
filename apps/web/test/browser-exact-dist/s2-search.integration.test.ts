@@ -1,95 +1,30 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation, selectTreeChapter } from "../support/inline-chapter-creation.ts";
+import { selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
-import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { manuscriptIsEditable, MANUSCRIPT_EDITOR_SELECTOR } from "../support/manuscript-surface.ts";
 import {
-  focusManuscriptEnd,
-  manuscriptBody,
-  manuscriptEditor,
-  manuscriptIsEditable,
-  MANUSCRIPT_EDITOR_SELECTOR,
-} from "../support/manuscript-surface.ts";
+  appRoot,
+  chapterButton,
+  closeApplicationFrame,
+  openApplicationFrame,
+  openFirstChapterForm,
+  submitChapterForm,
+  submitProjectForm,
+  submitVolumeForm,
+  typeIntoCurrent,
+  waitLastChapter,
+} from "../support/exact-dist-frame.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const TOKEN_A = "AlphaSearch";
 const TOKEN_B = "BetaSearch";
 
-let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist manuscript-search page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
-
 afterEach(async () => {
-  if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
-
-function applicationWindow(frame: HTMLIFrameElement): Window & typeof globalThis {
-  const result = frame.contentWindow;
-  if (result === null) throw new Error("the production page realm is unavailable");
-  return result as Window & typeof globalThis;
-}
-
-function appRoot(frame: HTMLIFrameElement): Element {
-  const root = frame.contentDocument?.querySelector("#app");
-  if (root === null || root === undefined) {
-    throw new Error("the production page root is missing");
-  }
-  return root;
-}
-
-function chapterButton(root: Element, title: string): HTMLButtonElement | undefined {
-  return [...root.querySelectorAll<HTMLButtonElement>(
-    'nav[aria-label="稿件目录"] button[data-chapter-id]',
-  )].find((button) => button.textContent === title);
-}
-
-async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<void> {
-  const root = appRoot(frame);
-  const editor = manuscriptEditor(root, applicationWindow(frame));
-  const previousRevision = root.querySelector("[data-save-state]")
-    ?.getAttribute("data-authoritative-revision-id");
-  if (previousRevision === null || previousRevision === undefined) {
-    throw new Error("the authoritative revision is missing");
-  }
-  editor.focus();
-  focusManuscriptEnd(editor, applicationWindow(frame));
-  await applyTrustedInput({ operation: "insert_text", text });
-  // A new authoritative revision proves that the input reached the saved manuscript.
-  await expect.poll(() => {
-    const save = root.querySelector("[data-save-state]");
-    return {
-      body: manuscriptBody(editor),
-      saveState: save?.getAttribute("data-save-state"),
-      unsettledIntentCount: save?.getAttribute("data-unsettled-intent-count"),
-      revisionChanged: save?.getAttribute("data-authoritative-revision-id") !== previousRevision,
-    };
-  }, { timeout: 10_000 }).toEqual({
-    body: text,
-    saveState: "saved",
-    unsettledIntentCount: "0",
-    revisionChanged: true,
-  });
-}
 
 async function search(
   frame: HTMLIFrameElement,
@@ -132,61 +67,13 @@ function matchIdentities(outcome: Element): string[] {
 }
 
 it("searches the current Chapter and manuscript with bounded Snapshot identity", { timeout: 90_000 }, async () => {
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = "StoryOS exact-dist manuscript search";
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName
-  ).toBe("INPUT");
-  const title = frame.contentDocument?.querySelector<HTMLInputElement>('#app input[name="title"]');
-  const form = title?.form;
-  if (title === null || title === undefined || form === null || form === undefined) {
-    throw new Error("the protected-ready form is missing");
-  }
-  title.value = "Search Novel";
-  form.requestSubmit();
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
-  ).toBe("empty-project-ready");
-  await beginInlineVolumeCreation(frame.contentDocument);
-  const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
-    '#app form[data-create-volume] input[name="volume-title"]',
-  );
-  const volumeForm = volumeTitle?.form;
-  if (volumeTitle === null || volumeTitle === undefined
-    || volumeForm === null || volumeForm === undefined) {
-    throw new Error("the Create Volume form is missing");
-  }
-  volumeTitle.value = "Volume A";
-  volumeForm.requestSubmit();
-  await beginInlineChapterCreation(frame.contentDocument);
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
-  ).toBe(true);
+  const frame = await openApplicationFrame("StoryOS exact-dist manuscript search");
+  await submitProjectForm(frame, "Search Novel");
+  await submitVolumeForm(frame, "Volume A");
+  await openFirstChapterForm(frame);
   for (const name of ["Chapter A", "Chapter B"] as const) {
-    await beginInlineChapterCreation(frame.contentDocument);
-    const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
-      '#app form[data-create-chapter] input[name="chapter-title"]',
-    );
-    const chapterForm = chapterTitle?.form;
-    if (chapterTitle === null || chapterTitle === undefined
-      || chapterForm === null || chapterForm === undefined) {
-      throw new Error("the Create Chapter form is missing");
-    }
-    chapterTitle.value = name;
-    chapterForm.requestSubmit();
-    await expect.poll(() => {
-      const root = frame.contentDocument?.querySelector("#app");
-      const titles = [...(root?.querySelectorAll(
-        'nav[aria-label="稿件目录"] button[data-chapter-id]',
-      ) ?? [])].map((button) => button.textContent);
-      return root?.getAttribute("data-boot-state") === "project-ready"
-        && titles[titles.length - 1] === name;
-    }).toBe(true);
+    await submitChapterForm(frame, name);
+    await waitLastChapter(frame, name);
   }
 
   const root = appRoot(frame);

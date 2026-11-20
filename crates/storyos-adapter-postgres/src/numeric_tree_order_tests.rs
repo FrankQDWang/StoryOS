@@ -2,13 +2,13 @@
 //! A text order puts rank 10 before rank 2.
 
 use crate::PostgresProjectReader;
-use crate::command_sequence::tests::{
-    applied, seed_project, stores, titled_chapter, titled_volume,
-};
 use crate::pinned_export_source::{
     PinnedExportSourceCompleteness, PinnedExportSourceLoad, load_pinned_export_source,
 };
-use crate::update_structure_tests::{settle_update_chapter, settle_update_volume};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::{titled_chapter, titled_volume};
+use crate::shared_tests::command_sequence_support::{applied, seed_project, stores};
+use crate::shared_tests::update_structure::{settle_update_chapter, settle_update_volume};
 use storyos_application::{
     CanonicalManuscriptTree, GetManuscriptTree, ProjectScope, get_manuscript_tree,
     render_readable_manuscript_from_pinned_source,
@@ -152,7 +152,7 @@ async fn readable_export_headings(
     scope: &ProjectScope,
 ) -> Vec<String> {
     reset_challenge_rate(admin, scope).await;
-    let export_id = crate::export_work::tests::admit_readable_export(store, scope).await;
+    let export_id = crate::shared_tests::export_work::admit_readable_export(store, scope).await;
     let snapshot_id: String = admin
         .query_one(
             "SELECT source_snapshot_id::text FROM storyos.pinned_export_sources
@@ -173,7 +173,7 @@ async fn readable_export_headings(
     .unwrap() else {
         panic!("the readable export pins a complete source");
     };
-    crate::export_work::tests::remove_export_work_rows(admin).await;
+    crate::shared_tests::export_work::remove_export_work_rows(admin).await;
     render_readable_manuscript_from_pinned_source(&source)
         .lines()
         .filter(|line| line.starts_with('#'))
@@ -184,9 +184,7 @@ async fn readable_export_headings(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn tree_and_readable_export_list_ten_or_more_siblings_in_numeric_rank_order() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, first_volume_id) = seed_long_tree(&store, &admin, /*first_suffix*/ 0xc000).await;
 
@@ -289,9 +287,7 @@ async fn assert_tree_and_storage_order(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn rename_and_move_with_ten_or_more_siblings_keep_the_physical_order() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, first_volume_id) = seed_long_tree(&store, &admin, /*first_suffix*/ 0xc100).await;
     let mut volume_titles = numbered("Volume", VOLUME_COUNT);

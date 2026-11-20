@@ -4,24 +4,27 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AcceptProposalInput, AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore,
-    ChapterId, DeleteChapterInput, ProjectScope, RejectProposalOperationsInput, RejectionNote,
-    WithdrawProposalInput, WithdrawalNote,
+    AcceptProposalInput, AgentRunDecisionInspect, ChapterId, DeleteChapterInput,
+    RejectProposalOperationsInput, RejectionNote, WithdrawProposalInput, WithdrawalNote,
 };
 use storyos_core::{DeploymentDestination, SelectionReference};
 use tokio_postgres::Client;
 
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_referenced_run, stores};
-use crate::agent_run_propose_edit::revise_tests::{CandidateChange, Fixture};
-use crate::agent_run_propose_edit::tests::{REVISE, opened, propose_edit_calls};
-use crate::agent_run_steering::tests::{
+use crate::shared_tests::agent_run_current_candidate::settled;
+use crate::shared_tests::agent_run_propose_edit::{REVISE, opened, propose_edit_calls};
+use crate::shared_tests::agent_run_propose_edit_revise::{CandidateChange, Fixture};
+use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, settle, steering, step_references,
 };
-use crate::command_sequence::tests::{
-    ACCEPT_PROPOSAL, DELETE_CHAPTER, REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL, delete_chapter,
-    issued, named_call,
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_acceptance::ACCEPT_PROPOSAL;
+use crate::shared_tests::command_sequence_proposal_decision::{
+    REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL,
 };
+use crate::shared_tests::command_sequence_structure::{DELETE_CHAPTER, delete_chapter, named_call};
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 
 const EDITED: &str = "Still, ";
 const FINAL_TEXT: &str =
@@ -56,9 +59,9 @@ fn moved(reference: &SelectionReference, revision_id: &str, text: &str) -> Value
 /// `revision_id` in its Context Assembly record, and the selected text of each reference that
 /// its request sent.
 async fn sent_revision(admin: &Client, run_id: &str, position: &str, revision_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(
                       (SELECT jsonb_path_query_array(manifest.payload,
                                 '$.selected[*] ? (@.source_version == $revision).content',
                                 jsonb_build_object('revision', $3::text))
@@ -71,37 +74,26 @@ async fn sent_revision(admin: &Client, run_id: &str, position: &str, revision_id
                          FROM storyos.model_attempts AS attempt
                         WHERE attempt.run_id = $1::text::uuid AND attempt.attempt_role = 'decision'
                           AND attempt.decision_position = $2::text::numeric))::text",
-            &[&run_id, &position, &revision_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&run_id, &position, &revision_id],
+    )
+    .await
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_next_run_step_reads_the_candidate_that_the_author_edited_and_a_later_call_revises_it()
 {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0x6f0, tool_loop.clone()).await;
-    let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+    let scope = &fixture.scope;
     let reference = fixture.candidates(&admin).await.remove(0);
     let (_, before) = current(&admin, &reference).await;
     let message = format!("{REVISE} SCRIPT:propose_again");
-    let run_id = admit_referenced_run(
-        &store,
-        scope,
-        chapter_id,
-        "6f2",
-        tool_loop,
-        &message,
-        vec![reference.clone()],
-    )
-    .await;
+    let run_id = fixture
+        .admit(&store, 2, &message, vec![reference.clone()])
+        .await;
     let edit = fixture
         .candidate_edit(
             &store,
@@ -149,7 +141,8 @@ async fn the_next_run_step_reads_the_candidate_that_the_author_edited_and_a_late
             propose_edit_calls(&admin, &run_id).await,
             step_references(&admin, &run_id).await,
             sent_revision(&admin, &run_id, "1", &edited_revision).await,
-            crate::agent_run_steering::tests::run_steps(&admin, &run_id).await["status"].clone(),
+            crate::shared_tests::agent_run_steering::run_steps(&admin, &run_id).await["status"]
+                .clone(),
         ),
         (
             vec![stale, opened(1)],
@@ -165,41 +158,18 @@ async fn the_next_run_step_reads_the_candidate_that_the_author_edited_and_a_late
     );
 }
 
-/// The status and the public decision of the Run.
-pub(crate) async fn settled(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    run_id: &str,
-) -> (String, AgentRunDecisionInspect) {
-    let record = store
-        .read_agent_run(scope, run_id, &AgentRunReadSelection::Current)
-        .await
-        .unwrap()
-        .unwrap();
-    (format!("{:?}", record.status), record.decision)
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_with_no_accepted_call_after_the_author_edit_completes_with_its_final_text() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0x6f8, tool_loop.clone()).await;
-    let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+    let scope = &fixture.scope;
     let reference = fixture.candidates(&admin).await.remove(0);
-    let run_id = admit_referenced_run(
-        &store,
-        scope,
-        chapter_id,
-        "6fa",
-        tool_loop,
-        REVISE,
-        vec![reference.clone()],
-    )
-    .await;
+    let run_id = fixture
+        .admit(&store, 2, REVISE, vec![reference.clone()])
+        .await;
     let edit = fixture
         .candidate_edit(
             &store,
@@ -251,31 +221,22 @@ async fn a_run_with_no_accepted_call_after_the_author_edit_completes_with_its_fi
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_candidate_that_the_author_resolved_keeps_the_refusal_of_the_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let mut observed = Vec::new();
-    for (lead, run_prefix, suffix, decision) in [
-        (0x3f0, "3f2", 0x3fe0_u16, "accept"),
-        (0x3f8, "3fa", 0x3fe2, "reject"),
-        (0x6d0, "6d2", 0x6de0, "withdraw"),
+    for (lead, suffix, decision) in [
+        (0x3f0, 0x3fe0_u16, "accept"),
+        (0x3f8, 0x3fe2, "reject"),
+        (0x6d0, 0x6de0, "withdraw"),
     ] {
         let fixture = Fixture::new(&store, &admin, lead, tool_loop.clone()).await;
-        let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+        let scope = &fixture.scope;
         let reference = fixture.candidates(&admin).await.remove(0);
         let target = reference.candidate_target().unwrap();
-        let run_id = admit_referenced_run(
-            &store,
-            scope,
-            chapter_id,
-            run_prefix,
-            tool_loop.clone(),
-            REVISE,
-            vec![reference.clone()],
-        )
-        .await;
+        let run_id = fixture
+            .admit(&store, 2, REVISE, vec![reference.clone()])
+            .await;
         let (editor_session_id, head) = fixture.writer();
         let receipt: String = admin
             .query_one(
@@ -366,24 +327,15 @@ async fn a_candidate_that_the_author_resolved_keeps_the_refusal_of_the_run() {
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_steering_reference_to_a_candidate_that_the_author_edited_moves_to_its_current_revision()
 {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0x8e0, tool_loop.clone()).await;
-    let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+    let scope = &fixture.scope;
     let reference = fixture.candidates(&admin).await.remove(0);
-    let run_id = admit_referenced_run(
-        &store,
-        scope,
-        chapter_id,
-        "8e2",
-        tool_loop,
-        "Help with this passage.",
-        Vec::new(),
-    )
-    .await;
+    let run_id = fixture
+        .admit(&store, 2, "Help with this passage.", Vec::new())
+        .await;
     let input = steering(
         &store,
         scope,
@@ -452,24 +404,15 @@ async fn a_steering_reference_to_a_candidate_that_the_author_edited_moves_to_its
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_whose_candidate_the_author_emptied_completes_with_its_final_text() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0x8e8, tool_loop.clone()).await;
-    let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+    let scope = &fixture.scope;
     let reference = fixture.candidates(&admin).await.remove(0);
-    let run_id = admit_referenced_run(
-        &store,
-        scope,
-        chapter_id,
-        "8ea",
-        tool_loop,
-        REVISE,
-        vec![reference.clone()],
-    )
-    .await;
+    let run_id = fixture
+        .admit(&store, 2, REVISE, vec![reference.clone()])
+        .await;
     let edit = fixture
         .candidate_edit(&store, &admin, &reference, 2, CandidateChange::RemoveAll)
         .await;
@@ -512,26 +455,15 @@ async fn a_run_whose_candidate_the_author_emptied_completes_with_its_final_text(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_removed_chapter_or_a_chapter_over_the_item_limit_keeps_the_refusal_of_the_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let mut observed = Vec::new();
-    for (lead, run_prefix, change) in [(0x3d0, "3d2", "removed"), (0x3d8, "3da", "over_limit")] {
+    for (lead, change) in [(0x3d0, "removed"), (0x3d8, "over_limit")] {
         let fixture = Fixture::new(&store, &admin, lead, tool_loop.clone()).await;
         let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
         let reference = fixture.candidates(&admin).await.remove(0);
-        let run_id = admit_referenced_run(
-            &store,
-            scope,
-            chapter_id,
-            run_prefix,
-            tool_loop.clone(),
-            REVISE,
-            vec![reference],
-        )
-        .await;
+        let run_id = fixture.admit(&store, 2, REVISE, vec![reference]).await;
         // The Chapter changes after the admission of the Run, before its first request.
         if change == "removed" {
             let expected_tree_revision: i64 = admin
@@ -573,9 +505,7 @@ async fn a_removed_chapter_or_a_chapter_over_the_item_limit_keeps_the_refusal_of
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_steering_reference_keeps_its_range_when_the_author_edits_another_candidate_of_its_proposal()
  {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let grow = format!("{REVISE} SCRIPT:grow_proposal");
@@ -583,12 +513,9 @@ async fn a_steering_reference_keeps_its_range_when_the_author_edits_another_cand
     let mut expected = Vec::new();
     // The steering input names one candidate of a grown Proposal, and the author edits another:
     // first a joined candidate and the candidate of the Proposal block, then the reverse.
-    for (lead, run_prefix, suffix, referenced, edited) in [
-        (0xbf0, "bf3", 0xbfe0_u16, 0, 2),
-        (0xbf8, "bfb", 0xbfe8, 2, 0),
-    ] {
+    for (lead, suffix, referenced, edited) in [(0xbf0, 0xbfe0_u16, 0, 2), (0xbf8, 0xbfe8, 2, 0)] {
         let fixture = Fixture::new(&store, &admin, lead, tool_loop.clone()).await;
-        let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+        let scope = &fixture.scope;
         let mut references = fixture.candidates(&admin).await;
         references.insert(0, fixture.chapter_text(1, 2));
         fixture.run(&store, &admin, 2, &grow, references).await;
@@ -596,16 +523,9 @@ async fn a_steering_reference_keeps_its_range_when_the_author_edits_another_cand
         let mut part = json!(candidates[referenced]);
         part["end_offset"] = json!(3);
         let part: SelectionReference = serde_json::from_value(part).unwrap();
-        let run_id = admit_referenced_run(
-            &store,
-            scope,
-            chapter_id,
-            run_prefix,
-            tool_loop.clone(),
-            "Help with this passage.",
-            Vec::new(),
-        )
-        .await;
+        let run_id = fixture
+            .admit(&store, 3, "Help with this passage.", Vec::new())
+            .await;
         let input = steering(
             &store,
             scope,
@@ -653,45 +573,34 @@ async fn a_steering_reference_keeps_its_range_when_the_author_edits_another_cand
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_steering_reference_to_an_unknown_candidate_keeps_the_refusal_of_the_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let mut observed = Vec::new();
     let mut expected = Vec::new();
     // First a Proposal that does not exist, then an Operation that its known Proposal does not have.
-    for (lead, run_prefix, suffix, field, unknown) in [
+    for (lead, suffix, field, unknown) in [
         (
             0xdf0,
-            "df2",
             0xdfe0_u16,
             "proposal_id",
             "018f0000-0000-7001-8000-000000000df1",
         ),
         (
             0xdf8,
-            "dfa",
             0xdfe8,
             "operation_id",
             "018f0000-0000-7001-8000-000000000df9",
         ),
     ] {
         let fixture = Fixture::new(&store, &admin, lead, tool_loop.clone()).await;
-        let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+        let scope = &fixture.scope;
         let mut reference = json!(fixture.candidates(&admin).await.remove(0));
         reference[field] = json!(unknown);
         let reference: SelectionReference = serde_json::from_value(reference).unwrap();
-        let run_id = admit_referenced_run(
-            &store,
-            scope,
-            chapter_id,
-            run_prefix,
-            tool_loop.clone(),
-            "Help with this passage.",
-            Vec::new(),
-        )
-        .await;
+        let run_id = fixture
+            .admit(&store, 2, "Help with this passage.", Vec::new())
+            .await;
         let input = steering(
             &store,
             scope,

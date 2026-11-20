@@ -414,7 +414,6 @@ A Proposal Operation is a stable author decision unit. It is not a visual diff h
 - when target and semantic identity are unchanged, the operation retains its ID;
 - changing the operation's target or meaning closes the old operation and creates a new ID;
 - applied and rejected incarnations are permanently frozen against the exact revision that resolved them;
-- reopening a rejected operation creates a new Proposal Revision with the same operation ID only when target and semantic identity are unchanged, and resets validation to `pending`;
 - editing remaining pending operations after partial resolution creates a new Proposal Revision and requires validation again.
 
 One Proposal has exactly one active writer. Agent generation owns the write while `generating`; author input atomically pauses that writer, preserves the partial revision, transitions to `ready_partial`, and gives authorship priority. Concurrent writes fail through expected-revision checking.
@@ -518,13 +517,13 @@ StoryOS Core dispatches to a handler selected by closed `ProposalKind`. Extensio
 
 For a domain Proposal, the selected operations are atomic: all succeed or none apply. Bundle Entries are Bundle-level operations, so the same `selected_operation_ids` field selects them; their child-operation selections are pinned inside the exact Bundle Revision. Bundle entries then obey the declared `atomic` or `ordered_independent` policy, and each child Acceptance remains individually atomic. The handler revalidates the exact revisions, complete eligibility predicate, targets, permission, and preconditions, produces the required Authoritative Revisions and Commit records, records lifecycle events, and returns an immutable Acceptance Receipt. Reusing an idempotency key returns the existing result without applying effects again.
 
-### 8.3 Reject, withdraw, supersede, and reopen
+### 8.3 Reject, withdraw, and supersede
 
 - `RejectProposalOperations` is an author decision over selected pending operations and preserves a typed reason.
 - `WithdrawProposal` removes an active Proposal from review without representing an author rejection.
 - `SupersedeProposal` links the replacing and replaced Proposals and prevents Acceptance of the old Proposal.
-- rejected historical incarnations never change; reopen creates a new Proposal Revision, preserves the operation ID only when target and semantic identity are unchanged, resets validation to pending, and then requires Core validation.
-- applied operations cannot use reopen; they require Undo Acceptance or a new Reversal Proposal.
+- rejected historical incarnations never change, and no command reopens them ([ADR 0098](../adr/0098-remove-the-three-proposal-recovery-commands-that-no-client-sends.md));
+- applied operations require Undo Acceptance or a new Reversal Proposal.
 
 The state machine's closed per-command payload and applied-result matrices
 define the exact source/current/replacing Proposal Revisions, selections,

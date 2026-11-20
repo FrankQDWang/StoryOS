@@ -186,23 +186,39 @@ pub fn admit_chapter_read(
              the blocks after it. Read them with first_block {next}.]"
         )
     };
-    let costs: Vec<u64> = (start..end).map(|index| text_cost(&block(index))).collect();
-    let wanted = end - start;
+    let blocks: Vec<String> = (start..end).map(block).collect();
+    Ok(bounded_result(
+        &blocks,
+        header,
+        |kept| continues(start + kept + 1),
+        call_id,
+    ))
+}
+
+/// The result of the native call `call_id` with the first parts of `parts` that fit in the item
+/// limit (`kept_prefix`). The text is `head` of the kept count, the kept parts, and, when the
+/// result does not keep each part, `tail` of the kept count.
+pub(crate) fn bounded_result(
+    parts: &[String],
+    head: impl Fn(usize) -> String,
+    tail: impl Fn(usize) -> String,
+    call_id: &str,
+) -> ToolResultText {
+    let count = parts.len();
+    let costs: Vec<u64> = parts.iter().map(|part| text_cost(part)).collect();
     let kept = kept_prefix(
         &costs,
-        |kept| match kept < wanted {
-            true => text_cost(&header(kept)) + text_cost(&continues(start + kept + 1)),
-            false => text_cost(&header(kept)),
+        |kept| match kept < count {
+            true => text_cost(&head(kept)) + text_cost(&tail(kept)),
+            false => text_cost(&head(kept)),
         },
         call_id,
     );
-    let blocks: String = (start..start + kept).map(block).collect();
-    let tail = match kept < wanted {
-        true => continues(start + kept + 1),
+    let tail = match kept < count {
+        true => tail(kept),
         false => String::new(),
     };
-    let text = format!("{}{blocks}{tail}", header(kept));
-    Ok(crate::host_tool_result(&text))
+    crate::host_tool_result(&format!("{}{}{tail}", head(kept), parts[..kept].concat()))
 }
 
 /// The counted tokens of `text` in a `tool_result` item, after its escape. The token count is

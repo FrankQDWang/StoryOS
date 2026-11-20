@@ -4,9 +4,12 @@
 use storyos_application::{PassageIndexWorkStore, ProjectScope};
 use tokio_postgres::Client;
 
-use super::{FAKE_ONLY, claim, configured, park_other_work, steps, wake};
-use crate::memory_entries::tests::write_versions;
-use crate::passage_vectors::tests::{chapter, digests, rows as digest_rows, texts};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::memory_entries::write_versions;
+use crate::shared_tests::passage_index_work::{
+    FAKE_ONLY, claim, configured, park_other_work, steps, wake,
+};
+use crate::shared_tests::passage_vectors::{chapter, digests, rows as digest_rows, texts};
 
 /// A count and a digest of the ordered complete rows of each manuscript and Memory table of the
 /// Project of `scope`: each Chapter, each Revision, and each Memory Entry version.
@@ -42,9 +45,7 @@ async fn manuscript_and_memory(admin: &Client, scope: &ProjectScope) -> Vec<Stri
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_work_makes_each_lost_vector_row_again_and_changes_no_chapter_or_entry() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = configured().await;
     let chapter = chapter(&store, &admin, ["a25", "a26"], "a2f", &texts()).await;
     let scope = chapter.scope.clone();

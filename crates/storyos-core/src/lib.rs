@@ -89,9 +89,6 @@ mod project_export;
 mod readable_export;
 mod readable_export_command;
 mod reject_proposal_operations;
-mod reopen_rejected_operations;
-mod reopen_withdrawn_proposal;
-mod replan_proposal;
 mod revision_comparison;
 mod set_current_chapter;
 mod skill_instruction;
@@ -153,7 +150,7 @@ pub use compact_active_context::{
     SummaryObservation, active_context_input_digest, compaction_assembly_record, compaction_due,
     compaction_requested, compaction_threshold, conversation_too_long, decide_compaction_install,
     decision_request_kind, later_request_record, later_request_too_long, next_compaction_step,
-    requests_active_compaction, stage_compaction, summary_fits_item, summary_text,
+    stage_compaction, summary_fits_item, summary_text,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput, PriorInput,
@@ -212,10 +209,7 @@ pub use finish_rule::{
     UNEXECUTED_CALL_OUTPUT, apply_finish_rule, step_tool_choice,
 };
 pub use function_calling::{
-    AGENT_PLAN_FUNCTION_CALLING_CAPABILITY_PROFILE,
-    AGENT_PLAN_FUNCTION_CALLING_PENDING_CAPABILITY_PROFILE,
-    AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_FUNCTION_CALLING_REGISTRATION,
-    ToolProbe, tool_probe,
+    PROBE_FIXTURE_CAPABILITY_PROFILE, PROBE_FIXTURE_REGISTRATION, ToolProbe, tool_probe,
 };
 pub use grant_scope::{GrantFacts, GrantScope, admit_disclosure};
 pub use host_fake_profile::{
@@ -223,10 +217,8 @@ pub use host_fake_profile::{
     SECOND_PROSE_CHANGE_TEXT, requested_execution_capability,
 };
 pub use host_tool::{
-    FINISH_DOES_NOT_COUNT_RESULT, FIRST_HOST_TOOL_REGISTRATION, HOST_TOOL_REGISTRATION,
-    HOST_TOOL_REGISTRATIONS, HostToolRegistration, READ_RESULT_HOST_TOOL_REGISTRATION,
-    SKILL_HOST_TOOL_REGISTRATION, execute_host_tool, host_tool, host_tool_result,
-    host_tool_result_class,
+    FINISH_DOES_NOT_COUNT_RESULT, HOST_TOOL_REGISTRATION, HostToolRegistration, execute_host_tool,
+    host_tool, host_tool_result, host_tool_result_class,
 };
 pub use hybrid_search_manuscript::{
     HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC, HybridSearchRefusal, NO_SEARCH_BY_MEANING,
@@ -240,9 +232,9 @@ pub use load_skill::{
     skill_load_result,
 };
 pub use manuscript_payload::{
-    ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
-    COORDINATE_VERSION, MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind,
-    ManuscriptPayload, VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
+    ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, COORDINATE_VERSION,
+    MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
+    VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
     upgrade_legacy_manuscript,
 };
 pub use manuscript_use::{ManuscriptUse, StoredManuscriptCall, manuscript_uses};
@@ -264,13 +256,12 @@ pub use memory_delete_marks::{
 };
 pub use memory_entry::{
     MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference,
-    MemorySourceReferenceRead, memory_revision_pin, read_memory_source_references,
+    memory_revision_pin,
 };
 pub use memory_index::{
     MEMORY_INDEX_MAX_ENTRIES, MEMORY_INDEX_TOKEN_LIMIT, MemoryIndexEntry, assemble_memory_index,
     memory_index_text,
 };
-pub use memory_operation_decision::decide_memory_operations;
 pub use memory_prune::{MEMORY_UNUSED_AFTER_DAYS, memory_entry_unused};
 pub use memory_work_schedule::{
     CONSOLIDATION_INTERVAL, CONVERSATION_QUIET_TIME, ConsolidationFacts, ConsolidationSkip,
@@ -283,25 +274,9 @@ pub use model_output::{
     validate_agent_decision,
 };
 pub use model_registration::{
-    AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_COMPACTION_CAPABILITY_PROFILE,
-    AGENT_PLAN_COMPACTION_MAPPING_REVISION, AGENT_PLAN_COMPACTION_PENDING_CAPABILITY_PROFILE,
-    AGENT_PLAN_COMPACTION_REGISTRATION, AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE,
-    AGENT_PLAN_CONTINUATION_MAPPING_REVISION, AGENT_PLAN_CONTINUATION_PENDING_CAPABILITY_PROFILE,
-    AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION, AGENT_PLAN_CONTINUATION_REGISTRATION,
-    AGENT_PLAN_CREATE_CAPABILITY_PROFILE, AGENT_PLAN_CREATE_REGISTRATION,
-    AGENT_PLAN_MAPPING_REVISION, AGENT_PLAN_PENDING_CAPABILITY_PROFILE,
-    AGENT_PLAN_PENDING_REGISTRATION, AGENT_PLAN_PINNED_VERSION_PENDING_CAPABILITY_PROFILE,
-    AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION, AGENT_PLAN_PINNED_VERSION_REGISTRATION,
-    AGENT_PLAN_RECOVERY_CAPABILITY_PROFILE, AGENT_PLAN_RECOVERY_PENDING_CAPABILITY_PROFILE,
-    AGENT_PLAN_RECOVERY_PENDING_REGISTRATION, AGENT_PLAN_RECOVERY_REGISTRATION,
-    AGENT_PLAN_STREAMING_MAPPING_REVISION, AGENT_PLAN_STREAMING_PENDING_CAPABILITY_PROFILE,
-    AGENT_PLAN_STREAMING_PENDING_REGISTRATION, AGENT_PLAN_STREAMING_REGISTRATION,
-    AGENT_PLAN_THRESHOLD_CAPABILITY_PROFILE, AGENT_PLAN_THRESHOLD_REGISTRATION,
-    AGENT_PLAN_WINDOW_PENDING_CAPABILITY_PROFILE, AGENT_PLAN_WINDOW_PENDING_REGISTRATION,
-    COMPACTION_REQUIREMENT, CONTINUATION_REQUIREMENT, CREATE_REQUIREMENT, CapabilityCombination,
-    CapabilityEntries, CapabilityEvidence, ContextWindow, HOST_FAKE_CAPABILITY_PROFILE,
-    HOST_FAKE_REGISTRATION, ModelAdapter, ModelCapability, ModelCapabilityProfile,
-    ModelRegistration, RECOVERY_REQUIREMENT, STREAMING_REQUIREMENT, model_registration,
+    AGENT_PLAN_CAPABILITY_PROFILE, COMPACTION_REQUIREMENT, CapabilityCombination,
+    CapabilityEntries, CapabilityEvidence, ContextWindow, ModelAdapter, ModelCapability,
+    ModelCapabilityProfile, ModelRegistration, RECOVERY_REQUIREMENT, model_registration,
 };
 pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,
@@ -323,7 +298,6 @@ pub use project_archive::{
     PROJECT_EXPORT_ARCHIVE_PROFILE, PROJECT_EXPORT_TABLES, ProjectArchiveBuildRefusal,
     ProjectArchiveRootFacts, build_project_archive, canonical_json, classify_export_record,
     hex_sha256, package_verified_project_archive_zip, require_delivered_families,
-    verify_entry_digest,
 };
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
@@ -365,18 +339,6 @@ pub use reject_proposal_operations::{
     RejectProposalOperations, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
     RejectProposalOperationsResult, reject_proposal_operations,
 };
-pub use reopen_rejected_operations::{
-    ReopenRejectedOperations, ReopenRejectedOperationsConflict, ReopenRejectedOperationsRefusal,
-    ReopenRejectedOperationsResult, reopen_rejected_operations,
-};
-pub use reopen_withdrawn_proposal::{
-    ReopenWithdrawnProposal, ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
-    ReopenWithdrawnProposalRefusal, ReopenWithdrawnProposalResult, reopen_withdrawn_proposal,
-};
-pub use replan_proposal::{
-    ReplanProposal, ReplanProposalConflict, ReplanProposalRefusal, ReplanProposalResult,
-    replan_proposal,
-};
 pub use research_destination::{
     EXA_ACCOUNT_BOUNDARY, EXA_CREDENTIAL_REFERENCE, EXA_MCP_SERVER_URL, EXA_TOOL_REGISTRATION,
     RESEARCH_TOOL_OFFER, ResearchToolOffer, tool_registration,
@@ -396,8 +358,8 @@ pub use retrieve_original_result::{
     decide_original_result_retrieval,
 };
 pub use revision_comparison::{
-    ExactRevisionTexts, RangeMapping, ReplacementSpan, RevisionComparison,
-    RevisionComparisonAccess, inspect_revision_comparison, map_unchanged_range, utf16_slice,
+    ExactRevisionTexts, ReplacementSpan, RevisionComparison, RevisionComparisonAccess,
+    inspect_revision_comparison,
 };
 pub use run_result::{RunCallPosition, run_results};
 pub use search_manuscript::{
@@ -453,11 +415,7 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_CONTINUITY_MAPPING_REVISION, AGENT_PLAN_CONTINUITY_REGISTRATION,
-    AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION, AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
-    AGENT_PLAN_READ_RESULT_REGISTRATION, AGENT_PLAN_REGISTRATION,
-    AGENT_PLAN_SKILL_MAPPING_REVISION, AGENT_PLAN_SKILL_REGISTRATION,
-    AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION, AGENT_PLAN_TOOL_LOOP_REGISTRATION,
+    AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION, AGENT_PLAN_REGISTRATION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };
@@ -475,9 +433,9 @@ pub use tool_result_context::{
 };
 pub use tool_result_stub::TOOL_RESULT_STUB_TOKEN_LIMIT;
 pub use tool_spec::{
-    ExternalRead, ExternalWrite, FINISH_TOOL_SPEC, IntakeField, IntakeRefusal,
-    PROPOSE_EDIT_TOOL_SPEC, ServerArguments, TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope,
-    ToolIntake, ToolOperation, ToolSpec, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC, tool_spec,
+    ExternalRead, FINISH_TOOL_SPEC, IntakeField, IntakeRefusal, PROPOSE_EDIT_TOOL_SPEC,
+    ServerArguments, TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope, ToolIntake, ToolOperation,
+    ToolSpec, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC, tool_spec,
 };
 pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{
@@ -730,18 +688,6 @@ fn apply_author_edit_body(
     }
 }
 
-/// Replace one UTF-16 range and keep the remainder of the body.
-pub fn splice_utf16_range(
-    body: &str,
-    from: u32,
-    to: u32,
-    text: &str,
-) -> Result<String, AuthorEditRefusal> {
-    let mut next = body.to_owned();
-    replace_checked_utf16_range(&mut next, from, to, text)?;
-    Ok(next)
-}
-
 pub(crate) fn replace_checked_utf16_range(
     body: &mut String,
     from: u32,
@@ -785,6 +731,9 @@ pub(crate) fn utf16_offset_to_byte(value: &str, wanted: u32) -> Option<usize> {
     }
     (units == wanted).then_some(value.len())
 }
+
+#[cfg(test)]
+mod shared_tests;
 
 #[cfg(test)]
 #[path = "apply_author_edit_tests.rs"]

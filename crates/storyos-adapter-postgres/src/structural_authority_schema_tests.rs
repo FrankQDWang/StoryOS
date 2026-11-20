@@ -2,12 +2,14 @@
 //! Commit that the Author Action and the Receipt bind, and the Receipt checks.
 
 use crate::PostgresProjectReader;
-use crate::command_sequence::tests::{
-    CommandCall, create_chapter_call, create_volume_call, delete_chapter_call, delete_volume_call,
-    seed_project, set_current_chapter_call, stores, titled_volume, update_chapter_call,
-    update_volume_call,
-};
 use crate::command_sequence::{ProjectCommand, settle_project_command};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::{
+    create_chapter_call, create_volume_call, delete_chapter_call, delete_volume_call,
+    set_current_chapter_call, titled_volume, update_chapter_call, update_volume_call,
+};
+use crate::shared_tests::command_sequence_support::{CommandCall, seed_project, stores};
+use crate::shared_tests::json_row::json_of;
 
 async fn settled<C: ProjectCommand>(
     store: &PostgresProjectReader,
@@ -22,16 +24,13 @@ async fn settled<C: ProjectCommand>(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn authority_history_floor_exists_without_rewriting_structure_activity() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, "9780").await;
     let volume_id = titled_volume(&store, &scope, "9781", "Volume A", 1).await;
-    let observed: serde_json::Value = serde_json::from_str(
-        &admin
-            .query_one(
-                "SELECT jsonb_build_object(
+    let observed: serde_json::Value = json_of(
+        &admin,
+        "SELECT jsonb_build_object(
                           'replay_generation', snapshot.replay_generation,
                           'floor_matches_snapshot',
                             floor.floor_activity_position
@@ -53,13 +52,9 @@ async fn authority_history_floor_exists_without_rewriting_structure_activity() {
                          snapshot.snapshot_id) =
                         (floor.owner_user_id, floor.project_id, floor.snapshot_id)
                   WHERE floor.project_id = $1::text::uuid",
-                &[&scope.project_id.as_ref()],
-            )
-            .await
-            .unwrap()
-            .get::<_, String>(0),
+        &[&scope.project_id.as_ref()],
     )
-    .unwrap();
+    .await;
     assert_eq!(
         observed,
         serde_json::json!({
@@ -80,9 +75,7 @@ async fn authority_history_floor_exists_without_rewriting_structure_activity() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_applied_structure_command_binds_its_commit_to_its_action_and_receipt() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let receipts = [
         settled(&store, &create_volume_call(&store, /*base*/ 0x9710).await).await,
@@ -99,8 +92,9 @@ async fn each_applied_structure_command_binds_its_commit_to_its_action_and_recei
     ];
     let mut observed = Vec::new();
     for receipt_id in &receipts {
-        let json: String = admin
-            .query_one(
+        observed.push(
+            json_of(
+                &admin,
                 "SELECT jsonb_build_object(
                           'action_binds_commit',
                             action.authoritative_commit_id
@@ -141,10 +135,8 @@ async fn each_applied_structure_command_binds_its_commit_to_its_action_and_recei
                   WHERE receipt.receipt_id = $1::text::uuid",
                 &[receipt_id],
             )
-            .await
-            .unwrap()
-            .get(/*idx*/ 0);
-        observed.push(serde_json::from_str::<serde_json::Value>(&json).unwrap());
+            .await,
+        );
     }
     // An empty Revision pair, except the genesis Revision of a new Chapter.
     let structural = |tree: [u64; 2], affected: &str, genesis: bool| {
@@ -182,9 +174,7 @@ async fn each_applied_structure_command_binds_its_commit_to_its_action_and_recei
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_structure_receipt_without_a_commit_refuses_a_commit_identity() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut stale = create_volume_call(&store, /*base*/ 0x9790).await;
     stale.input.expected_tree_revision = 2;

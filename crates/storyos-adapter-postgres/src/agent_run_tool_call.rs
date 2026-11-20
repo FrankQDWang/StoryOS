@@ -12,7 +12,8 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_tool_authority::damaged;
+use crate::agent_run_work::complete_unavailable;
 
 /// The caller route of a ToolCall that a model requested.
 const MODEL_CALLER_ROUTE: &str = "model";
@@ -34,16 +35,15 @@ pub(crate) async fn insert_tool_calls(
     owner: &ToolCallOwner<'_>,
     calls: &[RequestedToolCall],
 ) -> Result<(), CompleteAgentRunError> {
-    // The global row of a Host Tool Registration appears at its first ToolCall.
-    for registration in storyos_core::HOST_TOOL_REGISTRATIONS {
-        if calls.iter().any(|call| {
-            matches!(call, RequestedToolCall::Validated(call)
-                if call.registration_revision == registration.revision)
-        }) {
-            crate::tool_registration::insert_host_registration_row(client, registration)
-                .await
-                .map_err(complete_database_error)?;
-        }
+    // The global row of the Host Tool Registration appears at its first ToolCall.
+    let registration = &storyos_core::HOST_TOOL_REGISTRATION;
+    if calls.iter().any(|call| {
+        matches!(call, RequestedToolCall::Validated(call)
+            if call.registration_revision == registration.revision)
+    }) {
+        crate::tool_registration::insert_host_registration_row(client, registration)
+            .await
+            .map_err(complete_unavailable)?;
     }
     for (position, call) in (0_i32..).zip(calls) {
         let (name, pin, arguments, argument_digest, refusal) = match call {
@@ -124,7 +124,7 @@ pub(crate) async fn insert_tool_calls(
                 ],
             )
             .await
-            .map_err(complete_database_error)?;
+            .map_err(complete_unavailable)?;
         if inserted == 1
             && let Some(refusal) = refusal
         {
@@ -169,7 +169,7 @@ pub(crate) async fn pending_tool_call_exists(
         )
         .await
         .map(|row| row.get(0))
-        .map_err(complete_database_error)
+        .map_err(complete_unavailable)
 }
 
 /// Whether a ToolCall of the Run has an effect that no evidence settled: a ToolCall with no
@@ -193,7 +193,7 @@ pub(crate) async fn unresolved_tool_effect(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let settlement = |value: Option<&str>| value.and_then(ToolAttemptSettlement::parse);
     Ok(rows.iter().any(|row| {
         let class = ToolCallState::parse(row.get(/*idx*/ 0)).and_then(|state| {
@@ -364,7 +364,7 @@ async fn current_tool_authority(
                 &[&tool.registration_revision],
             )
             .await
-            .map_err(complete_database_error)?;
+            .map_err(complete_unavailable)?;
         let lifecycle = match row.as_ref().map(|row| row.get::<_, &str>(/*idx*/ 0)) {
             None => ToolRegistrationLifecycle::Active,
             Some(lifecycle) => ToolRegistrationLifecycle::parse(lifecycle)
@@ -377,10 +377,6 @@ async fn current_tool_authority(
         });
     }
     Ok(current)
-}
-
-fn damaged(message: &'static str) -> CompleteAgentRunError {
-    CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(message)))
 }
 
 #[cfg(test)]

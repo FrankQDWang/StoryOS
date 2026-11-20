@@ -12,6 +12,9 @@ import type {
   EditorState,
   ProjectActivityEvent,
 } from "../../src/editor-types.ts";
+import { requestResult } from "../../src/indexed-db-request.ts";
+
+export { requestResult };
 
 export const OWNER = "018f0000-0000-7001-8000-000000000001";
 export const PROJECT = "018f0000-0000-7001-8000-000000000002";
@@ -55,7 +58,7 @@ export function replaceBlockUnit(
   };
 }
 
-export interface BrowserScenario {
+interface BrowserScenario {
   readonly chapter: GetChapterResponse;
   readonly journalName: string;
   readonly profile: Release1ProtocolProfile;
@@ -157,13 +160,6 @@ export function emptyActivityStream(): Response {
   });
 }
 
-export function requestResult<Result>(request: IDBRequest<Result>): Promise<Result> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-  });
-}
-
 export function trackDatabase(
   database: IDBDatabase,
   openDatabases: Set<IDBDatabase>,
@@ -230,7 +226,7 @@ export function requireDigestValue(value: unknown, name: string): DigestValue {
   return { algorithm, profile, value_hex_lowercase: valueHexLowercase };
 }
 
-export interface AppliedAuthorEditResponseOptions {
+interface AppliedAuthorEditResponseOptions {
   readonly authorCommandAdmissionId?: string;
   readonly authoritativeCommitId?: string;
   readonly authoritativeRevisionId?: string;
@@ -312,7 +308,7 @@ function canonicalJson(value: unknown): unknown {
   return value;
 }
 
-export interface AppliedActivityEventOptions {
+interface AppliedActivityEventOptions {
   readonly authorActionSequence?: string;
   readonly commandId: string;
   readonly commitId: string;

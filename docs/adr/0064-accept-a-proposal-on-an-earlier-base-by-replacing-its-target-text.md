@@ -69,3 +69,7 @@ This decision replaces these earlier rules:
 - Author Undo of a replacing Acceptance restores the text of the Chapter Head that the Acceptance applied to.
 - A partial Acceptance of a multi-Operation Proposal does not block the remaining Operations. Each selected Operation replaces its own target.
 - The recovery drill and the packaged journeys keep fewer Proposal Conflict conditions, because an Acceptance on an earlier base applies.
+
+[ADR 0099](0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md) amends the Editor rule: the editor does not remove a stored Replan entry at load.
+
+[ADR 0098](0098-remove-the-three-proposal-recovery-commands-that-no-client-sends.md) removes the commands `replanProposal`, `reopenWithdrawnProposal`, and `reopenRejectedOperations`, and the Author Undo of each.

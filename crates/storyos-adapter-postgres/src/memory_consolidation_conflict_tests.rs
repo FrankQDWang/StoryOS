@@ -3,32 +3,32 @@
 //! lead of these tests is `79`.
 
 use serde_json::{Value, json};
-use storyos_application::{MemoryConsolidationStore, MemoryWorkOutcome, ProjectScope};
+use storyos_application::{MemoryWorkOutcome, ProjectScope};
 use storyos_core::ConsolidationSkip;
 use tokio_postgres::Client;
 
-use super::super::schedule_tests::claim_pass;
-use super::super::tests::{capture, create, delete, run_pass, scripted, settled};
-use super::{flag, flag_lines, merge, seed, version_lines};
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_load_skill::tests::calls;
-use crate::memory_capture::loop_tests::{record, script};
-use crate::memory_capture::tests::{project, run_capture, start};
-use crate::memory_entries::tests::archived_rows;
-
-/// A conflict item of a capture with the entry `entry` and the reason `reason`.
-pub(super) fn conflict(entry: u64, reason: &str) -> Value {
-    json!({
-        "kind": "conflict", "type": null, "title": null, "text": null, "entry": entry,
-        "reason": reason
-    })
-}
+use crate::shared_tests::agent_run_load_skill::calls;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::memory_capture::{project, run_capture, start};
+use crate::shared_tests::memory_capture_loop::{record, script};
+use crate::shared_tests::memory_consolidation::{
+    capture, create, delete, run_pass, scripted, settled,
+};
+use crate::shared_tests::memory_consolidation_conflict::{conflict, entry_id};
+use crate::shared_tests::memory_consolidation_merge::{
+    flag, flag_lines, merge, seed, version_lines,
+};
+use crate::shared_tests::memory_consolidation_schedule::claim_pass;
+use crate::shared_tests::memory_entries::archived_rows;
 
 /// Each observation row of the Project as one line: the position, the kind, the title, the entry
 /// number, the reason, and the state, in the order of the captures.
 async fn observation_lines(admin: &Client, scope: &ProjectScope) -> Value {
-    let row = admin
-        .query_one(
+    version_lines(
+        &json_of(
+            admin,
             "SELECT jsonb_agg(jsonb_build_array(item.position, item.kind, item.title,
                       item.entry_number, item.reason, item.state)
                       ORDER BY capture.started_at, item.position)::text
@@ -37,22 +37,8 @@ async fn observation_lines(admin: &Client, scope: &ProjectScope) -> Value {
               WHERE item.project_id = $1::text::uuid",
             &[&scope.project_id.as_ref()],
         )
-        .await
-        .unwrap();
-    version_lines(&serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-}
-
-/// The identity of the entry `number` of the Project.
-pub(super) async fn entry_id(admin: &Client, scope: &ProjectScope, number: u64) -> String {
-    let row = admin
-        .query_one(
-            "SELECT memory_entry_id::text FROM storyos.memory_entry_versions
-              WHERE project_id = $1::text::uuid AND entry_number = $2::text::numeric LIMIT 1",
-            &[&scope.project_id.as_ref(), &number.to_string()],
-        )
-        .await
-        .unwrap();
-    row.get(/*idx*/ 0)
+        .await,
+    )
 }
 
 /// A conflict item is stored as an observation that waits, with its entry number and its reason,
@@ -61,9 +47,7 @@ pub(super) async fn entry_id(admin: &Client, scope: &ProjectScope, number: u64) 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_conflict_item_waits_as_an_observation_and_names_only_an_entry_of_the_author() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "790").await;
     let rows = [
@@ -115,9 +99,7 @@ async fn a_conflict_item_waits_as_an_observation_and_names_only_an_entry_of_the_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_request_of_a_pass_has_no_conflict_of_its_pass_row() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "594").await;
     seed(&admin, &scope, &[(1, "other", "author_request", "阿青")]).await;
@@ -172,9 +154,7 @@ async fn the_request_of_a_pass_has_no_conflict_of_its_pass_row() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_next_pass_that_is_not_stale_flags_each_current_entry_of_a_conflict() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "791").await;
     let rows = [
@@ -186,13 +166,12 @@ async fn the_next_pass_that_is_not_stale_flags_each_current_entry_of_a_conflict(
     capture(&store, &admin, &scope, &source, conflicts).await;
     let script = json!([scripted("脚本", &[flag(1, "模型")])]);
     capture(&store, &admin, &scope, &source, script).await;
-    let stale = store
-        .start_memory_consolidation(&scope)
+    let stale = crate::shared_tests::memory_consolidation::start_pass(&store, &scope)
         .await
-        .unwrap()
         .unwrap();
     let id = entry_id(&admin, &scope, 2).await;
-    let deleted = crate::delete_memory_entry::tests::delete(&store, &scope, 0x79fa, &id, 1).await;
+    let deleted =
+        crate::shared_tests::delete_memory_entry::delete(&store, &scope, 0x79fa, &id, 1).await;
     run_capture(&store, &admin, &scope, &stale.run_id).await;
     let flagged = run_pass(&store, &admin, &scope).await;
 
@@ -230,9 +209,7 @@ async fn the_next_pass_that_is_not_stale_flags_each_current_entry_of_a_conflict(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_conflict_flags_only_an_entry_of_its_own_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (first, _, first_source) = project(&store, &admin, "792").await;
     let (other, _, other_source) = project(&store, &admin, "793").await;
@@ -274,29 +251,25 @@ async fn a_conflict_flags_only_an_entry_of_its_own_project() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_pass_with_only_a_conflict_sends_the_entries_and_flags_the_entry() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "795").await;
     seed(&admin, &scope, &[(1, "other", "author_request", "阿青")]).await;
     capture(&store, &admin, &scope, &source, json!([conflict(1, "甲")])).await;
     let started = run_pass(&store, &admin, &scope).await;
     // The source classes of the decision Context Assembly of the pass.
-    let classes: String = admin
-        .query_one(
-            "SELECT jsonb_path_query_array(payload, '$.selected[*].source_class')::text
+    let classes = json_of(
+        &admin,
+        "SELECT jsonb_path_query_array(payload, '$.selected[*].source_class')::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
-            &[&started.run_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
+        &[&started.run_id],
+    )
+    .await;
 
     assert_eq!(
         (
-            serde_json::from_str::<Value>(&classes).unwrap(),
+            classes,
             settled(&admin, &started.run_id).await,
             flag_lines(&admin, &scope).await[1].clone()
         ),
@@ -314,15 +287,14 @@ async fn a_pass_with_only_a_conflict_sends_the_entries_and_flags_the_entry() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn no_pass_starts_for_conflicts_when_the_project_has_no_current_entry() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "796").await;
     seed(&admin, &scope, &[(1, "other", "author_request", "阿青")]).await;
     capture(&store, &admin, &scope, &source, json!([conflict(1, "甲")])).await;
     let id = entry_id(&admin, &scope, 1).await;
-    let deleted = crate::delete_memory_entry::tests::delete(&store, &scope, 0x79fb, &id, 1).await;
+    let deleted =
+        crate::shared_tests::delete_memory_entry::delete(&store, &scope, 0x79fb, &id, 1).await;
     let outcome = claim_pass(&store, &admin, &scope).await;
     let passes: i64 = admin
         .query_one(
@@ -355,8 +327,9 @@ async fn no_pass_starts_for_conflicts_when_the_project_has_no_current_entry() {
 /// The last version of each entry of the Project as one line: the number, the state, the title,
 /// the length of the text, and the reason of the flag.
 async fn last_versions(admin: &Client, scope: &ProjectScope) -> Value {
-    let row = admin
-        .query_one(
+    version_lines(
+        &json_of(
+            admin,
             "SELECT jsonb_agg(jsonb_build_array(entry_number, state, title, char_length(text),
                       flag_reason) ORDER BY entry_number)::text
                FROM (SELECT DISTINCT ON (entry_number) * FROM storyos.memory_entry_versions
@@ -364,9 +337,8 @@ async fn last_versions(admin: &Client, scope: &ProjectScope) -> Value {
                       ORDER BY entry_number, memory_revision DESC) AS latest",
             &[&scope.project_id.as_ref()],
         )
-        .await
-        .unwrap();
-    version_lines(&serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
+        .await,
+    )
 }
 
 /// One pass with each duty: it deletes an out-of-date entry, merges two duplicated entries,
@@ -376,9 +348,7 @@ async fn last_versions(admin: &Client, scope: &ProjectScope) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn one_pass_does_each_duty_of_consolidation() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "794").await;
     let rows = [

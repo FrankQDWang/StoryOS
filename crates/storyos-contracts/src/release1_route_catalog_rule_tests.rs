@@ -139,7 +139,7 @@ fn conditional_commands_bind_the_exact_author_and_producer_causes() {
         .iter()
         .map(|operation| text(&operation["operation_id"]))
         .collect::<Vec<_>>();
-    assert_eq!(ids, ["withdrawProposal", "replanProposal"]);
+    assert_eq!(ids, ["withdrawProposal"]);
     for operation in conditional {
         let id = text(&operation["operation_id"]);
         assert_eq!(

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { expect } from "playwright/test";
-import { webcrypto } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrowserContext } from "playwright";
@@ -18,25 +17,13 @@ import { verifyConflictedProposalRecovery } from "./production-conflict-recovery
 import { verifyProductionFirstOwnerEdit } from "./production-first-owner-edit-command.ts";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch, startStoryOSServer, stopStoryOSServer } from "./node-integration";
 import { assertProjectReceipts } from "./project-receipts.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "../../src/client-identity.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const USER = "018f0000-0000-7001-8000-000000000001";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MESSAGE = "Revise this passage: keep the voice.";
 const CORRECTION = "Revise this passage: keep the voice, but use a quieter pace.";
-
-function uuidV7(): string {
-  const bytes = webcrypto.getRandomValues(new Uint8Array(16));
-  let now = Date.now();
-  for (let offset = 5; offset >= 0; offset -= 1) {
-    bytes[offset] = now & 0xff;
-    now = Math.floor(now / 256);
-  }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 export async function verifyProductionProseRequest(context: BrowserContext, scenario = "prose_request"): Promise<void> {
   const configured = process.env.STORYOS_DEV_SERVER;
@@ -88,7 +75,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
         availability: "available",
         expected_assistance_revision: "0",
         client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-        security_policy_revision: "storyos.web-security-policy.release-1.v1",
+        security_policy_revision: SECURITY_POLICY_REVISION,
         correlation_id: uuidV7(),
       },
     };

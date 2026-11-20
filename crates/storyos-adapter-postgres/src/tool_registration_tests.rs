@@ -1,11 +1,14 @@
-use serde_json::{Value, json};
+use serde_json::json;
 use storyos_core::{
     ContractDifference, EXA_TOOL_REGISTRATION, ToolCallRefusal, ToolRegistration,
     ToolRegistrationLifecycle,
 };
 
-use super::QuarantineOutcome;
-use crate::agent_run_dispatch::tests::stores;
+use super::quarantine_revision;
+use crate::PostgresProjectReader;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 
 const PINNED: ToolRegistration = ToolRegistration {
     revision: "018f0000-0000-7001-8000-0000000e0f01",
@@ -16,15 +19,56 @@ const SUCCESSOR: ToolRegistration = ToolRegistration {
     ..EXA_TOOL_REGISTRATION
 };
 
+/// Inserts the revision and its tools in one transaction, as the binding of a research offer does.
+async fn insert(store: &PostgresProjectReader, registration: &ToolRegistration) {
+    let client = store.connect().await.unwrap();
+    client.batch_execute("BEGIN").await.unwrap();
+    super::insert_registration_rows(&client, registration)
+        .await
+        .unwrap();
+    client.batch_execute("COMMIT").await.unwrap();
+}
+
+/// The quarantine of the Tool Gateway on Tool Contract Drift. The result is the number of changed
+/// rows.
+async fn quarantine(
+    store: &PostgresProjectReader,
+    revision: &str,
+    differences: &[ContractDifference],
+) -> u64 {
+    let client = store.connect().await.unwrap();
+    let differences = serde_json::to_value(differences).unwrap();
+    quarantine_revision(&client, revision, &differences)
+        .await
+        .unwrap()
+}
+
+/// The lifecycle of a stored revision. `None` is an unknown revision.
+async fn lifecycle(
+    store: &PostgresProjectReader,
+    revision: &str,
+) -> Option<ToolRegistrationLifecycle> {
+    store
+        .connect()
+        .await
+        .unwrap()
+        .query_opt(
+            "SELECT lifecycle FROM storyos.tool_registration_revisions
+              WHERE tool_registration_revision = $1::text::uuid",
+            &[&revision],
+        )
+        .await
+        .unwrap()
+        .map(|row| ToolRegistrationLifecycle::parse(row.get(/*idx*/ 0)).unwrap())
+}
+
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn drift_quarantines_one_revision_once_and_a_new_revision_carries_no_authority_from_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    store.insert_tool_registration(&PINNED).await.unwrap();
-    store.insert_tool_registration(&PINNED).await.unwrap();
+    insert(&store, &PINNED).await;
+    insert(&store, &PINNED).await;
     let tools: Vec<(String, String)> = admin
         .query(
             "SELECT tool_name, input_schema_digest FROM storyos.tool_registration_tools
@@ -44,26 +88,17 @@ async fn drift_quarantines_one_revision_once_and_a_new_revision_carries_no_autho
         observed: "other-server".to_owned(),
     }];
 
-    let first = store
-        .quarantine_tool_registration(PINNED.revision, &drift)
-        .await
-        .unwrap();
-    let second = store
-        .quarantine_tool_registration(PINNED.revision, &later)
-        .await
-        .unwrap();
-    store.insert_tool_registration(&SUCCESSOR).await.unwrap();
-    let lifecycle = |revision| store.tool_registration_lifecycle(revision);
-    let pinned = lifecycle(PINNED.revision).await.unwrap().unwrap();
-    let record: String = admin
-        .query_one(
-            "SELECT quarantine_differences::text FROM storyos.tool_registration_revisions
+    let first = quarantine(&store, PINNED.revision, &drift).await;
+    let second = quarantine(&store, PINNED.revision, &later).await;
+    insert(&store, &SUCCESSOR).await;
+    let pinned = lifecycle(&store, PINNED.revision).await.unwrap();
+    let record = json_of(
+        &admin,
+        "SELECT quarantine_differences::text FROM storyos.tool_registration_revisions
               WHERE tool_registration_revision = $1::text::uuid",
-            &[&PINNED.revision],
-        )
-        .await
-        .unwrap()
-        .get(0);
+        &[&PINNED.revision],
+    )
+    .await;
 
     assert_eq!(
         tools,
@@ -82,15 +117,10 @@ async fn drift_quarantines_one_revision_once_and_a_new_revision_carries_no_autho
             ),
         ]
     );
+    // The first drift quarantines the revision. A later drift does not change it.
+    assert_eq!((first, second), (1, 0));
     assert_eq!(
-        (first, second),
-        (
-            QuarantineOutcome::Quarantined,
-            QuarantineOutcome::AlreadyUnavailable
-        )
-    );
-    assert_eq!(
-        serde_json::from_str::<Value>(&record).unwrap(),
+        record,
         json!([{"kind": "tool_removed", "tool": "web_fetch_exa"}])
     );
     assert_eq!(
@@ -98,24 +128,23 @@ async fn drift_quarantines_one_revision_once_and_a_new_revision_carries_no_autho
         Err("tool_registration_unavailable")
     );
     assert_eq!(
-        lifecycle(SUCCESSOR.revision).await.unwrap(),
+        lifecycle(&store, SUCCESSOR.revision).await,
         Some(ToolRegistrationLifecycle::Active)
     );
     assert_eq!(
-        store
-            .quarantine_tool_registration("018f0000-0000-7001-8000-0000000e0f03", &drift)
-            .await
-            .unwrap(),
-        QuarantineOutcome::UnknownRevision
+        quarantine(&store, "018f0000-0000-7001-8000-0000000e0f03", &drift).await,
+        0
+    );
+    assert_eq!(
+        lifecycle(&store, "018f0000-0000-7001-8000-0000000e0f03").await,
+        None
     );
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_runtime_role_never_reactivates_edits_or_extends_a_registration_revision() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, _admin) = stores().await;
     const REVISION: ToolRegistration = ToolRegistration {
         revision: "018f0000-0000-7001-8000-0000000e0f04",
@@ -125,16 +154,13 @@ async fn the_runtime_role_never_reactivates_edits_or_extends_a_registration_revi
         revision: "018f0000-0000-7001-8000-0000000e0f05",
         ..EXA_TOOL_REGISTRATION
     };
-    store.insert_tool_registration(&REVISION).await.unwrap();
-    store.insert_tool_registration(&ACTIVE).await.unwrap();
+    insert(&store, &REVISION).await;
+    insert(&store, &ACTIVE).await;
     let drift = [ContractDifference::ProtocolRevision {
         pinned: "2025-11-25".to_owned(),
         observed: "2026-06-18".to_owned(),
     }];
-    store
-        .quarantine_tool_registration(REVISION.revision, &drift)
-        .await
-        .unwrap();
+    quarantine(&store, REVISION.revision, &drift).await;
     let client = store.connect().await.unwrap();
 
     let reactivated = client
@@ -173,10 +199,7 @@ async fn the_runtime_role_never_reactivates_edits_or_extends_a_registration_revi
     assert_eq!(reactivated, 0);
     assert_eq!(identity_edit, Err(Some("42501".to_owned())));
     assert_eq!(
-        store
-            .tool_registration_lifecycle(REVISION.revision)
-            .await
-            .unwrap(),
+        lifecycle(&store, REVISION.revision).await,
         Some(ToolRegistrationLifecycle::Quarantined)
     );
 }

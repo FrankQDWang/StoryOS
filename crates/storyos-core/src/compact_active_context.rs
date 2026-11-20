@@ -29,11 +29,6 @@ pub struct CompactionInstallFacts {
     pub summary_within_item_limit: bool,
 }
 
-/// Author text that asks the Host-fake path to compact before the decision request.
-pub fn requests_active_compaction(author_message: &str) -> bool {
-    author_message.starts_with(ACTIVE_COMPACTION_REQUEST_PREFIX)
-}
-
 /// Whether the Host fake compacts at the RunStep of `facts`. The prefix alone asks for one
 /// compaction: at the first RunStep that compacts. The prefix with `At RunSteps <position> ...`
 /// asks for a compaction at each named position.

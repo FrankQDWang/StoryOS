@@ -80,26 +80,9 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
-        // The tool loop mappings are the decision and summary mappings: they stream, continue,
-        // and compact. A decision request of an earlier mapping held the reply form (ADR 0091).
-        // A qualification probe holds no reply form (ADR 0049).
+        current_mapping(route)?;
+        // A qualification probe holds no reply form, so it does not stream (ADR 0049).
         let probe = matches!(create.purpose, CreatePurpose::ToolQualification(_));
-        let tool_loop = [
-            storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
-            storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
-            storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION,
-            storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION,
-            storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION,
-        ]
-        .contains(&route.mapping_revision.as_str());
-        let memory_work = [
-            storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION,
-            storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION,
-        ]
-        .contains(&route.mapping_revision.as_str());
-        if !probe && !tool_loop {
-            return Err(PreDispatchRefusal::UnsupportedRequest);
-        }
         let body = match (&create.purpose, &create.previous_response_reference) {
             (CreatePurpose::Decision, _) => {
                 wire::create_body(create, &route.provider_model_id, bounds)
@@ -109,7 +92,6 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                     .ok_or(PreDispatchRefusal::UnsupportedRequest)?
             }
             (CreatePurpose::CompactionSummary, Some(reference)) => wire::summary_body(
-                &route.mapping_revision,
                 reference,
                 &create.tool_outputs,
                 &create.unexecuted_call_ids,
@@ -120,14 +102,12 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             (CreatePurpose::CompactionSummary, _) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
-            // Only the mappings `v8` and `v9` have the capture form (ADR 0094 section 5). A Run
-            // that pinned an earlier Registration keeps its mapping, so its capture request is
-            // refused.
-            (CreatePurpose::MemoryCapture(kind), _) if memory_work && create.capture_complete() => {
+            // The capture form (ADR 0094 section 5).
+            (CreatePurpose::MemoryCapture(kind), _) if create.capture_complete() => {
                 capture_wire::capture_body(create, *kind, &route.provider_model_id, bounds)
             }
-            // Only the mappings `v8` and `v9` have the pass form (ADR 0094 section 6).
-            (CreatePurpose::MemoryConsolidation, _) if memory_work && create.pass_complete() => {
+            // The pass form (ADR 0094 section 6).
+            (CreatePurpose::MemoryConsolidation, _) if create.pass_complete() => {
                 pass_wire::pass_body(create, &route.provider_model_id, bounds)
             }
             (CreatePurpose::MemoryCapture(_) | CreatePurpose::MemoryConsolidation, _) => {
@@ -226,6 +206,15 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
     }
 }
 
+/// Refuses each request on a mapping that is not the current one: a decision, a summary, a
+/// capture, a pass, a qualification probe, and a Retrieve (ADR 0097).
+fn current_mapping(route: &RequestRoute) -> Result<(), PreDispatchRefusal> {
+    match route.mapping_revision == storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION {
+        true => Ok(()),
+        false => Err(PreDispatchRefusal::UnsupportedRequest),
+    }
+}
+
 impl<R: CredentialResolver> AgentPlanResponses<R> {
     /// A GET of the stored response. The Host admits it only for a retained reference.
     async fn prepare_retrieve(
@@ -236,6 +225,7 @@ impl<R: CredentialResolver> AgentPlanResponses<R> {
         let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
+        current_mapping(route)?;
         let path = format!("/responses/{}", retrieve.response_reference);
         let wire = storyos_core::canonical_json(&serde_json::json!({
             "method": "GET",
@@ -409,7 +399,3 @@ mod chapter_list_wire_tests;
 #[cfg(test)]
 #[path = "memory_index_wire_tests.rs"]
 mod memory_index_wire_tests;
-
-#[cfg(test)]
-#[path = "memory_rules_wire_tests.rs"]
-mod memory_rules_wire_tests;

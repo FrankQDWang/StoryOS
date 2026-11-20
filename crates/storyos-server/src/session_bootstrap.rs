@@ -7,10 +7,6 @@ use uuid::Uuid;
 /// Eight-hour Client Session Binding lifetime used for Foundation-local cookies.
 pub const CLIENT_SESSION_BINDING_LIFETIME_SECS: u64 = 8 * 60 * 60;
 
-/// Test-only allowance that loads more than one mapping and disables issuance.
-pub const TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS: &str =
-    "STORYOS_TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS";
-
 /// Whether the packaged Server issues `storyos_session` on the HTML document GET.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum TrustedLocalSessionBootstrap {

@@ -2,15 +2,16 @@
 //! with the fake model of the tool loop profile.
 
 use serde_json::{Value, json};
-use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-};
+use storyos_application::{AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore};
 use storyos_core::DeploymentDestination;
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::{admit_run_in, stores};
-use crate::agent_run_propose_edit::revise_tests::Fixture;
-use crate::agent_run_propose_edit::tests::{complete, opened, propose_edit_calls};
+use crate::shared_tests::agent_run_propose_edit::{complete, opened, propose_edit_calls};
+use crate::shared_tests::agent_run_propose_edit_revise::Fixture;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::Admission;
 
 /// The message of Run 3 of the live run record of 2026-11-14. It has an edit word, and no clause
 /// names a Chapter, so the passage request does not resolve.
@@ -19,42 +20,34 @@ const UNRESOLVED: &str = "请修改第三段：把林三敲钟的动作写得更
 
 /// The working text that the Context Assembly of the first RunStep selected.
 async fn first_working_text(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT COALESCE(jsonb_agg(item -> 'content'), '[]')::text
+    json_of(
+        admin,
+        "SELECT COALESCE(jsonb_agg(item -> 'content'), '[]')::text
                FROM storyos.context_assembly_manifests AS manifest,
                     jsonb_array_elements(manifest.payload -> 'selected') AS item
               WHERE manifest.run_id = $1::text::uuid AND manifest.decision_position = 0
                 AND item ->> 'source_class' = 'working_target'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_unresolved_passage_request_works_on_the_current_chapter() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     // Four paragraphs, and an open Proposal on the last one.
     let fixture = Fixture::new(&store, &admin, 0x470, tool_loop.clone()).await;
     let scope = fixture.scope.clone();
     // The fake proposes a change of the third paragraph, as the model of Run 3 did.
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &fixture.chapter_id,
-        "478",
-        tool_loop,
-        &format!("{UNRESOLVED} SCRIPT:propose_block {}", fixture.block(2)),
-        ConversationSelection::New,
-        None,
-    )
+    let run_id = Admission {
+        destination: tool_loop,
+        message: &format!("{UNRESOLVED} SCRIPT:propose_block {}", fixture.block(2)),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &fixture.chapter_id, "478")
     .await;
     complete(&store, &admin, &scope, &run_id).await;
     let record = store

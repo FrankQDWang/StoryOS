@@ -3,10 +3,7 @@
 
 use std::time::Duration;
 
-use storyos_adapter_fake_destination::FakeEmbeddings;
-use storyos_application::{
-    PassageVectorStore, ProjectId, ProjectScope, QuestionVector, UserId, rank_manuscript_passages,
-};
+use storyos_application::{ProjectId, ProjectScope, QuestionVector, UserId};
 use storyos_core::{
     AuthorEditPrimitive, HOST_FAKE_EMBEDDING_REGISTRATION, PASSAGE_CUT_REVISION, PassageBlock,
     PassageTerms, TransitionOutcome, cut_passages,
@@ -15,11 +12,14 @@ use tokio_postgres::Client;
 
 use super::NEAREST_PASSAGES_SQL;
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::stores;
-use crate::command_sequence::tests::titled_chapter;
-use crate::delete_structure_tests::settle_delete_chapter;
-use crate::passage_vectors::tests::{
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::titled_chapter;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::delete_structure::settle_delete_chapter;
+use crate::shared_tests::passage_ranking::rank_passages;
+use crate::shared_tests::passage_vectors::{
     BOATS, Chapter, SHORE, TIDE, WIND, chapter, edit_at, head, index, prepend, texts,
+    vector_table_visible,
 };
 
 /// The result text of the ranking of `terms` and `question` in `scope`, or `None` when the Project
@@ -35,7 +35,7 @@ async fn rank(
         registration_revision: HOST_FAKE_EMBEDDING_REGISTRATION.revision,
         values,
     });
-    rank_manuscript_passages(
+    rank_passages(
         store,
         scope,
         &PassageTerms::new(&terms).unwrap(),
@@ -43,7 +43,6 @@ async fn rank(
         "call-1",
     )
     .await
-    .unwrap()
     .map(|result| result.text)
 }
 
@@ -117,15 +116,13 @@ async fn apply(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_result_joins_the_exact_term_list_and_the_vector_list_of_the_current_passages() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let chapter = chapter(&store, &admin, ["951", "952"], "953", &texts()).await;
     let no_vector = vec![0.25; 1_024];
     let before = rank(&store, &chapter.scope, &["渔船"], Some(&no_vector)).await;
 
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let question = stored_vector(&admin, &chapter.scope, &passage_digests(&texts())[0]).await;
     let joined = rank(&store, &chapter.scope, &["渔船"], Some(&question)).await;
     let exact_only = rank(&store, &chapter.scope, &["渔船"], None).await;
@@ -172,12 +169,10 @@ async fn the_result_joins_the_exact_term_list_and_the_vector_list_of_the_current
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_stale_vector_row_does_not_return_from_the_vector_list() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut chapter = chapter(&store, &admin, ["954", "955"], "956", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let digests = passage_digests(&texts());
     let first = stored_vector(&admin, &chapter.scope, &digests[0]).await;
     let second = stored_vector(&admin, &chapter.scope, &digests[1]).await;
@@ -250,12 +245,10 @@ async fn a_stale_vector_row_does_not_return_from_the_vector_list() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_result_is_one_consistent_state_of_the_manuscript() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut chapter = chapter(&store, &admin, ["95a", "95b"], "95c", &texts()).await;
-    index(&store, &FakeEmbeddings, &chapter).await;
+    index(&store, &admin, &chapter).await;
     let last = stored_vector(&admin, &chapter.scope, &passage_digests(&texts())[2]).await;
     let command = prepend(&store, &chapter, ("95c2", 2), 4, "夜里，").await;
 
@@ -318,16 +311,14 @@ async fn the_result_is_one_consistent_state_of_the_manuscript() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_in_one_project_scope_returns_nothing_of_another_project() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let own = chapter(&store, &admin, ["95d", "95e"], "95f", &texts()).await;
     let mut other_texts = texts();
     other_texts[0] = format!("另一个项目。{}", other_texts[0]);
     let other = chapter(&store, &admin, ["957", "958"], "959", &other_texts).await;
-    index(&store, &FakeEmbeddings, &own).await;
-    index(&store, &FakeEmbeddings, &other).await;
+    index(&store, &admin, &own).await;
+    index(&store, &admin, &other).await;
     let other_digests = passage_digests(&other_texts);
     let question = stored_vector(&admin, &other.scope, &other_digests[0]).await;
 
@@ -381,9 +372,7 @@ async fn a_read_in_one_project_scope_returns_nothing_of_another_project() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_result_with_no_vector_store_is_the_exact_term_list() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let chapter = chapter(&store, &admin, ["691", "692"], "693", &texts()).await;
     let offered: bool = admin
@@ -402,7 +391,7 @@ async fn the_result_with_no_vector_store_is_the_exact_term_list() {
 
     assert_eq!(
         (
-            store.vector_store_available(&chapter.scope).await.unwrap(),
+            vector_table_visible(&store, &chapter.scope).await,
             places(with_question.as_deref().unwrap()),
             &with_question,
         ),

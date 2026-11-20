@@ -3,6 +3,8 @@
 //! by their identities. Core checks each citation against the sources that the Run captured. The
 //! Host does no claim splitting and no support classification.
 
+use serde::Deserialize;
+
 use crate::SourceGapReason;
 
 /// What a citable identity names.
@@ -34,8 +36,10 @@ pub struct CitableSources {
     pub sources: Vec<CitableSource>,
 }
 
-/// One claim as the model gave it: its text and the identities that it cites.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// One claim as the model gave it: its text and the identities that it cites. It is also the
+/// strict form of one claim in the arguments of `submit_research`.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct ClaimCandidate {
     pub text: String,
     pub citations: Vec<String>,
@@ -67,8 +71,6 @@ pub struct ResearchSynthesis {
 pub enum SynthesisRefusal {
     NoClaim,
     EmptyText,
-    /// The summary or a claim text has U+0000, which the Artifact store cannot hold.
-    UnstorableText,
     UncitedClaim,
     /// A citation names no Snapshot and no Gap that this AgentRun captured.
     UncapturedCitation,
@@ -81,7 +83,6 @@ impl SynthesisRefusal {
         match self {
             Self::NoClaim => "no_claim",
             Self::EmptyText => "empty_text",
-            Self::UnstorableText => "unstorable_text",
             Self::UncitedClaim => "uncited_claim",
             Self::UncapturedCitation => "uncaptured_citation",
             Self::OtherScopeCitation => "other_scope_citation",
@@ -100,9 +101,6 @@ pub fn validate_research_synthesis(
     }
     if summary.trim().is_empty() || claims.iter().any(|claim| claim.text.trim().is_empty()) {
         return Err(SynthesisRefusal::EmptyText);
-    }
-    if summary.contains('\0') || claims.iter().any(|claim| claim.text.contains('\0')) {
-        return Err(SynthesisRefusal::UnstorableText);
     }
     let claims = claims
         .iter()

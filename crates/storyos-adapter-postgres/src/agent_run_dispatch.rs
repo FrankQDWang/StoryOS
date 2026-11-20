@@ -9,8 +9,8 @@ use storyos_core::NativeStreamItem;
 use super::PostgresProjectReader;
 use crate::agent_run_observation::merge_items;
 use crate::agent_run_work::{
-    CreateAdmission, RunPhaseRow, WorkPhase, admit_create, complete_challenge_error,
-    complete_database_error, hold_if_requested, load_run_phase, settle_one_phase, update_run,
+    CreateAdmission, RunPhaseRow, WorkPhase, admit_create, complete_unavailable, hold_if_requested,
+    load_run_phase, settle_one_phase, update_run,
 };
 use crate::update_project_assistance::read_assistance_record;
 
@@ -26,7 +26,7 @@ impl ModelDispatchStore for PostgresProjectReader {
             let transaction = self
                 .begin_serializable_project_command_transaction(&claim.project_scope)
                 .await
-                .map_err(complete_challenge_error)?;
+                .map_err(complete_unavailable)?;
             let phase = async {
                 let phase =
                     settle_one_phase(&transaction.client, claim, lease_seconds, checked_step)
@@ -41,10 +41,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                     return Err(error);
                 }
             };
-            transaction
-                .commit()
-                .await
-                .map_err(complete_challenge_error)?;
+            transaction.commit().await.map_err(complete_unavailable)?;
             match phase {
                 WorkPhase::Done(result) => return Ok(NextDispatchWork::Settled(result)),
                 WorkPhase::Hold(kind) => hold_if_requested(kind).await,
@@ -76,7 +73,7 @@ impl ModelDispatchStore for PostgresProjectReader {
         let transaction = self
             .begin_serializable_project_command_transaction(&claim.project_scope)
             .await
-            .map_err(complete_challenge_error)?;
+            .map_err(complete_unavailable)?;
         let client = &transaction.client;
         // A refused claim that recorded a pause commits that pause.
         let paused = std::sync::atomic::AtomicBool::new(/*v*/ false);
@@ -209,17 +206,11 @@ impl ModelDispatchStore for PostgresProjectReader {
         .await;
         match claimed {
             Ok(Some(dispatch)) => {
-                transaction
-                    .commit()
-                    .await
-                    .map_err(complete_challenge_error)?;
+                transaction.commit().await.map_err(complete_unavailable)?;
                 Ok(Some(dispatch))
             }
             Ok(None) if paused.load(std::sync::atomic::Ordering::Relaxed) => {
-                transaction
-                    .commit()
-                    .await
-                    .map_err(complete_challenge_error)?;
+                transaction.commit().await.map_err(complete_unavailable)?;
                 Ok(None)
             }
             Ok(None) => {
@@ -247,7 +238,7 @@ impl ModelDispatchStore for PostgresProjectReader {
         let transaction = self
             .begin_project_command_transaction(&claim.project_scope)
             .await
-            .map_err(complete_challenge_error)?;
+            .map_err(complete_unavailable)?;
         let appended = async {
             let run = match load_run_phase(&transaction.client, claim).await {
                 Err(CompleteAgentRunError::StaleFence) => return Ok(Some(StreamStop::StaleFence)),
@@ -270,7 +261,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                     ],
                 )
                 .await
-                .map_err(complete_database_error)?;
+                .map_err(complete_unavailable)?;
             let Some(target) = target else {
                 return Ok(Some(StreamStop::StaleFence));
             };
@@ -315,7 +306,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                     ],
                 )
                 .await
-                .map_err(complete_database_error)?;
+                .map_err(complete_unavailable)?;
             Ok(None)
         }
         .await
@@ -325,7 +316,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                 transaction
                     .commit()
                     .await
-                    .map_err(|error| contention(complete_challenge_error(error)))?;
+                    .map_err(|error| contention(complete_unavailable(error)))?;
                 Ok(None)
             }
             stopped => {
@@ -353,7 +344,7 @@ impl ModelDispatchStore for PostgresProjectReader {
         let transaction = self
             .begin_serializable_project_command_transaction(&claim.project_scope)
             .await
-            .map_err(complete_challenge_error)?;
+            .map_err(complete_unavailable)?;
         let client = &transaction.client;
         let phase = async {
             let run = load_run_phase(client, claim).await?;
@@ -515,10 +506,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                 return Err(error);
             }
         };
-        transaction
-            .commit()
-            .await
-            .map_err(complete_challenge_error)?;
+        transaction.commit().await.map_err(complete_unavailable)?;
         if let WorkPhase::Hold(kind) = phase {
             hold_if_requested(kind).await;
         }
@@ -595,7 +583,7 @@ async fn commit_retrieve(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .get::<_, i64>(0);
     // The work phase decided with this admission. A change since then is changed work.
     let assistance = read_assistance_record(client, &claim.project_scope)

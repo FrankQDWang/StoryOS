@@ -1,20 +1,11 @@
 use std::future::Future;
 
-use storyos_contracts::CommandKind;
-use storyos_core::{ReadableExportChapter, ReadableExportVolume, render_readable_manuscript};
+use storyos_core::{ReadableExportChapter, ReadableExportVolume};
 
 use crate::{
     AdmittedProjectCommand, CanonicalSnapshot, CanonicalTreeFacts, ManuscriptSearchChapterFact,
     ProjectReadError, ProjectScope, RefusableCommandError,
 };
-
-pub const HUMAN_READABLE_EXPORT_COMMAND_KIND: &str =
-    CommandKind::ExportHumanReadableManuscript.as_str();
-pub const HUMAN_READABLE_EXPORT_ROUTE: &str = "/api/v1/projects/{project_id}/manuscript/exports";
-pub const HUMAN_READABLE_EXPORT_REQUEST_SCHEMA: &str =
-    "storyos.command.export-human-readable-manuscript.request.v1";
-pub const HUMAN_READABLE_EXPORT_DIGEST_PROFILE: &str =
-    "storyos.command.exportHumanReadableManuscript.jcs.v1";
 
 /// The command-specific input of one exportHumanReadableManuscript.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,13 +55,6 @@ pub fn readable_volumes_from_canonical_facts(
                 .collect(),
         })
         .collect()
-}
-
-pub fn render_readable_manuscript_from_facts(
-    tree: &CanonicalTreeFacts,
-    chapters: &[ManuscriptSearchChapterFact],
-) -> String {
-    render_readable_manuscript(&readable_volumes_from_canonical_facts(tree, chapters))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

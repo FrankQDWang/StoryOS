@@ -8,11 +8,12 @@ use storyos_application::{
 use storyos_core::{AgentRunStatus, ManuscriptUse, NO_SEARCH_BY_MEANING};
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_read_chapter::tests::project;
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::project_embedding_binding::tests::{FAKE, embedding_project};
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_read_chapter::project;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
 
 fn chapter_read(chapter_id: &str, title: &str) -> ManuscriptUse {
     ManuscriptUse::ChapterRead {
@@ -50,9 +51,7 @@ async fn uses(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_run_read_names_each_chapter_and_each_query_once_in_the_order_of_the_first_use() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let blocks = ["Lin ran.", "The bell."];
     let (scope, chapter_a, fog, _) = project(&store, &admin, "ac1", 0xbd10, &blocks).await;
@@ -117,9 +116,7 @@ async fn the_run_read_names_each_chapter_and_each_query_once_in_the_order_of_the
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_run_read_names_only_the_uses_of_its_own_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut runs = Vec::new();
     for (lead, suffix, prefix, query) in
@@ -159,9 +156,7 @@ async fn each_run_read_names_only_the_uses_of_its_own_run() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_run_read_names_each_question_of_a_hybrid_search_only_in_its_own_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (plain, admin) = stores().await;
     let store = plain.clone().with_embedding_registration(FAKE);
     let (bound, chapter_id, first) = embedding_project(&store, &admin, ["feb", "fec"], FAKE).await;

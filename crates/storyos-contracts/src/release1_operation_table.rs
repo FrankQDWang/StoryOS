@@ -29,8 +29,6 @@ mod project_instruction_rows;
 mod project_rows;
 #[path = "release1_operation_rows_project_settings.rs"]
 mod project_settings_rows;
-#[path = "release1_operation_rows_proposal_recovery.rs"]
-mod proposal_recovery_rows;
 #[path = "release1_operation_rows_proposal.rs"]
 mod proposal_rows;
 #[path = "release1_operation_rows_query.rs"]
@@ -360,9 +358,6 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &proposal_rows::ACCEPT_PROPOSAL_ROW,
     &proposal_rows::REJECT_PROPOSAL_OPERATIONS_ROW,
     &proposal_rows::WITHDRAW_PROPOSAL_ROW,
-    &proposal_recovery_rows::REPLAN_PROPOSAL_ROW,
-    &proposal_recovery_rows::REOPEN_WITHDRAWN_PROPOSAL_ROW,
-    &proposal_recovery_rows::REOPEN_REJECTED_OPERATIONS_ROW,
     &author_edit_rows::UNDO_LATEST_AUTHOR_ACTION_ROW,
     &agent_run_rows::CREATE_AGENT_RUN_ROW,
     &agent_run_rows::GET_AGENT_RUN_ROW,

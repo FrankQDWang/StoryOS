@@ -2,62 +2,22 @@ import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
-
-let applicationFrame: HTMLIFrameElement | undefined;
-
-function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist rename page did not load"));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-  });
-}
-
-async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> {
-  if (!frame.isConnected) return;
-  const unloaded = nextFrameLoad(frame);
-  frame.src = "about:blank";
-  await unloaded;
-  frame.remove();
-}
-
-async function loadApplication(title: string): Promise<HTMLIFrameElement> {
-  const frame = document.createElement("iframe");
-  applicationFrame = frame;
-  frame.title = title;
-  const loaded = nextFrameLoad(frame);
-  frame.src = "/";
-  document.body.append(frame);
-  await loaded;
-  return frame;
-}
+import {
+  closeApplicationFrame,
+  destroyApplicationFrame,
+  openApplicationFrame,
+  submitProjectForm,
+} from "../support/exact-dist-frame.ts";
 
 afterEach(async () => {
-  if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
-  applicationFrame = undefined;
+  await closeApplicationFrame();
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
 
 it("the author renames one exact Project and the library plus opened title converge", async () => {
-  const created = await loadApplication("StoryOS exact-dist create for rename");
-  await expect.poll(() =>
-    created.contentDocument?.querySelector('#app input[name="title"]')?.tagName
-  ).toBe("INPUT");
-  const title = created.contentDocument?.querySelector<HTMLInputElement>('#app input[name="title"]');
-  const form = title?.form;
-  if (title === null || title === undefined || form === null || form === undefined) {
-    throw new Error("the protected-ready form is missing");
-  }
-  title.value = "Rename Source";
-  form.requestSubmit();
-  await expect.poll(() =>
-    created.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
-  ).toBe("empty-project-ready");
+  const created = await openApplicationFrame("StoryOS exact-dist create for rename");
+  await submitProjectForm(created, "Rename Source");
   await beginTreeAction(created.contentDocument, "[data-project-id]", "[data-begin-rename-project]");
   created.contentDocument?.querySelector<HTMLButtonElement>("[data-begin-rename-project]")?.click();
   await expect.poll(() => created.contentDocument?.querySelector('input[name="rename-title"]')?.tagName).toBe("INPUT");
@@ -75,7 +35,7 @@ it("the author renames one exact Project and the library plus opened title conve
   ).toBe("Renamed Novel");
   await destroyApplicationFrame(created);
 
-  const frame = await loadApplication("StoryOS exact-dist renamed library");
+  const frame = await openApplicationFrame("StoryOS exact-dist renamed library");
   await expect.poll(() =>
     [...(frame.contentDocument?.querySelectorAll("#app button[data-open=\"empty\"]") ?? [])]
       .some((button) => button.textContent === "Renamed Novel")

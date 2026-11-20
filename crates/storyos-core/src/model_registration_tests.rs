@@ -1,5 +1,8 @@
 use super::*;
-use crate::AGENT_PLAN_REGISTRATION;
+use crate::shared_tests::UNQUALIFIED_PROFILE;
+use crate::{
+    AGENT_PLAN_REGISTRATION, HOST_FAKE_TOOL_LOOP_REGISTRATION, PROBE_FIXTURE_REGISTRATION,
+};
 
 const PROOF: CapabilityEvidence = CapabilityEvidence::Qualified { evidence: "test" };
 
@@ -28,50 +31,36 @@ fn qualified_entries(combinations: &'static [CapabilityCombination]) -> ModelCap
 #[test]
 fn qualified_members_qualify_only_with_a_qualified_combination() {
     let documented = qualified_entries(&[CapabilityCombination {
-        members: CREATE_REQUIREMENT,
+        members: COMPACTION_REQUIREMENT,
         evidence: CapabilityEvidence::Documented { source: "test" },
     }]);
     let qualified = qualified_entries(&[CapabilityCombination {
-        members: CREATE_REQUIREMENT,
+        members: COMPACTION_REQUIREMENT,
         evidence: PROOF,
     }]);
 
     assert_eq!(
         [
-            documented.qualifies(CREATE_REQUIREMENT),
-            qualified.qualifies(CREATE_REQUIREMENT),
-            AGENT_PLAN_PENDING_REGISTRATION.qualified(),
-            AGENT_PLAN_CREATE_REGISTRATION.qualified(),
-            AGENT_PLAN_CREATE_CAPABILITY_PROFILE.qualifies(&[ModelCapability::Continuation]),
-            AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION.qualified(),
-            AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION
-                .capability_profile
-                .qualifies(CREATE_REQUIREMENT),
-            AGENT_PLAN_CONTINUATION_REGISTRATION.qualified(),
-            AGENT_PLAN_STREAMING_PENDING_REGISTRATION.qualified(),
-            AGENT_PLAN_STREAMING_PENDING_REGISTRATION
-                .capability_profile
-                .qualifies(CONTINUATION_REQUIREMENT),
-            AGENT_PLAN_STREAMING_REGISTRATION.qualified(),
-            AGENT_PLAN_COMPACTION_PENDING_REGISTRATION.qualified(),
-            AGENT_PLAN_COMPACTION_PENDING_REGISTRATION
-                .capability_profile
-                .qualifies(STREAMING_REQUIREMENT),
+            documented.qualifies(COMPACTION_REQUIREMENT),
+            qualified.qualifies(COMPACTION_REQUIREMENT),
+            // The same profile refuses a larger requirement than its qualified combination.
+            qualified.qualifies(RECOVERY_REQUIREMENT),
+            UNQUALIFIED_PROFILE.qualifies(AGENT_PLAN_REGISTRATION.requirement),
+            UNQUALIFIED_PROFILE.qualifies(&[ModelCapability::Continuation]),
             AGENT_PLAN_REGISTRATION.qualified(),
-            AGENT_PLAN_REGISTRATION.compacts(),
-            HOST_FAKE_REGISTRATION.qualified(),
-            HOST_FAKE_REGISTRATION.compacts(),
-            AGENT_PLAN_STREAMING_REGISTRATION.compacts(),
+            requirement_compacts(AGENT_PLAN_REGISTRATION.requirement),
+            HOST_FAKE_TOOL_LOOP_REGISTRATION.qualified(),
+            requirement_compacts(HOST_FAKE_TOOL_LOOP_REGISTRATION.requirement),
+            PROBE_FIXTURE_REGISTRATION.qualified(),
         ],
         [
-            false, true, false, true, false, false, true, true, false, true, true, false, true,
-            true, true, true, true, false
+            false, true, false, false, false, true, true, true, true, true
         ]
     );
 }
 
 #[test]
-fn the_head_profile_records_the_window_and_the_pending_profile_does_not_qualify_it() {
+fn the_current_profile_records_the_window_of_the_pinned_version() {
     let window = |registration: &ModelRegistration| {
         registration
             .capability_profile
@@ -83,27 +72,12 @@ fn the_head_profile_records_the_window_and_the_pending_profile_does_not_qualify_
         (
             [
                 window(&AGENT_PLAN_REGISTRATION),
-                window(&AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION),
-                window(&AGENT_PLAN_RECOVERY_REGISTRATION),
-                window(&AGENT_PLAN_WINDOW_PENDING_REGISTRATION),
-                window(&AGENT_PLAN_COMPACTION_REGISTRATION),
-                window(&HOST_FAKE_REGISTRATION),
+                window(&PROBE_FIXTURE_REGISTRATION),
+                window(&HOST_FAKE_TOOL_LOOP_REGISTRATION),
             ],
-            AGENT_PLAN_WINDOW_PENDING_REGISTRATION.qualified(),
             AGENT_PLAN_REGISTRATION.qualified(),
         ),
-        (
-            [
-                Some(1_048_576),
-                Some(1_048_576),
-                Some(262_144),
-                Some(262_144),
-                None,
-                None
-            ],
-            false,
-            true
-        )
+        ([Some(1_048_576), Some(1_048_576), None], true)
     );
 }
 
@@ -113,97 +87,55 @@ fn only_a_qualified_profile_or_an_authorized_qualification_of_its_requirement_re
 
     assert_eq!(
         [
-            HOST_FAKE_REGISTRATION.retrieves(Qualified),
-            AGENT_PLAN_THRESHOLD_REGISTRATION.retrieves(QualificationAuthorized),
-            AGENT_PLAN_RECOVERY_PENDING_REGISTRATION.retrieves(Qualified),
-            AGENT_PLAN_RECOVERY_PENDING_REGISTRATION.retrieves(QualificationAuthorized),
-            AGENT_PLAN_RECOVERY_PENDING_REGISTRATION.qualified(),
-            AGENT_PLAN_RECOVERY_REGISTRATION.retrieves(Qualified),
-            AGENT_PLAN_RECOVERY_REGISTRATION.qualified(),
-            AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION.retrieves(Qualified),
-            AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION.retrieves(QualificationAuthorized),
-            AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION.qualified(),
+            HOST_FAKE_TOOL_LOOP_REGISTRATION.retrieves(Qualified),
             AGENT_PLAN_REGISTRATION.retrieves(Qualified),
-            AGENT_PLAN_REGISTRATION.qualified(),
+            PROBE_FIXTURE_REGISTRATION.retrieves(QualificationAuthorized),
+            // The rule for a profile that does not qualify retrieval.
+            super::retrieval_admitted(&UNQUALIFIED_PROFILE, RECOVERY_REQUIREMENT, Qualified),
+            super::retrieval_admitted(
+                &UNQUALIFIED_PROFILE,
+                RECOVERY_REQUIREMENT,
+                QualificationAuthorized
+            ),
+            super::retrieval_admitted(
+                &UNQUALIFIED_PROFILE,
+                COMPACTION_REQUIREMENT,
+                QualificationAuthorized
+            ),
         ],
-        [
-            true, false, false, true, false, true, true, false, true, false, true, true
-        ]
+        [true, true, true, false, true, false]
     );
 }
 
+/// ADR 0097: the lookup resolves only the current Registrations and the probe fixture, each
+/// revision to its own Registration. Each revision of a removed Registration resolves to nothing.
 #[test]
-fn the_head_registration_pins_a_dated_version_and_each_revision_is_distinct() {
-    let agent_plan: Vec<_> = [
-        "fa02", "fa03", "fa04", "fa05", "fa06", "fa07", "fa08", "fa09", "fa10", "fa11", "fa12",
-        "fa13", "fa14", "fa15", "fa16", "fa17", "fa19", "fa20", "fa21", "fa22", "fa23",
-    ]
-    .iter()
-    .map(|suffix| {
-        model_registration(&format!("018f0000-0000-7001-8000-00000000{suffix}"))
-            .map(|registration| registration.provider_model_id)
-    })
-    .collect();
+fn only_the_current_registrations_resolve_and_the_head_pins_a_dated_version() {
+    // Each input revision with the Registration that it resolves to.
+    let resolved: Vec<_> = (1..=23)
+        .map(|number| format!("018f0000-0000-7001-8000-00000000fa{number:02}"))
+        .filter_map(|revision| {
+            model_registration(&revision).map(|registration| (revision, registration))
+        })
+        .collect();
+    let revision = |suffix: &str| format!("018f0000-0000-7001-8000-00000000{suffix}");
 
     assert_eq!(
         (
-            agent_plan,
-            AGENT_PLAN_REGISTRATION.revision,
+            resolved,
+            AGENT_PLAN_REGISTRATION.provider_model_id,
+            AGENT_PLAN_REGISTRATION.mapping_revision,
             AGENT_PLAN_REGISTRATION.capability_profile.revision,
-            AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION
-                .capability_profile
-                .revision,
         ),
         (
-            [
-                vec![Some("doubao-seed-2.1-pro"); 12],
-                vec![Some("doubao-seed-2-1-pro-260915"); 9]
-            ]
-            .concat(),
-            "018f0000-0000-7001-8000-00000000fa23",
+            vec![
+                (revision("fa16"), &PROBE_FIXTURE_REGISTRATION),
+                (revision("fa18"), &HOST_FAKE_TOOL_LOOP_REGISTRATION),
+                (revision("fa23"), &AGENT_PLAN_REGISTRATION),
+            ],
+            "doubao-seed-2-1-pro-260915",
+            "storyos.volcengine-agent-plan.responses.create.v9",
             "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v4",
-            "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v1",
         )
     );
-}
-
-#[test]
-fn the_registrations_of_the_mappings_v8_and_v9_keep_the_profile_and_the_requirement_of_fa21() {
-    let mapping = |suffix: &str| {
-        model_registration(&format!("018f0000-0000-7001-8000-00000000{suffix}"))
-            .map(|registration| registration.mapping_revision)
-    };
-    let pinned = crate::AGENT_PLAN_SKILL_REGISTRATION;
-
-    assert_eq!(
-        (
-            mapping("fa20"),
-            mapping("fa21"),
-            mapping("fa22"),
-            mapping("fa23"),
-            AGENT_PLAN_REGISTRATION.qualified(),
-            crate::HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
-        ),
-        (
-            Some("storyos.volcengine-agent-plan.responses.create.v6"),
-            Some("storyos.volcengine-agent-plan.responses.create.v7"),
-            Some("storyos.volcengine-agent-plan.responses.create.v8"),
-            Some("storyos.volcengine-agent-plan.responses.create.v9"),
-            true,
-            "018f0000-0000-7001-8000-00000000fa18",
-        )
-    );
-    for later in [
-        crate::AGENT_PLAN_CONTINUITY_REGISTRATION,
-        AGENT_PLAN_REGISTRATION,
-    ] {
-        assert_eq!(
-            ModelRegistration {
-                revision: pinned.revision,
-                mapping_revision: pinned.mapping_revision,
-                ..later
-            },
-            pinned
-        );
-    }
 }

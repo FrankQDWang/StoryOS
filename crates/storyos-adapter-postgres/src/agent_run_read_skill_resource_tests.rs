@@ -7,8 +7,7 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-    ProjectScope,
+    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ProjectScope,
 };
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, ReadToolResultRefusal,
@@ -18,11 +17,14 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_selected_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_load_skill::tests::{TOOLS, calls, loaded_run, skill_md};
-use crate::agent_run_steering::tests::queued;
-use crate::create_agent_run_tests::skill_tests::{fixture, package, set};
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_load_skill::{TOOLS, calls, loaded_run, skill_md};
+use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::Admission;
 
 const EXPIRES: &str = "SCRIPT:step-reference-expires";
 
@@ -56,15 +58,12 @@ async fn selected_run(
 ) -> (ProjectScope, String) {
     let (scope, chapter_id, first) = queued(store, prefixes[0]).await;
     complete(store, admin, &scope, &first).await;
-    let run_id = admit_selected_run(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
+    let run_id = Admission {
         message,
-        ConversationSelection::New,
-        (skills, selected),
-    )
+        skills: (skills, selected),
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[1])
     .await;
     complete(store, admin, &scope, &run_id).await;
     (scope, run_id)
@@ -73,9 +72,9 @@ async fn selected_run(
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, the
 /// Tools that it declared, and the call identifier and output of each Tool output that it sent.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position, wire -> 'tools',
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position, wire -> 'tools',
                       COALESCE((SELECT jsonb_agg(jsonb_build_array(output ->> 'call_id',
                                                                    output ->> 'output'))
                                   FROM jsonb_array_elements(wire -> 'tool_outputs') AS output),
@@ -84,30 +83,26 @@ async fn sent(admin: &Client, run_id: &str) -> Value {
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The read sources of the Operation Requirement and each selected `skill_resource` item of the
 /// decision Context Assembly at `position`.
 async fn read_record(admin: &Client, run_id: &str, position: i32) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_build_array(jsonb_path_query_array(payload,
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(jsonb_path_query_array(payload,
                         '$.operation_requirement.tool_results[*] ? (exists (@.resource_path))'),
                       jsonb_path_query_array(payload,
                         '$.selected[*] ? (@.source_class == \"skill_resource\")'))::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'
                 AND decision_position = $2::text::numeric",
-            &[&run_id, &position.to_string()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id, &position.to_string()],
+    )
+    .await
 }
 
 fn settled(name: &str, text: &str) -> Value {
@@ -131,9 +126,7 @@ fn finish() -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_of_the_resource_of_each_fixture_settles_with_its_exact_text() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let comms = fixture("internal-comms");
     let dialogue = fixture("dialogue-style-guide");
@@ -261,9 +254,7 @@ async fn a_read_of_the_resource_of_each_fixture_settles_with_its_exact_text() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_refused_read_gives_its_reason_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let comms = fixture("internal-comms");
     let odd = with_files(
@@ -362,9 +353,7 @@ async fn each_refused_read_gives_its_reason_and_the_run_continues() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_of_an_empty_file_or_a_file_of_white_space_gives_its_exact_text() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let blank = with_files(
         "blank-files",
@@ -428,9 +417,7 @@ async fn a_read_of_an_empty_file_or_a_file_of_white_space_gives_its_exact_text()
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn seventeen_reads_of_one_file_settle_sixteen_and_refuse_the_last_at_the_limit() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let notes = with_files(
         "notes",
@@ -472,9 +459,7 @@ async fn seventeen_reads_of_one_file_settle_sixteen_and_refuse_the_last_at_the_l
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_compaction_keeps_a_long_read_output_exact_and_names_no_read_stub() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let text = "Write each scene in the present tense. ".repeat(80);
     let long = with_files("long-notes", vec![("notes.md", text.clone().into_bytes())]);
@@ -512,18 +497,13 @@ async fn a_compaction_keeps_a_long_read_output_exact_and_names_no_read_stub() {
             ])
         })
         .collect();
-    let stubs: Value = serde_json::from_str(
-        admin
-            .query_one(
-                "SELECT jsonb_agg(jsonb_build_array(decision_position, stub_tool_call_ids))::text
+    let stubs: Value = json_of(
+        &admin,
+        "SELECT jsonb_agg(jsonb_build_array(decision_position, stub_tool_call_ids))::text
                    FROM storyos.active_context_compactions WHERE run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get::<_, &str>(/*idx*/ 0),
+        &[&run_id],
     )
-    .unwrap();
+    .await;
     // The summary request sends the read output that waits for it. The later request and each
     // later full input send the read output in its exact form, and no call is a stub.
     assert_eq!(
@@ -543,20 +523,15 @@ async fn a_compaction_keeps_a_long_read_output_exact_and_names_no_read_stub() {
     );
     // The current input of the later full input has no read item, so the read output is not a
     // part of the current input digest (ADR 0085).
-    let context: Value = serde_json::from_str(
-        &admin
-            .query_one(
-                "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
+    let context: Value = json_of(
+        &admin,
+        "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
                    FROM storyos.model_attempts
                   WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
                     AND decision_position = 3",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get::<_, String>(/*idx*/ 0),
+        &[&run_id],
     )
-    .unwrap();
+    .await;
     let classes: Vec<&str> = context
         .as_array()
         .unwrap()
@@ -569,9 +544,7 @@ async fn a_compaction_keeps_a_long_read_output_exact_and_names_no_read_stub() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_read_tool_result_call_of_a_skill_call_is_refused_as_a_host_tool_call() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let notes = with_files(
         "notes",

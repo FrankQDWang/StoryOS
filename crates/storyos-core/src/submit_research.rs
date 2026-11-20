@@ -63,14 +63,7 @@ pub(crate) fn parameters() -> Value {
 #[serde(deny_unknown_fields)]
 struct Arguments {
     summary: String,
-    claims: Vec<ClaimArguments>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ClaimArguments {
-    text: String,
-    citations: Vec<String>,
+    claims: Vec<ClaimCandidate>,
 }
 
 /// The typed intake. A summary, a claim text, or a citation with U+0000 does not fit, because
@@ -86,16 +79,7 @@ pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
     if texts.into_iter().any(|text| text.contains('\0')) {
         return Err(IntakeRefusal::UnstorableText);
     }
-    Ok(ToolIntake::SubmitResearch {
-        summary,
-        claims: claims
-            .into_iter()
-            .map(|claim| ClaimCandidate {
-                text: claim.text,
-                citations: claim.citations,
-            })
-            .collect(),
-    })
+    Ok(ToolIntake::SubmitResearch { summary, claims })
 }
 
 /// The validated arguments of the intake, in their typed form.
@@ -137,9 +121,6 @@ impl SubmitResearchRefusal {
         let reason = match self {
             Self::Synthesis(SynthesisRefusal::NoClaim) => "the research result has no claim",
             Self::Synthesis(SynthesisRefusal::EmptyText) => "the summary or a claim text is blank",
-            Self::Synthesis(SynthesisRefusal::UnstorableText) => {
-                "the summary or a claim text has the character U+0000"
-            }
             Self::Synthesis(SynthesisRefusal::UncitedClaim) => "a claim has no citation",
             Self::Synthesis(SynthesisRefusal::UncapturedCitation) => {
                 "a citation is not the id of a source or a gap in a tool_sources tag of this Run"

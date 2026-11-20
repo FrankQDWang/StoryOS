@@ -13,7 +13,7 @@ use crate::agent_run_retrieval::{
     advance_original_result_retrieval,
 };
 use crate::agent_run_successor::SuccessorWork;
-use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_database_error, update_run};
+use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_unavailable, update_run};
 use crate::update_project_assistance::read_assistance_record;
 
 /// Advances the retrieval subject and then the successor marker of the active decision.
@@ -141,7 +141,7 @@ pub(crate) async fn settle_cancelled(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled))
 }
 
@@ -231,7 +231,7 @@ pub(crate) async fn record_cancelled_create(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(WorkPhase::Hold("recovery"))
 }
 
@@ -293,7 +293,7 @@ async fn write_subject(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .get(0);
     // The successor marker follows the retrieval subject at each Decision position (ADR 0088).
     let unresolved_tool_call =
@@ -322,7 +322,7 @@ async fn write_subject(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     if updated != 1 {
         return Err(CompleteAgentRunError::Unavailable(Box::new(
             std::io::Error::other("The unknown create could not record its reference"),
@@ -416,7 +416,7 @@ pub(crate) async fn in_flight_attempt(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .get(0))
 }
 
@@ -439,7 +439,7 @@ pub(crate) async fn mark_cancellation_duties(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(())
 }
 
@@ -472,6 +472,6 @@ pub(crate) async fn refuse_cancellation_duties(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(())
 }

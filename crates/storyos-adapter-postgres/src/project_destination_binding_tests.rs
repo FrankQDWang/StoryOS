@@ -12,9 +12,11 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::RuntimeClock;
-use crate::agent_run_dispatch::tests::{admit_run, claim_run, queued_run, stores};
-use crate::model_registration::tests::agent_plan;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::model_gateway::RuntimeClock;
+use crate::shared_tests::model_gateway::{Admission, claim_run, queued_run};
+use crate::shared_tests::model_registration::agent_plan;
 
 /// The non-secret binding facts that the Agent Plan binding of a Project records.
 #[derive(Debug, PartialEq)]
@@ -88,9 +90,7 @@ async fn refusal(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_drifted_runs() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, fake_run) =
         queued_run(&store, "e7a", DeploymentDestination::HostFakeToolLoop).await;
@@ -99,14 +99,11 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
         .unwrap()
         .unwrap();
 
-    let agent_plan_run = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "e7b",
-        agent_plan(),
-        "Help with this passage.",
-    )
+    let agent_plan_run = Admission {
+        destination: agent_plan(),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "e7b")
     .await;
     let current = open_project_assistance(&store, &scope)
         .await
@@ -203,12 +200,11 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_binding_with_earlier_bounds_or_an_earlier_registration_gets_new_records() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) = queued_run(&store, "e7f", agent_plan()).await;
-    let reply_form = storyos_core::AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision;
+    // The superseded reply form Registration, which the test makes with its revision (ADR 0097).
+    let reply_form = "018f0000-0000-7001-8000-00000000fa17";
     admin
         .execute(
             "INSERT INTO storyos.model_registration_revisions
@@ -250,14 +246,11 @@ async fn a_binding_with_earlier_bounds_or_an_earlier_registration_gets_new_recor
             ))
             .await
             .unwrap();
-        admit_run(
-            &store,
-            &scope,
-            &chapter_id,
-            prefix,
-            agent_plan(),
-            "Help with this passage.",
-        )
+        Admission {
+            destination: agent_plan(),
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, prefix)
         .await;
         let current = open_project_assistance(&store, &scope)
             .await
@@ -296,21 +289,17 @@ async fn a_binding_with_earlier_bounds_or_an_earlier_registration_gets_new_recor
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_that_pinned_fa21_refuses_with_drift_after_the_deployment_offers_a_later_head() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, drifted_run) = queued_run(&store, "b03", agent_plan()).await;
-    let stale_run = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "b04",
-        agent_plan(),
-        "Help with this passage.",
-    )
+    let stale_run = Admission {
+        destination: agent_plan(),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "b04")
     .await;
-    let pinned = storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision;
+    // The superseded Registration `fa21`, which the test makes with its revision (ADR 0097).
+    let pinned = "018f0000-0000-7001-8000-00000000fa21";
     // The Project bound `fa21` before the deployment offered the later head.
     admin
         .batch_execute(&format!(
@@ -345,14 +334,11 @@ async fn a_run_that_pinned_fa21_refuses_with_drift_after_the_deployment_offers_a
     // The first createAgentRun of another Project on the later head makes it the head.
     let (other_scope, _, _) = queued_run(&store, "b05", agent_plan()).await;
     let drifted = refusal(&store, &admin, &scope, &drifted_run).await;
-    admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "b06",
-        agent_plan(),
-        "Help with this passage.",
-    )
+    Admission {
+        destination: agent_plan(),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "b06")
     .await;
     let stale = refusal(&store, &admin, &scope, &stale_run).await;
     let current = open_project_assistance(&store, &scope)
@@ -433,14 +419,11 @@ impl ContractFaultObserver for RebindAtFirstClaim<'_> {
         let first = point == ContractFaultPoint::DispatchClaimed
             && !std::mem::replace(&mut *self.rebound.lock().unwrap(), /*src*/ true);
         if first {
-            admit_run(
-                self.store,
-                self.scope,
-                self.chapter_id,
-                "e7e",
-                agent_plan(),
-                "Help with this passage.",
-            )
+            Admission {
+                destination: agent_plan(),
+                ..Default::default()
+            }
+            .admit(self.store, self.scope, self.chapter_id, "e7e")
             .await;
         }
     }
@@ -449,20 +432,15 @@ impl ContractFaultObserver for RebindAtFirstClaim<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_rebinding_after_an_unknown_create_pauses_its_successor_without_dispatch() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) =
         queued_run(&store, "e7c", DeploymentDestination::HostFakeToolLoop).await;
-    let run_id = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "e7d",
-        DeploymentDestination::HostFakeToolLoop,
-        "SCRIPT:successor-once",
-    )
+    let run_id = Admission {
+        message: "SCRIPT:successor-once",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "e7d")
     .await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
     let observer = RebindAtFirstClaim {
@@ -535,20 +513,15 @@ impl ModelProviderAdapter for DisableAtSuccessorPreparation<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn disabled_assistance_during_successor_preparation_pauses_it_with_its_spent_allowance() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) =
         queued_run(&store, "f5a", DeploymentDestination::HostFakeToolLoop).await;
-    let run_id = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "f5b",
-        DeploymentDestination::HostFakeToolLoop,
-        "SCRIPT:successor-once",
-    )
+    let run_id = Admission {
+        message: "SCRIPT:successor-once",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "f5b")
     .await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
     let adapter = DisableAtSuccessorPreparation {

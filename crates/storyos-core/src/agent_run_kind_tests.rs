@@ -1,8 +1,8 @@
 use super::{AgentRunKind, MEMORY_CAPTURE_MAX_RUN_STEPS, yields_to_author};
 use crate::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_STREAMING_REGISTRATION, BudgetBounds,
-    HOST_FAKE_REGISTRATION, MAX_RUN_STEPS, MemoryCaptureAssembly, ProjectionMode, RunStepLimit,
-    ToolChoice, ToolOperation, assemble_memory_capture_context,
+    AGENT_PLAN_REGISTRATION, BudgetBounds, HOST_FAKE_TOOL_LOOP_REGISTRATION, MAX_RUN_STEPS,
+    MemoryCaptureAssembly, ModelCapability, ProjectionMode, RunStepLimit, ToolChoice,
+    ToolOperation, assemble_memory_capture_context,
 };
 
 #[test]
@@ -25,14 +25,28 @@ fn each_kind_has_its_persisted_name_and_the_worker_dispatches_each_kind() {
 /// whose mapping compacts.
 #[test]
 fn only_a_run_of_the_author_compacts_with_a_registration_that_compacts() {
+    // The requirement of a mapping that streams and continues, and does not compact.
+    const STREAMED_CONTINUATION: &[ModelCapability] = &[
+        ModelCapability::Transport,
+        ModelCapability::NativeText,
+        ModelCapability::Continuation,
+        ModelCapability::Streaming,
+    ];
     let compacts = |revision| AgentRunKind::ALL.map(|kind| kind.compacts_before_decision(revision));
     assert_eq!(
         [
-            compacts(HOST_FAKE_REGISTRATION.revision),
-            compacts(AGENT_PLAN_STREAMING_REGISTRATION.revision),
+            compacts(HOST_FAKE_TOOL_LOOP_REGISTRATION.revision),
+            compacts(AGENT_PLAN_REGISTRATION.revision),
             compacts("an unknown revision"),
+            // A known Registration whose requirement has no HostCompaction.
+            AgentRunKind::ALL.map(|kind| kind.compacts_on(Some(STREAMED_CONTINUATION))),
         ],
-        [[true, false, false], [false; 3], [false; 3]]
+        [
+            [true, false, false],
+            [true, false, false],
+            [false; 3],
+            [false; 3]
+        ]
     );
 }
 
@@ -135,7 +149,7 @@ fn the_full_request_of_a_background_run_is_refused_at_the_window() {
         AgentRunKind::ALL.map(|kind| {
             [
                 AGENT_PLAN_REGISTRATION.revision,
-                HOST_FAKE_REGISTRATION.revision,
+                HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
             ]
             .map(|revision| kind.full_request_too_long(revision, bounds, &record))
         })

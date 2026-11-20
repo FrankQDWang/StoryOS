@@ -5,25 +5,27 @@
 
 use serde_json::{Value, json};
 use storyos_application::{
-    AgentRunControlRefusal, AgentRunReadSelection, AgentRunReadStore, AgentRunWorkStore,
-    CancelAgentRunInput, ConversationSelection, IssueProjectCommandChallenge, PauseAgentRunInput,
-    ProjectConversationReader, ProjectScope, RefusableCommandError, ResearchSourceReadStore,
-    SteerAgentRunInput, VerifiedExportArchive, claim_next_archive_export, complete_archive_export,
-    get_verified_export_archive, issue_project_command_challenge,
+    AgentRunControlRefusal, AgentRunReadSelection, AgentRunReadStore, CancelAgentRunInput,
+    ConversationSelection, PauseAgentRunInput, ProjectConversationReader, ProjectScope,
+    RefusableCommandError, ResearchSourceReadStore, SteerAgentRunInput,
 };
-use storyos_core::{ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination, ModelAdapter};
-use tokio_postgres::{Client, NoTls};
+use storyos_core::{ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination};
+use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::admit_run_in;
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::queued;
 use crate::command_sequence::settle_project_command;
-use crate::project_archive_build::tests::{export_command, zip_store_files};
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::model_gateway::Admission;
 
-use super::agent_run::{CANCEL_AGENT_RUN, PAUSE_AGENT_RUN, create_agent_run_call, request_rows};
-use super::steer_agent_run::STEER_AGENT_RUN;
-use super::support::{issued, seed_project, stores};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_agent_run::{
+    CANCEL_AGENT_RUN, PAUSE_AGENT_RUN, create_agent_run_call, request_rows,
+};
+use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::{issued, seed_project, stores};
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::memory_entries::archived_rows;
 
 /// Inserts the background Run `run_id` with `status` in the Project of the Run of the author
 /// `like`, with the Agent, the grant, and the Model Registration of that Run.
@@ -111,29 +113,7 @@ async fn refusals(admin: &Client, run_id: &str, forms: &[&str]) -> (String, Vec<
 
 /// The identity and the kind of each Run in the Project Export Archive of the Project.
 async fn archived_kinds(store: &PostgresProjectReader, scope: &ProjectScope) -> Vec<[String; 2]> {
-    let (export, input) = export_command(scope, "77");
-    let challenge = IssueProjectCommandChallenge {
-        binding: export.challenge_binding.clone(),
-        nonce: "nonce-export-77".to_owned(),
-        nonce_digest: export.nonce_digest.clone(),
-        earlier_revision_nonces: Vec::new(),
-    };
-    issue_project_command_challenge(store, &challenge)
-        .await
-        .unwrap();
-    store.export_project_archive(&export, &input).await.unwrap();
-    let claimed = claim_next_archive_export(store).await.unwrap().unwrap();
-    complete_archive_export(store, &claimed).await.unwrap();
-    let archive = get_verified_export_archive(store, scope, &input.export_id).await;
-    let VerifiedExportArchive::Ready(zip) = archive.unwrap() else {
-        panic!("the Project Export must return verified ZIP bytes");
-    };
-    let files = zip_store_files(&zip);
-    let (_, runs) = files
-        .iter()
-        .find(|(path, _)| path == "canonical/agent_runs.json")
-        .unwrap();
-    let runs: Vec<Value> = serde_json::from_slice(runs).unwrap();
+    let [runs] = archived_rows(store, scope, "77", ["agent_runs"]).await;
     runs.iter()
         .map(|run| {
             [&run["run_id"], &run["run_kind"]].map(|value| value.as_str().unwrap().to_owned())
@@ -177,9 +157,7 @@ async fn visible_rows(store: &PostgresProjectReader, scope: &ProjectScope, run_i
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_database_check_refuses_each_other_form_of_an_agent_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let call = create_agent_run_call(&store, /*base*/ 0x7700).await;
     store
@@ -257,9 +235,7 @@ async fn a_database_check_refuses_each_other_form_of_an_agent_run() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_background_run_is_not_a_run_that_the_author_can_see_or_control() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let call = create_agent_run_call(&store, /*base*/ 0x7710).await;
     store
@@ -422,34 +398,6 @@ async fn a_background_run_is_not_a_run_that_the_author_can_see_or_control() {
     );
 }
 
-/// Claims as another Worker. An admin transaction locks each AgentRun outside the Project, so
-/// that the claim can take only a Run of this Project and changes no other test data.
-pub(crate) async fn claim_in_project(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-) -> Option<storyos_application::ClaimedAgentRun> {
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL").unwrap();
-    let (others, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
-    tokio::spawn(connection);
-    others.batch_execute("BEGIN").await.unwrap();
-    others
-        .execute(
-            "SELECT 1 FROM storyos.agent_runs WHERE project_id <> $1::text::uuid FOR UPDATE",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    let claimed = store
-        .claim_next_agent_run(&[
-            ModelAdapter::HostFake,
-            ModelAdapter::VolcengineAgentPlanResponses,
-        ])
-        .await
-        .unwrap();
-    others.batch_execute("ROLLBACK").await.unwrap();
-    claimed
-}
-
 /// The Continuation Binding that the first decision request of the Run names as its prior
 /// response, and the binding that the last decision response of the Run `previous` produced.
 async fn prior_response(admin: &Client, run_id: &str, previous: &str) -> [Option<String>; 2] {
@@ -471,24 +419,20 @@ async fn prior_response(admin: &Client, run_id: &str, previous: &str) -> [Option
 
 /// The earlier author messages that the later request of the compaction of the Run records.
 async fn earlier_messages(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT (payload #> '{operation_requirement,earlier_author_messages}')::text
+    json_of(
+        admin,
+        "SELECT (payload #> '{operation_requirement,earlier_author_messages}')::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'later_request'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_background_run_changes_nothing_for_a_project_conversation() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "774").await;
     complete(&store, &admin, &scope, &first).await;
@@ -509,16 +453,13 @@ async fn a_background_run_changes_nothing_for_a_project_conversation() {
     background_run(&admin, &first, background, "queued").await;
     let admit = async |prefix: &str, message: &str| {
         let destination = DeploymentDestination::HostFakeToolLoop;
-        let run_id = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            prefix,
+        let run_id = Admission {
             destination,
             message,
-            conversation.clone(),
-            None,
-        )
+            conversation: conversation.clone(),
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, prefix)
         .await;
         complete(&store, &admin, &scope, &run_id).await;
         run_id

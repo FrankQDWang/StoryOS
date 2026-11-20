@@ -18,8 +18,9 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
 use crate::connection_pool::PooledClient;
+use crate::export_work::set_worker_scope;
 use crate::{PostgresProjectReader, read_error};
 
 /// The kind of the schedule row of a Project Conversation.
@@ -37,7 +38,7 @@ pub(crate) async fn mark_conversation_due(
     let settled_at: SystemTime = client
         .query_one("SELECT clock_timestamp()", &[])
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .get(/*idx*/ 0);
     client
         .execute(
@@ -60,7 +61,7 @@ pub(crate) async fn mark_conversation_due(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(())
 }
 
@@ -95,7 +96,7 @@ pub(crate) async fn mark_due_after_capture(
             &keys,
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
     else {
         return Ok(());
     };
@@ -121,7 +122,7 @@ pub(crate) async fn mark_due_after_capture(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(())
 }
 
@@ -144,7 +145,7 @@ pub(crate) async fn mark_consolidation_due(
             &[&keys[0], &keys[1]],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let Some(due_at) =
         storyos_core::consolidation_due(row.get(/*idx*/ 0), row.get(/*idx*/ 1), row.get(/*idx*/ 2))
     else {
@@ -160,7 +161,7 @@ pub(crate) async fn mark_consolidation_due(
             &[&keys[0], &keys[1], &CONSOLIDATION, &due_at],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(())
 }
 
@@ -168,7 +169,7 @@ impl MemoryWorkScheduleStore for PostgresProjectReader {
     async fn memory_work_due(&self) -> Result<bool, ProjectReadError> {
         let client = self.connect().await?;
         client.batch_execute("BEGIN").await.map_err(read_error)?;
-        set_worker_scope(&client).await?;
+        set_worker_scope(&*client).await?;
         let due = client
             .query_one(
                 "SELECT EXISTS (SELECT 1 FROM storyos.memory_work_schedules
@@ -203,27 +204,12 @@ impl MemoryWorkScheduleStore for PostgresProjectReader {
     }
 }
 
-/// Sets the Worker scope in the open transaction of `client`.
-async fn set_worker_scope(client: &PooledClient) -> Result<(), ProjectReadError> {
-    client
-        .execute(
-            "SELECT set_config('storyos.scope_mode', 'worker', true),
-                    set_config('storyos.owner_user_id', '', true),
-                    set_config('storyos.project_id', '', true),
-                    set_config('storyos.user_id', '', true)",
-            &[],
-        )
-        .await
-        .map(|_| ())
-        .map_err(read_error)
-}
-
 /// Claims one due row in the Worker scope and makes its due time empty, then decides and starts
 /// in the Project Scope of the row.
 async fn claim_and_decide(
     client: &PooledClient,
 ) -> Result<Option<ClaimedMemoryWork>, ProjectReadError> {
-    set_worker_scope(client).await?;
+    set_worker_scope(&**client).await?;
     let Some(row) = client
         .query_opt(
             "WITH next_work AS (

@@ -7,25 +7,26 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, CompleteAgentRunError,
-    ContractFaultPoint, ConversationSelection, NoContractFaults, ProjectScope, complete_agent_run,
+    ContractFaultPoint, ConversationSelection, NoContractFaults, complete_agent_run,
     complete_agent_run_with_tools,
 };
-use storyos_core::{
-    DeploymentDestination, MEMORY_TITLE_MAX_CHARS, MemoryWriteRefusal, RESEARCH_TOOL_OFFER,
-};
-use tokio_postgres::Client;
+use storyos_core::{MEMORY_TITLE_MAX_CHARS, MemoryWriteRefusal, RESEARCH_TOOL_OFFER};
 
-use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_load_skill::tests::calls;
-use crate::agent_run_retrieval::tests::destination;
-use crate::agent_run_steering::tests::{
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_load_skill::calls;
+use crate::shared_tests::agent_run_retrieval::destination;
+use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, cancellation, claim_duties, queued, settle,
 };
-use crate::agent_run_tool_dispatch::tests::{client, exa_tools, mcp_replies, point_mcp};
-use crate::agent_run_tool_recovery::tests::{Fault, FaultAt};
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::memory_entries::tests::{archived, write_versions};
+use crate::shared_tests::agent_run_tool_dispatch::{client, exa_tools, mcp_replies, point_mcp};
+use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
+use crate::shared_tests::agent_run_write_memory::{first_index, memory_head, refused, versions};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::memory_entries::{archived, write_versions};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 
 /// The fake script line of one `write_memory` call.
 fn script(action: &str, arguments: &Value) -> String {
@@ -36,77 +37,14 @@ fn settled(text: &str) -> Value {
     json!(["write_memory", "settled", null, text, true])
 }
 
-pub(crate) fn refused(refusal: MemoryWriteRefusal) -> Value {
-    json!([
-        "write_memory",
-        "refused",
-        refusal.label(),
-        refusal.result().text,
-        true
-    ])
-}
-
 fn finish() -> Value {
     json!(["finish", "settled", null, "", true])
-}
-
-/// Each version row of the Project of `scope` in the order of its Memory revision, as one line:
-/// the number, the version, the revision, the state, the type, the origin, the title, the
-/// description, the text, and the kind of the cause.
-pub(crate) async fn versions(admin: &Client, scope: &ProjectScope) -> Vec<Value> {
-    admin
-        .query(
-            "SELECT concat_ws(' ', entry_number, version, memory_revision, state, entry_type,
-                      origin, title, description, text, cause ->> 'kind')
-               FROM storyos.memory_entry_versions
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-              ORDER BY memory_revision",
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap()
-        .iter()
-        .map(|row| json!(row.get::<_, String>(/*idx*/ 0)))
-        .collect()
-}
-
-/// The Memory revision and the next entry number of the head of the Project of `scope`.
-pub(crate) async fn memory_head(admin: &Client, scope: &ProjectScope) -> Option<(i64, i64)> {
-    admin
-        .query_opt(
-            "SELECT memory_revision::bigint, next_entry_number::bigint
-               FROM storyos.project_memory_heads
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap()
-        .map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1)))
-}
-
-/// The text of each `memory_index` item of the decision Context Assembly at the RunStep 0 of the
-/// Run.
-pub(crate) async fn first_index(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT COALESCE(jsonb_path_query_array(payload,
-                      '$.selected[*] ? (@.source_class == \"memory_index\").content'), '[]')::text
-               FROM storyos.context_assembly_manifests
-              WHERE run_id = $1::text::uuid AND manifest_role = 'decision'
-                AND decision_position = 0",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_create_and_a_change_of_one_response_settle_in_order_and_the_next_run_gets_the_entry() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "9f1").await;
     complete(&store, &admin, &scope, &first).await;
@@ -152,9 +90,9 @@ async fn a_create_and_a_change_of_one_response_settle_in_order_and_the_next_run_
     );
     // The entry identity is the ToolCall of the create, and the source reference of each version
     // names the Conversation, the Run, and the ToolCall of its write.
-    let sources: Value = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(version.memory_entry_id = first.tool_call_id,
+    let sources: Value = json_of(
+        &admin,
+        "SELECT jsonb_agg(jsonb_build_array(version.memory_entry_id = first.tool_call_id,
                       version.source_references = jsonb_build_array(jsonb_build_object(
                         'kind', 'conversation', 'conversation_id', run.conversation_id::text,
                         'run_id', run.run_id::text, 'tool_call_id', call.tool_call_id::text)))
@@ -167,11 +105,9 @@ async fn a_create_and_a_change_of_one_response_settle_in_order_and_the_next_run_
                  ON call.run_id = run.run_id
                 AND call.call_id = 'call_write_memory_' || (version.version - 1)
               WHERE version.project_id = run.project_id",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-        .unwrap();
+        &[&run_id],
+    )
+    .await;
     assert_eq!(sources, json!([[true, true], [true, true]]));
     // The request after the writes sends each result as the output of its call in the
     // `tool_result` boundary (ADR 0085).
@@ -240,9 +176,7 @@ async fn a_create_and_a_change_of_one_response_settle_in_order_and_the_next_run_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_refused_write_writes_no_row_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "9f4").await;
     complete(&store, &admin, &scope, &first).await;
@@ -298,9 +232,7 @@ async fn each_refused_write_writes_no_row_and_the_run_continues() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_change_writes_only_the_entry_of_the_project_of_its_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "9f6").await;
     complete(&store, &admin, &scope, &first).await;
@@ -332,9 +264,7 @@ async fn a_change_writes_only_the_entry_of_the_project_of_its_run() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_settled_create_stays_when_the_author_cancels_the_run_later() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "9f9").await;
     complete(&store, &admin, &scope, &first).await;
@@ -382,25 +312,19 @@ async fn a_settled_create_stays_when_the_author_cancels_the_run_later() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_create_of_a_run_that_lost_its_lease_writes_nothing() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "9fb").await;
     complete(&store, &admin, &scope, &first).await;
     let create = json!({"type": "other", "title": "潮汐", "description": "潮汐表。",
                         "text": "1890 年的潮汐表。"});
     let message = format!("{}\nSearch the web: tide tables", script("create", &create));
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "9fc",
-        DeploymentDestination::HostFakeToolLoop,
-        &message,
-        ConversationSelection::New,
-        Some(&RESEARCH_TOOL_OFFER),
-    )
+    let run_id = Admission {
+        message: &message,
+        research: Some(&RESEARCH_TOOL_OFFER),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "9fc")
     .await;
     let (mcp_base, _mcp) = destination(mcp_replies(exa_tools(|_| {}), None)).await;
     point_mcp(&admin, &scope, &mcp_base).await;

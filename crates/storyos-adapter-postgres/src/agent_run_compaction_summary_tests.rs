@@ -5,8 +5,14 @@ use storyos_core::{ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::RuntimeClock;
-use crate::agent_run_dispatch::tests::{admit_run_in, claim_run, queued_run, stores};
+use crate::shared_tests::agent_run_compaction_summary::{
+    ADVICE, ChangingFake, finish_events, near_threshold, second_run_on_agent_plan, streamed,
+    with_usage,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::model_gateway::RuntimeClock;
+use crate::shared_tests::model_gateway::{Admission, claim_run, queued_run};
 
 /// Settles the first AgentRun of a new Conversation, then settles one compaction request in the
 /// same Conversation, and returns the identity of the second AgentRun.
@@ -23,18 +29,15 @@ async fn compact_after_first_run(
     complete_agent_run(store, adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    let run_id = admit_run_in(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
+    let run_id = Admission {
         destination,
-        ACTIVE_COMPACTION_REQUEST_PREFIX,
-        ConversationSelection::Existing {
+        message: ACTIVE_COMPACTION_REQUEST_PREFIX,
+        conversation: ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(store, &scope, &chapter_id, prefixes[1])
     .await;
     admin
         .batch_execute(&before_compaction.replace("{project}", scope.project_id.as_ref()))
@@ -73,9 +76,7 @@ async fn compaction_facts(admin: &Client, run_id: &str) -> [Option<String>; 6] {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_summary_outside_the_pinned_grant_scope_leaves_the_ordinary_continuation() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The pinned grant has the first scope, which does not name the compaction Purpose.
     let (_, run_id) = compact_after_first_run(
@@ -120,115 +121,6 @@ async fn a_summary_outside_the_pinned_grant_scope_leaves_the_ordinary_continuati
     );
 }
 
-/// Returns a test value that is not a real credential.
-struct TestCredential;
-
-impl storyos_application::CredentialResolver for TestCredential {
-    async fn resolve(
-        &self,
-        _reference: &storyos_application::CredentialReference,
-    ) -> Option<storyos_application::ResolvedCredential> {
-        Some(storyos_application::ResolvedCredential::new(
-            "storyos-test-credential".to_owned(),
-        ))
-    }
-}
-
-/// Answers each streamed Responses request on a local port with the next event list, in order,
-/// and returns the endpoint.
-async fn scripted_stream_endpoint(replies: Vec<Vec<serde_json::Value>>) -> String {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let endpoint = format!("http://{}/api/plan/v3", listener.local_addr().unwrap());
-    tokio::spawn(async move {
-        for events in replies {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = Vec::new();
-            let mut chunk = [0_u8; 4096];
-            while !request
-                .windows(/*size*/ 4)
-                .any(|window| window == b"\r\n\r\n")
-            {
-                let read = stream.read(&mut chunk).await.unwrap();
-                request.extend_from_slice(&chunk[..read]);
-            }
-            let mut body = String::from(
-                "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n",
-            );
-            for event in events {
-                body.push_str(&format!("data: {event}\n\n"));
-            }
-            stream.write_all(body.as_bytes()).await.unwrap();
-        }
-    });
-    endpoint
-}
-
-/// The streamed events of one complete response with one assistant message.
-pub(crate) fn streamed(reference: &str, text: &str) -> Vec<serde_json::Value> {
-    let message = serde_json::json!({"id": "msg_01", "type": "message", "role": "assistant",
-        "status": "completed", "content": [{"type": "output_text", "text": text}]});
-    vec![
-        serde_json::json!({"type": "response.created",
-                           "response": {"id": reference, "status": "in_progress"}}),
-        serde_json::json!({"type": "response.output_item.added", "output_index": 0,
-            "item": {"id": "msg_01", "type": "message", "role": "assistant",
-                     "status": "in_progress", "content": []}}),
-        serde_json::json!({"type": "response.output_text.delta", "output_index": 0,
-                           "item_id": "msg_01", "delta": text}),
-        serde_json::json!({"type": "response.output_item.done", "output_index": 0,
-                           "item": message}),
-        serde_json::json!({"type": "response.completed", "response": {
-            "id": reference, "status": "completed", "output": [message],
-            "usage": {"input_tokens": 40, "output_tokens": 12}}}),
-    ]
-}
-
-pub(crate) const ADVICE: &str = "Keep it.";
-
-/// The streamed events of one complete response with one `finish` call.
-pub(crate) fn finish_events(reference: &str) -> Vec<serde_json::Value> {
-    let call = serde_json::json!({"id": "fc_finish", "type": "function_call",
-        "status": "completed", "call_id": format!("call_finish_{reference}"), "name": "finish",
-        "arguments": "{}"});
-    vec![
-        serde_json::json!({"type": "response.created",
-                           "response": {"id": reference, "status": "in_progress"}}),
-        serde_json::json!({"type": "response.output_item.done", "output_index": 0,
-                           "item": call}),
-        serde_json::json!({"type": "response.completed", "response": {
-            "id": reference, "status": "completed", "output": [call],
-            "usage": {"input_tokens": 40, "output_tokens": 4}}}),
-    ]
-}
-
-/// The events of `streamed`, with the reported usage that the terminal event gives.
-pub(crate) fn with_usage(
-    mut events: Vec<serde_json::Value>,
-    input: u64,
-    output: u64,
-) -> Vec<serde_json::Value> {
-    if let Some(terminal) = events.last_mut() {
-        terminal["response"]["usage"] =
-            serde_json::json!({"input_tokens": input, "output_tokens": output});
-    }
-    events
-}
-
-/// The responses of a first Run: a `finish` call, and the closing response whose reported usage
-/// puts the next turn above the threshold. The threshold is (1,048,576 - 32,768) x 80 percent =
-/// 812,646 tokens.
-pub(crate) fn near_threshold() -> [Vec<serde_json::Value>; 2] {
-    [
-        finish_events("resp_finish"),
-        with_usage(
-            streamed("resp_decision", ADVICE),
-            /*input*/ 812_500,
-            /*output*/ 200,
-        ),
-    ]
-}
-
 /// Settles the first AgentRun of a new Conversation on a local scripted Agent Plan destination
 /// that answers with `replies` in order. Then settles one more request in the same
 /// Conversation, and returns the identity of the second AgentRun.
@@ -241,78 +133,10 @@ async fn compact_on_agent_plan(
     second_run_on_agent_plan(store, admin, prefixes, "Help again.", replies).await
 }
 
-/// Settles two AgentRuns of one Conversation as `compact_on_agent_plan` does. The second AgentRun
-/// has the author message `message`.
-pub(crate) async fn second_run_on_agent_plan(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    prefixes: [&str; 2],
-    message: &str,
-    replies: Vec<Vec<serde_json::Value>>,
-) -> String {
-    second_run_on_agent_plan_after(store, admin, prefixes, message, replies, "").await
-}
-
-/// Settles two AgentRuns as `second_run_on_agent_plan` does. The admin connection runs
-/// `before_claim`, with `{run}` as the second AgentRun, before the claim of that AgentRun.
-pub(crate) async fn second_run_on_agent_plan_after(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    prefixes: [&str; 2],
-    message: &str,
-    replies: Vec<Vec<serde_json::Value>>,
-    before_claim: &str,
-) -> String {
-    let endpoint = scripted_stream_endpoint(replies).await;
-    let destination = DeploymentDestination::VolcengineAgentPlan {
-        qualification_authorization: None,
-    };
-    let (scope, chapter_id, first) = queued_run(store, prefixes[0], destination.clone()).await;
-    admin
-        .execute(
-            "UPDATE storyos.processing_destination_identity_evidence_revisions
-                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL",
-            &[&scope.project_id.as_ref(), &endpoint],
-        )
-        .await
-        .unwrap();
-    let adapter = storyos_adapter_volcengine_responses::AgentPlanResponses {
-        resolver: TestCredential,
-    };
-    let claim = claim_run(admin, scope.clone(), first).await;
-    complete_agent_run(store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
-        .await
-        .unwrap();
-    let run_id = admit_run_in(
-        store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
-        destination,
-        message,
-        ConversationSelection::Existing {
-            conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
-        },
-        None,
-    )
-    .await;
-    admin
-        .batch_execute(&before_claim.replace("{run}", &run_id))
-        .await
-        .unwrap();
-    let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
-    complete_agent_run(store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
-        .await
-        .unwrap();
-    run_id
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_streamed_agent_plan_summary_installs_for_the_later_decision_request() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let summary = "The author keeps the rain scene and the open letter.";
     let run_id = compact_on_agent_plan(
@@ -389,9 +213,7 @@ async fn a_streamed_agent_plan_summary_installs_for_the_later_decision_request()
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_dropped_summary_stream_keeps_its_items_and_the_decision_continues_the_prior_response() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The summary stream ends after its first delta, with no terminal event.
     let mut dropped = streamed("resp_dropped", "The author keeps the rain.");
@@ -440,49 +262,6 @@ async fn a_dropped_summary_stream_keeps_its_items_and_the_decision_continues_the
     );
 }
 
-/// The Host fake, with one SQL statement that the admin connection runs at the first
-/// preparation of the request that `at` selects. This is a concurrent change at that moment.
-pub(crate) struct ChangingFake<'a> {
-    pub(crate) admin: &'a Client,
-    pub(crate) at: fn(&storyos_application::CreateRequest) -> bool,
-    pub(crate) statement: String,
-    pub(crate) done: std::sync::Mutex<bool>,
-}
-
-impl storyos_application::ModelProviderAdapter for ChangingFake<'_> {
-    const ADAPTERS: &'static [storyos_core::ModelAdapter] = &[storyos_core::ModelAdapter::HostFake];
-    type Prepared =
-        <storyos_adapter_fake_destination::FakeDestination as ModelProviderAdapter>::Prepared;
-
-    async fn prepare(
-        &self,
-        request: &storyos_application::DestinationRequest,
-    ) -> Result<
-        storyos_application::PreparedRequest<Self::Prepared>,
-        storyos_application::PreDispatchRefusal,
-    > {
-        if let storyos_application::DestinationRequest::Create(create) = request
-            && (self.at)(create)
-            && !std::mem::replace(&mut *self.done.lock().unwrap(), /*src*/ true)
-        {
-            self.admin.batch_execute(&self.statement).await.unwrap();
-        }
-        storyos_adapter_fake_destination::FakeDestination
-            .prepare(request)
-            .await
-    }
-
-    async fn exchange(
-        &self,
-        prepared: Self::Prepared,
-        sink: &mut impl storyos_application::ModelStreamSink,
-    ) -> storyos_application::Observation {
-        storyos_adapter_fake_destination::FakeDestination
-            .exchange(prepared, sink)
-            .await
-    }
-}
-
 /// Settles a first AgentRun and then a compaction request in the same Conversation, with the
 /// concurrent change of `adapter`. Returns the compaction refusal, the input mapping of the
 /// decision Attempt, and the role of the Context Assembly Manifest that its request disclosed.
@@ -504,18 +283,14 @@ async fn compact_with_change(
     )
     .await
     .unwrap();
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        prefixes[1],
-        DeploymentDestination::HostFakeToolLoop,
-        ACTIVE_COMPACTION_REQUEST_PREFIX,
-        ConversationSelection::Existing {
+    let run_id = Admission {
+        message: ACTIVE_COMPACTION_REQUEST_PREFIX,
+        conversation: ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, prefixes[1])
     .await;
     let adapter = ChangingFake {
         admin: &admin,
@@ -552,9 +327,7 @@ async fn compact_with_change(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_edit_during_the_summary_request_refuses_the_install() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     // The Working Target changes after the decision Context Assembly and before the summary
     // returns. The later request copies that assembly, so the install must refuse.
     let facts = compact_with_change(
@@ -589,9 +362,7 @@ async fn an_edit_during_the_summary_request_refuses_the_install() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_source_restricted_after_the_install_check_keeps_the_summary_unsent() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     // The prior Attempt becomes restricted while the later request is prepared, before its
     // dispatch claim.
     let facts = compact_with_change(
@@ -621,9 +392,7 @@ async fn a_source_restricted_after_the_install_check_keeps_the_summary_unsent() 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_chain_below_the_threshold_continues_with_no_compaction() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The first response reports 52 tokens, far below the threshold of 812,646 tokens.
     let run_id = compact_on_agent_plan(
@@ -653,9 +422,7 @@ async fn a_chain_below_the_threshold_continues_with_no_compaction() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_chain_at_the_window_without_an_installed_summary_refuses_as_too_long() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The closing response of the first Run reports 1,015,900 tokens. The window after the output bound is
     // 1,015,808 tokens. The summary stream drops, so no summary installs.
@@ -703,9 +470,7 @@ async fn a_chain_at_the_window_without_an_installed_summary_refuses_as_too_long(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_later_run_step_counts_only_the_outputs_of_its_prior_response_in_the_expected_input() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The request at position 1 of the second Run sends only the output of the `finish` call of
     // the response at position 0. The reported usage of that response already has the author

@@ -36,7 +36,7 @@ export type TrustedInputResult = Readonly<{ kind: "trusted_input_applied" }>;
 export type ClipboardPermissionResult = Readonly<{ kind: "clipboard_permission_updated" }>;
 export type ClientSessionCookieResult = Readonly<{ kind: "client_session_cookie_updated" }>;
 export type AuthorEditSubmissionHoldRequest = Readonly<{ action: "hold" | "release" }>;
-export type AuthorEditSubmissionHoldResult = Readonly<{
+type AuthorEditSubmissionHoldResult = Readonly<{
   kind: "author_edit_submission_hold_updated";
 }>;
 export type ProductionHostRequest = Readonly<{
@@ -53,7 +53,7 @@ export type ProjectReceiptsRequest = Readonly<{
   kinds: "all" | "listed";
   authorActions?: number;
 }>;
-export type CommandChallengeRateWindowsRequest = Readonly<{ action: "reset" }>;
+type CommandChallengeRateWindowsRequest = Readonly<{ action: "reset" }>;
 export type CommandChallengeRateWindowsResult = Readonly<{
   kind: "command_challenge_rate_windows_reset";
 }>;

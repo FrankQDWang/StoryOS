@@ -3,7 +3,7 @@
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ToolProbeRequest};
 use storyos_core::ToolProbe;
 
-use crate::agent_run_work::{RunPhaseRow, complete_database_error};
+use crate::agent_run_work::{RunPhaseRow, complete_unavailable};
 
 /// The probe of one AgentRun and the prior response reference that it continues.
 pub(crate) struct ProbeRequest {
@@ -90,7 +90,7 @@ async fn prior_function_call(
             ],
         )
         .await
-        .map_err(complete_database_error)?
+        .map_err(complete_unavailable)?
         .map(|row| (row.get(0), row.get(1))))
 }
 

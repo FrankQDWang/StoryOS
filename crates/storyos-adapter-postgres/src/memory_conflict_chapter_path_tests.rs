@@ -6,18 +6,20 @@ use serde_json::{Value, json};
 use storyos_application::MemoryWorkSource;
 use storyos_application::{MemoryEntrySourceItem, MemoryWorkOutcome, MemoryWorkScheduleStore};
 
-use super::super::schedule_tests::{claim_pass, pass_due};
-use super::super::tests::settled;
-use super::conflict_tests::conflict;
-use super::flag_show_tests::{listed_flags, run, write};
-use super::{flag_lines, seed};
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_load_skill::tests::calls;
-use crate::agent_run_read_chapter::tests::project;
-use crate::agent_run_write_memory::tests::first_index;
-use crate::chapter_capture_schedule::tests::make_chapter_due;
-use crate::memory_capture::loop_tests::record;
-use crate::memory_capture::tests::run_capture;
+use crate::shared_tests::agent_run_load_skill::calls;
+use crate::shared_tests::agent_run_read_chapter::project;
+use crate::shared_tests::agent_run_write_memory::first_index;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_capture_schedule::make_chapter_due;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::memory_capture::run_capture;
+use crate::shared_tests::memory_capture_loop::record;
+use crate::shared_tests::memory_conflict_flag_show::{listed_flags, run, write};
+use crate::shared_tests::memory_consolidation::settled;
+use crate::shared_tests::memory_consolidation_conflict::conflict;
+use crate::shared_tests::memory_consolidation_merge::{flag_lines, seed};
+use crate::shared_tests::memory_consolidation_schedule::{claim_pass, pass_due};
 
 /// The path on the fake destination. The second Block of the Chapter is the capture script of
 /// the fake model, so the Chapter capture gives a conflict item for entry 1. The pass has only
@@ -26,9 +28,7 @@ use crate::memory_capture::tests::run_capture;
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_chapter_capture_flags_an_entry_of_the_author_and_a_change_removes_the_flag() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let reason = "第一章写林舟游过了河。";
     let (call, arguments) = record(json!([conflict(1, reason)]));
@@ -46,11 +46,7 @@ async fn a_chapter_capture_flags_an_entry_of_the_author_and_a_change_removes_the
     let row = "SELECT jsonb_build_array(held, due_at > clock_timestamp())::text
                  FROM storyos.memory_work_schedules
                 WHERE work_kind = 'chapter_capture' AND source_id = $1::text::uuid";
-    let row: String = admin
-        .query_one(row, &[&chapter_a])
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
+    let row = json_of(&admin, row, &[&chapter_a]).await;
 
     // The live run makes the row due with one statement, as the test does here.
     make_chapter_due(&admin, &scope, &chapter_a, /*seconds*/ 1).await;
@@ -81,7 +77,7 @@ async fn a_chapter_capture_flags_an_entry_of_the_author_and_a_change_removes_the
 
     assert_eq!(
         (
-            serde_json::from_str::<Value>(&row).unwrap(),
+            row,
             claimed.source,
             due,
             settled(&admin, &pass.run_id).await,

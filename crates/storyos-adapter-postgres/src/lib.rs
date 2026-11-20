@@ -1,6 +1,8 @@
 //! PostgreSQL implementation of StoryOS Application ports.
 
 #[cfg(test)]
+mod shared_tests;
+#[cfg(test)]
 #[path = "project_command_challenge_tests.rs"]
 mod tests;
 
@@ -196,15 +198,11 @@ mod project_export;
 mod project_export_work;
 mod project_research_binding;
 mod proposal_decision;
-mod proposal_decision_compensation;
 mod prose_change_location_read;
 mod provider_evidence;
 mod readable_export;
 mod readable_export_work;
 mod reject_proposal_operations;
-mod reopen_rejected_operations;
-mod reopen_withdrawn_proposal;
-mod replan_proposal;
 mod selection_references;
 mod set_current_chapter;
 mod skill_package_snapshot;
@@ -246,7 +244,6 @@ pub use storage_activation::{
 pub use storage_activation_proof::{
     StorageActivationProofError, require_release1_storage_activation_proof,
 };
-pub use tool_registration::QuarantineOutcome;
 
 /// Whether `url` is a PostgreSQL connection string that the client can parse. A binary checks
 /// it at startup, before storage activation (ADR 0050).

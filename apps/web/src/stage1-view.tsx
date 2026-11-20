@@ -43,7 +43,6 @@ import { ChapterCreationMenu } from "./chapter-creation-menu.tsx";
 import { ManuscriptSearchPanel } from "./manuscript-search.tsx";
 import { ManuscriptStatisticsPanel } from "./manuscript-statistics.tsx";
 import { ManuscriptReadableExportPanel } from "./manuscript-readable-export.tsx";
-import { LocalUnsentTextPanel } from "./local-unsent-text-panel.tsx";
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { ManuscriptTree } from "./manuscript-tree.tsx";
 import { readManuscriptTree } from "./manuscript-tree-read.ts";
@@ -59,6 +58,7 @@ import { navigateProposal, type ProposalFocus, type ProposalNavigation } from ".
 import { ProjectSettingsLink, ProjectSettingsView } from "./project-settings.tsx";
 import { WritingWorkspace } from "./writing-workspace.tsx";
 import { ADDRESS_CHAPTER_NOT_FOUND_SENTENCE, useAddressChapter } from "./address-chapter.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 
 interface Stage1ViewProps {
   state: ControlledProjectState;
@@ -81,7 +81,6 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   onLocalRecoveryContinued: (state: ControlledProjectState) => void;
 }
 
-const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const INPUT_BOUND_STOP_MESSAGE =
   "等待保存时输入过多，编辑器已停止输入。已写入本机的输入会在刷新页面后继续保存，最后几次输入可能没有保存。请先复制需要保留的文字，再刷新页面。";
 
@@ -102,18 +101,6 @@ function editorParagraphs(
       block_kind: block.block_kind,
       text: block.text,
     }));
-}
-
-function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
-  const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
-  for (let offset = 5; offset >= 0; offset -= 1) {
-    bytes[offset] = now & 0xff;
-    now = Math.floor(now / 256);
-  }
-  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function ProjectReadyView({
@@ -503,11 +490,6 @@ function ProjectReadyView({
             fetchImpl={fetchImpl}
             cryptoImpl={cryptoImpl}
           />
-          {state.editor.kind === "editor-read-only-recovery" && state.editor.localUnsentText !== undefined ? (
-            <LocalUnsentTextPanel text={state.editor.localUnsentText}
-              chapterTitles={new Map(tree?.volumes.flatMap((volume) =>
-                volume.chapters.map((chapter) => [chapter.chapter_id, chapter.title])))} />
-          ) : null}
           </div>
         </>
       )}
@@ -624,20 +606,6 @@ function ProjectReadyView({
               onLocalRecoveryContinued(next);
             }}
           /> : null}
-          {saveState === "needs_attention" && state.editor.kind === "editor-ready" && pending !== null
-            && !pending.requires_local_reconfirmation
-            ? (
-              <button
-                type="button"
-                data-reconfirm-legacy-blocks=""
-                onClick={() => {
-                  void writing?.reconfirmLegacyBlocks();
-                }}
-              >
-                确认待写入正文
-              </button>
-            )
-            : null}
           {writer?.kind === "read_only"
             ? (
               <TakeOverWriterButton

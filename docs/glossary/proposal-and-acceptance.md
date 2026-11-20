@@ -9,7 +9,7 @@ A Core Artifact containing inspectable, core-validatable domain changes together
 _Avoid_: Suggestion, direct write, executable extension
 
 **Proposal Operation**:
-A stable, independently resolvable domain change within a Proposal; dynamically calculated diff hunks are never operations. Historical applied or rejected incarnations remain frozen, while reopening creates a new Proposal Revision and retains the operation ID only when target and semantic identity are unchanged.
+A stable, independently resolvable domain change within a Proposal; dynamically calculated diff hunks are never operations. Historical applied or rejected incarnations remain frozen.
 _Avoid_: Diff hunk, visual change marker
 
 **Proposal Growth**:
@@ -29,7 +29,7 @@ The orthogonal generation (`ready`), validation (`pending | valid | invalid | co
 _Avoid_: Proposal status, accepted Proposal state, rejected Proposal state, stale state
 
 **Proposal Transition**:
-One exhaustive StoryOS Core command-and-event change to a Proposal State Axis under exact expected Revision and lifecycle preconditions. Unlisted transitions are invalid; content correction, replanning, reopening, and Undo Acceptance append new Proposal Revisions rather than rewriting historical state.
+One exhaustive StoryOS Core command-and-event change to a Proposal State Axis under exact expected Revision and lifecycle preconditions. Unlisted transitions are invalid; content correction and Undo Acceptance append new Proposal Revisions rather than rewriting historical state.
 _Avoid_: Status assignment, implicit transition, mutable historical resolution
 
 **Proposal Anchor**:
@@ -93,11 +93,11 @@ The Core-produced `conflicted` condition on the validation axis of a well-formed
 _Avoid_: Proposal Invalidity, stale warning, automatic merge, silent anchor repair
 
 **Proposal Rejection**:
-An author's non-destructive decision not to apply selected pending Proposal Operations. Reopen creates a new pending Proposal Revision. Its Acceptance Eligibility follows the current rules, and a base behind the Chapter Head does not stop it ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
+An author's non-destructive decision not to apply selected pending Proposal Operations. A rejected Operation stays rejected: StoryOS has no command that reopens it ([ADR 0098](../adr/0098-remove-the-three-proposal-recovery-commands-that-no-client-sends.md)).
 _Avoid_: Withdrawal, deletion
 
 **Proposal Withdrawal**:
-A non-destructive removal of a Proposal from active review by the author or by its producer: its source AgentRun and Decision. A Proposal Revision records no producer, so an author candidate edit does not change this producer. Withdrawal is not represented as an author rejection. Author Undo keeps a Withdrawal by the producer of the Proposal. The Undo restores the content, and the Proposal stays `withdrawn` until the author reopens it. The Undo of an author reopen gives the Withdrawal back, so the author can reopen it again ([ADR 0069](../adr/0069-keep-a-producer-withdrawal-through-author-undo.md)).
+A non-destructive removal of a Proposal from active review by the author or by its producer: its source AgentRun and Decision. A Proposal Revision records no producer, so an author candidate edit does not change this producer. Withdrawal is not represented as an author rejection. Author Undo keeps a Withdrawal by the producer of the Proposal. The Undo restores the content, and the Proposal stays `withdrawn` ([ADR 0069](../adr/0069-keep-a-producer-withdrawal-through-author-undo.md)). No command opens a Proposal that its producer withdrew. Author Undo of an author Withdrawal opens the Proposal again in a new Revision ([ADR 0098](../adr/0098-remove-the-three-proposal-recovery-commands-that-no-client-sends.md)).
 _Avoid_: Rejection, deletion
 
 **Safe Compensation Head**:
@@ -133,7 +133,7 @@ The Revision that the current Head of a Chapter restores. Start at the Head. Whe
 _Avoid_: Text equality, content match, restored Head identity
 
 **Proposal Head Lineage Revision**:
-A Revision that the current head of a Proposal restores, and the head itself. When a recorded Proposal Compensation appended one, the prior Revision of the compensated Forward action is also one. The Undo Receipt payload of the Compensation records the appended Revision and its parent. When the Compensation of an Acceptance reopened the Proposal with one, the Undo Acceptance Receipt records it, and the accepted Revision is also one. Author Undo of a candidate edit, an author withdrawal, or a Proposal decision compensates when its target is one of them ([ADR 0068](../adr/0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md)).
+A Revision that the current head of a Proposal restores, and the head itself. When a recorded Proposal Compensation appended one, the prior Revision of the compensated Forward action is also one. The Undo Receipt payload of the Compensation records the appended Revision and its parent. When the Compensation of an Acceptance reopened the Proposal with one, the Undo Acceptance Receipt records it, and the accepted Revision is also one. Author Undo of a candidate edit or an author withdrawal compensates when its target is one of them ([ADR 0068](../adr/0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md)). [ADR 0098](../adr/0098-remove-the-three-proposal-recovery-commands-that-no-client-sends.md) removes the Proposal decisions Replan and reopen, and their Author Undo.
 _Avoid_: Candidate text equality, Proposal head identity, Chapter Head Lineage Revision
 
 **Author Undo Disposition**:

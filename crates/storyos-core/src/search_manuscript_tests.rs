@@ -5,8 +5,9 @@ use super::{
     exact_matches,
 };
 use crate::assemble_context::count_context_item_tokens;
+use crate::shared_tests::exposure_facts;
 use crate::{
-    AGENT_PLAN_REGISTRATION, CONTEXT_ITEM_TOKEN_LIMIT, ContextSourceClass, ExposureFacts,
+    AGENT_PLAN_REGISTRATION, CONTEXT_ITEM_TOKEN_LIMIT, ContextSourceClass,
     HOST_FAKE_TOOL_LOOP_REGISTRATION, IntakeRefusal, ReadableChapter, ToolExposure, ToolIntake,
     ToolResultProjection,
 };
@@ -29,7 +30,7 @@ fn item_tokens(text: &str) -> u64 {
     count_context_item_tokens(&ToolResultProjection::Ok(text).continuation_text("call-1"))
 }
 
-/// ADR 0095 section 1: the mapping `v8` and the fake tool loop mapping declare
+/// ADR 0095 section 1: the current mapping and the fake tool loop mapping declare
 /// `search_manuscript` in each Run, before `finish`, with a strict schema of one query.
 #[test]
 fn each_current_mapping_declares_search_manuscript_with_a_strict_schema() {
@@ -37,18 +38,11 @@ fn each_current_mapping_declares_search_manuscript_with_a_strict_schema() {
         AGENT_PLAN_REGISTRATION.revision,
         HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
     ] {
-        let tools: Vec<_> = ToolExposure::compute(&ExposureFacts {
-            bound: &[],
-            model_registration_revision: revision,
-            skill_catalog: false,
-            memory_use: false,
-            hybrid_search: false,
-            run_kind: crate::AgentRunKind::Author,
-        })
-        .tools
-        .into_iter()
-        .map(|tool| tool.declaration())
-        .collect();
+        let tools: Vec<_> = ToolExposure::compute(&exposure_facts(revision))
+            .tools
+            .into_iter()
+            .map(|tool| tool.declaration())
+            .collect();
         assert_eq!(
             (
                 tools.iter().map(|tool| tool.name).collect::<Vec<_>>(),

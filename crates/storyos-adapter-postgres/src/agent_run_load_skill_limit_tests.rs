@@ -3,18 +3,20 @@
 //! order, and the exact load outputs after a compaction (ADR 0093 section 5).
 
 use serde_json::{Value, json};
-use storyos_application::ConversationSelection;
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, LoadSkillRefusal,
     SKILL_MD_PATH, SkillFileInput, SkillPackage,
 };
 use tokio_postgres::Client;
 
-use super::tests::{calls, loaded_run, record, skill_md};
-use crate::agent_run_dispatch::tests::{admit_selected_run, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::queued;
-use crate::create_agent_run_tests::skill_tests::{fixture, package, set};
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_load_skill::{calls, loaded_run, record, skill_md};
+use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::Admission;
 
 /// The Skills `skill-1` to `skill-<count>`, each with a short `SKILL.md`.
 fn numbered(count: usize) -> Vec<SkillPackage> {
@@ -65,9 +67,9 @@ fn finish() -> Value {
 /// whether it continues a prior response, and the call identifier and output of each Tool
 /// output that it sent.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
                       wire ? 'previous_response_reference',
                       COALESCE((SELECT jsonb_agg(jsonb_build_array(output ->> 'call_id',
                                                                    output ->> 'output'))
@@ -77,19 +79,15 @@ async fn sent(admin: &Client, run_id: &str) -> Value {
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn nine_loads_of_one_response_settle_eight_and_refuse_the_ninth_at_the_limit() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let packages = numbered(9);
     let message = format!("SCRIPT:load_skill {}", names(1..=9));
@@ -114,9 +112,7 @@ async fn nine_loads_of_one_response_settle_eight_and_refuse_the_ninth_at_the_lim
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_second_load_of_a_skill_and_a_load_of_a_selected_skill_are_refused() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let dialogue = fixture("dialogue-style-guide");
     let (_, twice) = loaded_run(
@@ -132,15 +128,12 @@ async fn a_second_load_of_a_skill_and_a_load_of_a_selected_skill_are_refused() {
     let selections = vec![packages[0].reference(), packages[1].reference()];
     let (scope, chapter_id, first) = queued(&store, "215").await;
     complete(&store, &admin, &scope, &first).await;
-    let selected = admit_selected_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "216",
-        &format!("SCRIPT:load_skill skill-1,{}", names(3..=9)),
-        ConversationSelection::New,
-        (set(packages.clone()), selections),
-    )
+    let selected = Admission {
+        message: &format!("SCRIPT:load_skill skill-1,{}", names(3..=9)),
+        skills: (set(packages.clone()), selections),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "216")
     .await;
     complete(&store, &admin, &scope, &selected).await;
 
@@ -170,9 +163,7 @@ const EXPIRES: &str = "SCRIPT:step-reference-expires";
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn two_loads_are_two_outputs_in_call_order_and_each_full_input_sends_both_again() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let dialogue = fixture("dialogue-style-guide");
     let comms = fixture("internal-comms");
@@ -268,9 +259,7 @@ async fn two_loads_are_two_outputs_in_call_order_and_each_full_input_sends_both_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_compaction_after_the_loads_keeps_each_load_output_exact_and_names_no_load_stub() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let dialogue = fixture("dialogue-style-guide");
     let comms = fixture("internal-comms");
@@ -307,10 +296,9 @@ async fn a_compaction_after_the_loads_keeps_each_load_output_exact_and_names_no_
             .cloned()
             .collect()
     };
-    let stubs: Value = serde_json::from_str(
-        admin
-            .query_one(
-                "SELECT jsonb_agg(jsonb_build_array(record.decision_position,
+    let stubs: Value = json_of(
+        &admin,
+        "SELECT jsonb_agg(jsonb_build_array(record.decision_position,
                           (SELECT jsonb_agg(call.call_id ORDER BY stub.ordinal)
                              FROM jsonb_array_elements_text(record.stub_tool_call_ids)
                                   WITH ORDINALITY AS stub(id, ordinal)
@@ -318,13 +306,9 @@ async fn a_compaction_after_the_loads_keeps_each_load_output_exact_and_names_no_
                                ON call.tool_call_id = stub.id::uuid)))::text
                    FROM storyos.active_context_compactions AS record
                   WHERE record.run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get::<_, &str>(/*idx*/ 0),
+        &[&run_id],
     )
-    .unwrap();
+    .await;
     // The summary request sends the output of the load that waits for it. The later request and
     // each later full input send each load output in its exact form, and no call is a stub.
     assert_eq!(

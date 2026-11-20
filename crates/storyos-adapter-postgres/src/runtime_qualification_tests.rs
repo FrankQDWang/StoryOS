@@ -1,85 +1,32 @@
 use std::sync::Mutex;
 
 use storyos_application::{
-    ConversationSelection, CreateRequest, DestinationRequest, ModelProviderAdapter, ModelResponse,
+    ConversationSelection, DestinationRequest, ModelProviderAdapter, ModelResponse,
     ModelStreamSink, ModelUsage, NoContractFaults, Observation, PreDispatchRefusal,
     PreparedRequest, ProjectAssistanceRecord, ProjectScope, RequestRoute, UserId,
-    WirePayloadProjection, complete_agent_run, open_project_assistance,
+    complete_agent_run, open_project_assistance,
 };
 use storyos_core::{
     AGENT_PLAN_ENDPOINT, AGENT_PLAN_REGISTRATION, AssistanceAvailability, BudgetBounds,
-    DeploymentDestination, DestinationKind, ModelAdapter, RuntimeQualification, ToolChoice,
+    DestinationKind, ModelAdapter, RuntimeQualification, ToolChoice,
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::RuntimeClock;
-use crate::agent_run_dispatch::tests::{admit_run, admit_run_in, claim_run, queued_run, stores};
-use crate::agent_run_finish_rule::tests::{finish_before, text_item};
+/// The revision of the superseded Registration of S4-01, which the test makes (ADR 0097). No
+/// product code resolves it, and a Run that pinned it refuses with Registration drift.
+const EARLIER: &str = "018f0000-0000-7001-8000-00000000fa02";
 
-const AUTHORIZATION: &str =
-    "https://github.com/FrankQDWang/StoryOS/issues/393#issuecomment-6098554693";
+/// The revision of another superseded Registration of the route, from before the current one.
+const EARLIER_CONTINUATION: &str = "018f0000-0000-7001-8000-00000000fa04";
+
+use crate::shared_tests::agent_run_finish_rule::text_item;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::model_gateway::RuntimeClock;
+use crate::shared_tests::model_gateway::{Admission, claim_run, queued_run};
+use crate::shared_tests::runtime_qualification::{ScriptedAgentPlan, authorized, settle};
+
 const REFERENCE: &str = storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE;
-
-fn authorized() -> DeploymentDestination {
-    DeploymentDestination::VolcengineAgentPlan {
-        qualification_authorization: Some(AUTHORIZATION.to_owned()),
-    }
-}
-
-/// An Agent Plan adapter that records each Create request and reports one scripted observation.
-struct ScriptedAgentPlan {
-    observation: Observation,
-    seen: Mutex<Vec<CreateRequest>>,
-}
-
-impl ScriptedAgentPlan {
-    fn new(observation: Observation) -> Self {
-        Self {
-            observation,
-            seen: Mutex::default(),
-        }
-    }
-}
-
-/// The scripted observation answers the closing request. A request before a `finish` call that
-/// counted gets the `finish` call first.
-impl ModelProviderAdapter for ScriptedAgentPlan {
-    const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
-    type Prepared = ToolChoice;
-
-    async fn prepare(
-        &self,
-        request: &DestinationRequest,
-    ) -> Result<PreparedRequest<ToolChoice>, PreDispatchRefusal> {
-        let DestinationRequest::Create(create) = request else {
-            return Err(PreDispatchRefusal::UnsupportedRequest);
-        };
-        self.seen.lock().unwrap().push(create.clone());
-        Ok(PreparedRequest {
-            projection: WirePayloadProjection {
-                execution_profile: "storyos.volcengine-agent-plan.execution.v1".to_owned(),
-                mapping_revision: "storyos.volcengine-agent-plan.responses.create.v1".to_owned(),
-                digest: "sha256:scripted".to_owned(),
-                serialized_payload: None,
-                cache_setting: None,
-            },
-            prepared: create.tool_choice,
-        })
-    }
-
-    async fn exchange(
-        &self,
-        tool_choice: ToolChoice,
-        _sink: &mut impl ModelStreamSink,
-    ) -> Observation {
-        match (&self.observation, tool_choice) {
-            (Observation::Terminal(response), ToolChoice::Required) => {
-                Observation::Terminal(finish_before(response))
-            }
-            (observation, _) => observation.clone(),
-        }
-    }
-}
 
 /// The status, settlement, Attempt count, and the qualification, network, and input mapping
 /// facts of the first decision Attempt of one AgentRun.
@@ -104,24 +51,13 @@ async fn qualification_evidence(admin: &Client, run_id: &str) -> [Option<String>
     [0, 1, 2, 3, 4, 5].map(|index| row.get(index))
 }
 
-async fn settle(
-    store: &crate::PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    run_id: &str,
-    adapter: &ScriptedAgentPlan,
-) {
-    let claim = claim_run(admin, scope.clone(), run_id.to_owned()).await;
-    complete_agent_run(store, adapter, &NoContractFaults, &RuntimeClock, &claim)
-        .await
-        .unwrap();
-}
-
 /// Returns the Project to the binding of S4-01: the pending Agent Plan Registration, a pending
 /// Decision, and that Registration as the head of its adapter. `run_id` pinned it.
 async fn pin_pending_registration(admin: &Client, scope: &ProjectScope, run_id: &str) {
-    let pending = &storyos_core::AGENT_PLAN_PENDING_REGISTRATION;
-    let profile = serde_json::to_string(pending.capability_profile).unwrap();
+    // The row of the earlier revision has the profile of the probe fixture, a profile with a
+    // pending entry. The drift refusal reads only the revision.
+    let profile_value = &storyos_core::PROBE_FIXTURE_CAPABILITY_PROFILE;
+    let profile = serde_json::to_string(profile_value).unwrap();
     admin
         .batch_execute(&format!(
             "INSERT INTO storyos.model_capability_profiles (capability_profile_revision, profile)
@@ -143,9 +79,9 @@ async fn pin_pending_registration(admin: &Client, scope: &ProjectScope, run_id: 
              SET session_replication_role = DEFAULT;
              UPDATE storyos.model_registration_heads SET model_registration_revision = '{revision}'
               WHERE model_kind = 'volcengine_agent_plan_responses';",
-            profile_revision = pending.capability_profile.revision,
-            revision = pending.revision,
-            surface = pending.api_surface,
+            profile_revision = profile_value.revision,
+            revision = EARLIER,
+            surface = AGENT_PLAN_REGISTRATION.api_surface,
             project = scope.project_id.as_ref(),
         ))
         .await
@@ -155,9 +91,7 @@ async fn pin_pending_registration(admin: &Client, scope: &ProjectScope, run_id: 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_request_once() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, early_run) = queued_run(&store, "e9a", authorized()).await;
     pin_pending_registration(&admin, &scope, &early_run).await;
@@ -172,7 +106,13 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
     });
     settle(&store, &admin, &scope, &early_run, &unknown).await;
     settle(&store, &admin, &other_scope, &other_run, &unknown).await;
-    let unknown_run = admit_run(&store, &scope, &chapter_id, "e9b", authorized(), "Help.").await;
+    let unknown_run = Admission {
+        destination: authorized(),
+        message: "Help.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "e9b")
+    .await;
     let current = open_project_assistance(&store, &scope)
         .await
         .unwrap()
@@ -226,13 +166,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
                 None,
                 AGENT_PLAN_REGISTRATION.revision.to_owned()
             ),
-            (
-                "pending".to_owned(),
-                None,
-                storyos_core::AGENT_PLAN_PENDING_REGISTRATION
-                    .revision
-                    .to_owned()
-            ),
+            ("pending".to_owned(), None, EARLIER.to_owned()),
         )
     );
     assert_ne!(
@@ -251,21 +185,24 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
         cache_use: storyos_application::CacheUse::Unknown,
         response_reference: Some("resp_01".to_owned()),
     }));
-    let first = admit_run(&store, &scope, &chapter_id, "e9c", authorized(), "Help.").await;
+    let first = Admission {
+        destination: authorized(),
+        message: "Help.",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "e9c")
+    .await;
     settle(&store, &admin, &scope, &first, &advisory).await;
     let conversation_id = "018f0000-0000-7001-8000-00000006e9c6".to_owned();
-    let next = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "e9d",
-        authorized(),
-        "Help again.",
-        ConversationSelection::Existing {
+    let next = Admission {
+        destination: authorized(),
+        message: "Help again.",
+        conversation: ConversationSelection::Existing {
             conversation_id: conversation_id.clone(),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "e9d")
     .await;
     settle(&store, &admin, &scope, &next, &advisory).await;
     // The prior binding of the Conversation came from the earlier Registration of the route.
@@ -275,23 +212,17 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
                 SET payload = jsonb_set(payload, '{produced_binding,model_registration_revision}',
                                         to_jsonb($2::text))
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
-            &[
-                &next,
-                &storyos_core::AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION.revision,
-            ],
+            &[&next, &EARLIER_CONTINUATION],
         )
         .await
         .unwrap();
-    let upgraded = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "ea7",
-        authorized(),
-        "Help once more.",
-        ConversationSelection::Existing { conversation_id },
-        None,
-    )
+    let upgraded = Admission {
+        destination: authorized(),
+        message: "Help once more.",
+        conversation: ConversationSelection::Existing { conversation_id },
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "ea7")
     .await;
     settle(&store, &admin, &scope, &upgraded, &advisory).await;
 
@@ -420,9 +351,7 @@ impl ModelProviderAdapter for CancellingAgentPlan<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_cancelled_qualification_request_refuses_its_abort_once_and_records_no_remote_stop() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued_run(&store, "e9e", authorized()).await;
     let adapter = CancellingAgentPlan {
@@ -563,9 +492,7 @@ impl ModelProviderAdapter for LateResponseAgentPlan<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_response_after_cancellation_keeps_its_usage_and_cache_use_and_supplies_no_decision() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued_run(&store, "ea8", authorized()).await;
     let adapter = LateResponseAgentPlan {
@@ -662,9 +589,7 @@ impl ModelProviderAdapter for ReferenceChangingAgentPlan<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_dispatch_claim_refuses_a_prior_reference_that_changed_after_preparation() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued_run(&store, "ea9", authorized()).await;
     let advisory = ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
@@ -675,18 +600,15 @@ async fn the_dispatch_claim_refuses_a_prior_reference_that_changed_after_prepara
         response_reference: Some("resp_01".to_owned()),
     }));
     settle(&store, &admin, &scope, &first, &advisory).await;
-    let next = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "eab",
-        authorized(),
-        "Help again.",
-        ConversationSelection::Existing {
+    let next = Admission {
+        destination: authorized(),
+        message: "Help again.",
+        conversation: ConversationSelection::Existing {
             conversation_id: "018f0000-0000-7001-8000-00000006ea96".to_owned(),
         },
-        None,
-    )
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "eab")
     .await;
     let adapter = ReferenceChangingAgentPlan {
         admin: &admin,
@@ -797,7 +719,8 @@ async fn real_attempt_evidence(
     complete_agent_run(store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    let record = storyos_application::open_agent_run(store, &scope, &run_id)
+    let current = storyos_application::AgentRunReadSelection::Current;
+    let record = storyos_application::inspect_agent_run(store, &scope, &run_id, &current)
         .await
         .unwrap()
         .unwrap();
@@ -813,9 +736,7 @@ async fn real_attempt_evidence(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_reference() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let response = |id: &str, usage: Option<serde_json::Value>| {
         let mut body = serde_json::json!({"id": id, "status": "completed", "output": [

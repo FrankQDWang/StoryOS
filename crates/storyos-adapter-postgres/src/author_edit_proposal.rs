@@ -8,7 +8,7 @@ mod compensation;
 mod revision;
 pub(crate) use compensation::{
     ObservedProposalFrontier, ProposalEditCompensation, decode_proposal_compensation,
-    proposal_receipt_payload, settle_proposal_compensation,
+    proposal_receipt_payload,
 };
 pub(super) use revision::append_proposal_revision_as;
 

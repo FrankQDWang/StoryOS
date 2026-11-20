@@ -7,9 +7,12 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::stream_commit_contention_tests::dispatched;
-use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
 use crate::agent_run_observation::encode_items;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::{claim_run, queued_run};
+use crate::shared_tests::stream_commit_contention::dispatched;
 
 fn item(item_id: &str, text: &str) -> NativeStreamItem {
     NativeStreamItem {
@@ -27,16 +30,13 @@ fn item(item_id: &str, text: &str) -> NativeStreamItem {
 }
 
 async fn stored_payload(admin: &Client, dispatch: &DispatchClaim) -> serde_json::Value {
-    let payload: String = admin
-        .query_one(
-            "SELECT payload::text FROM storyos.model_attempts
+    json_of(
+        admin,
+        "SELECT payload::text FROM storyos.model_attempts
               WHERE model_attempt_id = $1::text::uuid",
-            &[&dispatch.model_attempt_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    serde_json::from_str(&payload).unwrap()
+        &[&dispatch.model_attempt_id],
+    )
+    .await
 }
 
 /// Each stream commit changes only the items and the optional reference of the stored Attempt
@@ -44,9 +44,7 @@ async fn stored_payload(admin: &Client, dispatch: &DispatchClaim) -> serde_json:
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_stream_commit_keeps_the_attempt_payload_outside_its_items_and_reference() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) =
         queued_run(&store, "9a0", DeploymentDestination::HostFakeToolLoop).await;

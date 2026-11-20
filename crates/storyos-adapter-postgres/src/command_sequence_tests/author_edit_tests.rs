@@ -8,16 +8,25 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::author_edit::AuthorEditFault;
-use crate::create_volume_authority_tests::{NamedEdit, adjusted_edit_command, named_edit_command};
+use crate::shared_tests::create_volume_authority::{
+    NamedEdit, adjusted_edit_command, named_edit_command,
+};
 
-use super::acceptance::{acceptable_proposal, advance_chapter_head, seed_condition};
-use super::agent_run::seed_run;
-use super::secondary_operation::{
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_acceptance::{
+    acceptable_proposal, advance_chapter_head, seed_condition,
+};
+use crate::shared_tests::command_sequence_agent_run::seed_run;
+use crate::shared_tests::command_sequence_secondary_operation::{
     BLOCK_EDIT, CandidateEdit, PRIMARY_TEXT, chapter_blocks, earlier_base_proposal, edit_block,
     edit_operation_candidate, one_operation_proposal, proposal_head_revision,
 };
-use super::support::{run_without_foreign_keys, settlement_rows, stores, two_chapter_writer};
-use super::undo::{edit_in_chapter_of, issued_undo, latest_forward, session_chapter_head, undo};
+use crate::shared_tests::command_sequence_support::{
+    run_without_foreign_keys, settlement_rows, stores, two_chapter_writer,
+};
+use crate::shared_tests::command_sequence_undo::{
+    edit_in_chapter_of, issued_undo, latest_forward, session_chapter_head, undo,
+};
 
 /// The Author Edit cases of the contract rows.
 #[derive(Clone, Copy, Debug)]
@@ -221,9 +230,7 @@ async fn admission_state(admin: &Client, command: &ApplyAuthorEditCommand) -> (i
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn every_author_edit_outcome_replays_its_first_settlement_and_writes_only_its_records() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
     for (edit, base) in EDITS.into_iter().zip((0x3800..).step_by(/*step*/ 0x10)) {
@@ -251,9 +258,7 @@ async fn every_author_edit_outcome_replays_its_first_settlement_and_writes_only_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_failing_settle_step_rolls_back_every_row_and_a_later_settle_step_completes_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
     for (edit, base) in EDITS.into_iter().zip((0x3860..).step_by(/*step*/ 0x10)) {
@@ -287,9 +292,7 @@ async fn a_failing_settle_step_rolls_back_every_row_and_a_later_settle_step_comp
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_cut_after_the_admit_step_leaves_one_admission_and_an_exact_retry_conflicts() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
     for (edit, base) in EDITS.into_iter().zip((0x38c0..).step_by(/*step*/ 0x10)) {
@@ -319,9 +322,7 @@ async fn a_cut_after_the_admit_step_leaves_one_admission_and_an_exact_retry_conf
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_author_edit_replay_needs_no_response_record_and_damaged_evidence_is_a_store_fault() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
     for (edit, base, damage) in [
@@ -476,9 +477,7 @@ enum Damage {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_replay_refuses_a_changed_binding_and_fails_on_a_damaged_receipt_shape() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let receipt = |set: &str| {
         format!("UPDATE storyos.domain_receipts SET {set} WHERE receipt_id = '{{receipt}}'")
@@ -667,9 +666,7 @@ async fn receipt_facts(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_outcome_query_settles_a_cut_admission_with_the_receipt_of_an_uninterrupted_edit() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut recovered = Vec::new();
     let mut uninterrupted = Vec::new();
@@ -707,9 +704,7 @@ async fn the_outcome_query_settles_a_cut_admission_with_the_receipt_of_an_uninte
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_outcome_query_settles_an_expired_or_unrecoverable_admission_as_requires_reconfirmation()
  {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
     let mut expected = Vec::new();
@@ -785,9 +780,7 @@ async fn the_outcome_query_settles_an_expired_or_unrecoverable_admission_as_requ
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_outcome_query_fails_on_a_changed_command_payload_or_a_corrupt_commit() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
     for (edit, base, damage) in [
@@ -829,9 +822,7 @@ async fn the_outcome_query_fails_on_a_changed_command_payload_or_a_corrupt_commi
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_versioned_edit_conflicts_on_a_reserved_block_and_applies_on_another_block() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let proposal = one_operation_proposal(&store, &admin, /*base*/ 0x8a00).await;
     let proposal_revision = proposal_head_revision(&admin, &proposal.proposal_id).await;
@@ -938,9 +929,7 @@ enum EarlierCandidate {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_candidate_edit_on_an_earlier_base_is_valid_and_its_undo_keeps_the_base() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut edited = Vec::new();
     let mut bases = Vec::new();
@@ -1029,9 +1018,7 @@ async fn a_candidate_edit_on_an_earlier_base_is_valid_and_its_undo_keeps_the_bas
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_admission_payload_cannot_carry_a_draft_retry_source() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let command = edit_command(&store, &admin, Edit::Prose, /*base*/ 0x7e00).await;
     store.apply_author_edit(&command).await.unwrap();

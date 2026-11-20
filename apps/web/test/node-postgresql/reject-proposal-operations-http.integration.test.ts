@@ -107,30 +107,6 @@ test("an exact retry of a rejection returns its first acknowledgement after a wi
   assert.deepEqual(await rejected.command.send(), { response: rejected.response, body: rejected.body });
 });
 
-test("an exact retry of a reopened withdrawal returns its first acknowledgement after a rejection", async () => {
-  const proposal = await openedProposal(server, "Proposal Decision Replay Novel");
-  const { story, opened, before, editorSessionId } = proposal;
-  const withdrawn = await withdrawal(proposal);
-  if (withdrawn.response.effect.kind !== "resolved") throw new Error("expected an author withdrawal");
-  const reopened = await story.send("reopenWithdrawnProposal", { request: {
-    command_schema: "storyos.command.reopen-withdrawn-proposal.request.v1",
-    reopen_withdrawn_proposal_input: {
-      proposal_revision_id: opened.revision_id,
-      withdrawal_event_ref: withdrawn.response.effect.closure_event_refs[0] ?? "",
-      expected_closure: "withdrawn",
-      expected_target_revisions: [before.current_revision.revision_id],
-      editor_session_id: editorSessionId,
-      ...story.binding(),
-    },
-  }, path: { proposalId: opened.proposal_id } });
-  if (reopened.response.effect.kind !== "resolved") throw new Error("expected a resolved reopen");
-  assert.equal(reopened.response.effect.preserved_operation_resolution, "pending");
-  const rejected = await story.send("rejectProposalOperations",
-    rejection(proposal, { revisionId: reopened.response.effect.resulting_proposal_revision_id }));
-  assert.equal(rejected.response.effect.kind, "resolved");
-  assert.deepEqual(await reopened.command.send(), { response: reopened.response, body: reopened.body });
-});
-
 test("author withdraw closes the current Proposal without changing authority", async () => {
   await drainLeftoverWork();
   const story = await createStory(server, { title: "Withdraw Proposal Novel", assistance: true });

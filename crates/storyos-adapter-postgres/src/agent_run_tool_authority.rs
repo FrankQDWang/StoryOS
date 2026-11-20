@@ -11,7 +11,8 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::complete_database_error;
+use crate::agent_run_work::complete_unavailable;
+use crate::tool_registration::quarantine_revision;
 
 /// One ToolCall row that the transaction locked.
 pub(crate) struct ToolCallRow {
@@ -85,7 +86,7 @@ pub(crate) async fn next_unresolved(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     row.as_ref().map(ToolCallRow::decode).transpose()
 }
 
@@ -113,7 +114,7 @@ pub(crate) async fn locked(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     row.as_ref().map(ToolCallRow::decode).transpose()
 }
 
@@ -220,7 +221,7 @@ pub(crate) async fn read_authority(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     let lifecycle = match row.get::<_, Option<&str>>(/*idx*/ 7) {
         None => ToolRegistrationLifecycle::Active,
         Some(lifecycle) => ToolRegistrationLifecycle::parse(lifecycle)
@@ -252,6 +253,29 @@ pub(crate) struct Resolution<'a> {
     pub attempt: Option<&'a Value>,
     pub outcome: Option<Value>,
     pub result: Option<&'a storyos_core::ToolResultText>,
+}
+
+impl<'a> Resolution<'a> {
+    /// A Host Tool call that settles with `result`.
+    pub(crate) fn settled(result: &'a storyos_core::ToolResultText) -> Self {
+        Self::host(ToolCallState::Settled, /*refusal*/ None, Some(result))
+    }
+
+    /// A call that ends in `state` with no Destination Attempt and no Tool Effect Outcome: a Host Tool
+    /// call, or an external ToolCall that `refuse` settles before the dispatch claim.
+    pub(crate) fn host(
+        state: ToolCallState,
+        refusal: Option<&'a str>,
+        result: Option<&'a storyos_core::ToolResultText>,
+    ) -> Self {
+        Self {
+            state,
+            refusal,
+            attempt: None,
+            outcome: None,
+            result,
+        }
+    }
 }
 
 /// Writes the resolution of `row` and appends its one `tool_call_settled` Activity Run Event.
@@ -288,7 +312,7 @@ pub(crate) async fn resolve(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     append_event(
         client,
         claim,
@@ -320,13 +344,7 @@ pub(crate) async fn refuse(
         client,
         claim,
         row,
-        Resolution {
-            state,
-            refusal: Some(code),
-            attempt: None,
-            outcome: None,
-            result: None,
-        },
+        Resolution::host(state, Some(code), /*result*/ None),
     )
     .await
 }
@@ -344,16 +362,9 @@ pub(crate) async fn quarantine(
         serde_json::to_value(differences)
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?,
     );
-    let changed = client
-        .execute(
-            "UPDATE storyos.tool_registration_revisions
-                SET lifecycle = 'quarantined', quarantine_differences = $2::text::jsonb,
-                    quarantined_at = clock_timestamp()
-              WHERE tool_registration_revision = $1::text::uuid AND lifecycle = 'active'",
-            &[&row.registration_revision, &differences.to_string()],
-        )
+    let changed = quarantine_revision(client, &row.registration_revision, &differences)
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     if changed == 0 {
         return Ok(());
     }
@@ -414,7 +425,7 @@ pub(crate) async fn append_event(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
+        .map_err(complete_unavailable)?;
     Ok(())
 }
 

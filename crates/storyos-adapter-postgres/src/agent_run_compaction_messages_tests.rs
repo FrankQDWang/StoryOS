@@ -2,40 +2,43 @@ use serde_json::{Value, json};
 use storyos_application::{AgentRunReadSelection, AgentRunReadStore, ConversationSelection};
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, AgentRunStatus,
-    DeploymentDestination, HOST_FAKE_COMPACTION_OUTPUT,
+    HOST_FAKE_COMPACTION_OUTPUT,
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::{admit_run_in, stores};
-use crate::agent_run_finish_rule::tests::{complete, tool_loop_run};
-use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
+use crate::shared_tests::agent_run_finish_rule::{complete, tool_loop_run};
+use crate::shared_tests::agent_run_steering::{
+    AuthorAction, AuthorAt, Moment, queued, settle, steering,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::Admission;
 
 /// For each decision request of the Run in RunStep order: its position, the earlier author
 /// messages and the author message that it sent, and whether it sent the current input again
 /// with the replaced input label.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(decision_position,
                       wire->'earlier_author_messages', wire->>'author_message',
                       wire->'replaces_earlier_input') ORDER BY decision_position)::text
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// For each decision and later request Context Assembly of the Run in RunStep order: its role,
 /// its position, the text of each selected `conversation_summary` and `author_instruction` item,
 /// and the earlier author messages that its Operation Requirement records.
 async fn assemblies(admin: &Client, run_id: &str) -> Value {
-    let row = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(manifest_role, decision_position,
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(manifest_role, decision_position,
                       (SELECT jsonb_agg(jsonb_build_array(item->>'source_class',
                                                           item->>'content'))
                          FROM jsonb_array_elements(payload->'selected') AS item
@@ -45,11 +48,9 @@ async fn assemblies(admin: &Client, run_id: &str) -> Value {
                       ORDER BY decision_position, manifest_role)::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role IN ('decision', 'later_request')",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 fn source(run_id: &str, message_id: &str) -> Value {
@@ -59,9 +60,7 @@ fn source(run_id: &str, message_id: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_later_request_sends_the_earlier_author_messages_of_the_conversation_in_exact_words() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The first Run reads a steering input at RunStep 1. Two more Runs follow it in the same
     // Conversation, and the fourth Run compacts at RunStep 0.
@@ -85,16 +84,12 @@ async fn the_later_request_sends_the_earlier_author_messages_of_the_conversation
         ("862", "Name the inn The Gull."),
         ("863", current.as_str()),
     ] {
-        let run_id = admit_run_in(
-            &store,
-            &scope,
-            &chapter_id,
-            prefix,
-            DeploymentDestination::HostFakeToolLoop,
+        let run_id = Admission {
             message,
-            conversation.clone(),
-            None,
-        )
+            conversation: conversation.clone(),
+            ..Default::default()
+        }
+        .admit(&store, &scope, &chapter_id, prefix)
         .await;
         complete(&store, &admin, &scope, &run_id).await;
         runs.push(run_id);
@@ -171,9 +166,7 @@ async fn the_later_request_sends_the_earlier_author_messages_of_the_conversation
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_compaction_in_the_first_run_of_a_conversation_sends_no_earlier_author_message() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The Run of another Conversation of the Project completes first.
     let current = format!(
