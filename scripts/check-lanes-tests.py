@@ -406,9 +406,10 @@ NO_BROWSER = ('Error: Failed to connect to the browser session "b63626c2" [brows
               "timeout.\n\n Test Files   (1)\n      Tests  no tests\n     Errors  1 error\n")
 PASSED = " Test Files  1 passed (1)\n      Tests  1 passed (1)\n"
 FAILED_TEST = " Test Files  1 failed (1)\n      Tests  1 failed (1)\n"
-# A test ran, and its own text has the words of the summary of a run with no test.
+# A test ran, and its own text has the words and a full line of the summary of a run with no test.
 CONNECT_LINE_WITH_TESTS = ('Error: Failed to connect to the browser session "b63626c2" [browser-exact-dist (chromium)] '
                            "within the timeout.\nstdout | a.integration.test.ts > the Tests panel shows no tests\n"
+                           "      Tests  no tests\n"
                            " Test Files  1 failed (1)\n      Tests  1 failed | 2 passed (3)\n")
 
 
@@ -416,7 +417,7 @@ def fake_browser_vitest_root(answers, failed_gaps=(), failed_tee=False):
     """A root with scripts/browser-vitest.sh, a fake start gap, and a fake `pnpm` that plays one answer for each run.
 
     `pnpm exec` takes node_modules/.bin before the PATH, so the fake is `pnpm`. Each wait and run goes to <root>/record.
-    The waits with a number in failed_gaps fail. With failed_tee, a fake `tee` reads its input and fails.
+    The waits with a number in failed_gaps fail. With failed_tee, a fake `tee` writes its input to its file and fails.
     """
     root = Path(tempfile.mkdtemp(prefix="storyos-browser-vitest-"))
     for directory in ("scripts", "bin", "target/check"):
@@ -434,7 +435,7 @@ def fake_browser_vitest_root(answers, failed_gaps=(), failed_tee=False):
         "sys.exit(1 if failed else 0)\n")
     if failed_tee:
         tee = root / "bin/tee"
-        tee.write_text(f"#!{sys.executable}\nimport sys\nsys.stdin.read()\nsys.exit(1)\n")
+        tee.write_text(f"#!{sys.executable}\nimport sys\nopen(sys.argv[1], 'w').write(sys.stdin.read())\nsys.exit(1)\n")
         tee.chmod(0o755)
     pnpm = root / "bin/pnpm"
     pnpm.write_text(
@@ -485,10 +486,11 @@ class BrowserVitestTests(unittest.TestCase):
         for name, (answers, expected) in cases.items():
             with self.subTest(name):
                 code, output, record = self.browser_vitest(answers)
-                self.assertEqual((code, record, output.splitlines().count(line)), expected, output)
+                # repr, so that a failure does not write the event line as a full line in the lane log.
+                self.assertEqual((code, record, output.splitlines().count(line)), expected, repr(output))
                 # The caller gets the output of each run.
-                self.assertEqual(output.replace(f"{line}\n", ""),
-                                 "".join(text for text, _ in answers[:len(expected[1]) // 2]))
+                self.assertEqual(repr(output.replace(f"{line}\n", "")),
+                                 repr("".join(text for text, _ in answers[:len(expected[1]) // 2])))
 
     def test_a_run_whose_start_or_output_fails_fails_with_no_second_run(self):
         line = runner_module().SECOND_RUN_LINE
@@ -496,14 +498,15 @@ class BrowserVitestTests(unittest.TestCase):
             # The event line comes only for a second run that starts.
             "the second wait for the start gap fails": (
                 {"answers": [[NO_BROWSER, 1], [PASSED, 0]], "failed_gaps": {2}}, ["gap", "run", "gap failed"]),
-            "the output is not kept": ({"answers": [[PASSED, 0]], "failed_tee": True}, ["gap", "run"]),
+            # The output file can have both lines of a run with no browser, and still no second run starts.
+            "the output is not kept": ({"answers": [[NO_BROWSER, 1], [PASSED, 0]], "failed_tee": True}, ["gap", "run"]),
             "no temporary directory": (
                 {"answers": [[PASSED, 0]], "before": lambda root: (root / "target/check").chmod(0o555)}, []),
         }
         for name, (options, record) in cases.items():
             with self.subTest(name):
                 code, output, actual = self.browser_vitest(**options)
-                self.assertEqual((code, actual, output.splitlines().count(line)), (1, record, 0), output)
+                self.assertEqual((code, actual, output.splitlines().count(line)), (1, record, 0), repr(output))
 
     def test_a_stopped_run_removes_its_temporary_output(self):
         root, command, env = fake_browser_vitest_root([["started\n", None]])
@@ -537,7 +540,7 @@ class BrowserVitestTests(unittest.TestCase):
                 result, text, _ = run_lanes(module, lanes, root, final_checks)
                 self.assertEqual((result, text.splitlines()[-1]),
                                  (code, "check-lanes: second runs of a browser Vitest run: 1 (lanes-test-second-run 1)"),
-                                 text)
+                                 repr(text))
 
 
 if __name__ == "__main__":
