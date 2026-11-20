@@ -84,8 +84,8 @@ fn every_postgresql_test_of_the_lib_target_takes_the_test_lock_first() {
     assert_eq!(
         found,
         Vec::<String>::new(),
-        "make `let _test_guard = {TEST_LOCK}.lock().await;` the first statement of each test, \
-         with `use crate::shared_tests::author_edit::{TEST_LOCK};`, and do not drop it early"
+        "make `let _test_guard = crate::author_edit::tests::{TEST_LOCK}.lock().await;` \
+         the first statement of each test, and do not drop it early"
     );
 }
 
