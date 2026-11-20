@@ -80,15 +80,9 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
-        // Only the current mapping sends a decision, summary, capture, or pass request: it
-        // streams, continues, and compacts (ADR 0097). A qualification probe holds no reply form
-        // (ADR 0049).
+        current_mapping(route)?;
+        // A qualification probe holds no reply form, so it does not stream (ADR 0049).
         let probe = matches!(create.purpose, CreatePurpose::ToolQualification(_));
-        if !probe
-            && route.mapping_revision != storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION
-        {
-            return Err(PreDispatchRefusal::UnsupportedRequest);
-        }
         let body = match (&create.purpose, &create.previous_response_reference) {
             (CreatePurpose::Decision, _) => {
                 wire::create_body(create, &route.provider_model_id, bounds)
@@ -212,6 +206,15 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
     }
 }
 
+/// Refuses each request on a mapping that is not the current one: a decision, a summary, a
+/// capture, a pass, a qualification probe, and a Retrieve (ADR 0097).
+fn current_mapping(route: &RequestRoute) -> Result<(), PreDispatchRefusal> {
+    match route.mapping_revision == storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION {
+        true => Ok(()),
+        false => Err(PreDispatchRefusal::UnsupportedRequest),
+    }
+}
+
 impl<R: CredentialResolver> AgentPlanResponses<R> {
     /// A GET of the stored response. The Host admits it only for a retained reference.
     async fn prepare_retrieve(
@@ -222,6 +225,7 @@ impl<R: CredentialResolver> AgentPlanResponses<R> {
         let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
+        current_mapping(route)?;
         let path = format!("/responses/{}", retrieve.response_reference);
         let wire = storyos_core::canonical_json(&serde_json::json!({
             "method": "GET",

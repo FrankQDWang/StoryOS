@@ -52,9 +52,17 @@ impl AgentRunKind {
     /// Whether the decision request of a RunStep compacts first. Only a Run with a Conversation
     /// compacts, when the mapping of its pinned Model Registration compacts (ADR 0055, ADR 0093).
     pub fn compacts_before_decision(self, model_registration_revision: &str) -> bool {
-        self.has_conversation()
-            && crate::model_registration(model_registration_revision)
-                .is_some_and(crate::ModelRegistration::compacts)
+        self.compacts_on(
+            crate::model_registration(model_registration_revision)
+                .map(crate::ModelRegistration::compacts),
+        )
+    }
+
+    /// The gate of `compacts_before_decision` for the compaction rule of the Registration, or
+    /// `None` for an unknown revision. Each Registration of the one list compacts now, but a
+    /// later one can have a mapping that does not (ADR 0097).
+    fn compacts_on(self, registration_compacts: Option<bool>) -> bool {
+        self.has_conversation() && registration_compacts == Some(true)
     }
 
     /// Whether the dispatch of the Run rebuilds an expired prior response. A background Run has

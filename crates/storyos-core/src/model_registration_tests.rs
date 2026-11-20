@@ -27,32 +27,12 @@ fn qualified_entries(combinations: &'static [CapabilityCombination]) -> ModelCap
     }
 }
 
-/// A profile of the test with the current entries and no qualified combination: its
-/// Registration awaits qualification.
-const PENDING_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
-    revision: "test.pending",
+/// A profile of the test with the current entries and no qualified combination, as of a later
+/// provider version before its qualification.
+const UNQUALIFIED_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
+    revision: "test.unqualified",
     combinations: &[],
     ..AGENT_PLAN_CAPABILITY_PROFILE
-};
-
-/// A Registration of the test with the profile `PENDING_PROFILE` and the current requirement.
-const PENDING: ModelRegistration = ModelRegistration {
-    revision: "test.pending",
-    capability_profile: &PENDING_PROFILE,
-    ..AGENT_PLAN_REGISTRATION
-};
-
-/// A Registration of the test that uses no Host compaction and no retrieval, on the profile
-/// `PENDING_PROFILE`.
-const NO_COMPACTION: ModelRegistration = ModelRegistration {
-    revision: "test.no-compaction",
-    requirement: &[
-        ModelCapability::Transport,
-        ModelCapability::NativeText,
-        ModelCapability::Continuation,
-        ModelCapability::Streaming,
-    ],
-    ..PENDING
 };
 
 #[test]
@@ -70,17 +50,15 @@ fn qualified_members_qualify_only_with_a_qualified_combination() {
         [
             documented.qualifies(COMPACTION_REQUIREMENT),
             qualified.qualifies(COMPACTION_REQUIREMENT),
-            PENDING.qualified(),
-            PENDING
-                .capability_profile
-                .qualifies(&[ModelCapability::Continuation]),
+            UNQUALIFIED_PROFILE.qualifies(AGENT_PLAN_REGISTRATION.requirement),
+            UNQUALIFIED_PROFILE.qualifies(&[ModelCapability::Continuation]),
             AGENT_PLAN_REGISTRATION.qualified(),
             AGENT_PLAN_REGISTRATION.compacts(),
             HOST_FAKE_TOOL_LOOP_REGISTRATION.qualified(),
             HOST_FAKE_TOOL_LOOP_REGISTRATION.compacts(),
-            NO_COMPACTION.compacts(),
+            PROBE_FIXTURE_REGISTRATION.qualified(),
         ],
-        [false, true, false, false, true, true, true, true, false]
+        [false, true, false, false, true, true, true, true, true]
     );
 }
 
@@ -113,24 +91,24 @@ fn only_a_qualified_profile_or_an_authorized_qualification_of_its_requirement_re
     assert_eq!(
         [
             HOST_FAKE_TOOL_LOOP_REGISTRATION.retrieves(Qualified),
-            NO_COMPACTION.retrieves(QualificationAuthorized),
-            PENDING.retrieves(Qualified),
-            PENDING.retrieves(QualificationAuthorized),
-            PENDING.qualified(),
             AGENT_PLAN_REGISTRATION.retrieves(Qualified),
-            AGENT_PLAN_REGISTRATION.qualified(),
+            PROBE_FIXTURE_REGISTRATION.retrieves(QualificationAuthorized),
+            // The rule for a profile that does not qualify retrieval.
+            super::retrieval_admitted(false, true, Qualified),
+            super::retrieval_admitted(false, true, QualificationAuthorized),
+            super::retrieval_admitted(false, false, QualificationAuthorized),
         ],
-        [true, false, false, true, false, true, true]
+        [true, true, true, false, true, false]
     );
 }
 
-/// ADR 0097: the lookup resolves only the current Registrations. The probe fixture resolves only
-/// in test code. Each revision of a removed Registration resolves to nothing.
+/// ADR 0097: the lookup resolves only the current Registrations and the probe fixture, each
+/// revision to its own Registration. Each revision of a removed Registration resolves to nothing.
 #[test]
 fn only_the_current_registrations_resolve_and_the_head_pins_a_dated_version() {
     let resolved: Vec<_> = (1..=23)
         .map(|number| format!("018f0000-0000-7001-8000-00000000fa{number:02}"))
-        .filter(|revision| model_registration(revision).is_some())
+        .filter_map(|revision| model_registration(&revision))
         .collect();
 
     assert_eq!(
@@ -142,13 +120,25 @@ fn only_the_current_registrations_resolve_and_the_head_pins_a_dated_version() {
         ),
         (
             vec![
-                "018f0000-0000-7001-8000-00000000fa16".to_owned(),
-                "018f0000-0000-7001-8000-00000000fa18".to_owned(),
-                "018f0000-0000-7001-8000-00000000fa23".to_owned(),
+                &PROBE_FIXTURE_REGISTRATION,
+                &HOST_FAKE_TOOL_LOOP_REGISTRATION,
+                &AGENT_PLAN_REGISTRATION,
             ],
             "doubao-seed-2-1-pro-260915",
             "storyos.volcengine-agent-plan.responses.create.v9",
             "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v4",
         )
+    );
+    assert_eq!(
+        [
+            PROBE_FIXTURE_REGISTRATION.revision,
+            HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
+            AGENT_PLAN_REGISTRATION.revision,
+        ],
+        [
+            "018f0000-0000-7001-8000-00000000fa16",
+            "018f0000-0000-7001-8000-00000000fa18",
+            "018f0000-0000-7001-8000-00000000fa23",
+        ]
     );
 }

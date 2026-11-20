@@ -48,23 +48,17 @@ fn only_an_authorized_decision_on_a_pending_entry_selects_a_probe() {
 
 #[test]
 fn the_link_authorizes_a_registration_only_while_it_awaits_qualification() {
-    const UNQUALIFIED_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
-        revision: "test.unqualified",
-        combinations: &[],
-        ..AGENT_PLAN_CAPABILITY_PROFILE
-    };
-    let unqualified = ModelRegistration {
-        revision: "test.unqualified",
-        capability_profile: &UNQUALIFIED_PROFILE,
-        ..AGENT_PLAN_REGISTRATION
-    };
     let authorized = DeploymentDestination::VolcengineAgentPlan {
         qualification_authorization: Some(AUTHORIZATION.to_owned()),
     };
 
     assert_eq!(
         (
-            unqualified.awaits_qualification(),
+            // An unqualified Registration, as of a later provider version.
+            awaits(
+                false,
+                AGENT_PLAN_CAPABILITY_PROFILE.entries.function_calling
+            ),
             PROBE_FIXTURE_REGISTRATION.awaits_qualification(),
             AGENT_PLAN_REGISTRATION.awaits_qualification(),
             authorized.registration().revision,

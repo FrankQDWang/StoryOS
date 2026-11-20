@@ -61,11 +61,24 @@ impl ModelRegistration {
     /// Whether the Host may read a stored response of an unknown create. Either the profile
     /// qualifies retrieval, or an authorized runtime qualification examines a route that needs it.
     pub fn retrieves(&self, qualification: crate::RuntimeQualification) -> bool {
-        self.capability_profile
-            .qualifies(&[ModelCapability::Retrieval])
-            || (qualification == crate::RuntimeQualification::QualificationAuthorized
-                && self.requirement.contains(&ModelCapability::Retrieval))
+        retrieval_admitted(
+            self.capability_profile
+                .qualifies(&[ModelCapability::Retrieval]),
+            self.requirement.contains(&ModelCapability::Retrieval),
+            qualification,
+        )
     }
+}
+
+/// The retrieval rule of `ModelRegistration::retrieves`: the profile qualifies retrieval, or an
+/// authorized qualification examines a requirement that has retrieval. No Registration of the one
+/// list needs the second branch now, but a later provider version can (ADR 0097).
+fn retrieval_admitted(
+    qualified: bool,
+    required: bool,
+    qualification: crate::RuntimeQualification,
+) -> bool {
+    qualified || (qualification == crate::RuntimeQualification::QualificationAuthorized && required)
 }
 
 /// One capability of a Model Capability Profile. Each capability has its own evidence.
@@ -290,19 +303,16 @@ pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilit
 };
 
 /// The known Registration of a stored revision. `None` is an unknown or damaged revision. Only
-/// the current Registrations are known (ADR 0097).
+/// the current Registrations and the probe fixture are known (ADR 0097).
 pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> {
-    let known = [
+    // The probe fixture is in the same list for each build. No deployment path binds it.
+    [
         &crate::HOST_FAKE_TOOL_LOOP_REGISTRATION,
         &crate::AGENT_PLAN_REGISTRATION,
+        &crate::PROBE_FIXTURE_REGISTRATION,
     ]
-    .into_iter();
-    // The one probe fixture of the tests of ADR 0049. No product path binds it.
-    #[cfg(any(test, feature = "probe-fixture"))]
-    let known = known.chain([&crate::PROBE_FIXTURE_REGISTRATION]);
-    known
-        .into_iter()
-        .find(|registration| registration.revision == revision)
+    .into_iter()
+    .find(|registration| registration.revision == revision)
 }
 
 #[cfg(test)]

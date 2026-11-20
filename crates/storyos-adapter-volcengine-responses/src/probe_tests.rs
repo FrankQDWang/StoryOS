@@ -141,3 +141,44 @@ fn a_native_item_that_the_request_did_not_ask_for_is_a_tool_item_with_no_decisio
         ]
     );
 }
+
+/// ADR 0097: the adapter refuses a qualification probe and a Retrieve on a mapping that is not
+/// current before dispatch, as it refuses each other request.
+#[tokio::test]
+async fn a_probe_and_a_retrieve_on_an_earlier_mapping_are_refused_before_dispatch() {
+    let adapter = AgentPlanResponses {
+        resolver: CanaryResolver::default(),
+    };
+    let earlier = RequestRoute {
+        mapping_revision: crate::tests::EARLIER_MAPPING.to_owned(),
+        ..route("http://127.0.0.1:9")
+    };
+    let DestinationRequest::Create(request) = create(earlier.clone(), RequestAttempt::New) else {
+        unreachable!("create() makes a Create request")
+    };
+    let probe = DestinationRequest::Create(CreateRequest {
+        purpose: CreatePurpose::ToolQualification(ToolProbeRequest::FunctionCall),
+        author_message: "StoryOS Tool probe".to_owned(),
+        ..request
+    });
+    let DestinationRequest::Retrieve(retrieve) =
+        crate::tests::retrieve("http://127.0.0.1:9", RequestAttempt::New)
+    else {
+        unreachable!("retrieve() makes a Retrieve request")
+    };
+    let retrieve = DestinationRequest::Retrieve(storyos_application::RetrieveRequest {
+        route: earlier,
+        ..retrieve
+    });
+
+    assert_eq!(
+        [
+            adapter.prepare(&probe).await.err(),
+            adapter.prepare(&retrieve).await.err(),
+        ],
+        [
+            Some(PreDispatchRefusal::UnsupportedRequest),
+            Some(PreDispatchRefusal::UnsupportedRequest)
+        ]
+    );
+}

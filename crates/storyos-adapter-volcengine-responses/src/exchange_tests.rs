@@ -590,7 +590,7 @@ async fn each_transport_outcome_maps_to_rejected_not_submitted_or_outcome_unknow
     );
 }
 
-fn retrieve(base: &str, attempt: RequestAttempt) -> DestinationRequest {
+pub(crate) fn retrieve(base: &str, attempt: RequestAttempt) -> DestinationRequest {
     DestinationRequest::Retrieve(RetrieveRequest {
         attempt,
         route: route(base),

@@ -1,21 +1,27 @@
 //! The function calling entry of a Model Capability Profile and its author-authorized
 //! qualification probe on the Agent Plan route (ADR 0049).
 
-#[cfg(any(test, feature = "probe-fixture"))]
-use crate::ModelCapabilityProfile;
-use crate::{CapabilityEvidence, ModelRegistration, RuntimeQualification, model_registration};
+use crate::{
+    CapabilityEvidence, ModelCapabilityProfile, ModelRegistration, RuntimeQualification,
+    model_registration,
+};
 
 impl ModelRegistration {
     /// True when the authorization link of a compatibility Decision has a requirement or the
     /// function calling entry of this Registration to qualify. Documentation alone leaves the
     /// entry pending.
     pub fn awaits_qualification(&self) -> bool {
-        !self.qualified()
-            || matches!(
-                self.capability_profile.entries.function_calling,
-                CapabilityEvidence::Documented { .. }
-            )
+        awaits(
+            self.qualified(),
+            self.capability_profile.entries.function_calling,
+        )
     }
+}
+
+/// The rule of `ModelRegistration::awaits_qualification` for a Registration that is `qualified`
+/// and has the function calling entry `function_calling`.
+fn awaits(qualified: bool, function_calling: CapabilityEvidence) -> bool {
+    !qualified || matches!(function_calling, CapabilityEvidence::Documented { .. })
 }
 
 /// One request of the function calling probe. The author message is its constant probe input,
@@ -76,7 +82,6 @@ pub fn tool_probe(
 
 /// The profile of the probe fixture: the current profile with the function calling entry
 /// pending. Each other entry and each combination keep their qualification.
-#[cfg(any(test, feature = "probe-fixture"))]
 pub const PROBE_FIXTURE_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
     revision: "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v3",
     entries: crate::model_registration::agent_plan_entries(CapabilityEvidence::Documented {
@@ -87,10 +92,10 @@ pub const PROBE_FIXTURE_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabi
     combinations: crate::model_registration::AGENT_PLAN_COMBINATIONS,
 };
 
-/// The one probe fixture of the tests of ADR 0049: the current Registration with the function
-/// calling entry pending, so a Decision with the authorization link dispatches its probe. No
-/// product path binds it, so only a test build has it (ADR 0097).
-#[cfg(any(test, feature = "probe-fixture"))]
+/// The probe fixture: the one Registration of the tests of ADR 0049, the current Registration
+/// with the function calling entry pending, so a Decision with the authorization link dispatches
+/// its probe. No deployment path binds it. The Registration of a later production model with a
+/// pending entry replaces it (ADR 0097).
 pub const PROBE_FIXTURE_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa16",
     capability_profile: &PROBE_FIXTURE_CAPABILITY_PROFILE,

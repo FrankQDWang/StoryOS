@@ -49,11 +49,15 @@ impl ModelProviderAdapter for ScriptedAgentPlan {
         let DestinationRequest::Create(create) = request else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
+        // As the real adapter does, only the current mapping prepares a request (ADR 0097).
+        if create.route.mapping_revision != storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        }
         self.seen.lock().unwrap().push(create.clone());
         Ok(PreparedRequest {
             projection: WirePayloadProjection {
                 execution_profile: "storyos.volcengine-agent-plan.execution.v1".to_owned(),
-                mapping_revision: "storyos.volcengine-agent-plan.responses.create.v1".to_owned(),
+                mapping_revision: create.route.mapping_revision.clone(),
                 digest: "sha256:scripted".to_owned(),
                 serialized_payload: None,
                 cache_setting: None,

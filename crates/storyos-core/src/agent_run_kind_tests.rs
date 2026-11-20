@@ -31,8 +31,15 @@ fn only_a_run_of_the_author_compacts_with_a_registration_that_compacts() {
             compacts(HOST_FAKE_TOOL_LOOP_REGISTRATION.revision),
             compacts(AGENT_PLAN_REGISTRATION.revision),
             compacts("an unknown revision"),
+            // A known Registration whose mapping does not compact.
+            AgentRunKind::ALL.map(|kind| kind.compacts_on(Some(false))),
         ],
-        [[true, false, false], [true, false, false], [false; 3]]
+        [
+            [true, false, false],
+            [true, false, false],
+            [false; 3],
+            [false; 3]
+        ]
     );
 }
 

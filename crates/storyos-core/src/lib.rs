@@ -211,9 +211,9 @@ pub use finish_rule::{
     FinishRuleOutcome, MAX_RUN_STEPS, PriorStepCall, RunStepLimit, ToolChoice,
     UNEXECUTED_CALL_OUTPUT, apply_finish_rule, step_tool_choice,
 };
-#[cfg(any(test, feature = "probe-fixture"))]
-pub use function_calling::{PROBE_FIXTURE_CAPABILITY_PROFILE, PROBE_FIXTURE_REGISTRATION};
-pub use function_calling::{ToolProbe, tool_probe};
+pub use function_calling::{
+    PROBE_FIXTURE_CAPABILITY_PROFILE, PROBE_FIXTURE_REGISTRATION, ToolProbe, tool_probe,
+};
 pub use grant_scope::{GrantFacts, GrantScope, admit_disclosure};
 pub use host_fake_profile::{
     ADVISORY_TEXT, ExecutionCapability, HOST_FAKE_MAPPING_REVISION, PROSE_CHANGE_TEXT,

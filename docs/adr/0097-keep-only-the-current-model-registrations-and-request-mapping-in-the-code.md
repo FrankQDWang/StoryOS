@@ -21,11 +21,11 @@ The reason to keep an earlier Registration is a stored Run that names it: the Ru
 1. The code keeps only these Registrations:
    - the Model Registrations that `DeploymentDestination::registration()` binds: `…fa18` (`HOST_FAKE_TOOL_LOOP_REGISTRATION`) and `…fa23` (`AGENT_PLAN_REGISTRATION`);
    - the Embedding Registrations, the research Tool Registration of Exa, and the Host Tool Registration `…0e0104`.
-2. The Agent Plan adapter has one request mapping, `v9`. It refuses a request on another mapping before dispatch, with `UnsupportedRequest`. The fake destination keeps its own mapping identity.
+2. The Agent Plan adapter has one request mapping, `v9`. It refuses each request on another mapping before dispatch, with `UnsupportedRequest`: a Create of each purpose, the qualification probe included, and a Retrieve. The fake destination keeps its own mapping identity.
 3. A Run that pinned a removed revision refuses before dispatch. The current head is a different revision, so the check of the head refuses it with `model_registration_drift`. When the head check passes, the lookup gives no Registration, and the run refuses with `model_registration_unknown`.
-4. The function calling probe of [ADR 0049](0049-admit-an-author-authorized-runtime-qualification.md) stays: `tool_probe`, its dispatch path, and its tests. The tests use one probe fixture, the Registration `…fa16` with a pending function calling entry. It is test code: only a test build or the Cargo feature `probe-fixture` has it, and only the dev-dependency of the Postgres adapter turns on that feature. No product build has it.
-5. Create admission keeps its check of a pending profile. No current Registration is pending, but a later provider version is a new Registration that can be pending (ADR 0059). The tests make a pending Registration in test code.
-6. A test that names a removed Registration or mapping either goes, when it proves only the removed code, or moves to the current Registration with the same assertions, when it proves a behaviour that stays. A test of the drift refusal makes the earlier revision in the test.
+4. The function calling probe of [ADR 0049](0049-admit-an-author-authorized-runtime-qualification.md) stays: `tool_probe`, its dispatch path, and its tests. The tests use one probe fixture, `PROBE_FIXTURE_REGISTRATION`: the revision `…fa16`, the current mapping, and a pending function calling entry. It is an ordinary constant in the one lookup list of `model_registration()`, so the test build and the product build have the same list, as for the Host fake Registrations. No deployment path binds it, and no Cargo feature and no second list select it. The Registration of a later production model with a pending entry replaces it.
+5. Create admission keeps its check of an unqualified profile, the retrieval rule keeps its branch for an authorized qualification, and the compaction gate keeps its branch for a mapping that does not compact. No Registration of the one list needs these branches now, but a later provider version is a new Registration that can (ADR 0059). The tests examine each branch through its rule function, with no Registration that the test makes.
+6. A test that names a removed Registration or mapping either goes, when it proves only the removed code, or moves to the current Registration with the same assertions, when it proves a behaviour that stays. A test of the drift refusal makes the earlier revision string in the test.
 
 ### The rule for later
 
@@ -35,7 +35,7 @@ A superseded Registration, and its mapping branch, stays in the code while a sto
 
 - **Keep each earlier Registration and mapping branch.** Refused: no stored Run needs them, and each later change of the adapter must keep about eight request forms the same.
 - **Remove the probe path with the pending Registrations.** Refused: a later provider version needs the probe before its function calling qualifies, and ADR 0049 requires the probe.
-- **Keep the probe fixture as an ordinary product constant.** Refused: then the product lookup resolves a Registration that the deployment never binds.
+- **Select the probe fixture with a Cargo feature or a test-only list.** Refused: the test build and the product build then resolve different lists, and a `#[cfg(test)]` item of `storyos-core` is not visible to the tests of the PostgreSQL adapter.
 
 ## Consequences
 
