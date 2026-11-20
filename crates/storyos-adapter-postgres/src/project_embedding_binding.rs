@@ -8,10 +8,11 @@ use storyos_core::{
     EmbeddingBindingFacts, EmbeddingRegistration, GrantScope, embedding_binding_to_make,
 };
 use tokio_postgres::Client;
-use uuid::Uuid;
 
 use crate::command_sequence::unavailable;
-use crate::project_destination_binding::binding_shape;
+use crate::project_destination_binding::{
+    BindingRecord, BoundRegistration, binding_shape, insert_binding,
+};
 
 /// The latest embedding use binding of the Project, its grant, and the endpoint of its evidence.
 /// Columns: 0 binding revision, 1 Embedding Registration revision, 2 grant, 3 grant scope,
@@ -82,53 +83,22 @@ pub(crate) async fn insert_embedding_binding(
     registration: &EmbeddingRegistration,
 ) -> Result<(), tokio_postgres::Error> {
     let shape = binding_shape(registration.destination);
-    let [identity, grant, binding] = [(); 3].map(|()| Uuid::now_v7().to_string());
-    client
-        .execute(
-            "WITH identity AS (
-               INSERT INTO storyos.processing_destination_identities
-                 (owner_user_id, project_id, processing_destination_identity, destination_kind,
-                  control_classification)
-               VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $6, $7)
-             ), evidence AS (
-               INSERT INTO storyos.processing_destination_identity_evidence_revisions
-                 (owner_user_id, project_id, processing_destination_identity, evidence_revision,
-                  evidence_kind, endpoint, account_boundary, eligibility_evidence)
-               VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 1, $8, $9, $10, $11)
-             ), destination_grant AS (
-               INSERT INTO storyos.project_destination_grants
-                 (owner_user_id, project_id, grant_id, processing_destination_identity,
-                  grant_kind, grant_scope)
-               VALUES ($1::text::uuid, $2::text::uuid, $4::text::uuid, $3::text::uuid,
-                       'manuscript_embedding_use', $12)
-             )
-             INSERT INTO storyos.project_external_use_binding_revisions
-               (owner_user_id, project_id, project_model_use_binding_revision,
-                processing_destination_identity, evidence_revision, grant_id,
-                embedding_registration_revision, credential_source, credential_reference,
-                budget_bounds)
-             VALUES ($1::text::uuid, $2::text::uuid, $5::text::uuid, $3::text::uuid, 1,
-                     $4::text::uuid, $13::text::uuid, $14, $15, $16)",
-            &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &identity,
-                &grant,
-                &binding,
-                &registration.destination.as_str(),
-                &shape.control_classification,
-                &shape.evidence_kind,
-                &shape.endpoint,
-                &shape.account_boundary,
-                &shape.eligibility_evidence,
-                &GrantScope::ManuscriptEmbeddingV1.as_str(),
-                &registration.revision,
-                &shape.credential_source,
-                &registration.destination.credential_reference(),
-                &registration.request_bounds,
-            ],
-        )
-        .await?;
+    let record = BindingRecord {
+        destination_kind: registration.destination.as_str(),
+        control_classification: shape.control_classification,
+        evidence_kind: shape.evidence_kind,
+        endpoint: shape.endpoint,
+        account_boundary: shape.account_boundary,
+        eligibility_evidence: shape.eligibility_evidence,
+        grant_kind: "manuscript_embedding_use",
+        grant_scope: GrantScope::ManuscriptEmbeddingV1,
+        registration: BoundRegistration::Embedding(registration.revision),
+        credential_source: shape.credential_source,
+        credential_reference: registration.destination.credential_reference(),
+        budget_bounds: registration.request_bounds,
+        decision: None,
+    };
+    insert_binding(client, scope, &record).await?;
     // Each live Chapter gets index work for the new binding (ADR 0095 section 4).
     crate::passage_index_work::mark_passage_index_work(
         client,
