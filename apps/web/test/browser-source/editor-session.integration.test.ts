@@ -154,20 +154,52 @@ it("fails closed for a stored group that an earlier client settled with refused_
   } finally { await test.close(); }
 });
 
-it("fails closed for a retained recovery record of a Draft retry of an earlier client", async () => {
+it("skips a retained recovery record of a Draft retry of an earlier client and keeps the other records", async () => {
   const test = await openJournalAppendTestWorkspace();
   try {
     await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
     const group = await freezeOneIntentSubmission(test.workspace, crypto);
-    const partitionId = createJournalUuid();
-    const retained = { ...group, journal_partition_id: partitionId,
-      frozen_request_body: { ...group.frozen_request_body, retry_source: { kind: "draft_retry" } },
-      settlement: { kind: "outcome_query_requires_reconfirmation" } };
-    const material = { disposition: "retained_for_manual_reentry", format_version: 1,
-      group: retained, records: [], chains: [], text: "Draft retry text", blocks: [] };
-    await requestResult(test.workspace.database.transaction("metadata", "readwrite").objectStore("metadata")
-      .put({ key: `${recoveryPrefix}${partitionId}:${group.journal_submission_group_id}`, value: material }));
-    await expect(readLocalRecovery(test.workspace)).rejects.toThrow("Local recovery record is corrupt");
+    const metadata = () => test.workspace.database.transaction("metadata", "readwrite").objectStore("metadata");
+    const retainedRow = (partitionId: string, request: object, text: string) => ({
+      key: `${recoveryPrefix}${partitionId}:${group.journal_submission_group_id}`,
+      value: { disposition: "retained_for_manual_reentry", format_version: 1,
+        group: { ...group, journal_partition_id: partitionId, frozen_request_body: request,
+          settlement: { kind: "outcome_query_requires_reconfirmation" } },
+        records: [], chains: [], text, blocks: [] },
+    });
+    const draft = retainedRow("018f0000-0000-7001-8000-000000172401",
+      { ...group.frozen_request_body, retry_source: { kind: "draft_retry" } }, "Draft retry text");
+    const current = retainedRow("018f0000-0000-7001-8000-000000172402", group.frozen_request_body, "Kept text");
+    await requestResult(metadata().put(draft));
+    await requestResult(metadata().put(current));
+    expect(await readLocalRecovery(test.workspace)).toEqual([current.value]);
+    expect(await requestResult(metadata().get(draft.key))).toEqual(draft);
+  } finally { await test.close(); }
+});
+
+it("fails closed for a stored authoritative ReplaceSelection record of an earlier client", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  try {
+    const workspace = test.workspace;
+    await appendAuthorEdit(workspace, FIRST_APPEND_EDIT);
+    const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+    const record = recordAt(snapshot.records, 0);
+    const primitive = requireAuthorEditUnit(record).normalized_primitives[0];
+    if (primitive?.kind !== "replace_block_selection") throw new Error("the stored Author Edit is not a Block selection");
+    // An earlier client stored the authoritative edit with no Block identity.
+    const authorEditUnit = { ...requireAuthorEditUnit(record), normalized_primitives: [{
+      kind: "replace_selection" as const, from: primitive.from, to: primitive.to, text: primitive.text }] };
+    const chain = snapshot.payloadChains[0];
+    if (chain === undefined) throw new Error("the payload chain is unavailable");
+    const payloadDigest = await digestJournalValue(authorEditUnit, crypto);
+    const transaction = workspace.database.transaction(["intents", "payload_chains"], "readwrite");
+    transaction.objectStore("intents").put({ ...record, author_edit_unit: authorEditUnit, payload_digest: payloadDigest });
+    transaction.objectStore("payload_chains").put({ ...chain, ordered_patch_refs: chain.ordered_patch_refs.map((patch) =>
+      patch.completed_intent_record_id === record.completed_intent_record_id
+        ? { ...patch, normalized_primitives: authorEditUnit.normalized_primitives } : patch) });
+    await transactionResult(transaction);
+    await expect(rebuildPendingProjection(workspace)).rejects.toThrow("Local Edit Journal is corrupt");
+    await expect(test.reopen()).rejects.toThrow("workspace unavailable: local_journal_unavailable");
   } finally { await test.close(); }
 });
 

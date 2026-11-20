@@ -53,9 +53,10 @@ export async function readLocalRecovery(workspace: EditorWorkspace, after?: Loca
     const page = rows.map((row) => row.value);
     if (page.some((item) => item.format_version !== 1 || item.disposition !== "retained_for_manual_reentry"
       || item.group.settlement.kind !== "outcome_query_requires_reconfirmation"
-      || !equal(item.group.project_scope, workspace.partition.project_scope)
-      || !hasCurrentSubmissionShape(item.group, item.records))) throw new Error("Local recovery record is corrupt");
-    retained.push(...page);
+      || !equal(item.group.project_scope, workspace.partition.project_scope))) throw new Error("Local recovery record is corrupt");
+    // A retained record with a shape of a removed path stays in the store, and the page shows no text of it (ADR 0099).
+    // The other records of the page stay available.
+    retained.push(...page.filter((item) => hasCurrentSubmissionShape(item.group, item.records)));
     if (page.length < limit) break;
     cursor = page.at(-1);
   }

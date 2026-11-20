@@ -317,8 +317,8 @@ that finds a binding that names no earlier group also enters local
 recovery. The records stay immutable in each case.
 
 The Web has no upgrade from an earlier Journal version
-([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)). When IndexedDB asks for an upgrade, the Web aborts the
-version-change transaction. The open fails, and the earlier Journal keeps its
+([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)). When IndexedDB asks for an upgrade from an earlier Journal version,
+the Web aborts the version-change transaction. The open fails, and the earlier Journal keeps its
 version and each row. The editor enters read-only local recovery with
 `local_journal_unavailable`, as for a Journal of an unknown version. It does
 not show the text of that Journal, and the readable export of the Server text

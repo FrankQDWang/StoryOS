@@ -348,20 +348,34 @@ const AUTHOR_EDIT_PRIMITIVE_KINDS = new Set(["replace_selection", "replace_block
 const ZERO_AUTHORITY_EFFECT_KINDS = new Set(["proposal_revised", "no_effect", "conflicted", "refused"]);
 
 /**
+ * True when the primitives have only the kinds of the current contract. The Web writes `replace_selection` only for a
+ * Proposal candidate. An authoritative `replace_selection` of an earlier client has no Block identity, so it is false.
+ */
+function currentPrimitives(primitives: { kind: unknown }[] | undefined, candidate: boolean) {
+  return (primitives ?? []).every((primitive) => AUTHOR_EDIT_PRIMITIVE_KINDS.has(String(primitive.kind))
+    && (candidate || primitive.kind !== "replace_selection"));
+}
+
+/** True when an intent record has only the shapes of the current contract (ADR 0099). */
+export function hasCurrentRecordShape(record: JournalIntentRecord) {
+  return record.retry_source?.kind === "fresh_editor_intent"
+    && currentPrimitives(record.author_edit_unit?.normalized_primitives, record.proposal_target !== undefined);
+}
+
+/**
  * True when a group and its records have only the shapes of the current contract. A stored shape of a removed path,
- * for example a Draft retry, a structured primitive, or a settlement `refused_to_draft`, is false (ADR 0099).
+ * for example a Draft retry, a structured primitive, or a Draft settlement, is false (ADR 0099). The check only
+ * refuses: no reader converts or sends an earlier shape.
  */
 export function hasCurrentSubmissionShape(group: JournalSubmissionGroup, records: JournalIntentRecord[] = []) {
   const request = group.frozen_request_body as JournalSubmissionGroup["frozen_request_body"] & { retry_source?: unknown };
   const settlement = group.settlement as { kind?: unknown; effect?: { kind?: unknown } };
-  const knownPrimitives = (primitives: { kind: unknown }[] | undefined) =>
-    (primitives ?? []).every((primitive) => AUTHOR_EDIT_PRIMITIVE_KINDS.has(String(primitive.kind)));
   return request.retry_source === undefined
-    && (request.author_edit_units ?? []).every((unit) => knownPrimitives(unit.normalized_primitives))
+    && (request.author_edit_units ?? []).every((unit) =>
+      currentPrimitives(unit.normalized_primitives, request.proposal_target !== undefined))
     && (settlement.kind !== "zero_authority_receipt_settled"
       || ZERO_AUTHORITY_EFFECT_KINDS.has(String(settlement.effect?.kind)))
-    && records.every((record) => record.retry_source?.kind === "fresh_editor_intent"
-      && knownPrimitives(record.author_edit_unit?.normalized_primitives));
+    && records.every(hasCurrentRecordShape);
 }
 
 function isZeroAuthoritySettlement(group: JournalSubmissionGroup) {
@@ -658,7 +672,6 @@ async function validateCoverage(
         !== firstRecord?.expected_authoritative_heads[0]
       || JSON.stringify(request?.expected_proposal_head_revision_ids)
         !== JSON.stringify(firstRecord?.expected_proposal_heads)
-      || (request as { retry_source?: unknown } | undefined)?.retry_source !== undefined
       || JSON.stringify(request?.proposal_target)
         !== JSON.stringify(firstRecord?.proposal_target)
       || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord?.target_refs)
@@ -715,7 +728,7 @@ export async function validateJournalSnapshot(
       || record.projection_dependency?.prior_sequence !== priorSequence
       || record.projection_dependency?.snapshot_id !== record.base_snapshot_id
       || !validFollowsBinding(record, groups, snapshot.workingBoundary)
-      || record.retry_source?.kind !== "fresh_editor_intent"
+      || !hasCurrentRecordShape(record)
       || record.editor_contract_revision !== EDITOR_CONTRACT_REVISION
       || record.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
       || record.undo_group_binding?.kind !== "direct_author_input"
