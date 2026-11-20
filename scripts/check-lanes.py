@@ -7,8 +7,7 @@ A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -e
 --project-scope adds the parts of `make check-full` after the lanes `build` and `package`: the storage activation
 checks, the exact-dist journeys in shards, and the two modes of the recovery drill.
 `scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; a script runs it before each
-browser Vitest run that does not start at the start of its lane. `scripts/check-lanes.py --postgres-list` is the
-command of the plan lane of the PostgreSQL shards.
+browser Vitest run that does not start at the start of its lane.
 When a lane fails or does not end in LANE_TIME_LIMIT_SECONDS, the runner stops the lanes, prints the log of that
 lane, and exits with 1.
 """
@@ -23,22 +22,19 @@ import signal
 import socket
 import subprocess
 import sys
-import threading
 import time
 import uuid
 
 # Selected from measured runs of `make check` on an Apple M4 with 10 cores and 32 GB (issue 1711).
 LANE_LIMIT = 6
-# A lane that ends at or after this time, or still runs at it, fails the run. The longest lane took 419 s in the
-# measured runs. In a run of `make check-full` on 2026-11-20, a Vitest run did not end after its browser did not
+# A lane that still runs when the runner examines it at or after this time fails the run. The limit is not an exact
+# end time: it makes sure that no run holds the heavy-run slot for an unlimited time. The longest lane took 419 s in
+# the measured runs. In a run of `make check-full` on 2026-11-20, a Vitest run did not end after its browser did not
 # connect (issue 1728).
 LANE_TIME_LIMIT_SECONDS = 900
-# A ps or docker command of the runner that runs longer than this time fails, so that it does not stop the stop of
-# the lanes or the report of a failure.
+# A command that the runner itself starts and waits for (ps, docker, the list of a test binary) fails after this
+# time, so that the examinations of the lanes and the stop cannot wait for an unlimited time.
 TOOL_SECONDS = 60
-# `scripts/check-lanes.py --postgres-list` writes each ignored test of the library test binaries on a line with this
-# start. The plan lane runs it, so that the check of the plan lane only reads its log.
-IGNORED_TEST_LINE = '{"ignored_test": '
 POSTGRES_SHARDS = 4
 # At most this count of browser lanes runs at the same time (issue 1712). In two runs of `make check-full` on
 # 2026-11-20, a journey wait did not succeed in time when three or four browser lanes ran at the same time.
@@ -99,8 +95,8 @@ class Lane:
         # A browser lane gets its own port. A lane that starts Chrome at its start gets the start gap from the runner.
         self.browser = browser
         self.browser_at_start = browser if browser_at_start is None else browser_at_start
-        self.process = self.log = self.watcher = None
-        self.started = self.ended = self.duration = None
+        self.process = self.log = None
+        self.started = self.duration = None
 
 
 def claim_browser_start(root, wait):
@@ -246,8 +242,19 @@ def postgres_lanes(root, after, final_checks):
     shards = []
 
     def plan(log):
-        tests = [tuple(json.loads(line)["ignored_test"]) for line in log.splitlines()
-                 if line.startswith(IGNORED_TEST_LINE)]
+        tests = []
+        for line in log.splitlines():
+            if not line.startswith("{"):
+                continue
+            message = json.loads(line)
+            target = message.get("target", {})
+            if (message.get("reason") != "compiler-artifact" or target.get("kind") != ["lib"]
+                    or not message["profile"]["test"] or not message.get("executable")):
+                continue
+            binary, directory = message["executable"], str(Path(message["manifest_path"]).parent)
+            listed = subprocess.run([binary, "--list", "--ignored"], cwd=directory, check=True,
+                                    capture_output=True, text=True, timeout=TOOL_SECONDS).stdout
+            tests.extend((directory, binary, name) for name in re.findall(r"^(\S+): test$", listed, re.MULTILINE))
         names = [name for _, _, name in tests]
         if not names or len(set(names)) != len(names):
             raise ValueError("postgres: the list of the ignored tests is empty or has a name two times")
@@ -267,27 +274,8 @@ def postgres_lanes(root, after, final_checks):
             lanes.append(Lane(name, [str(root / "scripts/dev-postgres.sh"), "with", "sh", "-ec", "; ".join(commands)]))
         return lanes
 
-    return [Lane("postgres-plan", [sys.executable, str(root / "scripts/check-lanes.py"), "--postgres-list"],
-                 after=after, passed=plan)]
-
-
-def list_ignored_tests():
-    """Build the library test binaries, and write each of their ignored tests as an IGNORED_TEST_LINE."""
-    built = subprocess.run(["cargo", "test", "--workspace", "--all-targets", "--all-features", "--no-run",
-                            "--message-format=json"], stdout=subprocess.PIPE, text=True, check=True).stdout
-    for line in built.splitlines():
-        if not line.startswith("{"):
-            continue
-        message = json.loads(line)
-        target = message.get("target", {})
-        if (message.get("reason") != "compiler-artifact" or target.get("kind") != ["lib"]
-                or not message["profile"]["test"] or not message.get("executable")):
-            continue
-        binary, directory = message["executable"], str(Path(message["manifest_path"]).parent)
-        listed = subprocess.run([binary, "--list", "--ignored"], cwd=directory, check=True,
-                                capture_output=True, text=True).stdout
-        for name in re.findall(r"^(\S+): test$", listed, re.MULTILINE):
-            print(json.dumps({"ignored_test": [directory, binary, name]}), flush=True)
+    return [Lane("postgres-plan", ["cargo", "test", "--workspace", "--all-targets", "--all-features", "--no-run",
+                                   "--message-format=json"], after=after, passed=plan)]
 
 
 def compare_postgres_counts(root, shards, listed):
@@ -337,24 +325,7 @@ def start(root, lane, running, token):
                                     env={**os.environ, **(lane.env or {}), RUN_VARIABLE: token},
                                     stdin=subprocess.DEVNULL,
                                     stdout=lane.log, stderr=subprocess.STDOUT, start_new_session=True)
-    lane.watcher = threading.Thread(target=watch_end, args=(lane,), daemon=True)
-    lane.watcher.start()
     print(f"Lane {lane.name}: started", flush=True)
-
-
-def watch_end(lane):
-    """Record the time when the lane leader ends, also while the runner does other work. The leader stays unreaped."""
-    try:
-        os.waitid(os.P_PID, lane.process.pid, os.WEXITED | os.WNOWAIT)
-    except ChildProcessError:
-        # The stop reaped the leader first.
-        pass
-    lane.ended = time.monotonic()
-
-
-def over_time_limit(lane, now):
-    """Return True when the lane ended at or after LANE_TIME_LIMIT_SECONDS, or did not end before `now` at it."""
-    return (now if lane.ended is None else lane.ended) - lane.started >= LANE_TIME_LIMIT_SECONDS
 
 
 def tool_output(command):
@@ -540,20 +511,17 @@ def run(root, lanes, final_checks):
             time.sleep(0.2)
             for lane in list(running):
                 code = None if interrupted else exit_code(lane)
-                if code is not None:
-                    # The watcher records the end time a short time after the end.
-                    lane.watcher.join()
-                late = not interrupted and over_time_limit(lane, time.monotonic())
+                # A lane that the runner finds ended has the result of its exit code and its check (issue 1728).
+                late = (code is None and not interrupted
+                        and time.monotonic() - lane.started >= LANE_TIME_LIMIT_SECONDS)
                 if code is None and not late:
                     continue
                 running.remove(lane)
-                lane.duration = (time.monotonic() if lane.ended is None else lane.ended) - lane.started
+                lane.duration = time.monotonic() - lane.started
                 lane.log.close()
-                reason = f"exit code {code}"
-                if late:
-                    reason = (f"the lane ran longer than the time limit of {LANE_TIME_LIMIT_SECONDS} s"
-                              + ("" if code is None else f", then ended with {reason}"))
-                if code == 0 and not late:
+                reason = (f"the lane ran longer than the time limit of {LANE_TIME_LIMIT_SECONDS} s" if late
+                          else f"exit code {code}")
+                if code == 0:
                     try:
                         more = lane.passed(Path(lane.log.name).read_text()) if lane.passed else []
                         # A passed lane is reaped here, so it is out of the scope of a later stop.
@@ -588,9 +556,6 @@ def main():
     root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
     if sys.argv[1:] == ["--browser-start"]:
         claim_browser_start(root, wait=True)
-        return 0
-    if sys.argv[1:] == ["--postgres-list"]:
-        list_ignored_tests()
         return 0
     final_checks = []
     try:

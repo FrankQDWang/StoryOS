@@ -285,24 +285,6 @@ class FunctionTests(unittest.TestCase):
         self.assertEqual(len(watched), 2, f"the lane or its child did not start before the stop\n{text}")
         self.assertEqual(remaining, [], text)
 
-    def test_the_time_limit_uses_the_end_time_of_the_lane_and_not_the_time_when_the_runner_finds_it(self):
-        module = runner_module()
-        (ROOT / "target/check").mkdir(parents=True, exist_ok=True)
-        lane = module.Lane("lanes-test-ends-at-once", ["true"])
-        module.start(ROOT, lane, [], "token")
-        # The watcher records the end time also when the runner finds the lane only much later.
-        lane.watcher.join(timeout=60)
-        lane.process.wait()
-        lane.log.close()
-        self.assertIsNotNone(lane.ended)
-        self.assertFalse(module.over_time_limit(lane, now=lane.started + 10 * module.LANE_TIME_LIMIT_SECONDS))
-        limit = module.LANE_TIME_LIMIT_SECONDS
-        cases = (((None, 100 + limit - 1), False), ((None, 100 + limit), True),
-                 ((100 + limit - 1, 100 + 2 * limit), False), ((100 + limit, 100 + limit), True))
-        for (ended, now), expected in cases:
-            lane.started, lane.ended = 100, ended
-            self.assertEqual(module.over_time_limit(lane, now), expected, (ended, now))
-
     def test_a_stop_whose_scan_of_the_processes_fails_still_ends_the_lanes(self):
         module = runner_module()
 
