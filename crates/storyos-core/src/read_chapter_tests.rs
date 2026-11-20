@@ -30,7 +30,7 @@ fn item_tokens(text: &str) -> u64 {
     count_context_item_tokens(&ToolResultProjection::Ok(text).continuation_text("call-1"))
 }
 
-/// ADR 0095 section 1: the mapping `v8` and the fake tool loop mapping declare `read_chapter`
+/// ADR 0095 section 1: the current mapping and the fake tool loop mapping declare `read_chapter`
 /// in each Run, before `finish`, with a strict schema of one integer and a range of Blocks.
 #[test]
 fn each_current_mapping_declares_read_chapter_with_a_strict_schema() {

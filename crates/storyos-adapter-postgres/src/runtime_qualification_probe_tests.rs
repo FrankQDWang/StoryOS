@@ -10,10 +10,11 @@ use crate::shared_tests::runtime_qualification::{
     AUTHORIZATION, ScriptedAgentPlan, authorized, settle,
 };
 
-/// Pins the Registration with the pending function calling entry to `run_id` and its Project,
+/// Pins the probe fixture, the Registration with the pending function calling entry, to `run_id`
+/// and its Project,
 /// with an authorized qualification Decision, and makes it the head of its adapter.
 async fn authorize_tool_probes(admin: &Client, scope: &ProjectScope, run_id: &str) {
-    let pending = &storyos_core::AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION;
+    let pending = &storyos_core::PROBE_FIXTURE_REGISTRATION;
     let profile = serde_json::to_string(pending.capability_profile).unwrap();
     admin
         .batch_execute(&format!(
@@ -144,7 +145,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
     .admit(&store, &scope, &chapter_id, "b4c")
     .await;
     authorize_tool_probes(&admin, &scope, &output).await;
-    let pending = storyos_core::AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION.revision;
+    let pending = storyos_core::PROBE_FIXTURE_REGISTRATION.revision;
     move_call(&admin, &call, pending, Some(&output)).await;
     let output_adapter = response("resp_b4c", Vec::new());
     settle(&store, &admin, &scope, &output, &output_adapter).await;

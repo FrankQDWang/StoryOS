@@ -6,6 +6,10 @@ edition.workspace = true
 [lints]
 workspace = true
 
+[features]
+# The one probe fixture of the tests of ADR 0049 (ADR 0097). Only test builds enable it.
+probe-fixture = []
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true

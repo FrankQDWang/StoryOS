@@ -4,7 +4,7 @@ use storyos_core::ContextSourceClass;
 
 use crate::skill_wire_tests::{body, closing, first, item, summary};
 
-const V8: &str = storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION;
 
 /// The paragraph of `read_chapter` (ADR 0095 section 1).
 const READ_CHAPTER: &str = "Call read_chapter when the author request needs the text of a \
@@ -22,14 +22,11 @@ Block that has the text, and then you can read the Blocks near a match with read
 result of search_manuscript is the text of the manuscript at the time of the call, as the result \
 of read_chapter is.";
 
-/// A request of the mapping `v8` with `context`.
-fn v8(context: Vec<storyos_application::RequestContextItem>) -> CreateRequest {
+/// A request of the current mapping with `context`.
+fn current(context: Vec<storyos_application::RequestContextItem>) -> CreateRequest {
     CreateRequest {
         context,
-        ..first(
-            V8,
-            storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
-        )
+        ..first(CURRENT, storyos_core::AGENT_PLAN_REGISTRATION.revision)
     }
 }
 
@@ -48,27 +45,31 @@ async fn the_chapter_list_is_one_exact_section_before_the_working_text_with_its_
          the number of the Chapter, its length in characters, and its title. The Working text is \
          the Chapter with the mark current. When the list is long, its last line gives the count \
          of the Chapters and the ranges of numbers that the list does not show.";
-    let base = v8(vec![
+    let base = current(vec![
         item(
             ContextSourceClass::AuthorInstruction,
             "Tighten this paragraph.",
         ),
         item(ContextSourceClass::WorkingTarget, "The rain fell hard."),
     ]);
-    let request = v8([
-        base.context.clone(),
-        vec![
-            item(ContextSourceClass::SkillCatalog, catalog),
-            item(ContextSourceClass::ChapterList, list),
-        ],
-    ]
-    .concat());
+    let request = current(
+        [
+            base.context.clone(),
+            vec![
+                item(ContextSourceClass::SkillCatalog, catalog),
+                item(ContextSourceClass::ChapterList, list),
+            ],
+        ]
+        .concat(),
+    );
     let instructions = |body: serde_json::Value| body["instructions"].as_str().unwrap().to_owned();
-    let without = v8([
-        base.context.clone(),
-        vec![item(ContextSourceClass::SkillCatalog, catalog)],
-    ]
-    .concat());
+    let without = current(
+        [
+            base.context.clone(),
+            vec![item(ContextSourceClass::SkillCatalog, catalog)],
+        ]
+        .concat(),
+    );
 
     assert_eq!(
         body(request.clone()).await["input"],
@@ -98,13 +99,13 @@ async fn the_chapter_list_is_one_exact_section_before_the_working_text_with_its_
     );
 }
 
-/// ADR 0095 section 1: a request of the mapping `v8` that declares `read_chapter` and has the
+/// ADR 0095 section 1: a request of the current mapping that declares `read_chapter` and has the
 /// Chapter list adds the paragraph of `read_chapter` after the paragraph of the Chapter list, and
 /// the paragraph of `search_manuscript` after it. A request that does not declare a Tool does not
 /// add its paragraph, and the declarations of the Tools go before `finish`.
 #[tokio::test]
 async fn the_read_chapter_and_search_paragraphs_follow_the_chapter_list_paragraph() {
-    let request = v8(vec![
+    let request = current(vec![
         item(
             ContextSourceClass::AuthorInstruction,
             "Use the harbor scene.",
@@ -155,12 +156,12 @@ async fn the_read_chapter_and_search_paragraphs_follow_the_chapter_list_paragrap
     );
 }
 
-/// ADR 0095 sections 1 and 4: a request of the mapping `v8` with the search by meaning declares
+/// ADR 0095 sections 1 and 4: a request of the current mapping with the search by meaning declares
 /// `hybrid_search_manuscript` after `search_manuscript` with its strict schema, and its
 /// instructions do not change.
 #[tokio::test]
-async fn the_mapping_v8_declares_the_hybrid_search_after_the_keyword_search() {
-    let request = v8(vec![
+async fn the_current_mapping_declares_the_hybrid_search_after_the_keyword_search() {
+    let request = current(vec![
         item(
             ContextSourceClass::AuthorInstruction,
             "Who waits at the quay?",
@@ -174,7 +175,7 @@ async fn the_mapping_v8_declares_the_hybrid_search_after_the_keyword_search() {
     let hybrid = CreateRequest {
         tool_exposure: storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
             bound: &[],
-            model_registration_revision: storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
+            model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
             skill_catalog: false,
             memory_use: false,
             hybrid_search: true,
@@ -242,7 +243,7 @@ async fn the_mapping_v8_declares_the_hybrid_search_after_the_keyword_search() {
 #[tokio::test]
 async fn the_project_instruction_is_before_the_skill_sections_and_the_chapter_list() {
     let list = "[1,19,\"The Harbor\",\"current\"]";
-    let request = v8(vec![
+    let request = current(vec![
         item(
             ContextSourceClass::AuthorInstruction,
             "Tighten this paragraph.",
@@ -270,11 +271,11 @@ async fn the_project_instruction_is_before_the_skill_sections_and_the_chapter_li
     );
 }
 
-/// ADR 0095 section 1: the mapping `v8` declares `read_chapter` as a strict function with the
+/// ADR 0095 section 1: the current mapping declares `read_chapter` as a strict function with the
 /// range of Blocks: `first_block` and `last_block` are required, and each takes null.
 #[tokio::test]
 async fn the_read_chapter_declaration_has_the_range_of_blocks() {
-    let declared = body(v8(vec![item(
+    let declared = body(current(vec![item(
         ContextSourceClass::WorkingTarget,
         "The rain fell hard.",
     )]))

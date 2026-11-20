@@ -15,7 +15,7 @@ fn names(revision: &str, hybrid_search: bool) -> Vec<&'static str> {
     exposure.tools.iter().map(|tool| tool.name).collect()
 }
 
-/// ADR 0095 sections 1 and 4: the mapping `v8` and the fake tool loop mapping declare
+/// ADR 0095 sections 1 and 4: the current mapping and the fake tool loop mapping declare
 /// `hybrid_search_manuscript` after `search_manuscript` and before `finish` only when the search
 /// by meaning is possible. The description tells the model to use the keyword search first.
 #[test]

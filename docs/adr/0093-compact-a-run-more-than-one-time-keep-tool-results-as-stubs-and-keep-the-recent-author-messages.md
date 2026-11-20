@@ -117,3 +117,4 @@ The later tickets of #1507 change the request forms of `v6` again: the stub outp
 - Section 4 changes the release baseline and adds one optional field to `getAgentRun`. The local database has no data to keep.
 - Section 5 adds the column `stub_tool_call_ids` to `active_context_compactions` in the release baseline, one optional field to the compaction record of `getAgentRun`, and the projection mode `tool_result_stub`.
 - Section 6 adds the column `kept_author_message_ids` to `active_context_compactions` in the release baseline and one optional field to the compaction record of `getAgentRun`. It adds no enum value.
+- [ADR 0097](0097-keep-only-the-current-model-registrations-and-request-mapping-in-the-code.md) removes the earlier Registrations and mapping branches from the code, because no stored Run names them.

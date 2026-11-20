@@ -1,4 +1,4 @@
-//! The request body of one RunStep of a capture on the mappings `v8` and `v9` (ADR 0094 sections
+//! The request body of one RunStep of a capture on the mapping `v9` (ADR 0094 sections
 //! 3, 5, and 8). The request has no author message: its user message has the input of the capture, the
 //! Memory Index, the Chapter list, and the delete marks as sections. It declares the Tools of the
 //! capture as strict functions with `tool_choice: "required"`.
@@ -12,12 +12,9 @@ pub(crate) const CONVERSATION_CAPTURE_RULE: &str = " In a capture of a Project C
 observation is a decision, a preference, or an intent that the messages have. You can read the manuscript to understand a message, and you do not \
 record a fact that only the manuscript has.";
 
-/// The Host instructions of a capture on `mapping`. Each number comes from a Core constant.
-pub(crate) fn capture_instructions(mapping: &str) -> String {
-    let conversation_rule = match mapping {
-        storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION => CONVERSATION_CAPTURE_RULE,
-        _ => "",
-    };
+/// The Host instructions of a capture. Each number comes from a Core constant.
+pub(crate) fn capture_instructions() -> String {
+    let conversation_rule = CONVERSATION_CAPTURE_RULE;
     let types = storyos_core::MemoryEntryType::ALL
         .map(storyos_core::MemoryEntryType::as_str)
         .join(", ");
@@ -79,7 +76,7 @@ pub(crate) fn capture_body(
 ) -> String {
     let mut body = serde_json::json!({
         "model": provider_model_id,
-        "instructions": capture_instructions(&request.route.mapping_revision),
+        "instructions": capture_instructions(),
         "input": crate::wire::input(request, &capture_text(request, kind)),
         "max_output_tokens": bounds.max_output_tokens,
         "stream": true,

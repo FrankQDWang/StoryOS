@@ -1,8 +1,8 @@
 //! The Host decision before the dispatch claim of a new Create request.
 
 use crate::{
-    BudgetBounds, ExecutionCapability, GrantFacts, RuntimeQualification, admit_disclosure,
-    model_registration,
+    BudgetBounds, ExecutionCapability, GrantFacts, ModelRegistration, RuntimeQualification,
+    admit_disclosure, model_registration,
 };
 
 /// The facts of one claimed AgentRun that Create admission examines.
@@ -71,6 +71,16 @@ pub fn admit_route(route: &RouteFacts<'_>) -> Result<(), &'static str> {
     let Some(registration) = model_registration(route.model_registration_revision) else {
         return Err("model_registration_unknown");
     };
+    admit_registration(registration, route)
+}
+
+/// Admits a new Create submission on the Registration of the route. No current Registration is
+/// pending, and a later version is a new Registration that can be pending (ADR 0059 and ADR
+/// 0097), so this check stays.
+fn admit_registration(
+    registration: &ModelRegistration,
+    route: &RouteFacts<'_>,
+) -> Result<(), &'static str> {
     // An authorized qualification admits a pending profile, and does not report it as qualified.
     if !registration.qualified()
         && route.qualification != RuntimeQualification::QualificationAuthorized

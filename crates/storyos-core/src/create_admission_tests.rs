@@ -1,10 +1,23 @@
-use super::{RouteFacts, admit_route};
+use super::{RouteFacts, admit_registration, admit_route};
 use crate::shared_tests::targeted_passage_assembly;
 use crate::{
-    AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION, AGENT_PLAN_CONTINUATION_REGISTRATION,
-    AGENT_PLAN_CREATE_REGISTRATION, AGENT_PLAN_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION,
-    BudgetBounds, GrantFacts, HOST_FAKE_REGISTRATION, RuntimeQualification,
-    assemble_current_passage_context,
+    AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_REGISTRATION, BudgetBounds, GrantFacts,
+    HOST_FAKE_TOOL_LOOP_REGISTRATION, ModelCapabilityProfile, ModelRegistration,
+    RuntimeQualification, assemble_current_passage_context,
+};
+
+/// A profile of the test with the current entries and no qualified combination.
+const PENDING_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
+    revision: "test.pending",
+    combinations: &[],
+    ..AGENT_PLAN_CAPABILITY_PROFILE
+};
+
+/// A Registration of the test that awaits qualification: a later version before its probe.
+const PENDING: ModelRegistration = ModelRegistration {
+    revision: "test.pending",
+    capability_profile: &PENDING_PROFILE,
+    ..AGENT_PLAN_REGISTRATION
 };
 
 /// A current-passage request that the standing grant scope covers.
@@ -39,71 +52,58 @@ fn route(
 
 #[test]
 fn a_qualified_profile_or_an_authorized_qualification_with_known_bounds_admits_create() {
-    let agent_plan = AGENT_PLAN_PENDING_REGISTRATION.revision;
+    let pending = |qualification, budget_bounds| {
+        admit_registration(
+            &PENDING,
+            &route(PENDING.revision, qualification, budget_bounds),
+        )
+    };
 
     assert_eq!(
         [
             admit_route(&route(
-                HOST_FAKE_REGISTRATION.revision,
+                HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
                 RuntimeQualification::Qualified,
                 BudgetBounds::NotRequired,
             )),
-            admit_route(&route(
-                agent_plan,
+            pending(
                 RuntimeQualification::Pending,
-                BudgetBounds::AgentPlanRequestV1,
-            )),
-            admit_route(&route(
-                agent_plan,
+                BudgetBounds::AgentPlanRequestV1
+            ),
+            pending(
                 RuntimeQualification::QualificationAuthorized,
                 BudgetBounds::AgentPlanRequestV1,
-            )),
-            admit_route(&route(
-                agent_plan,
+            ),
+            pending(
                 RuntimeQualification::QualificationAuthorized,
                 BudgetBounds::Unqualified,
-            )),
-            admit_route(&route(
-                AGENT_PLAN_CREATE_REGISTRATION.revision,
-                RuntimeQualification::Qualified,
-                BudgetBounds::AgentPlanRequestV1,
-            )),
+            ),
             admit_route(&RouteFacts {
                 grant: GrantFacts {
                     grant_scope: None,
                     ..granted()
                 },
                 ..route(
-                    AGENT_PLAN_CREATE_REGISTRATION.revision,
+                    AGENT_PLAN_REGISTRATION.revision,
                     RuntimeQualification::Qualified,
                     BudgetBounds::AgentPlanRequestV1,
                 )
             }),
             admit_route(&route(
-                AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION.revision,
-                RuntimeQualification::Pending,
-                BudgetBounds::AgentPlanRequestV1,
-            )),
-            admit_route(&route(
-                AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION.revision,
-                RuntimeQualification::QualificationAuthorized,
-                BudgetBounds::AgentPlanRequestV1,
-            )),
-            admit_route(&route(
-                AGENT_PLAN_CONTINUATION_REGISTRATION.revision,
-                RuntimeQualification::Qualified,
-                BudgetBounds::AgentPlanRequestV1,
-            )),
-            admit_route(&route(
                 AGENT_PLAN_REGISTRATION.revision,
                 RuntimeQualification::Qualified,
+                BudgetBounds::AgentPlanRequestV1,
+            )),
+            admit_route(&route(
+                PENDING.revision,
+                RuntimeQualification::QualificationAuthorized,
                 BudgetBounds::AgentPlanRequestV1,
             )),
             admit_route(&RouteFacts {
                 binding_current: false,
                 ..route(
-                    agent_plan,
-                    RuntimeQualification::QualificationAuthorized,
+                    AGENT_PLAN_REGISTRATION.revision,
+                    RuntimeQualification::Qualified,
                     BudgetBounds::AgentPlanRequestV1,
                 )
             }),
@@ -113,12 +113,9 @@ fn a_qualified_profile_or_an_authorized_qualification_with_known_bounds_admits_c
             Err("model_runtime_qualification_pending"),
             Ok(()),
             Err("model_request_bounds_unknown"),
-            Ok(()),
             Err("disclosure_outside_grant"),
-            Err("model_runtime_qualification_pending"),
             Ok(()),
-            Ok(()),
-            Ok(()),
+            Err("model_registration_unknown"),
             Err("model_use_binding_stale"),
         ]
     );

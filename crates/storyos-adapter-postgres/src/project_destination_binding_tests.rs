@@ -203,7 +203,8 @@ async fn a_binding_with_earlier_bounds_or_an_earlier_registration_gets_new_recor
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) = queued_run(&store, "e7f", agent_plan()).await;
-    let reply_form = storyos_core::AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision;
+    // The superseded reply form Registration, which the test makes with its revision (ADR 0097).
+    let reply_form = "018f0000-0000-7001-8000-00000000fa17";
     admin
         .execute(
             "INSERT INTO storyos.model_registration_revisions
@@ -297,7 +298,8 @@ async fn a_run_that_pinned_fa21_refuses_with_drift_after_the_deployment_offers_a
     }
     .admit(&store, &scope, &chapter_id, "b04")
     .await;
-    let pinned = storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision;
+    // The superseded Registration `fa21`, which the test makes with its revision (ADR 0097).
+    let pinned = "018f0000-0000-7001-8000-00000000fa21";
     // The Project bound `fa21` before the deployment offered the later head.
     admin
         .batch_execute(&format!(

@@ -8,8 +8,7 @@ use crate::AgentPlanResponses;
 use crate::skill_wire_tests::{body, first, item};
 use crate::tests::CanaryResolver;
 
-const V7: &str = storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION;
-const V8: &str = storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION;
 const ENTRY_1: &str = "{\"changed_at\":\"2026-11-17T10:00:00Z\",\"description\":\"渡口的船夫。\",\
                        \"id\":1,\"origin\":\"author_request\",\"text\":\"林舟撑船。\",\
                        \"title\":\"林舟\",\"type\":\"character\"}";
@@ -55,8 +54,8 @@ fn full() -> CreateRequest {
             item(ContextSourceClass::MemoryObservations, OBSERVATION),
             item(ContextSourceClass::MemoryDeleteMarks, MARKS),
         ],
-        V8,
-        storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
+        CURRENT,
+        storyos_core::AGENT_PLAN_REGISTRATION.revision,
     )
 }
 
@@ -65,16 +64,17 @@ fn message(text: &str) -> serde_json::Value {
     json!([{"role": "user", "content": [{"type": "input_text", "text": text}]}])
 }
 
-/// ADR 0094 sections 3, 6, 7, and 8: the Host instructions of a pass are one text of the mapping
-/// `v8`. They give the four duties and what an entry is for. They give the six types, one entry
-/// for each character and each pair, and the limits from the Core constants. They say what the
-/// mark `unused` and an entry of the author mean, and what the delete marks are. They give the
-/// rule of an uncertainty and of the observations of an entry. Each section is data, and the
+/// ADR 0094 sections 3, 6, 7, and 8: the Host instructions of a pass are one text of the current
+/// mapping. They give the four duties and what an entry is for. They give the six types, one
+/// entry for each character and each pair, and the limits from the Core constants. They say what
+/// the mark `unused` and an entry of the author mean, and what the delete marks are. They give
+/// the rule of an uncertainty and of the observations of an entry, and they say what the key
+/// `refused` of an observation means. Each section is data, and the
 /// reply is one `apply_memory_operations` call.
 #[test]
 fn the_pass_instructions_are_one_text_with_the_limits_of_the_core_constants() {
     assert_eq!(
-        crate::pass_wire::pass_instructions(V8),
+        crate::pass_wire::pass_instructions(),
         "\
 You keep the Memory of one novel for the writing assistant of the author. The author does not see \
 this work. A Memory entry is for a fact that a later Chapter needs and that a search of the \
@@ -99,7 +99,9 @@ flag_conflict is the only operation for it, when an observation is against it.
 
 The section Memory observations has the new facts of the captures, one JSON line for each \
 observation, with its number. Keep an uncertainty as an uncertainty, and do not write a guess as a \
-fact. Give each new or changed entry the numbers of the observations that it comes from.
+fact. Give each new or changed entry the numbers of the observations that it comes from. An \
+observation with the key refused was in an operation that the Host refused for that reason. Give \
+a correct operation for it, or no operation.
 
 The section Deleted Memory entries lists entries that the author deleted. They name content that \
 the author does not want, and the Host refuses to write it again.
@@ -143,7 +145,7 @@ async fn a_pass_request_has_its_sections_and_one_strict_function() {
             json!("required"),
             json!(8192),
             true,
-            json!(crate::pass_wire::pass_instructions(V8)),
+            json!(crate::pass_wire::pass_instructions()),
             message(&format!(
                 "Memory entries:\n{ENTRY_1}\n{ENTRY_2}\n\nMemory observations:\n{OBSERVATION}\
                  \n\nDeleted Memory entries:\n{MARKS}"
@@ -153,7 +155,7 @@ async fn a_pass_request_has_its_sections_and_one_strict_function() {
 }
 
 /// The request text of the keys `title`, `description`, and `text` says what null means for each
-/// action (#1685): the mapping `v8` changed in place.
+/// action (#1685).
 #[tokio::test]
 async fn the_pass_request_says_what_null_means_for_each_action() {
     let pass_body = body(full()).await;
@@ -186,8 +188,8 @@ async fn the_pass_request_says_what_null_means_for_each_action() {
 async fn a_pass_request_with_no_entry_and_no_mark_has_only_the_observations() {
     let request = pass(
         vec![item(ContextSourceClass::MemoryObservations, OBSERVATION)],
-        V8,
-        storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
+        CURRENT,
+        storyos_core::AGENT_PLAN_REGISTRATION.revision,
     );
     assert_eq!(
         body(request).await["input"],
@@ -204,8 +206,8 @@ async fn a_pass_request_with_entries_and_no_observation_has_no_observations_sect
             item(ContextSourceClass::MemoryEntries, ENTRY_1),
             item(ContextSourceClass::MemoryDeleteMarks, MARKS),
         ],
-        V8,
-        storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
+        CURRENT,
+        storyos_core::AGENT_PLAN_REGISTRATION.revision,
     );
     assert_eq!(
         body(request).await["input"],
@@ -215,15 +217,15 @@ async fn a_pass_request_with_entries_and_no_observation_has_no_observations_sect
     );
 }
 
-/// ADR 0093 section 3: only the mapping `v8` has the pass form, so the adapter refuses a pass of
-/// an earlier mapping before dispatch. It also refuses a pass with no entries item and no
+/// ADR 0093 section 3 and ADR 0097: only the current mapping has the pass form, so the adapter
+/// refuses a pass on a mapping that is not current before dispatch. It also refuses a pass with no entries item and no
 /// observations item, with no output Tool, or with a prior response reference.
 #[tokio::test]
 async fn the_adapter_refuses_a_pass_of_an_earlier_mapping_or_of_another_form() {
-    let v7 = pass(
+    let earlier = pass(
         full().context,
-        V7,
-        storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision,
+        crate::tests::EARLIER_MAPPING,
+        storyos_core::AGENT_PLAN_REGISTRATION.revision,
     );
     let marks_only = CreateRequest {
         context: (full().context.into_iter())
@@ -243,7 +245,7 @@ async fn the_adapter_refuses_a_pass_of_an_earlier_mapping_or_of_another_form() {
         resolver: CanaryResolver::default(),
     };
     let mut refusals = Vec::new();
-    for request in [v7, marks_only, no_output, continued, full()] {
+    for request in [earlier, marks_only, no_output, continued, full()] {
         let prepared = adapter.prepare(&DestinationRequest::Create(request)).await;
         refusals.push(prepared.err());
     }

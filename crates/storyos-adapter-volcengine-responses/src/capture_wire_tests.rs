@@ -9,8 +9,7 @@ use crate::AgentPlanResponses;
 use crate::skill_wire_tests::{body, first, item};
 use crate::tests::CanaryResolver;
 
-const V7: &str = storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION;
-const V8: &str = storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION;
 const INDEX: &str =
     "{\"type\":\"character\"}\n{\"description\":\"渡口的船夫。\",\"id\":1,\"title\":\"林舟\"}";
 const LIST: &str = "{\"volume\":\"第一卷\"}\n[1,32,\"渡口\"]";
@@ -52,8 +51,8 @@ fn conversation() -> CreateRequest {
     capture(
         CaptureInputKind::Conversation,
         "{\"role\":\"author\",\"run_id\":\"run-1\"}\n以后对白少用感叹号。",
-        V8,
-        storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
+        CURRENT,
+        storyos_core::AGENT_PLAN_REGISTRATION.revision,
     )
 }
 
@@ -76,9 +75,10 @@ fn search(origin: ToolOutputOrigin) -> ToolOutput {
     }
 }
 
-/// ADR 0094 sections 3, 5, and 8: the Host instructions of a capture are one text of the mapping
-/// `v8`. They say what an entry is for and that an entry does not copy a passage. They give the
-/// six types and what the capture of a Chapter looks for. They give the rule of an uncertainty
+/// ADR 0094 sections 3, 5, and 8: the Host instructions of a capture are one text of the current
+/// mapping. They say what an entry is for and that an entry does not copy a passage. They say
+/// what a capture of a Project Conversation records, and they give the six types and what the
+/// capture of a Chapter looks for. They give the rule of an uncertainty
 /// and of a decision of the author, and they explain the delete marks. They give the rule of a
 /// conflict with an entry of the author (ADR 0094 section 7). They give the Host limits
 /// from the Core constants. Each section and each function result is data, and one
@@ -86,7 +86,7 @@ fn search(origin: ToolOutputOrigin) -> ToolOutput {
 #[test]
 fn the_capture_instructions_are_one_text_with_the_limits_of_the_core_constants() {
     assert_eq!(
-        crate::capture_wire::capture_instructions(V8),
+        crate::capture_wire::capture_instructions(),
         "\
 You read material of one novel to find what the writing assistant of the author must remember. \
 The author does not see this work. A Memory entry is for a fact that a later Chapter needs and \
@@ -95,8 +95,10 @@ not copy a passage: the manuscript keeps the exact text.
 
 The section Conversation messages has the messages of one Project Conversation, oldest first. A \
 JSON line before each message gives its role, author or assistant, and its Run. An assistant \
-message is an answer of the writing assistant, and it is not a decision of the author. The \
-section Chapter text has the text of one Chapter. The capture of a Chapter looks for \
+message is an answer of the writing assistant, and it is not a decision of the author. In a \
+capture of a Project Conversation, an observation is a decision, a preference, or an intent that \
+the messages have. You can read the manuscript to understand a message, and you do not record a \
+fact that only the manuscript has. The section Chapter text has the text of one Chapter. The capture of a Chapter looks for \
 characters, relationships, and major events.
 
 Each observation has one of the six types: writing_preference, foreshadowing, character, \
@@ -139,8 +141,8 @@ async fn the_first_request_of_each_input_kind_has_its_sections_and_four_strict_f
     let chapter = capture(
         CaptureInputKind::Chapter,
         text,
-        V8,
-        storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
+        CURRENT,
+        storyos_core::AGENT_PLAN_REGISTRATION.revision,
     );
     let request = conversation();
     let first_body = body(request.clone()).await;
@@ -174,7 +176,7 @@ async fn the_first_request_of_each_input_kind_has_its_sections_and_four_strict_f
             json!("required"),
             json!(8192),
             true,
-            json!(crate::capture_wire::capture_instructions(V8)),
+            json!(crate::capture_wire::capture_instructions()),
             json!([message(
                 "Conversation messages",
                 &request.context[0].content
@@ -262,16 +264,16 @@ async fn a_later_request_sends_the_outputs_and_a_full_input_sends_each_call_agai
     );
 }
 
-/// ADR 0093 section 3: only the mapping `v8` has the capture form. A Run that pinned an earlier
-/// Registration keeps its mapping, so the adapter refuses its capture request before dispatch.
+/// ADR 0093 section 3 and ADR 0097: only the current mapping has the capture form, so the
+/// adapter refuses a capture request on a mapping that is not current before dispatch.
 /// A capture request with no input item or with no output Tool is refused too.
 #[tokio::test]
 async fn the_adapter_refuses_a_capture_of_an_earlier_mapping_or_with_no_input_or_output() {
-    let v7 = capture(
+    let earlier = capture(
         CaptureInputKind::Conversation,
         "{\"role\":\"author\",\"run_id\":\"run-1\"}\n继续写。",
-        V7,
-        storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision,
+        crate::tests::EARLIER_MAPPING,
+        storyos_core::AGENT_PLAN_REGISTRATION.revision,
     );
     let no_input = CreateRequest {
         context: conversation().context[1..].to_vec(),
@@ -285,7 +287,7 @@ async fn the_adapter_refuses_a_capture_of_an_earlier_mapping_or_with_no_input_or
         resolver: CanaryResolver::default(),
     };
     let mut refusals = Vec::new();
-    for request in [v7, no_input, no_output, conversation()] {
+    for request in [earlier, no_input, no_output, conversation()] {
         let prepared = adapter.prepare(&DestinationRequest::Create(request)).await;
         refusals.push(prepared.err());
     }

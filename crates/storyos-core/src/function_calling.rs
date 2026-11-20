@@ -1,11 +1,9 @@
 //! The function calling entry of a Model Capability Profile and its author-authorized
 //! qualification probe on the Agent Plan route (ADR 0049).
 
-use crate::{
-    AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_PINNED_VERSION_REGISTRATION, CapabilityEntries,
-    CapabilityEvidence, ModelCapabilityProfile, ModelRegistration, RuntimeQualification,
-    model_registration,
-};
+#[cfg(any(test, feature = "probe-fixture"))]
+use crate::ModelCapabilityProfile;
+use crate::{CapabilityEvidence, ModelRegistration, RuntimeQualification, model_registration};
 
 impl ModelRegistration {
     /// True when the authorization link of a compatibility Decision has a requirement or the
@@ -76,52 +74,27 @@ pub fn tool_probe(
         })
 }
 
-/// The profile of the dated version with the function calling entry pending. Each other entry
-/// and each combination keep their qualification.
-pub const AGENT_PLAN_FUNCTION_CALLING_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile =
-    ModelCapabilityProfile {
-        revision: "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v3",
-        entries: CapabilityEntries {
-            function_calling: CapabilityEvidence::Documented {
-                source: "General Ark tool calling, docs.volcengine.com/docs/82379/1958524, not \
-                         the Agent Plan route",
-            },
-            ..AGENT_PLAN_CAPABILITY_PROFILE.entries
-        },
-        context_window: AGENT_PLAN_CAPABILITY_PROFILE.context_window,
-        combinations: AGENT_PLAN_CAPABILITY_PROFILE.combinations,
-    };
-
-/// The qualified dated version with the function calling entry pending. A Decision with the
-/// authorization link dispatches its probe (ADR 0049). An AgentRun that pinned it refuses with
-/// Registration drift.
-pub const AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION: ModelRegistration = ModelRegistration {
-    revision: "018f0000-0000-7001-8000-00000000fa16",
-    capability_profile: &AGENT_PLAN_FUNCTION_CALLING_PENDING_CAPABILITY_PROFILE,
-    ..AGENT_PLAN_PINNED_VERSION_REGISTRATION
+/// The profile of the probe fixture: the current profile with the function calling entry
+/// pending. Each other entry and each combination keep their qualification.
+#[cfg(any(test, feature = "probe-fixture"))]
+pub const PROBE_FIXTURE_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
+    revision: "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v3",
+    entries: crate::model_registration::agent_plan_entries(CapabilityEvidence::Documented {
+        source: "General Ark tool calling, docs.volcengine.com/docs/82379/1958524, not the Agent \
+                 Plan route",
+    }),
+    context_window: crate::model_registration::AGENT_PLAN_CONTEXT_WINDOW,
+    combinations: crate::model_registration::AGENT_PLAN_COMBINATIONS,
 };
 
-/// The profile of the dated version with qualified function calling.
-pub const AGENT_PLAN_FUNCTION_CALLING_CAPABILITY_PROFILE: ModelCapabilityProfile =
-    ModelCapabilityProfile {
-        revision: "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v4",
-        entries: CapabilityEntries {
-            function_calling: CapabilityEvidence::Qualified {
-                evidence: "Authorized function calling probe of doubao-seed-2-1-pro-260915 on \
-                           2026-11-03: docs/research/agent-plan-function-calling-probe-2026-11-03.md",
-            },
-            ..AGENT_PLAN_CAPABILITY_PROFILE.entries
-        },
-        context_window: AGENT_PLAN_CAPABILITY_PROFILE.context_window,
-        combinations: AGENT_PLAN_CAPABILITY_PROFILE.combinations,
-    };
-
-/// The qualified dated version with qualified function calling and the reply form mapping `v4`.
-/// An AgentRun that pinned it refuses with Registration drift.
-pub const AGENT_PLAN_FUNCTION_CALLING_REGISTRATION: ModelRegistration = ModelRegistration {
-    revision: "018f0000-0000-7001-8000-00000000fa17",
-    capability_profile: &AGENT_PLAN_FUNCTION_CALLING_CAPABILITY_PROFILE,
-    ..AGENT_PLAN_PINNED_VERSION_REGISTRATION
+/// The one probe fixture of the tests of ADR 0049: the current Registration with the function
+/// calling entry pending, so a Decision with the authorization link dispatches its probe. No
+/// product path binds it, so only a test build has it (ADR 0097).
+#[cfg(any(test, feature = "probe-fixture"))]
+pub const PROBE_FIXTURE_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa16",
+    capability_profile: &PROBE_FIXTURE_CAPABILITY_PROFILE,
+    ..crate::AGENT_PLAN_REGISTRATION
 };
 
 #[cfg(test)]

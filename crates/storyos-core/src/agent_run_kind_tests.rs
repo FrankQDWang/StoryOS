@@ -1,8 +1,8 @@
 use super::{AgentRunKind, MEMORY_CAPTURE_MAX_RUN_STEPS, yields_to_author};
 use crate::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_STREAMING_REGISTRATION, BudgetBounds,
-    HOST_FAKE_REGISTRATION, MAX_RUN_STEPS, MemoryCaptureAssembly, ProjectionMode, RunStepLimit,
-    ToolChoice, ToolOperation, assemble_memory_capture_context,
+    AGENT_PLAN_REGISTRATION, BudgetBounds, HOST_FAKE_TOOL_LOOP_REGISTRATION, MAX_RUN_STEPS,
+    MemoryCaptureAssembly, ProjectionMode, RunStepLimit, ToolChoice, ToolOperation,
+    assemble_memory_capture_context,
 };
 
 #[test]
@@ -28,11 +28,11 @@ fn only_a_run_of_the_author_compacts_with_a_registration_that_compacts() {
     let compacts = |revision| AgentRunKind::ALL.map(|kind| kind.compacts_before_decision(revision));
     assert_eq!(
         [
-            compacts(HOST_FAKE_REGISTRATION.revision),
-            compacts(AGENT_PLAN_STREAMING_REGISTRATION.revision),
+            compacts(HOST_FAKE_TOOL_LOOP_REGISTRATION.revision),
+            compacts(AGENT_PLAN_REGISTRATION.revision),
             compacts("an unknown revision"),
         ],
-        [[true, false, false], [false; 3], [false; 3]]
+        [[true, false, false], [true, false, false], [false; 3]]
     );
 }
 
@@ -135,7 +135,7 @@ fn the_full_request_of_a_background_run_is_refused_at_the_window() {
         AgentRunKind::ALL.map(|kind| {
             [
                 AGENT_PLAN_REGISTRATION.revision,
-                HOST_FAKE_REGISTRATION.revision,
+                HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
             ]
             .map(|revision| kind.full_request_too_long(revision, bounds, &record))
         })
