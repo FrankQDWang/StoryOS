@@ -234,7 +234,7 @@ impl<C: AdmittedCommand, S: DeclaredSpec<C>> AdmittedCommand for Failing<C, S> {
 }
 
 /// Raises a serialization failure in the command transaction, and returns it as a store fault.
-pub(crate) async fn serialization_failure(client: &Client) -> ProjectCommandError {
+async fn serialization_failure(client: &Client) -> ProjectCommandError {
     match client
         .batch_execute(
             "DO $$ BEGIN RAISE EXCEPTION 'injected contention'
