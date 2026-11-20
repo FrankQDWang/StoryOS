@@ -7,8 +7,6 @@ import type { DeleteChapterRequest, DeleteChapterResponse, DeleteVolumeRequest, 
 import { deleteOwnedChapter } from "../../src/delete-chapter.ts";
 import { deleteOwnedVolume } from "../../src/delete-volume.ts";
 import { jsonResponse, OWNER } from "./scenario.ts";
-import { CHALLENGE_ROUTE, type Challenge, contentTypeRefusal, identityRefusal, isCatalogRoute, problem, readChallenge,
-  shapeRefusal, UUID_V7, webFallback } from "./project-challenge-route.ts";
 
 // Delete Chapter and Delete Volume wait after a Challenge rate limit before their one retry (#1720).
 const CHAPTER = "018f0000-0000-7001-8000-000000172002";
@@ -16,6 +14,7 @@ const VOLUME = "018f0000-0000-7001-8000-000000172003";
 const OTHER_CHAPTER = "018f0000-0000-7001-8000-000000172004";
 const COMMIT = "018f0000-0000-7001-8000-000000172024";
 const NONCE = "a".repeat(64);
+const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 type Exchange =
   | { step: "challenge" | "command"; key: string | null; nonce: string | null }
@@ -23,21 +22,46 @@ type Exchange =
 
 type Kind = "chapter" | "volume";
 type Delete = DeleteChapterRequest | DeleteVolumeRequest;
+type Challenge = { method: string; route_template: string; command_schema: string;
+  canonical_command_digest: { algorithm: string; profile: string; value_hex_lowercase: string };
+  idempotency_key: string };
+
+// A second copy of the lookup of `refused-command-challenge.integration.test.ts:101`, kept by a coordinator decision.
+const CATALOG_URL = new URL("../../../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json",
+  import.meta.url);
+const { operations } = await (await fetch(CATALOG_URL)).json() as { operations: {
+  operation_id: string; kind: string; method: string; path: string; schemas: { request: string } }[] };
+/** The rows of the route catalog that are the Project command targets of the Server. */
+const PROJECT_COMMANDS = operations.filter(({ kind, path }) =>
+  kind === "command" && path.startsWith("/api/v1/projects/{project_id}"));
+
+const problem = (code: string, message: string, status: number) =>
+  jsonResponse({ schema_id: "storyos.problem.v1", code, message }, status);
+
+/**
+ * The refusal of the Server for a Challenge request, in the order of `project_command_challenge.rs:63`: a target that
+ * is not in the route catalog (`lib.rs:908`), then a bad digest or a key that is not UUID v7 (`lib.rs:884`).
+ */
+function challengeRefusal(challenge: Challenge): Response | undefined {
+  const target = PROJECT_COMMANDS.find((operation) => operation.method === challenge.method
+    && operation.path === challenge.route_template && operation.schemas.request === challenge.command_schema);
+  if (target === undefined) {
+    return problem("command_target_refused", "The command target is not in the closed Release 1 contract.", 422);
+  }
+  const { algorithm, profile, value_hex_lowercase: value } = challenge.canonical_command_digest;
+  if (algorithm !== "sha256" || profile !== `storyos.command.${target.operation_id}.jcs.v1`
+    || !/^[0-9a-f]{64}$/.test(value) || !UUID_V7.test(challenge.idempotency_key)) {
+    return problem("invalid_request", "The request is invalid.", 400);
+  }
+  return undefined;
+}
+
 const digest = (kind: Kind, request: Delete) => kind === "chapter"
   ? digestDeleteChapter(request as DeleteChapterRequest, crypto)
   : digestDeleteVolume(request as DeleteVolumeRequest, crypto);
 
-/**
- * The problem of `crates/storyos-server/src/command_admission.rs:576` for a command that does not match its Challenge.
- * The Server uses the Challenge before it reads the Project (`storyos-adapter-postgres/src/command_sequence/skeleton.rs:55`),
- * and the nonce binds the Project text of the Challenge (`project_command_challenge.rs:150`), so a command on the path
- * of another Project, or of the same Project in another spelling, also gets this problem.
- */
-const challengeInvalid = (kind: Kind) => problem("challenge_invalid",
-  `The ${kind === "chapter" ? "Delete Chapter" : "Delete Volume"} challenge is invalid.`, 422);
-/** The route of the Delete command of `kind`, with the Project and the target segments. */
-const deleteRoute = (kind: Kind) => kind === "chapter"
-  ? /^\/api\/v1\/projects\/([^/]+)\/chapters\/([^/]+)$/ : /^\/api\/v1\/projects\/([^/]+)\/volumes\/([^/]+)$/;
+/** The problem of `crates/storyos-server/src/lib.rs:931` for a command that does not match its Challenge. */
+const challengeInvalid = () => problem("challenge_invalid", "The command challenge is invalid or expired.", 422);
 
 /**
  * The applied response of the Server (`crates/storyos-server/src/delete_chapter.rs:85`, `delete_volume.rs:82`). The
@@ -71,56 +95,55 @@ async function applied(kind: Kind, projectId: string, request: Delete, key: stri
       project_activity_position: "5" } } satisfies DeleteVolumeResponse;
 }
 
+// The fake Server serves the exact requests of the test: the method, the path with the Project of the test, and the
+// Chapter or Volume of the test. It records each other request and throws, so that request fails the test.
 /**
- * As the Server (ADR 0076): the Challenge route gives each refusal of `readChallenge`. Of the other Challenges, the
- * first gets a rate limit with Retry-After 1, and the next a nonce.
- * The Delete route refuses a path identity that is not a UUID and a request with no JSON content type, before the
- * body (`command_admission.rs:274`). A command is applied only when its nonce, key, method, route, schema, digest,
- * and Project text match the Challenge of the nonce. A path that is no route gets the Web fallback.
+ * As the Server (ADR 0076): a Challenge request that the Server refuses gets its refusal. Of the other Challenges,
+ * the first gets a rate limit with Retry-After 1, and the next a nonce.
+ * A command is applied only when its nonce, key, method, route, schema, and digest match the Challenge of the nonce.
  */
 function fakeServer(kind: Kind, projectId: string) {
   const sent: Exchange[] = [];
-  const issued = new Map<string, { challenge: Challenge; projectText: string }>();
+  const unserved: string[] = [];
+  servers.push({ unserved });
+  const target = kind === "chapter" ? `chapters/${CHAPTER}` : `volumes/${VOLUME}`;
+  const issued = new Map<string, Challenge>();
   let challenges = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
-    const challengeProject = CHALLENGE_ROUTE.exec(path)?.[1];
-    if (challengeProject !== undefined) {
-      const read = readChallenge(challengeProject, projectId, init);
-      if ("refusal" in read) return read.refusal;
-      sent.push({ step: "challenge", key: read.challenge.idempotency_key, nonce: null });
+    const route = `${init?.method ?? "GET"} ${path}`;
+    if (route === `POST /api/v1/projects/${projectId}/anti-forgery-challenges`) {
+      const challenge = JSON.parse(String(init?.body)) as Challenge;
+      sent.push({ step: "challenge", key: challenge.idempotency_key, nonce: null });
+      const refusal = challengeRefusal(challenge);
+      if (refusal !== undefined) return refusal;
       challenges += 1;
       if (challenges === 1) {
-        // `crates/storyos-server/src/lib.rs:926`: status 429, Retry-After, and the problem `challenge_rate_limited`.
+        // `crates/storyos-server/src/lib.rs:936`: status 429, Retry-After, and the problem `challenge_rate_limited`.
         return new Response(JSON.stringify({ schema_id: "storyos.problem.v1", code: "challenge_rate_limited",
           message: "The command challenge rate limit is exceeded." }),
         { status: 429, headers: { "content-type": "application/json", "retry-after": "1" } });
       }
-      issued.set(NONCE, { challenge: read.challenge, projectText: challengeProject });
+      issued.set(NONCE, challenge);
       // `crates/storyos-server/src/project_command_challenge.rs:142`.
       return jsonResponse({ nonce: NONCE, expires_at: "2026-11-20T12:05:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
-    const [, pathProject, target] = deleteRoute(kind).exec(path) ?? [];
-    if (pathProject === undefined || target === undefined || init?.method !== "DELETE") {
-      if (!isCatalogRoute(path)) return webFallback();
-      throw new Error(`The fake Server does not serve ${init?.method ?? "GET"} ${path}`);
+    if (route !== `DELETE /api/v1/projects/${projectId}/${target}`) {
+      unserved.push(route);
+      throw new Error(`The fake Server does not serve ${route}`);
     }
-    const refusal = identityRefusal(pathProject, target) ?? contentTypeRefusal(init);
-    if (refusal !== undefined) return refusal;
-    let request: Delete;
-    try { request = JSON.parse(String(init?.body)) as Delete; } catch { return shapeRefusal(); }
     const headers = new Headers(init?.headers);
     const key = headers.get("idempotency-key");
     const nonce = headers.get("x-storyos-anti-forgery");
     sent.push({ step: "command", key, nonce });
-    const issue = nonce === null ? undefined : issued.get(nonce);
-    const binding = issue?.challenge;
-    if (binding === undefined || issue?.projectText !== pathProject || binding.idempotency_key !== key
-      || binding.method !== init.method || binding.route_template !== `/api/v1/projects/{project_id}/${kind}s/{${kind}_id}`
-      || binding.command_schema !== request.command_schema
+    const request = JSON.parse(String(init?.body)) as Delete;
+    const binding = nonce === null ? undefined : issued.get(nonce);
+    const template = new RegExp(`^${binding?.route_template.replace(/\{[a-z_]+\}/g, "[^/]+") ?? "$^"}$`);
+    if (binding === undefined || binding.idempotency_key !== key || binding.method !== init?.method
+      || !template.test(path) || binding.command_schema !== request.command_schema
       || JSON.stringify(binding.canonical_command_digest) !== JSON.stringify(await digest(kind, request))) {
-      return challengeInvalid(kind);
+      return challengeInvalid();
     }
     return jsonResponse(await applied(kind, projectId, request, key ?? ""));
   };
@@ -130,11 +153,18 @@ function fakeServer(kind: Kind, projectId: string) {
     sent.push({ step: "wait", timeout });
     return realSetTimeout(callback, 0);
   }) as typeof setTimeout);
-  return { sent, fetchImpl };
+  return { sent, fetchImpl, unserved };
 }
+
+/** The fake Servers of the current test. */
+const servers: { unserved: string[] }[] = [];
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // The module sent only the requests that the fake Server serves.
+  const unserved = servers.flatMap((server) => server.unserved);
+  servers.length = 0;
+  expect(unserved).toEqual([]);
 });
 
 const connection = (projectId: string, fetchImpl: typeof fetch) =>
@@ -160,55 +190,22 @@ it.each([
     ] });
   });
 
-// Each request of the module, sent again with one change that the Server refuses.
-it("refuses each Challenge request and each Delete command that the Server refuses", async () => {
+it("does not serve a request with another method, on another Project, or for another target", async () => {
   const projectId = "018f0000-0000-7001-8000-000000172011";
+  const otherProject = "018f0000-0000-7001-8000-000000172013";
   const server = fakeServer("chapter", projectId);
-  const calls: { url: string; init: RequestInit }[] = [];
-  const recording: typeof fetch = (input, init) => {
-    calls.push({ url: input instanceof Request ? input.url : String(input), init: init ?? {} });
-    return server.fetchImpl(input, init);
-  };
-  await deleteOwnedChapter({ ...connection(projectId, recording), chapterId: CHAPTER, expectedTreeRevision: "4" });
-  const challenge = calls.find(({ url }) => CHALLENGE_ROUTE.test(new URL(url).pathname));
-  const command = calls.at(-1);
-  if (challenge === undefined || command === undefined) throw new Error("The module sent no Challenge or command");
-  const body = JSON.parse(String(challenge.init.body)) as Challenge;
-  const at = (url: string, project: string) => url.replace(projectId, project);
-  const send = async (url: string, init: RequestInit) => {
-    const response = await server.fetchImpl(url, init);
-    return { status: response.status, allow: response.headers.get("allow"), body: await response.text() };
-  };
-  const refused = (status: number, code: string, message: string) =>
-    ({ status, allow: null, body: JSON.stringify({ schema_id: "storyos.problem.v1", code, message }) });
-  const identity = refused(400, "invalid_request", "The request identity is invalid.");
-
-  expect({
-    challengeGet: await send(challenge.url, { method: "GET" }),
-    challengeOfInvalidProject: await send(at(challenge.url, "project"), challenge.init),
-    challengeOfUrnWithoutHyphens: await send(at(challenge.url, `urn:uuid:${projectId.replaceAll("-", "")}`),
-      challenge.init),
-    challengeWithoutContentType: await send(challenge.url, { ...challenge.init, headers: { accept: "application/json" } }),
-    challengeWithExtraField: await send(challenge.url, { ...challenge.init,
-      body: JSON.stringify({ ...body, extra: "field" }) }),
-    challengeOfOtherProject: await send(at(challenge.url, "018f0000-0000-7001-8000-000000172013"), challenge.init),
-    pathThatIsNoRoute: await send(`${challenge.url}/extra`, challenge.init),
-    commandOfOtherProject: await send(at(command.url, "018f0000-0000-7001-8000-000000172013"), command.init),
-    commandOfInvalidChapter: await send(command.url.replace(CHAPTER, "chapter"), command.init),
-    commandOfProject: (await send(command.url, command.init)).status,
-    // The Server reads the Project by its UUID, so another spelling of the same Project gets a nonce.
-    challengeOfUppercaseProject: (await send(at(challenge.url, projectId.toUpperCase()), challenge.init)).status,
-  }).toEqual({
-    challengeGet: { status: 405, allow: "POST", body: "" },
-    challengeOfInvalidProject: identity,
-    challengeOfUrnWithoutHyphens: identity,
-    challengeWithoutContentType: refused(415, "unsupported_content_type", "The request must use one JSON content type."),
-    challengeWithExtraField: refused(422, "invalid_request_shape", "The request does not match its closed schema."),
-    challengeOfOtherProject: refused(404, "resource_unavailable", "The requested resource is unavailable."),
-    pathThatIsNoRoute: { status: 404, allow: null, body: "" },
-    commandOfOtherProject: refused(422, "challenge_invalid", "The Delete Chapter challenge is invalid."),
-    commandOfInvalidChapter: identity,
-    commandOfProject: 200,
-    challengeOfUppercaseProject: 200,
-  });
+  const requests: [string, RequestInit][] = [
+    [`/api/v1/projects/${projectId}/anti-forgery-challenges`, { method: "GET" }],
+    [`/api/v1/projects/${otherProject}/anti-forgery-challenges`, { method: "POST", body: "{}" }],
+    [`/api/v1/projects/${projectId}/chapters/${OTHER_CHAPTER}`, { method: "DELETE", body: "{}" }],
+  ];
+  for (const [path, init] of requests) {
+    await expect(server.fetchImpl(`${location.origin}${path}`, init)).rejects.toThrow("The fake Server does not serve");
+  }
+  expect(server.unserved).toEqual([
+    `GET /api/v1/projects/${projectId}/anti-forgery-challenges`,
+    `POST /api/v1/projects/${otherProject}/anti-forgery-challenges`,
+    `DELETE /api/v1/projects/${projectId}/chapters/${OTHER_CHAPTER}`,
+  ]);
+  server.unserved.length = 0;
 });
