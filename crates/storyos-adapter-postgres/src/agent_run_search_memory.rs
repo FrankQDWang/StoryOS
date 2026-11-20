@@ -5,7 +5,6 @@
 //! value of an entry (ADR 0047).
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::ToolCallState;
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
 
@@ -24,13 +23,7 @@ pub(crate) async fn execute(
         client,
         claim,
         row,
-        Resolution {
-            state: ToolCallState::Settled,
-            refusal: None,
-            attempt: None,
-            outcome: None,
-            result: Some(&result),
-        },
+        Resolution::settled(&result),
     )
     .await
 }

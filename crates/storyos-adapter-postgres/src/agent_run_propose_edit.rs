@@ -137,16 +137,11 @@ pub(crate) async fn execute(
         bytes: text.len(),
         text,
     };
-    let resolution = Resolution {
-        state: match refusal {
-            Some(_) => ToolCallState::Refused,
-            None => ToolCallState::Settled,
-        },
-        refusal: refusal.map(ProposeEditRefusal::label),
-        attempt: None,
-        outcome: None,
-        result: Some(&result),
+    let state = match refusal {
+        Some(_) => ToolCallState::Refused,
+        None => ToolCallState::Settled,
     };
+    let resolution = Resolution::host(state, refusal.map(ProposeEditRefusal::label), Some(&result));
     resolve(client, claim, row, resolution).await
 }
 

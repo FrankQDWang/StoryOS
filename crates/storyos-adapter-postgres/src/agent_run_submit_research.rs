@@ -98,13 +98,7 @@ pub(crate) async fn execute(
         client,
         claim,
         row,
-        Resolution {
-            state,
-            refusal: label,
-            attempt: None,
-            outcome: None,
-            result: Some(&result),
-        },
+        Resolution::host(state, label, Some(&result)),
     )
     .await
 }

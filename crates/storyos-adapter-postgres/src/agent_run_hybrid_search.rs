@@ -148,13 +148,7 @@ pub(crate) async fn record(
         client,
         claim,
         &row,
-        Resolution {
-            state: ToolCallState::Settled,
-            refusal: None,
-            attempt: None,
-            outcome: None,
-            result: Some(&result),
-        },
+        Resolution::settled(&result),
     )
     .await
 }
@@ -181,13 +175,7 @@ async fn settle_refused(
         client,
         claim,
         row,
-        Resolution {
-            state: ToolCallState::Refused,
-            refusal: Some(refusal.label()),
-            attempt: None,
-            outcome: None,
-            result: Some(&result),
-        },
+        Resolution::host(ToolCallState::Refused, Some(refusal.label()), Some(&result)),
     )
     .await
 }

@@ -255,6 +255,28 @@ pub(crate) struct Resolution<'a> {
     pub result: Option<&'a storyos_core::ToolResultText>,
 }
 
+impl<'a> Resolution<'a> {
+    /// A Host Tool call that settles with `result`.
+    pub(crate) fn settled(result: &'a storyos_core::ToolResultText) -> Self {
+        Self::host(ToolCallState::Settled, /*refusal*/ None, Some(result))
+    }
+
+    /// A call that ends in `state` with no Destination Attempt and no effect outcome.
+    pub(crate) fn host(
+        state: ToolCallState,
+        refusal: Option<&'a str>,
+        result: Option<&'a storyos_core::ToolResultText>,
+    ) -> Self {
+        Self {
+            state,
+            refusal,
+            attempt: None,
+            outcome: None,
+            result,
+        }
+    }
+}
+
 /// Writes the resolution of `row` and appends its one `tool_call_settled` Activity Run Event.
 pub(crate) async fn resolve(
     client: &tokio_postgres::Client,
@@ -321,13 +343,7 @@ pub(crate) async fn refuse(
         client,
         claim,
         row,
-        Resolution {
-            state,
-            refusal: Some(code),
-            attempt: None,
-            outcome: None,
-            result: None,
-        },
+        Resolution::host(state, Some(code), /*result*/ None),
     )
     .await
 }

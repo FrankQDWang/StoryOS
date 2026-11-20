@@ -11,7 +11,6 @@ use storyos_application::{
 use storyos_core::{
     AgentRunKind, AssistanceAvailability, CaptureRefusal, CaptureRunEnd,
     MemoryConsolidationAssembly, MemoryOperationCandidate, PassConflict, PassMemoryEntry,
-    ToolCallState,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -340,13 +339,7 @@ pub(crate) async fn execute(
         client,
         claim,
         row,
-        Resolution {
-            state: ToolCallState::Settled,
-            refusal: None,
-            attempt: None,
-            outcome: None,
-            result: Some(&settlement.result),
-        },
+        Resolution::settled(&settlement.result),
     )
     .await?;
     crate::agent_run_work::complete(client, claim).await?;

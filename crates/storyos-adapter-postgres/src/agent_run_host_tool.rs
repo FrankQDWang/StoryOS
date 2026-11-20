@@ -3,7 +3,7 @@
 //! Assembly, no Destination Attempt, no Outbound Disclosure Event, and no source capture.
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::{ToolCallState, ToolIntake, ToolSpec};
+use storyos_core::{ToolIntake, ToolSpec};
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
 
@@ -101,13 +101,7 @@ pub(crate) async fn execute(
         client,
         claim,
         row,
-        Resolution {
-            state: ToolCallState::Settled,
-            refusal: None,
-            attempt: None,
-            outcome: None,
-            result: Some(&result),
-        },
+        Resolution::settled(&result),
     )
     .await
 }
