@@ -32,7 +32,7 @@ import {
 import { digestApplyAuthorEdit } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { FIRST_APPEND_EDIT, openJournalAppendTestWorkspace, withDigest } from "./local-edit-journal-append-fixture.ts";
 import { readLocalRecovery } from "../../src/local-edit-recovery.ts";
-import { recoveryPrefix } from "../../src/local-recovery-record.ts";
+import { RECOVERY_PAGE_SIZE, recoveryPrefix } from "../../src/local-recovery-record.ts";
 import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
 import {
   CHAPTER,
@@ -186,25 +186,50 @@ it.each([
   } finally { await test.close(); }
 });
 
+// A retained recovery row of another Editor Session, with the key that readLocalRecovery reads (local-recovery-record.ts).
+function retainedRecoveryRow(group: JournalSubmissionGroup, partitionId: string, request: object, text: string) {
+  return {
+    key: `${recoveryPrefix}${partitionId}:${group.journal_submission_group_id}`,
+    value: { disposition: "retained_for_manual_reentry", format_version: 1,
+      group: { ...group, journal_partition_id: partitionId, frozen_request_body: request,
+        settlement: { kind: "outcome_query_requires_reconfirmation" } },
+      records: [], chains: [], text, blocks: [] },
+  };
+}
+
 it("skips a retained recovery record of a Draft retry of an earlier client and keeps the other records", async () => {
   const test = await openJournalAppendTestWorkspace();
   try {
     await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
     const group = await freezeOneIntentSubmission(test.workspace, crypto);
     const metadata = () => test.workspace.database.transaction("metadata", "readwrite").objectStore("metadata");
-    const retainedRow = (partitionId: string, request: object, text: string) => ({
-      key: `${recoveryPrefix}${partitionId}:${group.journal_submission_group_id}`,
-      value: { disposition: "retained_for_manual_reentry", format_version: 1,
-        group: { ...group, journal_partition_id: partitionId, frozen_request_body: request,
-          settlement: { kind: "outcome_query_requires_reconfirmation" } },
-        records: [], chains: [], text, blocks: [] },
-    });
-    const draft = retainedRow("018f0000-0000-7001-8000-000000172401",
+    const draft = retainedRecoveryRow(group, "018f0000-0000-7001-8000-000000172401",
       { ...group.frozen_request_body, retry_source: { kind: "draft_retry" } }, "Draft retry text");
-    const current = retainedRow("018f0000-0000-7001-8000-000000172402", group.frozen_request_body, "Kept text");
+    const current = retainedRecoveryRow(group, "018f0000-0000-7001-8000-000000172402", group.frozen_request_body, "Kept text");
     await requestResult(metadata().put(draft));
     await requestResult(metadata().put(current));
     expect(await readLocalRecovery(test.workspace)).toEqual([current.value]);
+    expect(await requestResult(metadata().get(draft.key))).toEqual(draft);
+  } finally { await test.close(); }
+});
+
+// The skipped record takes a place in the first read, so readLocalRecovery reads again to fill the page.
+it("reads a full page of local recovery after a retained Draft retry record of an earlier client", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  try {
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
+    const group = await freezeOneIntentSubmission(test.workspace, crypto);
+    const metadata = () => test.workspace.database.transaction("metadata", "readwrite").objectStore("metadata");
+    // The key of the Draft retry record comes first, and a full page of current records follows it.
+    const draft = retainedRecoveryRow(group, "018f0000-0000-7001-8000-000000172400",
+      { ...group.frozen_request_body, retry_source: { kind: "draft_retry" } }, "Draft retry text");
+    const currents = Array.from({ length: RECOVERY_PAGE_SIZE }, (_, index) => retainedRecoveryRow(group,
+      `018f0000-0000-7001-8000-0000001724${String(index + 10).padStart(2, "0")}`, group.frozen_request_body, `Kept text ${index}`));
+    for (const row of [draft, ...currents]) await requestResult(metadata().put(row));
+
+    const page = await readLocalRecovery(test.workspace);
+    expect(page).toEqual(currents.map((row) => row.value));
+    expect(await readLocalRecovery(test.workspace, page.at(-1))).toEqual([]);
     expect(await requestResult(metadata().get(draft.key))).toEqual(draft);
   } finally { await test.close(); }
 });

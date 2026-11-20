@@ -95,6 +95,8 @@ async function applied(kind: Kind, projectId: string, request: Delete, key: stri
       project_activity_position: "5" } } satisfies DeleteVolumeResponse;
 }
 
+// The fake Server serves the exact requests of the test: the method, the path with the Project of the test, and the
+// Chapter or Volume of the test. It records each other request and throws, so that request fails the test.
 /**
  * As the Server (ADR 0076): a Challenge request that the Server refuses gets its refusal. Of the other Challenges,
  * the first gets a rate limit with Retry-After 1, and the next a nonce.
@@ -102,11 +104,15 @@ async function applied(kind: Kind, projectId: string, request: Delete, key: stri
  */
 function fakeServer(kind: Kind, projectId: string) {
   const sent: Exchange[] = [];
+  const unserved: string[] = [];
+  servers.push({ unserved });
+  const target = kind === "chapter" ? `chapters/${CHAPTER}` : `volumes/${VOLUME}`;
   const issued = new Map<string, Challenge>();
   let challenges = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
-    if (path.endsWith("/anti-forgery-challenges")) {
+    const route = `${init?.method ?? "GET"} ${path}`;
+    if (route === `POST /api/v1/projects/${projectId}/anti-forgery-challenges`) {
       const challenge = JSON.parse(String(init?.body)) as Challenge;
       sent.push({ step: "challenge", key: challenge.idempotency_key, nonce: null });
       const refusal = challengeRefusal(challenge);
@@ -123,15 +129,19 @@ function fakeServer(kind: Kind, projectId: string) {
       return jsonResponse({ nonce: NONCE, expires_at: "2026-11-20T12:05:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
+    if (route !== `DELETE /api/v1/projects/${projectId}/${target}`) {
+      unserved.push(route);
+      throw new Error(`The fake Server does not serve ${route}`);
+    }
     const headers = new Headers(init?.headers);
     const key = headers.get("idempotency-key");
     const nonce = headers.get("x-storyos-anti-forgery");
     sent.push({ step: "command", key, nonce });
     const request = JSON.parse(String(init?.body)) as Delete;
     const binding = nonce === null ? undefined : issued.get(nonce);
-    const route = new RegExp(`^${binding?.route_template.replace(/\{[a-z_]+\}/g, "[^/]+") ?? "$^"}$`);
+    const template = new RegExp(`^${binding?.route_template.replace(/\{[a-z_]+\}/g, "[^/]+") ?? "$^"}$`);
     if (binding === undefined || binding.idempotency_key !== key || binding.method !== init?.method
-      || !route.test(path) || binding.command_schema !== request.command_schema
+      || !template.test(path) || binding.command_schema !== request.command_schema
       || JSON.stringify(binding.canonical_command_digest) !== JSON.stringify(await digest(kind, request))) {
       return challengeInvalid();
     }
@@ -143,11 +153,18 @@ function fakeServer(kind: Kind, projectId: string) {
     sent.push({ step: "wait", timeout });
     return realSetTimeout(callback, 0);
   }) as typeof setTimeout);
-  return { sent, fetchImpl };
+  return { sent, fetchImpl, unserved };
 }
+
+/** The fake Servers of the current test. */
+const servers: { unserved: string[] }[] = [];
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // The module sent only the requests that the fake Server serves.
+  const unserved = servers.flatMap((server) => server.unserved);
+  servers.length = 0;
+  expect(unserved).toEqual([]);
 });
 
 const connection = (projectId: string, fetchImpl: typeof fetch) =>
@@ -172,3 +189,23 @@ it.each([
       { step: "command", key, nonce: NONCE },
     ] });
   });
+
+it("does not serve a request with another method, on another Project, or for another target", async () => {
+  const projectId = "018f0000-0000-7001-8000-000000172011";
+  const otherProject = "018f0000-0000-7001-8000-000000172013";
+  const server = fakeServer("chapter", projectId);
+  const requests: [string, RequestInit][] = [
+    [`/api/v1/projects/${projectId}/anti-forgery-challenges`, { method: "GET" }],
+    [`/api/v1/projects/${otherProject}/anti-forgery-challenges`, { method: "POST", body: "{}" }],
+    [`/api/v1/projects/${projectId}/chapters/${OTHER_CHAPTER}`, { method: "DELETE", body: "{}" }],
+  ];
+  for (const [path, init] of requests) {
+    await expect(server.fetchImpl(`${location.origin}${path}`, init)).rejects.toThrow("The fake Server does not serve");
+  }
+  expect(server.unserved).toEqual([
+    `GET /api/v1/projects/${projectId}/anti-forgery-challenges`,
+    `POST /api/v1/projects/${otherProject}/anti-forgery-challenges`,
+    `DELETE /api/v1/projects/${projectId}/chapters/${OTHER_CHAPTER}`,
+  ]);
+  server.unserved.length = 0;
+});
