@@ -4,12 +4,9 @@
 //! lead of these tests is `ad`. Each entry of these tests has the origin `author_request`, and it
 //! deletes like any other entry.
 
-use std::convert::Infallible;
-
 use serde_json::{Value, json};
 use storyos_application::{
-    ConversationSelection, DeleteMemoryEntryInput, MemoryEntryDeleted, ProjectScope,
-    RefusableCommandError, list_memory_entries,
+    ConversationSelection, MemoryEntryDeleted, ProjectScope, list_memory_entries,
 };
 use storyos_core::{
     DeleteMemoryEntryConflict, DeleteMemoryEntryNoEffect, DeleteMemoryEntryRefusal,
@@ -18,26 +15,18 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_load_skill::tests::calls;
-use crate::agent_run_read_chapter::tests::finish;
-use crate::agent_run_read_memory_entry::tests::refused as read_refused;
-use crate::agent_run_steering::tests::queued;
-use crate::agent_run_write_memory::tests::{first_index, memory_head, refused, versions};
-use crate::command_sequence::tests::{DELETE_MEMORY_ENTRY, issued, seed_project};
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::memory_entries::tests::{Version, archived, write_versions};
-
-pub(crate) type Outcome = Result<
-    TransitionOutcome<
-        MemoryEntryDeleted,
-        DeleteMemoryEntryNoEffect,
-        DeleteMemoryEntryConflict,
-        Infallible,
-    >,
-    DeleteMemoryEntryRefusal,
->;
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_load_skill::calls;
+use crate::shared_tests::agent_run_read_chapter::finish;
+use crate::shared_tests::agent_run_read_memory_entry::refused as read_refused;
+use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::agent_run_write_memory::{first_index, memory_head, refused, versions};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_support::seed_project;
+use crate::shared_tests::delete_memory_entry::delete;
+use crate::shared_tests::memory_entries::{Version, archived, write_versions};
+use crate::shared_tests::model_gateway::stores;
 
 /// The entry 1 at the version 2 and the entry 2 at the version 1, at the Memory revision 3.
 const TWO_ENTRIES: [Version<'static>; 3] = [
@@ -45,26 +34,6 @@ const TWO_ENTRIES: [Version<'static>; 3] = [
     (2, 1, 2, "current", "foreshadowing", "铜铃", "铃声。"),
     (1, 2, 3, "current", "character", "阿青", "沉默的船夫。"),
 ];
-
-/// Deletes `memory_entry_id` in the Project of `scope` with the Command Challenge `suffix`.
-pub(crate) async fn delete(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    suffix: u16,
-    memory_entry_id: &str,
-    expected_version: u64,
-) -> Outcome {
-    let input = DeleteMemoryEntryInput {
-        memory_entry_id: memory_entry_id.to_owned(),
-        expected_version,
-    };
-    let call = issued(store, scope, suffix, &DELETE_MEMORY_ENTRY, input).await;
-    match store.delete_memory_entry(&call.envelope, &call.input).await {
-        Ok(settlement) => Ok(settlement.outcome.map_applied(|applied| applied.effect)),
-        Err(RefusableCommandError::RefusedBeforeAdmission(refusal)) => Err(refusal),
-        Err(RefusableCommandError::Command(error)) => panic!("the delete must settle: {error:?}"),
-    }
-}
 
 /// The identity of the entry 1 of the Project of `scope`.
 async fn entry_id(admin: &Client, scope: &ProjectScope) -> String {
@@ -99,9 +68,7 @@ async fn listed(store: &PostgresProjectReader, scope: &ProjectScope) -> Vec<u64>
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_row_of_the_outcome_table_settles_and_the_deleted_version_keeps_its_mark() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, "ad50").await;
     write_versions(&admin, &scope, &TWO_ENTRIES).await;
@@ -195,9 +162,7 @@ async fn each_row_of_the_outcome_table_settles_and_the_deleted_version_keeps_its
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn after_a_delete_no_reader_gives_the_entry_and_the_archive_keeps_each_version() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "ad8").await;
     complete(&store, &admin, &scope, &first).await;
@@ -263,9 +228,7 @@ async fn after_a_delete_no_reader_gives_the_entry_and_the_archive_keeps_each_ver
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_that_pinned_its_index_before_the_delete_lists_the_entry_and_its_read_is_refused() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "ade").await;
     complete(&store, &admin, &scope, &first).await;

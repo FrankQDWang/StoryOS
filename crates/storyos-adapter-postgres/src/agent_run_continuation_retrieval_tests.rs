@@ -15,15 +15,19 @@ use storyos_core::ModelAdapter;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_retrieval::tests::{
+use crate::shared_tests::agent_run_retrieval::{
     adapter, broken_stream, destination, not_found, research_run,
 };
-use crate::agent_run_tool_dispatch::tests::{client, exa_tools, mcp_replies, point_mcp, reply};
-use crate::agent_run_tool_exposure::tests::advisory_stream;
-use crate::command_sequence::tests::{CANCEL_AGENT_RUN, issued};
-use crate::research_artifact::tests::{Reply, computed, tagged};
-use crate::research_source::tests::{SEARCH_TEXT, calls_stream};
+use crate::shared_tests::agent_run_tool_dispatch::{
+    client, exa_tools, mcp_replies, point_mcp, reply,
+};
+use crate::shared_tests::agent_run_tool_exposure::advisory_stream;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_agent_run::CANCEL_AGENT_RUN;
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::research_artifact::{Reply, computed, tagged};
+use crate::shared_tests::research_source::{SEARCH_TEXT, calls_stream};
 
 const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 
@@ -420,9 +424,7 @@ fn post() -> String {
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_records_the_artifact()
 {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let synthesis: Later = |reference, sources| {
         stored_synthesis(
@@ -557,9 +559,7 @@ fn request_items(payload: &Value) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles_the_synthesis() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let successor: Later = |reference, sources| {
         let arguments = synthesis_arguments("The tides of 1890.", sources);
@@ -802,9 +802,7 @@ async fn failed_condition(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_failed_condition_or_a_cancellation_stops_the_continuation_with_no_successor() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The Host recorded that the budget does not cover both Attempts. A real route admits a Run
     // only with a known request bound, and the Retrieve needs it too, so the test writes the fact.
@@ -821,10 +819,10 @@ async fn a_failed_condition_or_a_cancellation_stops_the_continuation_with_no_suc
     // A Tool Contract Drift quarantines the research revision during the Retrieve: the Tool
     // Exposure changes.
     let exposure = failed_condition(&store, &admin, "a93", 3, |_| {
-        Fault::Sql(crate::agent_run_tool_call::tests::quarantine_statement())
+        Fault::Sql(crate::shared_tests::agent_run_tool_call::quarantine_statement())
     })
     .await;
-    crate::agent_run_tool_call::tests::reactivate_research_revision(&admin).await;
+    crate::shared_tests::agent_run_tool_call::reactivate_research_revision(&admin).await;
     // The author cancels the Run during the Retrieve.
     let cancelled = failed_condition(&store, &admin, "a94", 3, |_| Fault::Cancel(0xa94b)).await;
 
@@ -867,9 +865,7 @@ async fn a_failed_condition_or_a_cancellation_stops_the_continuation_with_no_suc
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_interrupted_successor_of_a_continuation_waits_with_an_unknown_outcome() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let broken: Later = |reference, _| broken_stream(&format!("{reference}_s"));
     let (scope, run_id, served) = continuation_run(
@@ -951,9 +947,7 @@ async fn an_interrupted_successor_of_a_continuation_waits_with_an_unknown_outcom
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_successor_function_request_continues_to_a_synthesis_at_the_next_position() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let search: Later = |reference, _| {
         calls_stream(

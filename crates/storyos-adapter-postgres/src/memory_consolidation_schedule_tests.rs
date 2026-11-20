@@ -12,74 +12,18 @@ use storyos_application::{
 use storyos_core::{ConsolidationSkip, MemoryEntryOrigin};
 use tokio_postgres::Client;
 
-use super::tests::{capture, create, scripted, settled};
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::NoEmbeddings;
-use crate::agent_run_dispatch::tests::stores;
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::export_work::tests::admit_readable_export;
-use crate::memory_capture::loop_tests::{record, script};
-use crate::memory_capture::tests::{project, run_capture};
-use crate::memory_entries::tests::write_versions;
-use crate::memory_work_schedule::tests::make_due;
-
-/// The consolidation row of the Project: whether it names no Conversation and the Project as its
-/// source, and its due time. The due time is `null` when it is empty, `"now"` when it is in the
-/// past, and else its distance from the start of the last pass. `None`: the Project has no row.
-pub(super) async fn pass_due(admin: &Client, scope: &ProjectScope) -> Option<Value> {
-    let row = admin
-        .query_opt(
-            "SELECT jsonb_build_array(work.conversation_id IS NULL,
-                      work.source_id = work.project_id,
-                      CASE WHEN work.due_at <= clock_timestamp() THEN 'now'
-                           ELSE (work.due_at - (SELECT max(pass.started_at)
-                                                  FROM storyos.memory_consolidation_passes AS pass
-                                                 WHERE pass.project_id = work.project_id))::text
-                      END)::text
-               FROM storyos.memory_work_schedules AS work
-              WHERE work.project_id = $1::text::uuid AND work.work_kind = 'consolidation'",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    row.map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-}
-
-/// Makes the consolidation row of the Project due now, and each other row not due, so that the
-/// claim takes this row.
-async fn make_pass_due(admin: &Client, scope: &ProjectScope) {
-    admin
-        .execute(
-            "UPDATE storyos.memory_work_schedules
-                SET due_at = CASE WHEN project_id = $1::text::uuid AND work_kind = 'consolidation'
-                                  THEN clock_timestamp() - interval '1 second' END
-              WHERE (project_id = $1::text::uuid AND work_kind = 'consolidation')
-                 OR due_at IS NOT NULL",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-}
-
-/// Claims the due consolidation row of the Project, and returns its outcome. The due time is then
-/// empty.
-pub(super) async fn claim_pass(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-) -> MemoryWorkOutcome {
-    make_pass_due(admin, scope).await;
-    let claimed = store.claim_due_memory_work().await.unwrap().unwrap();
-    assert_eq!(
-        (&claimed.project_scope, &claimed.source),
-        (scope, &MemoryWorkSource::Project)
-    );
-    assert_eq!(
-        pass_due(admin, scope).await,
-        Some(json!([true, true, null]))
-    );
-    claimed.outcome
-}
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::export_work::admit_readable_export;
+use crate::shared_tests::memory_capture::{project, run_capture};
+use crate::shared_tests::memory_capture_loop::{record, script};
+use crate::shared_tests::memory_consolidation::{capture, create, scripted, settled};
+use crate::shared_tests::memory_consolidation_schedule::{claim_pass, pass_due};
+use crate::shared_tests::memory_entries::write_versions;
+use crate::shared_tests::memory_work_schedule::make_due;
+use crate::shared_tests::model_gateway::NoEmbeddings;
+use crate::shared_tests::model_gateway::stores;
 
 /// Claims the due consolidation row of the Project and requires a started pass. Returns its Run.
 async fn started_pass(
@@ -99,9 +43,7 @@ async fn started_pass(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_capture_with_observations_makes_the_project_due_after_the_last_pass() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "780").await;
     let observation = json!([{ "type": "other", "title": "渡口", "text": "渡口在河边。" }]);
@@ -134,14 +76,12 @@ async fn a_capture_with_observations_makes_the_project_due_after_the_last_pass()
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_pass_in_progress_and_no_waiting_observation_start_no_pass() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "781").await;
     let observation = json!([{ "type": "other", "title": "渡口", "text": "渡口在河边。" }]);
     capture(&store, &admin, &scope, &source, observation).await;
-    let started = crate::memory_consolidation::tests::start_pass(&store, &scope)
+    let started = crate::shared_tests::memory_consolidation::start_pass(&store, &scope)
         .await
         .unwrap();
     let in_progress = claim_pass(&store, &admin, &scope).await;
@@ -168,9 +108,7 @@ async fn a_pass_in_progress_and_no_waiting_observation_start_no_pass() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_refused_start_does_not_stop_the_next_row() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "782").await;
     let observation = json!([{ "type": "other", "title": "渡口", "text": "渡口在河边。" }]);
@@ -245,9 +183,7 @@ async fn a_refused_start_does_not_stop_the_next_row() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_stale_pass_makes_the_project_due_again() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "784").await;
     let script = json!([scripted("灯", &[create("foreshadowing", "灯", json!([1]))])]);
@@ -294,9 +230,7 @@ async fn a_stale_pass_makes_the_project_due_again() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_failed_pass_makes_the_project_due_again() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "785").await;
     let observation = json!([{ "type": "other", "title": "空", "text": "SCRIPT:no-call" }]);
@@ -347,9 +281,7 @@ async fn step_state(admin: &Client, scope: &ProjectScope, run_id: &str) -> Value
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn run_once_takes_two_runs_through_a_capture_and_a_pass_to_the_entries() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "786").await;
     let MemoryCaptureSource::Conversation {

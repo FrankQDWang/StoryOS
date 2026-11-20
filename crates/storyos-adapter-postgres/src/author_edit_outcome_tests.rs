@@ -8,6 +8,7 @@ use storyos_application::{
 use storyos_contracts::CommandKind;
 
 use super::*;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 
 const USER_ID: &str = "018f0000-0000-7001-8000-000000000001";
 const PROJECT_ID: &str = "018f0000-0000-7001-8000-000000000002";
@@ -58,9 +59,7 @@ fn outcome_query(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn unexpired_challenge_is_unknown_and_the_query_does_not_consume_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let database_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(database_url);
@@ -107,9 +106,7 @@ async fn unexpired_challenge_is_unknown_and_the_query_does_not_consume_it() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn expired_unconsumed_challenge_without_admission_is_rejected() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let database_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(database_url);
@@ -164,9 +161,7 @@ async fn expired_unconsumed_challenge_without_admission_is_rejected() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn missing_foreign_and_changed_proof_bindings_share_one_unavailable_oracle() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let database_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(database_url);
@@ -232,9 +227,7 @@ async fn missing_foreign_and_changed_proof_bindings_share_one_unavailable_oracle
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn outcome_resolution_waits_for_consume_and_cannot_report_a_false_rejection() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let database_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(&database_url);

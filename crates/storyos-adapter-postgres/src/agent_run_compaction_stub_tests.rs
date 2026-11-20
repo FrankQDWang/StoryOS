@@ -5,7 +5,8 @@ use storyos_core::{
     ProjectionMode, RESEARCH_RECORDED_RESULT, ReadToolResultRefusal, ToolResultProjection,
 };
 
-use crate::agent_run_submit_research::tests::{ResearchProject, research_project};
+use crate::shared_tests::agent_run_submit_research::{ResearchProject, research_project};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 
 /// A search result of 30 entries, so that its exact form is larger than a stub.
 fn long_search() -> String {
@@ -103,9 +104,7 @@ fn output(call_id: &str, output: &Value) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_model_reads_a_stub_result_again_and_a_later_compaction_makes_the_read_a_stub() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let project = research_project("850").await;
     // RunStep 0 searches, RunStep 1 reads an unknown call, RunStep 2 reads the search after it
     // got its stub, RunStep 3 submits and finishes, and RunStep 4 answers. The Run compacts at
@@ -260,9 +259,7 @@ async fn the_model_reads_a_stub_result_again_and_a_later_compaction_makes_the_re
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn after_a_compaction_submit_research_cites_a_source_of_a_stub() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let project = research_project("852").await;
     let synthesis = json!({"summary": "The tides of 1890.",
                            "claims": [{"text": "High water came at 10.01.",

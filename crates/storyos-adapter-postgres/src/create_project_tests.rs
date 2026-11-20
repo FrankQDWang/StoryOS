@@ -1,5 +1,6 @@
 use super::*;
-use crate::command_sequence::tests::{create_project_command, create_project_issue};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::{create_project_command, create_project_issue};
 use storyos_application::{CreateProjectError, create_project, issue_create_project_challenge};
 use tokio_postgres::NoTls;
 
@@ -10,9 +11,7 @@ const TITLE: &str = "Empty Novel";
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")

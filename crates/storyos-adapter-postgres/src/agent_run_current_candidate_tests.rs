@@ -4,24 +4,26 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AcceptProposalInput, AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore,
-    ChapterId, DeleteChapterInput, ProjectScope, RejectProposalOperationsInput, RejectionNote,
-    WithdrawProposalInput, WithdrawalNote,
+    AcceptProposalInput, AgentRunDecisionInspect, ChapterId, DeleteChapterInput,
+    RejectProposalOperationsInput, RejectionNote, WithdrawProposalInput, WithdrawalNote,
 };
 use storyos_core::{DeploymentDestination, SelectionReference};
 use tokio_postgres::Client;
 
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_referenced_run, stores};
-use crate::agent_run_propose_edit::revise_tests::{CandidateChange, Fixture};
-use crate::agent_run_propose_edit::tests::{REVISE, opened, propose_edit_calls};
-use crate::agent_run_steering::tests::{
+use crate::shared_tests::agent_run_current_candidate::settled;
+use crate::shared_tests::agent_run_propose_edit::{REVISE, opened, propose_edit_calls};
+use crate::shared_tests::agent_run_propose_edit_revise::{CandidateChange, Fixture};
+use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, settle, steering, step_references,
 };
-use crate::command_sequence::tests::{
-    ACCEPT_PROPOSAL, DELETE_CHAPTER, REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL, delete_chapter,
-    issued, named_call,
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_acceptance::ACCEPT_PROPOSAL;
+use crate::shared_tests::command_sequence_proposal_decision::{
+    REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL,
 };
+use crate::shared_tests::command_sequence_structure::{DELETE_CHAPTER, delete_chapter, named_call};
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::model_gateway::{admit_referenced_run, stores};
 
 const EDITED: &str = "Still, ";
 const FINAL_TEXT: &str =
@@ -82,9 +84,7 @@ async fn sent_revision(admin: &Client, run_id: &str, position: &str, revision_id
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_next_run_step_reads_the_candidate_that_the_author_edited_and_a_later_call_revises_it()
 {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0x6f0, tool_loop.clone()).await;
@@ -149,7 +149,8 @@ async fn the_next_run_step_reads_the_candidate_that_the_author_edited_and_a_late
             propose_edit_calls(&admin, &run_id).await,
             step_references(&admin, &run_id).await,
             sent_revision(&admin, &run_id, "1", &edited_revision).await,
-            crate::agent_run_steering::tests::run_steps(&admin, &run_id).await["status"].clone(),
+            crate::shared_tests::agent_run_steering::run_steps(&admin, &run_id).await["status"]
+                .clone(),
         ),
         (
             vec![stale, opened(1)],
@@ -165,26 +166,10 @@ async fn the_next_run_step_reads_the_candidate_that_the_author_edited_and_a_late
     );
 }
 
-/// The status and the public decision of the Run.
-pub(crate) async fn settled(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    run_id: &str,
-) -> (String, AgentRunDecisionInspect) {
-    let record = store
-        .read_agent_run(scope, run_id, &AgentRunReadSelection::Current)
-        .await
-        .unwrap()
-        .unwrap();
-    (format!("{:?}", record.status), record.decision)
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_with_no_accepted_call_after_the_author_edit_completes_with_its_final_text() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0x6f8, tool_loop.clone()).await;
@@ -251,9 +236,7 @@ async fn a_run_with_no_accepted_call_after_the_author_edit_completes_with_its_fi
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_candidate_that_the_author_resolved_keeps_the_refusal_of_the_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let mut observed = Vec::new();
@@ -366,9 +349,7 @@ async fn a_candidate_that_the_author_resolved_keeps_the_refusal_of_the_run() {
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_steering_reference_to_a_candidate_that_the_author_edited_moves_to_its_current_revision()
 {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0x8e0, tool_loop.clone()).await;
@@ -452,9 +433,7 @@ async fn a_steering_reference_to_a_candidate_that_the_author_edited_moves_to_its
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_whose_candidate_the_author_emptied_completes_with_its_final_text() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let fixture = Fixture::new(&store, &admin, 0x8e8, tool_loop.clone()).await;
@@ -512,9 +491,7 @@ async fn a_run_whose_candidate_the_author_emptied_completes_with_its_final_text(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_removed_chapter_or_a_chapter_over_the_item_limit_keeps_the_refusal_of_the_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let mut observed = Vec::new();
@@ -573,9 +550,7 @@ async fn a_removed_chapter_or_a_chapter_over_the_item_limit_keeps_the_refusal_of
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_steering_reference_keeps_its_range_when_the_author_edits_another_candidate_of_its_proposal()
  {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let grow = format!("{REVISE} SCRIPT:grow_proposal");
@@ -653,9 +628,7 @@ async fn a_steering_reference_keeps_its_range_when_the_author_edits_another_cand
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_steering_reference_to_an_unknown_candidate_keeps_the_refusal_of_the_run() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let mut observed = Vec::new();

@@ -1,18 +1,21 @@
 //! The SkillPackage Snapshots and the Skill catalog that `createAgentRun` writes (ADR 0089
 //! section 2).
 
-use std::path::Path;
 use std::sync::Arc;
 
 use storyos_application::ProjectCommandError;
 use storyos_core::{
-    FrontmatterValue, SKILL_MD_PATH, SKILL_PACKAGE_BYTE_LIMIT, SKILL_PACKAGE_FILE_LIMIT,
-    SKILL_SET_LIMIT, SkillFile, SkillFileInput, SkillPackage, SkillPackageInput,
-    SkillPackageReference, SkillSet, admit_skill_package, skill_md_frontmatter,
+    SKILL_PACKAGE_BYTE_LIMIT, SKILL_PACKAGE_FILE_LIMIT, SKILL_SET_LIMIT, SkillFile, SkillFileInput,
+    SkillPackage, SkillPackageReference, SkillSet,
 };
 use tokio_postgres::error::SqlState;
 
 use super::*;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::create_agent_run::{
+    CHAPTER, USER_A, admitted, connect_admin, issue_run, prepare_project, refused, run_command,
+};
+use crate::shared_tests::create_agent_run_skill::{fixture, package, set, skill_md};
 
 const DIALOGUE_DIGEST: &str =
     "sha256:e03399e0385ea904f5c37265661480113ef0125e3c7f837cf04875d5cbe8178b";
@@ -25,66 +28,6 @@ fn project(lead: &str) -> String {
 
 fn chapter(lead: &str) -> String {
     format!("018f0000-0000-7001-8000-00000000c1{lead}")
-}
-
-/// One package of `fixtures/skill-packages/`.
-pub(crate) fn fixture(name: &str) -> SkillPackage {
-    fn collect(root: &Path, directory: &Path, files: &mut Vec<SkillFileInput>) {
-        for entry in std::fs::read_dir(directory).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                collect(root, &path, files);
-            } else if !path.ends_with(".DS_Store") {
-                files.push(SkillFileInput {
-                    path: path
-                        .strip_prefix(root)
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .to_owned(),
-                    bytes: std::fs::read(&path).unwrap(),
-                });
-            }
-        }
-    }
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/skill-packages")
-        .join(name);
-    let mut files = Vec::new();
-    collect(&root, &root, &mut files);
-    package(name, files)
-}
-
-/// Admits one package. Each frontmatter line `key: value` is one text field.
-pub(crate) fn package(name: &str, files: Vec<SkillFileInput>) -> SkillPackage {
-    let skill_md = files
-        .iter()
-        .find(|file| file.path == SKILL_MD_PATH)
-        .unwrap();
-    let frontmatter = skill_md_frontmatter(std::str::from_utf8(&skill_md.bytes).unwrap())
-        .unwrap()
-        .lines()
-        .filter_map(|line| line.split_once(": "))
-        .map(|(key, value)| (key.to_owned(), FrontmatterValue::Text(value.to_owned())))
-        .collect();
-    admit_skill_package(SkillPackageInput {
-        directory_name: name.to_owned(),
-        files,
-        frontmatter: Some(frontmatter),
-    })
-    .unwrap()
-}
-
-fn skill_md(name: &str) -> SkillFileInput {
-    SkillFileInput {
-        path: SKILL_MD_PATH.to_owned(),
-        bytes: format!("---\nname: {name}\ndescription: Use it for {name}.\n---\nBody\n")
-            .into_bytes(),
-    }
-}
-
-pub(crate) fn set(packages: Vec<SkillPackage>) -> Arc<SkillSet> {
-    Arc::new(SkillSet::new(packages).unwrap())
 }
 
 /// One createAgentRun in a new Conversation of `project` that offers `skills`. The command ids
@@ -267,9 +210,7 @@ async fn skill_rows(client: &impl tokio_postgres::GenericClient, project: &str) 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_run_pins_the_set_of_its_admission_and_only_new_digests_get_a_snapshot() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (runtime_url, mut admin) = connect_admin().await;
     let store = PostgresProjectReader::new(runtime_url);
     let project = project("a1");
@@ -335,9 +276,7 @@ async fn each_run_pins_the_set_of_its_admission_and_only_new_digests_get_a_snaps
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_project_has_its_own_snapshots_and_the_runtime_role_cannot_change_a_skill_row() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (runtime_url, mut admin) = connect_admin().await;
     let store = PostgresProjectReader::new(runtime_url.clone());
     let (own, other) = (project("b1"), project("b2"));
@@ -389,9 +328,7 @@ async fn each_project_has_its_own_snapshots_and_the_runtime_role_cannot_change_a
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn no_offer_a_refusal_an_exact_retry_and_a_failed_transaction_write_no_skill_row() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (runtime_url, mut admin) = connect_admin().await;
     let store = PostgresProjectReader::new(runtime_url);
     let project = project("d1");
@@ -461,9 +398,7 @@ async fn no_offer_a_refusal_an_exact_retry_and_a_failed_transaction_write_no_ski
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_first_run_stores_a_set_at_the_limits() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (runtime_url, mut admin) = connect_admin().await;
     let store = PostgresProjectReader::new(runtime_url);
     let project = project("e1");

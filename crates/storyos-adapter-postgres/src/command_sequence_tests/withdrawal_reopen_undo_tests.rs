@@ -5,11 +5,14 @@
 use storyos_core::{ReopenWithdrawnProposalNoEffect, TransitionOutcome};
 use tokio_postgres::Client;
 
-use super::producer_withdrawal_undo::{producer_withdraw, reopen};
-use super::proposal_undo_chain::{compensated, head_closure, undo_latest, withdraw};
-use super::secondary_operation::two_operation_proposal;
-use super::support::stores;
-use super::undo::latest_forward;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_producer_withdrawal_undo::{producer_withdraw, reopen};
+use crate::shared_tests::command_sequence_proposal_undo_chain::{
+    compensated, head_closure, undo_latest, withdraw,
+};
+use crate::shared_tests::command_sequence_secondary_operation::two_operation_proposal;
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::command_sequence_undo::latest_forward;
 
 /// The Withdrawal event of the author Withdrawal of one Proposal at `author_action_sequence`.
 async fn author_withdrawal_event(
@@ -34,9 +37,7 @@ async fn author_withdrawal_event(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_author_reopens_a_withdrawal_again_after_the_undo_of_its_reopen() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x9e00).await;
     let prior = latest_forward(&admin, &proposal.scope).await;
@@ -91,9 +92,7 @@ async fn the_author_reopens_a_withdrawal_again_after_the_undo_of_its_reopen() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_of_an_author_withdrawal_keeps_a_later_producer_withdrawal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x9e20).await;
     let prior = latest_forward(&admin, &proposal.scope).await;

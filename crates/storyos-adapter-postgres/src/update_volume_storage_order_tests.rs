@@ -6,19 +6,17 @@ use storyos_application::{
 };
 use storyos_core::TransitionOutcome;
 
-use crate::command_sequence::tests::{
-    applied, seed_project, stores, titled_chapter, titled_volume, undo_named,
-};
-use crate::delete_structure_tests::settle_delete_volume;
-use crate::set_current_chapter_authority_tests::open_session;
-use crate::update_structure_tests::settle_update_volume;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::{titled_chapter, titled_volume};
+use crate::shared_tests::command_sequence_support::{applied, seed_project, stores, undo_named};
+use crate::shared_tests::delete_structure::settle_delete_volume;
+use crate::shared_tests::set_current_chapter_authority::open_session;
+use crate::shared_tests::update_structure::settle_update_volume;
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn undo_volume_reorders_then_delete_restores_the_original_tree() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (mut store, _admin) = stores().await;
     store.challenge_rate_clock_unix_seconds = Some(60);
     let scope = seed_project(&store, "7060").await;

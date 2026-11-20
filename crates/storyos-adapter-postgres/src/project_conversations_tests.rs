@@ -14,10 +14,11 @@ use storyos_core::{AgentRunStatus, DeploymentDestination::HostFakeToolLoop};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{
+use crate::shared_tests::agent_run_steering::cancellation;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{
     RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
 };
-use crate::agent_run_steering::tests::cancellation;
 
 const MESSAGES: [&str; 4] = [
     "Help with this passage.",
@@ -109,9 +110,7 @@ async fn run_ids(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_list_and_the_read_give_the_conversations_of_one_scope_in_order() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, runs, conversations) =
         three_conversations(&store, &admin, ["da1", "da2", "da3", "da4"]).await;
@@ -238,9 +237,7 @@ async fn requests(admin: &Client, run_id: &str) -> Vec<(Option<String>, String, 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn each_conversation_keeps_its_own_provider_continuation() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (_, _, runs, _) = three_conversations(&store, &admin, ["da5", "da6", "da7", "da8"]).await;
     let (first, other, second) = (
@@ -319,9 +316,7 @@ async fn cancelled_run(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_earlier_turns_expire_after_the_retention_from_the_newest_run_event() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, run_id) =
         queued_run_offering(&store, "da9", HostFakeToolLoop, None).await;

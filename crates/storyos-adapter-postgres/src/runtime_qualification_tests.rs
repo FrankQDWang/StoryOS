@@ -1,85 +1,24 @@
 use std::sync::Mutex;
 
 use storyos_application::{
-    ConversationSelection, CreateRequest, DestinationRequest, ModelProviderAdapter, ModelResponse,
+    ConversationSelection, DestinationRequest, ModelProviderAdapter, ModelResponse,
     ModelStreamSink, ModelUsage, NoContractFaults, Observation, PreDispatchRefusal,
     PreparedRequest, ProjectAssistanceRecord, ProjectScope, RequestRoute, UserId,
-    WirePayloadProjection, complete_agent_run, open_project_assistance,
+    complete_agent_run, open_project_assistance,
 };
 use storyos_core::{
     AGENT_PLAN_ENDPOINT, AGENT_PLAN_REGISTRATION, AssistanceAvailability, BudgetBounds,
-    DeploymentDestination, DestinationKind, ModelAdapter, RuntimeQualification, ToolChoice,
+    DestinationKind, ModelAdapter, RuntimeQualification, ToolChoice,
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::RuntimeClock;
-use crate::agent_run_dispatch::tests::{admit_run, admit_run_in, claim_run, queued_run, stores};
-use crate::agent_run_finish_rule::tests::{finish_before, text_item};
+use crate::shared_tests::agent_run_finish_rule::text_item;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::RuntimeClock;
+use crate::shared_tests::model_gateway::{admit_run, admit_run_in, claim_run, queued_run, stores};
+use crate::shared_tests::runtime_qualification::{ScriptedAgentPlan, authorized, settle};
 
-const AUTHORIZATION: &str =
-    "https://github.com/FrankQDWang/StoryOS/issues/393#issuecomment-6098554693";
 const REFERENCE: &str = storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE;
-
-fn authorized() -> DeploymentDestination {
-    DeploymentDestination::VolcengineAgentPlan {
-        qualification_authorization: Some(AUTHORIZATION.to_owned()),
-    }
-}
-
-/// An Agent Plan adapter that records each Create request and reports one scripted observation.
-struct ScriptedAgentPlan {
-    observation: Observation,
-    seen: Mutex<Vec<CreateRequest>>,
-}
-
-impl ScriptedAgentPlan {
-    fn new(observation: Observation) -> Self {
-        Self {
-            observation,
-            seen: Mutex::default(),
-        }
-    }
-}
-
-/// The scripted observation answers the closing request. A request before a `finish` call that
-/// counted gets the `finish` call first.
-impl ModelProviderAdapter for ScriptedAgentPlan {
-    const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
-    type Prepared = ToolChoice;
-
-    async fn prepare(
-        &self,
-        request: &DestinationRequest,
-    ) -> Result<PreparedRequest<ToolChoice>, PreDispatchRefusal> {
-        let DestinationRequest::Create(create) = request else {
-            return Err(PreDispatchRefusal::UnsupportedRequest);
-        };
-        self.seen.lock().unwrap().push(create.clone());
-        Ok(PreparedRequest {
-            projection: WirePayloadProjection {
-                execution_profile: "storyos.volcengine-agent-plan.execution.v1".to_owned(),
-                mapping_revision: "storyos.volcengine-agent-plan.responses.create.v1".to_owned(),
-                digest: "sha256:scripted".to_owned(),
-                serialized_payload: None,
-                cache_setting: None,
-            },
-            prepared: create.tool_choice,
-        })
-    }
-
-    async fn exchange(
-        &self,
-        tool_choice: ToolChoice,
-        _sink: &mut impl ModelStreamSink,
-    ) -> Observation {
-        match (&self.observation, tool_choice) {
-            (Observation::Terminal(response), ToolChoice::Required) => {
-                Observation::Terminal(finish_before(response))
-            }
-            (observation, _) => observation.clone(),
-        }
-    }
-}
 
 /// The status, settlement, Attempt count, and the qualification, network, and input mapping
 /// facts of the first decision Attempt of one AgentRun.
@@ -102,19 +41,6 @@ async fn qualification_evidence(admin: &Client, run_id: &str) -> [Option<String>
         .await
         .unwrap();
     [0, 1, 2, 3, 4, 5].map(|index| row.get(index))
-}
-
-async fn settle(
-    store: &crate::PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    run_id: &str,
-    adapter: &ScriptedAgentPlan,
-) {
-    let claim = claim_run(admin, scope.clone(), run_id.to_owned()).await;
-    complete_agent_run(store, adapter, &NoContractFaults, &RuntimeClock, &claim)
-        .await
-        .unwrap();
 }
 
 /// Returns the Project to the binding of S4-01: the pending Agent Plan Registration, a pending
@@ -155,9 +81,7 @@ async fn pin_pending_registration(admin: &Client, scope: &ProjectScope, run_id: 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_request_once() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, early_run) = queued_run(&store, "e9a", authorized()).await;
     pin_pending_registration(&admin, &scope, &early_run).await;
@@ -420,9 +344,7 @@ impl ModelProviderAdapter for CancellingAgentPlan<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_cancelled_qualification_request_refuses_its_abort_once_and_records_no_remote_stop() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued_run(&store, "e9e", authorized()).await;
     let adapter = CancellingAgentPlan {
@@ -563,9 +485,7 @@ impl ModelProviderAdapter for LateResponseAgentPlan<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_response_after_cancellation_keeps_its_usage_and_cache_use_and_supplies_no_decision() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued_run(&store, "ea8", authorized()).await;
     let adapter = LateResponseAgentPlan {
@@ -662,9 +582,7 @@ impl ModelProviderAdapter for ReferenceChangingAgentPlan<'_> {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_dispatch_claim_refuses_a_prior_reference_that_changed_after_preparation() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued_run(&store, "ea9", authorized()).await;
     let advisory = ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
@@ -814,9 +732,7 @@ async fn real_attempt_evidence(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_reference() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let response = |id: &str, usage: Option<serde_json::Value>| {
         let mut body = serde_json::json!({"id": id, "status": "completed", "output": [

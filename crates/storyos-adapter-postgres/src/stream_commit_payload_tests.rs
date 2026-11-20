@@ -7,9 +7,10 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::stream_commit_contention_tests::dispatched;
-use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
 use crate::agent_run_observation::encode_items;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{claim_run, queued_run, stores};
+use crate::shared_tests::stream_commit_contention::dispatched;
 
 fn item(item_id: &str, text: &str) -> NativeStreamItem {
     NativeStreamItem {
@@ -44,9 +45,7 @@ async fn stored_payload(admin: &Client, dispatch: &DispatchClaim) -> serde_json:
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_stream_commit_keeps_the_attempt_payload_outside_its_items_and_reference() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) =
         queued_run(&store, "9a0", DeploymentDestination::HostFakeToolLoop).await;

@@ -11,13 +11,16 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::RuntimeClock;
-use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
-use crate::agent_run_finish_rule::tests::{finish_item, propose_edit_item, text_item};
-use crate::agent_run_retrieval::tests::{
+use crate::shared_tests::agent_run_finish_rule::{finish_item, propose_edit_item, text_item};
+use crate::shared_tests::agent_run_retrieval::{
     AfterExchange, adapter, broken_stream, destination, real_run, research_run, stored,
 };
-use crate::agent_run_tool_exposure::tests::{advisory_stream, finish_stream, function_call_stream};
+use crate::shared_tests::agent_run_tool_exposure::{
+    advisory_stream, finish_stream, function_call_stream,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::RuntimeClock;
+use crate::shared_tests::model_gateway::{claim_run, queued_run, stores};
 
 /// A stream that reports `reference` and a function call item, and then ends.
 fn tool_stream(reference: &str) -> String {
@@ -70,9 +73,7 @@ async fn successor_facts(admin: &Client, run_id: &str) -> [Option<String>; 8] {
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_unknown_real_create_sends_the_same_request_once_and_keeps_its_late_result_as_evidence()
 {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![
         broken_stream("resp_c46"),
@@ -136,9 +137,7 @@ async fn an_unknown_real_create_sends_the_same_request_once_and_keeps_its_late_r
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_successor_call_of_an_unexposed_name_is_a_refused_call_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![
         broken_stream("resp_f74"),
@@ -197,9 +196,7 @@ async fn a_successor_call_of_an_unexposed_name_is_a_refused_call_and_the_run_con
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_committed_tool_item_or_a_changed_request_pauses_the_successor_before_egress() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (tool_base, tool_served) = destination(vec![
         tool_stream("resp_c47"),
@@ -276,9 +273,7 @@ async fn a_committed_tool_item_or_a_changed_request_pauses_the_successor_before_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_exposure_change_before_the_successor_claim_pauses_the_successor_before_egress() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![
         broken_stream("resp_e32"),
@@ -289,7 +284,7 @@ async fn an_exposure_change_before_the_successor_claim_pauses_the_successor_befo
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
     // A Tool Contract Drift quarantines the research revision after the successor request was
     // prepared.
-    let route = crate::agent_run_tool_exposure::tests::QuarantineBeforeClaim {
+    let route = crate::shared_tests::agent_run_tool_exposure::QuarantineBeforeClaim {
         admin: &admin,
         successor: true,
         quarantined: std::sync::atomic::AtomicBool::new(/*v*/ false),
@@ -298,7 +293,7 @@ async fn an_exposure_change_before_the_successor_claim_pauses_the_successor_befo
     complete_agent_run(&store, &route, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    crate::agent_run_tool_call::tests::reactivate_research_revision(&admin).await;
+    crate::shared_tests::agent_run_tool_call::reactivate_research_revision(&admin).await;
     let facts = successor_facts(&admin, &run_id).await;
     let declared: Vec<bool> = route
         .prepared
@@ -448,9 +443,7 @@ fn prose_changes(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_retrieved_prose_change_settles_with_its_proposal_and_sends_no_successor() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued_run(
         &store,
@@ -639,9 +632,7 @@ async fn successor_proposal_facts(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_successor_prose_change_opens_one_proposal_and_a_late_result_opens_none() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let route = SuccessorProseChange {
         successor_block: None,
         created: Default::default(),
@@ -662,9 +653,7 @@ async fn a_successor_prose_change_opens_one_proposal_and_a_late_result_opens_non
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_successor_prose_change_of_an_undeclared_target_opens_no_proposal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let route = SuccessorProseChange {
         successor_block: Some("018f0000-0000-7000-8000-0000000001d2"),
         created: Default::default(),

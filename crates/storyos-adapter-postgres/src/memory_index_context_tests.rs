@@ -10,11 +10,15 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{admit_run_in, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
-use crate::command_sequence::tests::{UPDATE_CHAPTER, issued};
-use crate::memory_entries::tests::write_versions;
+use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_steering::{
+    AuthorAction, AuthorAt, Moment, queued, settle, steering,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::UPDATE_CHAPTER;
+use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::memory_entries::write_versions;
+use crate::shared_tests::model_gateway::{admit_run_in, stores};
 
 /// The Index of the two entries that `seeded` writes at the Memory revision 2.
 const INDEX: &str = "{\"type\":\"foreshadowing\"}\n\
@@ -125,9 +129,7 @@ fn item(text: &str) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_keeps_its_pinned_index_and_a_later_run_gets_the_new_index() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let project = seeded(&store, &admin, "c54").await;
     let pinned = admitted(&store, &project, "c55", "Help.", conversation_of("c54")).await;
@@ -162,9 +164,7 @@ async fn a_run_keeps_its_pinned_index_and_a_later_run_gets_the_new_index() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_full_input_a_compaction_a_steering_input_and_a_chapter_edit_send_the_same_index() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The destination lost the closing reference of the Run before the second Run, so the second
     // Run sends its full input again.
@@ -250,9 +250,7 @@ async fn a_full_input_a_compaction_a_steering_input_and_a_chapter_edit_send_the_
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_without_use_or_without_a_current_entry_has_no_index() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The first Run of `seeded` starts before each entry, so it has no pin.
     let (scope, chapter_id, first) = queued(&store, "c5f").await;

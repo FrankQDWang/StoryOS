@@ -11,15 +11,16 @@ use storyos_application::{
 };
 use tokio_postgres::Client;
 
-use super::super::tests::{capture, settled};
-use super::{flag_lines, seed};
-use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_read_chapter::tests::project;
-use crate::agent_run_write_memory::tests::first_index;
-use crate::create_agent_run::context::chapter_list_tests::replace_text;
-use crate::memory_capture::loop_tests::{record, script, settlement};
-use crate::memory_capture::tests::start;
-use crate::memory_capture::tools_tests::conversation_source;
+use crate::shared_tests::agent_run_read_chapter::project;
+use crate::shared_tests::agent_run_write_memory::first_index;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::replace_text;
+use crate::shared_tests::memory_capture::start;
+use crate::shared_tests::memory_capture_loop::{record, script, settlement};
+use crate::shared_tests::memory_capture_tools::conversation_source;
+use crate::shared_tests::memory_consolidation::{capture, settled};
+use crate::shared_tests::memory_consolidation_merge::{flag_lines, seed};
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
 
 /// The fake destination, but it rejects each request of a capture and of a pass.
 struct RejectsMemoryWork;
@@ -100,9 +101,7 @@ async fn status(admin: &Client, run_id: &str) -> String {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn with_failed_memory_work_an_edit_commits_and_a_run_has_the_index_of_before() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_a, _, session) =
         project(&store, &admin, "a10", 0xa1f0, &["Lin ran."]).await;
@@ -122,7 +121,7 @@ async fn with_failed_memory_work_an_edit_commits_and_a_run_has_the_index_of_befo
         .await
         .unwrap();
     complete_rejected(&admin, &scope, &failed.run_id).await;
-    let pass = crate::memory_consolidation::tests::start_pass(&store, &scope)
+    let pass = crate::shared_tests::memory_consolidation::start_pass(&store, &scope)
         .await
         .unwrap();
     complete_rejected(&admin, &scope, &pass.run_id).await;
@@ -136,8 +135,14 @@ async fn with_failed_memory_work_an_edit_commits_and_a_run_has_the_index_of_befo
     )
     .await;
     let committed = store.apply_author_edit(&edit).await.unwrap();
-    let run =
-        super::flag_show_tests::run(&store, &admin, (&scope, &chapter_a), "a11", "继续写。").await;
+    let run = crate::shared_tests::memory_conflict_flag_show::run(
+        &store,
+        &admin,
+        (&scope, &chapter_a),
+        "a11",
+        "继续写。",
+    )
+    .await;
 
     assert_eq!(
         (

@@ -17,9 +17,12 @@ use storyos_core::{
     UNEXECUTED_CALL_OUTPUT,
 };
 
-use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, stores};
-use crate::agent_run_finish_rule::tests::tool_loop_run;
-use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
+use crate::shared_tests::agent_run_finish_rule::tool_loop_run;
+use crate::shared_tests::agent_run_steering::{
+    AuthorAction, AuthorAt, Moment, queued, settle, steering,
+};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run, stores};
 
 /// The adapter `inner`, which also keeps the input of each Create request in the body that the
 /// tool loop wire of the Agent Plan route builds for it.
@@ -70,7 +73,7 @@ impl<A: ModelProviderAdapter + Sync> ModelProviderAdapter for RealWire<A> {
                 },
                 ..create.clone()
             };
-            let prepared = crate::agent_run_retrieval::tests::adapter()
+            let prepared = crate::shared_tests::agent_run_retrieval::adapter()
                 .prepare(&DestinationRequest::Create(wire))
                 .await
                 .ok()
@@ -119,9 +122,7 @@ impl<A: ModelProviderAdapter + Sync> ModelProviderAdapter for RealWire<A> {
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_request_after_a_steering_input_between_two_requests_answers_each_call_of_its_prior_response()
  {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued(&store, "570").await;
     let input = steering(&store, &scope, 0x57f0, &run_id, "Keep the voice.", None).await;
@@ -164,9 +165,7 @@ async fn a_request_after_a_steering_input_between_two_requests_answers_each_call
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_next_run_answers_each_call_of_the_last_run_step_with_the_unexecuted_output() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let unexecuted = json!([
         ["unexecuted", "call_look_up_notes_23"],

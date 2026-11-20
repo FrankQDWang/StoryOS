@@ -1,71 +1,42 @@
 use storyos_application::TakeOverProjectWriterInput;
-use storyos_application::{
-    DeleteVolumeInput, ProjectCommandError, SetCurrentChapterInput, UpdateProjectInput,
-};
+use storyos_application::{DeleteVolumeInput, SetCurrentChapterInput, UpdateProjectInput};
 use storyos_application::{EditorSessionId, VolumeId};
 use storyos_core::ReceiptResult;
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::command_sequence::{ProjectCommand, settle_project_command};
-use crate::set_current_chapter_authority_tests::open_session;
+use crate::shared_tests::set_current_chapter_authority::open_session;
 
-use super::acceptance::accept_proposal_call;
-use super::agent_run::{cancel_agent_run_call, create_agent_run_call, pause_agent_run_call};
-use super::memory_entry::delete_memory_entry_call;
-use super::project_session::{
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_acceptance::accept_proposal_call;
+use crate::shared_tests::command_sequence_agent_run::{
+    cancel_agent_run_call, create_agent_run_call, pause_agent_run_call,
+};
+use crate::shared_tests::command_sequence_memory_entry::delete_memory_entry_call;
+use crate::shared_tests::command_sequence_project_session::{
     TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, take_over_project_writer,
     take_over_project_writer_call, update_project_assistance_call, update_project_call,
     update_project_instruction_call,
 };
-use super::proposal_decision::{
+use crate::shared_tests::command_sequence_proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
     reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
 };
-use super::steer_agent_run::steer_agent_run_call;
-use super::structure::{
+use crate::shared_tests::command_sequence_retry::in_progress_retry;
+use crate::shared_tests::command_sequence_steer_agent_run::steer_agent_run_call;
+use crate::shared_tests::command_sequence_structure::{
     DELETE_VOLUME, SET_CURRENT_CHAPTER, create_chapter, create_chapter_call, create_volume_call,
     delete_chapter_call, delete_volume, delete_volume_call, new_volume, set_current_chapter_call,
     update_chapter_call, update_volume_call,
 };
-use super::support::{
-    CommandCall, SequenceError, issued, replayed_outcome, seed_project, settlement_rows, stores,
-    two_chapter_writer, with_new_request_ids,
+use crate::shared_tests::command_sequence_support::{
+    CommandCall, issued, replayed_outcome, seed_project, stores, two_chapter_writer,
+    with_new_request_ids,
 };
-
-/// Marks the Command Challenge consumed and the Command Idempotency Fence in progress, then retries.
-///
-/// Returns whether the retry is a binding conflict and the rows of the retry Receipt.
-pub(super) async fn in_progress_retry<C: ProjectCommand<Error: SequenceError>>(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    call: &CommandCall<C>,
-) -> (bool, [i64; 5]) {
-    admin
-        .batch_execute(&format!(
-            "UPDATE storyos.project_command_challenges SET consumed_at = clock_timestamp()
-              WHERE idempotency_key = '{key}';
-             UPDATE storyos.command_idempotency SET outcome_kind = 'in_progress'
-              WHERE idempotency_key = '{key}';",
-            key = call.envelope.challenge_binding.idempotency_key,
-        ))
-        .await
-        .unwrap();
-    let retry = settle_project_command(store, &call.envelope, &call.input)
-        .await
-        .map_err(SequenceError::sequence);
-    (
-        matches!(retry, Err(ProjectCommandError::BindingConflict)),
-        settlement_rows(admin, &call.envelope.ids.receipt_id).await,
-    )
-}
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let observed = vec![
         in_progress_retry(
@@ -207,9 +178,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_exact_retry_ignores_a_later_canonical_snapshot_at_the_same_position() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, _admin) = stores().await;
     let switch = set_current_chapter_call(&store, /*base*/ 0x6ac0).await;
     let scope = switch.envelope.project_scope.clone();
@@ -258,9 +227,7 @@ async fn an_exact_retry_ignores_a_later_canonical_snapshot_at_the_same_position(
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_create_chapter_exact_retry_after_the_first_editor_session_returns_the_first_settlement()
 {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, _admin) = stores().await;
     let call = create_chapter_call(&store, /*base*/ 0xe100).await;
     let first = create_chapter(&store, &call).await.unwrap();
@@ -276,9 +243,7 @@ async fn a_create_chapter_exact_retry_after_the_first_editor_session_returns_the
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_exact_retry_returns_the_uppercase_client_identities_of_the_first_use() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, "a400").await;
     let volume_id = new_volume(

@@ -9,11 +9,12 @@ use storyos_application::{
 use storyos_core::{TransitionOutcome, UpdateChapterApplied};
 
 use crate::PostgresProjectReader;
-use crate::command_sequence::tests::{
-    CommandCall, UPDATE_CHAPTER, applied, named_call, seed_project, stores, titled_chapter,
-    titled_volume, update_chapter,
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_structure::{
+    UPDATE_CHAPTER, named_call, titled_chapter, titled_volume, update_chapter,
 };
-use crate::delete_structure_tests::settle_delete_chapter;
+use crate::shared_tests::command_sequence_support::{CommandCall, applied, seed_project, stores};
+use crate::shared_tests::delete_structure::settle_delete_chapter;
 
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 
@@ -286,9 +287,7 @@ async fn measure_applied_reorder(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn applied_chapter_reorder_uses_one_rank_write_for_many_siblings() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     measure_applied_reorder(
         &store,
@@ -356,9 +355,7 @@ async fn json_query(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn applied_chapter_reorder_keeps_other_volume_scope_and_removed_sibling_storage_keys() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let scope = seed_project(&store, &hex_suffix(0x6520)).await;
     let volume_a = titled_volume(&store, &scope, &hex_suffix(0x6521), "Volume A", 1).await;

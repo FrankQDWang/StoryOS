@@ -3,115 +3,27 @@
 //! then reopens the restored content.
 
 use storyos_application::{
-    CurrentProducerWithdrawal, EditorSessionId, RejectProposalOperationsInput, RejectionNote,
-    ReopenRejectedOperationsInput, ReopenWithdrawnProposalInput,
+    EditorSessionId, RejectProposalOperationsInput, RejectionNote, ReopenRejectedOperationsInput,
 };
-use storyos_core::{
-    ReopenWithdrawnProposalNoEffect, TransitionOutcome, UndoLatestAuthorActionUnavailable,
-};
-use tokio_postgres::Client;
+use storyos_core::{TransitionOutcome, UndoLatestAuthorActionUnavailable};
 
-use crate::PostgresProjectReader;
-
-use super::proposal_decision::{
-    REJECT_PROPOSAL_OPERATIONS, REOPEN_REJECTED_OPERATIONS, REOPEN_WITHDRAWN_PROPOSAL,
-    WITHDRAW_PROPOSAL, reject_proposal_operations, reopen_rejected_operations,
-    reopen_withdrawn_proposal,
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_producer_withdrawal_undo::{producer_withdraw, reopen};
+use crate::shared_tests::command_sequence_proposal_decision::{
+    REJECT_PROPOSAL_OPERATIONS, REOPEN_REJECTED_OPERATIONS, reject_proposal_operations,
+    reopen_rejected_operations,
 };
-use super::proposal_decision_undo_chain::{
+use crate::shared_tests::command_sequence_proposal_decision_undo_chain::{
     conflict_and_replan, head_state, operation_state, undo_and_retry,
 };
-use super::proposal_undo_chain::{compensated, edit, head_closure, on, undo_latest};
-use super::secondary_operation::{
-    TwoOperationProposal, operation_candidates, proposal_head_revision, two_operation_proposal,
+use crate::shared_tests::command_sequence_proposal_undo_chain::{
+    compensated, edit, head_closure, on, undo_latest,
 };
-use super::support::{challenge_issue, command_call, issued, stores};
-use super::undo::latest_forward;
-
-/// The Withdrawal of the current head by the AgentRun decision that produced the Proposal.
-/// Returns its Withdrawal event.
-pub(super) async fn producer_withdraw(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    proposal: &TwoOperationProposal,
-    suffix: u16,
-) -> String {
-    let producer = admin
-        .query_one(
-            "SELECT source_run_id::text, source_decision_id::text FROM storyos.proposals
-              WHERE proposal_id = $1::text::uuid",
-            &[&proposal.proposal_id],
-        )
-        .await
-        .unwrap();
-    let withdrawal = CurrentProducerWithdrawal {
-        run_id: producer.get(/*idx*/ 0),
-        decision_id: producer.get(/*idx*/ 1),
-        proposal_id: proposal.proposal_id.clone(),
-        proposal_revision_id: proposal_head_revision(admin, &proposal.proposal_id).await,
-        expected_authoritative_revision_id: proposal.chapter_revision_id.clone(),
-    };
-    // The producer form takes no Command Challenge, so the call issues none. Each issued
-    // Challenge counts toward the rate limit of the Project.
-    let issue = challenge_issue(
-        &proposal.scope,
-        suffix,
-        &WITHDRAW_PROPOSAL,
-        format!("sha256:producer-withdrawal:{suffix:04x}"),
-    );
-    let call = command_call(
-        issue.binding,
-        &issue.nonce_digest,
-        &format!("{suffix:04x}"),
-        b"{}",
-        withdrawal,
-    );
-    let settlement = store
-        .withdraw_proposal_as_current_producer(&call.envelope, &call.input)
-        .await
-        .unwrap();
-    match settlement.outcome {
-        TransitionOutcome::Applied(withdrawn) => withdrawn.withdrawal_event_id,
-        other => panic!("the producer must withdraw the Proposal, got {other:?}"),
-    }
-}
-
-/// The explicit reopen of the current head with `withdrawal_event_id`. Returns the outcome
-/// without its values.
-pub(super) async fn reopen(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    proposal: &TwoOperationProposal,
-    withdrawal_event_id: String,
-    suffix: u16,
-) -> TransitionOutcome<(), ReopenWithdrawnProposalNoEffect, String, String> {
-    let call = issued(
-        store,
-        &proposal.scope,
-        suffix,
-        &REOPEN_WITHDRAWN_PROPOSAL,
-        ReopenWithdrawnProposalInput {
-            editor_session_id: EditorSessionId::new(proposal.editor_session_id.clone()),
-            proposal_id: proposal.proposal_id.clone(),
-            proposal_revision_id: proposal_head_revision(admin, &proposal.proposal_id).await,
-            withdrawal_event_id,
-            expected_authoritative_revision_id: proposal.chapter_revision_id.clone(),
-        },
-    )
-    .await;
-    match reopen_withdrawn_proposal(store, &call)
-        .await
-        .unwrap()
-        .outcome
-    {
-        TransitionOutcome::Applied(_) => TransitionOutcome::Applied(()),
-        TransitionOutcome::NoEffect(reason) => TransitionOutcome::NoEffect(reason),
-        TransitionOutcome::Conflicted(reason) => {
-            TransitionOutcome::Conflicted(format!("{reason:?}"))
-        }
-        TransitionOutcome::Refused(reason) => TransitionOutcome::Refused(format!("{reason:?}")),
-    }
-}
+use crate::shared_tests::command_sequence_secondary_operation::{
+    operation_candidates, proposal_head_revision, two_operation_proposal,
+};
+use crate::shared_tests::command_sequence_support::{issued, stores};
+use crate::shared_tests::command_sequence_undo::latest_forward;
 
 /// `state` with the closure `closure` and the validation `validation`.
 fn with_axes(mut state: [String; 5], validation: &str, closure: &str) -> [String; 5] {
@@ -125,9 +37,7 @@ fn with_axes(mut state: [String; 5], validation: &str, closure: &str) -> [String
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_of_a_candidate_edit_keeps_a_producer_withdrawal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4f00).await;
     let prior = latest_forward(&admin, &proposal.scope).await;
@@ -175,9 +85,7 @@ async fn author_undo_of_a_candidate_edit_keeps_a_producer_withdrawal() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_of_an_earlier_candidate_edit_keeps_a_producer_withdrawal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4f30).await;
     let prior = latest_forward(&admin, &proposal.scope).await;
@@ -237,9 +145,7 @@ async fn author_undo_of_an_earlier_candidate_edit_keeps_a_producer_withdrawal() 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_keeps_a_producer_withdrawal_after_the_undo_of_its_reopen() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4f60).await;
     let prior = latest_forward(&admin, &proposal.scope).await;
@@ -302,9 +208,7 @@ async fn author_undo_keeps_a_producer_withdrawal_after_the_undo_of_its_reopen() 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_of_a_replan_keeps_a_producer_withdrawal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4f90).await;
     let prior = latest_forward(&admin, &proposal.scope).await;
@@ -343,9 +247,7 @@ async fn author_undo_of_a_replan_keeps_a_producer_withdrawal() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_of_a_rejected_operation_reopen_keeps_a_producer_withdrawal() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4fc0).await;
     let operation_id = proposal.operations[1].0.clone();

@@ -4,15 +4,14 @@ use storyos_core::{
     ACTIVE_COMPACTION_REQUEST_PREFIX, ADVISORY_TEXT, AgentRunStatus, RESEARCH_TOOL_OFFER,
 };
 
-use crate::agent_run_dispatch::tests::stores;
-use crate::agent_run_finish_rule::tests::{steps, tool_loop_run};
+use crate::shared_tests::agent_run_finish_rule::{steps, tool_loop_run};
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::model_gateway::stores;
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_first_run_step_with_a_prior_response_installs_the_summary_and_the_run_continues() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let message = format!("{ACTIVE_COMPACTION_REQUEST_PREFIX} Help with this passage.");
     // In a new Conversation, only RunStep 2 has a prior response: the response of RunStep 1. In
@@ -80,9 +79,7 @@ async fn the_first_run_step_with_a_prior_response_installs_the_summary_and_the_r
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_later_run_step_compacts_while_the_tool_results_of_the_prior_response_wait() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // RunStep 1 calls `web_search` and `finish`. This process has no Tool adapter, so the search
     // is refused, and the `finish` call does not count. Both results wait for the request of

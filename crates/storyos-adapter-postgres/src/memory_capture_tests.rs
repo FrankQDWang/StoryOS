@@ -8,109 +8,17 @@ use storyos_application::{
     ConversationSelection, MemoryCaptureSource, MemoryCaptureStartRefusal, NoContractFaults,
     ProjectScope, StartedMemoryCapture, complete_agent_run,
 };
-use storyos_core::{CaptureRefusal, ProjectionMode};
+use storyos_core::CaptureRefusal;
 use tokio_postgres::Client;
 
-use crate::PostgresProjectReader;
-use crate::agent_run_dispatch::tests::{RuntimeClock, stores};
-use crate::agent_run_finish_rule::tests::complete;
-use crate::agent_run_steering::tests::queued;
-use crate::command_sequence::tests::background_run::claim_in_project;
-use crate::command_sequence::tests::seed_project;
-use crate::create_agent_run::context::chapter_list_tests::admitted;
-use crate::memory_entries::tests::{archived_rows, as_runtime};
-use crate::project_research_binding::tests::park_queued_runs;
-
-/// A capture gives way to each queued Run of the author, and earlier tests leave queued Runs in
-/// the shared database. Park them, so that only the Runs of this test are queued.
-pub(crate) async fn park_queued_author_runs(admin: &Client) {
-    admin
-        .execute(
-            "UPDATE storyos.agent_runs
-                SET status = 'paused', lease_expires_at = NULL, wakeup_pending = false
-              WHERE run_kind = 'author' AND status = 'queued'",
-            &[],
-        )
-        .await
-        .unwrap();
-}
-
-/// A Project of `prefix` with one completed author Run, its Chapter, and the source of that Run.
-pub(crate) async fn project(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    prefix: &str,
-) -> (ProjectScope, String, MemoryCaptureSource) {
-    park_queued_author_runs(admin).await;
-    let (scope, chapter_id, run_id) = queued(store, prefix).await;
-    complete(store, admin, &scope, &run_id).await;
-    let conversation_id: String = admin
-        .query_one(
-            "SELECT conversation_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    let source = MemoryCaptureSource::Conversation {
-        conversation_id,
-        first_run_id: run_id.clone(),
-        last_run_id: run_id,
-    };
-    (scope, chapter_id, source)
-}
-
-/// Completes the capture Run `run_id`. A capture that gave its claim back to a queued Run of the
-/// author in another Project gets a new claim, until its Run is not queued.
-pub(crate) async fn run_capture(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-    run_id: &str,
-) {
-    for _ in 0..=storyos_core::MEMORY_CAPTURE_MAX_RUN_STEPS {
-        complete(store, admin, scope, run_id).await;
-        let status: String = admin
-            .query_one(
-                "SELECT status FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get(/*idx*/ 0);
-        if status != "queued" {
-            return;
-        }
-    }
-    panic!("the capture {run_id} did not end");
-}
-
-/// Starts one capture of `source` with the input `input` in one transaction, as a trigger does.
-pub(crate) async fn start(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    source: &MemoryCaptureSource,
-    input: &str,
-) -> Result<StartedMemoryCapture, MemoryCaptureStartRefusal> {
-    let transaction = store
-        .begin_serializable_project_command_transaction(scope)
-        .await
-        .unwrap();
-    let started = super::start(
-        &transaction.client,
-        scope,
-        source,
-        input,
-        ProjectionMode::ExactRequired,
-    )
-    .await
-    .unwrap();
-    match started {
-        Ok(_) => transaction.commit().await.unwrap(),
-        Err(_) => transaction.rollback().await.unwrap(),
-    }
-    started
-}
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_background_run::claim_in_project;
+use crate::shared_tests::command_sequence_support::seed_project;
+use crate::shared_tests::memory_capture::{project, start};
+use crate::shared_tests::memory_entries::{archived_rows, as_runtime};
+use crate::shared_tests::model_gateway::{RuntimeClock, stores};
+use crate::shared_tests::project_research_binding::park_queued_runs;
 
 /// The Run of the capture as its kind and status, the capture as its source and state, the
 /// Context Assembly of its first RunStep as its Purpose, its cause, and each selected item, and
@@ -147,9 +55,7 @@ async fn started_rows(admin: &Client, started: &StartedMemoryCapture) -> Value {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_started_capture_has_its_rows_and_the_worker_claims_it_after_the_run_of_the_author() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "fd1").await;
     let started = start(&store, &scope, &source, "林舟在雨夜撑船。")
@@ -213,9 +119,7 @@ async fn a_started_capture_has_its_rows_and_the_worker_claims_it_after_the_run_o
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_refused_start_writes_no_row() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "fd3").await;
     let (other, _, other_source) = project(&store, &admin, "fd4").await;
@@ -283,9 +187,7 @@ async fn a_refused_start_writes_no_row() {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_runtime_role_cannot_change_a_capture_and_the_archive_has_its_rows() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "fd6").await;
     let other = seed_project(&store, "fd70").await;
