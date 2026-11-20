@@ -648,4 +648,3 @@ async function commitFlight(workspace: EditorReadyState,
   });
   return created as DecisionFlight;
 }
-
