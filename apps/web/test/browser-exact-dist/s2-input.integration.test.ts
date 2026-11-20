@@ -32,6 +32,7 @@ import {
   openChapterEditor,
   waitSaved,
 } from "../support/exact-dist-frame.ts";
+import { SECURITY_POLICY_REVISION } from "../../src/client-identity.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -74,7 +75,7 @@ it("consumes real assistance and Run Activity before the author continues writin
   const key = (suffix: string) => `018f0000-0000-7001-8000-00000000f8${suffix}`;
   const binding = {
     client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-    security_policy_revision: "storyos.web-security-policy.release-1.v1",
+    security_policy_revision: SECURITY_POLICY_REVISION,
   };
   const tree = await getManuscriptTree({ baseUrl, projectId, fetchImpl });
   const assistance = {

@@ -4,6 +4,7 @@ import { createProjectChallenge } from "../../../../generated/typescript/storyos
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
 import { closeApplicationFrame, openApplicationFrame } from "../support/exact-dist-frame.ts";
+import { SECURITY_POLICY_REVISION } from "../../src/client-identity.ts";
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 async function waitForProtectedReady(frame: HTMLIFrameElement): Promise<Element> {
@@ -42,7 +43,7 @@ it("a new local browser session reaches protected-ready without AI and acquires 
         title: "Prospective Novel",
         client_contract_revision:
           RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-        security_policy_revision: "storyos.web-security-policy.release-1.v1",
+        security_policy_revision: SECURITY_POLICY_REVISION,
         correlation_id: "018f0000-0000-7001-8000-000000000330",
       },
       idempotency_key: "018f0000-0000-7001-8000-000000000331",
