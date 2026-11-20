@@ -417,6 +417,7 @@ def fake_browser_vitest_root(answers, failed_gaps=(), failed_tee=False):
     """A root with scripts/browser-vitest.sh, a fake start gap, and a fake `pnpm` that plays one answer for each run.
 
     `pnpm exec` takes node_modules/.bin before the PATH, so the fake is `pnpm`. Each wait and run goes to <root>/record.
+    The answer code "no exit code" kills the shell around the fake, so the script does not get the exit code.
     The waits with a number in failed_gaps fail. With failed_tee, a fake `tee` writes its input to its file and fails.
     """
     root = Path(tempfile.mkdtemp(prefix="storyos-browser-vitest-"))
@@ -452,6 +453,10 @@ def fake_browser_vitest_root(answers, failed_gaps=(), failed_tee=False):
         "sys.stdout.flush()\n"
         "if answer[1] is None:\n"
         "    time.sleep(60)\n"
+        "if answer[1] == 'no exit code':\n"
+        "    import os, signal\n"
+        "    os.kill(os.getppid(), signal.SIGKILL)\n"
+        "    sys.exit(1)\n"
         "sys.exit(answer[1])\n")
     pnpm.chmod(0o755)
     command = ["sh", str(root / "scripts/browser-vitest.sh"), "--project", "browser-exact-dist", "a.integration.test.ts"]
@@ -478,6 +483,8 @@ class BrowserVitestTests(unittest.TestCase):
         one, two = ["gap", "run"], ["gap", "run", "gap", "run"]
         cases = {
             "no browser, then a pass": ([[NO_BROWSER, 1], [PASSED, 0]], (0, two, 1)),
+            # The event line is a full line also after an output with no final newline.
+            "no browser with no final newline, then a pass": ([[NO_BROWSER.rstrip("\n"), 1], [PASSED, 0]], (0, two, 1)),
             "no browser two times": ([[NO_BROWSER, 1], [NO_BROWSER, 1], [PASSED, 0]], (1, two, 1)),
             "a failed test": ([[FAILED_TEST, 1], [PASSED, 0]], (1, one, 0)),
             "a pass": ([[PASSED, 0], [PASSED, 0]], (0, one, 0)),
@@ -488,9 +495,10 @@ class BrowserVitestTests(unittest.TestCase):
                 code, output, record = self.browser_vitest(answers)
                 # repr, so that a failure does not write the event line as a full line in the lane log.
                 self.assertEqual((code, record, output.splitlines().count(line)), expected, repr(output))
-                # The caller gets the output of each run.
-                self.assertEqual(repr(output.replace(f"{line}\n", "")),
-                                 repr("".join(text for text, _ in answers[:len(expected[1]) // 2])))
+                # The caller gets the output of each run, and a newline before the event line when necessary.
+                first, *rest = [text for text, _ in answers[:len(expected[1]) // 2]]
+                joined = first + ("\n" if rest and not first.endswith("\n") else "") + "".join(rest)
+                self.assertEqual(repr(output.replace(f"{line}\n", "")), repr(joined))
 
     def test_a_run_whose_start_or_output_fails_fails_with_no_second_run(self):
         line = runner_module().SECOND_RUN_LINE
@@ -500,6 +508,7 @@ class BrowserVitestTests(unittest.TestCase):
                 {"answers": [[NO_BROWSER, 1], [PASSED, 0]], "failed_gaps": {2}}, ["gap", "run", "gap failed"]),
             # The output file can have both lines of a run with no browser, and still no second run starts.
             "the output is not kept": ({"answers": [[NO_BROWSER, 1], [PASSED, 0]], "failed_tee": True}, ["gap", "run"]),
+            "the exit code is not known": ({"answers": [[NO_BROWSER, "no exit code"], [PASSED, 0]]}, ["gap", "run"]),
             "no temporary directory": (
                 {"answers": [[PASSED, 0]], "before": lambda root: (root / "target/check").chmod(0o555)}, []),
         }

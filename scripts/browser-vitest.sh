@@ -28,7 +28,7 @@ run_vitest() {
   fi
   code=$(cat "$work/code" 2>/dev/null) || code=
   case $code in
-    '' | *[!0-9]*) echo "browser-vitest: the exit code of the Vitest run is not known" >&2; return 1 ;;
+    '' | *[!0-9]*) echo "browser-vitest: the exit code of the Vitest run is not known" >&2; exit 1 ;;
   esac
   return "$code"
 }
@@ -47,5 +47,6 @@ code=$?
 connected_to_no_browser || exit "$code"
 wait_for_start_gap || exit
 # The drill state is safe: the first run executed no test file, and apps/web/vitest.config.ts has no global setup.
+if [ -n "$(tail -c 1 "$work/output")" ]; then echo; fi
 echo "browser-vitest: the run connected to no browser session and ran no test, so it runs one more time"
 run_vitest "$@"
