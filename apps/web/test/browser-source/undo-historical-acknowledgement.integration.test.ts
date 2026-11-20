@@ -16,7 +16,7 @@ it("explains a historical Undo Latest Author Action acknowledgement and does not
   const scenario = createBrowserScenario();
   const chapters = [{ chapter_id: CHAPTER, title: "Chapter A", order: "1" }];
   const { fetchImpl, methods } = recordingFetch(openedChapterRoute(scenario, "2", chapters, (method, path) => {
-    if (path.endsWith("/author-actions/undo") && method === "POST") {
+    if (path === `/api/v1/projects/${PROJECT}/author-actions/undo` && method === "POST") {
       return historicalProblem("The original Undo Latest Author Action acknowledgement cannot be recovered.");
     }
     return undefined;

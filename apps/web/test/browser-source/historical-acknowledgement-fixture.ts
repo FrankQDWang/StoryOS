@@ -95,10 +95,12 @@ export function recordingFetch(route: Route): { fetchImpl: typeof fetch; methods
 /** Answers the reads of the empty listed Project with the tree `volumes`, and gives each other request to `command`. */
 export function emptyProjectRoute(volumes: Volume[], command: Route): Route {
   return (method, path) => {
-    if (path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
-    if (path === "/api/v1/projects") return jsonResponse(listedEmptyProject());
-    if (path === `/api/v1/projects/${LISTED_PROJECT}`) return jsonResponse(emptyProject());
-    if (path === `/api/v1/projects/${LISTED_PROJECT}/manuscript/tree`) return jsonResponse(tree(volumes));
+    if (method === "GET" && path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
+    if (method === "GET" && path === "/api/v1/projects") return jsonResponse(listedEmptyProject());
+    if (method === "GET" && path === `/api/v1/projects/${LISTED_PROJECT}`) return jsonResponse(emptyProject());
+    if (method === "GET" && path === `/api/v1/projects/${LISTED_PROJECT}/manuscript/tree`) {
+      return jsonResponse(tree(volumes));
+    }
     if (path === `/api/v1/projects/${LISTED_PROJECT}/anti-forgery-challenges` && method === "POST") {
       return jsonResponse(challenge());
     }
@@ -113,8 +115,8 @@ export function emptyProjectRoute(volumes: Volume[], command: Route): Route {
 export function openedChapterRoute(scenario: Scenario, treeRevision: string, chapters: Chapter[], command: Route,
   sessionRead: Record<string, string> = {}): Route {
   return (method, path) => {
-    if (path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
-    if (path === "/api/v1/projects") {
+    if (method === "GET" && path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
+    if (method === "GET" && path === "/api/v1/projects") {
       return jsonResponse({
         schema_id: "storyos.query.project-list.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000013",
@@ -127,9 +129,11 @@ export function openedChapterRoute(scenario: Scenario, treeRevision: string, cha
         }],
       });
     }
-    if (path === `/api/v1/projects/${PROJECT}`) return jsonResponse(scenario.project);
-    if (path === `/api/v1/projects/${PROJECT}/chapters/${CHAPTER}`) return jsonResponse(scenario.chapter);
-    if (path === `/api/v1/projects/${PROJECT}/manuscript/tree`) {
+    if (method === "GET" && path === `/api/v1/projects/${PROJECT}`) return jsonResponse(scenario.project);
+    if (method === "GET" && path === `/api/v1/projects/${PROJECT}/chapters/${CHAPTER}`) {
+      return jsonResponse(scenario.chapter);
+    }
+    if (method === "GET" && path === `/api/v1/projects/${PROJECT}/manuscript/tree`) {
       return jsonResponse({
         schema_id: "storyos.query.manuscript-tree.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000014",
@@ -182,7 +186,7 @@ export async function closeOpenedChapter(scenario: Scenario, openDatabases: Set<
   await deleteJournal(scenario.journalName);
 }
 
-/** Expects that the client sent the command `entry` one time, after one Command Challenge. */
+/** Expects that the client sent the command `entry` one time and asked for one Command Challenge. */
 export function expectOneCommandAndChallenge(methods: readonly string[], entry: string): void {
   expect(methods.filter((sent) => sent === entry)).toEqual([entry]);
   expect(methods.filter((sent) => sent.includes("anti-forgery-challenges"))).toHaveLength(1);

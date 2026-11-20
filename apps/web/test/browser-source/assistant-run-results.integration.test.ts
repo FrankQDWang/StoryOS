@@ -1,12 +1,11 @@
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import artifactFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-research-artifact.json";
 import { RESEARCH_SYNTHESIS_SENTENCE } from "../../src/assistant-run-outcome.ts";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
-import { inActEnvironment, seedProseRequest } from "./assistant-panel-harness.ts";
+import { inActEnvironment, openPanelHost, seedProseRequest } from "./assistant-panel-harness.ts";
 import { BLOCK, CHAPTER, OWNER, PROJECT, REVISION, jsonResponse } from "./scenario.ts";
 
 const scope = { owner_user_id: OWNER, project_id: PROJECT };
@@ -76,11 +75,9 @@ async function renderPanel(runs: readonly { run_id: string }[], stored: object) 
     throw new Error(`Unexpected request ${path}`);
   };
   const opened: string[] = [];
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
+  const host = openPanelHost();
   await act(async () => {
-    root.render(createElement(WritingAssistantPanel, {
+    host.root.render(createElement(WritingAssistantPanel, {
       collapsed: false,
       context: { scope, chapterId: CHAPTER, canSubmit: true, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto },
       onOpenedProposal: (locator) => { opened.push(locator.proposalId); },
@@ -88,7 +85,7 @@ async function renderPanel(runs: readonly { run_id: string }[], stored: object) 
     }));
   });
   for (let turn = 0; turn < 40; turn += 1) await act(async () => { await Promise.resolve(); });
-  return { host, opened, remove: async () => { await act(async () => root.unmount()); host.remove(); } };
+  return { host: host.host, opened, remove: () => host.close() };
 }
 
 /** The result lines of one exchange in their order, with the controls that go with them. */

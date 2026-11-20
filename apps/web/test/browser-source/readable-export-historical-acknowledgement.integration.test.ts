@@ -14,7 +14,7 @@ it("explains a historical human-readable export acknowledgement and does not ret
   const scenario = createBrowserScenario();
   const chapters = [{ chapter_id: CHAPTER, title: "Chapter A", order: "1" }];
   const { fetchImpl, methods } = recordingFetch(openedChapterRoute(scenario, "2", chapters, (method, path) => {
-    if (path === `/api/v1/projects/${PROJECT}/manuscript/statistics`) {
+    if (method === "GET" && path === `/api/v1/projects/${PROJECT}/manuscript/statistics`) {
       return jsonResponse({
         schema_id: "storyos.problem.v1",
         code: "projection_not_ready",

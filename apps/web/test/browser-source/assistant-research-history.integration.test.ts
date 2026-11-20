@@ -7,7 +7,7 @@ import artifactFixture from "../../../../generated/golden-wire/storyos-public-re
 import sourcesFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-research-sources.json";
 import { RESEARCH_SYNTHESIS_SENTENCE } from "../../src/assistant-run-outcome.ts";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
-import { inActEnvironment, seedProseRequest } from "./assistant-panel-harness.ts";
+import { inActEnvironment, openPanelHost, seedProseRequest } from "./assistant-panel-harness.ts";
 import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 
 const scope = { owner_user_id: OWNER, project_id: PROJECT };
@@ -37,9 +37,7 @@ function storeConversation(earlier: ReturnType<typeof synthesisRun>, current: st
 
 /** Renders the panel, and returns a function that renders it again and one that removes it. */
 async function renderPanel(fetchImpl: typeof fetch) {
-  const host = document.createElement("div");
-  document.body.append(host);
-  let root = createRoot(host);
+  const host = openPanelHost();
   const panel = () => createElement(WritingAssistantPanel, {
     collapsed: false,
     context: { scope, chapterId: CHAPTER, canSubmit: true, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto },
@@ -48,24 +46,21 @@ async function renderPanel(fetchImpl: typeof fetch) {
   const settle = async () => {
     for (let turn = 0; turn < 40; turn += 1) await act(async () => { await Promise.resolve(); });
   };
-  await act(async () => root.render(panel()));
+  await act(async () => host.root.render(panel()));
   await settle();
   return {
-    host,
+    host: host.host,
     rerender: async () => {
-      await act(async () => root.render(panel()));
+      await act(async () => host.root.render(panel()));
       await settle();
     },
     remount: async () => {
-      await act(async () => root.unmount());
-      root = createRoot(host);
-      await act(async () => root.render(panel()));
+      await act(async () => host.root.unmount());
+      host.root = createRoot(host.host);
+      await act(async () => host.root.render(panel()));
       await settle();
     },
-    remove: async () => {
-      await act(async () => root.unmount());
-      host.remove();
-    },
+    remove: () => host.close(),
   };
 }
 

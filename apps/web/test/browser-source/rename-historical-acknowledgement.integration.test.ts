@@ -17,9 +17,11 @@ import { jsonResponse } from "./scenario.ts";
 
 it("explains a historical Update Project acknowledgement and does not retry it", async () => {
   const { fetchImpl, methods } = recordingFetch((method, path) => {
-    if (path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
-    if (path === "/api/v1/projects") return jsonResponse(listedEmptyProject("2"));
-    if (path === `/api/v1/projects/${PROJECT}/anti-forgery-challenges`) return jsonResponse(challenge());
+    if (method === "GET" && path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
+    if (method === "GET" && path === "/api/v1/projects") return jsonResponse(listedEmptyProject("2"));
+    if (method === "POST" && path === `/api/v1/projects/${PROJECT}/anti-forgery-challenges`) {
+      return jsonResponse(challenge());
+    }
     if (path === `/api/v1/projects/${PROJECT}` && method === "PATCH") {
       return historicalProblem("The original Update Project acknowledgement cannot be recovered.");
     }

@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 
 import { OWNER, PROJECT } from "./scenario.ts";
 
-export interface PanelHost {
+interface PanelHost {
   readonly host: HTMLDivElement;
   /** The current root on `host`. A test that reloads the panel puts a new root here. */
   root: Root;

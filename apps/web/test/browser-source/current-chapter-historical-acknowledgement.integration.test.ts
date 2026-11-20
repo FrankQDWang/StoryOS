@@ -39,7 +39,7 @@ it("explains a historical Set Current Chapter acknowledgement and does not retry
     { chapter_id: CHAPTER_B, title: "Chapter B", order: "2" },
   ];
   const { fetchImpl, methods } = recordingFetch(openedChapterRoute(scenario, "3", chapters, (method, path) => {
-    if (path === `/api/v1/projects/${PROJECT}/chapters/${CHAPTER_B}`) {
+    if (method === "GET" && path === `/api/v1/projects/${PROJECT}/chapters/${CHAPTER_B}`) {
       return jsonResponse(chapterB);
     }
     if (path === `/api/v1/projects/${PROJECT}/current-chapter` && method === "PUT") {

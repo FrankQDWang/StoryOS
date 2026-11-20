@@ -1,5 +1,5 @@
 import { act, createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
@@ -13,7 +13,7 @@ import type { AgentRunStatus, CreateAgentRunRequest, ProjectConversationEntry, S
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
 import { applyTrustedInput } from "../support/browser-command-client.ts";
-import { seedProseRequest } from "./assistant-panel-harness.ts";
+import { openPanelHost, seedProseRequest } from "./assistant-panel-harness.ts";
 import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 
 // ADR 0094 section 10: the author opens an earlier Project Conversation in the panel and continues it.
@@ -104,18 +104,14 @@ async function openPanel(setup: Setup) {
     return jsonResponse({ ...createFixture, project_scope: scope, conversation_id: created.conversationId,
       effect: { ...createFixture.effect, run_id: created.runId, conversation_id: created.conversationId } }, 202);
   };
-  const host = document.createElement("div");
-  document.body.append(host);
-  let root: Root | undefined;
-  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const panelHost = openPanelHost();
+  const host = panelHost.host;
   const settle = async () => {
     for (let turn = 0; turn < 40; turn += 1) await act(async () => { await Promise.resolve(); });
   };
   const mount = async (requested?: string) => {
-    root = createRoot(host);
     await act(async () => {
-      root!.render(createElement(WritingAssistantPanel, {
+      panelHost.root.render(createElement(WritingAssistantPanel, {
         collapsed: false, requestedConversationId: requested,
         scheduleRefresh: (refresh) => {
           scheduled.push(refresh);
@@ -126,11 +122,7 @@ async function openPanel(setup: Setup) {
     });
     await settle();
   };
-  cleanup.push(async () => {
-    await act(async () => root?.unmount());
-    host.remove();
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
-  });
+  cleanup.push(() => panelHost.close());
   await mount(setup.requested);
   const click = async (selector: string) => {
     await act(async () => { host.querySelector<HTMLElement>(selector)!.click(); });
@@ -156,7 +148,8 @@ async function openPanel(setup: Setup) {
       await settle();
     },
     reload: async () => {
-      await act(async () => root?.unmount());
+      await act(async () => panelHost.root.unmount());
+      panelHost.root = createRoot(host);
       await mount();
     },
     list: () => {
