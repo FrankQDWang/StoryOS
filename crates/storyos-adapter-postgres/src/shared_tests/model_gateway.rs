@@ -471,15 +471,23 @@ pub(crate) async fn conversation(admin: &Client, run_id: &str) -> String {
         .get(/*idx*/ 0)
 }
 
-/// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, for each
-/// source class of `classes` the text of each of its items that the fake destination received,
-/// and with `replaced` the replaced input label.
+/// Whether [`sent_context`] gives the replaced input label of each request.
+#[derive(Clone, Copy)]
+pub(crate) enum ReplacedInputLabel {
+    Include,
+    Omit,
+}
+
+/// For each Model Attempt of the Run in the order of its creation: its role, the position of its
+/// RunStep, for each source class of `classes` the text of each of its items that the fake
+/// destination received, and with [`ReplacedInputLabel::Include`] the replaced input label.
 pub(crate) async fn sent_context(
     admin: &Client,
     run_id: &str,
     classes: &[&str],
-    replaced: bool,
+    label: ReplacedInputLabel,
 ) -> Value {
+    let replaced = matches!(label, ReplacedInputLabel::Include);
     json_of(
         admin,
         "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position)

@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::json;
 use storyos_core::{
     ContractDifference, EXA_TOOL_REGISTRATION, ToolCallRefusal, ToolRegistration,
     ToolRegistrationLifecycle,
@@ -8,6 +8,7 @@ use super::quarantine_revision;
 use crate::PostgresProjectReader;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 
 const PINNED: ToolRegistration = ToolRegistration {
     revision: "018f0000-0000-7001-8000-0000000e0f01",
@@ -91,15 +92,13 @@ async fn drift_quarantines_one_revision_once_and_a_new_revision_carries_no_autho
     let second = quarantine(&store, PINNED.revision, &later).await;
     insert(&store, &SUCCESSOR).await;
     let pinned = lifecycle(&store, PINNED.revision).await.unwrap();
-    let record: String = admin
-        .query_one(
-            "SELECT quarantine_differences::text FROM storyos.tool_registration_revisions
+    let record = json_of(
+        &admin,
+        "SELECT quarantine_differences::text FROM storyos.tool_registration_revisions
               WHERE tool_registration_revision = $1::text::uuid",
-            &[&PINNED.revision],
-        )
-        .await
-        .unwrap()
-        .get(0);
+        &[&PINNED.revision],
+    )
+    .await;
 
     assert_eq!(
         tools,
@@ -121,7 +120,7 @@ async fn drift_quarantines_one_revision_once_and_a_new_revision_carries_no_autho
     // The first drift quarantines the revision. A later drift does not change it.
     assert_eq!((first, second), (1, 0));
     assert_eq!(
-        serde_json::from_str::<Value>(&record).unwrap(),
+        record,
         json!([{"kind": "tool_removed", "tool": "web_fetch_exa"}])
     );
     assert_eq!(

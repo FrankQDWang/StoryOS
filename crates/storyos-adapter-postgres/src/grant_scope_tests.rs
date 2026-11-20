@@ -9,6 +9,7 @@ use tokio_postgres::Client;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::grant_scope::current_grant;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::RuntimeClock;
 use crate::shared_tests::model_gateway::{
     DispatchEvidence, admit_run, claim_run, dispatch_evidence, queued_run,
@@ -180,9 +181,9 @@ async fn binding_rows(
     admin: &Client,
     record: &storyos_application::ProjectAssistanceRecord,
 ) -> serde_json::Value {
-    let text: String = admin
-        .query_one(
-            "SELECT jsonb_build_array(
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(
                       (SELECT to_jsonb(row) FROM storyos.processing_destination_identities AS row
                         WHERE row.processing_destination_identity = $1::text::uuid),
                       (SELECT to_jsonb(row) FROM storyos.project_destination_grants AS row
@@ -192,17 +193,14 @@ async fn binding_rows(
                       (SELECT to_jsonb(row)
                          FROM storyos.external_contract_compatibility_decisions AS row
                         WHERE row.external_compatibility_decision = $4::text::uuid))::text",
-            &[
-                &record.processing_destination_identity,
-                &record.grant_id,
-                &record.project_model_use_binding_revision,
-                &record.external_compatibility_decision,
-            ],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    serde_json::from_str(&text).unwrap()
+        &[
+            &record.processing_destination_identity,
+            &record.grant_id,
+            &record.project_model_use_binding_revision,
+            &record.external_compatibility_decision,
+        ],
+    )
+    .await
 }
 
 /// ADR 0094, ADR 0095, and ADR 0051: a grant with the fourth scope gets new binding records with

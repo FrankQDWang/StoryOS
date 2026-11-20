@@ -6,7 +6,7 @@ use crate::shared_tests::agent_run_steering::queued;
 use crate::shared_tests::create_agent_run_skill::{fixture, set};
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::admit_selected_run;
-use crate::shared_tests::model_gateway::sent_context;
+use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
 use serde_json::{Value, json};
 use std::sync::Arc;
 use storyos_application::{ConversationSelection, ProjectScope};
@@ -48,15 +48,15 @@ pub(crate) fn catalog(packages: &[SkillPackage]) -> String {
     skill_catalog_text(&entries)
 }
 
-/// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, the
-/// text of each `skill_instruction` item, and the text of each `skill_catalog` item that the fake
-/// destination received.
+/// For each Model Attempt of the Run in the order of its creation: its role, the position of its
+/// RunStep, the text of each `skill_instruction` item, and the text of each `skill_catalog` item
+/// that the fake destination received.
 pub(crate) async fn sent(admin: &Client, run_id: &str) -> Value {
     sent_context(
         admin,
         run_id,
         &["skill_instruction", "skill_catalog"],
-        false,
+        ReplacedInputLabel::Omit,
     )
     .await
 }

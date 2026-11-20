@@ -258,20 +258,18 @@ async fn a_pass_with_only_a_conflict_sends_the_entries_and_flags_the_entry() {
     capture(&store, &admin, &scope, &source, json!([conflict(1, "甲")])).await;
     let started = run_pass(&store, &admin, &scope).await;
     // The source classes of the decision Context Assembly of the pass.
-    let classes: String = admin
-        .query_one(
-            "SELECT jsonb_path_query_array(payload, '$.selected[*].source_class')::text
+    let classes = json_of(
+        &admin,
+        "SELECT jsonb_path_query_array(payload, '$.selected[*].source_class')::text
                FROM storyos.context_assembly_manifests
               WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
-            &[&started.run_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
+        &[&started.run_id],
+    )
+    .await;
 
     assert_eq!(
         (
-            serde_json::from_str::<Value>(&classes).unwrap(),
+            classes,
             settled(&admin, &started.run_id).await,
             flag_lines(&admin, &scope).await[1].clone()
         ),

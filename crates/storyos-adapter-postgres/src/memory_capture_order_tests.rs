@@ -10,6 +10,7 @@ use tokio_postgres::Client;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_background_run::claim_in_project;
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{project, run_capture, start};
 use crate::shared_tests::memory_capture_loop::{script, settlement};
 use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_with_id};
@@ -79,15 +80,13 @@ async fn a_run_of_the_author_goes_first_and_the_capture_continues_at_the_same_ru
     )
     .await
     .unwrap();
-    let given_back = admin
-        .query_one(
-            "SELECT jsonb_build_array(status, active_decision_position::text)::text
+    let given_back = json_of(
+        &admin,
+        "SELECT jsonb_build_array(status, active_decision_position::text)::text
                FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&started.run_id],
-        )
-        .await
-        .unwrap();
-    let given_back: Value = serde_json::from_str(given_back.get(/*idx*/ 0)).unwrap();
+        &[&started.run_id],
+    )
+    .await;
     let next = claim_in_project(&store, &scope).await.unwrap();
     complete_agent_run(
         &store,

@@ -22,7 +22,7 @@ use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::write_versions;
 use crate::shared_tests::model_gateway::admit_run_in;
-use crate::shared_tests::model_gateway::sent_context;
+use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
 
 /// The Index of the two entries that `seeded` writes at the Memory revision 2.
 const INDEX: &str = "{\"type\":\"foreshadowing\"}\n\
@@ -95,7 +95,13 @@ async fn recorded(admin: &Client, run_id: &str) -> Value {
 /// text of each `memory_index` item that the fake destination received, and the replaced input
 /// label.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    sent_context(admin, run_id, &["memory_index"], true).await
+    sent_context(
+        admin,
+        run_id,
+        &["memory_index"],
+        ReplacedInputLabel::Include,
+    )
+    .await
 }
 
 /// The recorded `memory_index` item with `text`.

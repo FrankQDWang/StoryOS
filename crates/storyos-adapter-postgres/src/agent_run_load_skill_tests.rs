@@ -305,18 +305,15 @@ async fn the_summary_request_of_a_compaction_at_the_step_of_the_load_sends_the_l
     );
     // The current input of the later full input has no load item, so the load output is not a
     // part of the current input digest (ADR 0085).
-    let context = admin
-        .query_one(
-            "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
+    let context = json_of(
+        &admin,
+        "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
                FROM storyos.model_attempts
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
                 AND decision_position = 1",
-            &[&run_id],
-        )
-        .await
-        .unwrap()
-        .get::<_, String>(/*idx*/ 0);
-    let context: Value = serde_json::from_str(&context).unwrap();
+        &[&run_id],
+    )
+    .await;
     let classes: Vec<_> = context
         .as_array()
         .unwrap()

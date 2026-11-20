@@ -300,10 +300,9 @@ async fn a_compaction_after_the_loads_keeps_each_load_output_exact_and_names_no_
             .cloned()
             .collect()
     };
-    let stubs: Value = serde_json::from_str(
-        admin
-            .query_one(
-                "SELECT jsonb_agg(jsonb_build_array(record.decision_position,
+    let stubs: Value = json_of(
+        &admin,
+        "SELECT jsonb_agg(jsonb_build_array(record.decision_position,
                           (SELECT jsonb_agg(call.call_id ORDER BY stub.ordinal)
                              FROM jsonb_array_elements_text(record.stub_tool_call_ids)
                                   WITH ORDINALITY AS stub(id, ordinal)
@@ -311,13 +310,9 @@ async fn a_compaction_after_the_loads_keeps_each_load_output_exact_and_names_no_
                                ON call.tool_call_id = stub.id::uuid)))::text
                    FROM storyos.active_context_compactions AS record
                   WHERE record.run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get::<_, &str>(/*idx*/ 0),
+        &[&run_id],
     )
-    .unwrap();
+    .await;
     // The summary request sends the output of the load that waits for it. The later request and
     // each later full input send each load output in its exact form, and no call is a stub.
     assert_eq!(

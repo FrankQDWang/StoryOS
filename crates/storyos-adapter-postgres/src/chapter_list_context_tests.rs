@@ -23,7 +23,7 @@ use crate::shared_tests::command_sequence_support::issued;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::archived_rows;
-use crate::shared_tests::model_gateway::sent_context;
+use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
 /// The list of the fixture Project: one Volume with its Chapter, the Current Chapter of the Run.
@@ -33,7 +33,13 @@ const FIXTURE_LIST: &str = "{\"volume\":\"Volume A\"}\n[1,0,\"Chapter A\",\"curr
 /// text of each `chapter_list` item that the fake destination received, and the replaced input
 /// label.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    sent_context(admin, run_id, &["chapter_list"], true).await
+    sent_context(
+        admin,
+        run_id,
+        &["chapter_list"],
+        ReplacedInputLabel::Include,
+    )
+    .await
 }
 
 /// For each decision Context Assembly of the Run in RunStep order: its RunStep and its selected

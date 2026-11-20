@@ -501,18 +501,13 @@ async fn a_compaction_keeps_a_long_read_output_exact_and_names_no_read_stub() {
             ])
         })
         .collect();
-    let stubs: Value = serde_json::from_str(
-        admin
-            .query_one(
-                "SELECT jsonb_agg(jsonb_build_array(decision_position, stub_tool_call_ids))::text
+    let stubs: Value = json_of(
+        &admin,
+        "SELECT jsonb_agg(jsonb_build_array(decision_position, stub_tool_call_ids))::text
                    FROM storyos.active_context_compactions WHERE run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get::<_, &str>(/*idx*/ 0),
+        &[&run_id],
     )
-    .unwrap();
+    .await;
     // The summary request sends the read output that waits for it. The later request and each
     // later full input send the read output in its exact form, and no call is a stub.
     assert_eq!(
@@ -532,20 +527,15 @@ async fn a_compaction_keeps_a_long_read_output_exact_and_names_no_read_stub() {
     );
     // The current input of the later full input has no read item, so the read output is not a
     // part of the current input digest (ADR 0085).
-    let context: Value = serde_json::from_str(
-        &admin
-            .query_one(
-                "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
+    let context: Value = json_of(
+        &admin,
+        "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
                    FROM storyos.model_attempts
                   WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
                     AND decision_position = 3",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get::<_, String>(/*idx*/ 0),
+        &[&run_id],
     )
-    .unwrap();
+    .await;
     let classes: Vec<&str> = context
         .as_array()
         .unwrap()

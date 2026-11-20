@@ -25,6 +25,7 @@ use crate::shared_tests::command_sequence_support::{
 };
 use crate::shared_tests::create_structure::current_chapter;
 use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::set_current_chapter_authority::open_session;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -629,18 +630,15 @@ async fn compensation_rows(
     scope: &ProjectScope,
     removal_kind: &str,
 ) -> serde_json::Value {
-    let json: String = admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    json_of(
+        admin,
+        "SELECT jsonb_build_object(
                       'compensations', (SELECT count(*) FROM storyos.author_action_entries
                         WHERE project_id = $1::text::uuid AND disposition = 'compensation'),
                       'removal_receipts', (SELECT count(*) FROM storyos.domain_receipts
                         WHERE project_id = $1::text::uuid AND command_kind = $2)
                     )::text",
-            &[&scope.project_id.as_ref(), &removal_kind],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    serde_json::from_str(&json).unwrap()
+        &[&scope.project_id.as_ref(), &removal_kind],
+    )
+    .await
 }

@@ -28,6 +28,7 @@ use crate::shared_tests::agent_run_write_memory::first_index;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::{archived_rows, as_runtime, write_versions};
 use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
 
@@ -410,16 +411,14 @@ async fn a_run_with_no_memory_use_declares_no_read() {
     let run_id = admitted(&store, &scope, &chapter_id, "c2f", message, conversation).await;
     complete(&store, &admin, &scope, &run_id).await;
 
-    let declared: Value = admin
-        .query_one(
-            "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'tools')::text
+    let declared: Value = json_of(
+        &admin,
+        "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'tools')::text
                FROM storyos.model_attempts
               WHERE run_id = $1::text::uuid AND decision_position = 0",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-        .unwrap();
+        &[&run_id],
+    )
+    .await;
     assert_eq!(
         (
             declared,
