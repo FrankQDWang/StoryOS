@@ -63,6 +63,18 @@ def alive(pid):
         return False
 
 
+def send(kill, pid, number):
+    """Send the signal. Return False when the process or its group already ended (issue 1736).
+
+    macOS answers EPERM for a group whose processes all ended and are not reaped.
+    """
+    try:
+        kill(pid, number)
+        return True
+    except (ProcessLookupError, PermissionError):
+        return False
+
+
 def pids_of(command_line):
     """Return the IDs of the processes whose command line is exactly this text."""
     return [int(line.split(None, 1)[0]) for line in subprocess.run(
@@ -81,7 +93,7 @@ class StopTests(unittest.TestCase):
     def tearDown(self):
         for pid in self.watched + pids_of(self.sleep):
             if alive(pid):
-                os.kill(pid, signal.SIGKILL)
+                send(os.kill, pid, signal.SIGKILL)
 
     def wait_for_sleep(self):
         deadline = time.monotonic() + 60
@@ -176,8 +188,7 @@ class StopTests(unittest.TestCase):
         self.watched.append(int(lane_pid.read_text()))
         # Ctrl-C in a terminal sends SIGINT to each process of the foreground process group.
         end = time.monotonic() + 3
-        while time.monotonic() < end and process.poll() is None:
-            os.killpg(process.pid, signal.SIGINT)
+        while time.monotonic() < end and process.poll() is None and send(os.killpg, process.pid, signal.SIGINT):
             time.sleep(0.01)
         output, _ = process.communicate(timeout=120)
         self.assertEqual(process.returncode, 130, output)
@@ -291,7 +302,7 @@ class FunctionTests(unittest.TestCase):
         finally:
             for name in ("lane", "child"):
                 if (directory / name).exists() and alive(int((directory / name).read_text())):
-                    os.kill(int((directory / name).read_text()), signal.SIGKILL)
+                    send(os.kill, int((directory / name).read_text()), signal.SIGKILL)
         self.assertEqual(code, 1, text)
         self.assertRegex(text, r"Lane lanes-test-no-end: FAIL after \d+ s \(the lane ran longer than the time limit "
                                r"of 15 s\)")
@@ -326,7 +337,7 @@ class FunctionTests(unittest.TestCase):
                     for number, handler in handlers.items():
                         signal.signal(number, handler)
                     if lane.process.poll() is None:
-                        os.killpg(lane.process.pid, signal.SIGKILL)
+                        send(os.killpg, lane.process.pid, signal.SIGKILL)
                         lane.process.wait()
                     lane.process.stdout.close()
 
@@ -506,7 +517,7 @@ class BrowserVitestTests(unittest.TestCase):
             self.assertEqual(process.wait(timeout=30), 143)
         finally:
             if process.poll() is None:
-                os.killpg(process.pid, signal.SIGKILL)
+                send(os.killpg, process.pid, signal.SIGKILL)
         self.assertEqual(list((root / "target/check").iterdir()), [])
 
     def test_the_runner_counts_the_second_runs_of_the_script_in_the_lanes_of_its_run(self):
