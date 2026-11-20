@@ -9,12 +9,13 @@ use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::{calls, complete};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_agent_run_skill::{fixture, set};
 use crate::shared_tests::memory_capture::{park_queued_author_runs, project, run_capture, start};
 use crate::shared_tests::memory_capture_loop::{
     other_records, record, requests, script, settlement,
 };
-use crate::shared_tests::model_gateway::{admit_selected_run, queued_run_offering, stores};
+use crate::shared_tests::model_gateway::{admit_selected_run, queued_run_offering};
 
 /// The Tool Exposure of each RunStep of a capture (ADR 0094 section 5).
 pub(crate) const CAPTURE_TOOLS: [&str; 4] = [

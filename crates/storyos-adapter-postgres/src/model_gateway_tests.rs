@@ -12,8 +12,9 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::{
-    DispatchEvidence, RuntimeClock, claim_run, dispatch_evidence, queued_run, stores,
+    DispatchEvidence, RuntimeClock, claim_run, dispatch_evidence, queued_run,
 };
 
 #[derive(Clone, Debug, PartialEq)]

@@ -22,10 +22,11 @@ use crate::shared_tests::command_sequence_structure::{
     CREATE_CHAPTER, DELETE_CHAPTER, create_chapter, delete_chapter,
 };
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture_loop::{record, script};
 use crate::shared_tests::model_gateway::NoEmbeddings;
-use crate::shared_tests::model_gateway::{assisted_chapter, stores};
+use crate::shared_tests::model_gateway::assisted_chapter;
 use crate::shared_tests::project_research_binding::park_queued_runs;
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 

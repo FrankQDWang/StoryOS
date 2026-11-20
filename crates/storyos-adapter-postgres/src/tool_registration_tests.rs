@@ -7,7 +7,7 @@ use storyos_core::{
 use super::quarantine_revision;
 use crate::PostgresProjectReader;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::command_sequence_support::stores;
 
 const PINNED: ToolRegistration = ToolRegistration {
     revision: "018f0000-0000-7001-8000-0000000e0f01",

@@ -19,8 +19,9 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_acceptance::ACCEPT_PROPOSAL;
 use crate::shared_tests::command_sequence_structure::{DELETE_CHAPTER, named_call};
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::{admit_referenced_run, stores};
+use crate::shared_tests::model_gateway::admit_referenced_run;
 
 const MESSAGE: &str = "Help with this passage.";
 const EDITED: &str = "Still, ";

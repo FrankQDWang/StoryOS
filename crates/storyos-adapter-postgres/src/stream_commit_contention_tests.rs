@@ -6,7 +6,8 @@ use storyos_core::{DeploymentDestination, NativeStreamItem, StreamItemRole, Stre
 use tokio_postgres::{Client, NoTls};
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run, claim_run, queued_run, stores};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run, claim_run, queued_run};
 use crate::shared_tests::stream_commit_contention::dispatched;
 
 /// Cancels the claimed AgentRun, so that the Worker of its next claim does cancellation duties.

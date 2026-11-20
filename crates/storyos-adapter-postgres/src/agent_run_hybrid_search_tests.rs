@@ -40,9 +40,11 @@ use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
 use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::NoEmbeddings;
-use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::model_gateway::conversation;
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 use crate::shared_tests::passage_ranking::rank_passages;
 use crate::shared_tests::passage_vectors::{
     Chapter, SHORE, chapter, index, prepend, texts, vector_table_visible,
@@ -652,17 +654,6 @@ async fn a_question_vector_that_is_not_finite_gives_the_exact_term_list() {
             json!([["invalid_result", ids[0]]]),
         )
     );
-}
-
-async fn conversation(admin: &Client, run_id: &str) -> String {
-    admin
-        .query_one(
-            "SELECT conversation_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0)
 }
 
 /// ADR 0095 section 1: the author acts while the question request is in progress. An Author Edit

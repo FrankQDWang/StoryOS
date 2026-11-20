@@ -13,7 +13,7 @@ use crate::shared_tests::agent_run_propose_edit::{
 };
 use crate::shared_tests::agent_run_propose_edit_revise::Fixture;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::command_sequence_support::stores;
 
 /// The locations of the public `prose_change` of the Run.
 async fn locations(store: &PostgresProjectReader, scope: &ProjectScope, run_id: &str) -> Value {

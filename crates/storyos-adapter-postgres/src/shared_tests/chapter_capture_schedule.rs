@@ -3,9 +3,9 @@
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_read_chapter::{project, write_blocks};
 use crate::shared_tests::chapter_list_context::{head, select};
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_capture::run_capture;
 use crate::shared_tests::memory_capture_loop::{record, script};
-use crate::shared_tests::model_gateway::stores;
 use crate::shared_tests::project_research_binding::park_queued_runs;
 use serde_json::{Value, json};
 use storyos_application::{

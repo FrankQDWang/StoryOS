@@ -19,10 +19,11 @@ use crate::shared_tests::agent_run_tool_exposure::{
     advisory_stream, finish_stream, finish_then_advisory,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};
 use crate::shared_tests::grant_scope::current_grant;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run, claim_run, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run, claim_run};
 use crate::shared_tests::research_source::calls_stream;
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 

@@ -1,7 +1,7 @@
 //! The shared test support from `passage_index_work_tests.rs`.
 
 use crate::PostgresProjectReader;
-use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::project_embedding_binding::FAKE;
 use std::time::Duration;
 use storyos_adapter_fake_destination::FakeEmbeddings;

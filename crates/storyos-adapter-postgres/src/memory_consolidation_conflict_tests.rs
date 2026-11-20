@@ -9,6 +9,7 @@ use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_load_skill::calls;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{project, run_capture, start};
 use crate::shared_tests::memory_capture_loop::{record, script};
@@ -21,14 +22,13 @@ use crate::shared_tests::memory_consolidation_merge::{
 };
 use crate::shared_tests::memory_consolidation_schedule::claim_pass;
 use crate::shared_tests::memory_entries::archived_rows;
-use crate::shared_tests::model_gateway::stores;
 
 /// Each observation row of the Project as one line: the position, the kind, the title, the entry
 /// number, the reason, and the state, in the order of the captures.
 async fn observation_lines(admin: &Client, scope: &ProjectScope) -> Value {
     version_lines(
         &json_of(
-            &admin,
+            admin,
             "SELECT jsonb_agg(jsonb_build_array(item.position, item.kind, item.title,
                       item.entry_number, item.reason, item.state)
                       ORDER BY capture.started_at, item.position)::text
@@ -331,7 +331,7 @@ async fn no_pass_starts_for_conflicts_when_the_project_has_no_current_entry() {
 async fn last_versions(admin: &Client, scope: &ProjectScope) -> Value {
     version_lines(
         &json_of(
-            &admin,
+            admin,
             "SELECT jsonb_agg(jsonb_build_array(entry_number, state, title, char_length(text),
                       flag_reason) ORDER BY entry_number)::text
                FROM (SELECT DISTINCT ON (entry_number) * FROM storyos.memory_entry_versions

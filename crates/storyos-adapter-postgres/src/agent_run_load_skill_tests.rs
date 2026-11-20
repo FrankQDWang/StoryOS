@@ -13,9 +13,9 @@ use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_load_skill::{TOOLS, calls, loaded_run, record, skill_md};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::stores;
 
 /// A package whose `SKILL.md` has exactly 32,000 counted tokens, the limit of ADR 0089 section
 /// 9, with `<`, `&`, and `"` in its text.

@@ -10,8 +10,9 @@ use crate::shared_tests::agent_run_compaction_summary::{
     with_usage,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::RuntimeClock;
-use crate::shared_tests::model_gateway::{admit_run_in, claim_run, queued_run, stores};
+use crate::shared_tests::model_gateway::{admit_run_in, claim_run, queued_run};
 
 /// Settles the first AgentRun of a new Conversation, then settles one compaction request in the
 /// same Conversation, and returns the identity of the second AgentRun.

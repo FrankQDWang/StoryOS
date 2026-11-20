@@ -15,6 +15,7 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::export_work::admit_readable_export;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{project, run_capture};
@@ -24,7 +25,6 @@ use crate::shared_tests::memory_consolidation_schedule::{claim_pass, pass_due};
 use crate::shared_tests::memory_entries::write_versions;
 use crate::shared_tests::memory_work_schedule::make_due;
 use crate::shared_tests::model_gateway::NoEmbeddings;
-use crate::shared_tests::model_gateway::stores;
 
 /// Claims the due consolidation row of the Project and requires a started pass. Returns its Run.
 async fn started_pass(

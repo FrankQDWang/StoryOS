@@ -9,9 +9,10 @@ use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_background_run::claim_in_project;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_capture::{project, run_capture, start};
 use crate::shared_tests::memory_capture_loop::{script, settlement};
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_with_id, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_with_id};
 
 fn newer_id() -> String {
     uuid::Uuid::now_v7().to_string()

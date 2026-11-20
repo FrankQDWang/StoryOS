@@ -11,6 +11,7 @@ use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_load_skill::calls;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{project, run_capture};
 use crate::shared_tests::memory_consolidation::{
@@ -20,7 +21,6 @@ use crate::shared_tests::memory_consolidation_merge::{
     Seed, flag, flag_lines, merge, pass_on, seed, version_lines,
 };
 use crate::shared_tests::memory_entries::archived_rows;
-use crate::shared_tests::model_gateway::stores;
 
 /// The source class and the lines of each item of the Context Assembly of the pass `pass_id`.
 async fn input(admin: &Client, pass_id: &str) -> Vec<(String, Vec<Value>)> {

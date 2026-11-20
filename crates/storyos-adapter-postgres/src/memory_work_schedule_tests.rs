@@ -17,11 +17,12 @@ use crate::shared_tests::agent_run_retrieval::{adapter, destination, real_run};
 use crate::shared_tests::agent_run_steering::{cancellation, claim_duties, queued};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_capture::{project, run_capture};
 use crate::shared_tests::memory_capture_loop::{other_records, record, script, settlement};
 use crate::shared_tests::memory_work_schedule::{claim_due, due, make_due};
 use crate::shared_tests::model_gateway::NoEmbeddings;
-use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 
 /// The conversation of a source of a capture.
 fn conversation(source: &MemoryCaptureSource) -> &str {

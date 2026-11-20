@@ -14,6 +14,7 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_finish_rule::conversation_of;
 use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, queued, settle, steering,
 };
@@ -23,8 +24,8 @@ use crate::shared_tests::command_sequence_structure::{
     CREATE_CHAPTER, create_chapter, update_chapter,
 };
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::stores;
 use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
@@ -76,13 +77,6 @@ fn item(text: &str) -> Value {
         format!("sha256:{}", hex_sha256(text.as_bytes())),
         text
     ])
-}
-
-/// The Conversation of the Run that `prefix` admitted.
-fn conversation_of(prefix: &str) -> ConversationSelection {
-    ConversationSelection::Existing {
-        conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
-    }
 }
 
 #[tokio::test]

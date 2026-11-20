@@ -7,8 +7,9 @@ use storyos_core::HOST_FAKE_EMBEDDING_REGISTRATION;
 use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::{admit_embedding_run, stores};
+use crate::shared_tests::model_gateway::admit_embedding_run;
 use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
 use crate::shared_tests::project_research_binding::park_queued_runs;
 

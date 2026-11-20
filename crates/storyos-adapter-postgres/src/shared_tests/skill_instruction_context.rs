@@ -113,13 +113,6 @@ pub(crate) fn with_provenance(packages: &[SkillPackage], provenance: &str) -> Va
         .collect()
 }
 
-/// The Conversation of the Run that `prefix` admitted.
-pub(crate) fn conversation_of(prefix: &str) -> ConversationSelection {
-    ConversationSelection::Existing {
-        conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
-    }
-}
-
 /// Completes the first Run of a new Project of the tool loop profile, then admits one Run with
 /// `message` in `conversation` and the selection of the two fixture Skills.
 pub(crate) async fn selected_run(

@@ -11,6 +11,7 @@ use crate::shared_tests::agent_run_read_chapter::project;
 use crate::shared_tests::agent_run_write_memory::first_index;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_capture_schedule::make_chapter_due;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_capture::run_capture;
 use crate::shared_tests::memory_capture_loop::record;
 use crate::shared_tests::memory_conflict_flag_show::{listed_flags, run, write};
@@ -18,7 +19,6 @@ use crate::shared_tests::memory_consolidation::settled;
 use crate::shared_tests::memory_consolidation_conflict::conflict;
 use crate::shared_tests::memory_consolidation_merge::{flag_lines, seed};
 use crate::shared_tests::memory_consolidation_schedule::{claim_pass, pass_due};
-use crate::shared_tests::model_gateway::stores;
 
 /// The path on the fake destination. The second Block of the Chapter is the capture script of
 /// the fake model, so the Chapter capture gives a conflict item for entry 1. The pass has only

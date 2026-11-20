@@ -9,12 +9,12 @@ use tokio_postgres::Client;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_structure::{DELETE_CHAPTER, delete_chapter};
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{run_capture, start};
 use crate::shared_tests::memory_capture_loop::{record, script, settlement};
 use crate::shared_tests::memory_capture_tools::conversation_source;
 use crate::shared_tests::memory_entries::write_versions;
-use crate::shared_tests::model_gateway::stores;
 
 /// The source class and the content of each Context item of the first request of the Run.
 async fn first_request_items(admin: &Client, run_id: &str) -> Value {

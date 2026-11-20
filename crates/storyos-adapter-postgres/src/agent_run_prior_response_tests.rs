@@ -22,7 +22,8 @@ use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, queued, settle, steering,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run, stores};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
 
 /// The adapter `inner`, which also keeps the input of each Create request in the body that the
 /// tool loop wire of the Agent Plan route builds for it.

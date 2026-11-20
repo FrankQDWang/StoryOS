@@ -6,7 +6,7 @@ use storyos_core::{
 
 use crate::shared_tests::agent_run_finish_rule::{steps, tool_loop_run};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::command_sequence_support::stores;
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]

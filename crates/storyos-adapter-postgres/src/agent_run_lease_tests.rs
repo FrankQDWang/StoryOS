@@ -12,7 +12,8 @@ use crate::shared_tests::agent_run_lease::SteppedClock;
 use crate::shared_tests::agent_run_retrieval::{adapter, real_run};
 use crate::shared_tests::agent_run_tool_exposure::{advisory_stream, finish_stream};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::{claim_run, stores};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::model_gateway::claim_run;
 
 /// Serves one streamed Create. It reports the reference, then holds the response until the test
 /// releases it. A dropped release closes the stream with no terminal event. A released response

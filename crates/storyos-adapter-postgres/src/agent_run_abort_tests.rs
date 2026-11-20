@@ -9,8 +9,9 @@ use storyos_core::{AGENT_PLAN_REGISTRATION, DeploymentDestination, ModelAdapter,
 use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::RuntimeClock;
-use crate::shared_tests::model_gateway::{claim_run, queued_run, stores};
+use crate::shared_tests::model_gateway::{claim_run, queued_run};
 
 const REFERENCE: &str = "resp_c45";
 

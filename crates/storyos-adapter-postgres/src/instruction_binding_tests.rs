@@ -2,7 +2,7 @@
 //! section 2, ADR 0085, ADR 0093).
 
 use serde_json::{Value, json};
-use storyos_application::{ConversationSelection, ProjectScope};
+use storyos_application::ProjectScope;
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination,
 };
@@ -10,12 +10,14 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
+use crate::shared_tests::agent_run_finish_rule::conversation_of;
 use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, queued, settle, steering,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::{admit_run, admit_run_in, stores};
+use crate::shared_tests::model_gateway::{admit_run, admit_run_in};
 use crate::shared_tests::project_instruction::{applied, save};
 use crate::shared_tests::project_research_binding::park_queued_runs;
 
@@ -74,13 +76,6 @@ async fn sent(admin: &Client, run_id: &str) -> Value {
         &[&run_id],
     )
     .await
-}
-
-/// The Conversation of the Run that `admit_run` admitted with `prefix`.
-fn conversation_of(prefix: &str) -> ConversationSelection {
-    ConversationSelection::Existing {
-        conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
-    }
 }
 
 fn required(revision_id: &str) -> Value {

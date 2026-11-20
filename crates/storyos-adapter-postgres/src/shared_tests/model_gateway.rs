@@ -14,7 +14,7 @@ use storyos_core::{
     AssistanceAvailability, DeploymentDestination, ResearchToolOffer, SelectionReference,
     SkillPackageReference, SkillSet,
 };
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::Client;
 
 pub(crate) const AVAILABLE_BYTES: &[u8] = br#"{"availability":"available"}"#;
 
@@ -458,12 +458,13 @@ pub(crate) async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchE
     }
 }
 
-pub(crate) async fn stores() -> (PostgresProjectReader, Client) {
-    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
-    tokio::spawn(connection);
-    (PostgresProjectReader::new(runtime_url), admin)
+pub(crate) async fn conversation(admin: &Client, run_id: &str) -> String {
+    admin
+        .query_one(
+            "SELECT conversation_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0)
 }

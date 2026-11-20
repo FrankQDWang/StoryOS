@@ -15,9 +15,8 @@ use crate::shared_tests::agent_run_compaction_summary::{
 };
 use crate::shared_tests::agent_run_finish_rule::tool_loop_run;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run, stores,
-};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run, queued_run};
 
 /// An author message that asks the Host fake to compact at RunSteps 0 and 1.
 fn compact_twice() -> String {

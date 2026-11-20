@@ -8,7 +8,8 @@ use crate::shared_tests::agent_run_tool_dispatch::{
     settled_event, settled_event_after_quarantine, tool_facts, tool_run,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 
 /// Gates one to six of the search ToolCall, with no volatile identity.
 fn tool_manifest() -> Value {

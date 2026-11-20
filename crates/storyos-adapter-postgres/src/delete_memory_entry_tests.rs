@@ -12,7 +12,6 @@ use storyos_core::{
     DeleteMemoryEntryConflict, DeleteMemoryEntryNoEffect, DeleteMemoryEntryRefusal,
     MemoryWriteRefusal, TransitionOutcome,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
@@ -24,10 +23,11 @@ use crate::shared_tests::agent_run_write_memory::{first_index, memory_head, refu
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::command_sequence_support::seed_project;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::delete_memory_entry::delete;
+use crate::shared_tests::delete_memory_entry::entry_id;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::{Version, archived, write_versions};
-use crate::shared_tests::model_gateway::stores;
 
 /// The entry 1 at the version 2 and the entry 2 at the version 1, at the Memory revision 3.
 const TWO_ENTRIES: [Version<'static>; 3] = [
@@ -35,19 +35,6 @@ const TWO_ENTRIES: [Version<'static>; 3] = [
     (2, 1, 2, "current", "foreshadowing", "铜铃", "铃声。"),
     (1, 2, 3, "current", "character", "阿青", "沉默的船夫。"),
 ];
-
-/// The identity of the entry 1 of the Project of `scope`.
-async fn entry_id(admin: &Client, scope: &ProjectScope) -> String {
-    admin
-        .query_one(
-            "SELECT DISTINCT memory_entry_id::text FROM storyos.memory_entry_versions
-              WHERE project_id = $1::text::uuid AND entry_number = 1",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0)
-}
 
 /// The number of each entry that the settings page lists in the Project of `scope`.
 async fn listed(store: &PostgresProjectReader, scope: &ProjectScope) -> Vec<u64> {

@@ -16,9 +16,11 @@ use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, queued, settle, steering,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::model_gateway::conversation;
 use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_referenced_run, admit_run_in, claim_run, stores,
+    RuntimeClock, admit_referenced_run, admit_run_in, claim_run,
 };
 
 async fn complete(
@@ -71,17 +73,6 @@ async fn requests(admin: &Client, run_id: &str) -> Vec<Value> {
         .iter()
         .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
         .collect()
-}
-
-async fn conversation(admin: &Client, run_id: &str) -> String {
-    admin
-        .query_one(
-            "SELECT conversation_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0)
 }
 
 /// Each block that a Proposal of the Run reserves.

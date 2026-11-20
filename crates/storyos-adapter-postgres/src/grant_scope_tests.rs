@@ -7,10 +7,11 @@ use storyos_core::DeploymentDestination;
 use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::grant_scope::current_grant;
 use crate::shared_tests::model_gateway::RuntimeClock;
 use crate::shared_tests::model_gateway::{
-    DispatchEvidence, admit_run, claim_run, dispatch_evidence, queued_run, stores,
+    DispatchEvidence, admit_run, claim_run, dispatch_evidence, queued_run,
 };
 
 const OUTSIDE_GRANT: &str =

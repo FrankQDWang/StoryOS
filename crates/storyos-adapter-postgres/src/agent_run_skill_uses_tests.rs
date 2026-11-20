@@ -6,8 +6,9 @@ use storyos_core::{SKILL_MD_PATH, SkillFileInput, SkillUse};
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_steering::queued;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_agent_run_skill::{fixture, package, set};
-use crate::shared_tests::model_gateway::{admit_selected_run, stores};
+use crate::shared_tests::model_gateway::admit_selected_run;
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]

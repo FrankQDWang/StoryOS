@@ -5,8 +5,9 @@ use crate::shared_tests::agent_run_retrieval::destination;
 use crate::shared_tests::agent_run_tool_dispatch::{
     Hooked, exa_tools, mcp_replies, point_mcp, reply,
 };
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
+    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
 };
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;

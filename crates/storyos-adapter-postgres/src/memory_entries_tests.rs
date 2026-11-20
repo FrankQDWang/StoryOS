@@ -7,8 +7,8 @@ use storyos_core::{MemoryEntryType, MemoryIndexEntry};
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::seed_project;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_entries::{archived, as_runtime, write_versions};
-use crate::shared_tests::model_gateway::stores;
 
 /// The grants of ADR 0094 section 3, and the Scope of a read: two Projects of one User each read
 /// only their own entries, and a read in the Scope of one Project sees no row of the other.

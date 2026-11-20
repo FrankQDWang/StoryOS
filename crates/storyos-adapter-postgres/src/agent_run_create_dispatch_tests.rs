@@ -8,8 +8,9 @@ use storyos_core::AgentRunStatus;
 use crate::shared_tests::agent_run_retrieval::{adapter, destination, real_run};
 use crate::shared_tests::agent_run_tool_exposure::{finish_stream, sse};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 use crate::shared_tests::research_source::calls_stream;
 
 /// A native rejection of the Create, before any stream.

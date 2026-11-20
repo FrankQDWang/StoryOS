@@ -25,8 +25,9 @@ use crate::shared_tests::agent_run_tool_exposure::advisory_stream;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_agent_run::CANCEL_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 use crate::shared_tests::research_artifact::{Reply, computed, tagged};
 use crate::shared_tests::research_source::{SEARCH_TEXT, calls_stream};
 

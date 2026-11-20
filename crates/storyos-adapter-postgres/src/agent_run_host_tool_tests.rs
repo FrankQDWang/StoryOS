@@ -12,9 +12,10 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run, queued_run_offering, stores,
+    RuntimeClock, admit_run_in, claim_run, queued_run, queued_run_offering,
 };
 
 /// The `tool_result` projection of an empty result (ADR 0085).

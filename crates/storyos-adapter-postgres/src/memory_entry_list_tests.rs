@@ -16,8 +16,8 @@ use crate::shared_tests::agent_run_steering::queued;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_structure::titled_chapter;
 use crate::shared_tests::command_sequence_support::seed_project;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::delete_structure::settle_delete_chapter;
-use crate::shared_tests::model_gateway::stores;
 
 /// Writes each version of `rows` in the Project of `scope` with SQL, and moves the head of the
 /// Project. A row is one line of the number, the version, the Memory revision, the state, the

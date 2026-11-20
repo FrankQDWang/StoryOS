@@ -15,8 +15,9 @@ use crate::shared_tests::agent_run_tool_dispatch::{
 };
 use crate::shared_tests::agent_run_tool_exposure::{advisory_stream, finish_stream, host_exposure};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
+    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
 };
 use crate::shared_tests::project_research_binding::park_queued_runs;
 

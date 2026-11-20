@@ -22,8 +22,9 @@ use crate::shared_tests::command_sequence_proposal_decision::{
     REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL,
 };
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
+    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
 };
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 

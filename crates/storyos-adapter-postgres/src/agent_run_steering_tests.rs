@@ -24,8 +24,9 @@ use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::issued;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_referenced_run, admit_run_in, claim_run, queued_run_offering, stores,
+    RuntimeClock, admit_referenced_run, admit_run_in, claim_run, queued_run_offering,
 };
 
 /// The status of the Run, and each steering input as its position, its text, and whether a

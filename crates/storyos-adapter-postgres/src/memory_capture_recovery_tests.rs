@@ -17,9 +17,10 @@ use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::replace_text;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_capture::{project, run_capture, start};
 use crate::shared_tests::memory_capture_loop::{record, script, settlement};
-use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 
 /// What the destination does with the first create of one RunStep of a capture.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

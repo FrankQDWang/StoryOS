@@ -25,8 +25,9 @@ use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};
 use crate::shared_tests::agent_run_write_memory::{first_index, memory_head, refused, versions};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::memory_entries::{archived, write_versions};
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
 
 /// The fake script line of one `write_memory` call.
 fn script(action: &str, arguments: &Value) -> String {

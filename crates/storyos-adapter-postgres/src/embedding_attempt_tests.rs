@@ -21,9 +21,9 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::NoEmbeddings;
-use crate::shared_tests::model_gateway::stores;
 use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
 use crate::shared_tests::project_research_binding::park_queued_runs;
 

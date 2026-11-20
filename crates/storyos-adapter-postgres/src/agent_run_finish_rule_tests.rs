@@ -17,8 +17,9 @@ use crate::shared_tests::agent_run_finish_rule::{
     calls, complete, conversation_of, steps, tool_loop_run,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
+    RuntimeClock, admit_run_in, claim_run, queued_run_offering,
 };
 
 #[tokio::test]

@@ -21,8 +21,9 @@ use crate::shared_tests::agent_run_tool_dispatch::{
 use crate::shared_tests::agent_run_tool_exposure::{advisory_stream, finish_stream};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_proposal_decision::REJECT_PROPOSAL_OPERATIONS;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::command_sequence_support::{issued, seed_project};
-use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run, stores};
+use crate::shared_tests::model_gateway::{RuntimeClock, admit_run_in, claim_run};
 use crate::shared_tests::project_archive_build::{export_command, zip_store_files};
 use crate::shared_tests::research_artifact::{Reply, computed, tagged};
 use crate::shared_tests::research_source::{SEARCH_TEXT, calls_stream, calls_stream_in};

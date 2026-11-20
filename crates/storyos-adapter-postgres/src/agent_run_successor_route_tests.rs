@@ -19,8 +19,9 @@ use crate::shared_tests::agent_run_tool_exposure::{
     advisory_stream, finish_stream, function_call_stream,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::model_gateway::RuntimeClock;
-use crate::shared_tests::model_gateway::{claim_run, queued_run, stores};
+use crate::shared_tests::model_gateway::{claim_run, queued_run};
 
 /// A stream that reports `reference` and a function call item, and then ends.
 fn tool_stream(reference: &str) -> String {

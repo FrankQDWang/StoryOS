@@ -14,7 +14,7 @@ use crate::shared_tests::agent_run_read_chapter::{
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::{admitted, head, replace_text, select};
-use crate::shared_tests::model_gateway::stores;
+use crate::shared_tests::command_sequence_support::stores;
 
 const NO_MATCH: &str = "No Block of the manuscript has this exact text, and this is not a failure.";
 

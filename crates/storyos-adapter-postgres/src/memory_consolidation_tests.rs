@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 use storyos_application::MemoryCaptureSource;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::project;
 use crate::shared_tests::memory_capture_loop::requests;
@@ -13,7 +14,6 @@ use crate::shared_tests::memory_consolidation::{
     capture, create, delete, guarded, run_pass, scripted, settled, update, versions,
 };
 use crate::shared_tests::memory_entries::{archived_rows, write_versions};
-use crate::shared_tests::model_gateway::stores;
 
 /// A started pass pins the Memory revision and has one RunStep whose Context Assembly holds the
 /// current entries and the waiting observations. Its one request requires the one output Tool, and
@@ -443,7 +443,7 @@ async fn the_archive_holds_the_passes_and_the_conversation_memory_settings() {
     let stored = |sql: &'static str| {
         let admin = &admin;
         let project = scope.project_id.as_ref().to_owned();
-        async move { json_of(&admin, sql, &[&project]).await }
+        async move { json_of(admin, sql, &[&project]).await }
     };
     let stored_passes = stored(
         "SELECT jsonb_agg(jsonb_build_array(pass_id, run_id, outcome) ORDER BY pass_id)::text
