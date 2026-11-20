@@ -4,7 +4,7 @@
 
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, MemoryCaptureSource, MemoryCaptureStartRefusal,
-    ProjectReadError, ProjectScope, StartedMemoryCapture,
+    ProjectAssistanceRecord, ProjectReadError, ProjectScope, StartedMemoryCapture,
 };
 use storyos_core::{
     AgentRunKind, AssistanceAvailability, CaptureAdmissionFacts, CaptureRefusal,
@@ -19,17 +19,20 @@ use crate::agent_run_work::complete_database_error;
 use crate::read_error;
 use crate::update_project_assistance::read_assistance_record;
 
-/// Pins the current Model Use Binding, its grant, and its Model Registration, and writes the
-/// queued Run, the capture, and the first RunStep. A refused start writes no row. The capture of a
-/// Conversation records its current Conversation Memory Settings revision. The input item has
-/// `projection_mode`.
-pub(crate) async fn start(
+/// The facts of the admission of a background Run.
+pub(crate) struct BackgroundAdmission<'a> {
+    pub(crate) binding: bool,
+    pub(crate) assistance_available: bool,
+    pub(crate) grant_scope: Option<&'a str>,
+}
+
+/// The current Project Assistance record when `admit` admits a background Run over it, else the
+/// refusal.
+pub(crate) async fn admitted_assistance(
     client: &Client,
     scope: &ProjectScope,
-    source: &MemoryCaptureSource,
-    input: &str,
-    projection_mode: ProjectionMode,
-) -> Result<Result<StartedMemoryCapture, MemoryCaptureStartRefusal>, ProjectReadError> {
+    admit: impl FnOnce(BackgroundAdmission<'_>) -> Result<(), CaptureRefusal>,
+) -> Result<Result<ProjectAssistanceRecord, CaptureRefusal>, ProjectReadError> {
     let assistance = read_assistance_record(client, scope).await?;
     let grant_scope: Option<String> = match &assistance {
         Some(record) => client
@@ -48,26 +51,30 @@ pub(crate) async fn start(
             .and_then(|row| row.get(/*idx*/ 0)),
         None => None,
     };
-    let facts = CaptureAdmissionFacts {
+    let facts = BackgroundAdmission {
         binding: assistance.is_some(),
         assistance_available: assistance
             .as_ref()
             .is_some_and(|record| record.availability == AssistanceAvailability::Available),
         grant_scope: grant_scope.as_deref(),
-        input,
     };
-    let assistance = match (storyos_core::admit_memory_capture(&facts), assistance) {
-        (Ok(()), Some(assistance)) => assistance,
-        (Err(refusal), _) => return Ok(Err(MemoryCaptureStartRefusal::Admission(refusal))),
-        (Ok(()), None) => {
-            let refusal = CaptureRefusal::NoModelUseBinding;
-            return Ok(Err(MemoryCaptureStartRefusal::Admission(refusal)));
-        }
-    };
-    let run_id = Uuid::now_v7().to_string();
-    let capture_id = Uuid::now_v7().to_string();
-    // Background work writes no grant and no binding: the Run pins the current ones. The first
-    // Run of the author made the Agent of the Project.
+    Ok(match (admit(facts), assistance) {
+        (Ok(()), Some(assistance)) => Ok(assistance),
+        (Err(refusal), _) => Err(refusal),
+        (Ok(()), None) => Err(CaptureRefusal::NoModelUseBinding),
+    })
+}
+
+/// Writes the queued Run `run_id` of `kind`. Background work writes no grant and no binding: the
+/// Run pins the current ones of `assistance`. The first Run of the author made the Agent of the
+/// Project.
+pub(crate) async fn insert_background_run(
+    client: &Client,
+    scope: &ProjectScope,
+    run_id: &str,
+    assistance: &ProjectAssistanceRecord,
+    kind: AgentRunKind,
+) -> Result<(), ProjectReadError> {
     client
         .execute(
             "INSERT INTO storyos.agent_runs
@@ -84,11 +91,48 @@ pub(crate) async fn start(
                 &assistance.grant_id,
                 &assistance.project_model_use_binding_revision,
                 &assistance.model_registration_revision,
-                &AgentRunKind::MemoryCapture.name(),
+                &kind.name(),
             ],
         )
         .await
         .map_err(read_error)?;
+    Ok(())
+}
+
+/// Pins the current Model Use Binding, its grant, and its Model Registration, and writes the
+/// queued Run, the capture, and the first RunStep. A refused start writes no row. The capture of a
+/// Conversation records its current Conversation Memory Settings revision. The input item has
+/// `projection_mode`.
+pub(crate) async fn start(
+    client: &Client,
+    scope: &ProjectScope,
+    source: &MemoryCaptureSource,
+    input: &str,
+    projection_mode: ProjectionMode,
+) -> Result<Result<StartedMemoryCapture, MemoryCaptureStartRefusal>, ProjectReadError> {
+    let admission = admitted_assistance(client, scope, |facts| {
+        storyos_core::admit_memory_capture(&CaptureAdmissionFacts {
+            binding: facts.binding,
+            assistance_available: facts.assistance_available,
+            grant_scope: facts.grant_scope,
+            input,
+        })
+    })
+    .await?;
+    let assistance = match admission {
+        Ok(assistance) => assistance,
+        Err(refusal) => return Ok(Err(MemoryCaptureStartRefusal::Admission(refusal))),
+    };
+    let run_id = Uuid::now_v7().to_string();
+    let capture_id = Uuid::now_v7().to_string();
+    insert_background_run(
+        client,
+        scope,
+        &run_id,
+        &assistance,
+        AgentRunKind::MemoryCapture,
+    )
+    .await?;
     let (conversation, first, last, chapter, revision) = match source {
         MemoryCaptureSource::Conversation {
             conversation_id: c,
