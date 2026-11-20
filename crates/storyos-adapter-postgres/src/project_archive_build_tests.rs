@@ -1,12 +1,11 @@
 use storyos_application::{
     ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, AuthorCommandAdmissionIds,
     EditorClientBinding, EditorSessionId, ExportProjectArchiveInput, IssueProjectCommandChallenge,
-    OpenEditorSession, PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE,
-    PROJECT_EXPORT_REQUEST_SCHEMA, PROJECT_EXPORT_ROUTE, ProjectCommandChallengeBinding,
-    ProjectCommandEnvelope, ProjectId, ProjectScope, RequiresReconfirmationApplyAuthorEdit,
-    ResolveApplyAuthorEditOutcome, UserId, VerifiedExportArchive, claim_next_archive_export,
-    complete_archive_export, create_editor_session, get_apply_author_edit_outcome,
-    get_verified_export_archive, issue_project_command_challenge,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectId,
+    ProjectScope, RequiresReconfirmationApplyAuthorEdit, ResolveApplyAuthorEditOutcome, UserId,
+    VerifiedExportArchive, claim_next_archive_export, complete_archive_export,
+    create_editor_session, get_apply_author_edit_outcome, get_verified_export_archive,
+    issue_project_command_challenge,
 };
 use storyos_contracts::CommandKind;
 use storyos_core::PROJECT_EXPORT_TABLES;
@@ -15,6 +14,10 @@ use tokio_postgres::NoTls;
 use crate::PostgresProjectReader;
 use crate::author_edit::AuthorEditFault;
 use crate::author_edit::tests::{AUTHOR_EDIT_TEST_LOCK, author_command, binding};
+use crate::export_work::tests::{
+    PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE, PROJECT_EXPORT_REQUEST_SCHEMA,
+    PROJECT_EXPORT_ROUTE,
+};
 
 const USER: &str = "018f0000-0000-7001-8000-000000000001";
 const PROJECT: &str = "018f0000-0000-7001-8000-000000000002";

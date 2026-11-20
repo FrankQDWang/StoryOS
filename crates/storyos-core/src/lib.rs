@@ -153,7 +153,7 @@ pub use compact_active_context::{
     SummaryObservation, active_context_input_digest, compaction_assembly_record, compaction_due,
     compaction_requested, compaction_threshold, conversation_too_long, decide_compaction_install,
     decision_request_kind, later_request_record, later_request_too_long, next_compaction_step,
-    requests_active_compaction, stage_compaction, summary_fits_item, summary_text,
+    stage_compaction, summary_fits_item, summary_text,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput, PriorInput,
@@ -264,13 +264,12 @@ pub use memory_delete_marks::{
 };
 pub use memory_entry::{
     MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference,
-    MemorySourceReferenceRead, memory_revision_pin, read_memory_source_references,
+    memory_revision_pin,
 };
 pub use memory_index::{
     MEMORY_INDEX_MAX_ENTRIES, MEMORY_INDEX_TOKEN_LIMIT, MemoryIndexEntry, assemble_memory_index,
     memory_index_text,
 };
-pub use memory_operation_decision::decide_memory_operations;
 pub use memory_prune::{MEMORY_UNUSED_AFTER_DAYS, memory_entry_unused};
 pub use memory_work_schedule::{
     CONSOLIDATION_INTERVAL, CONVERSATION_QUIET_TIME, ConsolidationFacts, ConsolidationSkip,
@@ -323,7 +322,6 @@ pub use project_archive::{
     PROJECT_EXPORT_ARCHIVE_PROFILE, PROJECT_EXPORT_TABLES, ProjectArchiveBuildRefusal,
     ProjectArchiveRootFacts, build_project_archive, canonical_json, classify_export_record,
     hex_sha256, package_verified_project_archive_zip, require_delivered_families,
-    verify_entry_digest,
 };
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
@@ -396,8 +394,8 @@ pub use retrieve_original_result::{
     decide_original_result_retrieval,
 };
 pub use revision_comparison::{
-    ExactRevisionTexts, RangeMapping, ReplacementSpan, RevisionComparison,
-    RevisionComparisonAccess, inspect_revision_comparison, map_unchanged_range, utf16_slice,
+    ExactRevisionTexts, ReplacementSpan, RevisionComparison, RevisionComparisonAccess,
+    inspect_revision_comparison,
 };
 pub use run_result::{RunCallPosition, run_results};
 pub use search_manuscript::{
@@ -728,18 +726,6 @@ fn apply_author_edit_body(
             }
         }
     }
-}
-
-/// Replace one UTF-16 range and keep the remainder of the body.
-pub fn splice_utf16_range(
-    body: &str,
-    from: u32,
-    to: u32,
-    text: &str,
-) -> Result<String, AuthorEditRefusal> {
-    let mut next = body.to_owned();
-    replace_checked_utf16_range(&mut next, from, to, text)?;
-    Ok(next)
 }
 
 pub(crate) fn replace_checked_utf16_range(

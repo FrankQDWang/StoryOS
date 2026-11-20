@@ -6,7 +6,7 @@ use super::{
     CompactionTrigger, HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER,
     StagedCompaction, SummaryObservation, active_context_input_digest, compaction_due,
     compaction_threshold, conversation_too_long, decide_compaction_install, later_request_record,
-    next_compaction_step, requests_active_compaction, stage_compaction,
+    next_compaction_step, stage_compaction,
 };
 
 fn facts(
@@ -22,12 +22,6 @@ fn facts(
         current_input_digest: current_input_digest.to_owned(),
         summary_within_item_limit: true,
     }
-}
-
-#[test]
-fn ordinary_assistance_does_not_request_active_compaction() {
-    assert!(requests_active_compaction(ACTIVE_COMPACTION_REQUEST_PREFIX));
-    assert!(!requests_active_compaction("Help with this passage."));
 }
 
 #[test]

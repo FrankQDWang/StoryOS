@@ -7,14 +7,15 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ChapterId, ClaimedMemoryWork, CreateChapterInput, DeleteChapterInput, DiagnosticField,
-    EditorSessionId, EditorSessionStore, MemoryCaptureSource, MemoryCaptureStore,
-    MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource, NoContractFaults, ProjectScope,
+    EditorSessionId, EditorSessionStore, MemoryCaptureSource, MemoryWorkOutcome,
+    MemoryWorkScheduleStore, MemoryWorkSource, NoContractFaults, ProjectScope,
     StartedMemoryCapture, complete_agent_run,
 };
 use storyos_core::{CreateChapterPlacement, TransitionOutcome};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
+use crate::agent_run_dispatch::tests::NoEmbeddings;
 use crate::agent_run_dispatch::tests::{assisted_chapter, stores};
 use crate::agent_run_read_chapter::tests::{project, write_blocks};
 use crate::agent_run_steering::tests::{cancellation, claim_duties, queued};
@@ -150,10 +151,9 @@ impl Fixture {
             revision_id: head(&self.admin, chapter_id).await.0,
         };
         let input = script(&[record(json!([]))]);
-        let started = self
-            .store
-            .start_memory_capture(&self.scope, &source, &input);
-        started.await.unwrap().unwrap()
+        crate::memory_capture::tests::start(&self.store, &self.scope, &source, &input)
+            .await
+            .unwrap()
     }
 
     async fn run_capture(&self, started: &StartedMemoryCapture) {
@@ -404,7 +404,7 @@ async fn three_due_chapters_start_in_chapter_order_at_the_rate_of_the_project() 
         adapter: FakeDestination,
         observer: NoContractFaults,
         tools: storyos_application::NoToolDestination,
-        embeddings: storyos_application::NoEmbeddingDestination,
+        embeddings: NoEmbeddings,
     };
     // A step can claim work that other tests left. The test records the state of its Project
     // only when a capture starts.

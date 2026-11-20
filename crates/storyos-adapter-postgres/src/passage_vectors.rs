@@ -21,24 +21,6 @@ pub(crate) fn vector_text(embedding: &[f32]) -> String {
 }
 
 impl PassageVectorStore for PostgresProjectReader {
-    async fn vector_store_available(&self, scope: &ProjectScope) -> Result<bool, ProjectReadError> {
-        let transaction = self
-            .begin_serializable_project_command_transaction(scope)
-            .await
-            .map_err(read_error)?;
-        let available: bool = transaction
-            .client
-            .query_one(
-                "SELECT to_regclass('storyos.passage_vectors') IS NOT NULL",
-                &[],
-            )
-            .await
-            .map_err(read_error)?
-            .get(/*idx*/ 0);
-        transaction.commit().await.map_err(read_error)?;
-        Ok(available)
-    }
-
     async fn read_passage_index_facts(
         &self,
         scope: &ProjectScope,
@@ -90,38 +72,6 @@ impl PassageVectorStore for PostgresProjectReader {
             .collect();
         transaction.commit().await.map_err(read_error)?;
         Ok(PassageIndexFacts { chapter, stored })
-    }
-
-    async fn remove_passage_vectors(
-        &self,
-        scope: &ProjectScope,
-        chapter_id: &str,
-        keys: &[PassageVectorKey],
-    ) -> Result<u64, ProjectReadError> {
-        if keys.is_empty() {
-            return Ok(0);
-        }
-        let transaction = self
-            .begin_serializable_project_command_transaction(scope)
-            .await
-            .map_err(read_error)?;
-        let removed = delete_passage_vectors(&transaction.client, scope, chapter_id, keys).await?;
-        transaction.commit().await.map_err(read_error)?;
-        Ok(removed)
-    }
-
-    async fn write_passage_vector(
-        &self,
-        scope: &ProjectScope,
-        row: &PassageVectorRow<'_>,
-    ) -> Result<(), ProjectReadError> {
-        let transaction = self
-            .begin_serializable_project_command_transaction(scope)
-            .await
-            .map_err(read_error)?;
-        insert_passage_vector(&transaction.client, scope, row).await?;
-        transaction.commit().await.map_err(read_error)?;
-        Ok(())
     }
 }
 

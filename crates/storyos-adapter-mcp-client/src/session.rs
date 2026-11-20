@@ -109,7 +109,6 @@ pub(crate) async fn run(
     url: &str,
     credential: &ResolvedCredential,
     request: &McpRequest,
-    call_body: Option<&str>,
     timeout: Duration,
 ) -> McpObservation {
     let Ok(client) = reqwest::Client::builder()
@@ -207,15 +206,12 @@ pub(crate) async fn run(
             };
             match record.check(registration) {
                 ContractCheck::Drift(differences) => McpObservation::Drift(differences),
-                // The prepared body is the Wire Payload Projection of the claim.
-                ContractCheck::Unchanged | ContractCheck::ProvenanceChange => match call_body {
-                    Some(body) => session.call_exact(body).await,
-                    None => {
-                        session
-                            .call_exact(&dispatch_call_body(tool, arguments))
-                            .await
-                    }
-                },
+                // `prepare` made the Wire Payload Projection of the claim from the same body.
+                ContractCheck::Unchanged | ContractCheck::ProvenanceChange => {
+                    session
+                        .call_exact(&dispatch_call_body(tool, arguments))
+                        .await
+                }
             }
         }
     }

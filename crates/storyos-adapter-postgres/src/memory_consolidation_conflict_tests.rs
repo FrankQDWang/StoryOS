@@ -3,7 +3,7 @@
 //! lead of these tests is `79`.
 
 use serde_json::{Value, json};
-use storyos_application::{MemoryConsolidationStore, MemoryWorkOutcome, ProjectScope};
+use storyos_application::{MemoryWorkOutcome, ProjectScope};
 use storyos_core::ConsolidationSkip;
 use tokio_postgres::Client;
 
@@ -186,10 +186,8 @@ async fn the_next_pass_that_is_not_stale_flags_each_current_entry_of_a_conflict(
     capture(&store, &admin, &scope, &source, conflicts).await;
     let script = json!([scripted("脚本", &[flag(1, "模型")])]);
     capture(&store, &admin, &scope, &source, script).await;
-    let stale = store
-        .start_memory_consolidation(&scope)
+    let stale = crate::memory_consolidation::tests::start_pass(&store, &scope)
         .await
-        .unwrap()
         .unwrap();
     let id = entry_id(&admin, &scope, 2).await;
     let deleted = crate::delete_memory_entry::tests::delete(&store, &scope, 0x79fa, &id, 1).await;

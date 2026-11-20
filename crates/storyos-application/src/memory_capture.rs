@@ -1,10 +1,5 @@
-//! The start port of a capture (ADR 0094 section 5). The triggers of S7-D3e and S7-D5 call it
-//! after a Run of the author in the Project completed. The store pins the current Model Use
+//! The types of the start of a capture (ADR 0094 section 5). The store pins the current Model Use
 //! Binding, the grant, and the Model Registration of the Project, and Core decides the admission.
-
-use std::future::Future;
-
-use crate::{ProjectReadError, ProjectScope};
 
 /// The source of one capture.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -36,18 +31,4 @@ pub enum MemoryCaptureStartRefusal {
     Admission(storyos_core::CaptureRefusal),
     /// The source is not in the Project Scope.
     SourceNotFound,
-}
-
-/// The store port of the start of a capture (ADR 0094 section 5). A trigger calls it after a
-/// Run of the author in the Project completed.
-pub trait MemoryCaptureStore: Sync {
-    /// Starts one capture of `source` with the input text `input` in one transaction.
-    fn start_memory_capture(
-        &self,
-        scope: &ProjectScope,
-        source: &MemoryCaptureSource,
-        input: &str,
-    ) -> impl Future<
-        Output = Result<Result<StartedMemoryCapture, MemoryCaptureStartRefusal>, ProjectReadError>,
-    > + Send;
 }

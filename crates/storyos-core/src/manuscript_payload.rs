@@ -59,7 +59,6 @@ pub enum VersionedTargetOwnership {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BlockReservation {
-    Present,
     Absent,
 }
 

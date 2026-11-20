@@ -246,7 +246,6 @@ pub use storage_activation::{
 pub use storage_activation_proof::{
     StorageActivationProofError, require_release1_storage_activation_proof,
 };
-pub use tool_registration::QuarantineOutcome;
 
 /// Whether `url` is a PostgreSQL connection string that the client can parse. A binary checks
 /// it at startup, before storage activation (ADR 0050).

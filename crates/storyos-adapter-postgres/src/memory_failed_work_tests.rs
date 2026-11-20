@@ -5,9 +5,9 @@
 use serde_json::json;
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AuthorEditSettlementEffect, CreatePurpose, DestinationRequest, MemoryConsolidationStore,
-    ModelProviderAdapter, ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal,
-    PreparedRequest, ProjectScope, complete_agent_run,
+    AuthorEditSettlementEffect, CreatePurpose, DestinationRequest, ModelProviderAdapter,
+    ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
+    ProjectScope, complete_agent_run,
 };
 use tokio_postgres::Client;
 
@@ -122,10 +122,8 @@ async fn with_failed_memory_work_an_edit_commits_and_a_run_has_the_index_of_befo
         .await
         .unwrap();
     complete_rejected(&admin, &scope, &failed.run_id).await;
-    let pass = store
-        .start_memory_consolidation(&scope)
+    let pass = crate::memory_consolidation::tests::start_pass(&store, &scope)
         .await
-        .unwrap()
         .unwrap();
     complete_rejected(&admin, &scope, &pass.run_id).await;
     let edit = replace_text(

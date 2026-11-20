@@ -5,9 +5,7 @@
 
 use std::collections::BTreeSet;
 
-use storyos_application::{
-    PassageRankingFacts, PassageRankingStore, ProjectReadError, ProjectScope, QuestionVector,
-};
+use storyos_application::{PassageRankingFacts, ProjectReadError, ProjectScope, QuestionVector};
 use storyos_core::{
     NearestPassage, PASSAGE_CUT_REVISION, PASSAGE_LIST_LIMIT, RankingBlock, RankingChapter,
     current_passages,
@@ -16,7 +14,7 @@ use tokio_postgres::GenericClient;
 
 use crate::manuscript_search::{LiveChapterReadExtent, read_live_chapter_blocks};
 use crate::passage_vectors::vector_text;
-use crate::{PostgresProjectReader, read_error, set_scope};
+use crate::{read_error, set_scope};
 
 /// The nearest vector rows of the current passages `$3`/`$4` (Chapter, digest) of the Project, for
 /// the Registration `$5` and the cut revision `$6`, by the cosine distance to `$7`, at most `$8`.
@@ -33,28 +31,6 @@ pub(crate) const NEAREST_PASSAGES_SQL: &str =
       ORDER BY vector.embedding OPERATOR(extensions.<=>) $7::text::extensions.vector,
                vector.chapter_id, vector.passage_digest
       LIMIT $8";
-
-impl PassageRankingStore for PostgresProjectReader {
-    async fn read_passage_ranking_facts(
-        &self,
-        scope: &ProjectScope,
-        question: Option<QuestionVector<'_>>,
-    ) -> Result<Option<PassageRankingFacts>, ProjectReadError> {
-        let client = self.connect().await?;
-        client
-            .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-            .await
-            .map_err(read_error)?;
-        let outcome = read_facts(&*client, scope, question).await;
-        match &outcome {
-            Ok(_) => client.batch_execute("COMMIT").await.map_err(read_error)?,
-            Err(_) => {
-                let _rollback = client.batch_execute("ROLLBACK").await;
-            }
-        }
-        outcome
-    }
-}
 
 /// Reads the facts of one ranking with `client`, in the transaction of the caller.
 pub(crate) async fn read_facts(
@@ -139,4 +115,4 @@ pub(crate) async fn read_facts(
 
 #[cfg(test)]
 #[path = "passage_ranking_tests.rs"]
-mod tests;
+pub(crate) mod tests;

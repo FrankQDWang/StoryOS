@@ -11,9 +11,6 @@ use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
 
-/// The environment variable that selects the level.
-pub const LOG_LEVEL_VARIABLE: &str = "STORYOS_LOG";
-
 /// A `STORYOS_LOG` value outside `off`, `error`, `warn`, `info`, and `debug`.
 pub struct UnknownLogLevel;
 

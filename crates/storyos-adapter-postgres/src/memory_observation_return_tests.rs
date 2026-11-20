@@ -2,7 +2,7 @@
 //! a pass on the fake destination. The lead of these tests is `51`.
 
 use serde_json::{Value, json};
-use storyos_application::{MemoryConsolidationStore, ProjectScope};
+use storyos_application::ProjectScope;
 use tokio_postgres::Client;
 
 use super::schedule_tests::pass_due;
@@ -184,10 +184,8 @@ async fn an_observation_of_a_stale_pass_still_returns_one_time() {
         &[(1, 1, 1, "current", "other", "阿青", "船夫")],
     )
     .await;
-    let stale = store
-        .start_memory_consolidation(&scope)
+    let stale = crate::memory_consolidation::tests::start_pass(&store, &scope)
         .await
-        .unwrap()
         .unwrap();
     let id: String = admin
         .query_one(

@@ -5,8 +5,8 @@
 
 use serde_json::{Value, json};
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRunError, MemoryConsolidationStore, ProjectReadError,
-    ProjectScope, StartedMemoryConsolidation,
+    ClaimedAgentRun, CompleteAgentRunError, ProjectReadError, ProjectScope,
+    StartedMemoryConsolidation,
 };
 use storyos_core::{
     AgentRunKind, AssistanceAvailability, CaptureRefusal, CaptureRunEnd,
@@ -23,33 +23,10 @@ use crate::memory_consolidation_versions::{
 };
 use crate::memory_entries::lock_memory_head;
 use crate::memory_observation_return::{add_return_refusals, returned_observations};
+use crate::read_error;
 use crate::update_project_assistance::read_assistance_record;
-use crate::{PostgresProjectReader, read_error};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
-
-impl MemoryConsolidationStore for PostgresProjectReader {
-    async fn start_memory_consolidation(
-        &self,
-        scope: &ProjectScope,
-    ) -> Result<Result<StartedMemoryConsolidation, CaptureRefusal>, ProjectReadError> {
-        let transaction = self
-            .begin_serializable_project_command_transaction(scope)
-            .await
-            .map_err(ProjectReadError::unavailable)?;
-        let started = start(&transaction.client, scope).await;
-        match &started {
-            Ok(Ok(_)) => transaction
-                .commit()
-                .await
-                .map_err(ProjectReadError::unavailable)?,
-            Ok(Err(_)) | Err(_) => {
-                let _rollback = transaction.rollback().await;
-            }
-        }
-        started
-    }
-}
 
 /// Pins the current Model Use Binding, its grant, its Model Registration, and the Memory revision.
 /// Then it writes the queued Run, the pass row, and the Context Assembly of its one RunStep. The
@@ -333,9 +310,7 @@ pub(crate) async fn execute(
                 .map(|(key, _)| json!(key))
                 .collect()
         }
-        storyos_core::ConsolidationOutcome::Stale | storyos_core::ConsolidationOutcome::Failed => {
-            Vec::new()
-        }
+        storyos_core::ConsolidationOutcome::Stale => Vec::new(),
     };
     client
         .execute(

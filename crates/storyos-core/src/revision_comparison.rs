@@ -33,20 +33,6 @@ pub struct RevisionComparison {
     pub spans: Vec<ReplacementSpan>,
 }
 
-/// Return the UTF-16 slice `from..to`, or `None` when the range is not in `text`.
-pub fn utf16_slice(text: &str, from: u32, to: u32) -> Option<&str> {
-    if from > to {
-        return None;
-    }
-    let start = crate::utf16_offset_to_byte(text, from)?;
-    let end = if from == to {
-        start
-    } else {
-        start + crate::utf16_offset_to_byte(&text[start..], to - from)?
-    };
-    text.get(start..end)
-}
-
 /// Inspect one comparison. A wrong Scope returns no text and no spans.
 pub fn inspect_revision_comparison(
     access: RevisionComparisonAccess,
@@ -446,10 +432,6 @@ fn utf16_len(scalars: &[char]) -> u32 {
     )
     .unwrap_or(u32::MAX)
 }
-
-#[path = "revision_range_mapping.rs"]
-mod range_mapping;
-pub use range_mapping::{RangeMapping, map_unchanged_range};
 
 #[cfg(test)]
 #[path = "revision_comparison_tests.rs"]
