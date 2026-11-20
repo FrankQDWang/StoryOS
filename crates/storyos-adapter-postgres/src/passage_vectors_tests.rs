@@ -4,7 +4,7 @@
 use storyos_adapter_fake_destination::FakeEmbeddings;
 use storyos_application::{
     ApplyAuthorEditCommand, ChallengeRateClass, ClaimedPassageIndex, EditorSessionStore,
-    PASSAGE_INDEX_LEASE, PassageIndexStep, ProjectId, ProjectScope, UserId,
+    PASSAGE_INDEX_LEASE, PassageIndexStep, PassageVectorStore, ProjectId, ProjectScope, UserId,
     claim_next_passage_index_work, step_passage_index_work,
 };
 use storyos_core::{
@@ -333,6 +333,11 @@ async fn a_read_in_one_project_scope_gets_only_its_rows_and_cannot_name_another_
         }
     };
 
+    // The read of the own Project Scope that names the Chapter of the other Project.
+    let facts = store
+        .read_passage_index_facts(&own.scope, &other.chapter_id)
+        .await
+        .unwrap();
     // A claim of the own Project Scope that names the Chapter of the other Project.
     let crossed = ClaimedPassageIndex {
         project_scope: own.scope.clone(),
@@ -347,6 +352,7 @@ async fn a_read_in_one_project_scope_gets_only_its_rows_and_cannot_name_another_
         .await
         .unwrap();
 
+    assert_eq!((facts.chapter.is_none(), facts.stored.len()), (true, 0));
     assert_eq!(crossed, PassageIndexStep::StaleFence);
     assert_eq!(
         (
@@ -432,6 +438,14 @@ async fn the_passage_index_work_follows_the_vector_store_of_the_database() {
     let available = vector_table_visible(&store, &chapter.scope).await;
     let configured = store.clone().with_embedding_registration(FAKE);
     mark(&admin, &chapter).await;
+    let work_rows: i64 = admin
+        .query_one(
+            "SELECT count(*) FROM storyos.passage_index_work WHERE project_id = $1::text::uuid",
+            &[&chapter.scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
 
     let claim = claim_next_passage_index_work(&configured, FAKE_ONLY)
         .await
@@ -454,7 +468,12 @@ async fn the_passage_index_work_follows_the_vector_store_of_the_database() {
     };
 
     assert_eq!(
-        (claimed, indexed, attempts(&admin, &chapter.scope).await > 0),
-        (available, expected, available)
+        (
+            work_rows > 0,
+            claimed,
+            indexed,
+            attempts(&admin, &chapter.scope).await > 0
+        ),
+        (available, available, expected, available)
     );
 }
