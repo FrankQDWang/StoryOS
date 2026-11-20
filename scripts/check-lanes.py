@@ -8,7 +8,8 @@ A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -e
 checks, the exact-dist journeys in shards, and the two modes of the recovery drill.
 `scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; a script runs it before each
 browser Vitest run that does not start at the start of its lane.
-When a lane fails, the runner stops the other lanes, prints the log of the failed lane, and exits with 1.
+When a lane fails or does not end in LANE_TIME_LIMIT_SECONDS, the runner stops the lanes, prints the log of that
+lane, and exits with 1.
 """
 
 import fcntl
@@ -26,6 +27,9 @@ import uuid
 
 # Selected from measured runs of `make check` on an Apple M4 with 10 cores and 32 GB (issue 1711).
 LANE_LIMIT = 6
+# A lane that runs longer than this time fails the run. The longest lane took 419 s in the measured runs. In a run
+# of `make check-full` on 2026-11-20, a Vitest run did not end after its browser did not connect (issue 1728).
+LANE_TIME_LIMIT_SECONDS = 900
 POSTGRES_SHARDS = 4
 # At most this count of browser lanes runs at the same time (issue 1712). In two runs of `make check-full` on
 # 2026-11-20, a journey wait did not succeed in time when three or four browser lanes ran at the same time.
@@ -496,12 +500,15 @@ def run(root, lanes, final_checks):
             time.sleep(0.2)
             for lane in list(running):
                 code = None if interrupted else exit_code(lane)
-                if code is None:
+                late = (code is None and not interrupted
+                        and time.monotonic() - lane.started >= LANE_TIME_LIMIT_SECONDS)
+                if code is None and not late:
                     continue
                 running.remove(lane)
                 lane.duration = time.monotonic() - lane.started
                 lane.log.close()
-                reason = f"exit code {code}"
+                reason = (f"the lane did not end in the time limit of {LANE_TIME_LIMIT_SECONDS} s" if late
+                          else f"exit code {code}")
                 if code == 0:
                     try:
                         more = lane.passed(Path(lane.log.name).read_text()) if lane.passed else []
