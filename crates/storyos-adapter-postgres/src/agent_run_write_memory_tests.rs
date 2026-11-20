@@ -24,6 +24,7 @@ use crate::shared_tests::agent_run_write_memory::{first_index, memory_head, refu
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::{archived, write_versions};
 use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 
@@ -89,9 +90,9 @@ async fn a_create_and_a_change_of_one_response_settle_in_order_and_the_next_run_
     );
     // The entry identity is the ToolCall of the create, and the source reference of each version
     // names the Conversation, the Run, and the ToolCall of its write.
-    let sources: Value = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_array(version.memory_entry_id = first.tool_call_id,
+    let sources: Value = json_of(
+        &admin,
+        "SELECT jsonb_agg(jsonb_build_array(version.memory_entry_id = first.tool_call_id,
                       version.source_references = jsonb_build_array(jsonb_build_object(
                         'kind', 'conversation', 'conversation_id', run.conversation_id::text,
                         'run_id', run.run_id::text, 'tool_call_id', call.tool_call_id::text)))
@@ -104,11 +105,9 @@ async fn a_create_and_a_change_of_one_response_settle_in_order_and_the_next_run_
                  ON call.run_id = run.run_id
                 AND call.call_id = 'call_write_memory_' || (version.version - 1)
               WHERE version.project_id = run.project_id",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-        .unwrap();
+        &[&run_id],
+    )
+    .await;
     assert_eq!(sources, json!([[true, true], [true, true]]));
     // The request after the writes sends each result as the output of its call in the
     // `tool_result` boundary (ADR 0085).

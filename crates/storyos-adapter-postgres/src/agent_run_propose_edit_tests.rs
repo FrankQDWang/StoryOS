@@ -23,6 +23,7 @@ use crate::shared_tests::command_sequence_proposal_decision::{
 };
 use crate::shared_tests::command_sequence_support::issued;
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run_offering};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
@@ -336,9 +337,9 @@ async fn the_author_accepts_rejects_and_withdraws_the_proposal_with_the_commands
                     .is_ok()
             }
         };
-        let state = admin
-            .query_one(
-                "SELECT jsonb_build_array(operation.resolution, revision.closure)::text
+        let state = json_of(
+            &admin,
+            "SELECT jsonb_build_array(operation.resolution, revision.closure)::text
                    FROM storyos.proposal_heads AS head
                    JOIN storyos.proposal_revisions AS revision
                      ON (revision.proposal_id, revision.revision_id) =
@@ -346,15 +347,10 @@ async fn the_author_accepts_rejects_and_withdraws_the_proposal_with_the_commands
                    JOIN storyos.proposal_operations AS operation
                      ON operation.proposal_id = head.proposal_id
                   WHERE head.proposal_id = $1::text::uuid",
-                &[&proposal_id],
-            )
-            .await
-            .unwrap();
-        states.push((
-            command,
-            applied,
-            serde_json::from_str::<Value>(state.get(/*idx*/ 0)).unwrap(),
-        ));
+            &[&proposal_id],
+        )
+        .await;
+        states.push((command, applied, state));
     }
 
     assert_eq!(

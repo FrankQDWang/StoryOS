@@ -26,6 +26,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
+import { SECURITY_POLICY_REVISION } from "../../src/client-identity.ts";
 
 const VOLUME_CORRELATION = "018f0000-0000-7001-8000-000000000e50";
 const VOLUME_KEY = "018f0000-0000-7001-8000-000000000e51";
@@ -58,7 +59,7 @@ async function loadCurrentWriter(baseUrl: string): Promise<GetEditorSessionRespo
   const request = {
     command_schema: "storyos.command.create-editor-session.request.v1",
     client_contract_revision: "storyos.web-client.release-1.v3",
-    security_policy_revision: "storyos.web-security-policy.release-1.v1",
+    security_policy_revision: SECURITY_POLICY_REVISION,
     correlation_id: "018f0000-0000-7001-8000-000000000e56",
   };
   const digest = await digestCreateEditorSession(request);
@@ -86,7 +87,7 @@ async function postVolume(
       expected_tree_revision: expectedTreeRevision,
       client_contract_revision:
         RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: VOLUME_CORRELATION,
     },
   };
@@ -122,7 +123,7 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
     const authorEditRequest: ApplyAuthorEditRequest = {
       command_schema: "storyos.command.apply-author-edit.request.v1",
       client_contract_revision: "storyos.web-client.release-1.v3",
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: EDIT_CORRELATION,
       editor_session_id: writer.editor_session.editor_session_id,
       writer_generation: writer.writer.writer_generation,

@@ -15,14 +15,15 @@ use crate::shared_tests::command_sequence_support::{
     applied, durable_project_rows, seed_project, stores,
 };
 use crate::shared_tests::delete_structure::settle_delete_volume;
+use crate::shared_tests::json_row::json_of;
 
 async fn removed_volume_state(
     admin: &tokio_postgres::Client,
     scope: &ProjectScope,
 ) -> serde_json::Value {
-    let json: String = admin
-        .query_one(
-            "SELECT jsonb_agg(jsonb_build_object('volume', to_jsonb(volume),
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_object('volume', to_jsonb(volume),
                                                 'removal', to_jsonb(removal))
                               ORDER BY volume.manuscript_object_id)::text
                FROM storyos.manuscript_objects AS volume
@@ -31,12 +32,9 @@ async fn removed_volume_state(
                 AND removal.project_id = volume.project_id
                 AND removal.volume_id = volume.manuscript_object_id
               WHERE volume.owner_user_id = $1::text::uuid AND volume.project_id = $2::text::uuid",
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap()
-        .get(0);
-    serde_json::from_str(&json).unwrap()
+        &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+    )
+    .await
 }
 
 #[tokio::test]

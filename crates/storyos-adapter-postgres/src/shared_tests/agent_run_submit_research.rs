@@ -6,6 +6,7 @@ use crate::shared_tests::agent_run_tool_dispatch::{
     Hooked, exa_tools, mcp_replies, point_mcp, reply,
 };
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run_offering};
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
@@ -93,10 +94,9 @@ impl ResearchProject {
     /// as its function name, state, refusal, and Host result, and the citation kinds of each
     /// Research Artifact of the Run.
     pub(crate) async fn facts(&self, run_id: &str) -> Value {
-        let row = self
-            .admin
-            .query_one(
-                "SELECT jsonb_build_object(
+        json_of(
+            &self.admin,
+            "SELECT jsonb_build_object(
                           'status', run.status,
                           'steps', (SELECT jsonb_agg(jsonb_build_array(
                                       attempt.payload #>> '{decision,kind}',
@@ -117,11 +117,9 @@ impl ResearchProject {
                                           FROM storyos.research_artifacts AS artifact
                                          WHERE artifact.run_id = run.run_id))::text
                    FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap();
-        serde_json::from_str(row.get::<_, &str>(0)).unwrap()
+            &[&run_id],
+        )
+        .await
     }
 
     pub(crate) async fn decision(&self, run_id: &str) -> AgentRunDecisionInspect {

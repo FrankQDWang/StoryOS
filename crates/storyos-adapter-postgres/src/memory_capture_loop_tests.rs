@@ -11,6 +11,7 @@ use crate::shared_tests::agent_run_finish_rule::{calls, complete};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::create_agent_run_skill::{fixture, set};
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{park_queued_author_runs, project, run_capture, start};
 use crate::shared_tests::memory_capture_loop::{
     other_records, record, requests, script, settlement,
@@ -259,17 +260,17 @@ async fn each_request_of_a_capture_has_the_kind_of_its_input() {
     for source in [&conversation, &chapter] {
         let started = start(&store, &scope, source, "雨。").await.unwrap();
         run_capture(&store, &admin, &scope, &started.run_id).await;
-        let row = admin
-            .query_one(
+        kinds.push(
+            json_of(
+                &admin,
                 "SELECT jsonb_agg(wire ->> 'capture_input')::text
                    FROM storyos.model_attempts,
                         LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
                   WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
                 &[&started.run_id],
             )
-            .await
-            .unwrap();
-        kinds.push(serde_json::from_str::<Value>(row.get(/*idx*/ 0)).unwrap());
+            .await,
+        );
     }
 
     assert_eq!(kinds, [json!(["conversation"]), json!(["chapter"])]);

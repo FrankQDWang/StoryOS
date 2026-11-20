@@ -11,6 +11,7 @@ import {
   createProjectChallenge,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { SECURITY_POLICY_REVISION } from "../../src/client-identity.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -162,7 +163,7 @@ export async function createEmptyProject(options: {
     create_project_input: {
       title: options.title,
       client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: options.correlationId,
     },
     idempotency_key: createKey,

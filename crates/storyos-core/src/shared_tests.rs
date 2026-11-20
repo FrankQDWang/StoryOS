@@ -9,7 +9,7 @@ use crate::{
 /// The input of a current-passage Context Assembly with `author_message` on the revision `rev-1`
 /// of the Chapter `chapter-1` with the text `chapter_body`. The identities are `requirement-1`,
 /// `snapshot-1`, `run-1`, `owner-1`, `project-1`, and `destination-1`. It has no Proposal
-/// target and no Project instruction.
+/// target and no Project Instruction.
 pub(crate) fn passage_assembly(author_message: &str, chapter_body: &str) -> CurrentPassageAssembly {
     CurrentPassageAssembly {
         operation_requirement_id: "requirement-1".to_owned(),
@@ -30,7 +30,7 @@ pub(crate) fn passage_assembly(author_message: &str, chapter_body: &str) -> Curr
 /// The input of a current-passage Context Assembly with `author_message` on the revision `rev-1`
 /// of the Chapter `ch-1` with the text `chapter_body`, with the Proposal target `block-1`. The
 /// identities are `req-1`, `snap-1`, `run-1`, `user-1`, `proj-1`, and `dest-1`. It has no
-/// Project instruction.
+/// Project Instruction.
 pub(crate) fn targeted_passage_assembly(
     author_message: &str,
     chapter_body: &str,
@@ -64,7 +64,7 @@ pub(crate) fn harbour_passage() -> CurrentPassageAssemblyRecord {
     })
 }
 
-/// The facts of the Tool exposure of an Author Run that pinned `model_registration_revision`,
+/// The facts of the Tool Exposure of an Author Run that pinned `model_registration_revision`,
 /// with no bound Tool, no Skill catalog, no Memory use, and no search by meaning.
 pub(crate) fn exposure_facts(model_registration_revision: &str) -> ExposureFacts<'_> {
     ExposureFacts {

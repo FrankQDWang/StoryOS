@@ -9,10 +9,10 @@ import type { EditorReadyState } from "./editor-types.ts";
 import type { EditorWorkspace } from "./editor-types.ts";
 import { beginAcceptanceAttempt, finishAcceptanceAttempt } from "./acceptance-transport.ts";
 import { createFlight, decisionInput, parsePreAdmissionAcceptanceProblem,
-  readAcceptanceJournal, readFlight, uuidV7, writeFlight, type RejectionFlight,
+  readAcceptanceJournal, readFlight, writeFlight, type RejectionFlight,
   type RejectionSettlement } from "./acceptance-journal.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 
-const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
 type RejectionOptions = {
   baseUrl: string;

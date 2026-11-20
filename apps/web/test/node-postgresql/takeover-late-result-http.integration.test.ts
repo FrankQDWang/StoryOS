@@ -25,6 +25,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
+import { SECURITY_POLICY_REVISION } from "../../src/client-identity.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -85,7 +86,7 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
     const authorEditRequest: ApplyAuthorEditRequest = {
       command_schema: "storyos.command.apply-author-edit.request.v1",
       client_contract_revision: "storyos.web-client.release-1.v3",
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: "018f0000-0000-7001-8000-000000000342",
       editor_session_id: writer.editor_session.editor_session_id,
       writer_generation: priorGeneration,
@@ -131,7 +132,7 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
     const takeoverRequest = {
       command_schema: "storyos.command.take-over-project-writer.request.v1",
       client_contract_revision: "storyos.web-client.release-1.v3",
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: "018f0000-0000-7001-8000-000000000346",
       editor_session_id: observer.editor_session.editor_session_id,
       observed_writer_generation: priorGeneration,

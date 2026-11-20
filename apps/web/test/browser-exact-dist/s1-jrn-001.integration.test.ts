@@ -37,6 +37,7 @@ import {
   nextFrameLoad,
   openApplicationFrame,
 } from "../support/exact-dist-frame.ts";
+import { requestResult } from "../../src/indexed-db-request.ts";
 
 interface PendingSurface {
   readonly authoritative_revision_id: string | null;
@@ -139,13 +140,6 @@ function focusAtEnd(frame: HTMLIFrameElement): number {
   const currentEditor = editor(frame);
   focusManuscriptEnd(currentEditor, applicationWindow(frame));
   return manuscriptBody(currentEditor).length;
-}
-
-function requestResult<Result>(request: IDBRequest<Result>): Promise<Result> {
-  return new Promise((resolve, reject) => {
-    request.addEventListener("success", () => resolve(request.result), { once: true });
-    request.addEventListener("error", () => reject(request.error), { once: true });
-  });
 }
 
 async function readJourneyJournal(childWindow: Window): Promise<JourneyJournal> {

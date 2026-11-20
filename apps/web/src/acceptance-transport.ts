@@ -1,7 +1,8 @@
 import type { EditorReadyState, TransportCapsule } from "./editor-types.ts";
-import { decisionDigestProfile, decisionRoute, uuidV7,
+import { decisionDigestProfile, decisionRoute,
   type DecisionFlight } from "./acceptance-journal.ts";
 import { JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
+import { uuidV7 } from "./client-identity.ts";
 
 export async function beginAcceptanceAttempt(workspace: EditorReadyState,
   flight: DecisionFlight): Promise<{ id: string; ordinal: number }> {

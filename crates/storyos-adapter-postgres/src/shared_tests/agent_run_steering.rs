@@ -4,6 +4,7 @@ use crate::PostgresProjectReader;
 use crate::shared_tests::command_sequence_agent_run::CANCEL_AGENT_RUN;
 use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::{CommandCall, issued};
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, queued_run_offering};
 use serde_json::Value;
 use std::sync::Mutex;
@@ -336,9 +337,9 @@ pub(crate) async fn step_references(admin: &Client, run_id: &str) -> Value {
 /// Each requirement position of the Run, and each decision Model Attempt as its position and
 /// decision kind.
 pub(crate) async fn run_steps(admin: &Client, run_id: &str) -> Value {
-    admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    json_of(
+        admin,
+        "SELECT jsonb_build_object(
                       'status', run.status,
                       'requirements', (SELECT jsonb_agg(requirement.decision_position
                                         ORDER BY requirement.decision_position)
@@ -352,11 +353,9 @@ pub(crate) async fn run_steps(admin: &Client, run_id: &str) -> Value {
                                     WHERE attempt.run_id = run.run_id
                                       AND attempt.attempt_role = 'decision'))::text
                FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-        .unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 /// The claim of a cancelled Run that has cancellation duties, as the Worker claims it.

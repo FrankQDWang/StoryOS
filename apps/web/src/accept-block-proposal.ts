@@ -5,10 +5,10 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyo
 import type { EditorReadyState } from "./editor-types.ts";
 import { beginAcceptanceAttempt, finishAcceptanceAttempt } from "./acceptance-transport.ts";
 import { createFlight, parsePreAdmissionAcceptanceProblem, readAcceptanceJournal,
-  readFlight, uuidV7, writeFlight,
+  readFlight, writeFlight,
   type AcceptanceFlight, type AcceptanceRefusal } from "./acceptance-journal.ts";
+import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 
-const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
 class AcceptanceDeliveryUnknown extends Error {
   constructor(cause: unknown) {

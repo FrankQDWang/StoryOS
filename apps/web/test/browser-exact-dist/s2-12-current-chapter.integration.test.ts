@@ -12,6 +12,7 @@ import {
 import {
   appRoot,
   applicationWindow,
+  chapterButton,
   closeApplicationFrame,
   nextFrameLoad,
   openApplicationFrame,
@@ -28,12 +29,6 @@ afterEach(async () => {
   await updateClientSessionCookie({ action: "clear" });
   document.body.replaceChildren();
 });
-
-function chapterButton(root: Element, title: string): HTMLButtonElement | undefined {
-  return [...root.querySelectorAll<HTMLButtonElement>(
-    'nav[aria-label="稿件目录"] button[data-chapter-id]',
-  )].find((button) => button.textContent === title);
-}
 
 it("writes in each selected Chapter, undoes a chapter switch, and reopens the Current Chapter", async () => {
   const frame = await openApplicationFrame("StoryOS exact-dist current Chapter");

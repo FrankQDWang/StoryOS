@@ -12,6 +12,7 @@ use crate::shared_tests::agent_run_write_memory::first_index;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_capture_schedule::make_chapter_due;
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::run_capture;
 use crate::shared_tests::memory_capture_loop::record;
 use crate::shared_tests::memory_conflict_flag_show::{listed_flags, run, write};
@@ -45,11 +46,7 @@ async fn a_chapter_capture_flags_an_entry_of_the_author_and_a_change_removes_the
     let row = "SELECT jsonb_build_array(held, due_at > clock_timestamp())::text
                  FROM storyos.memory_work_schedules
                 WHERE work_kind = 'chapter_capture' AND source_id = $1::text::uuid";
-    let row: String = admin
-        .query_one(row, &[&chapter_a])
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
+    let row = json_of(&admin, row, &[&chapter_a]).await;
 
     // The live run makes the row due with one statement, as the test does here.
     make_chapter_due(&admin, &scope, &chapter_a, /*seconds*/ 1).await;
@@ -80,7 +77,7 @@ async fn a_chapter_capture_flags_an_entry_of_the_author_and_a_change_removes_the
 
     assert_eq!(
         (
-            serde_json::from_str::<Value>(&row).unwrap(),
+            row,
             claimed.source,
             due,
             settled(&admin, &pass.run_id).await,

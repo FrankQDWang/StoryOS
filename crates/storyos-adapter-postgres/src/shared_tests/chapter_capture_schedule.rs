@@ -4,6 +4,7 @@ use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_read_chapter::{project, write_blocks};
 use crate::shared_tests::chapter_list_context::{head, select};
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::run_capture;
 use crate::shared_tests::memory_capture_loop::{record, script};
 use crate::shared_tests::project_research_binding::park_queued_runs;
@@ -43,20 +44,18 @@ pub(crate) async fn make_chapter_due(
 /// The row of the Chapter: `held`, and its due time in seconds after the start of the last Chapter
 /// capture of the Project, or `null`.
 pub(crate) async fn row(admin: &Client, chapter_id: &str) -> Value {
-    admin
-        .query_one(
-            "SELECT jsonb_build_array(work.held,
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(work.held,
                       extract(epoch FROM work.due_at - (
                         SELECT max(capture.started_at) FROM storyos.memory_captures AS capture
                          WHERE capture.project_id = work.project_id
                            AND capture.source_kind = 'chapter'))::bigint)::text
                FROM storyos.memory_work_schedules AS work
               WHERE work.work_kind = 'chapter_capture' AND work.source_id = $1::text::uuid",
-            &[&chapter_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-        .unwrap()
+        &[&chapter_id],
+    )
+    .await
 }
 
 /// Whether the row of the Chapter is due now, due later, or not due.

@@ -11,7 +11,6 @@ import type { EditorView } from "@tiptap/pm/view";
 
 import type { InputOrigin } from "./editor-types.ts";
 import { blockProposalDecoration, capturedCandidateEdit } from "./block-proposal-decoration.ts";
-import { createJournalUuid } from "./local-edit-journal.ts";
 import {
   captureManuscriptChange,
   type CapturedManuscriptEdit,
@@ -24,6 +23,7 @@ import {
 } from "./manuscript-doc.ts";
 
 import { firstOwnerRange, narrowToFirstOwner } from "./first-owner-range.ts";
+import { uuidV7 } from "./client-identity.ts";
 
 const STORYOS_HYDRATE = "storyos.hydrate";
 const STORYOS_ORIGIN = "storyos.origin";
@@ -163,7 +163,7 @@ function replaceWithLinesTransaction(
   let position = from;
   lines.forEach((line, index) => {
     if (index > 0) {
-      transaction.split(position, 1, [{ type: paragraph, attrs: { id: createJournalUuid() } }]);
+      transaction.split(position, 1, [{ type: paragraph, attrs: { id: uuidV7() } }]);
       position += 2;
     }
     if (line !== "") transaction.insertText(line, position);
@@ -234,7 +234,7 @@ export function storyosManuscriptExtensions(
     UniqueID.configure({
       attributeName: "id",
       types: ["paragraph", "heading"],
-      generateID: () => createJournalUuid(),
+      generateID: () => uuidV7(),
       updateDocument: false,
     }),
     Extension.create({
@@ -418,7 +418,7 @@ function dispatchPlainTextReplacement(
     manuscriptIndex(view.state.doc, $to.index(0)),
     $to.parentOffset,
     text,
-    createJournalUuid,
+    uuidV7,
   );
   if (next === undefined) return;
   const content = manuscriptContentWithCandidates(view.state.doc, next);

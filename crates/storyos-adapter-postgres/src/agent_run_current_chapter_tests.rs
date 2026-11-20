@@ -492,20 +492,10 @@ async fn a_later_propose_edit_call_on_the_moved_reference_opens_the_proposal_on_
     )
     .await;
     let head = head(&admin, &fixture).await;
-    let bases: Value = serde_json::from_str(
-        admin
-            .query_one(
-                "SELECT jsonb_agg(DISTINCT location ->> 'base_authoritative_revision_id')::text
+    let bases: Value = json_of(&admin, "SELECT jsonb_agg(DISTINCT location ->> 'base_authoritative_revision_id')::text
                    FROM storyos.model_attempts AS attempt,
                         jsonb_array_elements(attempt.payload #> '{proposed_edit,locations}') AS location
-                  WHERE attempt.run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get(/*idx*/ 0),
-    )
-    .unwrap();
+                  WHERE attempt.run_id = $1::text::uuid", &[&run_id]).await;
     let changed_head = json!([
         0,
         "refused",

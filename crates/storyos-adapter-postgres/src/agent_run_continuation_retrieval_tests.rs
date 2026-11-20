@@ -464,9 +464,9 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
     drain(&store, &admin, &again, &scope, &run_id)
         .await
         .unwrap();
-    let lineage = admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    let lineage = json_of(
+        &admin,
+        "SELECT jsonb_build_object(
                       'position', artifact.decision_position::text,
                       'attempt', artifact.model_attempt_id = attempt.model_attempt_id,
                       'decision', artifact.decision_id = attempt.decision_id,
@@ -479,11 +479,9 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
                JOIN storyos.tool_calls AS call
                  ON call.run_id = artifact.run_id AND call.call_id = 'call_01'
               WHERE artifact.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str::<Value>(row.get(/*idx*/ 0)).unwrap())
-        .unwrap();
+        &[&run_id],
+    )
+    .await;
     let reserved = json!({"kind": "worst_case", "released": false});
     let released = json!({"kind": "worst_case", "released": true});
     let during = restart.during.lock().unwrap().as_ref().map(inspect);
@@ -590,20 +588,18 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
     drain(&store, &admin, &restart, &scope, &run_id)
         .await
         .unwrap();
-    let digests: Value = admin
-        .query_one(
-            "SELECT jsonb_build_array(decision.payload #> '{wire,digest}',
+    let digests: Value = json_of(
+        &admin,
+        "SELECT jsonb_build_array(decision.payload #> '{wire,digest}',
                                       successor.payload #> '{projection,digest}')::text
                FROM storyos.model_attempts AS decision
                JOIN storyos.model_attempts AS successor
                  ON successor.run_id = decision.run_id AND successor.attempt_role = 'successor'
               WHERE decision.run_id = $1::text::uuid AND decision.attempt_role = 'decision'
                 AND decision.decision_position = 1",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-        .unwrap();
+        &[&run_id],
+    )
+    .await;
     let payloads = model.payloads.into_inner().unwrap();
     let before = model.before.into_inner().unwrap();
     let reserved = json!({"kind": "worst_case", "released": false});

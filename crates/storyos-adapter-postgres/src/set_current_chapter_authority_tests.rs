@@ -11,6 +11,7 @@ use tokio_postgres::NoTls;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_structure::{SET_CURRENT_CHAPTER, outcome_code};
 use crate::shared_tests::command_sequence_support::{command_call, command_issue, undo_named};
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::set_current_chapter_authority::{open_session, seed_two_chapters};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -289,10 +290,9 @@ async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
         }]
     );
     let admin = open_admin().await;
-    let after_restore: serde_json::Value = serde_json::from_str(
-        &admin
-            .query_one(
-                "SELECT jsonb_build_object(
+    let after_restore: serde_json::Value = json_of(
+        &admin,
+        "SELECT jsonb_build_object(
                           'forward_switch_actions', (
                             SELECT count(*) FROM storyos.author_action_entries
                              WHERE project_id = $1::text::uuid
@@ -312,18 +312,14 @@ async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
                                AND receipt_id = $4::text::uuid
                           )
                         )::text",
-                &[
-                    &scope.project_id.as_ref(),
-                    &switched.ids.receipt_id,
-                    &source_sequence.to_string(),
-                    &compensated.ids.receipt_id,
-                ],
-            )
-            .await
-            .unwrap()
-            .get::<_, String>(0),
+        &[
+            &scope.project_id.as_ref(),
+            &switched.ids.receipt_id,
+            &source_sequence.to_string(),
+            &compensated.ids.receipt_id,
+        ],
     )
-    .unwrap();
+    .await;
     assert_eq!(
         after_restore,
         serde_json::json!({

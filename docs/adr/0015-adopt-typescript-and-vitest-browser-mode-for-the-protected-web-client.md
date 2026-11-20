@@ -85,6 +85,8 @@ Isolation is per test file. Tests in one file share a browser page. A persistent
 
 The machine must have Google Chrome Stable. Missing Chrome, a failed `channel: "chrome"` launch, or evidence of a different browser must fail the project. There is no Chromium fallback and no missing-browser skip. Verification must record the actual Google Chrome version because a Playwright package pin does not pin the installed system Chrome binary.
 
+Amendment (issue 1734): a browser Vitest run of the scripts that connects to no browser session and runs no test gets one second run through `scripts/browser-vitest.sh`. A failed test gets no second run (`retry: 0` stays), and a second failure of the connection fails the project.
+
 ## Browser Mode and exact-dist transport
 
 Normal browser tests use Browser Mode assertions and its application iframe. They must not use a private HTTP result collector or evaluate test code through a browser debugging protocol.

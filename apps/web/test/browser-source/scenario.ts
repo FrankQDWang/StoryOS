@@ -12,6 +12,9 @@ import type {
   EditorState,
   ProjectActivityEvent,
 } from "../../src/editor-types.ts";
+import { requestResult } from "../../src/indexed-db-request.ts";
+
+export { requestResult };
 
 export const OWNER = "018f0000-0000-7001-8000-000000000001";
 export const PROJECT = "018f0000-0000-7001-8000-000000000002";
@@ -154,13 +157,6 @@ export function emptyActivityStream(): Response {
   return new Response("", {
     status: 200,
     headers: { "content-type": "text/event-stream" },
-  });
-}
-
-export function requestResult<Result>(request: IDBRequest<Result>): Promise<Result> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
   });
 }
 

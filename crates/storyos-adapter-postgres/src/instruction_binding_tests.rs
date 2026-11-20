@@ -18,7 +18,7 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::Admission;
-use crate::shared_tests::model_gateway::sent_context;
+use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
 use crate::shared_tests::project_instruction::{applied, save};
 use crate::shared_tests::project_research_binding::park_queued_runs;
 
@@ -65,7 +65,13 @@ async fn assemblies(admin: &Client, run_id: &str) -> Value {
 /// For each Model Attempt of the Run in the order of its creation: its role, its RunStep, and
 /// the text of each `instruction_binding` item that the fake destination received.
 async fn sent(admin: &Client, run_id: &str) -> Value {
-    sent_context(admin, run_id, &["instruction_binding"], false).await
+    sent_context(
+        admin,
+        run_id,
+        &["instruction_binding"],
+        ReplacedInputLabel::Omit,
+    )
+    .await
 }
 
 fn required(revision_id: &str) -> Value {

@@ -13,6 +13,7 @@ use crate::shared_tests::agent_run_tool_exposure::advisory_stream;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::seed_project;
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::{archived_files, canonical};
 use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
 use crate::shared_tests::research_source::{SEARCH_TEXT, calls_stream};
@@ -223,9 +224,9 @@ async fn a_settled_search_captures_one_snapshot_per_entry_that_its_continuation_
         .unwrap();
     // The continuation records the Snapshot identities, and its selected tool_result item
     // names them as its Context Source Version.
-    let continuation: Value = admin
-        .query_one(
-            "SELECT jsonb_build_object(
+    let continuation: Value = json_of(
+        &admin,
+        "SELECT jsonb_build_object(
                       'recorded', requirement.payload
                                   #> '{operation_requirement,tool_results,0,source_snapshot_ids}',
                       'versions', (SELECT jsonb_agg(DISTINCT item -> 'source_version')
@@ -238,11 +239,9 @@ async fn a_settled_search_captures_one_snapshot_per_entry_that_its_continuation_
                     (requirement.run_id, requirement.decision_position, 'decision')
               WHERE requirement.run_id = $1::text::uuid AND requirement.decision_position = 1
                 AND requirement.requirement_role = 'primary'",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get::<_, &str>(0)).unwrap())
-        .unwrap();
+        &[&run_id],
+    )
+    .await;
 
     assert_eq!(
         (

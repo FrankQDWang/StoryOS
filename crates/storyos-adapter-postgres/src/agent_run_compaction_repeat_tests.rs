@@ -16,6 +16,7 @@ use crate::shared_tests::agent_run_compaction_summary::{
 use crate::shared_tests::agent_run_finish_rule::tool_loop_run;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run};
 
 /// An author message that asks the Host fake to compact at RunSteps 0 and 1.
@@ -45,19 +46,17 @@ async fn records(admin: &Client, run_id: &str) -> Vec<Value> {
 
 /// The status of the Run, the capability of its refusal, and its count of decision Attempts.
 async fn settlement(admin: &Client, run_id: &str) -> Value {
-    admin
-        .query_one(
-            "SELECT jsonb_build_array(run.status, run.settlement->>'capability',
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(run.status, run.settlement->>'capability',
                       (SELECT count(*) FROM storyos.model_attempts AS decision
                         WHERE decision.run_id = run.run_id
                           AND decision.attempt_role = 'decision'))::text
                FROM storyos.agent_runs AS run
               WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-        .unwrap()
+        &[&run_id],
+    )
+    .await
 }
 
 #[tokio::test]
@@ -312,9 +311,9 @@ async fn a_run_that_crosses_the_threshold_two_times_compacts_two_times() {
         ]
         .concat();
         let run_id = second_run_on_agent_plan(&store, &admin, prefixes, &message, replies).await;
-        let sent: Value = admin
-            .query_one(
-                "SELECT jsonb_build_array(
+        let sent: Value = json_of(
+            &admin,
+            "SELECT jsonb_build_array(
                           (summary.payload #>> '{wire,serialized_payload}')::jsonb
                             ->> 'previous_response_id',
                           (later.payload #>> '{wire,serialized_payload}')::jsonb
@@ -327,11 +326,9 @@ async fn a_run_that_crosses_the_threshold_two_times_compacts_two_times() {
                     AND summary.decision_position = 1
                   WHERE later.run_id = $1::text::uuid AND later.attempt_role = 'decision'
                     AND later.decision_position = 1",
-                &[&run_id],
-            )
-            .await
-            .map(|row| serde_json::from_str(row.get(/*idx*/ 0)).unwrap())
-            .unwrap();
+            &[&run_id],
+        )
+        .await;
         let first_text = sent[2].as_str().unwrap_or_default();
         let mut expected_records = vec![json!([0, "installed", null])];
         if second.is_some() {
