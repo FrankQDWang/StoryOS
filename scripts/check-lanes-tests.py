@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests of scripts/check-lanes.py (issues 1711, 1712): the stop, the Chrome start gap, and some functions.
+"""Tests of scripts/check-lanes.py (issues 1711, 1712) and scripts/browser-vitest.sh (issue 1734).
 
 CHECK_LANES_SCRIPT gives another runner to test, for example the runner of an earlier commit.
 """
@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -62,6 +63,18 @@ def alive(pid):
         return False
 
 
+def send(kill, pid, number):
+    """Send the signal. Return False when the process or its group already ended (issue 1736).
+
+    macOS answers EPERM for a group whose processes all ended and are not reaped.
+    """
+    try:
+        kill(pid, number)
+        return True
+    except (ProcessLookupError, PermissionError):
+        return False
+
+
 def pids_of(command_line):
     """Return the IDs of the processes whose command line is exactly this text."""
     return [int(line.split(None, 1)[0]) for line in subprocess.run(
@@ -80,7 +93,7 @@ class StopTests(unittest.TestCase):
     def tearDown(self):
         for pid in self.watched + pids_of(self.sleep):
             if alive(pid):
-                os.kill(pid, signal.SIGKILL)
+                send(os.kill, pid, signal.SIGKILL)
 
     def wait_for_sleep(self):
         deadline = time.monotonic() + 60
@@ -175,8 +188,7 @@ class StopTests(unittest.TestCase):
         self.watched.append(int(lane_pid.read_text()))
         # Ctrl-C in a terminal sends SIGINT to each process of the foreground process group.
         end = time.monotonic() + 3
-        while time.monotonic() < end and process.poll() is None:
-            os.killpg(process.pid, signal.SIGINT)
+        while time.monotonic() < end and process.poll() is None and send(os.killpg, process.pid, signal.SIGINT):
             time.sleep(0.01)
         output, _ = process.communicate(timeout=120)
         self.assertEqual(process.returncode, 130, output)
@@ -220,6 +232,19 @@ def runner_module():
     return module
 
 
+def run_lanes(module, lanes, root=ROOT, final_checks=()):
+    """Run the lanes in this process. Return the exit code, the output, and the time of the run."""
+    handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
+    output, began = io.StringIO(), time.monotonic()
+    try:
+        with contextlib.redirect_stdout(output):
+            code = module.run(root, lanes, list(final_checks))
+    finally:
+        for number, handler in handlers.items():
+            signal.signal(number, handler)
+    return code, output.getvalue(), time.monotonic() - began
+
+
 class FunctionTests(unittest.TestCase):
     def test_a_screenshot_directory_is_not_a_test_file(self):
         web = Path(tempfile.mkdtemp(prefix="storyos-test-files-"))
@@ -254,18 +279,6 @@ class FunctionTests(unittest.TestCase):
         # The lane without a browser starts while the third browser lane waits.
         self.assertLess(lanes[3].started, lanes[2].started)
 
-    def run_lanes(self, module, lanes):
-        """Run the lanes in this process. Return the exit code, the output, and the time of the run."""
-        handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
-        output, began = io.StringIO(), time.monotonic()
-        try:
-            with contextlib.redirect_stdout(output):
-                code = module.run(ROOT, lanes, [])
-        finally:
-            for number, handler in handlers.items():
-                signal.signal(number, handler)
-        return code, output.getvalue(), time.monotonic() - began
-
     def test_a_lane_that_does_not_end_in_the_time_limit_fails_the_run(self):
         # The lane and its child in a new session do not obey SIGTERM, as the Vitest run of issue 1728. Each writes
         # its ID after it ignores SIGTERM. Without a time limit, the lane passes after 20 s.
@@ -278,7 +291,7 @@ class FunctionTests(unittest.TestCase):
             ready.format(str(directory / "lane"))
             + f"import subprocess; subprocess.Popen({child!r}, start_new_session=True); time.sleep(20)")])
         try:
-            code, text, elapsed = self.run_lanes(module, [lane])
+            code, text, elapsed = run_lanes(module, [lane])
             watched = [int((directory / name).read_text()) for name in ("lane", "child")
                        if (directory / name).exists()]
             # The system reaps a killed child of another parent a short time after its end.
@@ -289,7 +302,7 @@ class FunctionTests(unittest.TestCase):
         finally:
             for name in ("lane", "child"):
                 if (directory / name).exists() and alive(int((directory / name).read_text())):
-                    os.kill(int((directory / name).read_text()), signal.SIGKILL)
+                    send(os.kill, int((directory / name).read_text()), signal.SIGKILL)
         self.assertEqual(code, 1, text)
         self.assertRegex(text, r"Lane lanes-test-no-end: FAIL after \d+ s \(the lane ran longer than the time limit "
                                r"of 15 s\)")
@@ -324,7 +337,7 @@ class FunctionTests(unittest.TestCase):
                     for number, handler in handlers.items():
                         signal.signal(number, handler)
                     if lane.process.poll() is None:
-                        os.killpg(lane.process.pid, signal.SIGKILL)
+                        send(os.killpg, lane.process.pid, signal.SIGKILL)
                         lane.process.wait()
                     lane.process.stdout.close()
 
@@ -386,6 +399,157 @@ class FunctionTests(unittest.TestCase):
         module.tool_output = tool_output
         self.assertFalse(module.remove_run_resources("token"))
         self.assertEqual(removed, ["network", "volume"])
+
+
+# The output of Vitest 4.1.11 for a run that connected to no browser session (issue 1728).
+NO_BROWSER = ('Error: Failed to connect to the browser session "b63626c2" [browser-exact-dist (chromium)] within the '
+              "timeout.\n\n Test Files   (1)\n      Tests  no tests\n     Errors  1 error\n")
+PASSED = " Test Files  1 passed (1)\n      Tests  1 passed (1)\n"
+FAILED_TEST = " Test Files  1 failed (1)\n      Tests  1 failed (1)\n"
+# A test ran, and its own text has the words and a full line of the summary of a run with no test.
+CONNECT_LINE_WITH_TESTS = ('Error: Failed to connect to the browser session "b63626c2" [browser-exact-dist (chromium)] '
+                           "within the timeout.\nstdout | a.integration.test.ts > the Tests panel shows no tests\n"
+                           "      Tests  no tests\n"
+                           " Test Files  1 failed (1)\n      Tests  1 failed | 2 passed (3)\n")
+
+
+def fake_browser_vitest_root(answers, failed_gaps=(), failed_tee=False):
+    """A root with scripts/browser-vitest.sh, a fake start gap, and a fake `pnpm` that plays one answer for each run.
+
+    `pnpm exec` takes node_modules/.bin before the PATH, so the fake is `pnpm`. Each wait and run goes to <root>/record.
+    The answer code "no exit code" kills the shell around the fake, so the script does not get the exit code.
+    The waits with a number in failed_gaps fail. With failed_tee, a fake `tee` writes its input to its file and fails.
+    """
+    root = Path(tempfile.mkdtemp(prefix="storyos-browser-vitest-"))
+    for directory in ("scripts", "bin", "target/check"):
+        (root / directory).mkdir(parents=True)
+    shutil.copy(ROOT / "scripts/browser-vitest.sh", root / "scripts")
+    (root / "answers.json").write_text(json.dumps(answers))
+    (root / "scripts/check-lanes.py").write_text(
+        "import sys\n"
+        "from pathlib import Path\n"
+        "path = Path(__file__).resolve().parent.parent / 'record'\n"
+        "number = (path.read_text().splitlines() if path.exists() else []).count('gap') + 1\n"
+        f"failed = number in {sorted(failed_gaps)!r}\n"
+        "with open(path, 'a') as record:\n"
+        "    record.write('gap failed\\n' if failed else 'gap\\n')\n"
+        "sys.exit(1 if failed else 0)\n")
+    if failed_tee:
+        tee = root / "bin/tee"
+        tee.write_text(f"#!{sys.executable}\nimport sys\nopen(sys.argv[1], 'w').write(sys.stdin.read())\nsys.exit(1)\n")
+        tee.chmod(0o755)
+    pnpm = root / "bin/pnpm"
+    pnpm.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys, time\n"
+        "from pathlib import Path\n"
+        "root = Path(__file__).resolve().parent.parent\n"
+        "record = root / 'record'\n"
+        "runs = [line for line in record.read_text().splitlines() if line.startswith('run')]\n"
+        "answer = json.loads((root / 'answers.json').read_text())[len(runs)]\n"
+        "with open(record, 'a') as file:\n"
+        "    file.write('run ' + ' '.join(sys.argv[1:]) + '\\n')\n"
+        "sys.stdout.write(answer[0])\n"
+        "sys.stdout.flush()\n"
+        "if answer[1] is None:\n"
+        "    time.sleep(60)\n"
+        "if answer[1] == 'no exit code':\n"
+        "    import os, signal\n"
+        "    os.kill(os.getppid(), signal.SIGKILL)\n"
+        "    sys.exit(1)\n"
+        "sys.exit(answer[1])\n")
+    pnpm.chmod(0o755)
+    command = ["sh", str(root / "scripts/browser-vitest.sh"), "--project", "browser-exact-dist", "a.integration.test.ts"]
+    env = {"PATH": f"{root / 'bin'}{os.pathsep}{os.environ['PATH']}"}
+    return root, command, env
+
+
+class BrowserVitestTests(unittest.TestCase):
+    def browser_vitest(self, answers, before=None, **options):
+        """Run scripts/browser-vitest.sh with fake `pnpm exec vitest` answers. Return the code, output, and record."""
+        root, command, env = fake_browser_vitest_root(answers, **options)
+        if before:
+            before(root)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=60, env={**os.environ, **env})
+        run = f"run --dir {root}/apps/web exec vitest run --project browser-exact-dist a.integration.test.ts"
+        lines = (root / "record").read_text().splitlines() if (root / "record").exists() else []
+        record = ["run" if line == run else line for line in lines]
+        # The temporary output of the script is under target/check, and the script removes it.
+        self.assertEqual(list((root / "target/check").iterdir()), [])
+        return result.returncode, result.stdout, record
+
+    def test_only_a_run_that_connected_to_no_browser_runs_one_more_time(self):
+        line = runner_module().SECOND_RUN_LINE
+        one, two = ["gap", "run"], ["gap", "run", "gap", "run"]
+        cases = {
+            "no browser, then a pass": ([[NO_BROWSER, 1], [PASSED, 0]], (0, two, 1)),
+            # The event line is a full line also after an output with no final newline.
+            "no browser with no final newline, then a pass": ([[NO_BROWSER.rstrip("\n"), 1], [PASSED, 0]], (0, two, 1)),
+            "no browser two times": ([[NO_BROWSER, 1], [NO_BROWSER, 1], [PASSED, 0]], (1, two, 1)),
+            "a failed test": ([[FAILED_TEST, 1], [PASSED, 0]], (1, one, 0)),
+            "a pass": ([[PASSED, 0], [PASSED, 0]], (0, one, 0)),
+            "the connect line with tests that ran": ([[CONNECT_LINE_WITH_TESTS, 1], [PASSED, 0]], (1, one, 0)),
+        }
+        for name, (answers, expected) in cases.items():
+            with self.subTest(name):
+                code, output, record = self.browser_vitest(answers)
+                # repr, so that a failure does not write the event line as a full line in the lane log.
+                self.assertEqual((code, record, output.splitlines().count(line)), expected, repr(output))
+                # The caller gets the output of each run, and a newline before the event line when necessary.
+                first, *rest = [text for text, _ in answers[:len(expected[1]) // 2]]
+                joined = first + ("\n" if rest and not first.endswith("\n") else "") + "".join(rest)
+                self.assertEqual(repr(output.replace(f"{line}\n", "")), repr(joined))
+
+    def test_a_run_whose_start_or_output_fails_fails_with_no_second_run(self):
+        line = runner_module().SECOND_RUN_LINE
+        cases = {
+            # The event line comes only for a second run that starts.
+            "the second wait for the start gap fails": (
+                {"answers": [[NO_BROWSER, 1], [PASSED, 0]], "failed_gaps": {2}}, ["gap", "run", "gap failed"]),
+            # The output file can have both lines of a run with no browser, and still no second run starts.
+            "the output is not kept": ({"answers": [[NO_BROWSER, 1], [PASSED, 0]], "failed_tee": True}, ["gap", "run"]),
+            "the exit code is not known": ({"answers": [[NO_BROWSER, "no exit code"], [PASSED, 0]]}, ["gap", "run"]),
+            "no temporary directory": (
+                {"answers": [[PASSED, 0]], "before": lambda root: (root / "target/check").chmod(0o555)}, []),
+        }
+        for name, (options, record) in cases.items():
+            with self.subTest(name):
+                code, output, actual = self.browser_vitest(**options)
+                self.assertEqual((code, actual, output.splitlines().count(line)), (1, record, 0), repr(output))
+
+    def test_a_stopped_run_removes_its_temporary_output(self):
+        root, command, env = fake_browser_vitest_root([["started\n", None]])
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True, env={**os.environ, **env},
+                                   start_new_session=True)
+        try:
+            self.assertEqual(process.stdout.readline(), "started\n")
+            self.assertEqual(len(list((root / "target/check").iterdir())), 1)
+            # The lane runner sends SIGTERM to the process group of a lane.
+            os.killpg(process.pid, signal.SIGTERM)
+            self.assertEqual(process.wait(timeout=30), 143)
+        finally:
+            if process.poll() is None:
+                send(os.killpg, process.pid, signal.SIGKILL)
+        self.assertEqual(list((root / "target/check").iterdir()), [])
+
+    def test_the_runner_counts_the_second_runs_of_the_script_in_the_lanes_of_its_run(self):
+        module = runner_module()
+        def failed_final_check():
+            raise ValueError("a final check failed")
+
+        for code, answers, final_checks in ((0, [[NO_BROWSER, 1], [PASSED, 0]], ()),
+                                            (1, [[NO_BROWSER, 1], [NO_BROWSER, 1]], ()),
+                                            (1, [[NO_BROWSER, 1], [PASSED, 0]], (failed_final_check,))):
+            with self.subTest(code=code, final_checks=len(final_checks)):
+                root, command, env = fake_browser_vitest_root(answers)
+                # target/check keeps the logs of the lanes of earlier runs.
+                (root / "target/check/lanes-test-old.log").write_text(f"{module.SECOND_RUN_LINE}\n")
+                lanes = [module.Lane("lanes-test-second-run", command, env=env),
+                         module.Lane("lanes-test-one-run", ["true"])]
+                result, text, _ = run_lanes(module, lanes, root, final_checks)
+                self.assertEqual((result, text.splitlines()[-1]),
+                                 (code, "check-lanes: second runs of a browser Vitest run: 1 (lanes-test-second-run 1)"),
+                                 repr(text))
 
 
 if __name__ == "__main__":
