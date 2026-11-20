@@ -30,7 +30,7 @@ fn item_tokens(text: &str) -> u64 {
     count_context_item_tokens(&ToolResultProjection::Ok(text).continuation_text("call-1"))
 }
 
-/// ADR 0095 section 1: the mapping `v8` and the fake tool loop mapping declare
+/// ADR 0095 section 1: the current mapping and the fake tool loop mapping declare
 /// `search_manuscript` in each Run, before `finish`, with a strict schema of one query.
 #[test]
 fn each_current_mapping_declares_search_manuscript_with_a_strict_schema() {

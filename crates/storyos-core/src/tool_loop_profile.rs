@@ -1,96 +1,81 @@
-//! The tool loop profile of ADR 0091: the Model Registrations whose request mapping declares the
-//! Host Tools. The adapters send a decision request only with these mappings. The earlier
-//! Registrations stay only as the identities of recorded Attempts.
+//! The tool loop profile of ADR 0091: the current Model Registrations, whose request mapping
+//! declares the Host Tools. Only these Registrations bind a new Run (ADR 0097).
 
 use crate::{
-    AGENT_PLAN_FUNCTION_CALLING_REGISTRATION, CapabilityEntries, CapabilityEvidence,
-    HOST_FAKE_CAPABILITY_PROFILE, HOST_FAKE_REGISTRATION, ModelCapabilityProfile,
-    ModelRegistration,
+    COMPACTION_REQUIREMENT, CapabilityCombination, CapabilityEntries, CapabilityEvidence,
+    ModelAdapter, ModelCapability, ModelCapabilityProfile, ModelRegistration, RECOVERY_REQUIREMENT,
 };
 
 /// The fake model mapping of the tool loop profile. Its script follows the finish rule.
 pub const HOST_FAKE_TOOL_LOOP_MAPPING_REVISION: &str = "storyos.host-fake.mapping.v2";
 
-/// The Agent Plan mapping of the tool loop profile: the compaction mapping with Host
-/// instructions that describe the Tools and the finish rule, strict functions, and the
-/// `tool_choice` of the finish rule.
-pub const AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION: &str =
-    "storyos.volcengine-agent-plan.responses.create.v5";
-
-/// The tool loop mapping with the fourth Host Tool `read_tool_result` (ADR 0093).
-pub const AGENT_PLAN_READ_RESULT_MAPPING_REVISION: &str =
-    "storyos.volcengine-agent-plan.responses.create.v6";
-
-/// The tool loop mapping of Stage 6: the mapping `v6` with the Skill section of a request and
-/// the Skill paragraph of the Host instructions (ADR 0089 sections 3 and 4).
-pub const AGENT_PLAN_SKILL_MAPPING_REVISION: &str =
-    "storyos.volcengine-agent-plan.responses.create.v7";
-
-/// The tool loop mapping of Stage 7: the mapping `v7` with the manuscript and Memory items and
-/// Tools that the Stage 7 tickets add (ADR 0094, ADR 0095).
-pub const AGENT_PLAN_CONTINUITY_MAPPING_REVISION: &str =
-    "storyos.volcengine-agent-plan.responses.create.v8";
-
-/// The mapping `v8` with the Host instructions of the Memory rules of ADR 0094 sections 5 and 6:
-/// the words of the author in an entry, what a Conversation capture records, and the key `refused`
-/// of a pass.
+/// The current Agent Plan mapping: the tool loop mapping with the Host instructions of the Tools
+/// and the finish rule, strict functions, and the `tool_choice` of the finish rule (ADR 0091),
+/// the stored Tool results (ADR 0093), the Skill sections (ADR 0089 sections 3 and 4), the
+/// manuscript and Memory items and Tools (ADR 0094, ADR 0095), and the Host instructions of the
+/// Memory rules of ADR 0094 sections 5 and 6: the words of the author in an entry, what a
+/// Conversation capture records, and the key `refused` of a pass.
 pub const AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION: &str =
     "storyos.volcengine-agent-plan.responses.create.v9";
+
+const STAGE_3_PROOF: CapabilityEvidence = CapabilityEvidence::Qualified {
+    evidence: "Stage 3 contract proof of the Contract-Faithful Fake Destination",
+};
 
 pub const HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
     revision: "storyos.host-fake.capability.v2",
     entries: CapabilityEntries {
+        transport: STAGE_3_PROOF,
+        native_text: STAGE_3_PROOF,
+        structured_text: CapabilityEvidence::Unknown,
+        continuation: STAGE_3_PROOF,
+        streaming: STAGE_3_PROOF,
+        implicit_cache: CapabilityEvidence::Unknown,
+        explicit_cache: CapabilityEvidence::Unknown,
+        native_compaction: CapabilityEvidence::Unknown,
+        host_compaction: STAGE_3_PROOF,
+        retrieval: STAGE_3_PROOF,
+        abort: STAGE_3_PROOF,
         function_calling: CapabilityEvidence::Qualified {
             evidence: "Contract proof of the Contract-Faithful Fake Destination (ADR 0091)",
         },
-        ..HOST_FAKE_CAPABILITY_PROFILE.entries
     },
-    ..HOST_FAKE_CAPABILITY_PROFILE
+    context_window: None,
+    combinations: &[CapabilityCombination {
+        members: &[
+            ModelCapability::Transport,
+            ModelCapability::NativeText,
+            ModelCapability::Continuation,
+            ModelCapability::Streaming,
+            ModelCapability::HostCompaction,
+            ModelCapability::Retrieval,
+            ModelCapability::Abort,
+        ],
+        evidence: STAGE_3_PROOF,
+    }],
 };
 
-/// The second fake model profile.
+/// The fake model Registration of the Host fake destination and of the journeys.
 pub const HOST_FAKE_TOOL_LOOP_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa18",
+    adapter: ModelAdapter::HostFake,
+    api_surface: "storyos.host-fake",
+    provider_model_id: "host-fake",
     mapping_revision: HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
+    requirement: COMPACTION_REQUIREMENT,
     capability_profile: &HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE,
-    ..HOST_FAKE_REGISTRATION
 };
 
-/// The qualified dated version with qualified function calling and the tool loop mapping `v5`.
-/// An AgentRun that pinned it keeps the mapping `v5` and the first three Host Tools.
-pub const AGENT_PLAN_TOOL_LOOP_REGISTRATION: ModelRegistration = ModelRegistration {
-    revision: "018f0000-0000-7001-8000-00000000fa19",
-    mapping_revision: AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
-    ..AGENT_PLAN_FUNCTION_CALLING_REGISTRATION
-};
-
-/// Registration `fa19` with the mapping `v6`. An AgentRun that pinned it keeps the mapping
-/// `v6`.
-pub const AGENT_PLAN_READ_RESULT_REGISTRATION: ModelRegistration = ModelRegistration {
-    revision: "018f0000-0000-7001-8000-00000000fa20",
-    mapping_revision: AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
-    ..AGENT_PLAN_TOOL_LOOP_REGISTRATION
-};
-
-/// Registration `fa20` with the mapping `v7`. An AgentRun that pinned it keeps the mapping
-/// `v7`.
-pub const AGENT_PLAN_SKILL_REGISTRATION: ModelRegistration = ModelRegistration {
-    revision: "018f0000-0000-7001-8000-00000000fa21",
-    mapping_revision: AGENT_PLAN_SKILL_MAPPING_REVISION,
-    ..AGENT_PLAN_READ_RESULT_REGISTRATION
-};
-
-/// Registration `fa21` with the mapping `v8`. An AgentRun that pinned it keeps the mapping `v8`.
-pub const AGENT_PLAN_CONTINUITY_REGISTRATION: ModelRegistration = ModelRegistration {
-    revision: "018f0000-0000-7001-8000-00000000fa22",
-    mapping_revision: AGENT_PLAN_CONTINUITY_MAPPING_REVISION,
-    ..AGENT_PLAN_SKILL_REGISTRATION
-};
-
-/// The current Agent Plan Registration: Registration `fa22` with the mapping `v9`. Nothing is
-/// pending, so the link authorizes no probe.
+/// The current Agent Plan Registration: the qualified dated version `doubao-seed-2-1-pro-260915`
+/// with qualified function calling and the mapping `v9`. Nothing is pending, so the link
+/// authorizes no probe. A later provider version is a new Registration that the author approves
+/// (ADR 0059).
 pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa23",
+    adapter: ModelAdapter::VolcengineAgentPlanResponses,
+    api_surface: "volcengine.agent-plan.responses./api/plan/v3",
+    provider_model_id: "doubao-seed-2-1-pro-260915",
     mapping_revision: AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION,
-    ..AGENT_PLAN_CONTINUITY_REGISTRATION
+    requirement: RECOVERY_REQUIREMENT,
+    capability_profile: &crate::AGENT_PLAN_CAPABILITY_PROFILE,
 };

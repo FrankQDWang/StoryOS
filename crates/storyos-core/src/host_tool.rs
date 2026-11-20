@@ -21,54 +21,18 @@ pub struct HostToolRegistration {
     pub tools: &'static [&'static ToolSpec],
 }
 
-/// The three Host Tools of ADR 0091. A Model Registration before the mapping `v6` keeps them.
-pub const FIRST_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
-    id: "host_tools",
-    revision: "018f0000-0000-7001-8000-0000000e0101",
-    kind: ToolRegistrationKind::Host,
-    adapter_revision: "storyos.host-tool.v1",
-    tools: &[
-        &PROPOSE_EDIT_TOOL_SPEC,
-        &SUBMIT_RESEARCH_TOOL_SPEC,
-        &FINISH_TOOL_SPEC,
-    ],
-};
-
-/// The three Host Tools and `read_tool_result` (ADR 0093). The mapping `v6` keeps them.
-pub const READ_RESULT_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
-    revision: "018f0000-0000-7001-8000-0000000e0102",
-    tools: &[
-        &PROPOSE_EDIT_TOOL_SPEC,
-        &SUBMIT_RESEARCH_TOOL_SPEC,
-        &READ_TOOL_RESULT_TOOL_SPEC,
-        &FINISH_TOOL_SPEC,
-    ],
-    ..FIRST_HOST_TOOL_REGISTRATION
-};
-
-/// The four Host Tools of the mapping `v6`, `load_skill`, and `read_skill_resource` (ADR 0089
-/// section 3). The mapping `v7` keeps them.
-pub const SKILL_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
-    revision: "018f0000-0000-7001-8000-0000000e0103",
-    tools: &[
-        &PROPOSE_EDIT_TOOL_SPEC,
-        &SUBMIT_RESEARCH_TOOL_SPEC,
-        &READ_TOOL_RESULT_TOOL_SPEC,
-        &LOAD_SKILL_TOOL_SPEC,
-        &READ_SKILL_RESOURCE_TOOL_SPEC,
-        &FINISH_TOOL_SPEC,
-    ],
-    ..FIRST_HOST_TOOL_REGISTRATION
-};
-
-/// The current Host Tools: the six Host Tools of the mapping `v7`, `read_chapter`,
-/// `search_manuscript`, `hybrid_search_manuscript`, the Memory Tools `write_memory`, `read_memory_entry`, and `search_memory`,
-/// the output Tool `record_memory_observations` of a capture, and the output Tool
-/// `apply_memory_operations` of a consolidation pass. The Stage 7 tickets add their
-/// Tools before `finish` (ADR 0093 section 3, ADR 0094, ADR 0095).
+/// The current Host Tools: the Host Tools of ADR 0091, `read_tool_result` (ADR 0093),
+/// `load_skill` and `read_skill_resource` (ADR 0089 section 3), `read_chapter`,
+/// `search_manuscript`, `hybrid_search_manuscript`, the Memory Tools `write_memory`,
+/// `read_memory_entry`, and `search_memory`, the output Tool `record_memory_observations` of a
+/// capture, and the output Tool `apply_memory_operations` of a consolidation pass (ADR 0094,
+/// ADR 0095). The Tools are before `finish`.
 /// `ExposureFacts::has_host_tool` decides which of them a RunStep declares.
 pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
+    id: "host_tools",
     revision: "018f0000-0000-7001-8000-0000000e0104",
+    kind: ToolRegistrationKind::Host,
+    adapter_revision: "storyos.host-tool.v1",
     tools: &[
         &PROPOSE_EDIT_TOOL_SPEC,
         &SUBMIT_RESEARCH_TOOL_SPEC,
@@ -85,7 +49,6 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
         &crate::APPLY_MEMORY_OPERATIONS_TOOL_SPEC,
         &FINISH_TOOL_SPEC,
     ],
-    ..FIRST_HOST_TOOL_REGISTRATION
 };
 
 /// The Context source class of the settled result of the Host Tool `spec` (ADR 0095 section 1).
@@ -114,36 +77,18 @@ pub fn host_tool_result_class(spec: &ToolSpec) -> ContextSourceClass {
 }
 
 impl ModelRegistration {
-    /// The Host Tools that the request mapping declares. The Agent Plan mappings `v8` and `v9` and
-    /// the fake tool loop mapping declare the current Host Tools, the mapping `v7` keeps six, the
-    /// mapping `v6` keeps four, and each earlier mapping keeps the first three (ADR 0053).
+    /// The Host Tools that the request mapping declares: each current mapping declares the current
+    /// Host Tools (ADR 0097).
     pub fn host_tools(&self) -> &'static HostToolRegistration {
-        match self.mapping_revision {
-            crate::AGENT_PLAN_CONTINUITY_MAPPING_REVISION
-            | crate::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION
-            | crate::HOST_FAKE_TOOL_LOOP_MAPPING_REVISION => &HOST_TOOL_REGISTRATION,
-            crate::AGENT_PLAN_SKILL_MAPPING_REVISION => &SKILL_HOST_TOOL_REGISTRATION,
-            crate::AGENT_PLAN_READ_RESULT_MAPPING_REVISION => &READ_RESULT_HOST_TOOL_REGISTRATION,
-            _ => &FIRST_HOST_TOOL_REGISTRATION,
-        }
+        &HOST_TOOL_REGISTRATION
     }
 }
-
-/// Each Host Tool Registration revision of this build.
-pub const HOST_TOOL_REGISTRATIONS: [&HostToolRegistration; 4] = [
-    &FIRST_HOST_TOOL_REGISTRATION,
-    &READ_RESULT_HOST_TOOL_REGISTRATION,
-    &SKILL_HOST_TOOL_REGISTRATION,
-    &HOST_TOOL_REGISTRATION,
-];
 
 /// The Host Tool of the pinned revisions of a ToolCall. `None` is a ToolCall of another
 /// Registration.
 pub fn host_tool(registration_revision: &str, spec_revision: &str) -> Option<&'static ToolSpec> {
-    HOST_TOOL_REGISTRATIONS
-        .into_iter()
-        .find(|registration| registration.revision == registration_revision)?
-        .tools
+    (registration_revision == HOST_TOOL_REGISTRATION.revision)
+        .then_some(HOST_TOOL_REGISTRATION.tools)?
         .iter()
         .copied()
         .find(|spec| spec.revision == spec_revision)

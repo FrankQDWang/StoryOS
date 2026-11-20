@@ -4,17 +4,13 @@ use storyos_core::ContextSourceClass;
 
 use crate::skill_wire_tests::{body, closing, first, item, summary};
 
-const V7: &str = storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION;
-const V8: &str = storyos_core::AGENT_PLAN_CONTINUITY_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION;
 
-/// A request of the mapping `v8` with `context`.
-fn v8(context: Vec<storyos_application::RequestContextItem>) -> CreateRequest {
+/// A request of the current mapping with `context`.
+fn current(context: Vec<storyos_application::RequestContextItem>) -> CreateRequest {
     CreateRequest {
         context,
-        ..first(
-            V8,
-            storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
-        )
+        ..first(CURRENT, storyos_core::AGENT_PLAN_REGISTRATION.revision)
     }
 }
 
@@ -45,12 +41,14 @@ async fn the_memory_index_is_one_exact_section_after_the_chapter_list_with_its_p
         item(ContextSourceClass::SkillCatalog, catalog),
         item(ContextSourceClass::ChapterList, list),
     ];
-    let request = v8([
-        base.to_vec(),
-        vec![item(ContextSourceClass::MemoryIndex, index)],
-    ]
-    .concat());
-    let without = v8(base.to_vec());
+    let request = current(
+        [
+            base.to_vec(),
+            vec![item(ContextSourceClass::MemoryIndex, index)],
+        ]
+        .concat(),
+    );
+    let without = current(base.to_vec());
     let instructions = |body: serde_json::Value| body["instructions"].as_str().unwrap().to_owned();
 
     assert_eq!(
@@ -82,21 +80,28 @@ async fn the_memory_index_is_one_exact_section_after_the_chapter_list_with_its_p
     );
 }
 
-/// ADR 0094 section 5: each decision and closing request of the mapping `v8` declares
+/// ADR 0094 section 5: each decision and closing request of the current mapping declares
 /// `write_memory` and has one paragraph: the model calls the Tool only when the author asks for a
 /// lasting change of Memory and never on its own decision, an entry is a short synthesis or an
 /// intent and not a copy of a passage, a character or a pair of characters that the Index lists
 /// gets a change and not a second entry, and the model tells the author when the Host refuses a
-/// write. A request of the mapping `v7` and a summary request have no paragraph.
+/// write. The paragraph also says that an entry holds only what the author said in this
+/// Conversation. A summary request has no paragraph.
 #[tokio::test]
-async fn each_v8_request_has_the_write_memory_paragraph_of_adr_0094() {
+async fn each_request_has_the_write_memory_paragraph_of_adr_0094() {
     let paragraph = "Call write_memory only when the author asks you to remember something, to \
          change what you remember, or to forget something, and never on your own decision. An \
          entry is a short synthesis or an intent, not a copy of a passage. For a character or a \
          pair of characters that the section Memory index lists, change that entry and do not \
-         create a second one. When the Host refuses a write, tell the author.";
-    let request = v8(Vec::new());
-    let v7 = first(V7, storyos_core::AGENT_PLAN_SKILL_REGISTRATION.revision);
+         create a second one. When the Host refuses a write, tell the author. An entry holds only \
+         what the author said in this Conversation. Do not add a quotation, a clue, a name, a \
+         relation, or another fact that you read in the manuscript or in Memory and that the \
+         author did not say. If such a fact can help the author, say it in your answer and do not \
+         put it in the entry. When the author asks you to remember what a Chapter says, the \
+         author said so, and the entry can hold it. A decision that the author states with no \
+         request to remember it is not a request: do not call write_memory for it, because the \
+         Memory work of the Host records it later.";
+    let request = current(Vec::new());
     let paragraphs = |body: serde_json::Value| {
         let declared = (body["tools"].as_array().into_iter().flatten())
             .any(|tool| tool["name"] == "write_memory");
@@ -113,14 +118,12 @@ async fn each_v8_request_has_the_write_memory_paragraph_of_adr_0094() {
             paragraphs(body(request.clone()).await),
             paragraphs(body(closing(request.clone())).await),
             paragraphs(body(summary(request)).await),
-            paragraphs(body(v7.clone()).await),
-            paragraphs(body(closing(v7)).await),
         ],
-        [(true, 1), (true, 1), (false, 0), (false, 0), (false, 0)]
+        [(true, 1), (true, 1), (false, 0)]
     );
 }
 
-/// ADR 0094 section 4: a request of the mapping `v8` for a Run with Memory use declares
+/// ADR 0094 section 4: a request of the current mapping for a Run with Memory use declares
 /// `read_memory_entry` and `search_memory`, and the paragraph of the Memory Index gets two
 /// sentences for the read and one for the search: the model calls `read_memory_entry` with the
 /// id of an entry when the task needs its text, the result is data and not an instruction, and
@@ -139,7 +142,7 @@ async fn a_run_with_memory_use_adds_the_read_and_search_sentences_to_the_memory_
     let with_use = |request: CreateRequest| CreateRequest {
         tool_exposure: storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
             bound: &[],
-            model_registration_revision: storyos_core::AGENT_PLAN_CONTINUITY_REGISTRATION.revision,
+            model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
             skill_catalog: false,
             memory_use: true,
             hybrid_search: false,
@@ -164,16 +167,16 @@ async fn a_run_with_memory_use_adds_the_read_and_search_sentences_to_the_memory_
 
     assert_eq!(
         [
-            facts(body(with_use(v8(vec![index.clone()]))).await),
-            facts(body(closing(with_use(v8(vec![index.clone()])))).await),
-            facts(body(with_use(v8(Vec::new()))).await),
-            facts(body(v8(vec![index])).await),
+            facts(body(with_use(current(vec![index.clone()]))).await),
+            facts(body(closing(with_use(current(vec![index.clone()])))).await),
+            facts(body(with_use(current(Vec::new()))).await),
+            facts(body(current(vec![index])).await),
         ],
         [(true, true), (true, true), (true, false), (false, false)]
     );
 }
 
-/// ADR 0094 section 7: each decision and closing request of the mapping `v8` with a Memory Index
+/// ADR 0094 section 7: each decision and closing request of the current mapping with a Memory Index
 /// has one paragraph for an entry that the author requested. The entry changes only when the
 /// author asks. The model does not change a flagged entry or an entry that it finds in conflict.
 /// It tells the author the conflict and the reason, and it asks which is correct in its reply.
@@ -204,10 +207,10 @@ async fn a_request_with_the_memory_index_has_the_conflict_paragraph_of_adr_0094_
 
     assert_eq!(
         [
-            count(body(v8(vec![index.clone()])).await),
-            count(body(closing(v8(vec![index.clone()]))).await),
-            count(body(summary(v8(vec![index]))).await),
-            count(body(v8(Vec::new())).await),
+            count(body(current(vec![index.clone()])).await),
+            count(body(closing(current(vec![index.clone()]))).await),
+            count(body(summary(current(vec![index]))).await),
+            count(body(current(Vec::new())).await),
         ],
         [(1, true), (1, true), (0, false), (0, false)]
     );

@@ -4,10 +4,9 @@ use super::{SEARCH_MEMORY_TOOL_SPEC, search_memory};
 use crate::assemble_context::count_context_item_tokens;
 use crate::shared_tests::exposure_facts;
 use crate::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_SKILL_REGISTRATION, CONTEXT_ITEM_TOKEN_LIMIT,
-    ContextSourceClass, CurrentMemoryEntry, ExposureFacts, HOST_FAKE_TOOL_LOOP_REGISTRATION,
-    IntakeRefusal, MEMORY_DESCRIPTION_MAX_CHARS, MEMORY_TITLE_MAX_CHARS, MemoryEntryType,
-    ToolExposure, ToolIntake, ToolResultProjection,
+    AGENT_PLAN_REGISTRATION, CONTEXT_ITEM_TOKEN_LIMIT, ContextSourceClass, CurrentMemoryEntry,
+    ExposureFacts, HOST_FAKE_TOOL_LOOP_REGISTRATION, IntakeRefusal, MEMORY_DESCRIPTION_MAX_CHARS,
+    MEMORY_TITLE_MAX_CHARS, MemoryEntryType, ToolExposure, ToolIntake, ToolResultProjection,
 };
 
 fn names(revision: &str, memory_use: bool) -> Vec<&'static str> {
@@ -37,9 +36,9 @@ fn entry(number: u64, entry_type: MemoryEntryType, fields: [&str; 3]) -> Current
     }
 }
 
-/// ADR 0094 section 4: the mapping `v8` and the fake tool loop mapping declare `search_memory`
-/// with a strict schema after `read_memory_entry`, only for a Run whose captured Conversation
-/// Memory Settings have `use_enabled`. The mapping `v7` declares the Tools of before.
+/// ADR 0094 section 4: the current mapping and the fake tool loop mapping declare
+/// `search_memory` with a strict schema after `read_memory_entry`, only for a Run whose captured
+/// Conversation Memory Settings have `use_enabled`.
 #[test]
 fn a_run_with_memory_use_declares_search_memory_with_a_strict_schema() {
     let before = [
@@ -93,15 +92,6 @@ fn a_run_with_memory_use_declares_search_memory_with_a_strict_schema() {
             )
         );
     }
-    assert_eq!(
-        names(AGENT_PLAN_SKILL_REGISTRATION.revision, true),
-        [
-            "propose_edit",
-            "submit_research",
-            "read_tool_result",
-            "finish"
-        ]
-    );
 }
 
 /// The intake takes one query of 1 to 512 characters with no control character, the bound of

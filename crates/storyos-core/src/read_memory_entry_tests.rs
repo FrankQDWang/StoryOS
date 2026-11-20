@@ -6,8 +6,8 @@ use super::{
 };
 use crate::shared_tests::exposure_facts;
 use crate::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_SKILL_REGISTRATION, ContextSourceClass, ExposureFacts,
-    HOST_FAKE_TOOL_LOOP_REGISTRATION, IntakeRefusal, MemoryEntryType, ToolExposure, ToolIntake,
+    AGENT_PLAN_REGISTRATION, ContextSourceClass, ExposureFacts, HOST_FAKE_TOOL_LOOP_REGISTRATION,
+    IntakeRefusal, MemoryEntryType, ToolExposure, ToolIntake,
 };
 
 fn exposure(revision: &str, memory_use: bool) -> ToolExposure {
@@ -21,10 +21,9 @@ fn names(exposure: &ToolExposure) -> Vec<&str> {
     exposure.tools.iter().map(|tool| tool.name).collect()
 }
 
-/// ADR 0094 section 4: the mapping `v8` and the fake tool loop mapping declare
+/// ADR 0094 section 4: the current mapping and the fake tool loop mapping declare
 /// `read_memory_entry` with a strict schema only for a Run whose captured Conversation Memory
-/// Settings have `use_enabled`. A Run with no use, and a Run on the mapping `v7`, declare the
-/// Tools of before.
+/// Settings have `use_enabled`. A Run with no use declares the Tools of before.
 #[test]
 fn a_run_with_memory_use_declares_read_memory_entry_with_a_strict_schema() {
     let before = vec![
@@ -73,15 +72,6 @@ fn a_run_with_memory_use_declares_read_memory_entry_with_a_strict_schema() {
             )
         );
     }
-    assert_eq!(
-        names(&exposure(AGENT_PLAN_SKILL_REGISTRATION.revision, true)),
-        [
-            "propose_edit",
-            "submit_research",
-            "read_tool_result",
-            "finish"
-        ]
-    );
 }
 
 /// Finding F1 of the live record of S7-D1a2: the description of `write_memory` says that the

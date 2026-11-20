@@ -12,6 +12,13 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
+/// The revision of the superseded Registration of S4-01, which the test makes (ADR 0097). No
+/// product code resolves it, and a Run that pinned it refuses with Registration drift.
+const EARLIER: &str = "018f0000-0000-7001-8000-00000000fa02";
+
+/// The revision of another superseded Registration of the route, from before the current one.
+const EARLIER_CONTINUATION: &str = "018f0000-0000-7001-8000-00000000fa04";
+
 use crate::shared_tests::agent_run_finish_rule::text_item;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
@@ -47,8 +54,10 @@ async fn qualification_evidence(admin: &Client, run_id: &str) -> [Option<String>
 /// Returns the Project to the binding of S4-01: the pending Agent Plan Registration, a pending
 /// Decision, and that Registration as the head of its adapter. `run_id` pinned it.
 async fn pin_pending_registration(admin: &Client, scope: &ProjectScope, run_id: &str) {
-    let pending = &storyos_core::AGENT_PLAN_PENDING_REGISTRATION;
-    let profile = serde_json::to_string(pending.capability_profile).unwrap();
+    // The row of the earlier revision has the profile of the probe fixture, a profile with a
+    // pending entry. The drift refusal reads only the revision.
+    let profile_value = &storyos_core::PROBE_FIXTURE_CAPABILITY_PROFILE;
+    let profile = serde_json::to_string(profile_value).unwrap();
     admin
         .batch_execute(&format!(
             "INSERT INTO storyos.model_capability_profiles (capability_profile_revision, profile)
@@ -70,9 +79,9 @@ async fn pin_pending_registration(admin: &Client, scope: &ProjectScope, run_id: 
              SET session_replication_role = DEFAULT;
              UPDATE storyos.model_registration_heads SET model_registration_revision = '{revision}'
               WHERE model_kind = 'volcengine_agent_plan_responses';",
-            profile_revision = pending.capability_profile.revision,
-            revision = pending.revision,
-            surface = pending.api_surface,
+            profile_revision = profile_value.revision,
+            revision = EARLIER,
+            surface = AGENT_PLAN_REGISTRATION.api_surface,
             project = scope.project_id.as_ref(),
         ))
         .await
@@ -157,13 +166,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
                 None,
                 AGENT_PLAN_REGISTRATION.revision.to_owned()
             ),
-            (
-                "pending".to_owned(),
-                None,
-                storyos_core::AGENT_PLAN_PENDING_REGISTRATION
-                    .revision
-                    .to_owned()
-            ),
+            ("pending".to_owned(), None, EARLIER.to_owned()),
         )
     );
     assert_ne!(
@@ -209,10 +212,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
                 SET payload = jsonb_set(payload, '{produced_binding,model_registration_revision}',
                                         to_jsonb($2::text))
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
-            &[
-                &next,
-                &storyos_core::AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION.revision,
-            ],
+            &[&next, &EARLIER_CONTINUATION],
         )
         .await
         .unwrap();

@@ -103,3 +103,12 @@ pub(crate) fn tool_result_candidate<'a>(
         resource_path: None,
     }
 }
+
+/// A profile with the current entries and no qualified combination, as of a later provider
+/// version before its qualification (ADR 0097). It is not a Registration.
+pub(crate) const UNQUALIFIED_PROFILE: crate::ModelCapabilityProfile =
+    crate::ModelCapabilityProfile {
+        revision: "test.unqualified",
+        combinations: &[],
+        ..crate::AGENT_PLAN_CAPABILITY_PROFILE
+    };

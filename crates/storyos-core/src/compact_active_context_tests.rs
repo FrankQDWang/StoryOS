@@ -319,8 +319,7 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
         compacted_earlier: false,
     };
     let agent_plan = crate::AGENT_PLAN_REGISTRATION.revision;
-    let undated = crate::AGENT_PLAN_RECOVERY_REGISTRATION.revision;
-    let host_fake = crate::HOST_FAKE_REGISTRATION.revision;
+    let host_fake = crate::HOST_FAKE_TOOL_LOOP_REGISTRATION.revision;
     let near_window = facts(agent_plan, "Help again.", Some(1_015_900));
 
     assert_eq!(
@@ -328,7 +327,6 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
             [
                 facts(agent_plan, "Help again.", Some(812_646)),
                 facts(agent_plan, "Help again.", Some(812_645)),
-                facts(undated, "Help again.", Some(183_500)),
                 facts(agent_plan, "Help again.", Some(183_500)),
                 facts(agent_plan, ACTIVE_COMPACTION_REQUEST_PREFIX, Some(10)),
                 facts(host_fake, ACTIVE_COMPACTION_REQUEST_PREFIX, Some(10)),
@@ -348,7 +346,7 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
             ],
         ),
         (
-            [true, false, true, false, false, true, false],
+            [true, false, false, false, true, false],
             [
                 super::DecisionRequestKind::Later,
                 super::DecisionRequestKind::TooLong,
@@ -407,7 +405,7 @@ fn the_text_of_overlapping_selection_references_counts_toward_compaction() {
 fn the_host_fake_compacts_one_time_or_at_each_named_run_step() {
     let requested = |message: &str, decision_position, compacted_earlier| {
         super::compaction_requested(&super::CompactionRequestFacts {
-            model_registration_revision: crate::HOST_FAKE_REGISTRATION.revision,
+            model_registration_revision: crate::HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
             budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
             author_message: message,
             decision: None,
@@ -460,7 +458,7 @@ fn a_later_request_whose_full_input_reaches_the_window_is_too_long() {
         [
             too_long(crate::AGENT_PLAN_REGISTRATION.revision, at_window),
             too_long(crate::AGENT_PLAN_REGISTRATION.revision, at_window - 1),
-            too_long(crate::HOST_FAKE_REGISTRATION.revision, at_window),
+            too_long(crate::HOST_FAKE_TOOL_LOOP_REGISTRATION.revision, at_window),
         ],
         [true, false, false]
     );

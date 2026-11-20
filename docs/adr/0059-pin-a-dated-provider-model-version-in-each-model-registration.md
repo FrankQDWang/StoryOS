@@ -29,3 +29,4 @@ S4-01 ([#392](https://github.com/FrankQDWang/StoryOS/issues/392)) required one e
 - At the Claim of #1143, one live request confirmed that the route accepts the exact dated identifier.
 - The compaction threshold of the head Registration is 812,646 tokens (ADR 0056).
 - A provider that removes a dated version makes the Registration refuse at the destination. Then the author approves a new Registration.
+- [ADR 0097](0097-keep-only-the-current-model-registrations-and-request-mapping-in-the-code.md) removes the earlier Registrations and mapping branches from the code, because no stored Run names them.

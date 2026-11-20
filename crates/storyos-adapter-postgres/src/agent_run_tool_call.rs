@@ -35,16 +35,15 @@ pub(crate) async fn insert_tool_calls(
     owner: &ToolCallOwner<'_>,
     calls: &[RequestedToolCall],
 ) -> Result<(), CompleteAgentRunError> {
-    // The global row of a Host Tool Registration appears at its first ToolCall.
-    for registration in storyos_core::HOST_TOOL_REGISTRATIONS {
-        if calls.iter().any(|call| {
-            matches!(call, RequestedToolCall::Validated(call)
-                if call.registration_revision == registration.revision)
-        }) {
-            crate::tool_registration::insert_host_registration_row(client, registration)
-                .await
-                .map_err(complete_unavailable)?;
-        }
+    // The global row of the Host Tool Registration appears at its first ToolCall.
+    let registration = &storyos_core::HOST_TOOL_REGISTRATION;
+    if calls.iter().any(|call| {
+        matches!(call, RequestedToolCall::Validated(call)
+            if call.registration_revision == registration.revision)
+    }) {
+        crate::tool_registration::insert_host_registration_row(client, registration)
+            .await
+            .map_err(complete_unavailable)?;
     }
     for (position, call) in (0_i32..).zip(calls) {
         let (name, pin, arguments, argument_digest, refusal) = match call {
