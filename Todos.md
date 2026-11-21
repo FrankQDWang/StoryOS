@@ -38,9 +38,10 @@ Each idea must pass two questions: does it need setup before writing (then it is
 
 ### 4.1 Machine voice
 
-- **Examples only from the text of the author.** Before the assistant writes, the Host finds some passages of this book that the author typed, and it gives them to the model as examples of the voice. It never uses text that came from a Proposal, because the voice then moves toward the machine. The hybrid search of Stage 7 can find the passages.
-- **Learn from the changes of the author.** The change that the author makes to an accepted Proposal and the rejection of a Proposal are the best signals. A phrase that the author removes again and again becomes a writing preference in Agent Memory.
-- **Marks on machine phrases in the text.** The editor marks a sentence with a known machine pattern, for example “不是……而是……”, “眼中闪过一丝”, or a summary sentence at the end of a paragraph. The list starts as a general list and changes with the edits of the author. This function works with no AI.
+- **Examples from the text of the author, and learning from the changes of the author.** [ADR 0100](docs/adr/0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md) decided these two ideas on 2026-11-21: they are not built. StoryOS infers no preference of the author automatically. The author puts sample passages into the Project Instruction.
+- **Marks on machine phrases in the text.** The editor marks a sentence with a known machine pattern, for example “不是……而是……”, “眼中闪过一丝”, or a summary sentence at the end of a paragraph. The list starts as a general list. This function works with no AI. It is not in Stage 10 (ADR 0100).
+- **A second model that reviews a draft.** A second model examines a draft of the assistant and gives suggestions, and the assistant revises the draft. The author named this on 2026-11-21 as a possible later mechanism. It needs an experiment first, and ADR 0100 keeps experiments out of Stage 10.
+- **Skills that the author makes.** The author later provides own SkillPackages for the demands of one book. ADR 0089 deferred each Skill that an author provides, and Stage 10 ships only SkillPackages of the StoryOS distribution.
 - **The model.** The author rates the Claude series and the Gemini series as the best for Chinese prose, and the GPT series below them. The Volcengine route is in use because it is cheap and has the Responses form, and it lets the full loop work first. Production will use another model. No vendor is selected, and the selection needs its own ADR.
 
 ### 4.2 Memory in a long novel, after Stage 7
@@ -59,7 +60,7 @@ Each idea must pass two questions: does it need setup before writing (then it is
 
 ## 5. Open points
 
-- **The scope of the author-voice stage.** ADR 0096 puts this stage after Stage 7. The ideas of section 4.1 are its candidates. A kickoff with the author decides the scope.
+- **The scope of the author-voice stage.** Decided: [ADR 0100](docs/adr/0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md).
 - **The production model.** Which vendor, which account, and which cost. See section 4.1.
 - **Stage 8 and Stage 9.** The author decides again about them after the author-voice stage.
 
