@@ -384,7 +384,7 @@ function retiredRow<Row extends { working_set_partition_id: string }>(row: Row, 
   return retained;
 }
 
-function journalSnapshot(count: number, retired: number, extraIntent = false) {
+function journalSnapshot(count: number, retired: number, { extraIntent = false } = {}) {
   return {
     groups: Array.from({ length: count }, (_value, index) => retiredRow(collectedGroup(index), index, retired)),
     intents: [
@@ -549,7 +549,7 @@ export function expectedStage1Journey() {
     },
     interrupt: {
       pending: pendingProjection(AFTER_UNSETTLED, "saving", 1, "revision-3"),
-      journal: journalSnapshot(3, 3, true),
+      journal: journalSnapshot(3, 3, { extraIntent: true }),
     },
     recover: {
       pending: pendingProjection(AFTER_UNSETTLED, "saving", 1, "revision-3"),
