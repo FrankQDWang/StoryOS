@@ -17,6 +17,7 @@ CHECK_FAST_STEPS = scripts/verify-web-source-guards.sh; \
 	cargo run --quiet --locked -p storyos-contracts -- check; \
 	cargo metadata --no-deps --format-version 1 | python3 scripts/verify-workspace-boundaries.py; \
 	python3 scripts/verify-transaction-control-receivers.py; \
+	python3 scripts/review-tests.py; \
 	cargo run --quiet --locked -p storyos-literal-guard -- --tracing; \
 	git diff --check "$$(git merge-base $(BASE) HEAD)" --
 CHECK_LANES = \

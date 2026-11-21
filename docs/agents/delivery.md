@@ -56,9 +56,9 @@ The ticket body is the only owner of its acceptance contract. Before the brief, 
 
 The executor reads the current ticket, the current parent, the native dependencies, `AGENTS.md`, [CODING_STANDARDS.md](../../CODING_STANDARDS.md), and the contracts and ADRs that the ticket names. Then it claims the ticket at once, with no plan for approval and no wait for a reply.
 
-To claim, assign the issue and post the [Claim](#claim). When the coordinator changes the parent or the ticket, it tells the executor. The executor reads the changed body and posts a new Claim before it continues.
+To claim, assign the issue and post the [Claim](#claim). The coordinator puts each decision in the parent or the ticket body first, and then it tells the executor. The executor reads the changed body and posts a new Claim before it continues.
 
-The coordinator puts each decision in the ticket body first, and then it sends the message. The executor reads the ticket body again before it opens the pull request and before the final report.
+The executor reads the ticket body again before it opens the pull request and before the final report.
 
 Ask the coordinator only for a real decision. A product, contract, number, or waiver question goes to the author through the coordinator.
 
@@ -82,7 +82,7 @@ Run the [Codex review](#codex-review) rounds until a round passes. Handle each S
 
 When a finding says that the contract does not ask for a change, ask the coordinator to change the ticket body before the next round, and post a new [Claim](#claim).
 
-After a round passes, merge the current integration tip into the branch. Then run the required tier one time on that head: `make check`, or only `make check-full` when the ticket or a request requires it. Put its Check Evidence Line in the body. Report the result of `make check-full` to the coordinator before any push, body edit, or comment.
+After a round passes, merge the current integration tip into the branch. Then run the required tier one time on that head. Put its Check Evidence Line in the body. Report the result of `make check-full` to the coordinator before any push, body edit, or comment.
 
 ### 7. Final report
 
@@ -136,7 +136,7 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 - Only a line of `make check` or `make check-full` with `result=PASS` is merge evidence.
 - `make check` and `make check-full` stop at the start when the working tree has changes. A line with `tree=DIRTY` is not evidence.
 - When each changed file is a document under `docs/` or at the root that no code names, `make check` runs only the `make check-fast` steps, and its line ends with `scope=documents`.
-- Copy the line into the pull request body exactly. A review round does not need the line.
+- Copy the line into the pull request body exactly.
 - Each new head, also a merge of the base branch, needs a new line.
 - Start a long tier in the background, and wait for the process to exit. The result is the line, its last output, and not a step that passed.
 
@@ -161,9 +161,9 @@ Then it sends the [review prompt](review-prompt.md) and the request to one new r
 
 - A pull request gets at most three rounds.
 - Only a blocking finding fails a round. A finding on format, lint, names, or ASD-STE100 wording never fails a round.
-- After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier only after a round passes: a fix or a base merge replaces the head of an earlier heavy run, and a round beside `make check-full` can lose its Codex job. The [merge gate](#merge-gate) still needs a line for the final head.
-- After a passed round, a new round starts only after a change to the diff of the ticket.
-- A merge of the base branch after a passed round needs no new round when it does not change the diff of the ticket. Compare `git diff <base>...<head>` before and after the merge.
+- After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier only after a round passes: a fix or a base merge replaces the head of an earlier heavy run, and a round beside `make check-full` can lose its Codex job.
+- Round 2 and round 3 examine the fixes of the earlier blocking findings and the lines that changed after the earlier round. On a line that did not change, only product code of the [review prompt](review-prompt.md) can get a new blocking finding, and the reviewer marks each other new finding `late:`. The coordinator opens an issue for each `late:` finding that is a defect.
+- After a passed round, a new round starts only after a change to the diff of the ticket. A merge of the base branch is no such change when `git diff <base>...<head>` is the same before and after the merge.
 
 ### After round 3
 
@@ -171,7 +171,6 @@ When round 3 has open blocking findings, do not start a fourth round. Send the f
 
 1. The coordinator reviews the fix in a pull request comment that names the new head.
 2. The fix adds a test that fails before the fix.
-3. The new head meets the conditions 1 and 2 of the [merge gate](#merge-gate).
 
 Then the coordinator review comment replaces the verdicts of round 3.
 
