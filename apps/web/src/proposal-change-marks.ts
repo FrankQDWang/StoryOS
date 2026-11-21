@@ -81,7 +81,7 @@ function samePair(first: Pair | undefined, second: Pair | undefined): boolean {
 
 /**
  * The marks on the new words of each candidate, and the pair of the mark under the pointer (S10-REQ-004). They are
- * view decorations only. During an IME composition they do not change.
+ * view decorations only. During an IME composition the plugin only maps them, and it computes them again at its end.
  */
 export function proposalChangeMarks(): Plugin<MarksState> {
   let composing = false;
@@ -102,11 +102,14 @@ export function proposalChangeMarks(): Plugin<MarksState> {
             ? { ...value, decorations: value.decorations.map(transaction.mapping, transaction.doc), stale: true }
             : value;
         }
-        if (transaction.docChanged || value.stale) {
-          pointed = undefined;
-          return marksState(state.doc, value.candidates);
+        const meta = transaction.getMeta(marksKey) as { pair?: Pair; recompute?: true } | undefined;
+        if (transaction.docChanged || value.stale || meta?.recompute === true) {
+          // Other texts can give other runs, so a pair stays only when no text changed.
+          if (transaction.docChanged || value.stale) pointed = undefined;
+          const next = marksState(state.doc, value.candidates);
+          return pointed === undefined ? next
+            : { ...next, pair: pointed, decorations: changeDecorations(state.doc, next.candidates, pointed) };
         }
-        const meta = transaction.getMeta(marksKey) as { pair?: Pair } | undefined;
         if (meta === undefined || !("pair" in meta)) return value;
         return { ...value, pair: meta.pair, decorations: changeDecorations(state.doc, value.candidates, meta.pair) };
       },
@@ -122,12 +125,7 @@ export function proposalChangeMarks(): Plugin<MarksState> {
           composing = false;
           // The marks follow the composed text after the editor reads it.
           setTimeout(() => {
-            if (view.isDestroyed) return;
-            if (marksKey.getState(view.state)?.stale === true) {
-              view.dispatch(view.state.tr.setMeta(marksKey, {}));
-            } else {
-              showPair(view);
-            }
+            if (!view.isDestroyed) view.dispatch(view.state.tr.setMeta(marksKey, { recompute: true }));
           });
           return false;
         },

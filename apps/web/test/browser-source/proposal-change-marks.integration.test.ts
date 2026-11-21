@@ -340,3 +340,33 @@ it("computes the runs of the current texts when the two texts change together", 
     texts: ["他走了。", "她来了。\u0000他走了。她来了。"],
     shown: shownCandidate("她来了。\u0000他走了。她来了。", proposalChangeRuns("他走了。", "她来了。\u0000他走了。她来了。")) });
 });
+
+it("removes only the decorations on the text that a composition replaces across a mark and a tick", async () => {
+  const editor = openEditor(ROW_1.old, [candidate(ROW_1.new)]);
+  const decorated = () => Array.from(candidateText(editor).querySelectorAll(".proposal-change-mark, .proposal-change-tick"));
+  const [first, second] = decorated();
+  const inMark = second!.firstChild!;
+  const afterTick = candidateText(editor).querySelector(".proposal-change-tick")!.nextSibling!;
+  editor.view.focus();
+  // The composition offsets count the rendered text of the editor, which the selection text gives.
+  const offset = (node: Node, at: number) => {
+    window.getSelection()!.setBaseAndExtent(editor.view.dom, 0, node, at);
+    return window.getSelection()!.toString().length;
+  };
+  const [start, end] = [offset(inMark, 3), offset(afterTick, 1)];
+  window.getSelection()!.setBaseAndExtent(inMark, 3, afterTick, 1);
+  await expect.poll(() => [editor.state.selection.from, editor.state.selection.to])
+    .toEqual([position(editor, "candidate", 34), position(editor, "candidate", 45)]);
+  await applyImeComposition({ text: "zhong", replacementStart: start, replacementEnd: end, selectionStart: 5, selectionEnd: 5 });
+  const during = decorated();
+  // The composed text is in the DOM of the rest of mark 2, where the browser puts it.
+  expect({ text: candidateText(editor).textContent, shown: shownInEditor(candidateText(editor)),
+    kept: [during[0] === first, during[1] === second] }).toEqual({
+    text: `${ROW_1.new.slice(0, 34)}zhong${ROW_1.new.slice(45)}`,
+    shown: "他站在门口，【把钥匙从左手换到右手，说】：“妈，先借我两千。”母亲【看了他zhong】身进了里屋。"
+      + "他听见抽屉被拉开【，又听见她在里面翻了很久。他低头去看自己的鞋尖，鞋带松了一边】。", kept: [true, true] });
+  await applyTrustedInput({ operation: "insert_text", text: "中" });
+  await expect.poll(() => ({ text: candidateText(editor).textContent, shown: shownInEditor(candidateText(editor)) }))
+    .toEqual({ text: `${ROW_1.new.slice(0, 34)}中${ROW_1.new.slice(45)}`, shown: "他站在门口，【把钥匙从左手换到右手，说】："
+      + "“妈，先借我两千。”母亲【看了他中】身进了里屋。他听见抽屉被拉开【，又听见她在里面翻了很久。他低头去看自己的鞋尖，鞋带松了一边】。" });
+});
