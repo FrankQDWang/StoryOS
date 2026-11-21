@@ -62,7 +62,7 @@ test("listSkills gives the Skills that the Server validated at its start to the 
 });
 
 test("listSkills gives each SkillPackage of the distribution with the description of its SKILL.md", async () => {
-  const expected = await Promise.all(["conflict-check"].map(async (name) => {
+  const expected = await Promise.all(["conflict-check", "local-revision"].map(async (name) => {
     const skillMd = await readFile(join(DISTRIBUTION, name, "SKILL.md"), "utf8");
     return { name, description: skillMd.match(/^description: (.+)$/m)?.[1] };
   }));
