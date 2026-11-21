@@ -9,11 +9,17 @@ Use these instructions to agree on a new scene with the author before you write 
 
 ## When it applies
 
-An answer to a brief is an author message that comes directly after a Run whose final answer was a brief.
+An answer to a brief is the author message directly after a Run whose final answer was a brief.
 
-- When the author message is an answer to a brief and it asks for a new brief, give the new brief as the section "The brief" says.
-- When the author message is an answer to a brief and it does not ask for a new brief, write the scene as the section "The writing" says.
-- When the author message is not an answer to a brief and it asks for a new scene or a longer new passage, do as the section "A complete request" says.
+For an answer to a brief:
+
+- When the answer asks for a new brief, give it as the section "The brief" says.
+- When the answer asks for no new brief and tells you to write the scene, use the section "The writing". An acceptance of the brief, a correction of an item, or a request for the scene tells you to write.
+- For each other answer, do not write the scene of the brief, and make no Proposal for that scene. Examples are a question about the brief, a refusal of the brief, and a small change of existing text. These instructions say nothing more for such an answer.
+
+For an author message that is not an answer to a brief:
+
+- When it asks for a new scene or a longer new passage, use the section "A complete request".
 - In all other cases, for example a small change of existing text, do not use these instructions.
 
 ## A complete request
@@ -27,19 +33,22 @@ The items of a brief are:
 5. The last event of the scene.
 6. The facts of the earlier story that the scene keeps.
 
-- When the author request gives each item, write the scene at once as the section "The writing" says, and give no brief.
-- When the author request does not give each item, give the brief as the section "The brief" says.
+- When the author request gives each item, use the section "The writing" at once, and give no brief.
+- When the author request tells you to write with no brief, use the section "The writing" at once.
+- In all other cases, give the brief as the section "The brief" says.
 
 ## The brief
 
 - In this Run, write no prose of the novel and make no Proposal.
 - Read what you need from the earlier Chapters and Agent Memory.
-- Give the brief as the final answer, in the language of the manuscript, in 4 to 6 lines. Give each item of the brief. A line can have more than one item.
+- Give the brief as the final answer, in the language of the manuscript.
+- Give the brief in 4 to 6 lines, with each item of the brief. A line can have more than one item.
 - After the brief, end the final answer with one question: is the brief correct, and what must change?
 
 ## The writing
 
-- For an answer to a brief, write the scene by the brief and by each correction of the answer. When a correction changes an item of the brief, the correction applies.
-- For a complete request, write the scene by the items of the request.
+- For an answer to a brief, write the scene by the brief and by each correction of the answer.
+- When a correction changes an item of the brief, the correction applies.
+- For a complete request, write the scene by the items that the request gives.
 - Send the scene with propose_edit.
 - Give no second brief in this Run.

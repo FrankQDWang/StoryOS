@@ -52,9 +52,10 @@ The run kept its plan.
 | Text | `SKILL.md` SHA-256 | Runs |
 | --- | --- | --- |
 | The text of the live run, product commit `2c7c8d70` | `9ff25b4cbe4011223b0b58ba9eace5bf81c90047622c1ac35a5bcdb5998ee259` | 1 and 2 (Run 3 had only the catalog line) |
-| With the corrected conditions of the sections "When it applies", "The brief", and "The writing" (the head of this change) | `deeb949f94f6554dd3f536e8f58812a8c3f6bfb4b902a4b4596ce4e07f436e62` | none |
+| The text of review round 1, with the corrected conditions of the sections "When it applies", "The brief", and "The writing" | `deeb949f94f6554dd3f536e8f58812a8c3f6bfb4b902a4b4596ce4e07f436e62` | none |
+| The text of the head, after review round 1 | `9aafd9bb36426be23f66ba73ae03e6d1c26959a5f23b621bc3acbc65bde121a1` | none |
 
-A pre-review after the live run found two inputs for which two sentences of the text of the live run give different instructions: an answer to a brief that asks for a new brief ("write the scene" and "give the new brief"), and a complete request in a later turn of a Conversation that had a brief ("by the brief" and "by those items"). The correction makes the conditions exclusive. No Run repeats ([decision on #1765](https://github.com/FrankQDWang/StoryOS/issues/1765#issuecomment-7061627195), as for the same case of `local-revision` in the [decision on #1764](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7061123227)): for the input of each Run, the corrected sentences give the same instruction, as the list after the diff shows. The diff:
+A pre-review after the live run found two inputs for which two sentences of the text of the live run give different instructions: an answer to a brief that asks for a new brief ("write the scene" and "give the new brief"), and a complete request in a later turn of a Conversation that had a brief ("by the brief" and "by those items"). The correction makes the conditions exclusive. No Run repeats ([decision on #1765](https://github.com/FrankQDWang/StoryOS/issues/1765#issuecomment-7061627195), as for the same case of `local-revision` in the [decision on #1764](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7061123227)): for the input of each Run, the corrected sentences give the same instruction, as the list at the end of this section shows. The diff from the text of the live run to the text of round 1:
 
 ```diff
 @@
@@ -89,10 +90,65 @@ A pre-review after the live run found two inputs for which two sentences of the 
 +- Give no second brief in this Run.
 ```
 
-For the input of each Run, the sentences before and after the correction give the same instruction:
+Review round 1 of the pull request found which inputs went into each branch of the text of round 1 ([decision on #1765](https://github.com/FrankQDWang/StoryOS/issues/1765#issuecomment-7061789813)). A question about the brief or a refusal of the brief got the instruction to write the scene. The head text gives the writing only to an answer that tells the assistant to write. It also gives the writing at once to a request that tells the assistant to write with no brief. Its sentences have at most 20 words. No Run repeats. The diff from the text of round 1 to the head text:
 
-- **Run 1** ("请接着这一章的结尾，写下一场：…"): the message comes in a new Conversation, so it is no answer to a brief, and it asks for a new scene. It does not give each item. Before and after, the instruction is the brief. The brief before and after: 4 to 6 lines with each item, then one question.
-- **Run 2** ("思路可以。只改一处：视角换成老周。…"): the message comes directly after Run 1, whose final answer was a brief, and it asks for no new brief. Before and after, the instruction is to write the scene by the brief and by the correction, with `propose_edit`, and with no second brief.
+```diff
+@@
+
+ ## When it applies
+
+-An answer to a brief is an author message that comes directly after a Run whose final answer was a brief.
++An answer to a brief is the author message directly after a Run whose final answer was a brief.
+
+-- When the author message is an answer to a brief and it asks for a new brief, give the new brief as the section "The brief" says.
+-- When the author message is an answer to a brief and it does not ask for a new brief, write the scene as the section "The writing" says.
+-- When the author message is not an answer to a brief and it asks for a new scene or a longer new passage, do as the section "A complete request" says.
++For an answer to a brief:
++
++- When the answer asks for a new brief, give it as the section "The brief" says.
++- When the answer asks for no new brief and tells you to write the scene, use the section "The writing". An acceptance of the brief, a correction of an item, or a request for the scene tells you to write.
++- For each other answer, do not write the scene of the brief, and make no Proposal for that scene. Examples are a question about the brief, a refusal of the brief, and a small change of existing text. These instructions say nothing more for such an answer.
++
++For an author message that is not an answer to a brief:
++
++- When it asks for a new scene or a longer new passage, use the section "A complete request".
+ - In all other cases, for example a small change of existing text, do not use these instructions.
+
+ ## A complete request
+@@
+ 5. The last event of the scene.
+ 6. The facts of the earlier story that the scene keeps.
+
+-- When the author request gives each item, write the scene at once as the section "The writing" says, and give no brief.
+-- When the author request does not give each item, give the brief as the section "The brief" says.
++- When the author request gives each item, use the section "The writing" at once, and give no brief.
++- When the author request tells you to write with no brief, use the section "The writing" at once.
++- In all other cases, give the brief as the section "The brief" says.
+
+ ## The brief
+
+ - In this Run, write no prose of the novel and make no Proposal.
+ - Read what you need from the earlier Chapters and Agent Memory.
+-- Give the brief as the final answer, in the language of the manuscript, in 4 to 6 lines. Give each item of the brief. A line can have more than one item.
++- Give the brief as the final answer, in the language of the manuscript.
++- Give the brief in 4 to 6 lines, with each item of the brief. A line can have more than one item.
+ - After the brief, end the final answer with one question: is the brief correct, and what must change?
+
+ ## The writing
+
+-- For an answer to a brief, write the scene by the brief and by each correction of the answer. When a correction changes an item of the brief, the correction applies.
+-- For a complete request, write the scene by the items of the request.
++- For an answer to a brief, write the scene by the brief and by each correction of the answer.
++- When a correction changes an item of the brief, the correction applies.
++- For a complete request, write the scene by the items that the request gives.
+ - Send the scene with propose_edit.
+ - Give no second brief in this Run.
+```
+
+For the input of each Run, the head text gives the same instruction as the text of the Run:
+
+- **Run 1** ("请接着这一章的结尾，写下一场：…"): the message comes in a new Conversation, so it is no answer to a brief. It asks for a new scene, it does not give each item, and it does not tell the assistant to write with no brief. By the text of the Run and by the head text, the instruction is the brief: 4 to 6 lines with each item, then one question.
+- **Run 2** ("思路可以。只改一处：视角换成老周。…其余照你的思路写。"): the message comes directly after Run 1, whose final answer was a brief. It asks for no new brief, and it accepts the brief, corrects one item, and asks for the scene. By the text of the Run and by the head text, the instruction is to write the scene by the brief and by the correction, with `propose_edit`, and with no second brief.
 - **Run 3**: no Skill instruction; the catalog line is the description, which did not change.
 
 ## Fixed inputs
