@@ -28,21 +28,15 @@ run_vitest() {
   : > "$work/output"
   # POSIX sh has no pipefail, so the exit code of Vitest goes through a file.
   { pnpm --dir "$root/apps/web" exec vitest run "$@" 2>&1; echo "$?" > "$work/code"; } | tee "$work/output" &
-  run=$!
-  while kill -0 "$run" 2>/dev/null; do
-    if connected_to_no_browser; then
-      python3 "$root/scripts/check-lanes.py" --stop-run "$$" "$run" "$work"
-      case $? in
-        0) ;;
-        2) wait "$run"; end_line
-           echo "browser-vitest: the run connected to no browser session and did not exit, so it was stopped"
-           return 1 ;;
-        *) exit 1 ;;
-      esac
-    fi
-    sleep 1
-  done
-  if ! wait "$run"; then
+  python3 "$root/scripts/check-lanes.py" --watch-run "$$" "$!" "$work/output"
+  case $? in
+    0) ;;
+    2) wait "$!"; end_line
+       echo "browser-vitest: the run connected to no browser session and did not exit, so it was stopped"
+       return 1 ;;
+    *) exit 1 ;;
+  esac
+  if ! wait "$!"; then
     echo "browser-vitest: the output of the Vitest run was not kept" >&2
     exit 1
   fi
@@ -54,12 +48,7 @@ run_vitest() {
 }
 
 connected_to_no_browser() {
-  # Only the error line and the last "Tests" line (the summary of Vitest) count, also with colors.
-  cp "$work/output" "$work/seen" || return 1
-  sed "s/$(printf '\033')\[[0-9;]*m//g" "$work/seen" > "$work/plain" || return 1
-  grep -Eq '^Error: Failed to connect to the browser session ' "$work/plain" \
-    && grep -E '^[[:space:]]*Tests[[:space:]]' "$work/plain" | tail -n 1 \
-      | grep -Eq '^[[:space:]]*Tests[[:space:]]+no tests[[:space:]]*$'
+  python3 "$root/scripts/check-lanes.py" --connected-to-no-browser "$work/output"
 }
 
 wait_for_start_gap || exit
