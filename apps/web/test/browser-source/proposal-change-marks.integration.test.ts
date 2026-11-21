@@ -84,6 +84,13 @@ it("shows the marks and the tick of fixture row 1 and leaves the candidate text 
 
 const PAIR_COLOUR = "rgba(52, 50, 46, 0.12)";
 
+/** Moves the mouse pointer out of the editors, to an element below them. */
+async function movePointerOutside(): Promise<void> {
+  const outside = Object.assign(document.createElement("div"), { style: "height: 40px" });
+  document.body.append(outside);
+  try { await userEvent.hover(outside); } finally { outside.remove(); }
+}
+
 /** Each element of the editor with the pair background or outline, with its place, text, and colours. */
 function pairs(editor: Editor) {
   return Array.from(editor.view.dom.querySelectorAll(".proposal-change-pair"), (element) => {
@@ -117,7 +124,7 @@ it("pairs a mark or the tick with its old words in the target Block only while t
   await userEvent.hover(targetBlock(editor));
   expect(pairs(editor)).toEqual([]);
   await userEvent.hover(mark());
-  await userEvent.unhover(mark());
+  await movePointerOutside();
   expect({ pairs: pairs(editor), target: targetBlock(editor).outerHTML })
     .toEqual({ pairs: [], target: targetBlock(openEditor(ROW_1.old, [])).outerHTML });
 });
@@ -135,13 +142,6 @@ async function typeAt(editor: Editor, place: "target" | "candidate", offset: num
   editor.commands.setTextSelection(position(editor, place, offset));
   editor.view.focus();
   await applyTrustedInput({ operation: "insert_text", text });
-}
-
-/** The marks that the rule gives for the current texts of the target Block and of the candidate. */
-function shownByRule(editor: Editor): string {
-  const old = targetBlock(editor).textContent!;
-  const current = candidateText(editor).textContent!;
-  return shownCandidate(current, proposalChangeRuns(old, current));
 }
 
 it("marks a word that the author types into an editable candidate and captures the same candidate edit", async () => {
@@ -331,7 +331,7 @@ it("removes the pair when the pointer leaves during a composition that changes n
   await userEvent.hover(mark());
   expect(pairs(editor).length).toBe(2);
   editor.view.dom.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
-  await userEvent.unhover(mark());
+  await movePointerOutside();
   expect(pairs(editor).length).toBe(2);
   editor.view.dom.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "" }));
   await expect.poll(() => pairs(editor)).toEqual([]);
