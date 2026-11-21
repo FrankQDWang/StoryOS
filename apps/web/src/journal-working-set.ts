@@ -144,14 +144,10 @@ export async function retireCollectedJournalPrefix(
     if (chains === undefined) chainsById.set(chain.payload_chain_id, [chain]);
     else chains.push(chain);
   }
-  const chainPositions = new Map<string, { first: number; last: number }>();
-  for (const [position, record] of snapshot.records.entries()) {
-    const positions = chainPositions.get(record.payload_chain_ref);
-    if (positions === undefined) {
-      chainPositions.set(record.payload_chain_ref, { first: position, last: position });
-    } else positions.last = position;
-  }
-  const scanned: { group: JournalSubmissionGroup; end: number; ids: Set<string>; collected: boolean }[] = [];
+  const chainLast = new Map<string, number>();
+  for (const [position, record] of snapshot.records.entries()) chainLast.set(record.payload_chain_ref, position);
+  const scanned: { group: JournalSubmissionGroup; end: number; ids: Set<string>; collected: boolean;
+    chainEnd: number }[] = [];
   let position = 0;
   for (let index = 0; position < snapshot.records.length;) {
     const group = snapshot.groups[index];
@@ -172,12 +168,10 @@ export async function retireCollectedJournalPrefix(
       || chains.some((chain) => chain.payload_collection?.collection_fence_id !== fenceId)
       || !equal(Reflect.get(fences.get(fenceId) as object, "collected_payload_chain_ids"), [...ids])))
       || (!collected && chains.some((chain) => chain.payload_collection !== undefined))
-      || chains.length !== ids.size
-      || [...ids].some((id) => {
-        const { first, last } = chainPositions.get(id)!;
-        return first < position || last >= end;
-      })) break;
-    scanned.push({ group, end, ids, collected });
+      || chains.length !== ids.size) break;
+    // A chain can continue from an earlier group of the prefix, as the chain rule before #1758 wrote it.
+    const chainEnd = Math.max(...[...ids].map((id) => chainLast.get(id)! + 1));
+    scanned.push({ group, end, ids, collected, chainEnd });
     position = end;
   }
   // The prefix ends after the last collected group before `end`.
@@ -186,11 +180,14 @@ export async function retireCollectedJournalPrefix(
     while (last > 0 && !scanned[last - 1]!.collected) last -= 1;
     return last;
   };
-  // Each closed group must also be closed against the records after the prefix that leaves.
+  // Each closed group must also be closed against the records after the prefix that leaves, and each chain of the
+  // prefix must end inside it.
   let count = collectedEnd(scanned.length);
   for (let open = 0; open >= 0;) {
-    const later = snapshot.records.slice(scanned[count - 1]?.end ?? 0);
-    open = scanned.slice(0, count).findIndex((entry) => !entry.collected && !closed(entry.group, later));
+    const end = scanned[count - 1]?.end ?? 0;
+    const later = snapshot.records.slice(end);
+    open = scanned.slice(0, count).findIndex((entry) => entry.chainEnd > end
+      || (!entry.collected && !closed(entry.group, later)));
     if (open >= 0) count = collectedEnd(open);
   }
   const retiring = scanned.slice(0, count);

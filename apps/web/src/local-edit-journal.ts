@@ -952,8 +952,13 @@ function closedJournalGroup(snapshot: ValidatedJournalSnapshot, base: EditorBase
     // A collected applied group after it in the prefix installs a later base (kind 2 of #1758).
     if (settlement.kind === "applied_receipt_settled") return true;
     if (settlement.kind !== "zero_authority_receipt_settled") return false;
+    // The projection keeps the records that follow a group active in each Chapter, and it resolves a group of
+    // another Chapter only when it applied. Thus such a group stays, so the save state does not change.
+    const otherChapter = group.frozen_request_body.chapter_id !== base.chapter_id;
+    if (otherChapter && snapshot.records.find((record) => record.local_intent_sequence
+      === group.covered_sequence_range.first)?.follows_submission_group !== undefined) return false;
     if (settlement.effect.kind === "no_effect") {
-      if (group.frozen_request_body.chapter_id === base.chapter_id) {
+      if (!otherChapter) {
         return provenNoEffectAgainstDurableBase(group, snapshot, base);
       }
       // The session base names another Chapter, so the checkpoint of the chain gives the text of the head.
