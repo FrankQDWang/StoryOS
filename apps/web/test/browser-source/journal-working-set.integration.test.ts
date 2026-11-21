@@ -19,7 +19,8 @@ import {
 } from "./scenario.ts";
 
 function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserScenario>,
-  currentBody: () => string, activity = { position: 0 }) {
+  currentBody: () => string, actions = { sequence: 0 }) {
+  let position = 0;
   let commandDigest: DigestValue | undefined;
   let session: GetEditorSessionResponse = {
     ...scenario.session, schema_id: "storyos.query.editor-session.response.v1",
@@ -43,7 +44,7 @@ function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserSce
       if (!commandDigest || !idempotencyKey) throw new Error("missing admitted identity");
       const revisionId = createJournalUuid();
       const response = createAppliedAuthorEditResponse({ request, commandDigest,
-        idempotencyKey, body, projectActivityPosition: String(++activity.position),
+        idempotencyKey, body, projectActivityPosition: String(++position),
         priorRevisionId: session.base_snapshot.authoritative_head_revision_id,
         authoritativeRevisionId: revisionId, commandId: createJournalUuid(),
         authorCommandAdmissionId: createJournalUuid(), receiptId: createJournalUuid(),
@@ -53,7 +54,7 @@ function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserSce
         "SHA-256", new TextEncoder().encode(body),
       ));
       session = { ...session, base_snapshot: { ...session.base_snapshot,
-        snapshot_id: createJournalUuid(), project_activity_position: String(activity.position),
+        snapshot_id: createJournalUuid(), project_activity_position: String(position),
         authoritative_head_revision_id: revisionId,
         materialized_revision: chapterRevision(revisionId, body),
         materialized_payload_digest: { algorithm: "sha256",
@@ -61,7 +62,9 @@ function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserSce
           value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
         },
       } };
-      return jsonResponse(response);
+      const action = String(++actions.sequence);
+      return jsonResponse({ ...response, effect: { ...response.effect, author_action_sequence: action },
+        receipt: { ...response.receipt, author_action_sequence: action } });
     }
     throw new Error(`unexpected request ${path}`);
   };
@@ -385,9 +388,10 @@ function candidateEdit(revision: string, priorText: string, text: string,
  */
 function candidateTransport(scenario: ReturnType<typeof createBrowserScenario>, currentBody: () => string,
   { firstNoEffect = false } = {}) {
-  // The Server gives each applied or revised Author Edit the next Author Action Sequence.
-  const activity = { position: 0 };
-  const applied = appliedAuthorEditTransport(scenario, currentBody, activity);
+  // The Server gives each applied or revised Author Edit the next Author Action Sequence. Only an applied edit moves
+  // the Project Activity position.
+  const actions = { sequence: 0 };
+  const applied = appliedAuthorEditTransport(scenario, currentBody, actions);
   const targets: string[] = [];
   const unexpected: string[] = [];
   const project = `/api/v1/projects/${PROJECT}`;
@@ -428,7 +432,7 @@ function candidateTransport(scenario: ReturnType<typeof createBrowserScenario>, 
     sequence += 1;
     const revision = REVISIONS[sequence]!;
     const answer = await response();
-    const action = String(++activity.position);
+    const action = String(++actions.sequence);
     return jsonResponse({ ...answer, effect: { kind: "proposal_revised", proposal_revision_id: revision,
       author_action_sequence: action }, receipt: { ...answer.receipt, result: "proposal_revised",
       prior_heads: [head], resulting_heads: [head], proposal_revision_ids: [revision], authoritative_revision_ids: [],
@@ -450,6 +454,9 @@ it("retires a group that revised a Proposal with the next collected group", asyn
     expect(await submit()).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
     await typeRun(workspace, text, 1, 1);
     expect(await submit()).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
+    // The Proposal Revision moves the Author Action Sequence, and only the applied edit moves the Activity position.
+    expect((await readJournalSnapshot(workspace)).groups[1]?.settlement).toMatchObject({
+      kind: "applied_receipt_settled", project_activity_position: "1", author_action_sequence: "2" });
     await collectEligibleJournalPayload(workspace);
     const saved = await readJournalSnapshot(workspace);
     remember(seen, saved);
