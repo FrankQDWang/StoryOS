@@ -4,14 +4,29 @@ This record is the live evidence of [S10-04: Add the SkillPackage local-revision
 
 Raw evidence is on the tag `evidence/1764-live-local-revision-2026-11-21`. The tag holds the plan, the Chapter, the Project Instruction, the list of the planted habits, the run script, the request guard, the wire payload of each request (`wire/M1.json` to `wire/M8.json`), the Model Attempts, the ToolCalls, the guard log, `measures-A.json` and `measures-B.json` (the Blocks, the Proposal operations, and each answer in full), `checks.json`, `loader.log`, and the Server and Worker logs. The tag has no database dump and no Project Export Archive.
 
+## Plan and final count
+
+The plan comes before the results. The planned numbers are 6 requests in total, 3 for each Run, and about 45,000 reported input tokens. The script of this run stopped only at the database cap of 12 requests, and not at the planned number. Thus the 4th request of each Run did not stop the run. The stop rule of "Live model requests" that the coordinator set after this run (decision on [#1762](https://github.com/FrankQDWang/StoryOS/issues/1762#issuecomment-7060590530)) stops a run at the first request above the planned number.
+
+The plan was posted on the ticket before the first request ([plan comment](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7060564582)). A rehearsal of all steps on `host_fake` on the same head came first: 2 author Runs, 4 fake requests, and no other Run.
+
+| Item | Planned | Actual |
+| --- | --- | --- |
+| AgentRuns | 2 (limit 4) | 2, each `completed`, each in a new Project and Conversation |
+| Model requests | 6 (3 for each Run); the database cap was 12 | 8 (4 for each Run, finding F2) |
+| Reported input | about 45,000 tokens | 69,190 tokens |
+| Largest request | at most 40,000 | 10,746 |
+| Other Runs (Memory work) | 0 | 0 |
+| Exa and embedding requests | 0 | 0 |
+
 ## Findings
 
 | ID | Finding | Effect |
 | --- | --- | --- |
 | F1 | **Each Run sent one Proposal in its first `propose_edit` call, with one operation for each changed Block.** Run A changed 5 Blocks, and Run B changed 2 Blocks. Each operation waits for the decision of the author, so the author can accept, change, or refuse each change alone. | The count rules and the rule "one Proposal" show in the first call. |
 | F2 | **After the first Proposal, the Host sent a new input with fewer target Blocks, and each Run made a second `propose_edit` call that the Host refused with `after_proposal`.** The user message of the next request said "The input of this author request changed after your last step", and its target Blocks had no Block of the open Proposal. The model read this as a new request: in Run A it proposed Block 8 "in the new five target Blocks", and in Run B it proposed Blocks 2 and 4 as a new set of "2 places". | Each Run used 4 requests and not 3. The total was 8 requests against 6 in the plan, in the cap of 12. The refusal kept the count: no Run changed more Blocks than the instructions permit. |
-| F3 | **The final answers do not have the form of the instructions.** Run A gave one line only for the refused change of Block 8, and named the 5 changed places in one sentence. Run B gave lines for Blocks 2 and 4, which it did not change, and offered to send them after the decision of the author. Neither answer gave one line for each changed place. | A cause is F2: the answer spoke of the second input. |
-| F4 | **Block 5, which has the device of the sample passage, stayed unchanged in each Run.** The answer of Run A said why: the sample passage uses the same frame. | The rule "what you leave" shows. |
+| F3 | **The final answers do not have the form of the instructions.** Run A gave one line only for the refused change of Block 8 ("然而，雾越来越浓…… —— 段首“然而”连接词＋……三连排比，属机器腔"), and named the 5 changed places in one sentence ("此前那份待决 Proposal 已覆盖另外五处更明显的机器腔（开头的“微微／缓缓”、眼中闪过、石子投湖比喻、心中暖流、命运齿轮）"). Run B gave lines for Blocks 2 and 4, which it did not change, and offered to send them later ("之后我立刻按当前选段提交下面这 2 处"). Neither answer gave one line for each changed place. | A cause is F2: the answer spoke of the second input ("这次的五个目标段里", Run A). |
+| F4 | **Block 5, which has the device of the sample passage, stayed unchanged in each Run.** The answer of Run A said why: "样文本身两次使用这一句式……属于你指定的口吻，故不动。" | The rule "what you leave" shows. |
 | F5 | **The Blocks with no habit (1, 3, and 7) stayed unchanged in each Run.** | The rule "all other text stays as it is" shows. |
 | F6 | **Some candidates add a small action or a sensory detail in the place of the removed habit**: 别开脸 and 没接话 (Block 4), 林舟没接话 and 河水拍着船帮 (Block 6), 握紧那把钥匙 (Block 9), and a new last image (Block 10 of each Run). No candidate adds an event of the plot or a name, and no candidate changes a fact of the Chapter. | Observation for the author. The rule "add no fact of the plot" did not stop small details of the scene. |
 | F7 | **The two Runs chose different places first.** Run A chose Blocks 2, 4, 6, 9, and 10, and left Block 8 for its refused second call. Run B, with "只改最明显的 2 处", chose Blocks 9 and 10. | Observation: the order of "the most obvious place" is the choice of the model. |
@@ -29,19 +44,6 @@ Raw evidence is on the tag `evidence/1764-live-local-revision-2026-11-21`. The t
 | Model | `doubao-seed-2-1-pro-260915`, head Model Registration `018f0000-0000-7001-8000-00000000fa24`, mapping `storyos.volcengine-agent-plan.responses.create.v10`. |
 | Script | `local-revision-live.ts`, started by `run.sh` and `rehearse.sh`. It is the run script of #1763 with the steps of this plan. It sends each command through the HTTP test support and the generated client, and it reads each measure with read-only SQL. |
 | Skill | `local-revision`, package digest `sha256:aedcb026ab7ba53db958a3665898dcee83bad3fd1a197f13079d5545afe99a20`. `listSkills` gave it and `conflict-check`, each with the description of its `SKILL.md`. |
-
-## Plan and final count
-
-The plan was posted on the ticket before the first request ([plan comment](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7060564582)). A rehearsal of all steps on `host_fake` on the same head came first: 2 author Runs, 4 fake requests, and no other Run.
-
-| Item | Planned | Actual |
-| --- | --- | --- |
-| AgentRuns | 2 (limit 4) | 2, each `completed`, each in a new Project and Conversation |
-| Model requests | 6, hard cap 12 | 8 (finding F2) |
-| Reported input | about 45,000 tokens | 69,190 tokens |
-| Largest request | at most 40,000 | 10,746 |
-| Other Runs (Memory work) | 0 | 0 |
-| Exa and embedding requests | 0 | 0 |
 
 ## Fixed inputs
 
@@ -109,7 +111,7 @@ Each explanation names the habit, for example "原句叠用“微微、缓缓、
 4. “这不是一次普通的渡河，而是……”虽是“不是……而是……”句式，但样文本身两次使用这一句式……属于你指定的口吻，故不动。
 5. 另：此前那份待决 Proposal 已覆盖另外五处更明显的机器腔（开头的“微微／缓缓”、眼中闪过、石子投湖比喻、心中暖流、命运齿轮），请先逐条接受或拒绝。
 
-The full answer is in `measures-A.json`. The answer speaks of the second input of M2. It gives no line for each of the 5 changed places in the form of the instructions (finding F3).
+The full answer is in `measures-A.json`. The answer speaks of the second input of M2 ("这次的五个目标段里，只有一处我建议改"). It gives no line for each of the 5 changed places in the form of the instructions (finding F3).
 
 ## Run B: the selected Skill, "只改最明显的 2 处。"
 
@@ -122,7 +124,7 @@ Author request in Project B, with the selection of `local-revision`: "只改最�
 | 9 | 林舟心中涌起一股暖流，他终于明白，姐姐留下钥匙，是想让他自己做决定。 | 姐姐留下钥匙，是让他自己拿主意。 |
 | 10 | 他不知道的是，命运的齿轮已经开始转动。 | 雾漫上来，船还在往对岸走。 |
 
-The candidate of Block 9 lost the name 林舟 at the start of the Block. The candidate of Block 10 added a new last image. In M6 the model proposed Blocks 2 and 4 with the summary "改最明显的 2 处机器腔", and the Host refused the call (finding F2). The final answer said that it cannot send a new suggestion while a Proposal waits, gave the two refused changes of Blocks 2 and 4 to send after the decision of the author, and said that 3 more places stay (Blocks 5, 6, and 8). Block 5 stayed unchanged.
+The candidate of Block 9 lost the name 林舟 at the start of the Block. The candidate of Block 10 added a new last image. In M6 the model proposed Blocks 2 and 4 with the summary "改最明显的 2 处机器腔", and the Host refused the call (finding F2). The final answer said that it cannot send a new suggestion while a Proposal waits ("现在没法提交新建议：这一章已有一条待处理的 Proposal"), gave the two refused changes of Blocks 2 and 4 to send after the decision of the author ("请先接受或拒绝那条待处理建议；之后我立刻按当前选段提交下面这 2 处"), and said that 3 more places stay ("选段里另外还留着 3 处较明显的（“不是普通渡河，而是……”“如同石子投入湖面……”“然而，雾越来越浓……”），这次按你说的不动。"), which are Blocks 5, 6, and 8. Block 5 stayed unchanged.
 
 ## Key check
 
