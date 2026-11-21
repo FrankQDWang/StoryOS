@@ -348,6 +348,8 @@ The route accepted each request. Each request of each Run had the block of the w
 | G3 | **With no selected Skill, R3 loaded `local-revision` from the Skill catalog** for the request "请改写这一段，保留其中的情节。". The words of the model: “作者要求改写整段并保留情节，本段集中了大量机器腔套路，该技能的去机器腔改法适用。” The Run then changed the one Block, and its candidate keeps 41 of the 163 characters of the paragraph in order. R3b, with the same inputs, loaded no Skill, and its candidate keeps 16. The two Runs do not show a cause of this difference. | none proposed. The Skill catalog is out of the scope of the rule text. |
 | G4 | **The final answer of R4 calls the device of the sample 机器腔.** The Project Instruction asks for the voice of its sample, which has the contrast 不是……是……. Block 5 has the contrast 这不是……而是…… on purpose. The candidate did not change Block 5, and the answer lists it as one of 2 places that stay. | none proposed for the rule text. The text of the package is out of the scope of this ticket. |
 
+The coordinator decided no change of the rule text for G1 to G4, and accepted the five Runs ([decision on the findings](https://github.com/FrankQDWang/StoryOS/issues/1774#issuecomment-7061876514)).
+
 Other observations, with no proposed change of the rule text:
 
 | ID | Observation |
