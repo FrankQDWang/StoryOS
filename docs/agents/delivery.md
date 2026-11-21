@@ -4,7 +4,7 @@ This document gives the rules to deliver a specification and its tickets. [ADR 0
 
 ## Roles
 
-- **Author:** decides each change of the product, a contract, a number, a waiver, and each merge of an aggregate pull request into `main`. The author approves the ticket graph of a specification. The [standing approvals](#standing-approvals) need no question. A report to the author follows the Reports rule of `AGENTS.md`. The author approves a ticket that must add more than 1500 counted lines only when the lines above the limit are mechanical or generated.
+- **Author:** decides each change of the product, a contract, a number, a waiver, and each merge of an aggregate pull request into `main`. The author approves the ticket graph of a specification. The [standing approvals](#standing-approvals) need no question. The author approves a ticket that must add more than 1500 counted lines only when the lines above the limit are mechanical or generated.
 - **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts the executor of each chain, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Before dispatch, it splits each ticket that must add more than 1500 counted lines and that the author did not approve. It approves a split only for its size.
 - **Executor:** one session for an ordered chain of tickets, in one worktree. Each ticket has its own branch and pull request. The executor implements each ticket, runs its review and checks, and sends its final report. It does not merge.
 - **Reviewer:** a new read-only Codex thread for each review axis. The reviewer is never the agent tool that implements the ticket.
@@ -56,9 +56,9 @@ The ticket body is the only owner of its acceptance contract. Before the brief, 
 
 The executor reads the current ticket, the current parent, the native dependencies, `AGENTS.md`, [CODING_STANDARDS.md](../../CODING_STANDARDS.md), and the contracts and ADRs that the ticket names. Then it claims the ticket at once, with no plan for approval and no wait for a reply.
 
-To claim, assign the issue and post the [Claim](#claim). The coordinator puts each decision in the parent or the ticket body first, and then it tells the executor. The executor reads the changed body and posts a new Claim before it continues.
+To claim, assign the issue and post the [Claim](#claim). When the coordinator changes the parent or the ticket, it tells the executor. The executor reads the changed body and posts a new Claim before it continues.
 
-The executor reads the ticket body again before it opens the pull request and before the final report.
+The coordinator puts each decision in the ticket body first, and then it sends the message. The executor reads the ticket body again before it opens the pull request and before the final report.
 
 Ask the coordinator only for a real decision. A product, contract, number, or waiver question goes to the author through the coordinator.
 
@@ -162,7 +162,7 @@ Then it sends the [review prompt](review-prompt.md) and the request to one new r
 - A pull request gets at most three rounds.
 - Only a blocking finding fails a round. A finding on format, lint, names, or ASD-STE100 wording never fails a round.
 - After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier only after a round passes: a fix or a base merge replaces the head of an earlier heavy run, and a round beside `make check-full` can lose its Codex job.
-- Round 2 and round 3 examine the fixes of the earlier blocking findings and the lines that changed after the earlier round. On a line that did not change, only product code of the [review prompt](review-prompt.md) can get a new blocking finding, and the reviewer marks each other new finding `late:`. The coordinator opens an issue for each `late:` finding that is a defect.
+- Round 2 and round 3 examine the earlier blocking findings and the lines that changed after the earlier round. Only product code can get a new blocking finding on a line that did not change; each other new finding there is `late:`, and the coordinator opens an issue for a `late:` defect.
 - After a passed round, a new round starts only after a change to the diff of the ticket. A merge of the base branch is no such change when `git diff <base>...<head>` is the same before and after the merge.
 
 ### After round 3
@@ -171,6 +171,7 @@ When round 3 has open blocking findings, do not start a fourth round. Send the f
 
 1. The coordinator reviews the fix in a pull request comment that names the new head.
 2. The fix adds a test that fails before the fix.
+3. The new head meets the conditions 1 and 2 of the [merge gate](#merge-gate).
 
 Then the coordinator review comment replaces the verdicts of round 3.
 
