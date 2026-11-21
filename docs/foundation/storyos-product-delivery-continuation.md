@@ -216,12 +216,16 @@ explicit model-policy decision; verify the editor remains independently usable.
 Stage 10 comes after the release of Stage 7 and before Stage 8 and Stage 9
 ([ADR 0096](../adr/0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md)).
 It works on the first problem of the author: generated prose reads as
-machine-written. Its scope is not decided. A kickoff with the author decides
-the scope, and then a specification and a parent issue follow. Until then,
-Stage 10 has no Requirement, no author journey, and no evidence row, and the
-proof owner has nothing to cover for it. The candidates are in
+machine-written. [ADR 0100](../adr/0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md)
+sets its scope: default writing rules in the Host instructions, the Project
+Instruction as the one place for the sample passages of the author,
+SkillPackages of the StoryOS distribution, and marks on the new words of a
+Proposal candidate. StoryOS infers no preference of the author automatically.
+A specification and a parent issue follow. Until then, Stage 10 has no
+Requirement, no author journey, and no evidence row, and the proof owner has
+nothing to cover for it. The other candidates stay in
 [`Todos.md`](../../Todos.md), which is not a contract. The rule "no setup
-before writing" of ADR 0096 applies to each candidate.
+before writing" of ADR 0096 applies.
 
 ## 8. Deferred scope outside MVP
 
