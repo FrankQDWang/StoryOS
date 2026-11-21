@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package one clean Git source tree with its exact Web bytes and Server digest pin."""
+"""Package one clean Git source tree with its exact Web bytes, its SkillPackages, and Server digest pin."""
 
 import os
 from pathlib import Path
@@ -28,6 +28,10 @@ target.mkdir(exist_ok=True)
 with tempfile.TemporaryDirectory(prefix="release-package-", dir=target) as temporary:
     package = Path(temporary) / "package"
     shutil.copytree(root / "apps/web/dist", package / "web", symlinks=True)
+    # Only the tracked files: an ignored file of the worktree stays out of the release package.
+    for path in filter(None, output("git", "ls-files", "-z", "skill-packages").split("\0")):
+        (package / path).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(root / path, package / path)
     digest = output("cargo", "run", "--quiet", "--locked", "-p", "storyos-contracts", "--",
                     "web-manifest", str(package / "web"), *source)
     build_target = target / "web-release"
