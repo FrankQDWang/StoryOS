@@ -13,6 +13,7 @@ StoryOS comes with standard SkillPackages for the work of a novel author ([ADR 0
 | Package | What the assistant does |
 | --- | --- |
 | `conflict-check` | It compares a text with the earlier Chapters and Agent Memory, and it reports each conflict with its source. It changes no text. |
+| `local-revision` | It finds the most obvious machine-voice places of a text (at most 5, or the number that the author gives), and it sends one Proposal with one small change for each place. The author accepts, changes, or refuses each change. All other text stays as it is. |
 
 - **In the repository:** the directory `skill-packages/` at the root.
 - **In the release package:** the directory `skill-packages/`, beside `web/`. `python3 scripts/package-release.py` copies the tracked files of `skill-packages/` into it with the same bytes.
