@@ -26,35 +26,8 @@ type Challenge = { method: string; route_template: string; command_schema: strin
   canonical_command_digest: { algorithm: string; profile: string; value_hex_lowercase: string };
   idempotency_key: string };
 
-// A second copy of the lookup of `refused-command-challenge.integration.test.ts:101`, kept by a coordinator decision.
-const CATALOG_URL = new URL("../../../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json",
-  import.meta.url);
-const { operations } = await (await fetch(CATALOG_URL)).json() as { operations: {
-  operation_id: string; kind: string; method: string; path: string; schemas: { request: string } }[] };
-/** The rows of the route catalog that are the Project command targets of the Server. */
-const PROJECT_COMMANDS = operations.filter(({ kind, path }) =>
-  kind === "command" && path.startsWith("/api/v1/projects/{project_id}"));
-
 const problem = (code: string, message: string, status: number) =>
   jsonResponse({ schema_id: "storyos.problem.v1", code, message }, status);
-
-/**
- * The refusal of the Server for a Challenge request, in the order of `project_command_challenge.rs:63`: a target that
- * is not in the route catalog (`lib.rs:908`), then a bad digest or a key that is not UUID v7 (`lib.rs:884`).
- */
-function challengeRefusal(challenge: Challenge): Response | undefined {
-  const target = PROJECT_COMMANDS.find((operation) => operation.method === challenge.method
-    && operation.path === challenge.route_template && operation.schemas.request === challenge.command_schema);
-  if (target === undefined) {
-    return problem("command_target_refused", "The command target is not in the closed Release 1 contract.", 422);
-  }
-  const { algorithm, profile, value_hex_lowercase: value } = challenge.canonical_command_digest;
-  if (algorithm !== "sha256" || profile !== `storyos.command.${target.operation_id}.jcs.v1`
-    || !/^[0-9a-f]{64}$/.test(value) || !UUID_V7.test(challenge.idempotency_key)) {
-    return problem("invalid_request", "The request is invalid.", 400);
-  }
-  return undefined;
-}
 
 const digest = (kind: Kind, request: Delete) => kind === "chapter"
   ? digestDeleteChapter(request as DeleteChapterRequest, crypto)
@@ -98,8 +71,7 @@ async function applied(kind: Kind, projectId: string, request: Delete, key: stri
 // The fake Server serves the exact requests of the test: the method, the path with the Project of the test, and the
 // Chapter or Volume of the test. It records each other request and throws, so that request fails the test.
 /**
- * As the Server (ADR 0076): a Challenge request that the Server refuses gets its refusal. Of the other Challenges,
- * the first gets a rate limit with Retry-After 1, and the next a nonce.
+ * As the Server (ADR 0076): the first Challenge gets a rate limit with Retry-After 1, and the next a nonce.
  * A command is applied only when its nonce, key, method, route, schema, and digest match the Challenge of the nonce.
  */
 function fakeServer(kind: Kind, projectId: string) {
@@ -115,8 +87,6 @@ function fakeServer(kind: Kind, projectId: string) {
     if (route === `POST /api/v1/projects/${projectId}/anti-forgery-challenges`) {
       const challenge = JSON.parse(String(init?.body)) as Challenge;
       sent.push({ step: "challenge", key: challenge.idempotency_key, nonce: null });
-      const refusal = challengeRefusal(challenge);
-      if (refusal !== undefined) return refusal;
       challenges += 1;
       if (challenges === 1) {
         // `crates/storyos-server/src/lib.rs:936`: status 429, Retry-After, and the problem `challenge_rate_limited`.

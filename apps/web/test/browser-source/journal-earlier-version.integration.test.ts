@@ -98,8 +98,8 @@ function journalServer(scenario: ReturnType<typeof createBrowserScenario>) {
       });
     }
     if (route === `GET /api/v1/projects/${PROJECT}/manuscript/statistics`) {
-      return jsonResponse({ schema_id: "storyos.problem.v1", code: "projection_not_ready",
-        message: "The statistics projection is not ready." }, 409);
+      // `crates/storyos-server/src/manuscript_statistics.rs:45`.
+      return problem("projection_not_ready", "The required statistics projection watermark is not ready.", 503);
     }
     if (route === `POST /api/v1/projects/${PROJECT}/anti-forgery-challenges`) {
       const challenge = JSON.parse(String(init?.body)) as Challenge;
