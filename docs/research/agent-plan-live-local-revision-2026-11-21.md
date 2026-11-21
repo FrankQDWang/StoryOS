@@ -35,7 +35,7 @@ Run C kept its plan.
 
 ## Findings
 
-The executor sent findings F1 to F8, and then the findings C1 to C4 of Run C (F9 to F11 of this record), to the coordinator before the review request. The decision of the coordinator on F1 to F8 is on the ticket ([decision comment](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7060765711)). The coordinator accepted Run C as it occurred, with no added sentence and no fourth AgentRun ([decision comment of Run C](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7060913472)).
+The executor sent findings F1 to F8, and then the findings C1 to C4 of Run C (F9 to F11 of this record), to the coordinator before the review request. The decision of the coordinator on F1 to F8 is on the ticket ([decision comment](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7060765711)). The coordinator accepted Run C as it occurred, with no added sentence and no fourth AgentRun ([decision comment of Run C](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7060913472)). After review round 1, the coordinator decided to correct the conditions of two sections of the package with no new Run ([decision comment of round 1](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7061123227); section "The text of the package in each Run").
 
 | ID | Finding | Effect |
 | --- | --- | --- |
@@ -64,6 +64,42 @@ The executor sent findings F1 to F8, and then the findings C1 to C4 of Run C (F9
 | Model | `doubao-seed-2-1-pro-260915`, head Model Registration `018f0000-0000-7001-8000-00000000fa24`, mapping `storyos.volcengine-agent-plan.responses.create.v10`. |
 | Script | `local-revision-live.ts`, started by `run.sh` and `rehearse.sh`. It is the run script of #1763 with the steps of this plan. It sends each command through the HTTP test support and the generated client, and it reads each measure with read-only SQL. |
 | Skill | `local-revision`, package digest `sha256:aedcb026ab7ba53db958a3665898dcee83bad3fd1a197f13079d5545afe99a20`. `listSkills` gave it and `conflict-check`, each with the description of its `SKILL.md`. |
+
+## The text of the package in each Run
+
+| Text | `SKILL.md` SHA-256 | Runs |
+| --- | --- | --- |
+| First text | `13b982e7f579330603794547e910aedcc0aee4682ae0a942e9202e9a400513fb` | A and B |
+| With the two added sentences of the section "One Proposal" | `0b73daa84eb8c536c2fe016a385b8fb38677de5667e1f2274f9bafc0762558e9` | C |
+| With the corrected conditions of the sections "The text to revise" and "The count" (the head of this change) | `05acee45246f6c5339fc330eca104767eb8c0f61531b2e2ba32e392695d3b283` | none |
+
+After review round 1, the conditions of two sections became exclusive and complete. No Run used the corrected text. The diff from the text of Run C:
+
+```diff
+ ## The text to revise
+ 
+-- When the author names a text, revise that text.
+-- When the author names no text, revise the text of the author references of the request.
+-- When the request has no author reference, revise the Working text.
++- When the author request names a text, revise that text.
++- When it names no text and the request has author references, revise the text of the author references.
++- When it names no text and the request has no author reference, revise the Working text.
+@@
+ ## The count
+ 
+-- Choose at most 5 places. Choose the most obvious place first.
+ - When the author request gives a number, choose at most that number of places.
++- When it gives no number, choose at most 5 places.
++- Choose the most obvious place first.
+ - One place is one Block.
+```
+
+For the input of each Run, the sentences before and after the correction give the same instruction:
+
+- **Runs A and C** ("请修改这一章。"): the request names the Chapter, which is the Working text, and it has no author reference. Before and after, the text to revise is the Chapter. The request gives no number. Before and after, the limit is 5 places.
+- **Run B** ("只改最明显的 2 处。"): the request names no text and has no author reference. Before and after, the text to revise is the Working text, the Chapter. The request gives the number 2. Before, the two sentences "at most 5" and "at most that number" both permit 2 places and no more. After, the limit is 2 places.
+
+The live run of [S10-08](https://github.com/FrankQDWang/StoryOS/issues/1774) with `local-revision` uses the package after the merge of this change, and its record gives the SHA-256 of that `SKILL.md`.
 
 ## Fixed inputs
 

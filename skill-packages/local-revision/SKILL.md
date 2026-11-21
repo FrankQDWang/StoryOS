@@ -9,9 +9,9 @@ Use these instructions to revise only the most obvious machine-voice places of a
 
 ## The text to revise
 
-- When the author names a text, revise that text.
-- When the author names no text, revise the text of the author references of the request.
-- When the request has no author reference, revise the Working text.
+- When the author request names a text, revise that text.
+- When it names no text and the request has author references, revise the text of the author references.
+- When it names no text and the request has no author reference, revise the Working text.
 
 ## The habits
 
@@ -19,8 +19,9 @@ A habit is one of the habits that the default rules for prose of the Host instru
 
 ## The count
 
-- Choose at most 5 places. Choose the most obvious place first.
 - When the author request gives a number, choose at most that number of places.
+- When it gives no number, choose at most 5 places.
+- Choose the most obvious place first.
 - One place is one Block.
 
 ## What you leave
