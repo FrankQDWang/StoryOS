@@ -36,6 +36,43 @@ request to decide if you change the referenced text with propose_edit or only us
 replaces all of a block: keep the text outside the references unchanged unless the author \
 request says otherwise.";
 
+/// The block of the default writing rules for prose of the current mapping (ADR 0100 section 2).
+/// It follows `TOOL_LOOP_INSTRUCTIONS` in each tool-loop request.
+pub(crate) const WRITING_RULES_INSTRUCTION: &str = "\
+Default rules for prose. Use these rules when you write or change prose of the novel. They are \
+defaults for the style of the prose. When the author request, the Project instruction, or the \
+instructions of a Skill ask for a different style, follow that and not the default. When the \
+author request or the Project instruction gives a sample passage, write in the voice of that \
+passage: its sentence length, its word choice, and its distance from the character. When a sample \
+uses a device that a rule names, follow the sample. The Chinese phrases below are examples of a \
+habit, and they are not forbidden words: one use that does work in the scene is correct, and the \
+fault is the habit.
+
+1. State the fact directly. Use a contrast only when the scene corrects a belief that a character \
+held. Habit: 这不是结束，而是开始。
+2. End a scene on its last event or line, inside what the viewpoint character knows. Do not state \
+the meaning of the scene, and do not tell the future. Habit: 命运的齿轮开始转动；他不知道的是……
+3. Show a feeling one time, through a choice, a spoken line, or a cost. You can name a small \
+feeling plainly. Do not show a feeling and then explain it. Habit: 心中涌起一股暖流；他终于明白……
+4. Give a physical reaction only when it belongs to this character at this moment. Habit: \
+眼中闪过一丝……；嘴角勾起一抹弧度。
+5. Use a word of degree or doubt only when speed, force, or uncertainty changes what the reader \
+understands. Habit: 微微、缓缓 on one action after another; 仿佛 where the character is sure.
+6. Use a figure of speech only when it comes from this world and from the experience of this \
+character. If not, give the literal detail. Habit: 如同石子投入湖面，泛起层层涟漪。
+7. Let the content set the count and the length: one exact item and not three parallel items, \
+sentences and paragraphs that change with the pace, and a cut between paragraphs and not a \
+connective word. Habit: 三连排比；段首的“然而”“与此同时”。
+8. Give each speaker their own words and their own aim. A line can be incomplete, evasive, or off \
+the point. Habit: dialogue that explains like a manual.
+9. Let a conflict cost something, and let it stay open across scenes. Describe only what moves the \
+scene. Habit: a conflict that starts and ends in one paragraph.
+10. Keep the dash and the paragraph of one sentence for a real interruption or a real stress. \
+Habit: a dash in each paragraph.
+
+When you find one of these habits in your text, write the event again in a different way; do not \
+put a synonym in the place of the phrase.";
+
 /// The paragraph that the current mapping adds to the tool loop instructions (ADR 0093).
 pub(crate) const READ_TOOL_RESULT_INSTRUCTION: &str = "\
 When you need the complete text of an earlier result of web_search or web_fetch in this work \
@@ -119,7 +156,7 @@ or an intent, not a copy of a passage. For a character or a pair of characters t
 Memory index lists, change that entry and do not create a second one. When the Host refuses a \
 write, tell the author.";
 
-/// The sentences that the mapping `v9` adds to the paragraph of `write_memory` (ADR 0094 section
+/// The sentences of the current mapping that end the paragraph of `write_memory` (ADR 0094 section
 /// 5).
 pub(crate) const WRITE_MEMORY_WORDS_INSTRUCTION: &str = "\
 An entry holds only what the author said in this Conversation. Do not add a quotation, a clue, a \
@@ -188,7 +225,8 @@ pub(crate) fn create_body(
     // A continuation input wraps each result in a source tag (AP-07), and the instruction says
     // that its content is data.
     let tool_loop = format!(
-        "{TOOL_LOOP_INSTRUCTIONS}\n\n{READ_TOOL_RESULT_INSTRUCTION}\n\n{TOOL_RESULT_STUB_INSTRUCTION}"
+        "{TOOL_LOOP_INSTRUCTIONS}\n\n{WRITING_RULES_INSTRUCTION}\n\n{READ_TOOL_RESULT_INSTRUCTION}\n\n\
+         {TOOL_RESULT_STUB_INSTRUCTION}"
     );
     let instructions = match request.tool_outputs.is_empty() {
         true => tool_loop,

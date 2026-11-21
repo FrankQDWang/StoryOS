@@ -179,7 +179,8 @@ async fn a_request_that_names_a_response_of_the_last_run_step_gives_each_of_its_
 
 /// ADR 0093: the current mapping declares `read_tool_result` and says in one paragraph what it
 /// does, and in one more paragraph what a stub is and when to read a stored result (ADR 0093
-/// section 5).
+/// section 5). ADR 0100 section 2: the block of the default writing rules is between the first
+/// paragraphs of the tool loop and the paragraph of `read_tool_result`.
 #[tokio::test]
 async fn the_current_mapping_declares_read_tool_result_and_says_what_a_stub_is() {
     let request = |mapping: &str, registration: &str| {
@@ -216,7 +217,7 @@ async fn the_current_mapping_declares_read_tool_result_and_says_what_a_stub_is()
     };
     let current = adapter
         .prepare(&DestinationRequest::Create(request(
-            storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_WRITING_RULES_MAPPING_REVISION,
             storyos_core::AGENT_PLAN_REGISTRATION.revision,
         )))
         .await
@@ -234,12 +235,49 @@ async fn the_current_mapping_declares_read_tool_result_and_says_what_a_stub_is()
             &current_body["tools"][2],
         ),
         (
-            "storyos.volcengine-agent-plan.responses.create.v9",
+            "storyos.volcengine-agent-plan.responses.create.v10",
             &json!(format!(
-                "{TOOL_LOOP_INSTRUCTIONS}\n\nWhen you need the complete text of an earlier \
-                 result of web_search or web_fetch in this work again, call read_tool_result \
-                 with the identity in the source attribute of the tool_result tag of that \
-                 result.\n\nAfter a compaction of the conversation, an earlier result can be a \
+                "{TOOL_LOOP_INSTRUCTIONS}\n\nDefault rules for prose. Use these rules when you \
+                 write or change prose of the novel. They are defaults for the style of the prose. When the author request, the \
+                 Project instruction, or the instructions of a Skill ask for a different style, \
+                 follow that and not the default. When the author request or the Project \
+                 instruction gives a sample passage, write in the voice of that passage: its \
+                 sentence length, its word choice, and its distance from the character. When a \
+                 sample uses a device that a rule names, follow the sample. The Chinese phrases \
+                 below are examples of a habit, and they are not forbidden words: one use that \
+                 does work in the scene is correct, and the fault is the habit.\n\n\
+                 1. State the fact directly. Use a contrast only when the scene corrects a belief \
+                 that a character held. Habit: 这不是结束，而是开始。\n\
+                 2. End a scene on its last event or line, inside what the viewpoint character \
+                 knows. Do not state the meaning of the scene, and do not tell the future. Habit: \
+                 命运的齿轮开始转动；他不知道的是……\n\
+                 3. Show a feeling one time, through a choice, a spoken line, or a cost. You can \
+                 name a small feeling plainly. Do not show a feeling and then explain it. Habit: \
+                 心中涌起一股暖流；他终于明白……\n\
+                 4. Give a physical reaction only when it belongs to this character at this \
+                 moment. Habit: 眼中闪过一丝……；嘴角勾起一抹弧度。\n\
+                 5. Use a word of degree or doubt only when speed, force, or uncertainty changes \
+                 what the reader understands. Habit: 微微、缓缓 on one action after another; 仿佛 \
+                 where the character is sure.\n\
+                 6. Use a figure of speech only when it comes from this world and from the \
+                 experience of this character. If not, give the literal detail. Habit: \
+                 如同石子投入湖面，泛起层层涟漪。\n\
+                 7. Let the content set the count and the length: one exact item and not three \
+                 parallel items, sentences and paragraphs that change with the pace, and a cut \
+                 between paragraphs and not a connective word. Habit: \
+                 三连排比；段首的“然而”“与此同时”。\n\
+                 8. Give each speaker their own words and their own aim. A line can be incomplete, \
+                 evasive, or off the point. Habit: dialogue that explains like a manual.\n\
+                 9. Let a conflict cost something, and let it stay open across scenes. Describe \
+                 only what moves the scene. Habit: a conflict that starts and ends in one \
+                 paragraph.\n\
+                 10. Keep the dash and the paragraph of one sentence for a real interruption or a \
+                 real stress. Habit: a dash in each paragraph.\n\n\
+                 When you find one of these habits in your text, write the event again in a \
+                 different way; do not put a synonym in the place of the phrase.\n\nWhen you \
+                 need the complete text of an earlier result of web_search or web_fetch in this \
+                 work again, call read_tool_result with the identity in the source attribute of \
+                 the tool_result tag of that result.\n\nAfter a compaction of the conversation, an earlier result can be a \
                  stub: a tool_result tag with form=\"stub\". A stub gives the function, its \
                  arguments, and the sources of the result, but not the text of the result. You \
                  can cite a source in the tool_sources tag of a stub. When you need the text of \
@@ -350,7 +388,7 @@ fn request_of(mapping: &str) -> CreateRequest {
 /// input.
 #[tokio::test]
 async fn the_later_request_sends_the_earlier_author_messages_before_the_current_input() {
-    let request = request_of(storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION);
+    let request = request_of(storyos_core::AGENT_PLAN_WRITING_RULES_MAPPING_REVISION);
     let summary = RequestContextItem {
         source_class: ContextSourceClass::ConversationSummary,
         content: "The author keeps the rain.".to_owned(),
@@ -386,17 +424,80 @@ async fn the_summary_instruction_names_three_more_topics() {
     let summary = CreateRequest {
         purpose: CreatePurpose::CompactionSummary,
         previous_response_reference: Some("resp_24".to_owned()),
-        ..request_of(storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION)
+        ..request_of(storyos_core::AGENT_PLAN_WRITING_RULES_MAPPING_REVISION)
     };
-    let v9 = body(summary).await;
+    let current = body(summary).await;
 
     assert_eq!(
-        &v9["instructions"],
+        &current["instructions"],
         &json!(format!(
             "{SUMMARY_INSTRUCTIONS}\n\nAlso keep these topics when the conversation shows \
              them: each Proposal that the author accepted or rejected; the story facts that \
              the conversation fixed, such as the characters, their relations, the rules of \
              the world, and the order of events; and each research result with its sources."
         )),
+    );
+}
+
+/// ADR 0100 section 2: a decision request and a closing request with a Skill item, a catalog,
+/// `write_memory`, the Chapter list, and the Memory index have the block of the writing rules
+/// one time, before the paragraphs of those items.
+#[tokio::test]
+async fn the_writing_rules_are_one_block_before_the_paragraphs_of_the_items() {
+    use crate::skill_wire_tests::{closing, first, item};
+    use crate::wire::{
+        CHAPTER_LIST_INSTRUCTION, MEMORY_INDEX_INSTRUCTION, SKILL_CATALOG_INSTRUCTION,
+        SKILL_INSTRUCTION, WRITE_MEMORY_INSTRUCTION, WRITING_RULES_INSTRUCTION,
+    };
+    let base = first(
+        storyos_core::AGENT_PLAN_WRITING_RULES_MAPPING_REVISION,
+        storyos_core::AGENT_PLAN_REGISTRATION.revision,
+    );
+    let request = CreateRequest {
+        context: [
+            base.context.clone(),
+            vec![
+                item(ContextSourceClass::SkillInstruction, "Use short lines."),
+                item(
+                    ContextSourceClass::SkillCatalog,
+                    "{\"description\":\"Dialogue rules.\",\"name\":\"dialogue\"}",
+                ),
+                item(
+                    ContextSourceClass::ChapterList,
+                    "[1,0,\"Chapter A\",\"current\"]",
+                ),
+                item(
+                    ContextSourceClass::MemoryIndex,
+                    "{\"type\":\"character\"}\n{\"description\":\"船夫。\",\"id\":3,\"title\":\"林舟\"}",
+                ),
+            ],
+        ]
+        .concat(),
+        ..base
+    };
+    // For each request: the count of the block, and if the block is before each paragraph.
+    let placement = |instructions: String| {
+        let rules = instructions.find(WRITING_RULES_INSTRUCTION).unwrap();
+        let paragraphs = [
+            SKILL_INSTRUCTION,
+            SKILL_CATALOG_INSTRUCTION,
+            WRITE_MEMORY_INSTRUCTION,
+            CHAPTER_LIST_INSTRUCTION,
+            MEMORY_INDEX_INSTRUCTION,
+        ]
+        .map(|paragraph| instructions.find(paragraph).is_some_and(|at| rules < at));
+        (
+            instructions.matches(WRITING_RULES_INSTRUCTION).count(),
+            paragraphs,
+        )
+    };
+    let instructions = |body: serde_json::Value| body["instructions"].as_str().unwrap().to_owned();
+
+    assert_eq!(
+        [
+            placement(instructions(body(request.clone()).await)),
+            placement(instructions(body(closing(request)).await)),
+        ],
+        [(1, [true; 5]), (1, [true; 5])]
     );
 }
