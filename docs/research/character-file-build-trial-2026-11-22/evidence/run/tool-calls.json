@@ -1,0 +1,335 @@
+[
+  {
+    "tool_call_id": "01a20066-1329-7842-bd64-520042d51a46",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20065-ea3c-7641-b247-984ca0f00d87",
+    "decision_position": 0,
+    "call_position": 0,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 1,
+      "last_block": null,
+      "first_block": null
+    }
+  },
+  {
+    "tool_call_id": "01a20066-132a-7063-924a-3563fe5ed6bd",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20065-ea3c-7641-b247-984ca0f00d87",
+    "decision_position": 0,
+    "call_position": 1,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 2,
+      "last_block": null,
+      "first_block": null
+    }
+  },
+  {
+    "tool_call_id": "01a20066-132a-7063-924a-357af022aa0e",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20065-ea3c-7641-b247-984ca0f00d87",
+    "decision_position": 0,
+    "call_position": 2,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 3,
+      "last_block": null,
+      "first_block": null
+    }
+  },
+  {
+    "tool_call_id": "01a20066-132b-7283-b336-6e224b25883a",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20065-ea3c-7641-b247-984ca0f00d87",
+    "decision_position": 0,
+    "call_position": 3,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 4,
+      "last_block": null,
+      "first_block": null
+    }
+  },
+  {
+    "tool_call_id": "01a20066-132b-7283-b336-6e3fbc49d19a",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20065-ea3c-7641-b247-984ca0f00d87",
+    "decision_position": 0,
+    "call_position": 4,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 5,
+      "last_block": null,
+      "first_block": null
+    }
+  },
+  {
+    "tool_call_id": "01a20066-132c-79d2-b5d1-ac78fe59c335",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20065-ea3c-7641-b247-984ca0f00d87",
+    "decision_position": 0,
+    "call_position": 5,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 6,
+      "last_block": null,
+      "first_block": null
+    }
+  },
+  {
+    "tool_call_id": "01a20068-c447-7490-ad18-771de5e46ef6",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20065-ea3c-7641-b247-984ca0f00d87",
+    "decision_position": 1,
+    "call_position": 0,
+    "function_name": "finish",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {}
+  },
+  {
+    "tool_call_id": "01a20069-4215-71d0-a494-09f847f770fe",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20069-1e04-7ec2-9e1a-97c5928a195e",
+    "decision_position": 0,
+    "call_position": 0,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 1,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a20069-4216-7380-9fa3-13e220271bdd",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20069-1e04-7ec2-9e1a-97c5928a195e",
+    "decision_position": 0,
+    "call_position": 1,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 2,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a20069-4217-7d43-90d2-9b0e82439bf3",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20069-1e04-7ec2-9e1a-97c5928a195e",
+    "decision_position": 0,
+    "call_position": 2,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 3,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a20069-4217-7d43-90d2-9b1453a59bdf",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20069-1e04-7ec2-9e1a-97c5928a195e",
+    "decision_position": 0,
+    "call_position": 3,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 4,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a20069-4218-7661-a8fa-4518e81ed506",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20069-1e04-7ec2-9e1a-97c5928a195e",
+    "decision_position": 0,
+    "call_position": 4,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 5,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a20069-4219-7203-97d6-a4e0d781678c",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20069-1e04-7ec2-9e1a-97c5928a195e",
+    "decision_position": 0,
+    "call_position": 5,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 6,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a20069-421a-7d53-8da9-318a23edf642",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20069-1e04-7ec2-9e1a-97c5928a195e",
+    "decision_position": 0,
+    "call_position": 6,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 7,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a2006c-f266-7182-9be2-2e5acc8602c6",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a20069-1e04-7ec2-9e1a-97c5928a195e",
+    "decision_position": 1,
+    "call_position": 0,
+    "function_name": "finish",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {}
+  },
+  {
+    "tool_call_id": "01a2006d-6d06-7bc2-a32c-0bc8388a9d35",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a2006d-4694-7bd3-8f85-14efc51fc1d4",
+    "decision_position": 0,
+    "call_position": 0,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 1,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a2006d-6d07-7331-81f4-8dd9d0195fdc",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a2006d-4694-7bd3-8f85-14efc51fc1d4",
+    "decision_position": 0,
+    "call_position": 1,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 2,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a2006d-6d08-7862-9d53-a2331629d961",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a2006d-4694-7bd3-8f85-14efc51fc1d4",
+    "decision_position": 0,
+    "call_position": 2,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 3,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a2006d-6d08-7862-9d53-a24b2c940625",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a2006d-4694-7bd3-8f85-14efc51fc1d4",
+    "decision_position": 0,
+    "call_position": 3,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 4,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a2006d-6d09-7433-8571-62cb4c90e666",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a2006d-4694-7bd3-8f85-14efc51fc1d4",
+    "decision_position": 0,
+    "call_position": 4,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 5,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a2006d-6d0a-7e91-b694-a1d3eb9bdb4b",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a2006d-4694-7bd3-8f85-14efc51fc1d4",
+    "decision_position": 0,
+    "call_position": 5,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 6,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a2006d-6d0b-7c32-93ee-cf94273ca0ce",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a2006d-4694-7bd3-8f85-14efc51fc1d4",
+    "decision_position": 0,
+    "call_position": 6,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 7,
+      "last_block": null,
+      "first_block": 1
+    }
+  },
+  {
+    "tool_call_id": "01a20070-14ea-7282-83bc-5c7e17a0a2c7",
+    "project_id": "01a20063-23cf-77a2-9156-30b3514fd6ad",
+    "run_id": "01a2006d-4694-7bd3-8f85-14efc51fc1d4",
+    "decision_position": 1,
+    "call_position": 0,
+    "function_name": "finish",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {}
+  }
+]
