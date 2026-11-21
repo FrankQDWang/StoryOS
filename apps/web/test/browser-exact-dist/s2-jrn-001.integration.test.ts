@@ -132,6 +132,9 @@ it("runs the AI-disabled production journey without losing Chapter work", {
   expect(reopenedRoot.textContent).not.toContain("模型");
   expect(reopenedRoot.textContent).not.toContain("Agent");
   expect(manuscriptBody(manuscriptEditor(reopenedRoot, applicationWindow(frame)))).toBe(BODY_B);
+  // An editor with no Proposal candidate shows no mark of a candidate (S10-REQ-004).
+  expect(manuscriptEditor(reopenedRoot, applicationWindow(frame))
+    .querySelectorAll(".proposal-change-mark, .proposal-change-tick, .proposal-change-pair")).toHaveLength(0);
   const childWindow = applicationWindow(frame);
   const [authoritativeA, authoritativeB] = await Promise.all([
     getChapter({

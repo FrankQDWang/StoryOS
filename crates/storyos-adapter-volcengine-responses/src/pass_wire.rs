@@ -1,4 +1,4 @@
-//! The request body of the one RunStep of a consolidation pass on the mapping `v9` (ADR
+//! The request body of the one RunStep of a consolidation pass on the current mapping (ADR
 //! 0094 sections 3, 6, 7, and 8). The request has no author message. Its user message has the current
 //! entries, the observations, and the delete marks as sections. It declares the one function
 //! `apply_memory_operations` as a strict function with `tool_choice: "required"`, and it continues
@@ -21,7 +21,7 @@ const SECTIONS: [(ContextSourceClass, &str); 3] = [
     ),
 ];
 
-/// The sentences that the mapping `v9` adds for an observation that returned after a refused
+/// The sentences of the current mapping for an observation that returned after a refused
 /// operation (ADR 0094 section 6).
 pub(crate) const REFUSED_OBSERVATION_RULE: &str = " An observation with the key refused was in an \
 operation that the Host refused for that reason. Give a correct operation for it, or no \

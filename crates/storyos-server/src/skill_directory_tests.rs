@@ -89,6 +89,19 @@ fn the_fixture_directory_gives_the_two_stage_6_skills() {
 }
 
 #[test]
+fn the_distribution_directory_gives_exactly_its_named_packages() {
+    // ADR 0100 section 3: the release package copies this directory.
+    let distribution = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../skill-packages");
+    let set = read_skill_directory(Some(&distribution)).expect("valid distribution packages");
+    let names: Vec<_> = set
+        .packages()
+        .iter()
+        .map(|package| package.name.as_str())
+        .collect();
+    assert_eq!(names, ["conflict-check", "local-revision", "scene-brief"]);
+}
+
+#[test]
 fn no_setting_and_a_directory_with_no_package_give_an_empty_skill_set() {
     assert_eq!(read_skill_directory(None), Ok(SkillSet::default()));
     let directory = Directory::new();
