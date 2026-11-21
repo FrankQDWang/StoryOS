@@ -6,7 +6,7 @@ Raw evidence is on the tag `evidence/1764-live-local-revision-2026-11-21`. The t
 
 ## Plan and final count
 
-The plan comes before the results. The planned numbers are 6 requests in total, 3 for each Run, and about 45,000 reported input tokens. The script of this run stopped only at the database cap of 12 requests, and not at the planned number. Thus the 4th request of each Run, and the reported input above 45,000 tokens, did not stop the run. The stop rule of "Live model requests" that the coordinator set after this run (decision on [#1762](https://github.com/FrankQDWang/StoryOS/issues/1762#issuecomment-7060590530)) stops a run at the first request above the planned number.
+The plan comes before the results. The planned numbers of Runs A and B were 6 requests in total, 3 for each Run, and about 45,000 reported input tokens.
 
 The plan was posted on the ticket before the first request ([plan comment](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7060564582)). A rehearsal of all steps on `host_fake` on the same head came first: 2 author Runs, 4 fake requests, and no other Run.
 
@@ -18,6 +18,8 @@ The plan was posted on the ticket before the first request ([plan comment](https
 | Largest request | at most 40,000 | 10,746 |
 | Other Runs (Memory work) | 0 | 0 |
 | Exa and embedding requests | 0 | 0 |
+
+**Deviation from the plan.** Run A and Run B each had 4 requests, and the plan had 3 for each Run (finding F2). The reported input was 69,190 tokens, and the plan had about 45,000. "Live model requests" of the delivery document says to stop and report to the coordinator for more requests than the plan. The run did not stop after Run A: the script had no stop at the planned number of a Run, and it stopped only above 12 requests or 120,000 input tokens in a Project. The 8 requests were inside the cap of 12. The executor reported the extra requests to the coordinator after the run, in the findings message before the review request. After the run, the coordinator decided to accept Runs A and B as evidence of the ticket, with no repeat of a Run ([decision comment](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7060765711)). The plan of Run C gives one number of requests, and the script stops at it ([decision on #1762](https://github.com/FrankQDWang/StoryOS/issues/1762#issuecomment-7060590530), item 4).
 
 ## Findings
 
