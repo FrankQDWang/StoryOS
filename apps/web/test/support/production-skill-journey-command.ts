@@ -88,7 +88,7 @@ async function exportedTables(baseUrl: string, setup: Awaited<ReturnType<typeof 
  * Types `$` in the composer, chooses the Skill in the picker, and then types the message with keyboard events. The
  * typed text must show in the composer after the chip (finding 2 of the live record of S6-03c).
  */
-async function selectThenType(page: Page, skill: string, message: string) {
+export async function selectThenType(page: Page, skill: string, message: string) {
   const composer = page.locator('textarea[name="assistant-message"]');
   await composer.click();
   await page.keyboard.type("$");
@@ -100,7 +100,7 @@ async function selectThenType(page: Page, skill: string, message: string) {
 }
 
 /** Clicks the send button and returns the createAgentRun request and response that the click sent. */
-async function send(page: Page) {
+export async function send(page: Page) {
   const response = page.waitForResponse((reply) =>
     reply.request().method() === "POST" && new URL(reply.url()).pathname.endsWith("/agent-runs"));
   await page.locator(".composer .send-button").click();

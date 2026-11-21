@@ -14,7 +14,7 @@ async fn a_probe_sends_one_function_tool_and_constant_input_and_no_project_conte
         resolver: CanaryResolver::default(),
     };
     let route = RequestRoute {
-        mapping_revision: storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION.to_owned(),
+        mapping_revision: storyos_core::AGENT_PLAN_WRITING_RULES_MAPPING_REVISION.to_owned(),
         ..route("http://127.0.0.1:9")
     };
     let DestinationRequest::Create(request) = create(route, RequestAttempt::New) else {

@@ -1,6 +1,6 @@
 // Verification: {"phase":"http-main","after":[]}
 import assert from "node:assert/strict";
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,8 @@ import { stopStoryOSServer } from "../support/node-integration.ts";
 
 // ADR 0089 sections 5 and 8: the $ picker lists the name and the description of each Skill of the deployment.
 const FIXTURES = fileURLToPath(new URL("../../../../fixtures/skill-packages", import.meta.url));
+// ADR 0100 section 3: the SkillPackages of the StoryOS distribution.
+const DISTRIBUTION = fileURLToPath(new URL("../../../../skill-packages", import.meta.url));
 const DIALOGUE = {
   reference: { name: "dialogue-style-guide",
     package_digest: "sha256:e03399e0385ea904f5c37265661480113ef0125e3c7f837cf04875d5cbe8178b" },
@@ -54,6 +56,23 @@ test("listSkills gives the Skills that the Server validated at its start to the 
       refusals: [{ status: 404, code: "resource_unavailable" }, { status: 404, code: "resource_unavailable" }],
       none: { schema_id: "storyos.query.skills.response.v1", project_scope: scope, skills: [] },
     });
+  } finally {
+    await stopStoryOSServer(started.server);
+  }
+});
+
+test("listSkills gives each SkillPackage of the distribution with the description of its SKILL.md", async () => {
+  const expected = await Promise.all(["conflict-check", "local-revision", "scene-brief"].map(async (name) => {
+    const skillMd = await readFile(join(DISTRIBUTION, name, "SKILL.md"), "utf8");
+    return { name, description: skillMd.match(/^description: (.+)$/m)?.[1] };
+  }));
+  const started = await startServer({ extraEnv: { STORYOS_SKILLS_DIR: DISTRIBUTION } });
+  try {
+    const project = await createProject(TestServer.at(started.baseUrl), { title: "Distribution Skill Novel" });
+    const { skills } = await listSkills({ baseUrl: started.baseUrl, fetchImpl: project.fetchImpl,
+      projectId: project.projectId });
+    for (const { reference } of skills) assert.match(reference.package_digest, /^sha256:[0-9a-f]{64}$/);
+    assert.deepEqual(skills.map(({ reference, description }) => ({ name: reference.name, description })), expected);
   } finally {
     await stopStoryOSServer(started.server);
   }

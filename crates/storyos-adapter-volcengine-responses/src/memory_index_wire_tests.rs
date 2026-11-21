@@ -4,7 +4,7 @@ use storyos_core::ContextSourceClass;
 
 use crate::skill_wire_tests::{body, closing, first, item, summary};
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_WRITING_RULES_MAPPING_REVISION;
 
 /// A request of the current mapping with `context`.
 fn current(context: Vec<storyos_application::RequestContextItem>) -> CreateRequest {
