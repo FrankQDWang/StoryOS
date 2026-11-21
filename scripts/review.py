@@ -17,6 +17,8 @@ ROUNDS = 3
 AXES = ("Standards", "Spec")
 # The heading of each verdict comment. The rounds of earlier pull requests use the same heading.
 VERDICT = re.compile(r'## (Standards|Spec) review, round (\d+): (PASS|FAIL)')
+# The headings of the two finding lists of a verdict comment that this script posted.
+FINDINGS = re.compile(r"^### (Blocking|Non-blocking)$", re.M)
 HEAD = re.compile(r"^(?:Head|Candidate: head) `([0-9a-f]{40})`(?:.*?tree `([0-9a-f]{40})`)?", re.M)
 # make check adds the field scope=documents for a change that has only documents. The match keeps the field.
 EVIDENCE = re.compile(r"Check Evidence Line: tier=(\S+) commit=([0-9a-f]{40}) tree=(\S+) result=(\S+) time=\S+ duration=\d+s"
@@ -196,7 +198,8 @@ def inside_worktree(pid):
 
 
 def request(pr, number, pull, line, directory):
-    """Write the review request: the commits, the Check Evidence Line when the body has one, the PR body, and the closed issues."""
+    """Write the review request: the commits, the Check Evidence Line when the body has one, the earlier rounds, the PR body,
+    and the closed issues."""
     head, base = pull["headRefOid"], pull["baseRefOid"]
     parts = [f"# Review request: PR {pr}, round {number}\n",
              f"- Pull request: {pull['url']}",
@@ -204,6 +207,7 @@ def request(pr, number, pull, line, directory):
              f"- Head: `{head}`",
              f"- Check Evidence Line: {f'`{line}`' if line else NO_EVIDENCE}",
              f"- Scoped diff: `git diff {base}...{head}`\n",
+             *earlier_rounds(pull, number),
              f"# Pull request\n\n{pull['body']}"]
     for issue in sorted({i["number"] for i in pull["closingIssuesReferences"]} | {int(n) for n in CLOSES.findall(pull["body"])}):
         value = gh_json("issue", "view", str(issue), "--json", "number,title,body")
@@ -211,6 +215,34 @@ def request(pr, number, pull, line, directory):
     path = directory / "request.md"
     path.write_text("\n".join(parts) + "\n")
     return path
+
+
+def earlier_rounds(pull, number):
+    """After round 1: the head of the earlier round, the diff after it, and the Blocking list of each earlier verdict comment.
+
+    The earlier round is the last round before this one that has a verdict comment for each axis."""
+    complete = {n: axes for n, axes in rounds_of(pull).items() if n < number and len(axes) == len(AXES)}
+    if not complete:
+        return []
+    earlier = max(complete)
+    heads = {head for _, head, _, _ in complete[earlier].values()}
+    if len(heads) != 1 or None in heads:
+        raise Refused(f"The verdict comments of round {earlier} do not name one head, so the request cannot give the changes after it")
+    previous = heads.pop()
+    parts = [f"- Earlier round: round {earlier}, head `{previous}`",
+             f"- Changes after the earlier round: `git diff {previous} {pull['headRefOid']}`\n",
+             "# Blocking findings of the earlier rounds\n"]
+    for comment in pull["comments"]:
+        if (match := VERDICT.match(comment["body"])) and int(match[2]) < number:
+            headings = outside_fences(FINDINGS, comment["body"])
+            if [heading[1] for heading in headings[:2]] != ["Blocking", "Non-blocking"]:
+                raise Refused(f"The verdict comment {comment['url']} has no Blocking list before its Non-blocking list")
+            blocking = comment["body"][headings[0].end():headings[1].start()].strip()
+            # A PASS verdict has the list None., and a FAIL verdict has a numbered list.
+            if not (blocking == "None." if match[3] == "PASS" else re.match(r"1\. \S", blocking)):
+                raise Refused(f"The {match[3]} verdict comment {comment['url']} has a Blocking list that does not agree with its result")
+            parts.append(f"## Round {match[2]}, {match[1]} axis\n\n{blocking}\n")
+    return parts
 
 
 def prompt(axis, path):
@@ -236,6 +268,11 @@ def post(pr, body):
 
 def verdicts_section(body):
     """The first match of the verdict links section outside the fenced code blocks of the PR body."""
+    return next(iter(outside_fences(LINKS, body)), None)
+
+
+def outside_fences(pattern, body):
+    """The matches of a pattern that start outside the fenced code blocks of a text."""
     fenced, opening = [], None
     for fence in FENCE.finditer(body):
         if opening is None:
@@ -245,8 +282,7 @@ def verdicts_section(body):
             opening = None
     if opening is not None:
         fenced.append((opening.start(), len(body)))
-    return next((match for match in LINKS.finditer(body)
-                 if not any(start <= match.start() < end for start, end in fenced)), None)
+    return [match for match in pattern.finditer(body) if not any(start <= match.start() < end for start, end in fenced)]
 
 
 def link_verdicts(pr, pull):

@@ -4,7 +4,7 @@ This document gives the rules to deliver a specification and its tickets. [ADR 0
 
 ## Roles
 
-- **Author:** decides each change of the product, a contract, a number, a waiver, and each merge of an aggregate pull request into `main`. The author approves the ticket graph of a specification. The [standing approvals](#standing-approvals) need no question. A report to the author follows the Reports rule of `AGENTS.md`. The author approves a ticket that must add more than 1500 counted lines only when the lines above the limit are mechanical or generated.
+- **Author:** decides each change of the product, a contract, a number, a waiver, and each merge of an aggregate pull request into `main`. The author approves the ticket graph of a specification. The [standing approvals](#standing-approvals) need no question. The author approves a ticket that must add more than 1500 counted lines only when the lines above the limit are mechanical or generated.
 - **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts the executor of each chain, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Before dispatch, it splits each ticket that must add more than 1500 counted lines and that the author did not approve. It approves a split only for its size.
 - **Executor:** one session for an ordered chain of tickets, in one worktree. Each ticket has its own branch and pull request. The executor implements each ticket, runs its review and checks, and sends its final report. It does not merge.
 - **Reviewer:** a new read-only Codex thread for each review axis. The reviewer is never the agent tool that implements the ticket.
@@ -82,7 +82,7 @@ Run the [Codex review](#codex-review) rounds until a round passes. Handle each S
 
 When a finding says that the contract does not ask for a change, ask the coordinator to change the ticket body before the next round, and post a new [Claim](#claim).
 
-After a round passes, merge the current integration tip into the branch. Then run the required tier one time on that head: `make check`, or only `make check-full` when the ticket or a request requires it. Put its Check Evidence Line in the body. Report the result of `make check-full` to the coordinator before any push, body edit, or comment.
+After a round passes, merge the current integration tip into the branch. Then run the required tier one time on that head. Put its Check Evidence Line in the body. Report the result of `make check-full` to the coordinator before any push, body edit, or comment.
 
 ### 7. Final report
 
@@ -136,7 +136,7 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 - Only a line of `make check` or `make check-full` with `result=PASS` is merge evidence.
 - `make check` and `make check-full` stop at the start when the working tree has changes. A line with `tree=DIRTY` is not evidence.
 - When each changed file is a document under `docs/` or at the root that no code names, `make check` runs only the `make check-fast` steps, and its line ends with `scope=documents`.
-- Copy the line into the pull request body exactly. A review round does not need the line.
+- Copy the line into the pull request body exactly.
 - Each new head, also a merge of the base branch, needs a new line.
 - Start a long tier in the background, and wait for the process to exit. The result is the line, its last output, and not a step that passed.
 
@@ -145,7 +145,7 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 ### Who runs it
 
 - When Claude Code implements the ticket, the executor runs `make review PR=<number>`.
-- When Codex implements the ticket, nobody runs `make review`, because Codex cannot review its own work. The coordinator starts a separate read-only Claude Code session. It runs the `code-review` skill of the `mattpocock-skills` plugin, with the [review prompt](review-prompt.md) rules. It posts one verdict comment for each axis with the heading `## <Standards or Spec> review, round <n>: <PASS or FAIL>`. The round rules below apply.
+- When Codex implements the ticket, nobody runs `make review`, because Codex cannot review its own work. The coordinator starts a separate read-only Claude Code session. It runs the `code-review` skill of the `mattpocock-skills` plugin, with the [review prompt](review-prompt.md) rules. It posts one verdict comment for each axis in the form that the review prompt gives. The round rules below apply.
 
 ### What `make review` does
 
@@ -161,9 +161,9 @@ Then it sends the [review prompt](review-prompt.md) and the request to one new r
 
 - A pull request gets at most three rounds.
 - Only a blocking finding fails a round. A finding on format, lint, names, or ASD-STE100 wording never fails a round.
-- After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier only after a round passes: a fix or a base merge replaces the head of an earlier heavy run, and a round beside `make check-full` can lose its Codex job. The [merge gate](#merge-gate) still needs a line for the final head.
-- After a passed round, a new round starts only after a change to the diff of the ticket.
-- A merge of the base branch after a passed round needs no new round when it does not change the diff of the ticket. Compare `git diff <base>...<head>` before and after the merge.
+- After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier only after a round passes: a fix or a base merge replaces the head of an earlier heavy run, and a round beside `make check-full` can lose its Codex job.
+- Round 2 and round 3 examine the earlier blocking findings and the lines that changed after the earlier round. Only product code can get a new blocking finding on a line that did not change; each other new finding there is `late:`, and the coordinator opens an issue for a `late:` defect.
+- After a passed round, a new round starts only after a change to the diff of the ticket. A merge of the base branch is no such change when `git diff <base>...<head>` is the same before and after the merge.
 
 ### After round 3
 

@@ -31,10 +31,13 @@ CHECK_LANES = \
 	--lane "postgres-command-challenge:build,package=scripts/dev-postgres.sh with \
 		cargo test --workspace --all-features --test project_command_challenge -- --ignored --nocapture" \
 	--postgres-shards build,package
+# The GitHub verify check runs only the make check-fast steps, and ADR 0070 keeps tooling self-tests out of it.
 CHECK_STEPS = $(CHECK_FAST_STEPS); \
+	python3 scripts/review-tests.py; \
 	python3 scripts/check-lanes.py $(CHECK_LANES)
 # make check-full runs the lanes of make check and the project-scope lanes in one run of the lane runner.
 CHECK_FULL_STEPS = $(CHECK_FAST_STEPS); \
+	python3 scripts/review-tests.py; \
 	python3 scripts/check-lanes.py $(CHECK_LANES) --project-scope
 
 check-fast:
