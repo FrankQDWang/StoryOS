@@ -52,7 +52,9 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 - Use deterministic coordination or controlled scheduling for concurrent work. Use a sleep only when no deterministic wait is available.
 - Use existing test helpers when they make a test shorter and easier to read.
 - Pass environment-derived flags or dependencies from above, in place of a change to the process environment in a test.
-- A fake of an external destination refuses each request that the real destination refuses by a rule of a tracked contract. A fake that accepts such a request hides the defect from each test that uses it.
+- A fake of an external destination (a model, a tool, or an embedding destination) refuses each request that the real destination refuses by a rule of a tracked contract. A fake that accepts such a request hides the defect from each test that uses it. This rule is about these fakes only.
+- A fake Server of a Web test serves only the exact requests that its test sends: the method and the path with the Project and the target of the test. It records each other request and throws, and the test asserts that the record is empty. For these requests it keeps only the rules that its test is about, for example the binding of a Challenge to its command, and it copies no other refusal rule of the Server. When a test is about one refusal, the fake gives that one answer for that exact request.
+- The fake Server rule applies to a new fake and to a fake whose routes a ticket changes. A finding about a fake that the ticket does not change is not blocking.
 - In `storyos-adapter-postgres`, the first statement of each `#[ignore]` test of the lib target is `let _test_guard = ...AUTHOR_EDIT_TEST_LOCK.lock().await;`. Keep the guard to the end of the test. A damaged evidence test drops or disables a database check under this lock, so write it only in the lib target. `postgres_test_lock_tests.rs` checks this rule.
 - Put a new test module in a separate sibling file. Use an explicit `#[path = "..._tests.rs"]` attribute that gives the file a descriptive name:
 
@@ -63,6 +65,11 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
   ```
 
 - This applies only to a new test module. Keep an existing inline `#[cfg(test)] mod tests { ... }` module where it is when this convention is the only reason to move it.
+
+## Check scripts
+
+- The scripts under `scripts/` that run the checks are development tools for one host. A script handles one fault at a time: a process that ends, a command that does not return, or a signal that does not arrive.
+- A path that needs two faults at the same time is not a defect. A process ID that the system gives to another process between two steps of the script is not a defect.
 
 ## Project commands
 
