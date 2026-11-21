@@ -6,6 +6,19 @@ The operator of a deployment provides the Skills ([ADR 0089](../adr/0089-deliver
 
 Set `STORYOS_SKILLS_DIR` in the environment of `storyos-server` to the absolute path of one directory. Only the Server reads it. The Worker does not read it. When the setting is absent, the deployment has no Skill.
 
+## The SkillPackages of the StoryOS distribution
+
+StoryOS comes with standard SkillPackages for the work of a novel author ([ADR 0100](../adr/0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md) sections 2 and 3). Each package is one `SKILL.md` with no script.
+
+| Package | What the assistant does |
+| --- | --- |
+| `conflict-check` | It compares a text with the earlier Chapters and Agent Memory, and it reports each conflict with its source. It changes no text. |
+
+- **In the repository:** the directory `skill-packages/` at the root.
+- **In the release package:** the directory `skill-packages/`, beside `web/`. `python3 scripts/package-release.py` copies the tracked files of `skill-packages/` into it with the same bytes.
+- **To use them:** set `STORYOS_SKILLS_DIR` to the absolute path of the directory `skill-packages/` of the release package, and start the Server. The Server has no default Skill directory: with no setting, the deployment has no Skill.
+- **To use your own packages with them:** make one directory, copy each package directory of `skill-packages/` and each of your own package directories into it, and set `STORYOS_SKILLS_DIR` to that directory. A package name is unique in one directory, so give your own package a name that is not the name of a package of the distribution.
+
 ## The directory layout
 
 ```text
