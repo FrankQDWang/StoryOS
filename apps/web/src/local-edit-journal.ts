@@ -795,18 +795,15 @@ function validFollowsBinding(
   return group.covered_sequence_range?.last < record.local_intent_sequence;
 }
 
-function provenNoEffectAgainstDurableBase(
-  group: JournalSubmissionGroup,
-  snapshot: ValidatedJournalSnapshot,
-  base: EditorBaseSnapshot,
-): boolean {
+/**
+ * Gives the parts of a `no_effect` group that its settlement, its receipt, and its payload chain prove. The receipt
+ * says that the head of the request did not change.
+ */
+function noEffectProof(group: JournalSubmissionGroup, snapshot: ValidatedJournalSnapshot) {
   const settlement = group.settlement;
   if (settlement.kind !== "zero_authority_receipt_settled"
     || settlement.effect?.kind !== "no_effect"
-    || settlement.effect.reason !== "content_unchanged"
-    || snapshot.activeBase === undefined
-    || JSON.stringify(snapshot.activeBase) !== JSON.stringify(base)) return false;
-
+    || settlement.effect.reason !== "content_unchanged") return undefined;
   const request = group.frozen_request_body;
   const receipt = settlement.receipt;
   const head = request.expected_authoritative_revision_id;
@@ -838,8 +835,28 @@ function provenNoEffectAgainstDurableBase(
     || lastRecord.base_snapshot_id !== chain.checkpoint_ref.source_snapshot_id
     || chain.checkpoint_ref.chapter_object_id !== request.chapter_id
     || JSON.stringify(chain.checkpoint_ref.source_heads) !== JSON.stringify([head])) {
-    return false;
+    return undefined;
   }
+  return { request, head, lastSequence, chain, finalBlocks, finalBody };
+}
+
+/** True when the final text of a proven `no_effect` group is the checkpoint of its payload chain. */
+function noEffectMatchesCheckpoint(proof: NonNullable<ReturnType<typeof noEffectProof>>): boolean {
+  const checkpointBlocks = checkpointBlocksForChain(proof.chain);
+  return proof.finalBody === flattenChapterBody(checkpointBlocks)
+    && manuscriptBlocksEqual(proof.finalBlocks, checkpointBlocks);
+}
+
+function provenNoEffectAgainstDurableBase(
+  group: JournalSubmissionGroup,
+  snapshot: ValidatedJournalSnapshot,
+  base: EditorBaseSnapshot,
+): boolean {
+  if (snapshot.activeBase === undefined
+    || JSON.stringify(snapshot.activeBase) !== JSON.stringify(base)) return false;
+  const proof = noEffectProof(group, snapshot);
+  if (proof === undefined) return false;
+  const { request, head, lastSequence, finalBlocks, finalBody } = proof;
 
   if (head === base.authoritative_head_revision_id
     && request.chapter_id === base.chapter_id) {
@@ -853,10 +870,7 @@ function provenNoEffectAgainstDurableBase(
     && later.frozen_request_body.expected_authoritative_revision_id === head
     && later.settlement.kind === "applied_receipt_settled"
     && JSON.stringify(later.settlement.receipt.prior_heads) === JSON.stringify([head]));
-  if (!appliedSuccessor) return false;
-  const checkpointBlocks = checkpointBlocksForChain(chain);
-  return finalBody === flattenChapterBody(checkpointBlocks)
-    && manuscriptBlocksEqual(finalBlocks, checkpointBlocks);
+  return appliedSuccessor && noEffectMatchesCheckpoint(proof);
 }
 
 function pendingProjectionFromSnapshot(
@@ -938,11 +952,17 @@ function closedJournalGroup(snapshot: ValidatedJournalSnapshot, base: EditorBase
     // A collected applied group after it in the prefix installs a later base (kind 2 of #1758).
     if (settlement.kind === "applied_receipt_settled") return true;
     if (settlement.kind !== "zero_authority_receipt_settled") return false;
-    if (settlement.effect.kind === "no_effect") return provenNoEffectAgainstDurableBase(group, snapshot, base);
+    if (settlement.effect.kind === "no_effect") {
+      if (group.frozen_request_body.chapter_id === base.chapter_id) {
+        return provenNoEffectAgainstDurableBase(group, snapshot, base);
+      }
+      // The session base names another Chapter, so the checkpoint of the chain gives the text of the head.
+      const proof = noEffectProof(group, snapshot);
+      return proof !== undefined && noEffectMatchesCheckpoint(proof);
+    }
     const revised = group.frozen_request_body.proposal_target?.revision_id;
     // `proposalSuccessors` maps the revised Revision only for a record that targets it.
     return settlement.effect.kind === "proposal_revised" && revised !== undefined
-      && group.frozen_request_body.chapter_id === base.chapter_id
       && !later.some((record) => record.proposal_target !== undefined
         && (record.proposal_target.revision_id === revised || record.expected_proposal_heads.includes(revised)));
   };

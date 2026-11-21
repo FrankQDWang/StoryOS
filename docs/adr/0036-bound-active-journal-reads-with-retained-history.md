@@ -27,7 +27,8 @@ The author decided this rule on 2026-11-21 from the measurement of [#1721](https
 The coordinator decided this rule on 2026-11-21 from the reproduction and the recommendation of [#1758](https://github.com/FrankQDWang/StoryOS/issues/1758). It replaces the prefix rule of the amendment above. A settled group that the collection does not take stopped the retirement for the life of the partition, and input stopped at the 2400-item guard.
 
 - **A closed group** is a settled group that the collection does not take and that no later work needs in the working set:
-  - A group with the effect `no_effect`, when the Journal proves that its text is equal to the durable base.
+  - A group with the effect `no_effect` of the Chapter of the session base, when the Journal proves that its text is equal to the durable base.
+  - A group with the effect `no_effect` of another Chapter, when its settlement, its receipt, and its payload chain pass the same checks, and its final text and Blocks are equal to the checkpoint of its payload chain. The checkpoint is the text of that Chapter at the head of the request, and the receipt says that the head did not change. The session base names another Chapter, so the rule makes no comparison with it.
   - A group with the effect `proposal_revised`, when no record after the prefix targets the Revision that the group revised.
   - An applied group with no collection fence, when a collected applied group comes after it in the prefix.
 - **The prefix** is the groups from the start of the working set that are collected or closed, up to the first group that is neither. The prefix ends at its last collected group, because the working boundary needs that group. Thus, a closed group leaves with the next collected group.

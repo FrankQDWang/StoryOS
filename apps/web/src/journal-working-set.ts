@@ -126,7 +126,7 @@ export type ClosedJournalGroup = (group: JournalSubmissionGroup, later: readonly
  * moved (ADR 0036). The prefix ends at a collected group, because the working boundary needs that group.
  */
 export async function retireCollectedJournalPrefix(
-  workspace: EditorWorkspace, snapshot: ValidatedJournalSnapshot, closed: ClosedJournalGroup = () => false,
+  workspace: EditorWorkspace, snapshot: ValidatedJournalSnapshot, closed: ClosedJournalGroup,
 ): Promise<boolean> {
   if (workspace.partition.disposition !== "current_writer_open"
     || workspace.session.writer.kind !== "current_writer"

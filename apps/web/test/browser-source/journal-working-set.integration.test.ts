@@ -386,7 +386,8 @@ function candidateTransport(scenario: ReturnType<typeof createBrowserScenario>, 
   let sequence = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
-    const request = path.endsWith("/manuscript/author-edits") ? requireRequestBody(init) : undefined;
+    const request = `${init?.method ?? "GET"} ${path}` === `POST /api/v1/projects/${PROJECT}/manuscript/author-edits`
+      ? requireRequestBody(init) : undefined;
     const target = request?.proposal_target as { revision_id: string } | undefined;
     if (request === undefined || target === undefined) return applied.fetchImpl(input, init);
     targets.push(target.revision_id);
