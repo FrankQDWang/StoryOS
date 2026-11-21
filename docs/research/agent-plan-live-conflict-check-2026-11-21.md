@@ -4,6 +4,19 @@ This record is the live evidence of [S10-03: Ship the SkillPackages of the Story
 
 Raw evidence of Runs 1 to 3 is on the tag `evidence/1763-live-conflict-check-2026-11-21`, and of Run 4 on the tag `evidence/1763-live-conflict-check-run4-2026-11-21`. Each tag holds the plan, the two Chapters, the list of the planted conflicts, the run script, the request guard, the wire payload of each request (`wire/M1.json` to `wire/M10.json` of the first tag, `wire/M1.json` to `wire/M3.json` of the second tag), the Model Attempts, the ToolCalls, the guard log, `measures.json` (each answer in full), `entries.json`, `checks.json`, `loader.log`, and the Server and Worker logs. The tags have no database dump and no Project Export Archive.
 
+**Note of 2026-11-21: a correction of the package after the Runs.** [S10-05](https://github.com/FrankQDWang/StoryOS/issues/1765) corrected the section "The text to check" of `skill-packages/conflict-check/SKILL.md`: the Working text applies only when the author names no text and the request has no author reference. Runs 2 to 4 used the text before the correction (Run 1 had only the catalog line). The correction needs no new Run. The requests of Runs 2 to 4 name the current Chapter ("请检查这一章。" and "请帮我看看这一章和前面的章节、和你记住的事情有没有前后矛盾的地方。"), the current Chapter is the Working text, and no request has a section of author references. Thus the sentences before and after the correction give the same text for each of those inputs. The diff:
+
+```diff
+ ## The text to check
+
+-- When the author names a text, check that text.
+-- When the author names no text, check the text of the author references of the request.
+-- When the request has no author reference, check the Working text.
++- When the author request names a text, check that text.
++- When it names no text and the request has author references, check the text of the author references.
++- When it names no text and the request has no author reference, check the Working text.
+```
+
 ## Findings
 
 | ID | Finding | Effect |
