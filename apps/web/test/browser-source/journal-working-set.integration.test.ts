@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import { digestApplyAuthorEdit } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { DigestValue, GetEditorSessionResponse }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { openEditorWorkspace, appendAuthorEdit, submitOnePendingAuthorEdit }
@@ -8,14 +9,17 @@ import type { EditorState, EditorWorkspace, JournalSnapshot } from "../../src/ed
 import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
 import { readJournalSnapshot, rebuildPendingProjection }
   from "../../src/local-edit-journal.ts";
+import type { CandidateSelectionEdit } from "../../src/local-edit-journal.ts";
+import { retainLocalRecovery } from "../../src/local-edit-recovery.ts";
+import { recoveryPrefix } from "../../src/local-recovery-record.ts";
 import {
-  OWNER, PROJECT, SESSION, chapterRevision, createAppliedAuthorEditResponse,
+  BLOCK, OWNER, PROJECT, SESSION, chapterRevision, createAppliedAuthorEditResponse,
   createBrowserScenario, deleteJournal, jsonResponse, requestHeaders,
   requireDigestValue, requireEditorReady, requireRequestBody, requestResult,
 } from "./scenario.ts";
 
 function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserScenario>,
-  currentBody: () => string) {
+  currentBody: () => string, actions = { sequence: 0 }) {
   let position = 0;
   let commandDigest: DigestValue | undefined;
   let session: GetEditorSessionResponse = {
@@ -58,7 +62,9 @@ function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserSce
           value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
         },
       } };
-      return jsonResponse(response);
+      const action = String(++actions.sequence);
+      return jsonResponse({ ...response, effect: { ...response.effect, author_action_sequence: action },
+        receipt: { ...response.receipt, author_action_sequence: action } });
     }
     throw new Error(`unexpected request ${path}`);
   };
@@ -186,6 +192,31 @@ async function replacePrefix(ready: EditorWorkspace, prefix: JournalSnapshot) {
   await completed;
 }
 
+/** Writes the collection fences of the partition of `ready`. A fence names only a collected group. */
+async function writeFences(ready: EditorWorkspace, fences: readonly unknown[]) {
+  await requestResult(ready.database.transaction("metadata", "readwrite").objectStore("metadata")
+    .put({ key: `collection_fences:${ready.partition.journal_partition_id}`, value: fences }));
+}
+
+/** `prefix` with the settlement of its first group changed by `settle`. */
+function withFirstSettlement(prefix: JournalSnapshot,
+  settle: (applied: Record<string, unknown>) => Record<string, unknown>): JournalSnapshot {
+  const [first, ...rest] = prefix.groups;
+  return { ...prefix, groups: [{ ...first!, settlement: settle(first!.settlement) as never }, ...rest] };
+}
+
+const reconfirmation = (applied: Record<string, unknown>) => ({ kind: "outcome_query_requires_reconfirmation",
+  command_id: applied.command_id, author_command_admission_id: applied.author_command_admission_id,
+  reconfirmation_reason: "direct_edit_intent_unrecoverable" });
+const refused = (applied: Record<string, unknown>) => {
+  const receipt = applied.receipt as Record<string, unknown>;
+  return { kind: "zero_authority_receipt_settled", command_id: applied.command_id,
+    author_command_admission_id: applied.author_command_admission_id,
+    receipt: { ...receipt, result: "refused", resulting_heads: receipt.prior_heads, authoritative_revision_ids: [],
+      authoritative_commit_ids: [], author_action_sequence: null },
+    effect: { kind: "refused", reason: "target_mismatch" } };
+};
+
 it("refuses input when a full working set cannot retire its prefix", async () => {
   const scenario = createBrowserScenario();
   const text = { body: "Base" };
@@ -195,12 +226,12 @@ it("refuses input when a full working set cannot retire its prefix", async () =>
   const { fetchImpl } = transport;
   await deleteJournal(scenario.journalName);
   let workspace: EditorState = await openWorkspace(scenario, fetchImpl);
-  /** Refuses the next input on `target`, and keeps its working set. */
-  async function refusesInput(target: EditorWorkspace) {
+  /** Refuses the next input on `target` with `reason`, and keeps its working set. */
+  async function refusesInput(target: EditorWorkspace, reason?: string) {
     const before = await readJournalSnapshot(target);
     expect(before.records).toHaveLength(2400);
     await expect(appendAuthorEdit(target, { from: text.body.length, to: text.body.length,
-      text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" })).rejects.toThrow();
+      text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" })).rejects.toThrow(reason);
     expect(await readJournalSnapshot(target)).toEqual(before);
   }
   try {
@@ -213,12 +244,24 @@ it("refuses input when a full working set cannot retire its prefix", async () =>
       await collectEligibleJournalPayload(workspace);
       if (batch === 0) {
         firstCollected = await readJournalSnapshot(workspace);
-        // A first group that is not collected stops the prefix, so the working set fills to its limit.
-        await replacePrefix(workspace, firstUncollected!);
+        // A first group that is not closed stops the prefix, so the working set fills to its limit (ADR 0036).
+        // Behavior of today, owned by #1775: a kept reconfirmation group cannot leave, and input continues behind it.
+        await replacePrefix(workspace, withFirstSettlement(firstUncollected!, reconfirmation));
+        await writeFences(workspace, []);
+        await retainLocalRecovery(workspace, firstUncollected!.groups[0]!.journal_submission_group_id);
       }
     }
-    await refusesInput(workspace);
+    expect(await rebuildPendingProjection(workspace)).toMatchObject({ save_state: "saved" });
+    await refusesInput(workspace, "Local Edit Journal schema or partition is incompatible");
+    // A refused group also stops the prefix.
+    const firstGroupId = firstUncollected!.groups[0]!.journal_submission_group_id;
+    await requestResult(workspace.database.transaction("metadata", "readwrite").objectStore("metadata")
+      .delete(`${recoveryPrefix}${workspace.partition.journal_partition_id}:${firstGroupId}`));
+    await replacePrefix(workspace, withFirstSettlement(firstUncollected!, refused));
+    expect(await rebuildPendingProjection(workspace)).toMatchObject({ save_state: "needs_attention" });
+    await refusesInput(workspace, "Local Edit Journal limit failed");
     await replacePrefix(workspace, firstCollected!);
+    await writeFences(workspace, [firstCollected!.fences[0], ...(await readJournalSnapshot(workspace)).fences]);
     const saved = await readJournalSnapshot(workspace);
     expect(saved.records).toHaveLength(2400);
     expect(saved.records.every((record) => record.author_edit_unit === undefined)).toBe(true);
@@ -265,10 +308,15 @@ it("refuses input when a full working set cannot retire its prefix", async () =>
         text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" })).rejects.toThrow();
     } finally { interrupted.mockRestore(); }
     expect(await readJournalSnapshot(reopened)).toEqual(saved);
+    // An applied first group that the collection did not take is closed, so it leaves with the groups after it.
+    await replacePrefix(reopened, firstUncollected!);
+    await writeFences(reopened, saved.fences.slice(1));
     await appendAuthorEdit(reopened, { from: text.body.length, to: text.body.length,
       text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" });
     const continued = await readJournalSnapshot(reopened);
     expect([continued.records.length, continued.workingBoundary?.last_sequence]).toEqual([1, 2400]);
+    expect((await retainedHistory(reopened)).records.filter((record) => record.author_edit_unit !== undefined))
+      .toHaveLength(240);
   } finally {
     if (workspace.kind === "editor-ready") workspace.database.close();
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
@@ -276,7 +324,7 @@ it("refuses input when a full working set cannot retire its prefix", async () =>
   }
 }, 360000);
 
-it("retires settled single-input groups up to the first uncollected group", async () => {
+it("retires settled single-input groups and an applied group that the collection did not take", async () => {
   const scenario = createBrowserScenario();
   const text = { body: "Base" };
   const { fetchImpl } = appliedAuthorEditTransport(scenario, () => text.body);
@@ -291,30 +339,27 @@ it("retires settled single-input groups up to the first uncollected group", asyn
       await submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin, fetchImpl,
         cryptoImpl: crypto });
       if (group !== uncollected) await collectEligibleJournalPayload(workspace);
-      if (group < uncollected) remember(seen, await readJournalSnapshot(workspace));
+      remember(seen, await readJournalSnapshot(workspace));
     }
     const saved = await readJournalSnapshot(workspace);
-    // The groups after the uncollected group stay, also when they are collected.
+    // The applied group that the collection did not take leaves with the collected group after it (ADR 0036).
     expect(saved.groups.map((group) => [group.ordered_coverage.length,
-      group.payload_collection?.kind === "collected"]))
-      .toEqual(sizes.slice(uncollected).map((size, index) => [size, index !== 0]));
-    expect([saved.records.length, saved.workingBoundary?.last_sequence]).toEqual([2400 - uncollected, uncollected]);
+      group.payload_collection?.kind === "collected"])).toEqual([[120, true]]);
+    expect([saved.records.length, saved.workingBoundary?.last_sequence]).toEqual([120, 2280]);
 
     const projection = await appendAuthorEdit(workspace, { from: text.body.length, to: text.body.length,
       text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" });
     expect(projection).toMatchObject({ body: `${text.body}+`, unsettled_intent_count: 1 });
     expect(await rebuildPendingProjection(workspace)).toEqual(projection);
     const continued = await readJournalSnapshot(workspace);
-    const workingSet = (snapshot: JournalSnapshot) => ({ records: snapshot.records,
-      payloadChains: snapshot.payloadChains, groups: snapshot.groups, fences: snapshot.fences,
-      workingBoundary: snapshot.workingBoundary });
-    expect(workingSet({ ...continued, records: continued.records.slice(0, -1),
-      payloadChains: continued.payloadChains.slice(0, -1) })).toEqual(workingSet(saved));
-    const retiredGroups = [...seen.groups.keys()];
-    expect(retiredGroups).toHaveLength(uncollected);
-    expect(await retainedHistory(workspace)).toEqual(expectedHistory(seen, {
+    expect([continued.records.length, continued.workingBoundary?.last_sequence]).toEqual([1, 2400]);
+    const retained = await retainedHistory(workspace);
+    expect([retained.records.length, retained.groups.length, retained.fences.length]).toEqual([2400, 130, 129]);
+    // The group that the collection did not take leaves with its payload and gets no retained fence.
+    expect(retained.records.filter((record) => record.author_edit_unit !== undefined)).toHaveLength(1);
+    expect(retained).toEqual(expectedHistory(seen, {
       records: [...seen.records.keys()], chains: [...seen.chains.keys()],
-      groups: retiredGroups, fences: [...seen.fences.keys()],
+      groups: [...seen.groups.keys()], fences: [...seen.fences.keys()],
     }));
   } finally {
     workspace.database.close();
@@ -322,3 +367,203 @@ it("retires settled single-input groups up to the first uncollected group", asyn
     await deleteJournal(scenario.journalName);
   }
 }, 360000);
+
+const PROPOSAL = "018f0000-0000-7001-8000-000000000c01";
+const OPERATION = "018f0000-0000-7001-8000-000000000c02";
+const REVISIONS = ["018f0000-0000-7001-8000-000000000c03", "018f0000-0000-7001-8000-000000000c04",
+  "018f0000-0000-7001-8000-000000000c05"] as const;
+
+function candidateEdit(revision: string, priorText: string, text: string,
+  timing: { undoGroupId?: string; createdAt?: string } = {}): CandidateSelectionEdit {
+  return { kind: "candidate_selection",
+    target: { proposal_id: PROPOSAL, operation_id: OPERATION, revision_id: revision, manuscript_block_id: BLOCK },
+    expectedProposalHeads: [revision], priorText, from: priorText.length, to: priorText.length, text,
+    resultingBody: `${priorText}${text}`, ...timing };
+}
+
+/**
+ * The applied transport for the exact requests of the tests below. The candidate Author Edit number n of the current
+ * Revision gives `proposal_revised` with `REVISIONS[n]`. With `firstNoEffect`, the first Author Edit gives `no_effect`
+ * (`content_unchanged`), and the head does not change. The fake records each other request and throws.
+ */
+function candidateTransport(scenario: ReturnType<typeof createBrowserScenario>, currentBody: () => string,
+  { firstNoEffect = false } = {}) {
+  // The Server gives each applied or revised Author Edit the next Author Action Sequence. Only an applied edit moves
+  // the Project Activity position.
+  const actions = { sequence: 0 };
+  const applied = appliedAuthorEditTransport(scenario, currentBody, actions);
+  const targets: string[] = [];
+  const unexpected: string[] = [];
+  const project = `/api/v1/projects/${PROJECT}`;
+  const delegated = [`POST ${project}/anti-forgery-challenges`, `POST ${project}/editor-sessions`,
+    `GET ${project}/editor-sessions/${SESSION}`];
+  let sequence = 0;
+  let edits = 0;
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const path = new URL(input instanceof Request ? input.url : input).pathname;
+    const route = `${init?.method ?? "GET"} ${path}`;
+    if (route === `POST ${project}/manuscript/author-edits`) edits += 1;
+    if (delegated.includes(route)) return applied.fetchImpl(input, init);
+    if (route !== `POST ${project}/manuscript/author-edits`) {
+      unexpected.push(route);
+      throw new Error(`unexpected fetch ${route}`);
+    }
+    const request = requireRequestBody(init);
+    const target = request.proposal_target as { revision_id: string } | undefined;
+    const head = request.expected_authoritative_revision_id as string;
+    const response = async () => createAppliedAuthorEditResponse({ request,
+      commandDigest: await digestApplyAuthorEdit(request as never),
+      idempotencyKey: requestHeaders(init).get("idempotency-key")!, commandId: createJournalUuid(),
+      authorCommandAdmissionId: createJournalUuid(), receiptId: createJournalUuid(), priorRevisionId: head });
+    if (target === undefined && firstNoEffect && edits === 1) {
+      const answer = await response();
+      return jsonResponse({ ...answer, effect: { kind: "no_effect", reason: "content_unchanged" },
+        receipt: { ...answer.receipt, result: "no_effect", prior_heads: [head], resulting_heads: [head],
+          proposal_revision_ids: [], authoritative_revision_ids: [], authoritative_commit_ids: [],
+          author_action_sequence: null } });
+    }
+    if (target === undefined) return applied.fetchImpl(input, init);
+    // The Server gives `proposal_revised` only for the current Revision of the Proposal.
+    if (target.revision_id !== REVISIONS[sequence]) {
+      unexpected.push(`${route} ${target.revision_id}`);
+      throw new Error(`unexpected candidate target ${target.revision_id}`);
+    }
+    targets.push(target.revision_id);
+    sequence += 1;
+    const revision = REVISIONS[sequence]!;
+    const answer = await response();
+    const action = String(++actions.sequence);
+    return jsonResponse({ ...answer, effect: { kind: "proposal_revised", proposal_revision_id: revision,
+      author_action_sequence: action }, receipt: { ...answer.receipt, result: "proposal_revised",
+      prior_heads: [head], resulting_heads: [head], proposal_revision_ids: [revision], authoritative_revision_ids: [],
+      authoritative_commit_ids: [], author_action_sequence: action } });
+  };
+  return { fetchImpl, targets, unexpected };
+}
+
+it("retires a group that revised a Proposal with the next collected group", async () => {
+  const scenario = createBrowserScenario();
+  const text = { body: "Base" };
+  const { fetchImpl, targets, unexpected } = candidateTransport(scenario, () => text.body);
+  await deleteJournal(scenario.journalName);
+  const workspace = await openWorkspace(scenario, fetchImpl);
+  const submit = () => submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto });
+  const seen = emptyRows();
+  try {
+    await appendAuthorEdit(workspace, candidateEdit(REVISIONS[0], "Candidate", "!"));
+    expect(await submit()).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
+    await typeRun(workspace, text, 1, 1);
+    expect(await submit()).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
+    // The Proposal Revision moves the Author Action Sequence, and only the applied edit moves the Activity position.
+    expect((await readJournalSnapshot(workspace)).groups[1]?.settlement).toMatchObject({
+      kind: "applied_receipt_settled", project_activity_position: "1", author_action_sequence: "2" });
+    await collectEligibleJournalPayload(workspace);
+    const saved = await readJournalSnapshot(workspace);
+    remember(seen, saved);
+    expect(saved.groups.map((group) => group.payload_collection?.kind)).toEqual([undefined, "collected"]);
+
+    await typeRun(workspace, text, 2, 1);
+    const continued = await readJournalSnapshot(workspace);
+    expect([continued.records.length, continued.groups.length, continued.workingBoundary?.last_sequence])
+      .toEqual([1, 0, 2]);
+    expect(targets).toEqual([REVISIONS[0]]);
+    // The closed group leaves with its payload and gets no retained collection fence.
+    expect(await retainedHistory(workspace)).toEqual(expectedHistory(seen, {
+      records: [...seen.records.keys()], chains: [...seen.chains.keys()],
+      groups: [...seen.groups.keys()], fences: [...seen.fences.keys()],
+    }));
+    expect((await retainedHistory(workspace)).records[0]?.author_edit_unit).toBeDefined();
+    expect(unexpected).toEqual([]);
+  } finally {
+    workspace.database.close();
+    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+    await deleteJournal(scenario.journalName);
+  }
+});
+
+it("keeps a group that revised a Proposal while a later record targets the Revision that it revised", async () => {
+  const scenario = createBrowserScenario();
+  const text = { body: "Base" };
+  const { fetchImpl, targets, unexpected } = candidateTransport(scenario, () => text.body);
+  await deleteJournal(scenario.journalName);
+  const workspace = await openWorkspace(scenario, fetchImpl);
+  const submit = () => submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto });
+  try {
+    await appendAuthorEdit(workspace, candidateEdit(REVISIONS[0], "Candidate", "!"));
+    await submit();
+    await typeRun(workspace, text, 1, 1);
+    await submit();
+    // A later record still targets the Revision that the first group revised. The test collects the applied group
+    // while that record is not settled, which the writing controller does not do (it collects at the save state
+    // `saved`). The Server would give `conflicted` for that record, so the test does not submit it.
+    const undoGroupId = createJournalUuid();
+    await appendAuthorEdit(workspace, candidateEdit(REVISIONS[0], "Candidate!", "?",
+      { undoGroupId, createdAt: "2026-08-15T09:00:00.000Z" }));
+    await collectEligibleJournalPayload(workspace);
+    const before = await readJournalSnapshot(workspace);
+    expect(before.groups.map((group) => group.payload_collection?.kind)).toEqual([undefined, "collected"]);
+    await appendAuthorEdit(workspace, candidateEdit(REVISIONS[0], "Candidate!?", ".",
+      { undoGroupId, createdAt: "2026-08-15T09:00:00.100Z" }));
+    const kept = await readJournalSnapshot(workspace);
+    expect([kept.records.length, kept.groups.length, kept.workingBoundary]).toEqual([4, 2, undefined]);
+    expect(targets).toEqual([REVISIONS[0]]);
+    expect(unexpected).toEqual([]);
+  } finally {
+    workspace.database.close();
+    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+    await deleteJournal(scenario.journalName);
+  }
+});
+
+it("retires a group with no effect whose chain the next group continues, as a partition of main has it", async () => {
+  const scenario = createBrowserScenario();
+  const text = { body: "Base" };
+  const { fetchImpl, unexpected } = candidateTransport(scenario, () => text.body, { firstNoEffect: true });
+  await deleteJournal(scenario.journalName);
+  const workspace = await openWorkspace(scenario, fetchImpl);
+  const submit = () => submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto });
+  try {
+    // A group whose text does not change. The Server gives `no_effect`.
+    const undoGroupId = createJournalUuid();
+    await appendAuthorEdit(workspace, { from: 4, to: 4, text: "x", resultingBody: "Basex", inputOrigin: "typing",
+      undoGroupId, createdAt: "2026-08-15T08:00:00.000Z" });
+    await appendAuthorEdit(workspace, { from: 4, to: 5, text: "", resultingBody: "Base", inputOrigin: "typing",
+      undoGroupId, createdAt: "2026-08-15T08:00:00.001Z" });
+    expect(await submit()).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
+    await typeRun(workspace, text, 1, 1);
+    expect(await submit()).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
+    // Before #1758, the input after a group with no effect continued its chain. The test writes that shape: the record
+    // of the applied group moves into the chain of the first group. The code before #1758 writes it with no change.
+    const written = await readJournalSnapshot(workspace);
+    const [first, second] = written.payloadChains;
+    if (second !== undefined) {
+      const transaction = workspace.database.transaction(["intents", "payload_chains"], "readwrite");
+      const completed = new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onabort = () => reject(transaction.error);
+      });
+      transaction.objectStore("intents").put({ ...written.records[2]!, payload_chain_ref: first!.payload_chain_id });
+      transaction.objectStore("payload_chains").put({ ...first!,
+        ordered_patch_refs: [...first!.ordered_patch_refs, ...second.ordered_patch_refs] });
+      transaction.objectStore("payload_chains").delete(second.payload_chain_id);
+      await completed;
+    }
+    await collectEligibleJournalPayload(workspace);
+    const shared = await readJournalSnapshot(workspace);
+    expect([shared.payloadChains.length, shared.groups.map((group) => group.payload_collection?.kind)])
+      .toEqual([1, [undefined, undefined]]);
+    // A collected group after them ends the prefix. Both earlier groups and their one chain leave before the next input.
+    await typeRun(workspace, text, 2, 1);
+    expect(await submit()).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
+    await collectEligibleJournalPayload(workspace);
+    await typeRun(workspace, text, 3, 1);
+    const continued = await readJournalSnapshot(workspace);
+    expect([continued.records.length, continued.payloadChains.length, continued.groups.length,
+      continued.workingBoundary?.last_sequence]).toEqual([1, 1, 0, 4]);
+    expect(unexpected).toEqual([]);
+  } finally {
+    workspace.database.close();
+    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+    await deleteJournal(scenario.journalName);
+  }
+});

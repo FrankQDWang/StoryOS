@@ -371,6 +371,9 @@ chain. Its checkpoint is the full projection text before the first record of the
 run, and its source fields are the projection base at that time. Thus each later
 group collects alone (section 11).
 
+Input after a settled group starts a new chain, also when the base did not
+change. An append never continues a chain whose last record a group covers.
+
 These optional fields extend the IndexedDB version 4 record shape, and version 5 keeps them.
 Existing records without them retain their authoritative checkpoint behavior;
 they are not assigned a candidate target during recovery. A candidate record

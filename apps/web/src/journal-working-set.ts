@@ -115,16 +115,24 @@ function collectionProofMatches(group: Partial<JournalSubmissionGroup>, fence: u
     && Reflect.get(fence, "reason") === "applied_receipt_converged_with_durable_successor";
 }
 
-/** Moves the complete collected prefix out of the working set before each input, and returns true when it moved (ADR 0036). */
+/**
+ * Tells if a settled group that the collection did not take can leave the working set (ADR 0036). `later` holds the
+ * records after the prefix that would leave.
+ */
+export type ClosedJournalGroup = (group: JournalSubmissionGroup, later: readonly JournalIntentRecord[]) => boolean;
+
+/**
+ * Moves the prefix of collected and closed groups out of the working set before each input, and returns true when it
+ * moved (ADR 0036). The prefix ends at a collected group, because the working boundary needs that group.
+ */
 export async function retireCollectedJournalPrefix(
-  workspace: EditorWorkspace, snapshot: ValidatedJournalSnapshot,
+  workspace: EditorWorkspace, snapshot: ValidatedJournalSnapshot, closed: ClosedJournalGroup,
 ): Promise<boolean> {
   if (workspace.partition.disposition !== "current_writer_open"
     || workspace.session.writer.kind !== "current_writer"
     || workspace.session.writer.writer_generation !== workspace.partition.writer_generation) {
     return false;
   }
-  const prefix: JournalSubmissionGroup[] = [];
   const fences = new Map(snapshot.fences.map((fence) => [
     fence !== null && typeof fence === "object" ? Reflect.get(fence, "collection_fence_id") : undefined,
     fence,
@@ -136,15 +144,10 @@ export async function retireCollectedJournalPrefix(
     if (chains === undefined) chainsById.set(chain.payload_chain_id, [chain]);
     else chains.push(chain);
   }
-  const chainPositions = new Map<string, { first: number; last: number }>();
-  for (const [position, record] of snapshot.records.entries()) {
-    const positions = chainPositions.get(record.payload_chain_ref);
-    if (positions === undefined) {
-      chainPositions.set(record.payload_chain_ref, { first: position, last: position });
-    } else positions.last = position;
-  }
-  let recordCount = 0;
-  const chainIds = new Set<string>();
+  const chainLast = new Map<string, number>();
+  for (const [position, record] of snapshot.records.entries()) chainLast.set(record.payload_chain_ref, position);
+  const scanned: { group: JournalSubmissionGroup; end: number; ids: Set<string>; collected: boolean;
+    chainEnd: number }[] = [];
   let position = 0;
   for (let index = 0; position < snapshot.records.length;) {
     const group = snapshot.groups[index];
@@ -156,21 +159,41 @@ export async function retireCollectedJournalPrefix(
       group.ordered_coverage.map((item) => item.local_intent_sequence))) break;
     index += 1;
     const fenceId = group.payload_collection?.collection_fence_id;
-    if (!collectionProofMatches(group, fences.get(fenceId))) break;
+    const collected = collectionProofMatches(group, fences.get(fenceId));
+    // A closed group leaves with its payload, so its rows have no collection (ADR 0036).
+    if (!collected && (group.payload_collection !== undefined || !closed(group, []))) break;
     const chains = [...ids].flatMap((id) => chainsById.get(id) ?? []);
     const end = position + records.length;
-    if (records.some((item) => item.author_edit_unit !== undefined)
-      || chains.length !== ids.size
+    if ((collected && (records.some((item) => item.author_edit_unit !== undefined)
       || chains.some((chain) => chain.payload_collection?.collection_fence_id !== fenceId)
-      || !equal(Reflect.get(fences.get(fenceId) as object, "collected_payload_chain_ids"), [...ids])
-      || [...ids].some((id) => {
-        const { first, last } = chainPositions.get(id)!;
-        return first < position || last >= end;
-      })) break;
-    prefix.push(group);
-    recordCount = position = end;
-    for (const id of ids) chainIds.add(id);
+      || !equal(Reflect.get(fences.get(fenceId) as object, "collected_payload_chain_ids"), [...ids])))
+      || (!collected && chains.some((chain) => chain.payload_collection !== undefined))
+      || chains.length !== ids.size) break;
+    // A chain can continue from an earlier group of the prefix, as the chain rule before #1758 wrote it.
+    const chainEnd = Math.max(...[...ids].map((id) => chainLast.get(id)! + 1));
+    scanned.push({ group, end, ids, collected, chainEnd });
+    position = end;
   }
+  // The prefix ends after the last collected group before `end`.
+  const collectedEnd = (end: number) => {
+    let last = end;
+    while (last > 0 && !scanned[last - 1]!.collected) last -= 1;
+    return last;
+  };
+  // Each closed group must also be closed against the records after the prefix that leaves, and each chain of the
+  // prefix must end inside it.
+  let count = collectedEnd(scanned.length);
+  for (let open = 0; open >= 0;) {
+    const end = scanned[count - 1]?.end ?? 0;
+    const later = snapshot.records.slice(end);
+    open = scanned.slice(0, count).findIndex((entry) => entry.chainEnd > end
+      || (!entry.collected && !closed(entry.group, later)));
+    if (open >= 0) count = collectedEnd(open);
+  }
+  const retiring = scanned.slice(0, count);
+  const prefix = retiring.map((entry) => entry.group);
+  const recordCount = retiring.at(-1)?.end ?? 0;
+  const chainIds = new Set(retiring.flatMap((entry) => [...entry.ids]));
   if (prefix.length === 0) return false;
   const partitionId = workspace.partition.journal_partition_id;
   const transaction = workspace.database.transaction(
@@ -214,7 +237,8 @@ export async function retireCollectedJournalPrefix(
         transaction.objectStore(name).put(retained);
       }
     }
-    const retiredFences = new Set(prefix.map((group) => group.payload_collection!.collection_fence_id));
+    const retiredFences = new Set(retiring.flatMap((entry) =>
+      entry.collected ? [entry.group.payload_collection!.collection_fence_id] : []));
     for (const id of retiredFences) {
       metadata.add({ key: `retained_collection_fence:${id}`, value: fences.get(id) });
     }
