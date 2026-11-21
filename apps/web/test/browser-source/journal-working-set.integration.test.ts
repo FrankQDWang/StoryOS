@@ -19,8 +19,7 @@ import {
 } from "./scenario.ts";
 
 function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserScenario>,
-  currentBody: () => string) {
-  let position = 0;
+  currentBody: () => string, activity = { position: 0 }) {
   let commandDigest: DigestValue | undefined;
   let session: GetEditorSessionResponse = {
     ...scenario.session, schema_id: "storyos.query.editor-session.response.v1",
@@ -44,7 +43,7 @@ function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserSce
       if (!commandDigest || !idempotencyKey) throw new Error("missing admitted identity");
       const revisionId = createJournalUuid();
       const response = createAppliedAuthorEditResponse({ request, commandDigest,
-        idempotencyKey, body, projectActivityPosition: String(++position),
+        idempotencyKey, body, projectActivityPosition: String(++activity.position),
         priorRevisionId: session.base_snapshot.authoritative_head_revision_id,
         authoritativeRevisionId: revisionId, commandId: createJournalUuid(),
         authorCommandAdmissionId: createJournalUuid(), receiptId: createJournalUuid(),
@@ -54,7 +53,7 @@ function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserSce
         "SHA-256", new TextEncoder().encode(body),
       ));
       session = { ...session, base_snapshot: { ...session.base_snapshot,
-        snapshot_id: createJournalUuid(), project_activity_position: String(position),
+        snapshot_id: createJournalUuid(), project_activity_position: String(activity.position),
         authoritative_head_revision_id: revisionId,
         materialized_revision: chapterRevision(revisionId, body),
         materialized_payload_digest: { algorithm: "sha256",
@@ -386,7 +385,9 @@ function candidateEdit(revision: string, priorText: string, text: string,
  */
 function candidateTransport(scenario: ReturnType<typeof createBrowserScenario>, currentBody: () => string,
   { firstNoEffect = false } = {}) {
-  const applied = appliedAuthorEditTransport(scenario, currentBody);
+  // The Server gives each applied or revised Author Edit the next Author Action Sequence.
+  const activity = { position: 0 };
+  const applied = appliedAuthorEditTransport(scenario, currentBody, activity);
   const targets: string[] = [];
   const unexpected: string[] = [];
   const project = `/api/v1/projects/${PROJECT}`;
@@ -427,10 +428,11 @@ function candidateTransport(scenario: ReturnType<typeof createBrowserScenario>, 
     sequence += 1;
     const revision = REVISIONS[sequence]!;
     const answer = await response();
+    const action = String(++activity.position);
     return jsonResponse({ ...answer, effect: { kind: "proposal_revised", proposal_revision_id: revision,
-      author_action_sequence: String(sequence) }, receipt: { ...answer.receipt, result: "proposal_revised",
+      author_action_sequence: action }, receipt: { ...answer.receipt, result: "proposal_revised",
       prior_heads: [head], resulting_heads: [head], proposal_revision_ids: [revision], authoritative_revision_ids: [],
-      authoritative_commit_ids: [], author_action_sequence: String(sequence) } });
+      authoritative_commit_ids: [], author_action_sequence: action } });
   };
   return { fetchImpl, targets, unexpected };
 }

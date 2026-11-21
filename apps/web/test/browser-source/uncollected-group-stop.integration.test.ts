@@ -148,13 +148,17 @@ function writingServer(scenario: ReturnType<typeof createBrowserScenario>, mode:
     if (route === `GET ${project}/assistance`) return jsonResponse({ ...assistanceFixture, project_scope: scope });
     if (route === `GET ${project}/skills`) return jsonResponse({ ...skillsFixture, project_scope: scope, skills: [] });
     if (route === `PUT ${project}/current-chapter` && current === CHAPTER && chapterDigest !== undefined) {
+      const input = requireRequestBody(init).set_current_chapter_input as { correlation_id: string };
       await openChapterB();
-      // The answer names the base that the switch installs, and the receipt names the command of the request.
-      return jsonResponse({ ...setCurrentChapterFixture, project_scope: scenario.project.project_scope,
+      // The answer names the base that the switch installs, and the receipt names the command of the request and
+      // the Author Action Sequence of the Chapter selection.
+      return jsonResponse({ ...setCurrentChapterFixture, correlation_id: input.correlation_id,
+        project_scope: scenario.project.project_scope,
         effect: { ...setCurrentChapterFixture.effect, base_snapshot_id: session.base_snapshot.snapshot_id,
           project_activity_position: String(position) },
         receipt: { ...setCurrentChapterFixture.receipt, project_scope: scenario.project.project_scope,
-          command_digest: chapterDigest, idempotency_key: requestHeaders(init).get("idempotency-key") ?? "" } });
+          author_action_sequence: String(position), command_digest: chapterDigest,
+          idempotency_key: requestHeaders(init).get("idempotency-key") ?? "" } });
     }
     if (route === `GET ${project}/manuscript/tree`) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
