@@ -716,8 +716,9 @@ approval before publication.
 Reuse current owners and stable Requirement IDs. No old child body can stand in
 for that alignment. The current [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361)
 owns its accepted implementation handoff and pending final release evidence.
-Stage 4 and later remain on EXECUTION HOLD until their gates pass and the
-author explicitly resumes execution.
+The author released the execution of Stage 4 through Stage 7 and of
+Stage 10. Stage 8 and Stage 9 stay on EXECUTION HOLD until the author
+explicitly releases their execution (ADR 0096).
 
 ## 10. Explicit non-scope of this contract
 

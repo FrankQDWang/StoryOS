@@ -223,13 +223,15 @@ SkillPackages of the StoryOS distribution, and marks on the new words of a
 Proposal candidate. StoryOS infers no preference of the author automatically.
 The specification is
 [Deliver Stage 10: Author Voice](https://github.com/FrankQDWang/StoryOS/issues/1760).
-The Requirements, the author journey, and the evidence rows below came with
-it. The other candidates stay in [`Todos.md`](../../Todos.md), which is not a
-contract. The rule "no setup before writing" of ADR 0096 applies.
+The author approved it on 2026-11-21, and that approval released the
+execution of Stage 10. The Requirements, the author journey, and the evidence
+rows below came with the specification. The other candidates stay in
+[`Todos.md`](../../Todos.md), which is not a contract. The rule "no setup
+before writing" of ADR 0096 applies.
 
 | ID | Production obligation | Semantic owner |
 | --- | --- | --- |
-| S10-REQ-001 | Send default writing rules for prose in the Host instructions of each tool-loop request. Each rule states the wanted behaviour and says when a device is appropriate. The rules are no list of forbidden phrases. They are defaults for the style of the prose: a different style in the author request, in the Project Instruction, in a sample passage that they give, or in the instructions of a Skill applies before them, and the text of the rules says so (the exception of ADR 0100 to the order of ADR 0089). A change of the rules gets a new mapping revision and a new Registration. | Context and Model Gateway owners |
+| S10-REQ-001 | Send default writing rules for prose in the Host instructions of each tool-loop request. Each rule states the wanted behaviour and says when a device is appropriate. The rules are no list of forbidden phrases. They are defaults for the style of the prose. A different style applies before them when it is in the author request, in the Project Instruction, in a sample passage that they give, or in the instructions of a Skill. The text of the rules says so. For the instructions of a Skill, this is the exception of ADR 0100 to the order of ADR 0089. A change of the rules gets a new mapping revision and a new Registration. | Context and Model Gateway owners |
 | S10-REQ-002 | Keep the Project Instruction as the one place for the lasting demands and the sample passages of the author. The writing rules tell the model to write in the voice of a sample passage. Stage 10 adds no record, no control, and no automatic capture for them, and StoryOS infers no preference of the author automatically. | Context owner |
 | S10-REQ-003 | Give each deployment the SkillPackages of the StoryOS distribution as files of the release package: a local revision that gives a candidate for each of a small number of places, and a conflict check that reports and changes no text. An agreement before a scene is the third package while its ticket is in the ticket graph of the specification (ADR 0100 section 2). Each is a standard SkillPackage. The operator sets the Skill directory, and an absent setting gives no Skill (ADR 0089). | Skill owner |
 | S10-REQ-004 | Mark the new words of each Proposal candidate in the editor, with a tick where words were removed with no replacement. A candidate has no mark when its target Block is empty, and when almost all of its text is new. The pointer on a mark shows the old words of that mark in the target Block, and the target Block has no mark at other times. When the author changes the text of a candidate, the marks follow the text. The marks are in the view only: the document, the Local Edit Journal, each command, and the copied text do not change. | Workspace and Core/Proposal owners |
@@ -240,10 +242,11 @@ contract. The rule "no setup before writing" of ADR 0096 applies.
    package. The Skill picker lists the SkillPackages of the distribution
    with their descriptions.
 2. Select the local revision and ask for a revision of a Chapter. The
-   assistant gives one Proposal with a candidate for some Blocks. Each
-   candidate that keeps a part of the text of its target shows marks on its
-   new words and a tick at each removal with no replacement. The pointer on
-   a mark shows the old words of that mark in the target Block.
+   assistant gives one Proposal with a candidate for each of two Blocks.
+   Each candidate keeps most of the text of its target Block, so
+   S10-REQ-004 gives it marks: the editor shows marks on its new words and a
+   tick at each removal with no replacement. The pointer on a mark shows the
+   old words of that mark in the target Block.
 3. Change the text of one candidate: the marks follow the text. Accept one
    candidate and reject one. The manuscript has the accepted text with no
    mark.
@@ -412,12 +415,13 @@ owners and stable requirements, preserve Stage 1/2 historical evidence and
 unaffected Stage 6/8/9 promises, and audit forward/reverse coverage. Existing
 old bodies do not certify these changes. The current Stage 3 specification
 owns its accepted implementation handoff and pending final release evidence.
-Stage 4 and later remain on EXECUTION HOLD until alignment passes and the
-author explicitly resumes execution. This contract creates no implementation
-ticket or stage release.
+The author released the execution of Stage 4 through Stage 7 and of
+Stage 10. Stage 8 and Stage 9 stay on EXECUTION HOLD until the author
+explicitly releases their execution (ADR 0096). This contract creates no
+implementation ticket or stage release.
 
 The two conversation defaults are recorded in the release baseline. Concrete
 external services, accounts, spending, and destination authorization remain
 explicit prerequisites of the affected real-integration ticket. No Eval
 definition, evaluator, rubric, or API decision blocks MVP planning or delivery.
-Publication and execution for Stage 4 and later remain paused.
+Publication and execution for Stage 8 and Stage 9 remain paused.
