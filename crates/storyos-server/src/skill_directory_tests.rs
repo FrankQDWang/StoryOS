@@ -98,7 +98,7 @@ fn the_distribution_directory_gives_exactly_its_named_packages() {
         .iter()
         .map(|package| package.name.as_str())
         .collect();
-    assert_eq!(names, ["conflict-check"]);
+    assert_eq!(names, ["conflict-check", "local-revision"]);
 }
 
 #[test]
