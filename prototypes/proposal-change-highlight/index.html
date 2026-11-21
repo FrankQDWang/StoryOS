@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE: marks for the changes of a Proposal candidate</title>
+<!--
+PROTOTYPE. This file is not product code, and it is not in main.
+
+Question: how does the editor show which words of a Proposal candidate are new, in a way that
+agrees with the book look of the manuscript?
+
+Variants (the arrow buttons or the arrow keys change the variant):
+  A  no mark (the editor on 2026-11-21)
+  B  marks on the new words of the candidate only
+  C  marks on the old words and on the new words
+  D  the two texts as one paragraph
+The two colour buttons change the colour of the marks.
+
+Verdict: the author chose variant B on 2026-11-21.
+
+The marks of this page are made by hand. The product computes the marks by the rule of the
+implementation ticket. The line below the page that shows the old words and the new words is a
+part of the prototype only.
+
+The head of this file and its first style element make the copy a complete page. The part after
+the comment PROTOTYPE SOURCE is the source that the author saw.
+-->
+<style>
+:root { --border: #dcd9d2; --text-secondary: #77756e; }
+body { margin: 0; padding: 24px 16px 48px; background: #f4f3f0; color: #23221e; font-family: "PingFang SC", system-ui, sans-serif; }
+#rt { max-width: 760px; margin: 0 auto; }
+button { font: 13px "PingFang SC", system-ui, sans-serif; padding: 5px 12px; border: 1px solid #cfcbc3; border-radius: 6px; background: #fff; color: #23221e; cursor: pointer; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<!-- PROTOTYPE SOURCE -->
+<h2 class="sr-only">编辑器里修改处高亮的四种样子，可以用箭头切换比较，并切换标记颜色。</h2>
+<style>
+.pg{background:#fbfbfa;border:0.5px solid var(--border);border-radius:12px;padding:22px 40px 16px 52px;color:#23221e;font-family:"Noto Serif SC","Songti SC",serif;font-size:16.5px;line-height:2}
+.pg p{margin:0}
+.pg .ttl{font-size:26px;font-weight:600;line-height:1.4;margin:0 0 20px}
+.pg .cand{position:relative;margin:0 -37px 0 -33px;padding:12px 33px 13px;background:#eeece7;color:#34322e}
+.pg .cand::before{content:"";position:absolute;left:0;top:0;bottom:0;width:1px;background:#5d5951}
+.pg .acts{display:flex;gap:24px;align-items:center;padding:9px 0 0;margin:0 0 26px -16px;min-height:40px}
+.pg .acts span{font:12px "PingFang SC",sans-serif;color:#5b5953;padding:5px 4px}
+.tone-ink{--mk:#8d877a;--tint:rgba(52,50,46,.12);--dl:#a09a8e}
+.tone-warm{--mk:#b9853f;--tint:rgba(185,133,63,.2);--dl:#b9853f}
+.v-B .ins,.v-C .ins,.v-D .ins{text-decoration:underline;text-decoration-color:var(--mk);text-decoration-thickness:1.5px;text-underline-offset:5px;cursor:default}
+.v-C .del,.v-D .del{text-decoration:line-through;text-decoration-color:var(--dl);color:#918c80;cursor:default}
+.gap{display:none}
+.v-B .gap,.v-C .gap{display:inline-block;width:2px;height:.95em;margin:0 3px;vertical-align:-2px;background:var(--mk);cursor:default}
+.on{background:var(--tint)}
+.gap.on{outline:3px solid var(--tint)}
+.v-D .orig,.v-D .two,.mrg{display:none}
+.v-D .mrg{display:block}
+</style>
+<div id="rt" class="v-B tone-ink">
+<div style="display:flex;align-items:center;gap:8px;margin:0 0 12px;flex-wrap:wrap">
+<button id="pv" aria-label="上一种">←</button>
+<span id="lb" style="font-size:14px;font-weight:500;min-width:150px;text-align:center">B · 只标新写的字</span>
+<button id="nx" aria-label="下一种">→</button>
+<span style="flex:1"></span>
+<span style="font-size:13px;color:var(--text-secondary)">标记颜色</span>
+<button id="t1" style="font-weight:500">同色系</button>
+<button id="t2">暖色</button>
+</div>
+<div class="pg">
+<p class="ttl">第十二章　借钱</p>
+<p>傍晚的楼道里有炒菜的油烟味。他在三楼停了一会儿，才接着往上走。</p>
+<p class="orig">他站在门口，<span class="del" data-k="1">深吸了一口气，终于把那句话说了出来：</span>“妈，先借我两千。”母亲<span class="del" data-k="2">的眼中闪过一丝复杂的情绪，她</span>没有问为什么，<span class="del" data-k="3">只是默默地</span>转身进了里屋。他听见抽屉被拉开<span class="del" data-k="4">的声音，心中涌起一股难以言说的酸楚。</span><span class="del" data-k="5">这不是一次简单的借钱，而是他第一次向母亲承认自己的失败。</span></p>
+<p class="cand two">他站在门口，<span class="ins" data-k="1">把钥匙从左手换到右手，说：</span>“妈，先借我两千。”母亲<span class="ins" data-k="2">看了他一眼，</span>没有问为什么，<span class="gap" data-k="3"></span>转身进了里屋。他听见抽屉被拉开<span class="ins" data-k="4">，又听见她在里面翻了很久。</span><span class="ins" data-k="5">他低头去看自己的鞋尖，鞋带松了一边。</span></p>
+<div class="acts"><span>✓ 接受</span><span>× 拒绝</span></div>
+<p>“吃了没有？”母亲在里屋问。</p>
+</div>
+<p id="st" style="font-size:13px;color:var(--text-secondary);margin:10px 0 0;min-height:1.7em">把鼠标移到带标记的字上，可以看到它对应的原文。</p>
+</div>
+<script>
+(function(){
+var rt=document.getElementById('rt'),lb=document.getElementById('lb'),st=document.getElementById('st');
+var orig=rt.querySelector('.orig'),cand=rt.querySelector('.two');
+var hint='把鼠标移到带标记的字上，可以看到它对应的原文。';
+var m=document.createElement('p');m.className='cand mrg';
+orig.childNodes.forEach(function(n){
+if(n.nodeType===3){m.appendChild(document.createTextNode(n.textContent));return;}
+m.appendChild(n.cloneNode(true));
+var i=cand.querySelector('.ins[data-k="'+n.dataset.k+'"]');
+if(i)m.appendChild(i.cloneNode(true));
+});
+cand.after(m);
+var V=[['A','现在的样子'],['B','只标新写的字'],['C','两边都标'],['D','合成一段']],vi=1;
+function clear(){rt.querySelectorAll('.on').forEach(function(x){x.classList.remove('on');});}
+function show(){
+rt.className=rt.className.replace(/v-\w/,'v-'+V[vi][0]);
+lb.textContent=V[vi][0]+' · '+V[vi][1];
+clear();
+st.textContent=vi===0?'这是现在的样子：没有任何标记，哪里变了要自己上下对照。':hint;
+}
+function step(d){vi=(vi+d+4)%4;show();}
+document.getElementById('pv').onclick=function(){step(-1);};
+document.getElementById('nx').onclick=function(){step(1);};
+document.addEventListener('keydown',function(e){
+if(e.key==='ArrowLeft')step(-1);
+if(e.key==='ArrowRight')step(1);
+});
+var t1=document.getElementById('t1'),t2=document.getElementById('t2');
+function tone(w){
+rt.classList.toggle('tone-ink',!w);rt.classList.toggle('tone-warm',w);
+t1.style.fontWeight=w?'400':'500';t2.style.fontWeight=w?'500':'400';
+}
+t1.onclick=function(){tone(false);};
+t2.onclick=function(){tone(true);};
+rt.addEventListener('mouseover',function(e){
+var t=e.target.closest?e.target.closest('[data-k]'):null;
+clear();
+if(!t||vi===0){if(vi!==0)st.textContent=hint;return;}
+var k=t.dataset.k;
+rt.querySelectorAll('[data-k="'+k+'"]').forEach(function(x){x.classList.add('on');});
+var d=orig.querySelector('.del[data-k="'+k+'"]'),i=cand.querySelector('.ins[data-k="'+k+'"]');
+st.textContent='原来：'+d.textContent+'　→　'+(i?'现在：'+i.textContent:'删去，没有替换');
+});
+})();
+</script>
+</body>
+</html>
