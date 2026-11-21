@@ -35,7 +35,7 @@ The paragraph of Project C:
 
 ### Requests
 
-Each author request is one AgentRun in a new Conversation. The plan has 4 Runs, one for each request, and the ticket permits at most 8.
+Each author request is one AgentRun in a new Project Conversation. The plan has 4 Runs, one for each request, and the ticket permits at most 8.
 
 | Run | Project | Author request | What the request shows |
 | --- | --- | --- | --- |
@@ -290,7 +290,7 @@ The table lists each habit of the ten rules in the prose of each candidate, with
 | 1. Contrast | 0 | 0 | 0 | none |
 | 2. Meaning or future at the end | 0 | 0 | 0 | none: R1 ends on a line of speech, R2 and R3 on an event |
 | 3. Feeling shown and explained | 0 | 0 | 0 | none |
-| 4. Stock physical reaction | 1: 到了半空又落下去 | 0 | 2: 嘴角动了动，没笑出来; 伸出手，又在半空中停住 | R2 手攥着雨衣的扣子, 在围裙上擦了擦手, and 手里还攥着那只鞋底: each hand holds an object of this scene. R1 看了她一会儿 and R2 看着她，看了一会儿: a plain action with no stock phrase. |
+| 4. Stock physical reaction | 1: 到了半空又落下去 | 0 | 2: 嘴角动了动，没笑出来; 伸出手，又在半空中停住 | R2 手攥着雨衣的扣子 and 手里还攥着那只鞋底: the hand holds an object of this scene. R2 在围裙上擦了擦手: the hand wipes on the apron of this scene and holds no object. R1 看了她一会儿 and R2 看着她，看了一会儿: a plain action with no stock phrase. |
 | 5. Word of degree or doubt | 0 | 0 | 0 | R1 像是要碰她的头发, R2 也许是林舟长高了, and R2 像没装什么: the viewpoint character does not know the aim, the cause, or the content of the case. R3 碗停在手里，过了片刻才放下 writes the event of 微微一怔，缓缓放下手中的碗 again with no word of degree. |
 | 6. Stock figure of speech | 0 | 0 | 0 | none |
 | 7. Count, length, connective words | 1: 她剪了短发，人比照片上瘦，一件灰外套大了一号，肩膀塌着，裤脚从膝盖往下全湿了 (five parallel items) | 1: 箱子是皮的，旧得发黑，一角磨白了，中间拦腰捆了一道绳子 (four parallel items) | 1: 雨打在瓦上，风穿过院子，潮意贴着地面漫过来 | none |

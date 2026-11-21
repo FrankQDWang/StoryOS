@@ -93,7 +93,7 @@ async fn the_tool_loop_mapping_sends_the_finish_rule_and_the_tool_choice_of_each
 }
 
 #[tokio::test]
-async fn the_host_instructions_give_the_selection_reference_rule_and_the_proposal_growth_rule() {
+async fn the_one_proposal_rule_is_between_the_growth_rule_and_the_reference_rule() {
     let DestinationRequest::Create(request) =
         create(route("http://127.0.0.1:9"), RequestAttempt::New)
     else {
@@ -112,16 +112,19 @@ async fn the_host_instructions_give_the_selection_reference_rule_and_the_proposa
          together with joinable blocks, and then they join that Proposal. Then the call changes \
          no other block, and it changes the joinable blocks next to the candidate first, with no \
          gap.";
+    // ADR 0062: the Host refuses each later call after the Run opened its Proposal.
+    let one_proposal = "StoryOS accepts one propose_edit call for the author request. Put the \
+         changes that answer the request into that one call. After StoryOS accepts the call, the \
+         Proposal waits for the decision of the author, and StoryOS refuses each later \
+         propose_edit call until the author sends a new message.";
     let references = "Author references show the exact text that the author selected for this \
          request. Use the author request to decide if you change the referenced text with \
          propose_edit or only use it. A change replaces all of a block: keep the text outside \
          the references unchanged unless the author request says otherwise.";
+    let growth_at = paragraphs.iter().position(|paragraph| *paragraph == growth);
     assert_eq!(
-        (
-            paragraphs.contains(&growth),
-            paragraphs.contains(&references)
-        ),
-        (true, true),
+        growth_at.map(|at| &paragraphs[at..at + 3]),
+        Some(&[growth, one_proposal, references][..]),
         "{instructions}"
     );
 }
@@ -242,8 +245,9 @@ async fn the_current_mapping_declares_read_tool_result_and_says_what_a_stub_is()
                  Project instruction, or the instructions of a Skill ask for a different style, \
                  follow that and not the default. When the author request or the Project \
                  instruction gives a sample passage, write in the voice of that passage: its \
-                 sentence length, its word choice, and its distance from the character. When a \
-                 sample uses a device that a rule names, follow the sample. The Chinese phrases \
+                 sentence length, its word choice, and its distance from the character. Do not \
+                 take its events, its objects, or its setting. When a sample uses a device that a \
+                 rule names, follow the sample. The Chinese phrases \
                  below are examples of a habit, and they are not forbidden words: one use that \
                  does work in the scene is correct, and the fault is the habit.\n\n\
                  1. State the fact directly. Use a contrast only when the scene corrects a belief \
@@ -255,7 +259,7 @@ async fn the_current_mapping_declares_read_tool_result_and_says_what_a_stub_is()
                  name a small feeling plainly. Do not show a feeling and then explain it. Habit: \
                  心中涌起一股暖流；他终于明白……\n\
                  4. Give a physical reaction only when it belongs to this character at this \
-                 moment. Habit: 眼中闪过一丝……；嘴角勾起一抹弧度。\n\
+                 moment. Habit: 眼中闪过一丝……；嘴角勾起一抹弧度；手停在半空。\n\
                  5. Use a word of degree or doubt only when speed, force, or uncertainty changes \
                  what the reader understands. Habit: 微微、缓缓 on one action after another; 仿佛 \
                  where the character is sure.\n\
@@ -274,7 +278,8 @@ async fn the_current_mapping_declares_read_tool_result_and_says_what_a_stub_is()
                  10. Keep the dash and the paragraph of one sentence for a real interruption or a \
                  real stress. Habit: a dash in each paragraph.\n\n\
                  When you find one of these habits in your text, write the event again in a \
-                 different way; do not put a synonym in the place of the phrase.\n\nWhen you \
+                 different way; do not put a synonym or the same device in another form in the \
+                 place of the phrase.\n\nWhen you \
                  need the complete text of an earlier result of web_search or web_fetch in this \
                  work again, call read_tool_result with the identity in the source attribute of \
                  the tool_result tag of that result.\n\nAfter a compaction of the conversation, an earlier result can be a \
@@ -440,7 +445,7 @@ async fn the_summary_instruction_names_three_more_topics() {
 }
 
 /// ADR 0100 section 2: a decision request and a closing request with a Skill item, a catalog,
-/// `write_memory`, the Chapter list, and the Memory index have the block of the writing rules
+/// `write_memory`, the Chapter list, and the Memory Index have the block of the writing rules
 /// one time, before the paragraphs of those items.
 #[tokio::test]
 async fn the_writing_rules_are_one_block_before_the_paragraphs_of_the_items() {

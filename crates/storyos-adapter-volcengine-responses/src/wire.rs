@@ -31,6 +31,10 @@ candidate: one propose_edit call can change the candidate together with joinable
 then they join that Proposal. Then the call changes no other block, and it changes the joinable \
 blocks next to the candidate first, with no gap.
 
+StoryOS accepts one propose_edit call for the author request. Put the changes that answer the \
+request into that one call. After StoryOS accepts the call, the Proposal waits for the decision of \
+the author, and StoryOS refuses each later propose_edit call until the author sends a new message.
+
 Author references show the exact text that the author selected for this request. Use the author \
 request to decide if you change the referenced text with propose_edit or only use it. A change \
 replaces all of a block: keep the text outside the references unchanged unless the author \
@@ -43,8 +47,9 @@ Default rules for prose. Use these rules when you write or change prose of the n
 defaults for the style of the prose. When the author request, the Project instruction, or the \
 instructions of a Skill ask for a different style, follow that and not the default. When the \
 author request or the Project instruction gives a sample passage, write in the voice of that \
-passage: its sentence length, its word choice, and its distance from the character. When a sample \
-uses a device that a rule names, follow the sample. The Chinese phrases below are examples of a \
+passage: its sentence length, its word choice, and its distance from the character. Do not take \
+its events, its objects, or its setting. When a sample uses a device that a rule names, follow the \
+sample. The Chinese phrases below are examples of a \
 habit, and they are not forbidden words: one use that does work in the scene is correct, and the \
 fault is the habit.
 
@@ -55,7 +60,7 @@ the meaning of the scene, and do not tell the future. Habit: 命运的齿轮开�
 3. Show a feeling one time, through a choice, a spoken line, or a cost. You can name a small \
 feeling plainly. Do not show a feeling and then explain it. Habit: 心中涌起一股暖流；他终于明白……
 4. Give a physical reaction only when it belongs to this character at this moment. Habit: \
-眼中闪过一丝……；嘴角勾起一抹弧度。
+眼中闪过一丝……；嘴角勾起一抹弧度；手停在半空。
 5. Use a word of degree or doubt only when speed, force, or uncertainty changes what the reader \
 understands. Habit: 微微、缓缓 on one action after another; 仿佛 where the character is sure.
 6. Use a figure of speech only when it comes from this world and from the experience of this \
@@ -71,7 +76,7 @@ scene. Habit: a conflict that starts and ends in one paragraph.
 Habit: a dash in each paragraph.
 
 When you find one of these habits in your text, write the event again in a different way; do not \
-put a synonym in the place of the phrase.";
+put a synonym or the same device in another form in the place of the phrase.";
 
 /// The paragraph that the current mapping adds to the tool loop instructions (ADR 0093).
 pub(crate) const READ_TOOL_RESULT_INSTRUCTION: &str = "\
