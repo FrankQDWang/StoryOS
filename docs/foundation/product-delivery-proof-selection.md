@@ -16,14 +16,14 @@ contract, approved the specification of Stage 10 on 2026-11-21
 [ADR 0100](../adr/0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md)).
 [Add the Stage 10 Requirements to the Release Sources and Bind the Proof Documents to Them](https://github.com/FrankQDWang/StoryOS/pull/1768)
 accepted the two sources with the rows of Stage 10 at
-`d0a70496be2bf0ef52c8db86706dcc6b278b9648`, tree
-`152972d687c11a14b45204b0a192e40fa7497d70`. That commit is the exact source snapshot
+`d055e49f96a3aa04535346881fc009a3730f30f9`, tree
+`be453c4304e35ed0eedd4a80459b5d6e0a7bc62a`. That commit is the exact source snapshot
 consumed by both proof documents, not the release owner's earlier Claim baseline.
 
 | Accepted source | UTF-8/LF SHA-256 |
 | --- | --- |
-| [Editor-first release](ai-independent-editor-first-release-baseline-and-handoff-criteria.md) | `5154c80f8630105d7f110c16ef36b8005e92a6877607e8d7017f0107a45ee38e` |
-| [Product continuation](storyos-product-delivery-continuation.md) | `40238be4e61d2a36ceeaf2be0d3933081eb3302796e68ba470429dc5cb97a8c5` |
+| [Editor-first release](ai-independent-editor-first-release-baseline-and-handoff-criteria.md) | `8423cb933f91c9b8e2667cb8027ba79de7c5e430217f33e92b28fa5cf0f62412` |
+| [Product continuation](storyos-product-delivery-continuation.md) | `635dd6a5662a44e19a81f1e43f61d8b79c2e2a43b70eb4d33b6e0acc9f705139` |
 
 The continuation source owns the exact 71-source disposition inventory:
 original Issues 2 through 65, 67 through 70, and 75 through 77. Its additional
@@ -400,7 +400,7 @@ Every row uses `BLOCK-ALL` for missing, failed, stale, or unreplayable evidence.
 | `S9-EVD-002` | Child scope/reservation/Mailbox/join/Seal/late-result/cancellation/recovery proof. `OWN-SUBRUN`, `OWN-RET`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
 | `S9-EVD-003` | Authorized proactive work, misfire/deduplication, guardrails/model policy, and editor regression. `OWN-AGENT`, `OWN-MODEL`, `OWN-WEB`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
 | `S9-JRN-001` | Execute every step of the accepted Stage 9 author journey on one exact released candidate, including the complete AI-disabled regression; `OWN-REL` and the stage's named owners. | `SMAP-STAGE-9` | `BLOCK-ALL`; every journey step is mandatory. |
-| `S10-REQ-001` | Default writing rules for prose in the Host instructions of each tool-loop request. Each rule states the wanted behaviour, and the rules are no list of forbidden phrases. They are defaults for the style of the prose: a different style in the author request, in the Project Instruction, in a sample passage that they give, or in the instructions of a Skill applies before them (the exception of ADR 0100 to the order of ADR 0089). A change of the rules gets a new mapping revision and a new Registration. `OWN-CTX`, `OWN-MODEL`. | `SMAP-STAGE-10` | `BLOCK-ALL`. |
+| `S10-REQ-001` | Default writing rules for prose in the Host instructions of each tool-loop request. Each rule states the wanted behaviour, and the rules are no list of forbidden phrases. They are defaults for the style of the prose. A different style applies before them when it is in the author request, in the Project Instruction, in a sample passage that they give, or in the instructions of a Skill. For the instructions of a Skill, this is the exception of ADR 0100 to the order of ADR 0089. A change of the rules gets a new mapping revision and a new Registration. `OWN-CTX`, `OWN-MODEL`. | `SMAP-STAGE-10` | `BLOCK-ALL`. |
 | `S10-REQ-002` | The Project Instruction stays the one place for the lasting demands and the sample passages of the author, with no new record, no new control, and no automatic capture. StoryOS infers no preference of the author automatically (ADR 0100). `OWN-CTX`. | `SMAP-STAGE-10` | `BLOCK-ALL`. |
 | `S10-REQ-003` | The SkillPackages of the StoryOS distribution as standard packages that the release package has as files: a local revision, a conflict check that changes no text, and an agreement before a scene while its ticket is in the ticket graph of the specification. The operator sets the Skill directory, and an absent setting gives no Skill (ADR 0089, ADR 0100). `OWN-SKILL`. | `SMAP-STAGE-10` | `BLOCK-ALL`. |
 | `S10-REQ-004` | Marks on the new words of each Proposal candidate, a tick at each removal with no replacement, and no mark for an empty target Block or for a candidate whose text is almost all new. The old words of a mark show in the target Block only while the pointer is on that mark. The marks follow a change of the candidate text by the author, and they are in the view only (ADR 0100). `OWN-WEB`, `OWN-CORE`. | `SMAP-STAGE-10` | `BLOCK-ALL`. |
@@ -463,7 +463,8 @@ The current Stage 3 specification owns its accepted implementation handoff
 and pending final release evidence. Any later change to a specification or
 child graph requires alignment with the `to-spec` skill. Before publication, the
 `to-tickets` skill review includes the changed breakdown and native blocking edges. Reuse current
-owners and closed prerequisites. Stage 4 and later remain on EXECUTION HOLD.
+owners and closed prerequisites. Stage 8 and Stage 9 remain on EXECUTION HOLD
+(ADR 0096).
 This proof contract does not claim that any product stage has passed.
 
 Use the existing repository checks plus this bounded source/graph review.
