@@ -19,8 +19,8 @@ A habit is one of the habits that the default rules for prose of the Host instru
 
 ## The count
 
-- When the author request gives a number, choose at most that number of places.
-- When it gives no number, choose at most 5 places.
+- When the author request gives a number of places, choose at most that number of places.
+- When it gives no number of places, choose at most 5 places.
 - Choose the most obvious place first.
 - One place is one Block.
 
@@ -46,4 +46,4 @@ In the final answer, give one line for each place: the first words of the Block,
 
 ## Nothing to change
 
-When no place has a habit, make no Proposal, and say so in the final answer.
+When you choose no place, make no Proposal, and say so in the final answer.

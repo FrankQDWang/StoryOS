@@ -40,7 +40,7 @@ The executor sent findings F1 to F8, and then the findings C1 to C4 of Run C (F9
 | ID | Finding | Effect |
 | --- | --- | --- |
 | F1 | **Each Run sent one Proposal in its first `propose_edit` call, with one operation for each changed Block.** Run A changed 5 Blocks, and Run B changed 2 Blocks. Each operation waits for the decision of the author, so the author can accept, change, or refuse each change alone. | The count rules and the rule "one Proposal" show in the first call. |
-| F2 | **After the first Proposal, the Host sent a new input with fewer target Blocks, and each Run made a second `propose_edit` call that the Host refused with `after_proposal`.** The user message of the next request said "The input of this author request changed after your last step", and its target Blocks had no Block of the open Proposal. Then the model made a second call: in Run A it proposed Block 8 with the summary "在新的五个目标段中，只改“然而，雾越来越浓……”这一处", and in Run B it proposed Blocks 2 and 4 with the summary "改最明显的 2 处机器腔". | Each Run used 4 requests and not 3. The total was 8 requests against 6 in the plan, in the cap of 12. The refusal kept the count: no Run changed more Blocks than the instructions permit. The coordinator added two sentences to the package for Run C (F9). The Host part, a sentence in the Host instructions on the one Proposal of a Run, has the owner [S10-08](https://github.com/FrankQDWang/StoryOS/issues/1774). |
+| F2 | **After the first Proposal, the Host sent a new input with fewer target Blocks, and each Run made a second `propose_edit` call that the Host refused with `after_proposal`.** The user message of the next request said "The input of this author request changed after your last step", and its target Blocks had no Block of the open Proposal. Then the model made a second call: in Run A it proposed Block 8 with the summary "在新的五个目标段中，只改“然而，雾越来越浓……”这一处的段首连接词和三连排比。", and in Run B it proposed Blocks 2 and 4 with the summary "改最明显的 2 处机器腔". | Each Run used 4 requests and not 3. The total was 8 requests against 6 in the plan, in the cap of 12. The refusal kept the count: no Run changed more Blocks than the instructions permit. The coordinator added two sentences to the package for Run C (F9). The Host part, a sentence in the Host instructions on the one Proposal of a Run, has the owner [S10-08](https://github.com/FrankQDWang/StoryOS/issues/1774). |
 | F3 | **The final answers do not have the form of the instructions.** Run A gave one line only for the refused change of Block 8 ("然而，雾越来越浓…… —— 段首“然而”连接词＋“雾越来越／水越来越／岸越来越”三连排比，属机器腔"), and named the 5 changed places in one sentence ("此前那份待决 Proposal 已覆盖另外五处更明显的机器腔（开头的“微微／缓缓”、眼中闪过、石子投湖比喻、心中暖流、命运齿轮）"). Run B gave lines for Blocks 2 and 4, which it did not change, and offered to send them later ("之后我立刻按当前选段提交下面这 2 处"). Neither answer gave one line for each changed place. | The answer of Run A spoke of the input of M2 ("这次的五个目标段里"). |
 | F4 | **Block 5, which has the device of the sample passage, stayed unchanged in each Run.** The answer of Run A said why: "样文本身两次使用这一句式（“他等的不是船，是人”），属于你指定的口吻，故不动。" | The rule "what you leave" shows. |
 | F5 | **The Blocks with no habit (1, 3, and 7) stayed unchanged in each Run.** | The rule "all other text stays as it is" shows. |
@@ -71,9 +71,9 @@ The executor sent findings F1 to F8, and then the findings C1 to C4 of Run C (F9
 | --- | --- | --- |
 | First text | `13b982e7f579330603794547e910aedcc0aee4682ae0a942e9202e9a400513fb` | A and B |
 | With the two added sentences of the section "One Proposal" | `0b73daa84eb8c536c2fe016a385b8fb38677de5667e1f2274f9bafc0762558e9` | C |
-| With the corrected conditions of the sections "The text to revise" and "The count" (the head of this change) | `05acee45246f6c5339fc330eca104767eb8c0f61531b2e2ba32e392695d3b283` | none |
+| With the corrected conditions of the sections "The text to revise", "The count", and "Nothing to change" (the head of this change) | `eb6fbaf75cbf247d5a3b1e5b435c04b67865631e7dd2d1ca455ff2130e9c6041` | none |
 
-After review round 1, the conditions of two sections became exclusive and complete. No Run used the corrected text. The diff from the text of Run C:
+After review round 1, the conditions of three sections became exclusive and complete. No Run used the corrected text. The diff from the text of Run C:
 
 ```diff
  ## The text to revise
@@ -88,16 +88,22 @@ After review round 1, the conditions of two sections became exclusive and comple
  ## The count
  
 -- Choose at most 5 places. Choose the most obvious place first.
- - When the author request gives a number, choose at most that number of places.
-+- When it gives no number, choose at most 5 places.
+-- When the author request gives a number, choose at most that number of places.
++- When the author request gives a number of places, choose at most that number of places.
++- When it gives no number of places, choose at most 5 places.
 +- Choose the most obvious place first.
  - One place is one Block.
+@@
+ ## Nothing to change
+ 
+-When no place has a habit, make no Proposal, and say so in the final answer.
++When you choose no place, make no Proposal, and say so in the final answer.
 ```
 
 For the input of each Run, the sentences before and after the correction give the same instruction:
 
-- **Runs A and C** ("请修改这一章。"): the request names the Chapter, which is the Working text, and it has no author reference. Before and after, the text to revise is the Chapter. The request gives no number. Before and after, the limit is 5 places.
-- **Run B** ("只改最明显的 2 处。"): the request names no text and has no author reference. Before and after, the text to revise is the Working text, the Chapter. The request gives the number 2. Before, the two sentences "at most 5" and "at most that number" both permit 2 places and no more. After, the limit is 2 places.
+- **Runs A and C** ("请修改这一章。"): the request names the Chapter, which is the Working text, and it has no author reference. Before and after, the text to revise is the Chapter. The request gives no number of places. Before and after, the limit is 5 places. Each Run chose places, so the section "Nothing to change" did not apply before or after.
+- **Run B** ("只改最明显的 2 处。"): the request names no text and has no author reference. Before and after, the text to revise is the Working text, the Chapter. The request gives the number 2. Before, the two sentences "at most 5" and "at most that number" both permit 2 places and no more. After, the limit is 2 places. The Run chose places, so the section "Nothing to change" did not apply before or after.
 
 The live run of [S10-08](https://github.com/FrankQDWang/StoryOS/issues/1774) with `local-revision` uses the package after the merge of this change, and its record gives the SHA-256 of that `SKILL.md`.
 
@@ -160,7 +166,7 @@ Author request in Project A, with the selection of `local-revision` in `skill_se
 
 Each explanation names the habit, for example "原句叠用“微微、缓缓、轻轻地、仿佛”四个修饰词，是典型机器腔" (Block 2) and "是规则中点名的惯用比喻" (Block 6). No candidate changes a name, an event, or the sequence of the information.
 
-**Unchanged Blocks:** 1, 3, 5, 7, and 8. **Block 5, with the device of the sample passage, stayed unchanged.** Block 8 has a planted habit. The model proposed "雾更浓了，水急起来，岸看不见了。" for it in M2, with the summary "在新的五个目标段中，只改“然而，雾越来越浓……”这一处", and the Host refused the call (finding F2).
+**Unchanged Blocks:** 1, 3, 5, 7, and 8. **Block 5, with the device of the sample passage, stayed unchanged.** Block 8 has a planted habit. The model proposed "雾更浓了，水急起来，岸看不见了。" for it in M2, with the summary "在新的五个目标段中，只改“然而，雾越来越浓……”这一处的段首连接词和三连排比。", and the Host refused the call (finding F2).
 
 **Lines of the final answer:**
 
