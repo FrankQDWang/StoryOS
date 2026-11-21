@@ -26,9 +26,9 @@ The run kept its plan.
 | G1 | **Run 1, with the selected Skill, gave a brief and made no Proposal.** It called `read_chapter` for Chapter 1, then `finish`, and its final answer was the brief: "这场戏我先对齐思路，暂不写正文：", then 5 numbered lines that give the 6 items (line 1 has the purpose and the viewpoint), then the question. | The section "The brief" shows. |
 | G2 | **The brief ended with the question and one more question on a choice:** "这个思路对不对，哪里要改？特别是船上那句话——让老周提起**父亲**（雾与翻船），还是提起**姐姐**（比如她临走那天交代过什么）？" | Observation: the instructions ask for one question. |
 | G3 | **Run 2, the answer of the author with one correction (the viewpoint), gave a Proposal with the scene from the viewpoint of 老周, and no second brief.** The brief had "第三人称贴着林舟写". The candidate has "老周没问去哪儿。一个月来，这孩子每天傍晚到渡口问一趟对岸的信，他都看在眼里。" and shows 林舟 only through his words and actions, for example "林舟嘴唇动了动，没再问。" | The section "The writing" shows: the correction applies. |
-| G4 | **The candidate of Run 2 keeps the other items of the brief and changes the last event.** It keeps the turn ("“你爹林德，”老周说，“那年翻船，也是这样的雾。”"), the two coins, and the last boat before sunset. The brief ended with 林舟 on the bank ("画面落在他迈出的第一步"). The candidate ends with "老周一篙点在石阶上，把船撑回雾里。" The answer says: "结尾停在老周撑船回雾，不写林舟进省城后的事。" | Observation for the author: the author changed only the viewpoint. |
-| G5 | **Run 3, a new Conversation with no selected Skill and the same plain request, did not call `load_skill`, and it gave a Proposal at once.** Its ToolCalls were `propose_edit` and `finish`. Its answer starts: "我已按你的要求把渡河一场续写在本章结尾". | The last sentence of the description shows: the model did not load the Skill for a plain request to write. |
-| G6 | **Run 3 read no earlier Chapter, and its candidate changes a fact of Chapter 1.** Chapter 1 has "林舟点头，把钥匙缝进了棉袄的内袋。" The candidate of Run 3 has "钥匙用麻绳穿了挂在脖子上". The brief of Run 1 kept the fact ("黄铜钥匙缝在棉袄内袋"), and the candidate of Run 2 has "林舟从棉袄内袋边上摸出个布卷". | Observation for the author: the reading step of the brief kept the fact in Runs 1 and 2. |
+| G4 | **The candidate of Run 2 keeps the other items of the brief and changes the last event.** It keeps the turn ("“你爹林德，”老周说，“那年翻船，也是这样的雾。”"), the two coins ("“两文。”"), and the last boat before sunset ("“日头落山前一班，”他说，“误了，今天就没船了。”"). The brief ended with 林舟 on the bank ("画面落在他迈出的第一步"). The candidate ends with "老周一篙点在石阶上，把船撑回雾里。" The answer says: "结尾停在老周撑船回雾，不写林舟进省城后的事。" | Observation for the author: the author changed only the viewpoint. |
+| G5 | **Run 3, a new Conversation with no selected Skill and the same plain request, did not call `load_skill`, and it gave a Proposal at once.** Its ToolCalls were `propose_edit` and `finish`. Its answer starts: "我已按你的要求把渡河一场续写在本章结尾". | Observation: the Skill catalog of each request of Run 3 had the description with its last sentence "只在你要求先对思路时使用。", and the model did not load the Skill for this plain request. |
+| G6 | **Run 3 read no earlier Chapter, and its candidate changes a fact of Chapter 1.** Chapter 1 has "林舟点头，把钥匙缝进了棉袄的内袋。" The candidate of Run 3 has "钥匙用麻绳穿了挂在脖子上". The brief of Run 1 kept the fact ("黄铜钥匙缝在棉袄内袋"), and the candidate of Run 2 has "林舟从棉袄内袋边上摸出个布卷". | Observation for the author. Run 1 called `read_chapter` for Chapter 1, and Runs 2 and 3 called no read function. The Working text of each Run has "隔着棉袄摸了摸那把钥匙". |
 | G7 | **Each new scene is in the candidate of the last Block of Chapter 2, after its kept text.** Run 2 used single line breaks and Run 3 blank lines. The first new sentence of Run 2, "老周没问去哪儿。", repeats the kept sentence "没有问他要去哪里". | The same form as observation O3 of the record of #1762. |
 | G8 | **After each `propose_edit`, the next request (M5, M8) had the label "The input of this author request changed after your last step", and each Run called `finish`.** No call was refused. | No second Proposal. The label has the owner [S10-08](https://github.com/FrankQDWang/StoryOS/issues/1774). |
 | G9 | **The first request of Run 2 (M4) continued the response of M3 with `previous_response_id`, and it had no section `Skill instruction`.** The Skill instruction was in M1 of the same Conversation. | Observation of the Conversation continuation of ADR 0089. |
@@ -47,6 +47,54 @@ The run kept its plan.
 | Script | `scene-brief-live.ts`, started by `run.sh` and `rehearse.sh`. It is the run script of #1764 with the steps of this plan. It sends each command through the HTTP test support and the generated client, and it reads each measure with read-only SQL. |
 | Skill | `scene-brief`, package digest `sha256:1f8c21ddf0690106a85952167fd28ddff505af435195d8b3407df808d8ba8959`. `listSkills` gave `conflict-check`, `local-revision`, and `scene-brief`, each with the description of its `SKILL.md`. |
 
+## The text of the package in each Run
+
+| Text | `SKILL.md` SHA-256 | Runs |
+| --- | --- | --- |
+| The text of the live run | `9ff25b4cbe4011223b0b58ba9eace5bf81c90047622c1ac35a5bcdb5998ee259` | 1 and 2 (Run 3 had only the catalog line) |
+| With the corrected conditions of the sections "When it applies", "The brief", and "The writing" (the head of this change) | `deeb949f94f6554dd3f536e8f58812a8c3f6bfb4b902a4b4596ce4e07f436e62` | none |
+
+A pre-review after the live run found two inputs for which two sentences of the text of the live run give different instructions: an answer to a brief that asks for a new brief ("write the scene" and "give the new brief"), and a complete request in a later turn of a Conversation that had a brief ("by the brief" and "by those items"). The correction makes the conditions exclusive, with no new Run, as the coordinator decided for the same case of `local-revision` ([decision on #1764](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7061123227)). The diff:
+
+```diff
+@@
+
+ ## When it applies
+
+-- When the author message answers a brief that you gave in this Conversation, write the scene as the section "The writing" says.
++An answer to a brief is an author message that comes directly after a Run whose final answer was a brief.
++
++- When the author message is an answer to a brief and it asks for a new brief, give the new brief as the section "The brief" says.
++- When the author message is an answer to a brief and it does not ask for a new brief, write the scene as the section "The writing" says.
+ - When the author message is not an answer to a brief and it asks for a new scene or a longer new passage, do as the section "A complete request" says.
+ - In all other cases, for example a small change of existing text, do not use these instructions.
+
+@@
+
+ - In this Run, write no prose of the novel and make no Proposal.
+ - Read what you need from the earlier Chapters and Agent Memory.
+-- Give the brief as the final answer, in the language of the manuscript, in 4 to 6 lines. Give each item of the brief. One line can have two items.
+-- End the brief with one question: is the brief correct, and what must change?
++- Give the brief as the final answer, in the language of the manuscript, in 4 to 6 lines. Give each item of the brief. A line can have more than one item.
++- After the brief, end the final answer with one question: is the brief correct, and what must change?
+
+ ## The writing
+
+-- When you gave a brief, write the scene by the brief and by each correction of the author. When a correction changes an item of the brief, the correction applies.
+-- When the author request gave each item, write the scene by those items.
++- For an answer to a brief, write the scene by the brief and by each correction of the answer. When a correction changes an item of the brief, the correction applies.
++- For a complete request, write the scene by the items of the request.
+ - Send the scene with propose_edit.
+-- When the author asks for a new brief, give the new brief as the section "The brief" says. When the author does not ask for a new brief, give no second brief.
++- Give no second brief in this Run.
+```
+
+For the input of each Run, the sentences before and after the correction give the same instruction:
+
+- **Run 1** ("请接着这一章的结尾，写下一场：…"): the message comes in a new Conversation, so it is no answer to a brief, and it asks for a new scene. It does not give each item. Before and after, the instruction is the brief. The brief before and after: 4 to 6 lines with each item, then one question.
+- **Run 2** ("思路可以。只改一处：视角换成老周。…"): the message comes directly after Run 1, whose final answer was a brief, and it asks for no new brief. Before and after, the instruction is to write the scene by the brief and by the correction, with `propose_edit`, and with no second brief.
+- **Run 3**: no Skill instruction; the catalog line is the description, which did not change.
+
 ## Fixed inputs
 
 Two new Projects 渡口 1 and 渡口 2, each with assistance on, the Volume 第一卷, and two Chapters written through the public commands: Chapter 1 渡口 (5 Blocks) and Chapter 2 来信 (5 Blocks). Chapter 2 was the current Chapter, so it was the Working text of each Run. Its last Block is "第二天一早，他去了渡口。老周正在解缆绳，看见他，没有问他要去哪里。" No Project Instruction. The texts are `chapter-01.md` and `chapter-02.md` of the tag, and the facts of the earlier story are in `facts.md`.
@@ -54,7 +102,7 @@ Two new Projects 渡口 1 and 渡口 2, each with assistance on, the Volume 第�
 | Run | Project, Conversation | Selected Skill | Author request |
 | --- | --- | --- | --- |
 | 1 | 渡口 1, new | `scene-brief` | 请接着这一章的结尾，写下一场：林舟坐老周的船过河，去省城找姐姐。 |
-| 2 | 渡口 1, the Conversation of Run 1 | none (the selection of the Conversation) | 思路可以。只改一处：视角换成老周。这一场从老周的眼睛写，林舟想什么，只能从他的话和动作里看出来。其余照你的思路写。 |
+| 2 | 渡口 1, the Conversation of Run 1 | none in the request | 思路可以。只改一处：视角换成老周。这一场从老周的眼睛写，林舟想什么，只能从他的话和动作里看出来。其余照你的思路写。 |
 | 3 | 渡口 2, new | none | 请接着这一章的结尾，写下一场：林舟坐老周的船过河，去省城找姐姐。 |
 
 ## Live request log
@@ -117,9 +165,9 @@ The author corrected one item, the viewpoint. **ToolCalls:** `propose_edit` with
 > 林舟嘴唇动了动，没再问。他拎起包袱跳上石阶，脖子上挂铜表的绳晃了一下，人走进旗幌和挑夫中间，没有回头。
 > 老周一篙点在石阶上，把船撑回雾里。
 
-**Does the candidate follow the correction?** Yes. The scene is told from the viewpoint of 老周 (finding G3), and the thoughts of 林舟 show only through his words and actions. The other items of the brief stay, and the last event changed (finding G4). The Run gave no second brief.
+**Does the candidate follow the correction?** Yes. The scene is told from the viewpoint of 老周 (finding G3), and the thoughts of 林舟 show only through his words and actions. The turn, the two coins, and the last boat of the brief stay, and the last event changed (finding G4). The Run gave no second brief.
 
-**The final answer** starts with "已按你的修改写好，整段已作为提案提交，等你决定接受、修改或拒绝。全章从老周那只右眼看出去，林舟的心思只落在他的动作和三句话上：", then quotes the scene, and ends with "需要调语气、删对话或改结尾，直接说。" The full answer is in `measures-1.json`.
+**The final answer** starts with "已按你的修改写好，整段已作为提案提交，等你决定接受、修改或拒绝。全章从老周那只右眼看出去，林舟的心思只落在他的动作和三句话上：", then gives the scene again, and ends with "需要调语气、删对话或改结尾，直接说。" The full answer is in `measures-1.json`.
 
 ## Run 3: no selected Skill, a plain request to write the next scene
 
@@ -153,7 +201,7 @@ The author corrected one item, the viewpoint. **ToolCalls:** `propose_edit` with
 >
 > 他把铜子揣回衣袋，朝堤外的空场跑。
 
-The final answer starts with "我已按你的要求把渡河一场续写在本章结尾", quotes the scene, and ends with "你可以接受、修改或拒绝这条提案；想调整节奏（比如删掉同船妇人、让老周多说几句姐姐的事），告诉我即可。" The full answer is in `measures-2.json`.
+The final answer starts with "我已按你的要求把渡河一场续写在本章结尾", gives the scene again without the kept first sentence, and ends with "你可以接受、修改或拒绝这条提案；想调整节奏（比如删掉同船妇人、让老周多说几句姐姐的事），告诉我即可。" The full answer is in `measures-2.json`.
 
 ## Key check
 

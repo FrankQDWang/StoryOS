@@ -9,7 +9,10 @@ Use these instructions to agree on a new scene with the author before you write 
 
 ## When it applies
 
-- When the author message answers a brief that you gave in this Conversation, write the scene as the section "The writing" says.
+An answer to a brief is an author message that comes directly after a Run whose final answer was a brief.
+
+- When the author message is an answer to a brief and it asks for a new brief, give the new brief as the section "The brief" says.
+- When the author message is an answer to a brief and it does not ask for a new brief, write the scene as the section "The writing" says.
 - When the author message is not an answer to a brief and it asks for a new scene or a longer new passage, do as the section "A complete request" says.
 - In all other cases, for example a small change of existing text, do not use these instructions.
 
@@ -31,12 +34,12 @@ The items of a brief are:
 
 - In this Run, write no prose of the novel and make no Proposal.
 - Read what you need from the earlier Chapters and Agent Memory.
-- Give the brief as the final answer, in the language of the manuscript, in 4 to 6 lines. Give each item of the brief. One line can have two items.
-- End the brief with one question: is the brief correct, and what must change?
+- Give the brief as the final answer, in the language of the manuscript, in 4 to 6 lines. Give each item of the brief. A line can have more than one item.
+- After the brief, end the final answer with one question: is the brief correct, and what must change?
 
 ## The writing
 
-- When you gave a brief, write the scene by the brief and by each correction of the author. When a correction changes an item of the brief, the correction applies.
-- When the author request gave each item, write the scene by those items.
+- For an answer to a brief, write the scene by the brief and by each correction of the answer. When a correction changes an item of the brief, the correction applies.
+- For a complete request, write the scene by the items of the request.
 - Send the scene with propose_edit.
-- When the author asks for a new brief, give the new brief as the section "The brief" says. When the author does not ask for a new brief, give no second brief.
+- Give no second brief in this Run.
