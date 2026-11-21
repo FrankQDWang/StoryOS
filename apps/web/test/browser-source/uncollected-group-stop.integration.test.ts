@@ -333,21 +333,7 @@ it("lets input continue after one group with no effect and 2,400 more inputs, an
       journal: Object.values(await journalCounts(scenario.journalName))[0] };
     const rows = await journalRows(scenario.journalName);
 
-    // Step 3: a reload in the same tab opens the same Editor Session and the same partition. Then one more input.
-    unmount();
-    const reloadTimers: Timer[] = [];
-    root = await mount(reloadTimers);
-    const step3Opened = { view: view(root), status: status(root) };
-    editor().focus();
-    focusManuscriptEnd(editor(), window);
-    await applyTrustedInput({ operation: "insert_text", text: "z" });
-    await expect.poll(async () => Object.values(await journalCounts(scenario.journalName))[0]?.all.records)
-      .toBe(2603);
-    await settle(root, reloadTimers);
-    const step3 = { opened: step3Opened, view: view(root), status: status(root),
-      body: manuscriptBody(editor()).slice(-3), journal: Object.values(await journalCounts(scenario.journalName))[0] };
-    console.info(JSON.stringify({ issue: 1758, test: "no_effect", step1, step2, step3 }));
-
+    console.info(JSON.stringify({ issue: 1758, test: "no_effect", step1, step2 }));
     const ready = { alert: null, saveState: "saved", editable: true };
     expect(step1).toMatchObject({ effects: ["no_effect"], view: ready,
       journal: { working: { records: 2, chains: 1, groups: 1 }, uncollected: ["1-2:no_effect"] } });
@@ -364,6 +350,21 @@ it("lets input continue after one group with no effect and 2,400 more inputs, an
     expect(rows.submission_groups.retained).toHaveLength(13);
     expect(byKey(retained)).toEqual(byKey(left));
     expect(rows.intents.retained.filter((row) => row.author_edit_unit !== undefined)).toHaveLength(2);
+
+    // Step 3: a reload in the same tab opens the same Editor Session and the same partition. Then one more input.
+    unmount();
+    const reloadTimers: Timer[] = [];
+    root = await mount(reloadTimers);
+    const step3Opened = { view: view(root), status: status(root) };
+    editor().focus();
+    focusManuscriptEnd(editor(), window);
+    await applyTrustedInput({ operation: "insert_text", text: "z" });
+    await expect.poll(async () => Object.values(await journalCounts(scenario.journalName))[0]?.all.records)
+      .toBe(2603);
+    await settle(root, reloadTimers);
+    const step3 = { opened: step3Opened, view: view(root), status: status(root),
+      body: manuscriptBody(editor()).slice(-3), journal: Object.values(await journalCounts(scenario.journalName))[0] };
+    console.info(JSON.stringify({ issue: 1758, test: "no_effect_reload", step3 }));
     // After the reload, the editor is saved and writable, and one more input saves.
     expect(step3).toMatchObject({ opened: { view: ready, status: { unsettled: "0" } }, view: ready,
       status: { unsettled: "0" }, body: "xxz", journal: { working: { records: 1, groups: 1 }, boundary: 2602 } });

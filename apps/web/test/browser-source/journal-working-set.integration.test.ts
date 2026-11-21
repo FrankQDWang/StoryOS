@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import { digestApplyAuthorEdit } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { DigestValue, GetEditorSessionResponse }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { openEditorWorkspace, appendAuthorEdit, submitOnePendingAuthorEdit }
@@ -8,8 +9,9 @@ import type { EditorState, EditorWorkspace, JournalSnapshot } from "../../src/ed
 import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
 import { readJournalSnapshot, rebuildPendingProjection }
   from "../../src/local-edit-journal.ts";
+import type { CandidateSelectionEdit } from "../../src/local-edit-journal.ts";
 import {
-  OWNER, PROJECT, SESSION, chapterRevision, createAppliedAuthorEditResponse,
+  BLOCK, OWNER, PROJECT, SESSION, chapterRevision, createAppliedAuthorEditResponse,
   createBrowserScenario, deleteJournal, jsonResponse, requestHeaders,
   requireDigestValue, requireEditorReady, requireRequestBody, requestResult,
 } from "./scenario.ts";
@@ -322,3 +324,119 @@ it("retires settled single-input groups up to the first uncollected group", asyn
     await deleteJournal(scenario.journalName);
   }
 }, 360000);
+
+const PROPOSAL = "018f0000-0000-7001-8000-000000000c01";
+const OPERATION = "018f0000-0000-7001-8000-000000000c02";
+const REVISIONS = ["018f0000-0000-7001-8000-000000000c03", "018f0000-0000-7001-8000-000000000c04",
+  "018f0000-0000-7001-8000-000000000c05"] as const;
+
+function candidateEdit(revision: string, priorText: string, text: string,
+  timing: { undoGroupId?: string; createdAt?: string } = {}): CandidateSelectionEdit {
+  return { kind: "candidate_selection",
+    target: { proposal_id: PROPOSAL, operation_id: OPERATION, revision_id: revision, manuscript_block_id: BLOCK },
+    expectedProposalHeads: [revision], priorText, from: priorText.length, to: priorText.length, text,
+    resultingBody: `${priorText}${text}`, ...timing };
+}
+
+/** The applied transport. The candidate Author Edit number n gives `proposal_revised` with `REVISIONS[n]`. */
+function candidateTransport(scenario: ReturnType<typeof createBrowserScenario>, currentBody: () => string) {
+  const applied = appliedAuthorEditTransport(scenario, currentBody);
+  const targets: string[] = [];
+  let sequence = 0;
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const path = new URL(input instanceof Request ? input.url : input).pathname;
+    const request = path.endsWith("/manuscript/author-edits") ? requireRequestBody(init) : undefined;
+    const target = request?.proposal_target as { revision_id: string } | undefined;
+    if (request === undefined || target === undefined) return applied.fetchImpl(input, init);
+    targets.push(target.revision_id);
+    sequence += 1;
+    const revision = REVISIONS[sequence]!;
+    const response = createAppliedAuthorEditResponse({ request, commandDigest: await digestApplyAuthorEdit(request as never),
+      idempotencyKey: requestHeaders(init).get("idempotency-key")!, commandId: createJournalUuid(),
+      authorCommandAdmissionId: createJournalUuid(), receiptId: createJournalUuid(),
+      priorRevisionId: request.expected_authoritative_revision_id as string });
+    const head = request.expected_authoritative_revision_id as string;
+    return jsonResponse({ ...response, effect: { kind: "proposal_revised", proposal_revision_id: revision,
+      author_action_sequence: String(sequence) }, receipt: { ...response.receipt, result: "proposal_revised",
+      prior_heads: [head], resulting_heads: [head], proposal_revision_ids: [revision], authoritative_revision_ids: [],
+      authoritative_commit_ids: [], author_action_sequence: String(sequence) } });
+  };
+  return { fetchImpl, targets };
+}
+
+it("retires a group that revised a Proposal with the next collected group", async () => {
+  const scenario = createBrowserScenario();
+  const text = { body: "Base" };
+  const { fetchImpl, targets } = candidateTransport(scenario, () => text.body);
+  await deleteJournal(scenario.journalName);
+  const workspace = await openWorkspace(scenario, fetchImpl);
+  const submit = () => submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto });
+  const seen = emptyRows();
+  try {
+    await appendAuthorEdit(workspace, candidateEdit(REVISIONS[0], "Candidate", "!"));
+    expect(await submit()).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
+    await typeRun(workspace, text, 1, 1);
+    expect(await submit()).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
+    await collectEligibleJournalPayload(workspace);
+    const saved = await readJournalSnapshot(workspace);
+    remember(seen, saved);
+    expect(saved.groups.map((group) => group.payload_collection?.kind)).toEqual([undefined, "collected"]);
+
+    await typeRun(workspace, text, 2, 1);
+    const continued = await readJournalSnapshot(workspace);
+    expect([continued.records.length, continued.groups.length, continued.workingBoundary?.last_sequence])
+      .toEqual([1, 0, 2]);
+    expect(targets).toEqual([REVISIONS[0]]);
+    // The closed group leaves with its payload and gets no retained collection fence.
+    expect(await retainedHistory(workspace)).toEqual(expectedHistory(seen, {
+      records: [...seen.records.keys()], chains: [...seen.chains.keys()],
+      groups: [...seen.groups.keys()], fences: [...seen.fences.keys()],
+    }));
+    expect((await retainedHistory(workspace)).records[0]?.author_edit_unit).toBeDefined();
+  } finally {
+    workspace.database.close();
+    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+    await deleteJournal(scenario.journalName);
+  }
+});
+
+it("keeps a group that revised a Proposal while a later record targets the Revision that it revised", async () => {
+  const scenario = createBrowserScenario();
+  const text = { body: "Base" };
+  const { fetchImpl, targets } = candidateTransport(scenario, () => text.body);
+  await deleteJournal(scenario.journalName);
+  const workspace = await openWorkspace(scenario, fetchImpl);
+  const submit = () => submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto });
+  try {
+    await appendAuthorEdit(workspace, candidateEdit(REVISIONS[0], "Candidate", "!"));
+    await submit();
+    await typeRun(workspace, text, 1, 1);
+    await submit();
+    // A later record still targets the Revision that the first group revised.
+    const undoGroupId = createJournalUuid();
+    await appendAuthorEdit(workspace, candidateEdit(REVISIONS[0], "Candidate!", "?",
+      { undoGroupId, createdAt: "2026-08-15T09:00:00.000Z" }));
+    await collectEligibleJournalPayload(workspace);
+    const before = await readJournalSnapshot(workspace);
+    expect(before.groups.map((group) => group.payload_collection?.kind)).toEqual([undefined, "collected"]);
+    await appendAuthorEdit(workspace, candidateEdit(REVISIONS[0], "Candidate!?", ".",
+      { undoGroupId, createdAt: "2026-08-15T09:00:00.100Z" }));
+    const kept = await readJournalSnapshot(workspace);
+    expect([kept.records.length, kept.groups.length, kept.workingBoundary]).toEqual([4, 2, undefined]);
+
+    expect(await submit()).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
+    expect(targets).toEqual([REVISIONS[0], REVISIONS[0]]);
+    await typeRun(workspace, text, 3, 1);
+    await submit();
+    await collectEligibleJournalPayload(workspace);
+    // No record after the prefix targets a revised Revision now, so both candidate groups leave.
+    await typeRun(workspace, text, 4, 1);
+    const continued = await readJournalSnapshot(workspace);
+    expect([continued.records.length, continued.groups.length, continued.workingBoundary?.last_sequence])
+      .toEqual([1, 0, 5]);
+  } finally {
+    workspace.database.close();
+    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+    await deleteJournal(scenario.journalName);
+  }
+});
