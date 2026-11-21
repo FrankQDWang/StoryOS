@@ -3,6 +3,7 @@ import { Fragment, Mark, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
 
 import { contiguousUtf16Replace } from "./manuscript-doc.ts";
+import { proposalChangeMarks } from "./proposal-change-marks.ts";
 
 export type BlockProposalProjection = {
   proposalId: string;
@@ -196,6 +197,9 @@ export const blockProposalDecoration = TiptapNode.create({
   },
   parseHTML() {
     return [{ tag: "div[data-proposal-id]" }];
+  },
+  addProseMirrorPlugins() {
+    return [proposalChangeMarks()];
   },
   renderHTML({ node }) {
     const eligible = node.attrs.eligible === true;
