@@ -4,6 +4,8 @@ This record is the live evidence of [S10-05: Add the Agreement Before a Scene to
 
 Raw evidence is on the tag `evidence/1765-live-scene-brief-2026-11-21`. The tag holds the plan, the two Chapters, the list of the facts of the earlier story (`facts.md`), the run script, the request guard, the wire payload of each request (`wire/M1.json` to `wire/M9.json`), the Model Attempts, the ToolCalls, the guard log, `measures-1.json` and `measures-2.json` (the Runs, their ToolCalls, the Proposal operations, and each answer in full), `checks.json`, `loader.log`, and the Server and Worker logs. The tag has no database dump and no Project Export Archive.
 
+Runs 4 to 6 and the first Runs 4 and 5 have their raw evidence on the tag `evidence/1765-live-scene-brief-runs-4-6-2026-11-21`: the plan, the inputs, the scripts, `first-try/` (the logs, `checks.json`, and `measures.json` of the first Runs 4 and 5), and `repeat/` (the nine wire payloads `wire/M1.json` to `wire/M9.json`, the Model Attempts, the ToolCalls, the Run rows, the guard log, `measures-3.json`, `checks.json`, and the logs).
+
 ## Plan and final count
 
 The plan comes before the results. The plan was posted on the ticket before the first request ([plan comment](https://github.com/FrankQDWang/StoryOS/issues/1765#issuecomment-7061430844)). Its planned numbers were 4 requests for each Run and 12 in total, and 40,000 reported input tokens for each Run and 120,000 in total. The request guard of the database was set to refuse the claim of a 5th model request of one Run and of a 13th model request in total. The script was set to stop the Worker above one of the planned numbers, when the guard refused a request, or when a Run did not end 90 seconds after its 4th request. A rehearsal of all steps on `host_fake` on the same head came first: 3 author Runs, 6 fake requests, and no other Run.
@@ -52,7 +54,7 @@ The run kept its plan.
 | Text | `SKILL.md` SHA-256 | Runs |
 | --- | --- | --- |
 | The text of the first live run, product commit `2c7c8d70` | `9ff25b4cbe4011223b0b58ba9eace5bf81c90047622c1ac35a5bcdb5998ee259` | 1 and 2 (Run 3 had only the catalog line) |
-| The short text of the head, after review round 1 ([decision 3](https://github.com/FrankQDWang/StoryOS/issues/1765#issuecomment-7061886378)) | `456583e18d450d3b2a07e2704ff19a9d0021cf19ecb8042cae214eca1787a966` | 4 to 6 |
+| The short text of the head, after review round 1 ([decision 3](https://github.com/FrankQDWang/StoryOS/issues/1765#issuecomment-7061886378)) | `456583e18d450d3b2a07e2704ff19a9d0021cf19ecb8042cae214eca1787a966` | the first Runs 4 and 5 (product commit `d43a02cc`), and Runs 4 to 6 of the repeat (product commit `d2592974`) |
 
 The description is the same in each text.
 
@@ -164,6 +166,96 @@ The author corrected one item, the viewpoint. **ToolCalls:** `propose_edit` with
 
 The final answer starts with "我已按你的要求把渡河一场续写在本章结尾", gives the scene again without the kept first sentence, and ends with "你可以接受、修改或拒绝这条提案；想调整节奏（比如删掉同船妇人、让老周多说几句姐姐的事），告诉我即可。" The full answer is in `measures-2.json`.
 
+## Runs 4 to 6: a Conversation with no selected Skill
+
+The ticket asks for three more Runs with the text of the head, in a new Project Conversation with no selected Skill ([decision 3](https://github.com/FrankQDWang/StoryOS/issues/1765#issuecomment-7061886378)). The three author messages:
+
+- Run 4: "接下来写林舟坐老周的船过河、去省城找姐姐这一场。先对一下思路再写。"
+- Run 5: "可以，就照这个思路写。"
+- Run 6: "再写下一场：林舟到了省城的码头，没有找到来接他的人。"
+
+Each Run used Project 渡口 3, with the same two Chapters as Runs 1 to 3, and one Conversation for the three Runs.
+
+### The first Runs 4 and 5
+
+The [first plan](https://github.com/FrankQDWang/StoryOS/issues/1765#issuecomment-7062005045) came before the first request. Its planned numbers were 5, 4, and 4 requests (13 in total), and 45,000, 45,000, and 50,000 reported input tokens (140,000 in total). The product was `d43a02cc`, with the release manifest `sha256:42876a7495eef45ace2b24c862ff5411f5ae075db784565a5c17f30240421987`.
+
+| Run | Requests | Reported input | ToolCalls | Proposals | Status |
+| --- | --- | --- | --- | --- | --- |
+| 4 | 3 | 19,841 | `load_skill`, `read_chapter`, `finish` | 0 | `completed` |
+| 5 | 4 | 27,146 (3 requests with usage) | `propose_edit` (settled), `propose_edit` (refused `after_proposal`) | 1 | `refused` |
+
+- In Run 5, the third request settled with no decision kind in its Model Attempt. For the fourth request, the Worker log has the dispatch observation "rejected" and then the claim outcome "already_settled". Then the Run had the status `refused`.
+- The cause of the refusal is not known. The stop of the script kept `measures.json`, `checks.json`, and the logs, but not the wire payloads and not the Run rows, and the run removed the database.
+- The plan stops the run at a refused Run, so the script stopped the Worker before Run 6. No count was above the plan: 7 requests and 46,987 reported input tokens in total.
+- The coordinator decided one repeat after the merge of [S10-08](https://github.com/FrankQDWang/StoryOS/issues/1774), with a script that keeps the wire payloads and the Run rows at a stop, and a limit of 8 AgentRuns.
+
+### The repeat: plan and final count
+
+The [plan of the repeat](https://github.com/FrankQDWang/StoryOS/issues/1765#issuecomment-7062211300) came before the first request, with the same planned numbers. The product was `d25929746e2f0cd7f9b4371812823849f0cffb89` (tree `80f14f8fec3278dea352ed92ab272e2215309a36`), with the merged tip `f8938f1e` of `stage10-author-voice`, release manifest `sha256:efa958ffaa46187accf274c20d6128ef2fddcb895b257ce5d206804daa37e983`. `skill-packages/scene-brief/SKILL.md` of the release package has the bytes of the head text (SHA-256 `456583e1`). The rehearsal on `host_fake` came first: 3 author Runs and 6 fake requests.
+
+| Item | Planned | Actual |
+| --- | --- | --- |
+| AgentRuns | 3 (8 in all with Runs 1 to 3 and the first Runs 4 and 5) | 3, each `completed` |
+| Model requests | Run 4: 5, Run 5: 4, Run 6: 4; 13 in total | 3 for each Run, 9 in total |
+| Reported input | Run 4: 45,000, Run 5: 45,000, Run 6: 50,000; 140,000 in total | Run 4: 19,710; Run 5: 26,004; Run 6: 47,362; total 93,076 |
+| Reported output | — | Run 4: 2,212; Run 5: 3,630; Run 6: 9,342; total 15,184 |
+| Largest request | at most 40,000 | 19,220 |
+| Other Runs, Exa, and embedding requests | 0 | 0 |
+
+The repeat kept its plan.
+
+### Findings of Runs 4 to 6
+
+| ID | Finding | Effect |
+| --- | --- | --- |
+| H1 | **Run 4 called `load_skill` for `scene-brief` in its first request.** The reason of the call: "作者明确要求先对思路再写新场景，该技能正是写前对齐场景目标、视角、冲突、转折和结尾。" The output of the call in M2 has the exact bytes of the head `SKILL.md`. | Observation: the model loaded the Skill for a request in ordinary words, with no selection. |
+| H2 | **Run 4 gave a brief and made no Proposal.** Its ToolCalls were `load_skill` and `read_chapter` (Chapter 1) in one request, then `finish`. The final answer starts with "这场戏的思路如下，先请你过目：", then 6 numbered items. | The section "The brief" shows. |
+| H3 | **The brief of Run 4 ended with the question and a choice:** "这个思路对不对？尤其是第 4 点的转折选①还是②，或者你另有安排，确认后我就动笔。" Item 4 of the brief gave two options. | Observation: the instructions ask for one question. The same as G2. |
+| H4 | **Run 5, the acceptance with no correction, gave a Proposal at once and no second brief.** Its ToolCalls were `propose_edit` with one change of the last Block of Chapter 2, then `finish`. The candidate uses option ② of the brief: "“你姐那封信，不是我从对岸带的。”" | The section "The writing" shows. |
+| H5 | **Run 5 made one `propose_edit` call and no refused call.** The next request (M5) had the label "The input of this author request changed after your last step", and the Run called `finish`. Each request of the repeat had the sentence "StoryOS refuses each later propose_edit call until you get a new message of the author." | Observation. The product of the first Runs 4 and 5 did not have this sentence, which came with S10-08. The first Run 5 made a second `propose_edit` call, and StoryOS refused it. |
+| H6 | **Run 6, the plain request for a different scene, gave no brief.** Its first request called `propose_edit` for the last Block of Chapter 2, and StoryOS refused the call with `undeclared_block`. The open Proposal of Run 5 has a change of that Block. Then the Run called `finish`. Proposals: 0. | Observation for the author: the Run tried to write at once. |
+| H7 | **The final answer of Run 6 gives the scene as text and asks the author to decide on the Proposal of Run 5 first.** It starts: "这一场我写好了，但暂时没法落稿：上一场"坐船过河"的提案还在等你处理，那个结尾块目前归待决提案管，不在本次可改的块里，系统拒绝了我的修改。" | Observation for the author. |
+| H8 | **The first request of each later Run (M4, M7) continued the response of the Run before it with `previous_response_id`.** No request of Runs 5 and 6 had the `SKILL.md` text in a new input item. | Observation of the Conversation continuation of ADR 0089. |
+
+### Run 4: the request to agree first
+
+**Did the Run call `load_skill` for `scene-brief`?** Yes. **Proposals: 0.** The brief, in full:
+
+> 这场戏的思路如下，先请你过目：
+>
+> 1. **这场要做什么**：让林舟从"等信的人"变成"动身的人"——他第一次坐老周的船过河；同时让"省城医馆"这个地址显出可疑之处，寻人不会一到就成。
+> 2. **视角**：林舟贴身第三人称，延续前两章白描、克制的写法。
+> 3. **谁要什么、阻碍是什么**：他要过河按信上地址找姐姐；阻碍有三层——这条河三年前吞了父亲，他怕水又不敢露怯；船钱两文、老周从不赊账；以及信上只有"省城的医馆"五个字，没有街名和馆名。
+> 4. **转折/新信息**：船到河心或靠岸时，老周慢吞吞说出一句与林雪有关的话（备选：①九月初三送她时，对岸有人接她，不是医馆的人；②这封信不是按往常的路子捎来的）。我倾向②，更轻，也更让人疑心信是不是姐姐亲笔所写、为何而写。
+> 5. **结尾事件**：林舟踏上对岸码头，回头时老周的船已撑回雾里；他捏着那半页信站在省城的街口，发现街边挂着不止一家医馆的招牌——停在这里，不进城、不抒情。
+> 6. **必须守住的前文事实**：老周六十一岁、左眼被鱼钩所伤只剩右眼、说话慢收钱快、一趟两文不赊账；怀表玻璃斜纹、指针停在四点十分，挂在脖子上；黄铜钥匙缝在棉袄内袋；林雪九月初三背蓝布包袱走、说学医三年；父亲三年前冬翻船、人没捞回来；信是十月初九到的，末句"钥匙收好，别一个人开箱子。"
+>
+> 这个思路对不对？尤其是第 4 点的转折选①还是②，或者你另有安排，确认后我就动笔。
+
+### Run 5: the acceptance
+
+**Proposals: 1**, a change of the last Block of Chapter 2. The candidate text of that Block:
+
+> 第二天一早，他去了渡口。老周正在解缆绳，看见他，没有问他要去哪里。
+> 林舟上了船。船身一晃，他弯下腰，两只手攥住船舷。父亲就是在这条河上没的，他不往水里看。
+> 老周收了他两文钱，塞进怀里，竹篙往岸边一点，船出了渡口。
+> 河上有雾。水拍着船底，一声一声。林舟蹲在舱里，怀表隔着棉袄硌在胸口，表针不走，也不响。
+> 船到河心，老周说：“你姐那封信，不是我从对岸带的。”
+> 林舟抬起头。
+> “初八夜里，一个外乡人在这边码头把信塞给我，口音不是省城的。”老周盯着前面的雾，说话还是那样慢，“他给我一文钱，叫我第二天给你。”
+> 林舟把信从怀里摸出来。半页纸他看了三遍，有几个字收笔发虚，他原当是墨干。姐姐在药铺帮工时写的字，不是这个写法。
+> 船靠了岸。省城的码头铺着青石，台阶一级一级通到街上。林舟跨上去，回头看，老周的船已经退回雾里。
+> 街口立着一排招牌，三块匾上都有“医”字。林舟站在台阶底下，捏着那半页纸，没有迈步。
+
+The candidate keeps the turn (option ②) and the last event of the brief ("街口立着一排招牌，三块匾上都有“医”字。"). The final answer starts with "已按思路写好，作为修改提案提交在第二章最后一段" and ends with "你看哪里要调整？"
+
+### Run 6: the plain request for a different scene
+
+**Did the Run give a brief?** No. **Did the Run give a Proposal at once?** No: its `propose_edit` call in RunStep 0 was refused with `undeclared_block`, and the Run made no other `propose_edit` call. The final answer gives the scene as text. Its scene starts with "信上还写了一行：辰时到码头，大槐树下，自有举"林"字纸牌的人接他。" and its scene ends with "他把信折好塞回怀里，走上了最后一级台阶。" The answer ends with "你定夺过河那场后，我就提交。" The full answer is in `repeat/measures-3.json` of the tag.
+
 ## Key check
 
-The Server log (177 lines), the Worker log (12 lines), the nine wire payloads, and the other files of the tag have no `Authorization` header, no bearer token, no `x-api-key`, no e-mail address, and no home path.
+The Server log (177 lines), the Worker log (12 lines), the nine wire payloads, and the other files of the first tag have no `Authorization` header, no bearer token, no `x-api-key`, no e-mail address, and no home path.
+
+Each file of the tag of Runs 4 to 6 (33 files) has no `Authorization` header, no bearer token, no `x-api-key`, no e-mail address, and no home path. `run.sh` has the test-only challenge secret of the HTTP test support, as in the first tag.
