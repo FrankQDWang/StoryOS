@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +8,7 @@ import { expect } from "playwright/test";
 
 import { getChapter, getProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { USER_A, drainLeftoverWork, prepare, settleRun } from "./acceptance.ts";
-import { startStoryOSServer, stopStoryOSServer } from "./node-integration.ts";
+import { queryStoryOSPostgres, startStoryOSServer, stopStoryOSServer } from "./node-integration.ts";
 import { selectThenType, send } from "./production-skill-journey-command.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
 
@@ -29,10 +30,16 @@ const CANDIDATE = "Guard the narrator voice in this passage.";
 const EDITED = "Keep the second block voice in this passage now.";
 const DECORATIONS = ".proposal-change-mark, .proposal-change-tick, .proposal-change-pair";
 
-/** The name and the description of each SkillPackage of the directory, from the front matter of its `SKILL.md`. */
+/**
+ * The name and the description of each SkillPackage of the directory, from the front matter of its `SKILL.md`. The
+ * directory has exactly the packages of the tracked directory `skill-packages/` of the distribution.
+ */
 async function packagedSkills(): Promise<string[][]> {
   const names = (await readdir(SKILLS, { withFileTypes: true })).filter((entry) => entry.isDirectory())
     .map((entry) => entry.name).sort();
+  const tracked = execFileSync("git", ["ls-files", "skill-packages"], { cwd: repositoryRoot, encoding: "utf8" })
+    .split("\n").filter(Boolean).map((path) => path.split("/")[1]!);
+  assert.deepEqual(names, [...new Set(tracked)].sort());
   return Promise.all(names.map(async (name) => {
     const text = await readFile(join(SKILLS, name, "SKILL.md"), "utf8");
     const field = (key: string) => new RegExp(`^${key}: (.+)$`, "mu").exec(text.split("---")[1] ?? "")?.[1];
@@ -40,25 +47,39 @@ async function packagedSkills(): Promise<string[][]> {
   }));
 }
 
-/** The text of one candidate in the notation of the fixture table of S10-REQ-004. */
+/**
+ * The text of one candidate in the notation of the fixture table of S10-REQ-004. A mark counts only with a visible
+ * underline, and a tick only with a visible line. Other decorations give `?`.
+ */
 function shown(candidate: Locator): Promise<string> {
-  return candidate.locator(".block-proposal-text").evaluate((text) => Array.from(text.childNodes, (node) =>
-    node instanceof Element && node.matches(".proposal-change-tick") ? "▏"
-      : node instanceof Element && node.matches(".proposal-change-mark") ? `【${node.textContent}】`
-        : node.textContent ?? "").join(""));
-}
-
-/** The text of each element of the editor that has the background of a pair, in document order. */
-function paired(page: Page): Promise<string[]> {
-  return page.locator("[data-manuscript-editor] .proposal-change-pair").evaluateAll((elements) =>
-    elements.map((element) => element.textContent ?? ""));
+  return candidate.locator(".block-proposal-text").evaluate((text) => Array.from(text.childNodes, (node) => {
+    if (!(node instanceof Element)) return node.textContent ?? "";
+    const style = getComputedStyle(node);
+    const line = node.querySelector(".proposal-change-tick-line");
+    const lineStyle = line === null ? undefined : getComputedStyle(line);
+    if (node.matches(".proposal-change-tick")) {
+      return lineStyle !== undefined && parseFloat(lineStyle.width) > 0
+        && lineStyle.backgroundColor !== "rgba(0, 0, 0, 0)" ? "▏" : "?";
+    }
+    if (node.matches(".proposal-change-mark")) {
+      return style.textDecorationLine.includes("underline") && style.textDecorationColor !== "rgba(0, 0, 0, 0)"
+        ? `【${node.textContent}】` : "?";
+    }
+    return node.textContent ?? "";
+  }).join(""));
 }
 
 /**
- * The author journey S10-JRN-001 of Stage 10 (S10-EVD-003): the Skill picker of the packaged SkillPackages, a
- * `local-revision` request with two target Blocks, the marks of each candidate and the pair under the pointer, an
- * edit of a candidate, one acceptance and one rejection, and a `conflict-check` request with a text answer.
+ * The text of each element in a Block or a candidate of the editor that has a visible background, in document order.
+ * The line of a tick has its own colour, so it does not count.
  */
+function paired(page: Page): Promise<string[]> {
+  return page.locator("[data-manuscript-editor] p *:not(.proposal-change-tick-line)").evaluateAll((elements) => elements
+    .filter((element) => getComputedStyle(element).backgroundColor !== "rgba(0, 0, 0, 0)")
+    .map((element) => element.textContent ?? ""));
+}
+
+/** The author journey S10-JRN-001 (S10-EVD-003) on the packaged Server with the SkillPackages of the release package. */
 export async function verifyProductionAuthorVoiceJourney(context: BrowserContext): Promise<void> {
   const started: (() => Promise<unknown>)[] = [];
   try {
@@ -110,9 +131,13 @@ export async function verifyProductionAuthorVoiceJourney(context: BrowserContext
     const revise = await send(page);
     assert.equal(revise.status, 202);
     assert.ok(revise.body.effect.kind === "admitted");
+    assert.deepEqual(revise.request.create_agent_run_input.skill_selections?.map((skill) => skill.name),
+      ["local-revision"]);
     const reviseRun = await settleRun(server.baseUrl, setup, revise.body.effect.run_id);
     assert.equal(reviseRun.status, "completed");
+    assert.deepEqual(reviseRun.skill_uses, [{ provenance: "author_selected", name: "local-revision" }]);
     assert.ok(reviseRun.decision.kind === "prose_change", JSON.stringify(reviseRun.decision));
+    assert.equal(reviseRun.decision.locations?.length, 2);
     const outcomes = (reviseRun.decision.locations ?? []).map((location) => {
       assert.ok(location.outcome.kind === "opened", JSON.stringify(location.outcome));
       return location.outcome;
@@ -123,6 +148,8 @@ export async function verifyProductionAuthorVoiceJourney(context: BrowserContext
     const candidates = outcomes.map((outcome) =>
       page.locator(`[data-proposal-id="${proposalId}"][data-proposal-operation-id="${outcome.operation_id}"]`));
     await expect(candidates[1]!).toBeVisible();
+    // The turn of the Run shows its two Proposal results.
+    await expect(page.locator("[data-assistant-current-run] [data-proposal-location]")).toHaveCount(2);
     assert.deepEqual([await shown(candidates[0]!), await shown(candidates[1]!)], SHOWN);
 
     // 3. The pointer on the mark of the second candidate gives a background to its old words only.
@@ -183,7 +210,11 @@ export async function verifyProductionAuthorVoiceJourney(context: BrowserContext
     await expect(page.locator("[data-assistant-current-run] [data-sent-skill-label]")).toHaveText(["$conflict-check"]);
     await expect(page.locator("[data-assistant-current-run] [data-assistant-skill-uses] li"))
       .toHaveText(["使用了你选择的技能「conflict-check」"]);
+    await expect(page.locator("[data-assistant-current-run] [data-proposal-location]")).toHaveCount(0);
     await expect(page.locator("[data-manuscript-editor] [data-proposal-id]")).toHaveCount(0);
+    // The Project has only the Proposal of the first Run.
+    assert.equal(await queryStoryOSPostgres(
+      `SELECT count(*)::text FROM storyos.proposals WHERE project_id = '${setup.projectId}'::uuid`), "1");
     assert.deepEqual(errors, []);
 
     await assertProjectReceipts([setup.projectId], { projects: 1, receipts: { createProject: 1,
