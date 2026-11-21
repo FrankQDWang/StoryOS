@@ -1,0 +1,41 @@
+{
+  "after run 1": [
+    {
+      "entry_number": 1,
+      "version": 1,
+      "state": "current",
+      "entry_type": "character",
+      "origin": "author_request",
+      "title": "林舟",
+      "length": 47,
+      "text": "林舟怕水，从小不会游泳。作者指明这是后面一个情节的关键，需作为伏笔保留。作者要求暂不修改正文。",
+      "flag_reason": null
+    }
+  ],
+  "after run 2": [
+    {
+      "entry_number": 1,
+      "version": 1,
+      "state": "current",
+      "entry_type": "character",
+      "origin": "author_request",
+      "title": "林舟",
+      "length": 47,
+      "text": "林舟怕水，从小不会游泳。作者指明这是后面一个情节的关键，需作为伏笔保留。作者要求暂不修改正文。",
+      "flag_reason": null
+    }
+  ],
+  "after run 3": [
+    {
+      "entry_number": 1,
+      "version": 1,
+      "state": "current",
+      "entry_type": "character",
+      "origin": "author_request",
+      "title": "林舟",
+      "length": 47,
+      "text": "林舟怕水，从小不会游泳。作者指明这是后面一个情节的关键，需作为伏笔保留。作者要求暂不修改正文。",
+      "flag_reason": null
+    }
+  ]
+}

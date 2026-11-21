@@ -1,0 +1,54 @@
+[
+  {
+    "at": "2026-11-21T07:27:16.162Z",
+    "before": "run 1 remember",
+    "requests": 0,
+    "input": null,
+    "background_max": null,
+    "author_max": null,
+    "failed": 0,
+    "embedding": 0,
+    "author_runs": 0,
+    "other_runs": 0,
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-21T07:27:46.907Z",
+    "before": "run 2 selected",
+    "requests": 3,
+    "input": 15401,
+    "background_max": null,
+    "author_max": 5467,
+    "failed": 0,
+    "embedding": 0,
+    "author_runs": 1,
+    "other_runs": 0,
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-21T07:29:23.855Z",
+    "before": "run 3 plain",
+    "requests": 6,
+    "input": 36731,
+    "background_max": null,
+    "author_max": 9643,
+    "failed": 0,
+    "embedding": 0,
+    "author_runs": 2,
+    "other_runs": 0,
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-21T07:30:24.977Z",
+    "before": "the end",
+    "requests": 10,
+    "input": 61348,
+    "background_max": null,
+    "author_max": 9643,
+    "failed": 0,
+    "embedding": 0,
+    "author_runs": 3,
+    "other_runs": 0,
+    "result": "pass"
+  }
+]
