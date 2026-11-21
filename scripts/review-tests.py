@@ -53,11 +53,21 @@ class RequestTests(unittest.TestCase):
         for absent in ("Earlier round", f"git diff {ROUND_1}", "Blocking findings", "c.rs:1"):
             self.assertNotIn(absent, text)
 
-    def test_round_2_refuses_an_earlier_round_with_no_head(self):
-        comments = [verdict_comment(axis, "FAIL", "1. `a.py:3` has a defect.", head="") for axis in ("Standards", "Spec")]
-        with self.assertRaisesRegex(review.Refused, "No verdict comment of round 1 gives its head"):
-            request_text(2, pull(comments))
-
+    def test_round_2_refuses_an_earlier_round_that_is_not_complete(self):
+        finding = "1. `a.py:3` has a defect."
+        cases = {"no head": ([verdict_comment(axis, "FAIL", finding, head="") for axis in ("Standards", "Spec")],
+                             "do not name one head"),
+                 "two heads": ([verdict_comment("Standards", "FAIL", finding),
+                                verdict_comment("Spec", "FAIL", finding, head=f"Head `{HEAD}`, tree `{TREE}`.")],
+                               "do not name one head"),
+                 "FAIL with no finding": ([verdict_comment("Standards", "FAIL", "None."),
+                                           verdict_comment("Spec", "PASS", "None.")], "does not agree with its result"),
+                 "no Blocking list": ([{**verdict_comment("Standards", "FAIL", finding), "body": "## Standards review, "
+                                        f"round 1: FAIL\n\nHead `{ROUND_1}`.\n\n{finding}\n"},
+                                       verdict_comment("Spec", "PASS", "None.")], "has no Blocking list")}
+        for name, (comments, refusal) in cases.items():
+            with self.subTest(name), self.assertRaisesRegex(review.Refused, refusal):
+                request_text(2, pull(comments))
 
 if __name__ == "__main__":
     unittest.main()

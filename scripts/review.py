@@ -225,9 +225,10 @@ def earlier_rounds(pull, number):
     if not complete:
         return []
     earlier = max(complete)
-    previous = next((head for _, head, _, _ in complete[earlier].values() if head), None)
-    if previous is None:
-        raise Refused(f"No verdict comment of round {earlier} gives its head, so the request cannot give the changes after it")
+    heads = {head for _, head, _, _ in complete[earlier].values()}
+    if len(heads) != 1 or None in heads:
+        raise Refused(f"The verdict comments of round {earlier} do not name one head, so the request cannot give the changes after it")
+    previous = heads.pop()
     parts = [f"- Earlier round: round {earlier}, head `{previous}`",
              f"- Changes after the earlier round: `git diff {previous} {pull['headRefOid']}`\n",
              "# Blocking findings of the earlier rounds\n"]
@@ -237,6 +238,8 @@ def earlier_rounds(pull, number):
             if [heading[1] for heading in headings[:2]] != ["Blocking", "Non-blocking"]:
                 raise Refused(f"The verdict comment {comment['url']} has no Blocking list before its Non-blocking list")
             blocking = comment["body"][headings[0].end():headings[1].start()].strip()
+            if (blocking == "None.") != (match[3] == "PASS"):
+                raise Refused(f"The {match[3]} verdict comment {comment['url']} has a Blocking list that does not agree with its result")
             parts.append(f"## Round {match[2]}, {match[1]} axis\n\n{blocking}\n")
     return parts
 

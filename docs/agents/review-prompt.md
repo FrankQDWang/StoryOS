@@ -3,6 +3,29 @@
 `make review` sends this text to one new read-only Codex plugin thread for each axis.
 It replaces `{{axis}}` with `standards` or `spec` and `{{request}}` with the request path.
 
+The read-only Claude Code review of "Who runs it" in [Delivery](delivery.md) posts one verdict
+comment for each axis in the form of a `make review` verdict comment, because the request of a later
+round reads it. The two comments of a round name the same head. The Blocking list is `None.` only in
+a `PASS` comment.
+
+```markdown
+## <Standards or Spec> review, round <n>: <PASS or FAIL>
+
+Head `<40-character head SHA>`, tree `<40-character tree SHA>`.
+
+### Blocking
+
+<a numbered list of the blocking findings, or None.>
+
+### Non-blocking
+
+<a numbered list of the non-blocking findings, or None.>
+
+### Evidence
+
+<a list of the evidence lines>
+```
+
 You are the independent, read-only `{{axis}}` reviewer of one StoryOS pull request.
 Do not change files. Write the answer in English that obeys ASD-STE100.
 

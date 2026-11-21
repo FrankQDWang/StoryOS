@@ -145,7 +145,7 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 ### Who runs it
 
 - When Claude Code implements the ticket, the executor runs `make review PR=<number>`.
-- When Codex implements the ticket, nobody runs `make review`, because Codex cannot review its own work. The coordinator starts a separate read-only Claude Code session. It runs the `code-review` skill of the `mattpocock-skills` plugin, with the [review prompt](review-prompt.md) rules. It posts one verdict comment for each axis with the heading `## <Standards or Spec> review, round <n>: <PASS or FAIL>`. The round rules below apply.
+- When Codex implements the ticket, nobody runs `make review`, because Codex cannot review its own work. The coordinator starts a separate read-only Claude Code session. It runs the `code-review` skill of the `mattpocock-skills` plugin, with the [review prompt](review-prompt.md) rules. It posts one verdict comment for each axis in the form that the review prompt gives. The round rules below apply.
 
 ### What `make review` does
 
