@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { requestResult } from "../../src/indexed-db-request.ts";
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
 import {
   focusManuscriptEnd,
@@ -29,8 +30,17 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-function saveNode(root: Element): Element | null {
-  return root.querySelector("[data-save-state]");
+/** The count of the Local Edit Journal records of the Project: the working set and the retained history. */
+async function journalRecordCount(realm: Window, projectId: string): Promise<number> {
+  const name = (await realm.indexedDB.databases()).map((database) => database.name)
+    .find((value) => value?.startsWith("storyos-local-edit-journal:") === true && value.endsWith(`:${projectId}`));
+  if (name === undefined) throw new Error("the Local Edit Journal of the Project is missing");
+  const database = await requestResult(realm.indexedDB.open(name));
+  try {
+    return await requestResult(database.transaction("intents").objectStore("intents").count());
+  } finally {
+    database.close();
+  }
 }
 
 it("recovers Local Edit Journal text after reload without a second Author Edit", async () => {
@@ -66,20 +76,14 @@ it("recovers Local Edit Journal text after reload without a second Author Edit",
   expect(manuscriptBody(editor)).toBe(SETTLED);
   await waitSaved(root, undefined, { timeout: 15_000 });
 
+  const recordsBefore = await journalRecordCount(applicationWindow(frame), projectId);
   editor.focus();
   focusManuscriptEnd(editor, applicationWindow(frame));
   await applyTrustedInput({ operation: "insert_text", text: " more" });
-  await expect.poll(() => {
-    const node = saveNode(root);
-    if (manuscriptBody(editor) !== FULL) return null;
-    const save = node?.getAttribute("data-save-state");
-    const unsettled = node?.getAttribute("data-unsettled-intent-count");
-    if (save === "saving" || (unsettled !== null && unsettled !== undefined && unsettled !== "0")) {
-      return "pending";
-    }
-    if (save === "saved" && unsettled === "0") return "saved";
-    return null;
-  }, { timeout: 10_000 }).toMatch(/^(pending|saved)$/);
+  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(FULL);
+  // The editor shows `saving` before the Journal append commits, so the reload waits for the record (#1773).
+  await expect.poll(() => journalRecordCount(applicationWindow(frame), projectId), { timeout: 10_000 })
+    .toBeGreaterThan(recordsBefore);
 
   root = await reloadProject(frame, projectId);
   editor = manuscriptEditor(root, applicationWindow(frame));
