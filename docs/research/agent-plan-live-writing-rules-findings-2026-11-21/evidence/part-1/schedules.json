@@ -1,0 +1,44 @@
+[
+  {
+    "project_id": "01a1fdb3-7d82-7582-b0be-d53ae689dfdb",
+    "work_kind": "chapter_capture",
+    "source_id": "01a1fdb3-7de5-73b2-85a7-3236c24b1f7d",
+    "due_at": "2026-11-21T11:42:41.287114+00:00",
+    "held": false
+  },
+  {
+    "project_id": "01a1fdb3-7d82-7582-b0be-d53ae689dfdb",
+    "work_kind": "conversation_capture",
+    "source_id": "01a1fdb6-4414-7891-aa14-1a8d680fad0b",
+    "due_at": "2026-11-21T11:17:51.980349+00:00",
+    "held": false
+  },
+  {
+    "project_id": "01a1fdb3-7e2a-7493-a090-2c15eea17eed",
+    "work_kind": "chapter_capture",
+    "source_id": "01a1fdb4-6a33-7313-a14f-6769d50b249a",
+    "due_at": "2026-11-21T11:43:41.79083+00:00",
+    "held": false
+  },
+  {
+    "project_id": "01a1fdb3-7e2a-7493-a090-2c15eea17eed",
+    "work_kind": "conversation_capture",
+    "source_id": "01a1fdb8-410b-7983-b581-77bcf50ec723",
+    "due_at": "2026-11-21T11:19:14.284471+00:00",
+    "held": false
+  },
+  {
+    "project_id": "01a1fdb4-6a8c-7783-a7a5-198f6cf66740",
+    "work_kind": "chapter_capture",
+    "source_id": "01a1fdb5-5680-7a00-a29e-01ded5b4fba7",
+    "due_at": "2026-11-21T11:44:42.266755+00:00",
+    "held": false
+  },
+  {
+    "project_id": "01a1fdb5-56b0-7b82-81f4-ca18da393d45",
+    "work_kind": "chapter_capture",
+    "source_id": "01a1fdb6-429b-7483-aa3c-0c287d423ea3",
+    "due_at": "2026-11-21T11:45:42.756584+00:00",
+    "held": false
+  }
+]

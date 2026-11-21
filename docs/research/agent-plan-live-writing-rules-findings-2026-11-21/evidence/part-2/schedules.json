@@ -1,0 +1,30 @@
+[
+  {
+    "project_id": "01a1fdc0-203d-7f53-9a32-eeaaeade50a4",
+    "work_kind": "chapter_capture",
+    "source_id": "01a1fdc0-2096-7243-81e9-5ac6e1a84a7a",
+    "due_at": "2026-11-21T11:56:29.364189+00:00",
+    "held": false
+  },
+  {
+    "project_id": "01a1fdc0-203d-7f53-9a32-eeaaeade50a4",
+    "work_kind": "conversation_capture",
+    "source_id": "01a1fdc1-0dcb-7632-a046-73fe2ae0029e",
+    "due_at": "2026-11-21T11:29:37.455722+00:00",
+    "held": false
+  },
+  {
+    "project_id": "01a1fdc0-20bf-7bb3-b8ee-1bb9dbeb4edf",
+    "work_kind": "chapter_capture",
+    "source_id": "01a1fdc1-0ce2-7512-a7c5-ad188962d4e7",
+    "due_at": "2026-11-21T11:57:29.896362+00:00",
+    "held": false
+  },
+  {
+    "project_id": "01a1fdc0-20bf-7bb3-b8ee-1bb9dbeb4edf",
+    "work_kind": "conversation_capture",
+    "source_id": "01a1fdc3-0c51-7b81-a99a-47e815609b1b",
+    "due_at": "2026-11-21T11:31:51.271957+00:00",
+    "held": false
+  }
+]

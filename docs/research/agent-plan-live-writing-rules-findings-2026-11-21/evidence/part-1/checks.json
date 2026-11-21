@@ -1,0 +1,67 @@
+[
+  {
+    "at": "2026-11-21T10:45:43.005Z",
+    "before": "R1",
+    "requests": 0,
+    "input": null,
+    "run_requests": 0,
+    "run_input": null,
+    "background": 0,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-21T10:47:53.256Z",
+    "before": "the end of R1",
+    "requests": 3,
+    "input": 24818,
+    "run_requests": 3,
+    "run_input": 24818,
+    "background": 0,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-21T10:47:53.306Z",
+    "before": "R2",
+    "requests": 3,
+    "input": 24818,
+    "run_requests": 0,
+    "run_input": null,
+    "background": 0,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-21T10:49:16.095Z",
+    "before": "the end of R2",
+    "requests": 6,
+    "input": 50900,
+    "run_requests": 3,
+    "run_input": 26082,
+    "background": 0,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-21T10:49:16.139Z",
+    "before": "R3",
+    "requests": 6,
+    "input": 50900,
+    "run_requests": 0,
+    "run_input": null,
+    "background": 0,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "result": "pass"
+  }
+]
