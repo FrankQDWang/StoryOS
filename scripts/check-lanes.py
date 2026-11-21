@@ -7,7 +7,8 @@ A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -e
 --project-scope adds the parts of `make check-full` after the lanes `build` and `package`: the storage activation
 checks, the exact-dist journeys in shards, and the two modes of the recovery drill.
 `scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; scripts/browser-vitest.sh runs it
-before each browser Vitest run that does not start at the start of its lane.
+before each browser Vitest run. `scripts/check-lanes.py --watch-run SCRIPT RUN OUTPUT` stops a run of that script that
+connected to no browser session and does not exit, and `--connected-to-no-browser OUTPUT` examines its output.
 When a lane fails or does not end in LANE_TIME_LIMIT_SECONDS, the runner stops the lanes, prints the log of that
 lane, and exits with 1. At the end, the runner prints the count of the second runs of scripts/browser-vitest.sh.
 """
@@ -48,6 +49,10 @@ BROWSER_START_FILE = "target/check/browser-start"
 # A test gives another file in this variable, so that it does not change the gap of a run.
 BROWSER_START_VARIABLE = "STORYOS_BROWSER_START_FILE"
 SECOND_RUN_LINE = "browser-vitest: the run connected to no browser session and ran no test, so it runs one more time"
+# A Vitest run that connected to no browser session and does not exit in this time is stopped (issue 1741).
+NO_EXIT_SECONDS = 30
+CONNECT_FAILURE = "Error: Failed to connect to the browser session "
+COLORS = re.compile("\x1b\\[[0-9;]*m")
 # The count of the exact-dist journey shards. Each shard has its own database and its own packaged Servers.
 JOURNEY_SHARDS = 3
 # The time of the longest journey files in a run of `make check-full` on 2026-11-20 (issue 1712). The other files
@@ -88,28 +93,21 @@ LANE_ARGUMENT = re.compile(r"([a-z0-9-]+)(?::([a-z0-9,-]+))?=(.+)", re.DOTALL)
 class Lane:
     """A command with its own log. `passed` reads the log of a passed lane and returns more lanes."""
 
-    def __init__(self, name, command, after=(), env=None, passed=None, browser=False, browser_at_start=None):
+    def __init__(self, name, command, after=(), env=None, passed=None, browser=False):
         self.name, self.command, self.after, self.env, self.passed = name, command, tuple(after), env, passed
-        # A browser lane gets its own port. A lane that starts Chrome at its start gets the start gap from the runner.
+        # A browser lane gets its own port. scripts/browser-vitest.sh takes the start gap for each start of Chrome.
         self.browser = browser
-        self.browser_at_start = browser if browser_at_start is None else browser_at_start
         self.process = self.log = None
         self.started = self.duration = None
 
 
-def claim_browser_start(root, wait):
-    """Record a start of Chrome when the last start is BROWSER_START_GAP_SECONDS ago. With wait, wait for that time.
-
-    Return False when the gap is not complete or another process holds the record, and wait is false.
-    """
+def claim_browser_start(root):
+    """Wait until the last start of Chrome is BROWSER_START_GAP_SECONDS ago, then record a start."""
     path = Path(os.environ.get(BROWSER_START_VARIABLE) or root / BROWSER_START_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a+") as file:
         while True:
-            try:
-                fcntl.flock(file, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return False
+            fcntl.flock(file, fcntl.LOCK_EX)
             file.seek(0)
             text = file.read().strip()
             remaining = (float(text) if text else 0.0) + BROWSER_START_GAP_SECONDS - time.time()
@@ -118,10 +116,8 @@ def claim_browser_start(root, wait):
                 file.truncate()
                 file.write(str(time.time()))
                 file.flush()
-                return True
+                return
             fcntl.flock(file, fcntl.LOCK_UN)
-            if not wait:
-                return False
             time.sleep(remaining)
 
 
@@ -151,7 +147,7 @@ def vitest_lane(root, name, project, files):
             raise ValueError(f"{name}: a listed file did not run or has no passing test")
         return []
 
-    return Lane(name, ["pnpm", "--dir", "apps/web", "exec", "vitest", "run", "--project", project, *files,
+    return Lane(name, ["sh", str(root / "scripts/browser-vitest.sh"), "--project", project, *files,
                        "--passWithNoTests=false", "--allowOnly=false", "--reporter=default", "--reporter=json",
                        f"--outputFile={output}"], passed=passed, browser=True)
 
@@ -212,7 +208,7 @@ def journey_lane(root, name, files):
 
     # scripts/verify-project-scope.sh writes the Vitest report of each of its runs to <report>-<run>.json.
     return Lane(name, [str(root / "scripts/verify-project-scope.sh"), "journeys", *files], after=PROJECT_SCOPE_AFTER,
-                env={"STORYOS_JOURNEY_REPORT": str(report)}, passed=passed, browser=True, browser_at_start=False)
+                env={"STORYOS_JOURNEY_REPORT": str(report)}, passed=passed, browser=True)
 
 
 def recovery_drill_lane(root, mode):
@@ -225,7 +221,7 @@ def recovery_drill_lane(root, mode):
     # the run names an operator directory, so that the two drills do not use the same files.
     return Lane(f"recovery-{mode}", [str(root / "scripts/verify-recovery-hold.sh")], after=PROJECT_SCOPE_AFTER,
                 env={"STORYOS_RECOVERY_DRILL": mode, "STORYOS_RECOVERY_COPY_DIR": ""}, passed=passed,
-                browser=True, browser_at_start=False)
+                browser=True)
 
 
 def project_scope_lanes(root):
@@ -412,6 +408,76 @@ def remove_run_resources(token):
     return verified and not remaining
 
 
+def end_processes(snapshot, table=None):
+    """Send SIGTERM, then SIGKILL, to each process of the snapshot that runs with its start time.
+
+    The first signal uses the scan `table` when it is given. Return False when a process remains.
+    """
+    def survivors(table):
+        return [pid for pid, started in snapshot.items()
+                if pid in table and table[pid][3] == started and not table[pid][2].startswith("Z")]
+
+    for stop_signal, seconds in ((signal.SIGTERM, STOP_SECONDS), (signal.SIGKILL, KILL_SECONDS)):
+        remaining = survivors(process_table() if table is None else table)
+        table = None
+        if not remaining:
+            return True
+        signal_processes(remaining, stop_signal)
+        if wait_until(lambda table: not survivors(table), seconds):
+            return True
+    return False
+
+
+def connected_to_no_browser(output):
+    """Return True when the output has the connect failure and its last Tests line, the summary, is `Tests  no tests`."""
+    lines = COLORS.sub("", Path(output).read_text(errors="replace")).split("\n")
+    tests = [line for line in lines if re.match(r"\s*Tests\s", line)]
+    return (any(line.startswith(CONNECT_FAILURE) for line in lines) and bool(tests)
+            and re.fullmatch(r"\s*Tests\s+no tests\s*", tests[-1]) is not None)
+
+
+def watch_run(script, run, output):
+    """Wait for the end of the process `run` of scripts/browser-vitest.sh, the script with the ID `script`.
+
+    When the output stays a run that connected to no browser session for NO_EXIT_SECONDS, stop each descendant of the
+    script, but not this process, that the scan at the start or at the end of that time finds. Return 0 when the run
+    ended, 2 when the stop ended its processes, and 1 when they are not verified.
+    """
+    def ended():
+        try:
+            os.kill(run, 0)
+            return False
+        except ProcessLookupError:
+            return True
+
+    def processes(table):
+        own = {os.getpid(), *descendants(table, [os.getpid()])}
+        return {pid: started for pid, started in descendants(table, [script]).items() if pid not in own}
+
+    since, snapshot = None, {}
+    try:
+        while not ended():
+            if not connected_to_no_browser(output):
+                since = None
+            elif since is None:
+                since, snapshot = time.monotonic(), processes(process_table())
+            elif time.monotonic() - since >= NO_EXIT_SECONDS:
+                table = process_table()
+                snapshot.update(processes(table))
+                # The output is examined again after the scan, so that a summary during the scan prevents the stop.
+                if not ended() and connected_to_no_browser(output):
+                    if end_processes(snapshot, table):
+                        return 2
+                    print("check-lanes: processes of the Vitest run remain", flush=True)
+                    return 1
+                since = None
+            time.sleep(1)
+        return 0
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(f"check-lanes: the Vitest run is not watched: {error}", flush=True)
+        return 1
+
+
 def stop(lanes, token):
     """Stop each lane whose leader the runner did not reap, then remove the Docker resources of the run that remain.
 
@@ -437,23 +503,11 @@ def stop(lanes, token):
             # The lanes get the signal also when the scan of the processes fails.
             signal_processes(leaders, signal.SIGTERM, os.killpg)
 
-        def survivors(table):
-            return [pid for pid, started in snapshot.items()
-                    if pid in table and table[pid][3] == started and not table[pid][2].startswith("Z")]
-
         if not wait_until(groups_ended, STOP_SECONDS):
             print(f"check-lanes: the lanes are killed after {STOP_SECONDS} s", flush=True)
             signal_processes(leaders, signal.SIGKILL, os.killpg)
             stopped = wait_until(groups_ended, KILL_SECONDS)
-        for stop_signal, seconds in ((signal.SIGTERM, STOP_SECONDS), (signal.SIGKILL, KILL_SECONDS)):
-            remaining = survivors(process_table())
-            if not remaining:
-                break
-            signal_processes(remaining, stop_signal)
-            if wait_until(lambda table: not survivors(table), seconds):
-                break
-        else:
-            stopped = False
+        stopped = end_processes(snapshot) and stopped
         if not stopped:
             print("check-lanes: processes of the run remain", flush=True)
     except (OSError, ValueError, subprocess.SubprocessError) as error:
@@ -520,8 +574,6 @@ def run_lanes(root, lanes, final_checks, started):
                 # A lane without a browser can take a free lane while the browser lanes wait.
                 if lane.browser and sum(other.browser for other in running) >= BROWSER_LANE_LIMIT:
                     continue
-                if lane.browser_at_start and not claim_browser_start(root, wait=False):
-                    continue
                 pending.remove(lane)
                 start(root, lane, running, token)
                 started.append(lane)
@@ -571,10 +623,14 @@ def run_lanes(root, lanes, final_checks, started):
 
 
 def main():
+    if sys.argv[1:2] == ["--watch-run"] and len(sys.argv) == 5:
+        return watch_run(int(sys.argv[2]), int(sys.argv[3]), sys.argv[4])
+    if sys.argv[1:2] == ["--connected-to-no-browser"] and len(sys.argv) == 3:
+        return 0 if connected_to_no_browser(sys.argv[2]) else 1
     root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True,
                                         timeout=TOOL_SECONDS).strip())
     if sys.argv[1:] == ["--browser-start"]:
-        claim_browser_start(root, wait=True)
+        claim_browser_start(root)
         return 0
     final_checks = []
     try:

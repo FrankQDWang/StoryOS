@@ -87,6 +87,8 @@ The machine must have Google Chrome Stable. Missing Chrome, a failed `channel: "
 
 Amendment (issue 1734): a browser Vitest run of the scripts that connects to no browser session and runs no test gets one second run through `scripts/browser-vitest.sh`. A failed test gets no second run (`retry: 0` stays), and a second failure of the connection fails the project.
 
+Amendment (issue 1741): the `browser-source` lanes of `scripts/check-lanes.py` also run through `scripts/browser-vitest.sh`. A run can print the connect failure and the summary `Tests  no tests`, and then not exit. When the last `Tests` line of its output stays `Tests  no tests` and the run does not exit in 30 s, the script stops its processes, also its Google Chrome. The run then counts as a run that connected to no browser session. The second run has the same rule, and there is no third run.
+
 ## Browser Mode and exact-dist transport
 
 Normal browser tests use Browser Mode assertions and its application iframe. They must not use a private HTTP result collector or evaluate test code through a browser debugging protocol.

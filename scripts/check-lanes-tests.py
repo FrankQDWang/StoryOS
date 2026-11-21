@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Tests of scripts/check-lanes.py (issues 1711, 1712) and scripts/browser-vitest.sh (issue 1734).
+"""Tests of scripts/check-lanes.py (issues 1711, 1712) and scripts/browser-vitest.sh (issues 1734, 1741).
 
 CHECK_LANES_SCRIPT gives another runner to test, for example the runner of an earlier commit.
 """
 
 import contextlib
-import fcntl
 import hashlib
 import importlib.util
 import io
@@ -211,18 +210,6 @@ class BrowserStartTests(unittest.TestCase):
             starts.append(float(record.read_text()))
         self.assertGreaterEqual(starts[1] - starts[0], gap)
 
-    def test_a_claim_without_wait_does_not_wait_for_a_held_record(self):
-        module = runner_module()
-        # A root of its own, so that the test does not change the gap of the browser lanes of a run.
-        root = Path(tempfile.mkdtemp(prefix="storyos-browser-start-"))
-        record = root / module.BROWSER_START_FILE
-        record.parent.mkdir(parents=True)
-        with open(record, "a+") as holder:
-            fcntl.flock(holder, fcntl.LOCK_EX)
-            began = time.monotonic()
-            self.assertFalse(module.claim_browser_start(root, wait=False))
-            self.assertLess(time.monotonic() - began, 5)
-
 
 def runner_module():
     """Load the runner as a module, for the tests of its functions."""
@@ -262,7 +249,7 @@ class FunctionTests(unittest.TestCase):
 
     def test_at_most_two_browser_lanes_run_at_the_same_time(self):
         module = runner_module()
-        lanes = [module.Lane(f"lanes-test-browser-{index}", ["sleep", "2"], browser=True, browser_at_start=False)
+        lanes = [module.Lane(f"lanes-test-browser-{index}", ["sleep", "2"], browser=True)
                  for index in range(3)]
         lanes.append(module.Lane("lanes-test-no-browser", ["sleep", "2"]))
         handlers = {number: signal.getsignal(number) for number in module.STOP_SIGNALS}
@@ -413,12 +400,140 @@ CONNECT_LINE_WITH_TESTS = ('Error: Failed to connect to the browser session "b63
                            " Test Files  1 failed (1)\n      Tests  1 failed | 2 passed (3)\n")
 
 
+FAKE_CHECK_LANES = """\
+import importlib.util, os, pathlib, sys, time
+if sys.argv[1:] != ['--browser-start']:
+    root = pathlib.Path(__file__).resolve().parent.parent
+    spec = importlib.util.spec_from_file_location('check_lanes', RUNNER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.NO_EXIT_SECONDS, module.STOP_SECONDS = 1, 1
+    connected, scan, end, scans = module.connected_to_no_browser, module.process_table, module.end_processes, []
+
+    def examined(output):
+        result = connected(output)
+        with open(root / 'examinations', 'a') as file:
+            file.write(f'{result}\\n')
+        if not result and (root / 'done').exists() and (root / 'again').exists() and not (root / 'again-trigger').exists():
+            (root / 'again-trigger').touch()
+            while not (root / 'again-done').exists():
+                time.sleep(0.05)
+        return result
+
+    def ended(*arguments):
+        with open(root / 'stops', 'a') as file:
+            file.write(f'requested {time.time()}\\n')
+        return end(*arguments)
+
+    def scanned():
+        table = scan()
+        scans.append(table)
+        action = root / 'action'
+        if action.exists() and int(action.read_text()) == len(scans):
+            (root / 'trigger').touch()
+            while not (root / 'done').exists():
+                time.sleep(0.05)
+        return table
+
+    module.connected_to_no_browser, module.process_table, module.end_processes = examined, scanned, ended
+    code = module.main()
+    if code == 2:
+        with open(root / 'stops', 'a') as file:
+            file.write('stopped\\n')
+    sys.exit(code)
+"""
+
+FAKE_PNPM = """\
+import json, os, signal, subprocess, sys, time
+from pathlib import Path
+root = Path(__file__).resolve().parent.parent
+record = root / 'record'
+runs = [line for line in record.read_text().splitlines() if line.startswith('run')]
+answer = json.loads((root / 'answers.json').read_text())[len(runs)]
+with open(record, 'a') as file:
+    file.write('run ' + ' '.join(sys.argv[1:]) + '\\n')
+code = answer[1]
+no_end = isinstance(code, str) and code.startswith('no end')
+
+
+def stored(text):
+    outputs = (root / 'target/check').glob('browser-vitest.*/output')
+    while not any(text in output.read_text(errors='replace') for output in outputs):
+        time.sleep(0.05)
+        outputs = (root / 'target/check').glob('browser-vitest.*/output')
+
+
+if no_end:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    child = [sys.executable, '-c', 'import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); '
+             'time.sleep(60)', str(root)]
+    if code == 'no end, child moved':
+        middle = subprocess.Popen([sys.executable, '-c', 'import subprocess, sys, time; print(subprocess.Popen('
+                                   'sys.argv[1:], start_new_session=True, stdout=subprocess.DEVNULL).pid, '
+                                   'flush=True); time.sleep(60)', *child], stdout=subprocess.PIPE, text=True)
+        pid = int(middle.stdout.readline())
+    else:
+        pid = subprocess.Popen(child, start_new_session=True, stdout=subprocess.DEVNULL).pid
+    with open(root / 'children', 'a') as file:
+        file.write(f'{pid}\\n')
+    if len(answer) >= 4:
+        (root / 'action').write_text(str(answer[2]))
+    if len(answer) == 5:
+        (root / 'again').touch()
+sys.stdout.write(answer[0])
+sys.stdout.flush()
+if no_end:
+    stored(answer[0])
+    if len(answer) >= 4:
+        while not (root / 'trigger').exists():
+            time.sleep(0.05)
+        if answer[3] == 'move the child':
+            middle.kill()
+            middle.wait()
+        else:
+            sys.stdout.write(answer[3])
+            sys.stdout.flush()
+            stored(answer[3])
+        (root / 'done').touch()
+    if len(answer) == 5:
+        while not (root / 'again-trigger').exists():
+            time.sleep(0.05)
+        sys.stdout.write(answer[4])
+        sys.stdout.flush()
+        stored(answer[4])
+        (root / 'again-done').write_text(str(time.time()))
+    (root / 'written').touch()
+    if code == 'no end, output closed':
+        os.close(1)
+        os.close(2)
+    while code == 'no end, diagnostics':
+        print('a diagnostic line of Vitest after its summary', flush=True)
+        time.sleep(0.2)
+if code is None or no_end:
+    time.sleep(60)
+if code == 'no exit code':
+    os.kill(os.getppid(), signal.SIGKILL)
+    sys.exit(1)
+sys.exit(code)
+"""
+
+
 def fake_browser_vitest_root(answers, failed_gaps=(), failed_tee=False):
     """A root with scripts/browser-vitest.sh, a fake start gap, and a fake `pnpm` that plays one answer for each run.
 
     `pnpm exec` takes node_modules/.bin before the PATH, so the fake is `pnpm`. Each wait and run goes to <root>/record.
     The answer code "no exit code" kills the shell around the fake, so the script does not get the exit code.
+    With the answer code "no end", the fake and its child in a new session ignore SIGTERM and do not exit, as the
+    Vitest run of issue 1741 and its Google Chrome. The ID of the child goes to <root>/children, before the output.
+    "no end, output closed" also closes the output of the fake, and "no end, diagnostics" writes a line each 0.2 s
+    after its text. With "no end, child moved", a parent is between the
+    child and the fake. The answer [text, code, scan, action] does the action at that scan of the processes of the
+    watch of the run: it writes the text `action`, or with "move the child", it ends the parent of the child. The answer
+    [text, code, scan, action, again] also writes the text `again` when the next examination after the action is false.
     The waits with a number in failed_gaps fail. With failed_tee, a fake `tee` writes its input to its file and fails.
+    Each other command of scripts/check-lanes.py goes to the runner, with a wait of 1 s for a run that does not exit.
+    Each examination of an output goes to <root>/examinations. Each request for a stop goes to <root>/stops before its
+    signals, and each stop that ended the processes of the run goes there after them.
     """
     root = Path(tempfile.mkdtemp(prefix="storyos-browser-vitest-"))
     for directory in ("scripts", "bin", "target/check"):
@@ -426,7 +541,7 @@ def fake_browser_vitest_root(answers, failed_gaps=(), failed_tee=False):
     shutil.copy(ROOT / "scripts/browser-vitest.sh", root / "scripts")
     (root / "answers.json").write_text(json.dumps(answers))
     (root / "scripts/check-lanes.py").write_text(
-        "import sys\n"
+        FAKE_CHECK_LANES.replace("RUNNER", repr(RUNNER)) +
         "from pathlib import Path\n"
         "path = Path(__file__).resolve().parent.parent / 'record'\n"
         "number = (path.read_text().splitlines() if path.exists() else []).count('gap') + 1\n"
@@ -439,29 +554,46 @@ def fake_browser_vitest_root(answers, failed_gaps=(), failed_tee=False):
         tee.write_text(f"#!{sys.executable}\nimport sys\nopen(sys.argv[1], 'w').write(sys.stdin.read())\nsys.exit(1)\n")
         tee.chmod(0o755)
     pnpm = root / "bin/pnpm"
-    pnpm.write_text(
-        f"#!{sys.executable}\n"
-        "import json, sys, time\n"
-        "from pathlib import Path\n"
-        "root = Path(__file__).resolve().parent.parent\n"
-        "record = root / 'record'\n"
-        "runs = [line for line in record.read_text().splitlines() if line.startswith('run')]\n"
-        "answer = json.loads((root / 'answers.json').read_text())[len(runs)]\n"
-        "with open(record, 'a') as file:\n"
-        "    file.write('run ' + ' '.join(sys.argv[1:]) + '\\n')\n"
-        "sys.stdout.write(answer[0])\n"
-        "sys.stdout.flush()\n"
-        "if answer[1] is None:\n"
-        "    time.sleep(60)\n"
-        "if answer[1] == 'no exit code':\n"
-        "    import os, signal\n"
-        "    os.kill(os.getppid(), signal.SIGKILL)\n"
-        "    sys.exit(1)\n"
-        "sys.exit(answer[1])\n")
+    pnpm.write_text(f"#!{sys.executable}\n" + FAKE_PNPM)
     pnpm.chmod(0o755)
     command = ["sh", str(root / "scripts/browser-vitest.sh"), "--project", "browser-exact-dist", "a.integration.test.ts"]
     env = {"PATH": f"{root / 'bin'}{os.pathsep}{os.environ['PATH']}"}
     return root, command, env
+
+
+def processes_of(root):
+    """Return the IDs of the processes whose command line names the root, as each process of a fake run does."""
+    lines = subprocess.run(["ps", "-A", "-ww", "-o", "pid=,command="], capture_output=True, text=True,
+                           check=True).stdout.splitlines()
+    return [int(parts[0]) for parts in (line.split(None, 1) for line in lines)
+            if len(parts) == 2 and str(root) in parts[1]]
+
+
+def kill_fake_processes(roots):
+    """Kill each process of the fake runs that still runs, after a failed assertion."""
+    for root in roots:
+        for pid in processes_of(root):
+            send(os.kill, pid, signal.SIGKILL)
+
+
+def wait_for_two_examinations(root, process):
+    """Wait until the watch of the run examined its output two times after the fake wrote its last text.
+
+    The watch stops a run only after an examination with that result, so each stop for the text started before the
+    second examination. The wait also ends when the script ends.
+    """
+    def count():
+        return len((root / "examinations").read_text().splitlines()) if (root / "examinations").exists() else 0
+
+    deadline, after = time.monotonic() + 60, None
+    while time.monotonic() < deadline and process.poll() is None:
+        if after is None and (root / "written").exists():
+            after = count() + 2
+        if after is not None and count() >= after:
+            return
+        time.sleep(0.05)
+    if process.poll() is None:
+        raise AssertionError("the watch of the run did not examine the last output of the fake two times")
 
 
 class BrowserVitestTests(unittest.TestCase):
@@ -499,6 +631,78 @@ class BrowserVitestTests(unittest.TestCase):
                 first, *rest = [text for text, _ in answers[:len(expected[1]) // 2]]
                 joined = first + ("\n" if rest and not first.endswith("\n") else "") + "".join(rest)
                 self.assertEqual(repr(output.replace(f"{line}\n", "")), repr(joined))
+
+    def test_a_run_that_connected_to_no_browser_and_does_not_exit_is_stopped(self):
+        line = runner_module().SECOND_RUN_LINE
+        two = ["gap", "run", "gap", "run"]
+        # The expected code, record, count of the event line, count of the children, and count of the stops.
+        cases = {
+            "then a pass": ([[NO_BROWSER, "no end"], [PASSED, 0]], (0, two, 1, 1, 1)),
+            # The shell around the fake keeps the output open, so the run stays a run in progress.
+            "with its output closed, then a pass": ([[NO_BROWSER, "no end, output closed"], [PASSED, 0]],
+                                                    (0, two, 1, 1, 1)),
+            # The wait does not start again for each line after the summary.
+            "with diagnostic output after its summary, then a pass": (
+                [[NO_BROWSER, "no end, diagnostics"], [PASSED, 0]], (0, two, 1, 1, 1)),
+            "with a child that gets another parent while the stop waits, then a pass": (
+                [[NO_BROWSER, "no end, child moved", 1, "move the child"], [PASSED, 0]], (0, two, 1, 1, 1)),
+            "two times": ([[NO_BROWSER, "no end"], [NO_BROWSER, "no end"], [PASSED, 0]], (1, two, 1, 2, 2)),
+        }
+        for name, (answers, expected) in cases.items():
+            with self.subTest(name):
+                roots = []
+                try:
+                    code, output, record = self.browser_vitest(answers, before=roots.append)
+                    # The system reaps a killed child of another parent a short time after its end.
+                    deadline = time.monotonic() + 5
+                    while processes_of(roots[0]) and time.monotonic() < deadline:
+                        time.sleep(0.1)
+                    children, stops = ((roots[0] / name).read_text().splitlines() for name in ("children", "stops"))
+                    self.assertEqual((code, record, output.splitlines().count(line), len(children),
+                                      stops.count("stopped")),
+                                     expected, repr(output))
+                    self.assertEqual(processes_of(roots[0]), [], repr(output))
+                finally:
+                    kill_fake_processes(roots)
+
+    def test_a_new_summary_after_a_prevented_stop_waits_the_full_time(self):
+        # A failed summary prevents the stop at its last scan. Then a new connect failure comes at once.
+        again = NO_BROWSER.replace("b63626c2", "c74737d3")
+        roots = []
+        try:
+            code, output, record = self.browser_vitest([[NO_BROWSER, "no end", 2, FAILED_TEST, again], [PASSED, 0]],
+                                                       before=roots.append)
+            requests = [float(line.split()[1]) for line in (roots[0] / "stops").read_text().splitlines()
+                        if line.startswith("requested")]
+            self.assertEqual((code, record, len(requests)), (0, ["gap", "run", "gap", "run"], 1), repr(output))
+            self.assertGreaterEqual(requests[0] - float((roots[0] / "again-done").read_text()), 1, repr(output))
+        finally:
+            kill_fake_processes(roots)
+
+    def test_a_failed_test_that_does_not_exit_is_not_stopped(self):
+        cases = {
+            "a failed test": [FAILED_TEST, "no end"],
+            "the connect line, then a failed test while the stop waits": [NO_BROWSER, "no end", 1, FAILED_TEST],
+            "the connect line, then a failed test during the last scan of the stop": [NO_BROWSER, "no end", 2,
+                                                                                      FAILED_TEST],
+        }
+        for name, answer in cases.items():
+            with self.subTest(name):
+                root, command, env = fake_browser_vitest_root([answer, [PASSED, 0]])
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True, env={**os.environ, **env},
+                                           start_new_session=True)
+                try:
+                    wait_for_two_examinations(root, process)
+                    self.assertIsNone(process.poll())
+                finally:
+                    send(os.killpg, process.pid, signal.SIGKILL)
+                    kill_fake_processes([root])
+                    process.wait()
+                output = process.stdout.read()
+                process.stdout.close()
+                record = [line.split()[0] for line in (root / "record").read_text().splitlines()]
+                self.assertEqual((record, output.splitlines().count(runner_module().SECOND_RUN_LINE),
+                                  (root / "stops").exists()), (["gap", "run"], 0, False), repr(output))
 
     def test_a_run_whose_start_or_output_fails_fails_with_no_second_run(self):
         line = runner_module().SECOND_RUN_LINE
@@ -550,6 +754,31 @@ class BrowserVitestTests(unittest.TestCase):
                 self.assertEqual((result, text.splitlines()[-1]),
                                  (code, "check-lanes: second runs of a browser Vitest run: 1 (lanes-test-second-run 1)"),
                                  repr(text))
+
+    def test_a_browser_source_lane_runs_through_the_script_with_one_start_gap_for_each_start(self):
+        module, claims = runner_module(), []
+        module.claim_browser_start = lambda *arguments, **options: claims.append(arguments) or True
+        file = "test/browser-source/a.integration.test.ts"
+        two = ["gap", "run", "gap", "run"]
+        for answers, record, counts in (([[PASSED, 0]], ["gap", "run"], []),
+                                        ([[NO_BROWSER, 1], [PASSED, 0]], two,
+                                         ["check-lanes: second runs of a browser Vitest run: 1 (browser-source 1)"])):
+            with self.subTest(runs=len(record) // 2):
+                root, _, env = fake_browser_vitest_root(answers)
+                report = root / "target/check/browser-source.json"
+                report.write_text(json.dumps({"testResults": [{"name": str(root / "apps/web" / file),
+                                                               "assertionResults": [{"status": "passed"}]}]}))
+                lane = module.vitest_lane(root, "browser-source", "browser-source", [file])
+                lane.env = env
+                code, text, _ = run_lanes(module, [lane], root)
+                run = (f"run --dir {root}/apps/web exec vitest run --project browser-source {file} "
+                       "--passWithNoTests=false --allowOnly=false --reporter=default --reporter=json "
+                       f"--outputFile={report}")
+                lines = (root / "record").read_text().splitlines() if (root / "record").exists() else []
+                actual = ["run" if line == run else line for line in lines]
+                self.assertEqual((code, actual, claims, [line for line in text.splitlines()
+                                                         if line.startswith("check-lanes: second runs")]),
+                                 (0, record, [], counts), repr(text))
 
 
 if __name__ == "__main__":
