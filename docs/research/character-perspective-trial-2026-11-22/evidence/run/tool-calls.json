@@ -1,0 +1,35 @@
+[
+  {
+    "tool_call_id": "01a1fee0-c8b9-7e82-a25e-5d5e0e424ede",
+    "project_id": "01a1fede-85a6-7e41-b280-6227e898493d",
+    "run_id": "01a1fede-869f-77e2-aaef-2de97ebf9cca",
+    "decision_position": 0,
+    "call_position": 0,
+    "function_name": "finish",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {}
+  },
+  {
+    "tool_call_id": "01a1fee2-3288-75a3-9cc0-c1ee5105807b",
+    "project_id": "01a1fede-85a6-7e41-b280-6227e898493d",
+    "run_id": "01a1fee1-0115-7c50-9142-63f56bca1b8d",
+    "decision_position": 0,
+    "call_position": 0,
+    "function_name": "finish",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {}
+  },
+  {
+    "tool_call_id": "01a1fee3-cf0d-7f12-b0b9-320e57442ddd",
+    "project_id": "01a1fede-85a6-7e41-b280-6227e898493d",
+    "run_id": "01a1fee2-7223-77d3-9282-8158f3098212",
+    "decision_position": 0,
+    "call_position": 0,
+    "function_name": "finish",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {}
+  }
+]
