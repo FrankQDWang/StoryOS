@@ -58,16 +58,16 @@ The executor reads the current ticket, the current parent, the native dependenci
 
 To claim, assign the issue and post the [Claim](#claim). When the coordinator changes the parent or the ticket, it tells the executor. The executor reads the changed body and posts a new Claim before it continues.
 
-The coordinator puts each decision in the ticket body first, and then it sends the message. The executor reads the ticket body again before it opens the pull request and before the final report.
+The coordinator puts each decision in the ticket body first, and then it sends the message. The executor reads the ticket body again before it opens the pull request, before each review round, and before the final report.
 
-Ask the coordinator only for a real decision. A product, contract, number, or waiver question goes to the author through the coordinator.
+Ask the coordinator only for a real decision. A product, contract, number, or waiver question goes to the author through the coordinator. After a question, the executor pushes no part that the question is about and starts no review round before the answer.
 
 ### 4. Implement
 
 - Use the `tdd` skill at the approved public seams.
 - After each product or test edit, run `make check-fast`.
 - Commit on the ticket branch.
-- Wait for `make check`, `make check-full`, and `make review` in the turn that starts the command. Do not end a turn while one of them runs: the end of a turn can stop the Codex jobs of the session. Wait in steps of at most 2 minutes, because a coordinator message arrives only between steps.
+- Wait for `make check`, `make check-full`, and `make review` in the turn that starts the command: the end of a turn can stop the Codex jobs of the session. Wait in steps of at most 2 minutes, because a coordinator message arrives only between steps.
 - When the counted lines will exceed the [change size](../../CODING_STANDARDS.md#change-size) limit, stop and report to the coordinator, which splits the ticket.
 
 ### 5. Open the pull request
@@ -76,7 +76,7 @@ When `make check-fast` and the tests that the ticket adds or changes pass, push 
 
 ### 6. Review
 
-Before round 1, complete each evidence record that an acceptance criterion requires. For a criterion that says "each", name one test case for each member. Give a fake each refusal rule of the real route that the test depends on.
+Before round 1, complete each evidence record that an acceptance criterion requires. For a criterion that says "each", name one test case for each member. A fake obeys the [fake rules](../../CODING_STANDARDS.md#tests).
 
 Run the [Codex review](#codex-review) rounds until a round passes. Handle each Sourcery review thread: fix the finding, or reply with the reason. Then resolve the thread.
 

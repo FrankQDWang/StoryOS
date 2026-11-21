@@ -69,6 +69,11 @@ Do not change files. Write the answer in English that obeys ASD-STE100.
   - An optional refactor.
   - An incorrect count of lines or files in the pull request body.
   - A `late:` finding of a round after round 1.
+  - A path of a check script under `scripts/` that needs two faults at the same time
+    ("Check scripts" in `CODING_STANDARDS.md`).
+  - A finding about a fake Server of a Web test that the pull request does not change, about a part
+    of a fake that no request of its tests reaches, or about a rule of the Server that a fake does not
+    keep ("Tests" in `CODING_STANDARDS.md`).
 - Round 1: sweep the full scoped diff and report every blocking finding in this answer.
 - A round after round 1 does not sweep the full scoped diff. It obeys these rules:
   - Give one evidence line for each blocking finding of the earlier rounds: fixed, not fixed, or
