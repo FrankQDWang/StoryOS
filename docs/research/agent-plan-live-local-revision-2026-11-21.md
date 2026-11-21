@@ -171,10 +171,11 @@ Author request in Project C, with the selection of `local-revision`: "请修改�
 | Line of the answer | Against the form |
 | --- | --- |
 | "已读完新指定的五个目标段。这里有个情况要先说明：上一版请求里我已经开了一个 Proposal（改的是另外五段：老周起身、老周慌乱、"回不来了"、暖流顿悟、命运齿轮），按 local-revision 的规则我不再叠加第二个 Proposal。如果您这次的选区是有意调整，请先驳回那个 Proposal，我再按新选区出稿。" | It names the 5 changed places in one sentence, with no habit and no change for each place. It speaks of the input of C2 as a new selection of the author ("按新选区出稿"). |
-| "**「然而，雾越来越浓……」**：段首"然而"是连接词起手，且三个"越来越"是机械排比——这是新选区里唯一明显的机器腔。最小改法建议：「雾越来越浓，水越来越急，岸看不见了。」" | A line in the form, but for Block 8, which is in no Proposal. |
+| "新选区五段的体检结果：" | Not in the form; a heading of the list that follows. |
+| "**「然而，雾越来越浓……」**：段首"然而"是连接词起手，且三个"越来越"是机械排比——这是新选区里唯一明显的机器腔。最小改法建议：「雾越来越浓，水越来越急，岸看不见了。」（去掉"然而"，三排改为两排加一个短句收尾，事实不变。）" | A line in the form, but for Block 8, which is in no Proposal. |
 | "**「这不是一次普通的渡河……」**：用的是"不是……是……"句式，样文本身就用这个（"他等的不是船，是人"），属于您指定的口吻，保留。" | Not in the form; it says why Block 5 stays. |
 | "其余三段（到渡口防风灯、放两文钱、怀表停在四点十分）句子短、事实实，没有机器腔，不动。" | Not in the form. |
-| "即：新选区 5 段中 1 段建议改，4 段保留。等您对当前 Proposal 作出处理后，我可以把"然而"那段的改法正式提交。" | It says how many places stay, but of the second input, and it offers a second change later. |
+| "即：新选区 5 段中 1 段建议改，4 段保留。等您对当前 Proposal 作出处理后，我可以把"然而"那段的改法正式提交。" | It says how many places stay, but of the input of C2, and it offers a second change later. |
 
 ## Key check
 
