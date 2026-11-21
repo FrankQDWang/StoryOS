@@ -221,11 +221,50 @@ sets its scope: default writing rules in the Host instructions, the Project
 Instruction as the one place for the sample passages of the author,
 SkillPackages of the StoryOS distribution, and marks on the new words of a
 Proposal candidate. StoryOS infers no preference of the author automatically.
-A specification and a parent issue follow. Until then, Stage 10 has no
-Requirement, no author journey, and no evidence row, and the proof owner has
-nothing to cover for it. The other candidates stay in
-[`Todos.md`](../../Todos.md), which is not a contract. The rule "no setup
-before writing" of ADR 0096 applies.
+The specification is
+[Deliver Stage 10: Author Voice](https://github.com/FrankQDWang/StoryOS/issues/1760).
+The Requirements, the author journey, and the evidence rows below came with
+it. The other candidates stay in [`Todos.md`](../../Todos.md), which is not a
+contract. The rule "no setup before writing" of ADR 0096 applies.
+
+| ID | Production obligation | Semantic owner |
+| --- | --- | --- |
+| S10-REQ-001 | Send default writing rules for prose in the Host instructions of each tool-loop request. Each rule states the wanted behaviour and says when a device is appropriate. The rules are no list of forbidden phrases. They are defaults for the style of the prose: a different style in the author request, in the Project Instruction, in a sample passage that they give, or in the instructions of a Skill applies before them, and the text of the rules says so (the exception of ADR 0100 to the order of ADR 0089). A change of the rules gets a new mapping revision and a new Registration. | Context and Model Gateway owners |
+| S10-REQ-002 | Keep the Project Instruction as the one place for the lasting demands and the sample passages of the author. The writing rules tell the model to write in the voice of a sample passage. Stage 10 adds no record, no control, and no automatic capture for them, and StoryOS infers no preference of the author automatically. | Context owner |
+| S10-REQ-003 | Give each deployment the SkillPackages of the StoryOS distribution as files of the release package: a local revision that gives a candidate for each of a small number of places, and a conflict check that reports and changes no text. An agreement before a scene is the third package while its ticket is in the ticket graph of the specification (ADR 0100 section 2). Each is a standard SkillPackage. The operator sets the Skill directory, and an absent setting gives no Skill (ADR 0089). | Skill owner |
+| S10-REQ-004 | Mark the new words of each Proposal candidate in the editor, with a tick where words were removed with no replacement. A candidate has no mark when its target Block is empty, and when almost all of its text is new. The pointer on a mark shows the old words of that mark in the target Block, and the target Block has no mark at other times. When the author changes the text of a candidate, the marks follow the text. The marks are in the view only: the document, the Local Edit Journal, each command, and the copied text do not change. | Workspace and Core/Proposal owners |
+
+**Author journey S10-JRN-001.**
+
+1. Start the packaged Server with the Skill directory of the release
+   package. The Skill picker lists the SkillPackages of the distribution
+   with their descriptions.
+2. Select the local revision and ask for a revision of a Chapter. The
+   assistant gives one Proposal with a candidate for some Blocks. Each
+   candidate that keeps a part of the text of its target shows marks on its
+   new words and a tick at each removal with no replacement. The pointer on
+   a mark shows the old words of that mark in the target Block.
+3. Change the text of one candidate: the marks follow the text. Accept one
+   candidate and reject one. The manuscript has the accepted text with no
+   mark.
+4. Select the conflict check and ask for a check. The assistant answers with
+   text and makes no Proposal.
+5. Continue to write with no model destination: the editor works, and no
+   mark shows.
+
+The journey uses the fake model, which does not read an instruction text. The
+live runs of S10-EVD-001 and S10-EVD-002 show the effect of the instruction
+texts on the real route.
+
+| ID | Mandatory evidence |
+| --- | --- |
+| S10-EVD-001 | The exact text of the writing rules in the request tests, the new mapping revision and Registration, and one live run on the real route with its evidence tag and its record under `docs/research/`. |
+| S10-EVD-002 | The validation of each SkillPackage of the distribution by the rules of the Skill directory, the copy in the release package, and one live run for each package that shows its effect. |
+| S10-EVD-003 | The table of the expected marks for each test input, the view tests (marks, pair, author edit, IME composition, the two no-mark cases, and no change of the document or of the Local Edit Journal), and the journey S10-JRN-001 on the exact dist. |
+
+Stage 10 adds no automatic capture of a preference, no second model, no mark
+on a machine phrase, no trial that compares models or prompts, and no change
+of the production model (ADR 0100 section 5).
 
 ## 8. Deferred scope outside MVP
 
