@@ -1,0 +1,62 @@
+[
+  {
+    "at": "2026-11-21T08:49:37.491Z",
+    "before": "R1",
+    "requests": 0,
+    "input": null,
+    "request_max": null,
+    "background": 0,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-21T08:53:37.944Z",
+    "before": "R2",
+    "requests": 4,
+    "input": 34454,
+    "request_max": 10269,
+    "background": 0,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-21T08:56:16.389Z",
+    "before": "R3",
+    "requests": 7,
+    "input": 59571,
+    "request_max": 10269,
+    "background": 0,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-21T08:57:30.867Z",
+    "before": "R4",
+    "requests": 10,
+    "input": 73670,
+    "request_max": 10269,
+    "background": 0,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-21T08:57:46.563Z",
+    "before": "the end",
+    "requests": 12,
+    "input": 85161,
+    "request_max": 10269,
+    "background": 0,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "result": "pass"
+  }
+]

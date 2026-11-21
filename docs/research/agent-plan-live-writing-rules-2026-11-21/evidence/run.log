@@ -1,0 +1,53 @@
+server 25666 worker 25667
+2026-11-21T08:47:36.208Z command createProject 渡口 A
+2026-11-21T08:47:36.263Z project 渡口 A 01a1fd4a-211d-7493-a7fd-7d8bbbd2f40f
+2026-11-21T08:47:36.263Z command updateProjectAssistance
+2026-11-21T08:47:36.283Z command createVolume
+2026-11-21T08:47:36.304Z command createChapter 第一章 渡口
+2026-11-21T08:47:36.323Z command createEditorSession
+2026-11-21T08:47:36.336Z command applyAuthorEdit chapter-ferry.md text
+2026-11-21T08:47:36.357Z command applyAuthorEdit chapter-ferry.md paragraphs
+2026-11-21T08:47:36.374Z command createProject 渡口 B
+2026-11-21T08:47:36.383Z project 渡口 B 01a1fd4a-21b7-7e53-b11c-d728fc9b500a
+2026-11-21T08:48:36.710Z command updateProjectAssistance
+2026-11-21T08:48:36.743Z command createVolume
+2026-11-21T08:48:36.762Z command createChapter 第一章 渡口
+2026-11-21T08:48:36.782Z command createEditorSession
+2026-11-21T08:48:36.796Z command applyAuthorEdit chapter-ferry.md text
+2026-11-21T08:48:36.817Z command applyAuthorEdit chapter-ferry.md paragraphs
+2026-11-21T08:48:36.836Z command updateProjectInstruction
+2026-11-21T08:48:36.846Z command createProject 归来 C
+2026-11-21T08:48:36.854Z project 归来 C 01a1fd4b-0def-7100-a238-673bdb22f67c
+2026-11-21T08:49:37.213Z command updateProjectAssistance
+2026-11-21T08:49:37.266Z command createVolume
+2026-11-21T08:49:37.299Z command createChapter 第三章 归来
+2026-11-21T08:49:37.329Z command createEditorSession
+2026-11-21T08:49:37.346Z command applyAuthorEdit chapter-habits.md text
+2026-11-21T08:49:37.492Z check before R1: {"requests":0,"input":null,"request_max":null,"background":0,"failed":0,"embedding":0,"exa":0}
+2026-11-21T08:49:37.492Z command createAgentRun R1
+2026-11-21T08:49:37.518Z run R1 01a1fd4b-fad9-75d0-8007-ca423e6a5bbf
+2026-11-21T08:50:39.860Z wait Run R1
+2026-11-21T08:51:42.072Z wait Run R1
+2026-11-21T08:52:44.848Z wait Run R1
+2026-11-21T08:53:37.850Z done Run R1
+2026-11-21T08:53:37.944Z check before R2: {"requests":4,"input":34454,"request_max":10269,"background":0,"failed":0,"embedding":0,"exa":0}
+2026-11-21T08:53:37.944Z command createAgentRun R2
+2026-11-21T08:53:38.010Z run R2 01a1fd4f-a62b-7992-8ae7-1c3eb874c112
+2026-11-21T08:54:40.405Z wait Run R2
+2026-11-21T08:55:42.288Z wait Run R2
+2026-11-21T08:56:16.311Z done Run R2
+2026-11-21T08:56:16.389Z check before R3: {"requests":7,"input":59571,"request_max":10269,"background":0,"failed":0,"embedding":0,"exa":0}
+2026-11-21T08:56:16.389Z command createAgentRun R3
+2026-11-21T08:56:16.444Z run R3 01a1fd52-1114-7a61-b223-d4a73b01be68
+2026-11-21T08:57:18.470Z wait Run R3
+2026-11-21T08:57:30.790Z done Run R3
+2026-11-21T08:57:30.870Z check before R4: {"requests":10,"input":73670,"request_max":10269,"background":0,"failed":0,"embedding":0,"exa":0}
+2026-11-21T08:57:30.871Z command createAgentRun R4
+2026-11-21T08:57:30.937Z run R4 01a1fd53-340d-7b13-bde3-12e26855d856
+2026-11-21T08:57:46.495Z done Run R4
+2026-11-21T08:57:46.563Z check before the end: {"requests":12,"input":85161,"request_max":10269,"background":0,"failed":0,"embedding":0,"exa":0}
+2026-11-21T08:57:46.563Z Worker stopped
+2026-11-21T08:57:48.939Z evidence written
+<evidence>/run.sh: line 41: 25667 Terminated: 15          env -i PATH="$PATH" HOME="$HOME" STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" STORYOS_MODEL_DESTINATION="$destination" target/release-package/storyos-worker > "$out/worker.log" 2>&1
+script exit 0
+exit=0
