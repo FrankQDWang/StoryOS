@@ -134,8 +134,8 @@ The stage names below are contract identifiers, not separate workflow runtimes:
     ([ADR 0096](../adr/0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md),
     [ADR 0100](../adr/0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md)).
 
-The continuation contract defines `S5-*` through `S9-*`. Stage 10 has no
-Requirement until its specification. The release order after Stage 7 is
+The continuation contract defines `S5-*` through `S10-*`. The release order
+after Stage 7 is
 Stage 10, then Stage 8 and Stage 9: the number of a stage is its identity, and
 it is not its place in the order. Stage 8 and Stage 9 stay on EXECUTION HOLD,
 and the author decides again about each of them after the release of Stage 10.
@@ -716,8 +716,9 @@ approval before publication.
 Reuse current owners and stable Requirement IDs. No old child body can stand in
 for that alignment. The current [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361)
 owns its accepted implementation handoff and pending final release evidence.
-Stage 4 and later remain on EXECUTION HOLD until their gates pass and the
-author explicitly resumes execution.
+The author released the execution of Stage 4 through Stage 7 and of
+Stage 10. Stage 8 and Stage 9 stay on EXECUTION HOLD until the author
+explicitly releases their execution (ADR 0096).
 
 ## 10. Explicit non-scope of this contract
 
