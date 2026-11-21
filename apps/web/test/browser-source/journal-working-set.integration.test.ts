@@ -4,7 +4,7 @@ import type { DigestValue, GetEditorSessionResponse }
 import { openEditorWorkspace, appendAuthorEdit, submitOnePendingAuthorEdit }
   from "../../src/editor-session.ts";
 import { collectEligibleJournalPayload } from "../../src/journal-payload-collection.ts";
-import type { JournalSnapshot } from "../../src/editor-types.ts";
+import type { EditorState, EditorWorkspace, JournalSnapshot } from "../../src/editor-types.ts";
 import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
 import { readJournalSnapshot, rebuildPendingProjection }
   from "../../src/local-edit-journal.ts";
@@ -65,34 +65,160 @@ function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserSce
   return { fetchImpl, session: () => session };
 }
 
-it("continues writing after 2400 saved and collected input intents", async () => {
-  const scenario = createBrowserScenario();
-  let body = "Base";
-  let firstUncollected: JournalSnapshot | undefined;
-  const transport = appliedAuthorEditTransport(scenario, () => body);
-  const { fetchImpl } = transport;
-  await deleteJournal(scenario.journalName);
-  let workspace = await openEditorWorkspace({ baseUrl: location.origin,
+type Row = Record<string, unknown>;
+const withoutIndex = ({ working_set_partition_id: _index, ...value }: Row) => value;
+const byKey = (key: string) => (rows: readonly Row[]) =>
+  [...rows].sort((left, right) => String(left[key]).localeCompare(String(right[key])));
+const fenceId = (fence: unknown) => String(Reflect.get(fence as object, "collection_fence_id"));
+
+/** Keeps the latest content of each row of `snapshot`, so a test can compare a row after it leaves the working set. */
+function remember(seen: ReturnType<typeof emptyRows>, snapshot: JournalSnapshot) {
+  for (const record of snapshot.records) seen.records.set(String(record.local_intent_sequence), record);
+  for (const chain of snapshot.payloadChains) seen.chains.set(chain.payload_chain_id, chain);
+  for (const group of snapshot.groups) seen.groups.set(group.journal_submission_group_id, group);
+  for (const fence of snapshot.fences) seen.fences.set(fenceId(fence), fence);
+}
+
+function emptyRows() {
+  return { records: new Map<string, unknown>(), chains: new Map<string, unknown>(),
+    groups: new Map<string, unknown>(), fences: new Map<string, unknown>() };
+}
+
+/** The rows of the partition that left the working set, and each retained collection fence. */
+async function retainedHistory(workspace: EditorWorkspace) {
+  const transaction = workspace.database.transaction(
+    ["intents", "payload_chains", "submission_groups", "metadata"]);
+  const partitionId = workspace.partition.journal_partition_id;
+  const history = async (store: string) => (await requestResult(transaction.objectStore(store)
+    .index("partition").getAll(partitionId)) as Row[]).filter((row) => row.working_set_partition_id === undefined);
+  const [records, chains, groups, fences] = await Promise.all([
+    history("intents"), history("payload_chains"), history("submission_groups"),
+    requestResult(transaction.objectStore("metadata").getAll(IDBKeyRange.bound(
+      "retained_collection_fence:", "retained_collection_fence:￿"))) as Promise<{ value: unknown }[]>,
+  ]);
+  return { records, chains: byKey("payload_chain_id")(chains),
+    groups: byKey("journal_submission_group_id")(groups), fences: fences.map((entry) => entry.value) };
+}
+
+/** The retained history that the remembered rows of `ids` give. */
+function expectedHistory(seen: ReturnType<typeof emptyRows>, ids: {
+  records: readonly string[]; chains: readonly string[]; groups: readonly string[]; fences: readonly string[];
+}) {
+  const pick = (rows: Map<string, unknown>, keys: readonly string[]) => keys.map((key) => rows.get(key) as Row);
+  return { records: pick(seen.records, ids.records).map(withoutIndex),
+    chains: byKey("payload_chain_id")(pick(seen.chains, ids.chains).map(withoutIndex)),
+    groups: byKey("journal_submission_group_id")(pick(seen.groups, ids.groups).map(withoutIndex)),
+    fences: [...ids.fences].sort().map((id) => seen.fences.get(id)) };
+}
+
+async function openWorkspace(scenario: ReturnType<typeof createBrowserScenario>, fetchImpl: typeof fetch) {
+  const workspace = await openEditorWorkspace({ baseUrl: location.origin,
     project: scenario.project, chapter: scenario.chapter, profile: scenario.profile,
     fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
   requireEditorReady(workspace);
+  return workspace;
+}
+
+/** Types `count` inputs of one undo group, and gives the working set after the first input. */
+async function typeRun(workspace: EditorWorkspace, text: { body: string }, run: number, count: number) {
+  const undoGroupId = createJournalUuid();
+  let afterFirst: JournalSnapshot | undefined;
+  for (let offset = 0; offset < count; offset++) {
+    const from = text.body.length;
+    text.body += "a";
+    await appendAuthorEdit(workspace, { from, to: from, text: "a",
+      resultingBody: text.body, inputOrigin: "typing", undoGroupId,
+      createdAt: new Date(Date.UTC(2026, 7, 15, 8) + run * 10000 + offset).toISOString(),
+    });
+    if (offset === 0) afterFirst = await readJournalSnapshot(workspace);
+  }
+  return afterFirst!;
+}
+
+it("retires each saved and collected group before the next input", async () => {
+  const scenario = createBrowserScenario();
+  const text = { body: "Base" };
+  const { fetchImpl } = appliedAuthorEditTransport(scenario, () => text.body);
+  await deleteJournal(scenario.journalName);
+  const workspace = await openWorkspace(scenario, fetchImpl);
+  const seen = emptyRows();
+  const afterFirstInputs: [number, number | undefined][] = [];
   try {
     for (let batch = 0; batch < 10; batch++) {
-      const undoGroupId = createJournalUuid();
-      for (let offset = 0; offset < 240; offset++) {
-        const from = body.length;
-        body += "a";
-        await appendAuthorEdit(workspace, { from, to: from, text: "a",
-          resultingBody: body, inputOrigin: "typing", undoGroupId,
-          createdAt: new Date(Date.UTC(2026, 7, 15, 8) + batch * 10000 + offset).toISOString(),
-        });
-      }
+      const afterFirst = await typeRun(workspace, text, batch, 240);
+      if (batch > 0) afterFirstInputs.push([afterFirst.records.length, afterFirst.workingBoundary?.last_sequence]);
       expect(await submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin,
-        fetchImpl, cryptoImpl: crypto })).toMatchObject({ body, save_state: "saved",
+        fetchImpl, cryptoImpl: crypto })).toMatchObject({ body: text.body, save_state: "saved",
+        unsettled_intent_count: 0 });
+      await collectEligibleJournalPayload(workspace);
+      remember(seen, await readJournalSnapshot(workspace));
+    }
+    expect(afterFirstInputs).toEqual(Array.from({ length: 9 }, (_value, index) => [1, 240 * (index + 1)]));
+    const collected = await readJournalSnapshot(workspace);
+    expect([collected.records.length, collected.workingBoundary?.last_sequence]).toEqual([240, 2160]);
+
+    await appendAuthorEdit(workspace, { from: text.body.length, to: text.body.length,
+      text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" });
+    const continued = await readJournalSnapshot(workspace);
+    expect([continued.records.length, continued.workingBoundary?.last_sequence]).toEqual([1, 2400]);
+    expect(seen.records.size).toBe(2400);
+    expect(await retainedHistory(workspace)).toEqual(expectedHistory(seen, {
+      records: [...seen.records.keys()], chains: [...seen.chains.keys()],
+      groups: [...seen.groups.keys()], fences: [...seen.fences.keys()],
+    }));
+  } finally {
+    workspace.database.close();
+    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+    await deleteJournal(scenario.journalName);
+  }
+}, 360000);
+
+/** Replaces the rows of the first 240 records of `ready` with the rows of `prefix`. */
+async function replacePrefix(ready: EditorWorkspace, prefix: JournalSnapshot) {
+  const transaction = ready.database.transaction(["intents", "payload_chains", "submission_groups"], "readwrite");
+  const completed = new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(transaction.error);
+  });
+  for (const record of prefix.records.slice(0, 240)) transaction.objectStore("intents").put(record);
+  transaction.objectStore("payload_chains").put(prefix.payloadChains[0]!);
+  transaction.objectStore("submission_groups").put(prefix.groups[0]!);
+  await completed;
+}
+
+it("refuses input when a full working set cannot retire its prefix", async () => {
+  const scenario = createBrowserScenario();
+  const text = { body: "Base" };
+  let firstUncollected: JournalSnapshot | undefined;
+  let firstCollected: JournalSnapshot | undefined;
+  const transport = appliedAuthorEditTransport(scenario, () => text.body);
+  const { fetchImpl } = transport;
+  await deleteJournal(scenario.journalName);
+  let workspace: EditorState = await openWorkspace(scenario, fetchImpl);
+  /** Refuses the next input on `target`, and keeps its working set. */
+  async function refusesInput(target: EditorWorkspace) {
+    const before = await readJournalSnapshot(target);
+    expect(before.records).toHaveLength(2400);
+    await expect(appendAuthorEdit(target, { from: text.body.length, to: text.body.length,
+      text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" })).rejects.toThrow();
+    expect(await readJournalSnapshot(target)).toEqual(before);
+  }
+  try {
+    for (let batch = 0; batch < 10; batch++) {
+      await typeRun(workspace, text, batch, 240);
+      expect(await submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin,
+        fetchImpl, cryptoImpl: crypto })).toMatchObject({ body: text.body, save_state: "saved",
         unsettled_intent_count: 0 });
       if (batch === 0) firstUncollected = await readJournalSnapshot(workspace);
       await collectEligibleJournalPayload(workspace);
+      if (batch === 0) {
+        firstCollected = await readJournalSnapshot(workspace);
+        // A first group that is not collected stops the prefix, so the working set fills to its limit.
+        await replacePrefix(workspace, firstUncollected!);
+      }
     }
+    await refusesInput(workspace);
+    await replacePrefix(workspace, firstCollected!);
     const saved = await readJournalSnapshot(workspace);
     expect(saved.records).toHaveLength(2400);
     expect(saved.records.every((record) => record.author_edit_unit === undefined)).toBe(true);
@@ -108,42 +234,21 @@ it("continues writing after 2400 saved and collected input intents", async () =>
     requireEditorReady(workspace);
     expect(await readJournalSnapshot(workspace)).toEqual(saved);
     const partitionId = workspace.partition.journal_partition_id;
-    const ready = workspace;
-    async function replacePrefix(prefix: JournalSnapshot) {
-      const transaction = ready.database.transaction(["intents", "payload_chains", "submission_groups"], "readwrite");
-      const completed = new Promise<void>((resolve, reject) => {
-        transaction.oncomplete = () => resolve();
-        transaction.onabort = () => reject(transaction.error);
-      });
-      for (const record of prefix.records.slice(0, 240)) transaction.objectStore("intents").put(record);
-      transaction.objectStore("payload_chains").put(prefix.payloadChains[0]!);
-      transaction.objectStore("submission_groups").put(prefix.groups[0]!);
-      await completed;
-    }
-    async function refusesFullWorkingSet() {
-      const before = await readJournalSnapshot(ready);
-      await expect(appendAuthorEdit(ready, { from: body.length, to: body.length,
-        text: "+", resultingBody: `${body}+`, inputOrigin: "typing" })).rejects.toThrow();
-      expect(await readJournalSnapshot(ready)).toEqual(before);
-    }
-    if (!firstUncollected) throw new Error("the first retained payload is unavailable");
-    await replacePrefix(firstUncollected);
-    await refusesFullWorkingSet();
-    await replacePrefix(saved);
+    const reopened = workspace;
     const chain = saved.payloadChains[0]!;
-    await replacePrefix({ ...saved, payloadChains: [{ ...chain,
+    await replacePrefix(reopened, { ...saved, payloadChains: [{ ...chain,
       payload_collection: saved.payloadChains[1]!.payload_collection!,
     }] });
-    await refusesFullWorkingSet();
-    await replacePrefix(saved);
+    await refusesInput(reopened);
+    await replacePrefix(reopened, saved);
     const firstFence = saved.fences[0] as Record<string, unknown>;
     const { partition_disposition: _disposition, ...incompleteFence } = firstFence;
-    const invalidFenceWrite = ready.database.transaction("metadata", "readwrite");
+    const invalidFenceWrite = reopened.database.transaction("metadata", "readwrite");
     await requestResult(invalidFenceWrite.objectStore("metadata").put({
       key: `collection_fences:${partitionId}`, value: [incompleteFence, ...saved.fences.slice(1)],
     }));
-    await refusesFullWorkingSet();
-    await requestResult(ready.database.transaction("metadata", "readwrite").objectStore("metadata")
+    await refusesInput(reopened);
+    await requestResult(reopened.database.transaction("metadata", "readwrite").objectStore("metadata")
       .put({ key: `collection_fences:${partitionId}`, value: saved.fences }));
     const put = IDBObjectStore.prototype.put;
     const interrupted = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (
@@ -156,26 +261,14 @@ it("continues writing after 2400 saved and collected input intents", async () =>
       return key === undefined ? put.call(this, value) : put.call(this, value, key);
     });
     try {
-      await expect(appendAuthorEdit(workspace, { from: body.length, to: body.length,
-        text: "+", resultingBody: `${body}+`, inputOrigin: "typing" })).rejects.toThrow();
+      await expect(appendAuthorEdit(reopened, { from: text.body.length, to: text.body.length,
+        text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" })).rejects.toThrow();
     } finally { interrupted.mockRestore(); }
-    expect(await readJournalSnapshot(workspace)).toEqual(saved);
-    await appendAuthorEdit(workspace, { from: body.length, to: body.length,
-      text: "+", resultingBody: `${body}+`, inputOrigin: "typing" });
-    const continued = await readJournalSnapshot(workspace);
-    expect(continued.records).toHaveLength(1);
-    expect(continued.workingBoundary?.last_sequence).toBe(2400);
-    const retained = workspace.database.transaction(["intents", "submission_groups", "metadata"]);
-    const [history, groups, retainedFences] = await Promise.all([
-      requestResult(retained.objectStore("intents").index("partition").getAll(workspace.partition.journal_partition_id)),
-      requestResult(retained.objectStore("submission_groups").index("partition").getAll(workspace.partition.journal_partition_id)),
-      Promise.all(saved.fences.map((fence) => requestResult(retained.objectStore("metadata")
-        .get(`retained_collection_fence:${Reflect.get(fence as object, "collection_fence_id")}`)))),
-    ]);
-    const withoutIndex = ({ working_set_partition_id: _index, ...value }: Record<string, unknown>) => value;
-    expect(history.slice(0, 2400)).toEqual(saved.records.map(withoutIndex));
-    expect(groups).toEqual(saved.groups.map(withoutIndex));
-    expect(retainedFences.map((entry) => entry.value)).toEqual(saved.fences);
+    expect(await readJournalSnapshot(reopened)).toEqual(saved);
+    await appendAuthorEdit(reopened, { from: text.body.length, to: text.body.length,
+      text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" });
+    const continued = await readJournalSnapshot(reopened);
+    expect([continued.records.length, continued.workingBoundary?.last_sequence]).toEqual([1, 2400]);
   } finally {
     if (workspace.kind === "editor-ready") workspace.database.close();
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
@@ -185,72 +278,44 @@ it("continues writing after 2400 saved and collected input intents", async () =>
 
 it("retires settled single-input groups up to the first uncollected group", async () => {
   const scenario = createBrowserScenario();
-  let body = "Base";
-  const { fetchImpl } = appliedAuthorEditTransport(scenario, () => body);
+  const text = { body: "Base" };
+  const { fetchImpl } = appliedAuthorEditTransport(scenario, () => text.body);
   await deleteJournal(scenario.journalName);
-  const workspace = await openEditorWorkspace({ baseUrl: location.origin,
-    project: scenario.project, chapter: scenario.chapter, profile: scenario.profile,
-    fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
-  requireEditorReady(workspace);
-  // Each append revalidates all groups, so 120 single-input groups and 10 batches keep the run short.
+  const workspace = await openWorkspace(scenario, fetchImpl);
   const sizes = [...Array.from({ length: 120 }, () => 1), ...Array.from({ length: 9 }, () => 240), 120];
   const uncollected = 60;
+  const seen = emptyRows();
   try {
     for (const [group, size] of sizes.entries()) {
-      const undoGroupId = createJournalUuid();
-      for (let offset = 0; offset < size; offset++) {
-        const from = body.length;
-        body += "a";
-        await appendAuthorEdit(workspace, { from, to: from, text: "a", resultingBody: body,
-          inputOrigin: "typing", undoGroupId,
-          createdAt: new Date(Date.UTC(2026, 7, 15, 8) + group * 10000 + offset).toISOString(),
-        });
-      }
+      await typeRun(workspace, text, group, size);
       await submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin, fetchImpl,
         cryptoImpl: crypto });
       if (group !== uncollected) await collectEligibleJournalPayload(workspace);
+      if (group < uncollected) remember(seen, await readJournalSnapshot(workspace));
     }
     const saved = await readJournalSnapshot(workspace);
+    // The groups after the uncollected group stay, also when they are collected.
     expect(saved.groups.map((group) => [group.ordered_coverage.length,
       group.payload_collection?.kind === "collected"]))
-      .toEqual(sizes.map((size, index) => [size, index !== uncollected]));
-    expect(saved.records).toHaveLength(2400);
+      .toEqual(sizes.slice(uncollected).map((size, index) => [size, index !== 0]));
+    expect([saved.records.length, saved.workingBoundary?.last_sequence]).toEqual([2400 - uncollected, uncollected]);
 
-    const projection = await appendAuthorEdit(workspace, { from: body.length, to: body.length,
-      text: "+", resultingBody: `${body}+`, inputOrigin: "typing" });
-    expect(projection).toMatchObject({ body: `${body}+`, unsettled_intent_count: 1 });
+    const projection = await appendAuthorEdit(workspace, { from: text.body.length, to: text.body.length,
+      text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" });
+    expect(projection).toMatchObject({ body: `${text.body}+`, unsettled_intent_count: 1 });
     expect(await rebuildPendingProjection(workspace)).toEqual(projection);
     const continued = await readJournalSnapshot(workspace);
-    const retiredChains = new Set(saved.records.slice(0, uncollected)
-      .map((record) => record.payload_chain_ref));
-    expect(continued.workingBoundary?.last_sequence)
-      .toBe(saved.records[uncollected - 1]!.local_intent_sequence);
-    expect(continued.records.slice(0, -1)).toEqual(saved.records.slice(uncollected));
-    expect(continued.payloadChains.slice(0, -1)).toEqual(saved.payloadChains
-      .filter((chain) => !retiredChains.has(chain.payload_chain_id)));
-    expect(continued.groups).toEqual(saved.groups.slice(uncollected));
-    expect(continued.fences).toEqual(saved.fences.slice(uncollected));
-    const retained = workspace.database.transaction(
-      ["intents", "payload_chains", "submission_groups", "metadata"]);
-    const partitionId = workspace.partition.journal_partition_id;
-    const history = async (store: string) => (await requestResult(retained.objectStore(store)
-      .index("partition").getAll(partitionId)) as Record<string, unknown>[])
-      .filter((row) => row.working_set_partition_id === undefined);
-    const [records, chains, groups, retainedFences] = await Promise.all([
-      history("intents"), history("payload_chains"), history("submission_groups"),
-      Promise.all(saved.fences.slice(0, uncollected).map((fence) => requestResult(retained
-        .objectStore("metadata").get(`retained_collection_fence:${
-          Reflect.get(fence as object, "collection_fence_id")}`)))),
-    ]);
-    const withoutIndex = ({ working_set_partition_id: _index, ...value }: Record<string, unknown>) => value;
-    const byKey = (key: string) => (rows: Record<string, unknown>[]) =>
-      [...rows].sort((left, right) => String(left[key]).localeCompare(String(right[key])));
-    expect(records).toEqual(saved.records.slice(0, uncollected).map(withoutIndex));
-    expect(byKey("payload_chain_id")(chains)).toEqual(byKey("payload_chain_id")(saved.payloadChains
-      .filter((chain) => retiredChains.has(chain.payload_chain_id)).map(withoutIndex)));
-    expect(byKey("journal_submission_group_id")(groups)).toEqual(
-      byKey("journal_submission_group_id")(saved.groups.slice(0, uncollected).map(withoutIndex)));
-    expect(retainedFences.map((entry) => entry.value)).toEqual(saved.fences.slice(0, uncollected));
+    const workingSet = (snapshot: JournalSnapshot) => ({ records: snapshot.records,
+      payloadChains: snapshot.payloadChains, groups: snapshot.groups, fences: snapshot.fences,
+      workingBoundary: snapshot.workingBoundary });
+    expect(workingSet({ ...continued, records: continued.records.slice(0, -1),
+      payloadChains: continued.payloadChains.slice(0, -1) })).toEqual(workingSet(saved));
+    const retiredGroups = [...seen.groups.keys()];
+    expect(retiredGroups).toHaveLength(uncollected);
+    expect(await retainedHistory(workspace)).toEqual(expectedHistory(seen, {
+      records: [...seen.records.keys()], chains: [...seen.chains.keys()],
+      groups: retiredGroups, fences: [...seen.fences.keys()],
+    }));
   } finally {
     workspace.database.close();
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);

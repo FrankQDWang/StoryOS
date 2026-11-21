@@ -115,12 +115,10 @@ function collectionProofMatches(group: Partial<JournalSubmissionGroup>, fence: u
     && Reflect.get(fence, "reason") === "applied_receipt_converged_with_durable_successor";
 }
 
+/** Moves the complete collected prefix out of the working set before each input, and returns true when it moved (ADR 0036). */
 export async function retireCollectedJournalPrefix(
   workspace: EditorWorkspace, snapshot: ValidatedJournalSnapshot,
 ): Promise<boolean> {
-  if (snapshot.records.length < MAX_WORKING_JOURNAL_ITEMS
-    && snapshot.payloadChains.length < MAX_WORKING_JOURNAL_ITEMS
-    && snapshot.groups.length < MAX_WORKING_JOURNAL_ITEMS) return false;
   if (workspace.partition.disposition !== "current_writer_open"
     || workspace.session.writer.kind !== "current_writer"
     || workspace.session.writer.writer_generation !== workspace.partition.writer_generation) {

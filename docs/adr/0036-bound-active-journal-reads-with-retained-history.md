@@ -17,3 +17,7 @@ IndexedDB version 5 keeps each version 4 store, index, and row. Its upgrade writ
 A Journal that cannot upgrade keeps its earlier version and each row, and it enters local recovery. The [Web Editor Session contract](../foundation/web-editor-session-synchronization-and-recovery-semantics.md#32-immutable-intent-records) owns the record shape.
 
 [ADR 0099](0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md) amends this record: the Web has no upgrade from an earlier Journal version.
+
+## Amendment 2026-11-21: the collected prefix leaves before each input
+
+The author decided this rule on 2026-11-21 from the measurement of [#1721](https://github.com/FrankQDWang/StoryOS/issues/1721) ([#1756](https://github.com/FrankQDWang/StoryOS/issues/1756)). Before each input, the complete collected prefix leaves the working set. It does not wait for the 2400-item guard. The prefix is the groups from the start of the working set that are settled and collected, each with its exact collection fence, up to the first group that is not. The validation, the strict transaction, the boundary, and the retained history do not change. The 2400-item guard stays as the bound of the work that is not collected. A collection occurs one time for each save, so the working set of a long writing session keeps only the work after the last collected group.
