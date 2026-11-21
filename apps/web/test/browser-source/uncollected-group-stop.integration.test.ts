@@ -41,6 +41,7 @@ import {
 } from "./scenario.ts";
 
 const AUTHOR_EDIT_SCHEMA = "storyos.command.apply-author-edit.request.v1";
+const SET_CURRENT_CHAPTER_SCHEMA = "storyos.command.set-current-chapter.request.v1";
 // Chapter B and its head are the ones of the golden response of Set Current Chapter.
 const CHAPTER_B = "018f0000-0000-7001-8000-000000000803";
 const REVISION_B = "018f0000-0000-7001-8000-000000000805";
@@ -87,6 +88,7 @@ function writingServer(scenario: ReturnType<typeof createBrowserScenario>, mode:
   let challenges = 0;
   const effects: string[] = [];
   let digest: DigestValue | undefined;
+  let chapterDigest: DigestValue | undefined;
   let current = CHAPTER;
   const bodies: Record<string, string> = { [CHAPTER]: body, [CHAPTER_B]: "B" };
   const unexpected: string[] = [];
@@ -145,9 +147,14 @@ function writingServer(scenario: ReturnType<typeof createBrowserScenario>, mode:
     }
     if (route === `GET ${project}/assistance`) return jsonResponse({ ...assistanceFixture, project_scope: scope });
     if (route === `GET ${project}/skills`) return jsonResponse({ ...skillsFixture, project_scope: scope, skills: [] });
-    if (route === `PUT ${project}/current-chapter` && current === CHAPTER) {
+    if (route === `PUT ${project}/current-chapter` && current === CHAPTER && chapterDigest !== undefined) {
       await openChapterB();
-      return jsonResponse(setCurrentChapterFixture);
+      // The answer names the base that the switch installs, and the receipt names the command of the request.
+      return jsonResponse({ ...setCurrentChapterFixture, project_scope: scenario.project.project_scope,
+        effect: { ...setCurrentChapterFixture.effect, base_snapshot_id: session.base_snapshot.snapshot_id,
+          project_activity_position: String(position) },
+        receipt: { ...setCurrentChapterFixture.receipt, project_scope: scenario.project.project_scope,
+          command_digest: chapterDigest, idempotency_key: requestHeaders(init).get("idempotency-key") ?? "" } });
     }
     if (route === `GET ${project}/manuscript/tree`) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
@@ -160,6 +167,9 @@ function writingServer(scenario: ReturnType<typeof createBrowserScenario>, mode:
     }
     if (route === `POST ${project}/anti-forgery-challenges`) {
       const request = requireRequestBody(init);
+      if (request.command_schema === SET_CURRENT_CHAPTER_SCHEMA) {
+        chapterDigest = requireDigestValue(request.canonical_command_digest, "command digest");
+      }
       if (request.command_schema === AUTHOR_EDIT_SCHEMA) {
         challenges += 1;
         digest = requireDigestValue(request.canonical_command_digest, "command digest");
