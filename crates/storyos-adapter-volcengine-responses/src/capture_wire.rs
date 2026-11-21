@@ -1,4 +1,4 @@
-//! The request body of one RunStep of a capture on the mapping `v9` (ADR 0094 sections
+//! The request body of one RunStep of a capture on the current mapping (ADR 0094 sections
 //! 3, 5, and 8). The request has no author message: its user message has the input of the capture, the
 //! Memory Index, the Chapter list, and the delete marks as sections. It declares the Tools of the
 //! capture as strict functions with `tool_choice: "required"`.
@@ -6,7 +6,7 @@
 use storyos_application::{CreateRequest, RequestBounds};
 use storyos_core::{CaptureInputKind, ContextSourceClass};
 
-/// The sentences that the mapping `v9` adds for a capture of a Project Conversation (ADR 0094
+/// The sentences of the current mapping for a capture of a Project Conversation (ADR 0094
 /// section 5).
 pub(crate) const CONVERSATION_CAPTURE_RULE: &str = " In a capture of a Project Conversation, an \
 observation is a decision, a preference, or an intent that the messages have. You can read the manuscript to understand a message, and you do not \

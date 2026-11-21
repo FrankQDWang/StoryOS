@@ -3,8 +3,8 @@
 - Status: current product delivery verification contract for [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60)
 - Canonical issue: [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60)
 - Contract revision: `proof-responses-memory-2026-09-15-v1`
-- Exact release-source snapshot consumed: `cca8e646f137bccc27414014470211451a1ac474`
-- Exact source tree consumed: `04b33642b800cd60345bf75bf366c1c08c59a1c3`
+- Exact release-source snapshot consumed: `daa673631a6055feb6322afde996de336c6459b0`
+- Exact source tree consumed: `04de23d57d3a41cc74d2fefd81c19b804b485dae`
 - Predecessor release-contract revision: `release-responses-memory-2026-09-14-v1`
 - Release baseline owner: [AI-Independent Editor-First Release Baseline and Handoff Criteria](ai-independent-editor-first-release-baseline-and-handoff-criteria.md)
 - Deterministic-method ADR: [ADR 0012](../adr/0012-adopt-deterministic-contract-verification.md)
@@ -31,7 +31,7 @@ by their existing owners. Historical Stage 1 exclusions remain unchanged.
 ### 1.1 Authority order
 
 The accepted release baseline and its continuation are the source of `REL-*`,
-`HND-*`, and the Stage 1 through Stage 9 meanings. The owner contracts listed in section 4
+`HND-*`, and the Stage 1 through Stage 10 meanings. The owner contracts listed in section 4
 remain the source of domain, authority, protocol, storage, retention,
 disclosure, Agent, model, Tool, MCP, editor, and trust semantics. This
 document owns only the deterministic verification boundary and failure/recovery
@@ -855,8 +855,8 @@ The first four stages retain the identities accepted by [Define the AI-Independe
    Plan Responses destination under the same identity, disclosure, Attempt/unknown/recovery,
    Proposal, and S2 fallback boundaries; no Provider-internal or literary claim.
 
-Stages 5 through 9 deliver governed Tools/research, Skills, Memory, MCP Apps,
-and complete orchestration. Their positive proof selections and
+Stages 5 through 10 deliver governed Tools/research, Skills, Memory, MCP Apps,
+complete orchestration, and the author voice. Their positive proof selections and
 release branches are defined in the companion. Stage 4 is an intermediate gate.
 
 A stage is not released because its next stage is planned, because a gate ran,
@@ -917,9 +917,9 @@ then resolves every gate, evidence, fixture, fault point, schedule, oracle,
 bundle, disposition, and block token against this document and its companion.
 
 The finite stage-map selectors below are also registered crosswalk tokens.
-`SMAP-STAGE-1` through `SMAP-STAGE-9` are mandatory implementation-evidence
+`SMAP-STAGE-1` through `SMAP-STAGE-10` are mandatory implementation-evidence
 maps: each selects its registered row here or in the companion and never contains `EV-SR`.
-`SMAP-EVALUATED-MANDATORY-STAGE` selects exactly one of those nine maps from
+`SMAP-EVALUATED-MANDATORY-STAGE` selects exactly one of those ten maps from
 the evidence record's required `evaluated_stage` field. A selector expands by
 structured cell to the listed gates, evidence classes/layers, fixtures,
 Contract Fault Points, schedules, oracles, and mandatory bundle set. The companion section 2.1 adds the exact case-group selections to each
@@ -929,8 +929,11 @@ combined fixture/fault/schedule/oracle cell, expansion is respectively to
 those four named subfields in left-to-right order; an explicit `+` operand
 adds to its matching subfield. It never expands to the union of all stages or to a bundle wildcard.
 
-The separate `SMAP-RELEASE-STAGE-1` through `SMAP-RELEASE-STAGE-9` selectors
-are ordered release branches. Each consumes exactly one mandatory map and its
+The separate `SMAP-RELEASE-STAGE-1` through `SMAP-RELEASE-STAGE-10` selectors
+are release branches in the release order. In that order, Stage 10 comes
+after Stage 7 and before Stage 8
+([ADR 0096](../adr/0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md)).
+Each consumes exactly one mandatory map and its
 named author journey; only after both pass does it emit `EV-SR`, `PASS-STAGE`,
 the exact resulting `main`, and the exact next-stage input. The dynamic
 `SMAP-EVALUATED-RELEASE-STAGE` selects the one release branch corresponding to
@@ -958,7 +961,7 @@ The release selectors are deliberately separate from these mandatory maps:
 | `SMAP-RELEASE-STAGE-4` | Stage 4 | `SMAP-STAGE-4` | `S4-JRN-001` | Emit `EV-SR`, `PASS-STAGE`, the exact resulting `main`, and the exact Stage 5 input. |
 
 `SMAP-EVALUATED-RELEASE-STAGE` is the finite dynamic selector for exactly one
-of those nine release rows, keyed by the same `evaluated_stage` that selects
+of those ten release rows, keyed by the same `evaluated_stage` that selects
 `SMAP-EVALUATED-MANDATORY-STAGE`. It is a release branch, not an evidence
 source: `EV-SR` exists only in its output after the selected mandatory map and
 author journey have passed. The Stage 2 result produced while running a Stage
@@ -988,7 +991,7 @@ absorbed as an implementation detail.
 | `REL-001` | Editor is daily usable with AI disabled; `OWN-REL` with `OWN-WEB`, `OWN-CORE`, `OWN-PG`, `OWN-RET`. | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-07`, `DVG-09`, `DVG-10`, `DVG-11`, `DVG-13` | `EC-01/02/03/04/05/06`; `EV-CP/IT/INT/PRD/SE` | `FX-EDITOR-IME`, `FX-RECOVERY-EDITOR`, `FX-RESTORE-LIFECYCLE`, `FX-LONG-SESSION` · `CFP-CORE-BEFORE-COMMIT`, `CFP-CORE-AFTER-COMMIT-BEFORE-ACK`, `CFP-REPLAY-BEFORE-COMPACTION`, `CFP-REPLAY-BELOW-FLOOR`, `CFP-RESTORE-BEFORE-VISIBILITY` · `SCH-NORMAL/REORDER/CRASH/REPLAY/RESTORE/LONG` · `ORC-ATOMIC-AUTHORITY`, `ORC-RECOVERY-ATOMICITY`, `ORC-RESTORE-LIFECYCLE` · `CFP-EDITOR-BEFORE-JOURNAL-DURABILITY` | `B-EDITOR` + `B-RECOVERY` + `B-RESTORE` + `B-MEASURE`; `PASS-STAGE` after author journey and adopted measurement evidence. | `BLOCK-ALL`; any missing journey, recovery, restore, isolation, or adopted measurement evidence blocks. |
 | `REL-002` | Only a Direct Author Action or an explicit Acceptance with Acceptance Result Applied may change Authoritative State; `OWN-CORE`, `OWN-ADM`, `OWN-PLAIN`, `OWN-TRUST`. | `DVG-02`, `DVG-03`, `DVG-04`, `DVG-05`, `DVG-07`, `DVG-08`, `DVG-11` | `EC-03/05/07/08`; `EV-CP/IT/INT/SE` | `FX-CORE-PROPOSAL`, `FX-CONTEXT-DISCLOSURE`, `FX-ABSENT-EXECUTION` · admission/core/proposal/manifest/dispatch/late points · `SCH-NORMAL/SCOPE/UNKNOWN/ABSENT` · `ORC-ATOMIC-AUTHORITY`, `ORC-NEGATIVE-CLOSURE` · `CFP-ADMISSION-BEFORE-CORE` | `B-CORE` + `B-CONTEXT` + `B-ABSENT`; `PASS-POS` for allowed transition or `PASS-REFUSAL` for every non-author path. | `BLOCK-ALL`; any direct Agent/Tool/MCP/model/browser/projection effect or fabricated Acceptance blocks. |
 | `REL-003` | Exact User/Project Scope is the authority boundary across Core, Postgres, routes, recovery, and disclosure; `OWN-PROTO`, `OWN-PG`, `OWN-ADM`, `OWN-TRUST`. | `DVG-01`, `DVG-02`, `DVG-07`, `DVG-10`, `DVG-11` | `EC-01/04/05/08`; `EV-CP/IT/INT/PRD/SE` | `FX-SCOPE-2U2P`, `FX-RESTORE-LIFECYCLE` · scope/query, restore, delete, RLS, fence points · `SCH-SCOPE/RESTORE/LIFECYCLE/FENCE` · `ORC-SCOPE`, `ORC-RESTORE-LIFECYCLE` · `CFP-SCOPE-BEFORE-QUERY` | `B-SCOPE` + `B-RESTORE`; `PASS-POS` for own scope and `PASS-REFUSAL`/`PASS-HOLD` for foreign or unsafe scope. | `BLOCK-ALL`; any leak, non-oracular mismatch, forced-RLS bypass, or recovery scope uncertainty blocks. |
-| `REL-004` | The first four stages retain their identities and are followed by the accepted Stages 5 through 9; `OWN-REL`, `OWN-STAGE`. | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-04`, `DVG-05`, `DVG-06`, `DVG-07`, `DVG-08`, `DVG-09`, `DVG-10`, `DVG-11`, `DVG-13` | `EC-01`; `EV-CP/SE` | `FX-HANDOFF`, `FX-CONTRACT-R1` · contract drift and stage-boundary points · `SCH-DRIFT/NORMAL/ABSENT` · `ORC-CROSSWALK-COMPLETENESS` · `CFP-CONTRACT-DRIFT` | `B-HANDOFF` + `B-CONTRACT`; `PASS-STAGE` when the accepted nine-stage sequence and evidence dependency graph match [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62). | `BLOCK-ALL`; any unapproved stage, reordered stage, invented capability, or unresolved owner/gate row blocks. |
+| `REL-004` | The first four stages retain their identities and are followed by the accepted Stages 5 through 10; `OWN-REL`, `OWN-STAGE`. | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-04`, `DVG-05`, `DVG-06`, `DVG-07`, `DVG-08`, `DVG-09`, `DVG-10`, `DVG-11`, `DVG-13` | `EC-01`; `EV-CP/SE` | `FX-HANDOFF`, `FX-CONTRACT-R1` · contract drift and stage-boundary points · `SCH-DRIFT/NORMAL/ABSENT` · `ORC-CROSSWALK-COMPLETENESS` · `CFP-CONTRACT-DRIFT` | `B-HANDOFF` + `B-CONTRACT`; `PASS-STAGE` when the accepted ten-stage sequence matches the [release baseline](ai-independent-editor-first-release-baseline-and-handoff-criteria.md), its [continuation](storyos-product-delivery-continuation.md), and the release order of [ADR 0096](../adr/0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md). The evidence dependency graph must also match these sources. [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) accepted Stage 1 through Stage 9, and ADR 0096 added Stage 10. | `BLOCK-ALL`; any unapproved stage, reordered stage, invented capability, or unresolved owner/gate row blocks. |
 | `REL-005` | The currently evaluated stage is eligible only when its own author journey and mandatory evidence are current, attributable, replayable, and passed; the evidence record supplies exactly one `evaluated_stage`; `OWN-REL`, `OWN-DVG`. First resolve `SMAP-EVALUATED-MANDATORY-STAGE` for that one stage, then use the corresponding `SMAP-EVALUATED-RELEASE-STAGE` branch with that stage's named author journey. A later stage's unrun evidence is not a current-stage failure, and `EV-SR` is produced only after both selected inputs pass. | `SMAP-EVALUATED-MANDATORY-STAGE` | `SMAP-EVALUATED-MANDATORY-STAGE` | `SMAP-EVALUATED-MANDATORY-STAGE` | `SMAP-EVALUATED-RELEASE-STAGE`; `PASS-STAGE` and `EV-SR` only after the selected mandatory map and author journey are passed or have the row-specific expected negative/hold disposition. | `BLOCK-ALL`; a selected-stage mandatory item or journey step that is failed, unrun, stale, unavailable, unverified, or unreplayable blocks, while evidence belonging only to a later stage does not. |
 | `REL-006` | Planning, implementation, stage evidence, stage release, and later controlled-cloud deployment remain separate; `OWN-REL`, `OWN-GOV`. | `DVG-01`, `DVG-10`, `DVG-13` | `EC-01/04/05`; `EV-CP/PRD/SE/CCD` | `FX-HANDOFF`, `FX-RESTORE-LIFECYCLE` · contract drift, restore, deletion, deployment-identity points · `SCH-DRIFT/RESTORE/LIFECYCLE` · `ORC-CONTRACT`, `ORC-RESTORE-LIFECYCLE`, `ORC-CROSSWALK-COMPLETENESS` · `CFP-CONTRACT-DRIFT` | `B-HANDOFF` + `B-RESTORE`; `PASS-STAGE` for local separation or `PASS-CLOUD` only for later controlled-cloud evidence. | `BLOCK-ALL`; planning cannot be reported as implementation/release, and cloud evidence cannot backfill a local gap. |
 
@@ -1144,7 +1147,7 @@ Before this contract or a later implementation handoff is accepted, the
 reviewer must verify all of the following without changing the locked tracker
 state:
 
-- every accepted `REL-*`, `HND-*`, and Stage 1 through Stage 9 Requirement,
+- every accepted `REL-*`, `HND-*`, and Stage 1 through Stage 10 Requirement,
   journey, and evidence identifier occurs in the combined crosswalk exactly once and resolves to existing gate, owner, evidence,
   fixture, fault-point, schedule, oracle, bundle, pass, and block definitions;
 - every `DVG-*`, `CFP-*`, `FX-*`, `SCH-*`, `B-*`, `EC-*`, `EV-*`, and `ORC-*`
@@ -1186,5 +1189,5 @@ user-approved tickets. Product and verification-code implementation belongs
 to execution agents; this correction changes only the two proof documents.
 The current [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361)
 owns its accepted implementation handoff and pending final release evidence.
-Stage 4 and later remain on EXECUTION HOLD. This proof contract releases no
-product stage.
+Stage 8 and Stage 9 remain on EXECUTION HOLD (ADR 0096). This proof contract
+releases no product stage.
