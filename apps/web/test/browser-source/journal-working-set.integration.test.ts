@@ -10,6 +10,8 @@ import { uuidV7 as createJournalUuid } from "../../src/client-identity.ts";
 import { readJournalSnapshot, rebuildPendingProjection }
   from "../../src/local-edit-journal.ts";
 import type { CandidateSelectionEdit } from "../../src/local-edit-journal.ts";
+import { retainLocalRecovery } from "../../src/local-edit-recovery.ts";
+import { recoveryPrefix } from "../../src/local-recovery-record.ts";
 import {
   BLOCK, OWNER, PROJECT, SESSION, chapterRevision, createAppliedAuthorEditResponse,
   createBrowserScenario, deleteJournal, jsonResponse, requestHeaders,
@@ -188,6 +190,25 @@ async function replacePrefix(ready: EditorWorkspace, prefix: JournalSnapshot) {
   await completed;
 }
 
+/** `prefix` with the settlement of its first group changed by `settle`. */
+function withFirstSettlement(prefix: JournalSnapshot,
+  settle: (applied: Record<string, unknown>) => Record<string, unknown>): JournalSnapshot {
+  const [first, ...rest] = prefix.groups;
+  return { ...prefix, groups: [{ ...first!, settlement: settle(first!.settlement) as never }, ...rest] };
+}
+
+const reconfirmation = (applied: Record<string, unknown>) => ({ kind: "outcome_query_requires_reconfirmation",
+  command_id: applied.command_id, author_command_admission_id: applied.author_command_admission_id,
+  reconfirmation_reason: "direct_edit_intent_unrecoverable" });
+const refused = (applied: Record<string, unknown>) => {
+  const receipt = applied.receipt as Record<string, unknown>;
+  return { kind: "zero_authority_receipt_settled", command_id: applied.command_id,
+    author_command_admission_id: applied.author_command_admission_id,
+    receipt: { ...receipt, result: "refused", resulting_heads: receipt.prior_heads, authoritative_revision_ids: [],
+      authoritative_commit_ids: [], author_action_sequence: null },
+    effect: { kind: "refused", reason: "target_mismatch" } };
+};
+
 it("refuses input when a full working set cannot retire its prefix", async () => {
   const scenario = createBrowserScenario();
   const text = { body: "Base" };
@@ -215,10 +236,18 @@ it("refuses input when a full working set cannot retire its prefix", async () =>
       await collectEligibleJournalPayload(workspace);
       if (batch === 0) {
         firstCollected = await readJournalSnapshot(workspace);
-        // A first group that is not collected stops the prefix, so the working set fills to its limit.
-        await replacePrefix(workspace, firstUncollected!);
+        // A first group that is not closed stops the prefix, so the working set fills to its limit (ADR 0036).
+        // The author keeps the text of a reconfirmation group, so input continues behind it.
+        await replacePrefix(workspace, withFirstSettlement(firstUncollected!, reconfirmation));
+        await retainLocalRecovery(workspace, firstUncollected!.groups[0]!.journal_submission_group_id);
       }
     }
+    await refusesInput(workspace);
+    // A refused group also stops the prefix.
+    const firstGroupId = firstUncollected!.groups[0]!.journal_submission_group_id;
+    await requestResult(workspace.database.transaction("metadata", "readwrite").objectStore("metadata")
+      .delete(`${recoveryPrefix}${workspace.partition.journal_partition_id}:${firstGroupId}`));
+    await replacePrefix(workspace, withFirstSettlement(firstUncollected!, refused));
     await refusesInput(workspace);
     await replacePrefix(workspace, firstCollected!);
     const saved = await readJournalSnapshot(workspace);
@@ -278,7 +307,7 @@ it("refuses input when a full working set cannot retire its prefix", async () =>
   }
 }, 360000);
 
-it("retires settled single-input groups up to the first uncollected group", async () => {
+it("retires settled single-input groups and an applied group that the collection did not take", async () => {
   const scenario = createBrowserScenario();
   const text = { body: "Base" };
   const { fetchImpl } = appliedAuthorEditTransport(scenario, () => text.body);
@@ -293,30 +322,27 @@ it("retires settled single-input groups up to the first uncollected group", asyn
       await submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin, fetchImpl,
         cryptoImpl: crypto });
       if (group !== uncollected) await collectEligibleJournalPayload(workspace);
-      if (group < uncollected) remember(seen, await readJournalSnapshot(workspace));
+      remember(seen, await readJournalSnapshot(workspace));
     }
     const saved = await readJournalSnapshot(workspace);
-    // The groups after the uncollected group stay, also when they are collected.
+    // The applied group that the collection did not take leaves with the collected group after it (ADR 0036).
     expect(saved.groups.map((group) => [group.ordered_coverage.length,
-      group.payload_collection?.kind === "collected"]))
-      .toEqual(sizes.slice(uncollected).map((size, index) => [size, index !== 0]));
-    expect([saved.records.length, saved.workingBoundary?.last_sequence]).toEqual([2400 - uncollected, uncollected]);
+      group.payload_collection?.kind === "collected"])).toEqual([[120, true]]);
+    expect([saved.records.length, saved.workingBoundary?.last_sequence]).toEqual([120, 2280]);
 
     const projection = await appendAuthorEdit(workspace, { from: text.body.length, to: text.body.length,
       text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" });
     expect(projection).toMatchObject({ body: `${text.body}+`, unsettled_intent_count: 1 });
     expect(await rebuildPendingProjection(workspace)).toEqual(projection);
     const continued = await readJournalSnapshot(workspace);
-    const workingSet = (snapshot: JournalSnapshot) => ({ records: snapshot.records,
-      payloadChains: snapshot.payloadChains, groups: snapshot.groups, fences: snapshot.fences,
-      workingBoundary: snapshot.workingBoundary });
-    expect(workingSet({ ...continued, records: continued.records.slice(0, -1),
-      payloadChains: continued.payloadChains.slice(0, -1) })).toEqual(workingSet(saved));
-    const retiredGroups = [...seen.groups.keys()];
-    expect(retiredGroups).toHaveLength(uncollected);
-    expect(await retainedHistory(workspace)).toEqual(expectedHistory(seen, {
+    expect([continued.records.length, continued.workingBoundary?.last_sequence]).toEqual([1, 2400]);
+    const retained = await retainedHistory(workspace);
+    expect([retained.records.length, retained.groups.length, retained.fences.length]).toEqual([2400, 130, 129]);
+    // The group that the collection did not take leaves with its payload and gets no retained fence.
+    expect(retained.records.filter((record) => record.author_edit_unit !== undefined)).toHaveLength(1);
+    expect(retained).toEqual(expectedHistory(seen, {
       records: [...seen.records.keys()], chains: [...seen.chains.keys()],
-      groups: retiredGroups, fences: [...seen.fences.keys()],
+      groups: [...seen.groups.keys()], fences: [...seen.fences.keys()],
     }));
   } finally {
     workspace.database.close();
