@@ -9,9 +9,9 @@ Use these instructions to find each conflict between one text and the earlier st
 
 ## The text to check
 
-- When the author names a text, check that text.
-- When the author names no text, check the text of the author references of the request.
-- When the request has no author reference, check the Working text.
+- When the author request names a text, check that text.
+- When it names no text and the request has author references, check the text of the author references.
+- When it names no text and the request has no author reference, check the Working text.
 
 ## The sources
 
