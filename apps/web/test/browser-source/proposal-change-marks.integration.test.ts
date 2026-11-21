@@ -275,8 +275,11 @@ it("writes the same Local Edit Journal record for an edit of a candidate with ma
     requests.push(`${init?.method ?? "GET"} ${input instanceof Request ? input.url : String(input)}`);
     throw new Error("unexpected request");
   };
+  // The idle timer of the submission never runs, so the edit stays in the Journal.
+  const held: (() => void)[] = [];
   const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin,
-    fetchImpl, onFailure: (error) => { failures.push(error); } });
+    fetchImpl, onFailure: (error) => { failures.push(error); },
+    setTimeoutImpl: (callback) => { held.push(callback); return held.length; }, clearTimeoutImpl: () => {} });
   await withActEnvironment(async () => {
     try {
       await act(async () => { root.render(createElement(ManuscriptEditor, { blocks: test.workspace.openedProjection.blocks,
@@ -303,6 +306,14 @@ it("writes the same Local Edit Journal record for an edit of a candidate with ma
       await act(async () => { root.unmount(); }); writing.close(); host.remove(); await test.close();
     }
   });
+});
+
+it("pairs a mark under a hovering pen", () => {
+  const editor = openEditor(ROW_1.old, [candidate(ROW_1.new)]);
+  const mark = candidateText(editor).querySelectorAll(".proposal-change-mark")[1]!;
+  mark.dispatchEvent(new PointerEvent("pointerover", { pointerType: "pen", bubbles: true }));
+  expect(pairs(editor).map(({ place, text }) => ({ place, text }))).toEqual([
+    { place: "target", text: "的眼中闪过一丝复杂的情绪，她" }, { place: "candidate", text: "看了他一眼，" }]);
 });
 
 it("shows no pair for a touch tap on a mark", () => {

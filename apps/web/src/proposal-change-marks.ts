@@ -85,7 +85,7 @@ function samePair(first: Pair | undefined, second: Pair | undefined): boolean {
  */
 export function proposalChangeMarks(): Plugin<MarksState> {
   let composing = false;
-  // The pair of the mouse pointer. A composition shows it only after it ends.
+  // The pair of the mouse or pen pointer. A composition shows it only after it ends.
   let pointed: Pair | undefined;
   const showPair = (view: EditorView): void => {
     const current = marksKey.getState(view.state);
@@ -129,15 +129,15 @@ export function proposalChangeMarks(): Plugin<MarksState> {
           });
           return false;
         },
-        // Only a mouse shows a pair. A touch tap also gives compatibility mouse events, so they are not used.
+        // A touch shows no pair. A touch tap also gives compatibility mouse events, so they are not used.
         pointerover: (view, event) => {
-          if (event.pointerType !== "mouse") return false;
+          if (event.pointerType === "touch") return false;
           pointed = pairAt(view, event.target);
           showPair(view);
           return false;
         },
         pointerout: (view, event) => {
-          if (event.pointerType !== "mouse") return false;
+          if (event.pointerType === "touch") return false;
           if (!(event.relatedTarget instanceof Node) || !view.dom.contains(event.relatedTarget)) {
             pointed = undefined;
             showPair(view);
