@@ -244,7 +244,8 @@ before writing" of ADR 0096 applies.
 2. Select the local revision and ask for a revision of a Chapter. The
    assistant gives one Proposal with a candidate for each of two Blocks. The
    inputs of the journey are fixed. Each of the two candidates meets the
-   marks rule of S10-REQ-004: its target Block is not empty, and its text is
+   marks rule of S10-REQ-004. The target Block of each candidate is not
+   empty. Each candidate has new words, and the text of each candidate is
    not almost all new. At least one mark replaces old words, and at least
    one candidate has a removal with no replacement. The editor shows marks
    on the new words of each candidate and a tick at each removal with no
