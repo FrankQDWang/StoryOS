@@ -54,6 +54,11 @@ The planned number of a Run is the number of the stop rule. Before each Run, the
 
 The run of part 1 stopped by its rule at R3 (section "Part 1: the stop at R3"). The coordinator decided the next steps ([decision](https://github.com/FrankQDWang/StoryOS/issues/1774#issuecomment-7061543995)): R1, R2, and R3 stay as evidence as they occurred, request 3 runs one more time as R3b with no selected Skill, and R4 runs as the plan of part 1 gave it. The plan of part 2 was posted before its first request ([plan of part 2](https://github.com/FrankQDWang/StoryOS/issues/1774#issuecomment-7061564246)). A rehearsal on `host_fake` came first: 2 Runs `completed`, 4 fake requests, and no refusal.
 
+| Run | Project | Author request | What the request shows |
+| --- | --- | --- | --- |
+| R3b | 归来 C, the same fixed paragraph | 请改写这一段，保留其中的情节。, with no selected Skill | Request 3 again, for one complete Run of that request: F1, F2, and whether the model loads a Skill from the catalog. The record gives the candidates of R3 and R3b for each measure, and it selects neither. |
+| R4 | 夜渡 D | as in part 1 | as in part 1 |
+
 | Run | Known steps that the number counts | Planned number of model requests | Planned number of reported input tokens |
 | --- | --- | --- | --- |
 | R3b | `load_skill`, `propose_edit`, `finish`, the final answer, and one more step | 5 | 30,000 |
@@ -99,7 +104,7 @@ The request guard counted 15 model requests, no Exa exchange, and no embedding r
 
 ### Part 1: the stop at R3
 
-R3 had no selected Skill. Its first request called `load_skill` for `local-revision` from the Skill catalog, its second request called `propose_edit`, and its third request called `finish`. The final answer would be the fourth request. The guard refused the claim of that request at the planned number of 3 (Worker warning with `sql_state` `P0001`). The Run did not end in 120 seconds, and the script stopped the run at 10:52:26 UTC and wrote the evidence at 10:52:28 UTC. No request of R4 of part 1 was sent. The executor reported the stop to the coordinator before the next request. R3 thus has a Proposal with one candidate and no final answer.
+R3 had no selected Skill. Its first request called `load_skill` for `local-revision` from the Skill catalog, its second request called `propose_edit`, and its third request called `finish`. The guard refused the claim of a fourth request at the planned number of 3 (Worker warning with `sql_state` `P0001`). The Run did not end in 120 seconds, and the script stopped the run at 10:52:26 UTC and wrote the evidence at 10:52:28 UTC. No request of R4 of part 1 was sent. The executor reported the stop to the coordinator before the next request. R3 thus has a Proposal with one candidate and no final answer.
 
 ## The request text in each Run
 
@@ -117,7 +122,7 @@ No request other than the request after the Proposal has the label. No Run made 
 
 ## R1: a new scene with no Project Instruction
 
-Run `01a1fdb6-4414-7891-aa14-1a9620861a08`, terminal state `completed`, 3 requests, 24,818 / 5,892 tokens. One Proposal with one candidate for the last Block of the Chapter. The first paragraph of the candidate is the original text of the Block. The paragraphs after it are the new scene. In each candidate of this record, one line break separates two paragraphs, and this record shows a blank line in its place:
+Run `01a1fdb6-4414-7891-aa14-1a9620861a08`, terminal state `completed`, 3 requests, 24,818 / 5,892 tokens. One Proposal with one candidate for the last Block of the Chapter. The first paragraph of the candidate is the original text of the Block. The paragraphs after it are the new scene. In each candidate and each final answer of this record, one line break separates two paragraphs or two items of a list, and this record shows a blank line in its place:
 
 > 林舟抬起头。对岸的码头上，有一个人影站在灯下，看不清脸，手里好像提着一个箱子。
 >
@@ -277,19 +282,19 @@ The section "The answer" of the package says: "In the final answer, give one lin
 
 - **Lines:** the answer has 5 numbered lines for the 5 changed places. Each line gives the first words of the Block in quotation marks, the habit, and the new words. The order of the lines is the order of the Blocks.
 - **Places that stay:** the answer says that 2 places stay: “「这不是一次普通的渡河，而是……」的「不是…而是」句式” (Block 5) and “「然而，雾越来越浓，水越来越急，岸越来越远」的「然而」加三连排比” (Block 8). The list of the planted habits of S10-04 (`inputs/planted-night-ferry.md`) gives Block 5 as the device of the sample, with the note "leave it". The answer calls it 机器腔.
-- **New selection, new request, or a change that is not in the Proposal:** the answer has no sentence on a new selection, and it speaks of no change that is not in the Proposal. One sentence speaks of a later request of the author: “你若要改，回我一句我再处理。” It is about Block 8 and Block 5, which stayed.
+- **New selection, new request, or a change that is not in the Proposal:** the answer has no sentence on a new selection. One sentence speaks of changes that are not in the Proposal and of a later request of the author: “按局部修改一份提案的规则没有一并改；你若要改，回我一句我再处理。” It is about Block 5 and Block 8, which stayed. It gives the rule of one Proposal for the local revision as the reason that these places did not change in the Proposal.
 
 ### Changes outside the words of the habit
 
-By the method of finding F11 of the [record of S10-04](agent-plan-live-local-revision-2026-11-21.md): for each candidate, the words of the original Block outside the words of its planted habit, and each change of these words.
+By the method of finding F11 of the [record of S10-04](agent-plan-live-local-revision-2026-11-21.md): for each candidate, what the original Block lost and what the candidate added, with each change of the words outside the words of its planted habit.
 
-| Block | Words of the habit | Changes outside the words of the habit |
-| --- | --- | --- |
-| 2 | 微微, 缓缓, 轻轻地, 仿佛 | 点头 became 点点头, and 早就知道 became 早知道. |
-| 4 | 的眼中闪过一丝慌乱，嘴角勾起一抹苦涩的弧度 | none. The habit became the new action 抿紧嘴，转头去看河上的雾. |
-| 6 | 这句话如同石子投入湖面，在林舟心里泛起层层涟漪 | none. The habit became the new sentence 林舟站着没动，也没再问. |
-| 9 | 心中涌起一股暖流，他终于明白 | 姐姐留下钥匙 became 林舟握住那把钥匙。姐姐留下它: a new action and a pronoun for the key. 想让 became 让, and 做决定 became 拿主意. The name 林舟 stayed at the start of the Block. |
-| 10 | the whole Block | none: the Block is the habit. The candidate is the new image 船头那盏防风灯在雾里亮着，船往对岸走. |
+| Block | Words of the habit | Lost | Added |
+| --- | --- | --- | --- |
+| 2 | 微微, 缓缓, 轻轻地, 仿佛 | no fact (only the habit); outside the habit, 点头 became 点点头, and 早就知道 became 早知道 | none |
+| 4 | 眼中闪过一丝慌乱，嘴角勾起一抹苦涩的弧度 | the words 慌乱 and 苦涩 (the habit) | the actions 抿紧嘴 and 转头去看河上的雾 |
+| 6 | 这句话如同石子投入湖面，在林舟心里泛起层层涟漪 | the effect of the words on 林舟 (the habit) | the action 林舟站着没动，也没再问 |
+| 9 | 心中涌起一股暖流，他终于明白 | the warm feeling and 终于明白 (the habit); outside the habit, 姐姐留下钥匙 became 姐姐留下它, 想让 became 让, and 做决定 became 拿主意 | the action 林舟握住那把钥匙, as a new first sentence. The name 林舟 stays at the start of the Block in this new sentence. |
+| 10 | the whole Block | the foreshadowing (the habit) | a new last image: 船头那盏防风灯在雾里亮着，船往对岸走 |
 
 ## F1: stock physical reactions
 
@@ -303,7 +308,7 @@ The table lists each stock physical reaction in the prose of each candidate, wit
 | R3b | 母亲……怔了一下 | 1 |
 | R4 | 老周抿紧嘴 | 1 |
 
-Not counted: R1 老钱……往船后摆了摆下巴 and R2 老周……把马灯举起来晃了三晃, a signal with an object of this scene. R1 林雪把箱子换到另一只手 and R2 林雪把箱子换到另一只手, an action with the case of this scene. R2 林雪点点头 and R4 老周点点头, a plain nod.
+Not counted: R1 老钱……往船后摆了摆下巴 and R2 老周……把马灯举起来晃了三晃, a signal with an object of this scene. R1 林雪把箱子换到另一只手 and R2 林雪把箱子换到另一只手, an action with the case of this scene. R2 林雪点点头 and R4 老周点点头, a plain nod. R3 声音哑得自己都没听出来 and R3b 声音哑, the voice of 林雪 after the trip in the rain. R3 她能听见自己的心跳, in section F2 as an item of the triad. R3 一把握住她的手 and R3b 把她的手攥在自己手里, the action of the mother that the reunion of the plot needs. R4 林舟站着没动，也没再问, an action of this scene that answers the words of 老周.
 
 ## F2: the habits of request 3 in another form
 
@@ -340,14 +345,14 @@ The route accepted each request. Each request of each Run had the block of the w
 | --- | --- | --- |
 | G1 | **Stock reactions that the rules do not name occur in each of the five Runs.** A stop of the step: 脚步顿了一下 (R1), 脚步停了一下 (R2). A short start: 愣了一下 (R2), 怔了一下 (R3, R3b). A movement of the mouth: 张了张嘴，没发出声音 (R3), 抿紧嘴 (R4). | Rule 4: `Habit: 眼中闪过一丝……；嘴角勾起一抹弧度；手停在半空；怔了一下；脚步顿了一下。` |
 | G2 | **In R3, two habits of the paragraph came back in another form** under the changed last sentence of the block: the triad as three clauses with the same three items, and a movement of the mouth in the place of the stock smile. R3b has the smile stated as absent. | none proposed. The changed last sentence already names "the same device in another form". |
-| G3 | **With no selected Skill, R3 loaded `local-revision` from the Skill catalog** for the request "请改写这一段，保留其中的情节。". The words of the model: “作者要求改写整段并保留情节，本段集中了大量机器腔套路，该技能的去机器腔改法适用。” The Run then changed the one Block, and its candidate keeps 41 of the 163 characters of the paragraph in order. R3b, with the same inputs, loaded no Skill, and its candidate keeps 16. | none proposed. The Skill catalog is out of the scope of the rule text. |
-| G4 | **The final answer of R4 calls the device of the sample 机器腔.** The Project Instruction asks for the voice of its sample, and Block 5 uses its contrast on purpose. The candidate did not change Block 5, and the answer lists it as one of 2 places that stay. | none proposed for the rule text. The text of the package is out of the scope of this ticket. |
+| G3 | **With no selected Skill, R3 loaded `local-revision` from the Skill catalog** for the request "请改写这一段，保留其中的情节。". The words of the model: “作者要求改写整段并保留情节，本段集中了大量机器腔套路，该技能的去机器腔改法适用。” The Run then changed the one Block, and its candidate keeps 41 of the 163 characters of the paragraph in order. R3b, with the same inputs, loaded no Skill, and its candidate keeps 16. The two Runs do not show a cause of this difference. | none proposed. The Skill catalog is out of the scope of the rule text. |
+| G4 | **The final answer of R4 calls the device of the sample 机器腔.** The Project Instruction asks for the voice of its sample, which has the contrast 不是……是……. Block 5 has the contrast 这不是……而是…… on purpose. The candidate did not change Block 5, and the answer lists it as one of 2 places that stay. | none proposed for the rule text. The text of the package is out of the scope of this ticket. |
 
 Other observations, with no proposed change of the rule text:
 
 | ID | Observation |
 | --- | --- |
-| P1 | The candidates of R4 change words outside the words of the habit in Blocks 2 and 9: 点点头, 早知道, 它, 让, and 拿主意 (section "Changes outside the words of the habit"). The name 林舟 stayed at the start of Block 9. |
+| P1 | The candidates of R4 change words outside the words of the habit in Blocks 2 and 9: 点点头, 早知道, 它, 让, and 拿主意. Block 9 also has the new first sentence 林舟握住那把钥匙, with the name 林舟 at its start (section "Changes outside the words of the habit"). |
 | P2 | The final answer of R4 has one line for each changed place and the count of the places that stay, and it speaks of no new selection. |
 | P3 | The scene of R2 has no event, object, or setting of the sample. Its sentences are longer than the sentences of the sample (median 15.5 and 8). |
 
