@@ -116,7 +116,7 @@ async fn the_one_proposal_rule_is_between_the_growth_rule_and_the_reference_rule
     let one_proposal = "StoryOS accepts one propose_edit call for the author request. Put the \
          changes that answer the request into that one call. After StoryOS accepts the call, the \
          Proposal waits for the decision of the author, and StoryOS refuses each later \
-         propose_edit call until the author sends a new message.";
+         propose_edit call until you get a new message of the author.";
     let references = "Author references show the exact text that the author selected for this \
          request. Use the author request to decide if you change the referenced text with \
          propose_edit or only use it. A change replaces all of a block: keep the text outside \

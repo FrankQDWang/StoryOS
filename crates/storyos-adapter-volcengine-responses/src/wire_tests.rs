@@ -383,6 +383,7 @@ fn a_continuation_sends_each_output_with_its_call_id_after_the_original_calls() 
     );
 }
 
+// ADR 0085: a replaced input has the exact label before the current input.
 #[test]
 fn an_incremental_continuation_with_a_changed_input_sends_the_current_input_before_the_outputs() {
     let DestinationRequest::Create(request) = crate::tests::create(

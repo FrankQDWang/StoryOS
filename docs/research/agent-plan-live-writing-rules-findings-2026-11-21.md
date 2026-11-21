@@ -120,6 +120,8 @@ The script compared the `instructions` of each wire payload with `writing-rules-
 
 No request other than the request after the Proposal has the label. No Run made a second `propose_edit` call, and the Host refused no call.
 
+After the run, review round 1 changed the last words of the paragraph of item 6 to "until you get a new message of the author.", and no Run repeats because no Run of this record had a steering input.
+
 ## R1: a new scene with no Project Instruction
 
 Run `01a1fdb6-4414-7891-aa14-1a9620861a08`, terminal state `completed`, 3 requests, 24,818 / 5,892 tokens. One Proposal with one candidate for the last Block of the Chapter. The first paragraph of the candidate is the original text of the Block. The paragraphs after it are the new scene. In each candidate and each final answer of this record, one line break separates two paragraphs or two items of a list, and this record shows a blank line in its place:
