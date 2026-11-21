@@ -524,19 +524,21 @@ it("retires a group with no effect whose chain the next group continues, as a pa
     await typeRun(workspace, text, 1, 1);
     expect(await submit()).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
     // Before #1758, the input after a group with no effect continued its chain. The test writes that shape: the record
-    // of the applied group moves into the chain of the first group.
+    // of the applied group moves into the chain of the first group. The code before #1758 writes it with no change.
     const written = await readJournalSnapshot(workspace);
     const [first, second] = written.payloadChains;
-    const transaction = workspace.database.transaction(["intents", "payload_chains"], "readwrite");
-    const completed = new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve();
-      transaction.onabort = () => reject(transaction.error);
-    });
-    transaction.objectStore("intents").put({ ...written.records[2]!, payload_chain_ref: first!.payload_chain_id });
-    transaction.objectStore("payload_chains").put({ ...first!,
-      ordered_patch_refs: [...first!.ordered_patch_refs, ...second!.ordered_patch_refs] });
-    transaction.objectStore("payload_chains").delete(second!.payload_chain_id);
-    await completed;
+    if (second !== undefined) {
+      const transaction = workspace.database.transaction(["intents", "payload_chains"], "readwrite");
+      const completed = new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onabort = () => reject(transaction.error);
+      });
+      transaction.objectStore("intents").put({ ...written.records[2]!, payload_chain_ref: first!.payload_chain_id });
+      transaction.objectStore("payload_chains").put({ ...first!,
+        ordered_patch_refs: [...first!.ordered_patch_refs, ...second.ordered_patch_refs] });
+      transaction.objectStore("payload_chains").delete(second.payload_chain_id);
+      await completed;
+    }
     await collectEligibleJournalPayload(workspace);
     const shared = await readJournalSnapshot(workspace);
     expect([shared.payloadChains.length, shared.groups.map((group) => group.payload_collection?.kind)])
