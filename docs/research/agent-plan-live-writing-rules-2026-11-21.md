@@ -2,7 +2,7 @@
 
 This record is the live evidence of [S10-02: Run the Writing Rules on the Real Route and Record the Result](https://github.com/FrankQDWang/StoryOS/issues/1762) for `S10-EVD-001` of [Deliver Stage 10: Author Voice](https://github.com/FrankQDWang/StoryOS/issues/1760). The run is an observation of the block of the default writing rules that the mapping `v10` sends in each tool-loop request ([ADR 0100](../adr/0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md) section 2, [#1761](https://github.com/FrankQDWang/StoryOS/issues/1761)). It compares no models and no prompts (ADR 0100 section 5). It states what the output shows, and it makes no claim about why the output has this form.
 
-Raw evidence is on the tag `evidence/1762-live-writing-rules-2026-11-21`, in `docs/research/agent-plan-live-writing-rules-2026-11-21/evidence/`. It holds the plan, the fixed inputs, the wire payload of each request (`wire/R1-M1.json` to `wire/R4-M2.json`), the Model Attempts, the ToolCalls, the measures of each Run, the checks of the stops, the request guard and its log, the Memory work schedules, the run script, and the Server and Worker logs. The tag has no database dump and no Project Export Archive.
+Raw evidence is on the tag `evidence/1762-live-writing-rules-2026-11-21`, in `docs/research/agent-plan-live-writing-rules-2026-11-21/evidence/`. It holds the plan, the fixed inputs, the wire payload of each request (`wire/R1-M1.json` to `wire/R4-M2.json`), the Model Attempts, the ToolCalls, the measures of each Run, the checks of the stops, the request guard and its log, the Memory work schedules, the run script, and the Server and Worker logs. The tag has no database dump and no Project Export Archive. Before the push, each file was examined for a key, an e-mail address, and a home path. One home path in `run.log` was replaced with `<evidence>/run.sh`, and no key and no e-mail address was found.
 
 ## Setup
 
@@ -35,14 +35,14 @@ The paragraph of Project C:
 
 ### Requests
 
-Each author request is one AgentRun in a new Conversation.
+Each author request is one AgentRun in a new Conversation. The plan has 4 Runs, one for each request, and the ticket permits at most 8.
 
 | Run | Project | Author request | What the request shows |
 | --- | --- | --- | --- |
-| R1 | A | 请接着这一章的结尾，写下一场。 | New prose with no Project Instruction. |
-| R2 | B | 请接着这一章的结尾，写下一场。 | The same request with a sample passage. |
-| R3 | C | 请改写这一段，保留其中的情节。 | A revision of a paragraph with eight classes of habit. |
-| R4 | A | 这一章里，林舟为什么一直不肯离开渡口？请直接回答，不用修改正文。 | A question that needs no prose of the novel. |
+| R1 | A | 请接着这一章的结尾，写下一场。 | New prose with no Project Instruction: each habit of the ten rules in the output. |
+| R2 | B | 请接着这一章的结尾，写下一场。 | The same request with a sample: the devices and the sentence length of the sample in the output. |
+| R3 | C | 请改写这一段，保留其中的情节。 | A revision of a paragraph with eight habit classes: the habits that stay. |
+| R4 | A | 这一章里，林舟为什么一直不肯离开渡口？请直接回答，不用修改正文。 | A question with no prose of the novel: a normal answer, and if it names or quotes the rules. |
 
 ### Planned count
 
@@ -54,7 +54,7 @@ Each author request is one AgentRun in a new Conversation.
 | R4 | 2 (`finish`, final answer) | 5 | 4,500 to 5,000 |
 | **Total** | **11** | **20** | about 56,000 tokens in all |
 
-The plan limits were 8 Runs, 20 model requests, 150,000 reported input tokens in all, and 30,000 tokens for one request. The script stopped the run at each of these limits, at a background request, an embedding request, an Exa exchange, or a refused or cancelled Run of the author.
+The ticket permits at most 8 Runs, and the plan has 4. The script stopped the run above 20 model requests, 150,000 reported input tokens in all, or 30,000 tokens for one request, and at a background request, an embedding request, an Exa exchange, or a refused or cancelled Run of the author. The script had no check for the limit of 5 requests for one Run. The plan also stopped the run for a refusal of the route, or for a key, an e-mail address, or a home path in a payload or a log.
 
 ## Live request log
 
@@ -87,7 +87,7 @@ Each row is one Model Attempt that the guard counted. The time is the time at wh
 
 Final count: **4 AgentRuns, 12 model requests, 85,161 reported input tokens, and 20,754 output tokens**. The request guard counted 12 model requests, no Exa exchange, and no embedding request. Each Model Attempt is `settled`, each Run is `completed`, and no background request occurred: the Memory work of the three Projects was due 26 to 52 minutes after the end of the run, and the Worker stopped first (`schedules.json`).
 
-**Deviation from the plan.** R1 had 4 requests, and the plan had 3 (observation O2). The reported input of most requests was above the expected range (observation O4). "Live model requests" of the delivery document says to stop and report to the coordinator for more requests than the plan. The run did not stop: the script stopped only at the limits of the plan, and the fourth request of R1 was inside the limit of 5 requests for one Run and inside the limit of 20 requests in all. The executor reported the extra request to the coordinator after the run, in the findings message before the review request. The coordinator kept O2 as an observation with no change ([decision comment](https://github.com/FrankQDWang/StoryOS/issues/1762#issuecomment-7060548887)). No Run was repeated.
+**Deviation from the plan.** R1 had 4 requests, and the plan had 3 (observation O2). The reported input of most requests was above the expected range (observation O4). "Live model requests" of the delivery document says to stop and report to the coordinator for more requests than the plan. The run did not stop: the script had no stop at the planned number of a Run, and no check for the limit of 5 for one Run. The four requests of R1 were inside that limit and inside the limit of 20 in all. The executor reported the extra request to the coordinator after the run, in the findings message before the review request ([findings message](https://github.com/FrankQDWang/StoryOS/issues/1762#issuecomment-7060548887)). After the run, the coordinator decided to accept the four Runs as the evidence of the ticket, with no repeat of a Run ([decision comment](https://github.com/FrankQDWang/StoryOS/issues/1762#issuecomment-7060590530)).
 
 ## The block in each Run
 
@@ -102,7 +102,7 @@ The script compared the `instructions` of each wire payload with `inputs/writing
 
 ## R1: a new scene with no Project Instruction
 
-Run `01a1fd4b-fad9-75d0-8007-ca423e6a5bbf`, terminal state `completed`, 4 requests, 34,454 / 10,371 tokens. One Proposal with one candidate for the last Block of the Chapter. The candidate keeps the first sentence of the Block and adds the scene:
+Run `01a1fd4b-fad9-75d0-8007-ca423e6a5bbf`, terminal state `completed`, 4 requests, 34,454 / 10,371 tokens. One Proposal with one candidate for the last Block of the Chapter. The candidate keeps the original text of the Block, its first line, and adds the scene:
 
 > 林舟抬起头。对岸的码头上，有一个人影站在灯下，看不清脸，手里好像提着一个箱子。
 >
@@ -235,7 +235,7 @@ The final answer:
 ### The sample and the output
 
 - **The devices of the sample.** The rule text says: "When a sample uses a device that a rule names, follow the sample." The sample has one dash for an interruption, “我站在门口，想说点什么——”, and one contrast, “她不是忘了收，而是每天都擦。”. The candidate of R2 has no dash and no contrast of the form 不是……而是……. Where the scene stops on a thing that a character does not say, the candidate uses plain sentences, for example “林舟的手在口袋里碰到那张车票，她没问那个圈。” and “母亲看着她，看了一会儿。”
-- **The sentence length.** A sentence ends at 。, ！, or ？, with the quotation marks removed. A length is the count of characters with the end mark. The sample has 21 sentences, with a mean of 12.4 and a median of 8 characters. The scene of R2 has 57 sentences, with a mean of 14.9 and a median of 14. The scene of R1 has a mean of 14.2 and a median of 12. The Chapter has a mean of 20.6 and a median of 21.
+- **The sentence length.** A sentence ends at 。, ！, or ？, with the quotation marks removed. A length is the count of characters with the end mark. The sample has 21 sentences, with a mean of 12.4 and a median of 8 characters. The scene of R2 has 57 sentences, with a mean of 14.9 and a median of 14. The scene of R1 has 46 sentences, with a mean of 14.2 and a median of 11.5. The Chapter has a mean of 20.6 and a median of 21.
   - Short sentences of narration in the sample: “天黑得早。” (5), “她不再问。” (5), “母亲在灶前添柴。” (8), “火光照着她半边脸。” (9).
   - Sentences of the median length in R2: “雨密了，对岸的灯糊成一团黄。” (14), “经过候船棚，她回头看了一眼。” (14).
   - The longest sentences: in the sample, “那第三碗面一直放到凉透，汤上结了一层油，她才端起来，倒进了鸡食盆里。” (34); in R2, “雨衣小，盖不住两个人，林雪把它往林舟那边推了推，自己半个肩膀露在雨里。” (35).
@@ -283,23 +283,23 @@ The answer is a normal answer about the Chapter. It does not name, quote, or des
 
 ## Habits in the output of R1, R2, and R3
 
-The table lists each habit of the ten rules in the prose of each candidate, with the quoted words. For R1 and R2 the prose is the new scene after the kept first sentence. A use of a device that its rule permits is not a habit, and the column "Not counted" gives it with the reason. The executor made each judgement by reading. The final answers are not prose of the novel, and the table does not count them.
+The table lists each habit of the ten rules in the prose of each candidate, with the quoted words. For R1 and R2 the prose is the new scene after the kept original text of the Block, its first line. A use of a device that its rule permits is not a habit, and the column "Not counted" gives it with the reason. The executor made each judgement by reading. The final answers are not prose of the novel, and the table does not count them.
 
 | Rule | R1 | R2 | R3 | Not counted |
 | --- | --- | --- | --- | --- |
 | 1. Contrast | 0 | 0 | 0 | none |
 | 2. Meaning or future at the end | 0 | 0 | 0 | none: R1 ends on a line of speech, R2 and R3 on an event |
 | 3. Feeling shown and explained | 0 | 0 | 0 | none |
-| 4. Stock physical reaction | 1: 到了半空又落下去 | 0 | 2: 嘴角动了动，没笑出来; 伸出手，又在半空中停住 | none |
-| 5. Word of degree or doubt | 0 | 0 | 0 | R1 像是要碰她的头发 and R2 也许是林舟长高了: the viewpoint character does not know |
+| 4. Stock physical reaction | 1: 到了半空又落下去 | 0 | 2: 嘴角动了动，没笑出来; 伸出手，又在半空中停住 | R2 手攥着雨衣的扣子, 在围裙上擦了擦手, and 手里还攥着那只鞋底: each hand holds an object of this scene. R1 看了她一会儿 and R2 看着她，看了一会儿: a plain action with no stock phrase. |
+| 5. Word of degree or doubt | 0 | 0 | 0 | R1 像是要碰她的头发, R2 也许是林舟长高了, and R2 像没装什么: the viewpoint character does not know the aim, the cause, or the content of the case. R3 碗停在手里，过了片刻才放下 writes the event of 微微一怔，缓缓放下手中的碗 again with no word of degree. |
 | 6. Stock figure of speech | 0 | 0 | 0 | none |
-| 7. Count, length, connective words | 0 | 0 | 1: 雨打在瓦上，风穿过院子，潮意贴着地面漫过来 | none |
+| 7. Count, length, connective words | 1: 她剪了短发，人比照片上瘦，一件灰外套大了一号，肩膀塌着，裤脚从膝盖往下全湿了 (five parallel items) | 1: 箱子是皮的，旧得发黑，一角磨白了，中间拦腰捆了一道绳子 (four parallel items) | 1: 雨打在瓦上，风穿过院子，潮意贴着地面漫过来 | none |
 | 8. One voice in dialogue | 0 | 0 | 0 | no dialogue in R3 |
 | 9. Conflict with no cost | 0 | 0 | 0 | the question of the ticket stays open at the end of R1 and R2 |
 | 10. Dash and paragraph of one sentence | 0 | 0 | 0 | No dash in the three candidates. Narrative paragraphs of one sentence: R1 has 5 of 25 paragraphs (for example 走出十几步，林雪停下。), R2 has 2 of 22 (两个人隔着几步站住。), R3 has 1 of 3 (林雪终于回来了。). Each is a pause next to a line of speech or the first sentence of the scene. |
-| **Total** | **1** | **0** | **3** | |
+| **Total** | **2** | **1** | **3** | |
 
-The paragraph of Project C had habits of eight rules. The candidate of R3 has no phrase of the habits of the rules 1, 2, 3, 5, 6, and 10 of the paragraph: 这不是结束，而是开始, 命运的齿轮, 她不知道的是, 心中涌起一股暖流, 微微, 缓缓, 如同石子投入湖面, 然而，与此同时, and the dash are not in it.
+The paragraph of Project C had habits of eight rules. The candidate of R3 has no phrase of the habits of the rules 1, 2, 3, 5, 6, 7 (the connective words), and 10 of the paragraph: 这不是结束，而是开始, 命运的齿轮, 她不知道的是, 心中涌起一股暖流, 微微, 缓缓, 如同石子投入湖面, 然而，与此同时, and the dash are not in it.
 
 ## Findings
 
@@ -315,10 +315,10 @@ Other observations, with no proposed change of the rule text:
 
 | ID | Observation |
 | --- | --- |
-| O1 | The sentences of R2 are not as short as the sentences of the sample. The median sentence has 8 characters in the sample, 14 in R2, 12 in R1 with no sample, and 21 in the Chapter. R2 used neither device of the sample: no dash and no contrast of the form 不是……而是……. The rule text says: "When a sample uses a device that a rule names, follow the sample." Section "R2" gives the quoted sentences. |
+| O1 | The sentences of R2 are not as short as the sentences of the sample. The median sentence has 8 characters in the sample, 14 in R2, 11.5 in R1 with no sample, and 21 in the Chapter. R2 used neither device of the sample: no dash and no contrast of the form 不是……而是……. The rule text says: "When a sample uses a device that a rule names, follow the sample." Section "R2" gives the quoted sentences. |
 | O2 | R1 sent the same `propose_edit` call again after the result said that the Proposal opened. The Host refused it with `after_proposal`, and the Run then called `finish`. Thus R1 had 4 requests, and the plan had 3 (section "Final count"). This is a behaviour of the tool loop, not of the rule text. |
-| O3 | A Run can change only an existing target Block. R1 and R2 each put the new scene into the candidate of the last Block of the Chapter, after its kept first sentence, with line breaks inside the one Block: R1 with blank lines, R2 with single line breaks. |
-| O4 | The reported input was 85,161 tokens, and the plan expected about 56,000. The first request of a Run on the Chapter had 5,600 to 5,938 tokens, and the plan expected 4,500. The first request of R1 reported 8,247 output tokens for a candidate of 772 characters. Each value is inside the limits of the plan. |
+| O3 | A Run can change only an existing target Block. R1 and R2 each put the new scene into the candidate of the last Block of the Chapter, after its kept original text, with line breaks inside the one Block: R1 with blank lines, R2 with single line breaks. |
+| O4 | The reported input was 85,161 tokens, and the plan expected about 56,000. The first requests of R1 and R2 were inside the expected ranges. The first request of R4 had 5,600 tokens, and the plan expected 4,500 to 5,000. Eight of the 12 requests were above their expected range. The first request of R1 reported 8,247 output tokens for a candidate of 722 characters. Each value is inside the limits of the plan. |
 | O5 | The question R4 got a normal answer with one call of `finish` and no Proposal. The answer does not name or quote the rules. |
 
 ## What this run does not show
