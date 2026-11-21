@@ -39,7 +39,7 @@ The run kept its plan.
 | Item | Value |
 | --- | --- |
 | Product code | `1765-scene-brief` at `2c7c8d70519066705e5b48928bef30510c8d6e15` (tree `0791861fbe15c0ad45e5afb9aa80f96730f76344`), on `stage10-author-voice` `050d7102`. |
-| Release package | `python3 scripts/package-release.py` on the clean commit, manifest `sha256:ed6440efaada5c6f19c6d6e9e8466a227e6487421745cc9b054c2a724197b27b`. Its `skill-packages/` has `conflict-check`, `local-revision`, and `scene-brief`. `skill-packages/scene-brief/SKILL.md` of the release package has the bytes of the tracked file (SHA-256 `9ff25b4cbe4011223b0b58ba9eace5bf81c90047622c1ac35a5bcdb5998ee259`). |
+| Release package | `python3 scripts/package-release.py` on the clean commit, manifest `sha256:ed6440efaada5c6f19c6d6e9e8466a227e6487421745cc9b054c2a724197b27b`. Its `skill-packages/` has `conflict-check`, `local-revision`, and `scene-brief`. `skill-packages/scene-brief/SKILL.md` of the release package has the bytes of the tracked file at `2c7c8d70`, the text of the Runs (SHA-256 `9ff25b4cbe4011223b0b58ba9eace5bf81c90047622c1ac35a5bcdb5998ee259`). |
 | Topology | ADR 0022 production surface: `storyos-server` with `STORYOS_WORKER=0`, `STORYOS_MODEL_DESTINATION=volcengine_agent_plan`, and `STORYOS_SKILLS_DIR` set to `target/release-package/skill-packages`, and one continuous `storyos-worker` with `STORYOS_MODEL_DESTINATION=volcengine_agent_plan`. Both from the release package. Each process environment had only the named variables, `STORYOS_DATABASE_URL`, `PATH`, and `HOME`, and the Server also had the test settings `STORYOS_BOOTSTRAP_SESSIONS` and `STORYOS_CHALLENGE_SECRET`. It had no embedding destination and no `STORYOS_EXA_API_KEY`. |
 | Settings | ADR 0050: the Worker resolved the key through its typed settings. The run never read, copied, or printed an env file or a key. |
 | Database | A new `scripts/dev-postgres.sh with` database. The only direct write was the guard schema `live_guard`. The database was removed after the run. |
@@ -51,10 +51,10 @@ The run kept its plan.
 
 | Text | `SKILL.md` SHA-256 | Runs |
 | --- | --- | --- |
-| The text of the live run | `9ff25b4cbe4011223b0b58ba9eace5bf81c90047622c1ac35a5bcdb5998ee259` | 1 and 2 (Run 3 had only the catalog line) |
+| The text of the live run, product commit `2c7c8d70` | `9ff25b4cbe4011223b0b58ba9eace5bf81c90047622c1ac35a5bcdb5998ee259` | 1 and 2 (Run 3 had only the catalog line) |
 | With the corrected conditions of the sections "When it applies", "The brief", and "The writing" (the head of this change) | `deeb949f94f6554dd3f536e8f58812a8c3f6bfb4b902a4b4596ce4e07f436e62` | none |
 
-A pre-review after the live run found two inputs for which two sentences of the text of the live run give different instructions: an answer to a brief that asks for a new brief ("write the scene" and "give the new brief"), and a complete request in a later turn of a Conversation that had a brief ("by the brief" and "by those items"). The correction makes the conditions exclusive, with no new Run, as the coordinator decided for the same case of `local-revision` ([decision on #1764](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7061123227)). The diff:
+A pre-review after the live run found two inputs for which two sentences of the text of the live run give different instructions: an answer to a brief that asks for a new brief ("write the scene" and "give the new brief"), and a complete request in a later turn of a Conversation that had a brief ("by the brief" and "by those items"). The correction makes the conditions exclusive. No Run repeats ([decision on #1765](https://github.com/FrankQDWang/StoryOS/issues/1765#issuecomment-7061627195), as for the same case of `local-revision` in the [decision on #1764](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7061123227)): for the input of each Run, the corrected sentences give the same instruction, as the list after the diff shows. The diff:
 
 ```diff
 @@
@@ -123,7 +123,7 @@ Each row is one Model Attempt that the guard counted. The time is the claim time
 
 Total: **9 model requests, 69,724 reported input tokens, and 18,538 output tokens** (Run 1: 22,335 / 3,878; Run 2: 27,631 / 7,153; Run 3: 19,758 / 7,507). No Retrieve, no recovery, and no refused call occurred.
 
-Each request declared the same 13 functions: `web_search`, `web_fetch`, `propose_edit`, `submit_research`, `read_tool_result`, `load_skill`, `read_skill_resource`, `read_chapter`, `search_manuscript`, `write_memory`, `read_memory_entry`, `search_memory`, and `finish`. The requests with a user message (M1, M4, M5, M7, and M8) had the section `Skill catalog` with the three lines of `conflict-check`, `local-revision`, and `scene-brief`. Only M1 had the section `Skill instruction`, with the exact bytes of `skill-packages/scene-brief/SKILL.md` (byte comparison: equal). The other requests sent only a function output. The instructions of each request had the default rules for prose.
+Each request declared the same 13 functions: `web_search`, `web_fetch`, `propose_edit`, `submit_research`, `read_tool_result`, `load_skill`, `read_skill_resource`, `read_chapter`, `search_manuscript`, `write_memory`, `read_memory_entry`, `search_memory`, and `finish`. The requests with a user message (M1, M4, M5, M7, and M8) had the section `Skill catalog` with the three lines of `conflict-check`, `local-revision`, and `scene-brief`. Only M1 had the section `Skill instruction`, with the exact bytes of `skill-packages/scene-brief/SKILL.md` at `2c7c8d70`, the text of the Runs (SHA-256 `9ff25b4c`; byte comparison: equal), and not of the head text. The other requests sent only a function output. The instructions of each request had the default rules for prose.
 
 ## Run 1: the selected Skill, the request for the next scene
 
