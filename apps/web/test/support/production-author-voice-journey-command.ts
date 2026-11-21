@@ -80,12 +80,18 @@ export async function verifyProductionAuthorVoiceJourney(context: BrowserContext
     await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
     await page.locator(`button[data-chapter-id="${setup.chapterId}"]`).click();
     await page.locator('[data-manuscript-editor][contenteditable="true"]').click();
+    // Each input is saved before the next one, so each gives one Author Edit.
+    const saved = async (texts: string[]) => {
+      await expect.poll(async () => (await chapter()).chapter.current_revision.blocks.map((block) => block.text))
+        .toEqual(texts);
+      await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    };
     await page.keyboard.insertText(FIRST);
+    await saved([FIRST]);
     await page.keyboard.press("Enter");
+    await saved([FIRST, ""]);
     await page.keyboard.insertText(SECOND);
-    await expect.poll(async () => (await chapter()).chapter.current_revision.blocks.map((block) => block.text))
-      .toEqual([FIRST, SECOND]);
-    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    await saved([FIRST, SECOND]);
     const blocks = (await chapter()).chapter.current_revision.blocks.map((block) => block.manuscript_block_id);
     const target = (index: number) => page.locator(`[data-manuscript-editor] p[data-id="${blocks[index]}"]`);
 
@@ -129,10 +135,15 @@ export async function verifyProductionAuthorVoiceJourney(context: BrowserContext
     await expect(target(1).locator(DECORATIONS)).toHaveCount(0);
 
     // 4. The author types words into the second candidate. They have a mark, and the other marks stay.
-    await candidates[1]!.locator(".block-proposal-text").click();
+    // The location link of the panel puts the caret into the candidate.
+    await page.locator(`[data-proposal-location="${outcomes[1]!.operation_id}"]`).click();
+    await expect(candidates[1]!).toHaveAttribute("data-proposal-focused", "true");
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.anchorNode?.parentElement
+      ?.closest("[data-proposal-operation-id]")?.getAttribute("data-proposal-operation-id")))
+      .toBe(outcomes[1]!.operation_id);
     await page.keyboard.press("End");
     await page.keyboard.press("ArrowLeft");
-    await page.keyboard.type(" now");
+    await page.keyboard.insertText(" now");
     await page.mouse.move(0, 0);
     await expect.poll(() => shown(candidates[1]!)).toBe(TYPED);
     assert.equal(await shown(candidates[0]!), SHOWN[0]);
@@ -147,7 +158,7 @@ export async function verifyProductionAuthorVoiceJourney(context: BrowserContext
     await candidates[0]!.locator("[data-proposal-reject]").click();
     await expect.poll(async () => (await getProposal({ baseUrl: server.baseUrl, projectId: setup.projectId,
       fetchImpl: setup.fetchImpl, proposalId })).proposal.operations.map((operation) => operation.resolution))
-      .toEqual(["rejected", "accepted"]);
+      .toEqual(["rejected", "applied"]);
     await expect(page.locator("[data-manuscript-editor] [data-proposal-id]")).toHaveCount(0);
     await expect(page.locator(`[data-manuscript-editor] :is(${DECORATIONS})`)).toHaveCount(0);
     assert.deepEqual((await chapter()).chapter.current_revision.blocks.map((block) => block.text), [FIRST, EDITED]);
@@ -167,15 +178,18 @@ export async function verifyProductionAuthorVoiceJourney(context: BrowserContext
     await page.locator(`[data-assistant-run-id="${check.body.effect.run_id}"][data-assistant-dispatch="completed"]`)
       .waitFor();
     await expect(page.locator("[data-assistant-current-run] .assistant-result")).toHaveText(ADVICE);
-    await expect(page.locator("[data-sent-skill-label]")).toHaveText(["$conflict-check"]);
+    // The panel keeps the earlier exchange above the boundary of the new Conversation.
+    await expect(page.locator("[data-assistant-current-run] .assistant-conversation-boundary")).toHaveText("新对话");
+    await expect(page.locator("[data-assistant-current-run] [data-sent-skill-label]")).toHaveText(["$conflict-check"]);
     await expect(page.locator("[data-assistant-current-run] [data-assistant-skill-uses] li"))
       .toHaveText(["使用了你选择的技能「conflict-check」"]);
     await expect(page.locator("[data-manuscript-editor] [data-proposal-id]")).toHaveCount(0);
     assert.deepEqual(errors, []);
 
     await assertProjectReceipts([setup.projectId], { projects: 1, receipts: { createProject: 1,
-      updateProjectAssistance: 1, createVolume: 1, createChapter: 1, applyAuthorEdit: 1, createAgentRun: 2,
-      editProposalCandidate: 1, acceptProposal: 1, rejectProposalOperations: 1 } });
+      updateProjectAssistance: 1, createVolume: 1, createChapter: 1, setCurrentChapter: 1,
+      // Three edits of the manuscript and one edit of the candidate.
+      applyAuthorEdit: 4, createAgentRun: 2, acceptProposal: 1, rejectProposalOperations: 1 } });
   } finally {
     for (const close of started.reverse()) await close();
   }
