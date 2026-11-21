@@ -4,6 +4,7 @@ import exportedFixture from "../../../../generated/golden-wire/storyos-public-re
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import openProposalsFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.json";
 import skillsFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-skills.json";
+import statisticsFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-statistics.json";
 import routeCatalog from "../../../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json";
 import readyExportFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json";
 import { digestExportHumanReadableManuscript, type ExportHumanReadableManuscriptRequest }
@@ -98,8 +99,15 @@ function journalServer(scenario: ReturnType<typeof createBrowserScenario>) {
       });
     }
     if (route === `GET /api/v1/projects/${PROJECT}/manuscript/statistics`) {
-      return jsonResponse({ schema_id: "storyos.problem.v1", code: "projection_not_ready",
-        message: "The statistics projection is not ready." }, 409);
+      // The Ready answer of the Server (`crates/storyos-server/src/manuscript_statistics.rs:50`) for the one Chapter of
+      // the Project, with the Server text "Base", at the activity position "0" of the scenario. The watermark and the
+      // generation are that position, and page_bytes is the byte length of the JSON totals.
+      const fixture = forProject(statisticsFixture);
+      const manuscript = { chapter_count: "1", word_count: "1", character_count: "4" };
+      return jsonResponse({ ...fixture, manuscript, page_bytes: String(JSON.stringify(manuscript).length),
+        current_chapter: { chapter_id: CHAPTER, word_count: "1", character_count: "4" },
+        projection_generation: "0", projection_watermark: "0",
+        source_snapshot: { ...fixture.source_snapshot, project_activity_position: "0" } });
     }
     if (route === `POST /api/v1/projects/${PROJECT}/anti-forgery-challenges`) {
       const challenge = JSON.parse(String(init?.body)) as Challenge;
