@@ -33,7 +33,7 @@ For each conflict, give these three items:
 - The words of the source, with the number of its Chapter, or with the Memory Entry.
 - One sentence that says what does not agree.
 
-Do not decide which side is correct.
+Do not decide which side is correct. List only the conflicts. Do not list the facts that agree.
 
 After the list, say what you compared: the Chapters that you read, the searches that you made, and what you did not read.
 
