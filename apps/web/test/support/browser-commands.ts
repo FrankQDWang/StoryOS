@@ -31,6 +31,7 @@ import { verifyProductionProjectConversations } from "./production-project-conve
 import { verifyProductionMemorySettings } from "./production-memory-settings-command.ts";
 import { verifyProductionProjectSettings } from "./production-project-settings-command.ts";
 import { verifyProductionStage7Journey } from "./production-stage7-journey-command.ts";
+import { verifyProductionAuthorVoiceJourney } from "./production-author-voice-journey-command.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
@@ -136,6 +137,8 @@ export const storyOSBrowserCommands = {
         await verifyProductionMemorySettings(context.context);
       } else if (request.scenario === "stage7_journey") {
         await verifyProductionStage7Journey(context.context);
+      } else if (request.scenario === "author_voice_journey") {
+        await verifyProductionAuthorVoiceJourney(context.context);
       } else if (request.scenario === "run_evidence") {
         await verifyProductionRunEvidence(context.context);
       } else if (request.scenario === "captured_memory") {
