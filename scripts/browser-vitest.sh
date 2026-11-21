@@ -31,9 +31,9 @@ run_vitest() {
   run=$!
   while kill -0 "$run" 2>/dev/null; do
     if connected_to_no_browser; then
-      python3 "$root/scripts/check-lanes.py" --stop-run "$$" "$run"
+      python3 "$root/scripts/check-lanes.py" --stop-run "$$" "$run" "$work"
       case $? in
-        0) break ;;
+        0) ;;
         2) wait "$run"; end_line
            echo "browser-vitest: the run connected to no browser session and did not exit, so it was stopped"
            return 1 ;;
@@ -55,7 +55,8 @@ run_vitest() {
 
 connected_to_no_browser() {
   # Only the error line and the last "Tests" line (the summary of Vitest) count, also with colors.
-  sed "s/$(printf '\033')\[[0-9;]*m//g" "$work/output" > "$work/plain" || return 1
+  cp "$work/output" "$work/seen" || return 1
+  sed "s/$(printf '\033')\[[0-9;]*m//g" "$work/seen" > "$work/plain" || return 1
   grep -Eq '^Error: Failed to connect to the browser session ' "$work/plain" \
     && grep -E '^[[:space:]]*Tests[[:space:]]' "$work/plain" | tail -n 1 \
       | grep -Eq '^[[:space:]]*Tests[[:space:]]+no tests[[:space:]]*$'

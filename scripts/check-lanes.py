@@ -7,8 +7,8 @@ A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -e
 --project-scope adds the parts of `make check-full` after the lanes `build` and `package`: the storage activation
 checks, the exact-dist journeys in shards, and the two modes of the recovery drill.
 `scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; scripts/browser-vitest.sh runs it
-before each browser Vitest run. `scripts/check-lanes.py --stop-run SCRIPT RUN` stops a run of that script that does
-not exit.
+before each browser Vitest run. `scripts/check-lanes.py --stop-run SCRIPT RUN WORK` stops a run of that script that
+does not exit.
 When a lane fails or does not end in LANE_TIME_LIMIT_SECONDS, the runner stops the lanes, prints the log of that
 lane, and exits with 1. At the end, the runner prints the count of the second runs of scripts/browser-vitest.sh.
 """
@@ -425,15 +425,23 @@ def end_processes(snapshot):
     return False
 
 
-def stop_run(script, run):
-    """Wait NO_EXIT_SECONDS for the end of the run. Then stop each descendant of the script, but not this process.
+def stop_run(script, run, work):
+    """Wait NO_EXIT_SECONDS for the end of the run or for output after <work>/seen, the output that the script examined.
 
-    Return 0 when the run ended, 2 when the stop ended the processes of the run, and 1 when they are not verified.
+    Without either, stop each descendant of the script, but not this process. Return 0 when the run ended or has more
+    output, 2 when the stop ended the processes of the run, and 1 when they are not verified.
     """
     try:
-        if wait_until(lambda table: run not in table or table[run][2].startswith("Z"), NO_EXIT_SECONDS):
+        output, seen = Path(work) / "output", (Path(work) / "seen").stat().st_size
+
+        def moved(table):
+            return run not in table or table[run][2].startswith("Z") or output.stat().st_size != seen
+
+        if wait_until(moved, NO_EXIT_SECONDS):
             return 0
         table = process_table()
+        if moved(table):
+            return 0
         own = {os.getpid(), *descendants(table, [os.getpid()])}
         if end_processes({pid: started for pid, started in descendants(table, [script]).items() if pid not in own}):
             return 2
@@ -588,8 +596,8 @@ def run_lanes(root, lanes, final_checks, started):
 
 
 def main():
-    if sys.argv[1:2] == ["--stop-run"] and len(sys.argv) == 4:
-        return stop_run(int(sys.argv[2]), int(sys.argv[3]))
+    if sys.argv[1:2] == ["--stop-run"] and len(sys.argv) == 5:
+        return stop_run(int(sys.argv[2]), int(sys.argv[3]), sys.argv[4])
     root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True,
                                         timeout=TOOL_SECONDS).strip())
     if sys.argv[1:] == ["--browser-start"]:
