@@ -26,7 +26,7 @@ import { flattenChapterBody } from "./manuscript-doc.ts";
 import type { CapturedManuscriptEdit } from "./manuscript-doc.ts";
 
 import {
-  MAX_WORKING_JOURNAL_ITEMS, readJournalWorkingBoundary, retireCollectedJournalPrefix,
+  MAX_WORKING_JOURNAL_ITEMS, readJournalWorkingBoundary, retireCollectedJournalPrefix, type ClosedJournalGroup,
 } from "./journal-working-set.ts";
 import { uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
@@ -927,9 +927,31 @@ export async function rebuildPendingProjection(
   return pendingProjectionFromSnapshot(workspace, snapshot);
 }
 
+/**
+ * Tells if a settled group that the collection did not take can leave the working set with the collected prefix
+ * (ADR 0036). No later work needs such a group: its records are resolved, and no record after the prefix binds it.
+ */
+function closedJournalGroup(snapshot: ValidatedJournalSnapshot, base: EditorBaseSnapshot): ClosedJournalGroup {
+  return (group, later) => {
+    const settlement = group.settlement;
+    if (group.payload_collection !== undefined || group.reconciliation !== undefined) return false;
+    // A collected applied group after it in the prefix installs a later base (kind 2 of #1758).
+    if (settlement.kind === "applied_receipt_settled") return true;
+    if (settlement.kind !== "zero_authority_receipt_settled") return false;
+    if (settlement.effect.kind === "no_effect") return provenNoEffectAgainstDurableBase(group, snapshot, base);
+    const revised = group.frozen_request_body.proposal_target?.revision_id;
+    // `proposalSuccessors` maps the revised Revision only for a record that targets it.
+    return settlement.effect.kind === "proposal_revised" && revised !== undefined
+      && group.frozen_request_body.chapter_id === base.chapter_id
+      && !later.some((record) => record.proposal_target !== undefined
+        && (record.proposal_target.revision_id === revised || record.expected_proposal_heads.includes(revised)));
+  };
+}
+
 async function prepareJournalAppend(workspace: EditorWorkspace) {
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
-  if (await retireCollectedJournalPrefix(workspace, snapshot)) {
+  if (await retireCollectedJournalPrefix(workspace, snapshot,
+    closedJournalGroup(snapshot, workspace.session.base_snapshot))) {
     return validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   }
   return snapshot;
@@ -1306,6 +1328,9 @@ async function persistAuthorEditUnit(
     ? activeChains.find((chain) => chain.payload_chain_id === lastRecord.payload_chain_ref) : undefined;
   const runFirst = followerChain && snapshot.records.find((item) =>
     item.payload_chain_ref === followerChain.payload_chain_id);
+  // Input after a settled group starts a new chain, also when the base did not change (ADR 0065).
+  const baseChains = activeChains.filter((chain) => isOpenPayloadChainForBase(chain, base.snapshot_id,
+    edit.candidate?.target) && !coveredSequences.has(chain.ordered_patch_refs.at(-1)?.local_intent_sequence ?? 0));
   const expectedProposalHeads = edit.candidate?.expectedProposalHeads ?? base.proposal_head_revision_ids;
   const ownership = edit.candidate === undefined ? base.observed_ownership_partition : "mixed";
   // The fields of this record that decide whether it continues the run.
@@ -1320,10 +1345,8 @@ async function persistAuthorEditUnit(
   const existingPayloadChain = followsGroup
     ? followerChain !== undefined && mayAppendJournalSubmissionRecord(runFirst!, lastRecord!, probe!)
       ? followerChain : undefined
-    : activeChains.find((chain) => isOpenPayloadChainForBase(chain, base.snapshot_id, edit.candidate?.target));
-  if ((!followsGroup && activeChains.filter((chain) => isOpenPayloadChainForBase(
-    chain, base.snapshot_id, edit.candidate?.target,
-  )).length > 1)
+    : baseChains.at(0);
+  if ((!followsGroup && baseChains.length > 1)
     || (existingPayloadChain?.ordered_patch_refs.length ?? 0) >= AUTHOR_EDIT_MAX_UNITS) {
     transaction.abort();
     throw new Error("Local Edit Journal limit failed");
