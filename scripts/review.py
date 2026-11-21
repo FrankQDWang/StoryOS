@@ -238,7 +238,8 @@ def earlier_rounds(pull, number):
             if [heading[1] for heading in headings[:2]] != ["Blocking", "Non-blocking"]:
                 raise Refused(f"The verdict comment {comment['url']} has no Blocking list before its Non-blocking list")
             blocking = comment["body"][headings[0].end():headings[1].start()].strip()
-            if (blocking == "None.") != (match[3] == "PASS"):
+            # A PASS verdict has the list None., and a FAIL verdict has a numbered list.
+            if not (blocking == "None." if match[3] == "PASS" else re.match(r"1\. \S", blocking)):
                 raise Refused(f"The {match[3]} verdict comment {comment['url']} has a Blocking list that does not agree with its result")
             parts.append(f"## Round {match[2]}, {match[1]} axis\n\n{blocking}\n")
     return parts

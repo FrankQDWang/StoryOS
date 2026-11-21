@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests of the review request of a round after round 1, ADR 0070 amendment of 2026-11-21 (issue 1749).
 
-The lanes-tests lane of make check runs them."""
+make check and make check-full run them after the make check-fast steps."""
 
 import importlib.util
 from pathlib import Path
@@ -62,6 +62,10 @@ class RequestTests(unittest.TestCase):
                                "do not name one head"),
                  "FAIL with no finding": ([verdict_comment("Standards", "FAIL", "None."),
                                            verdict_comment("Spec", "PASS", "None.")], "does not agree with its result"),
+                 "FAIL with a blank list": ([verdict_comment("Standards", "FAIL", " \n "),
+                                             verdict_comment("Spec", "PASS", "None.")], "does not agree with its result"),
+                 "PASS with a finding": ([verdict_comment("Standards", "FAIL", finding),
+                                          verdict_comment("Spec", "PASS", finding)], "does not agree with its result"),
                  "no Blocking list": ([{**verdict_comment("Standards", "FAIL", finding), "body": "## Standards review, "
                                         f"round 1: FAIL\n\nHead `{ROUND_1}`.\n\n{finding}\n"},
                                        verdict_comment("Spec", "PASS", "None.")], "has no Blocking list")}
