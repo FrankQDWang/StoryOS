@@ -4,6 +4,7 @@ import exportedFixture from "../../../../generated/golden-wire/storyos-public-re
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import openProposalsFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.json";
 import skillsFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-skills.json";
+import statisticsFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-statistics.json";
 import routeCatalog from "../../../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json";
 import readyExportFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json";
 import { digestExportHumanReadableManuscript, type ExportHumanReadableManuscriptRequest }
@@ -98,8 +99,8 @@ function journalServer(scenario: ReturnType<typeof createBrowserScenario>) {
       });
     }
     if (route === `GET /api/v1/projects/${PROJECT}/manuscript/statistics`) {
-      // `crates/storyos-server/src/manuscript_statistics.rs:45`.
-      return problem("projection_not_ready", "The required statistics projection watermark is not ready.", 503);
+      // The Ready answer of the Server (`crates/storyos-server/src/manuscript_statistics.rs:50`).
+      return jsonResponse(forProject(statisticsFixture));
     }
     if (route === `POST /api/v1/projects/${PROJECT}/anti-forgery-challenges`) {
       const challenge = JSON.parse(String(init?.body)) as Challenge;
