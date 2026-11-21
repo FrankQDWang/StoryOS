@@ -106,6 +106,23 @@ The live run records of 2026-11-14 for [#1464](../research/agent-tool-loop-live-
 
 [ADR 0097](0097-keep-only-the-current-model-registrations-and-request-mapping-in-the-code.md) removes the earlier Registrations and mapping branches from the code, because no stored Run names them. The rule for later is in that ADR.
 
-## Amendment 2026-11-21: the head Registration takes the mapping v10
+## Amendment 2026-11-21: the head Model Registration takes the mapping v10
 
-[ADR 0100](0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md) section 2 ([#1761](https://github.com/FrankQDWang/StoryOS/issues/1761)) gives the mapping `storyos.volcengine-agent-plan.responses.create.v10` to the new head Registration `018f0000-0000-7001-8000-00000000fa24`. It is Registration `fa23` with the mapping `v10`, and it keeps the adapter, the API surface, the provider model, the requirement, the capability profile, and the request bounds of `fa23`, so it needs no new qualification: no capability of the requirement changes, and the request form changes only in the text of the Host instructions. The mapping `v10` is the mapping `v9` with one change of the Host instructions: the block of the default writing rules for prose in each tool-loop request, after the first paragraphs of the tool loop and before the paragraph of `read_tool_result`. The requests of a Conversation capture, of a consolidation pass, and of a summary do not change. The declared schema of each function does not change, so the mapping `v10` declares the Host Tool Registration `018f0000-0000-7001-8000-0000000e0104` of the mapping `v9`. The code keeps only `fa24` and the mapping `v10` (ADR 0097). The Stage 10 tickets change the mapping `v10` in place until the aggregate pull request of [#1760](https://github.com/FrankQDWang/StoryOS/issues/1760) merges into `main`, for the reasons of the amendment of 2026-11-14 above (ADR 0093 section 3).
+[ADR 0100](0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md) section 2 ([#1761](https://github.com/FrankQDWang/StoryOS/issues/1761)) gives the mapping `storyos.volcengine-agent-plan.responses.create.v10` to a new head Model Registration. That Registration is `018f0000-0000-7001-8000-00000000fa24`.
+
+- `fa24` is Registration `fa23` with the mapping `v10`. It keeps the adapter, the API surface, the provider model, and the requirement of `fa23`.
+- It also keeps the capability profile and the request bounds of `fa23`. Thus it needs no new qualification.
+- No capability of the requirement changes. The request form changes only in the text of the Host instructions and of one label.
+
+The mapping `v10` is the mapping `v9` with three changes of the request text:
+
+1. **The block of the writing rules.** Each tool-loop request has the block of the default writing rules for prose. It follows the first paragraphs of the tool loop and comes before the paragraph of `read_tool_result`. [#1774](https://github.com/FrankQDWang/StoryOS/issues/1774) changes three places of the block, by the findings of the live run of [#1762](https://github.com/FrankQDWang/StoryOS/issues/1762).
+2. **The paragraph on the one `propose_edit` call** ([#1774](https://github.com/FrankQDWang/StoryOS/issues/1774)). The Host instructions of the tool loop say that StoryOS accepts one `propose_edit` call for the author request. The paragraph follows the paragraph on the joinable blocks, and it comes before the paragraph on the Author references. It states the refusal `after_proposal` of ADR 0062. The refusal stays until the Run gets a new message of the author.
+3. **The label of the replaced input** ([#1774](https://github.com/FrankQDWang/StoryOS/issues/1774)). The label of ADR 0085 gets two sentences. StoryOS can remove a block with a pending candidate of a Proposal of the Run from the target blocks. When the text under "Author request" does not change, the author sent no new message and made no new selection.
+
+Other facts of the mapping `v10`:
+
+- The requests of a Conversation capture, of a consolidation pass, and of a summary do not change.
+- The declared schema of each function does not change. Thus the mapping `v10` declares the Host Tool Registration `018f0000-0000-7001-8000-0000000e0104` of the mapping `v9`.
+- The code keeps only `fa24` and the mapping `v10` (ADR 0097).
+- The Stage 10 tickets change the mapping `v10` in place until the aggregate pull request of [#1760](https://github.com/FrankQDWang/StoryOS/issues/1760) merges into `main`. The reasons are those of the amendment of 2026-11-14 above (ADR 0093 section 3).
