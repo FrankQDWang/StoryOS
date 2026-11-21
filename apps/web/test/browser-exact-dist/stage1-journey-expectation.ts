@@ -377,11 +377,18 @@ function collectedFence(index: number) {
   };
 }
 
-function journalSnapshot(count: number, extraIntent = false) {
+/** A row of the first `retired` groups left the working set before a later input, so it has no working index (ADR 0036). */
+function retiredRow<Row extends { working_set_partition_id: string }>(row: Row, index: number, retired: number) {
+  if (index >= retired) return row;
+  const { working_set_partition_id: _index, ...retained } = row;
+  return retained;
+}
+
+function journalSnapshot(count: number, retired: number, { extraIntent = false } = {}) {
   return {
-    groups: Array.from({ length: count }, (_value, index) => collectedGroup(index)),
+    groups: Array.from({ length: count }, (_value, index) => retiredRow(collectedGroup(index), index, retired)),
     intents: [
-      ...Array.from({ length: count }, (_value, index) => intentRecord(index)),
+      ...Array.from({ length: count }, (_value, index) => retiredRow(intentRecord(index), index, retired)),
       ...(extraIntent ? [intentRecord(count, true)] : []),
     ],
     fences: Array.from({ length: count }, (_value, index) => collectedFence(index)),
@@ -538,11 +545,11 @@ export function expectedStage1Journey() {
     afterPasteInput: pendingProjection(AFTER_PASTE, "saving", 1, "revision-2"),
     settle: {
       pending: pendingProjection(AFTER_PASTE, "saved", 0, "revision-3"),
-      journal: journalSnapshot(3),
+      journal: journalSnapshot(3, 2),
     },
     interrupt: {
       pending: pendingProjection(AFTER_UNSETTLED, "saving", 1, "revision-3"),
-      journal: journalSnapshot(3, true),
+      journal: journalSnapshot(3, 3, { extraIntent: true }),
     },
     recover: {
       pending: pendingProjection(AFTER_UNSETTLED, "saving", 1, "revision-3"),
@@ -550,7 +557,7 @@ export function expectedStage1Journey() {
         ...page,
         pending: pendingProjection(AFTER_UNSETTLED, "saved", 0, "revision-4"),
       },
-      journal: journalSnapshot(4),
+      journal: journalSnapshot(4, 3),
     },
     authority: {
       receipts: [0, 1, 2, 3].map(appliedReceipt),

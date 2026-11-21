@@ -74,6 +74,11 @@ function stringAt(value: unknown, key: string): string {
   return result;
 }
 
+function fenceSequence(fence: JourneyRow): number {
+  return Number(valueAt(valueAt(first(rows(valueAt(fence, "collected_groups"), "collected groups"),
+    "collected groups"), "covered_sequence_range"), "first"));
+}
+
 function first<Value>(values: readonly Value[], label: string): Value {
   const value = values[0];
   if (value === undefined) throw new Error(`${label} is empty`);
@@ -165,9 +170,14 @@ async function readJourneyJournal(childWindow: Window): Promise<JourneyJournal> 
     const intentsResult = rows(intentValues, "Journal intents").sort((left, right) =>
       Number(valueAt(left, "local_intent_sequence"))
       - Number(valueAt(right, "local_intent_sequence")));
-    const fences = rows(metadataValues, "Journal metadata")
-      .filter((entry) => stringAt(entry, "key").startsWith("collection_fences:"))
-      .flatMap((entry) => rows(valueAt(entry, "value"), "Journal collection fences"));
+    // A fence of a group that left the working set is a retained fence (ADR 0036).
+    const metadataRows = rows(metadataValues, "Journal metadata");
+    const fences = [
+      ...metadataRows.filter((entry) => stringAt(entry, "key").startsWith("collection_fences:"))
+        .flatMap((entry) => rows(valueAt(entry, "value"), "Journal collection fences")),
+      ...metadataRows.filter((entry) => stringAt(entry, "key").startsWith("retained_collection_fence:"))
+        .map((entry) => row(valueAt(entry, "value"), "Journal retained collection fence")),
+    ].sort((left, right) => fenceSequence(left) - fenceSequence(right));
     return { fences, groups: groupsResult, intents: intentsResult };
   } finally {
     database.close();

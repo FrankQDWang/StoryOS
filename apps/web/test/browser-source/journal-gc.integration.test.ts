@@ -205,13 +205,14 @@ it("collects Journal payload only after settlement and a durable successor", asy
       createdAt: "2026-08-15T08:00:00.500Z",
     });
     const pending = await readJournalSnapshot(workspace);
-    expect(await collectEligibleJournalPayload(workspace)).toEqual({ fences: [expectedFence] });
+    // The collected group left the working set before the input, so only the unsettled record stays (ADR 0036).
+    expect(await collectEligibleJournalPayload(workspace)).toEqual({ fences: [] });
     const retained = await readJournalSnapshot(workspace);
-    expect(retained.records).toHaveLength(2);
-    const pendingPrimitive = retained.records[1]?.author_edit_unit?.normalized_primitives[0];
+    expect(retained).toEqual(pending);
+    expect(retained.records).toHaveLength(1);
+    const pendingPrimitive = retained.records[0]?.author_edit_unit?.normalized_primitives[0];
     expect(pendingPrimitive?.kind === "replace_block_selection" ? pendingPrimitive.text : undefined)
       .toBe("+");
-    expect(retained.fences).toEqual(pending.fences);
     expect(lastEdit).toBeDefined();
     workspace.database.close();
   } finally {
