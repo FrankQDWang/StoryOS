@@ -8,7 +8,7 @@ use storyos_core::{ContextSourceClass, ExposureFacts, ToolChoice, ToolExposure};
 use crate::AgentPlanResponses;
 use crate::tests::{CanaryResolver, create, route};
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_MEMORY_RULES_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_WRITING_RULES_MAPPING_REVISION;
 
 /// The body that `prepare` commits for `request`.
 pub(crate) async fn body(request: CreateRequest) -> serde_json::Value {
