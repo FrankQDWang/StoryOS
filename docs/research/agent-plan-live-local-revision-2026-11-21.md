@@ -6,7 +6,7 @@ Raw evidence is on the tag `evidence/1764-live-local-revision-2026-11-21`. The t
 
 ## Plan and final count
 
-The plan comes before the results. The planned numbers are 6 requests in total, 3 for each Run, and about 45,000 reported input tokens. The script of this run stopped only at the database cap of 12 requests, and not at the planned number. Thus the 4th request of each Run did not stop the run. The stop rule of "Live model requests" that the coordinator set after this run (decision on [#1762](https://github.com/FrankQDWang/StoryOS/issues/1762#issuecomment-7060590530)) stops a run at the first request above the planned number.
+The plan comes before the results. The planned numbers are 6 requests in total, 3 for each Run, and about 45,000 reported input tokens. The script of this run stopped only at the database cap of 12 requests, and not at the planned number. Thus the 4th request of each Run, and the reported input above 45,000 tokens, did not stop the run. The stop rule of "Live model requests" that the coordinator set after this run (decision on [#1762](https://github.com/FrankQDWang/StoryOS/issues/1762#issuecomment-7060590530)) stops a run at the first request above the planned number.
 
 The plan was posted on the ticket before the first request ([plan comment](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7060564582)). A rehearsal of all steps on `host_fake` on the same head came first: 2 author Runs, 4 fake requests, and no other Run.
 
