@@ -99,8 +99,15 @@ function journalServer(scenario: ReturnType<typeof createBrowserScenario>) {
       });
     }
     if (route === `GET /api/v1/projects/${PROJECT}/manuscript/statistics`) {
-      // The Ready answer of the Server (`crates/storyos-server/src/manuscript_statistics.rs:50`).
-      return jsonResponse(forProject(statisticsFixture));
+      // The Ready answer of the Server (`crates/storyos-server/src/manuscript_statistics.rs:50`) for the one Chapter of
+      // the Project, with the Server text "Base", at the activity position "0" of the scenario. The watermark and the
+      // generation are that position, and page_bytes is the byte length of the JSON totals.
+      const fixture = forProject(statisticsFixture);
+      const manuscript = { chapter_count: "1", word_count: "1", character_count: "4" };
+      return jsonResponse({ ...fixture, manuscript, page_bytes: String(JSON.stringify(manuscript).length),
+        current_chapter: { chapter_id: CHAPTER, word_count: "1", character_count: "4" },
+        projection_generation: "0", projection_watermark: "0",
+        source_snapshot: { ...fixture.source_snapshot, project_activity_position: "0" } });
     }
     if (route === `POST /api/v1/projects/${PROJECT}/anti-forgery-challenges`) {
       const challenge = JSON.parse(String(init?.body)) as Challenge;
