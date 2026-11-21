@@ -232,6 +232,38 @@ input:focus-visible {
   background: #5d5951;
 }
 
+.manuscript-editor .proposal-change-mark {
+  text-decoration: underline;
+  text-decoration-color: #8d877a;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 5px;
+  cursor: default;
+}
+
+/* The tick shows 2 px of its 8 px. All of the 8 px are its pointer target. */
+.manuscript-editor .proposal-change-tick {
+  display: inline-block;
+  height: 0.95em;
+  padding: 0 3px;
+  vertical-align: -2px;
+  cursor: default;
+}
+
+.manuscript-editor .proposal-change-tick-line {
+  display: block;
+  width: 2px;
+  height: 100%;
+  background: #8d877a;
+}
+
+.manuscript-editor .proposal-change-pair:not(.proposal-change-tick) {
+  background: rgba(52, 50, 46, 0.12);
+}
+
+.manuscript-editor .proposal-change-pair > .proposal-change-tick-line {
+  outline: 3px solid rgba(52, 50, 46, 0.12);
+}
+
 .manuscript-editor .block-proposal-earlier-base {
   margin: 6px 0 0;
   color: var(--muted);
