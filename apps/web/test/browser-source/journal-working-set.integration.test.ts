@@ -190,6 +190,12 @@ async function replacePrefix(ready: EditorWorkspace, prefix: JournalSnapshot) {
   await completed;
 }
 
+/** Writes the collection fences of the partition of `ready`. A fence names only a collected group. */
+async function writeFences(ready: EditorWorkspace, fences: readonly unknown[]) {
+  await requestResult(ready.database.transaction("metadata", "readwrite").objectStore("metadata")
+    .put({ key: `collection_fences:${ready.partition.journal_partition_id}`, value: fences }));
+}
+
 /** `prefix` with the settlement of its first group changed by `settle`. */
 function withFirstSettlement(prefix: JournalSnapshot,
   settle: (applied: Record<string, unknown>) => Record<string, unknown>): JournalSnapshot {
@@ -218,12 +224,12 @@ it("refuses input when a full working set cannot retire its prefix", async () =>
   const { fetchImpl } = transport;
   await deleteJournal(scenario.journalName);
   let workspace: EditorState = await openWorkspace(scenario, fetchImpl);
-  /** Refuses the next input on `target`, and keeps its working set. */
-  async function refusesInput(target: EditorWorkspace) {
+  /** Refuses the next input on `target` with `reason`, and keeps its working set. */
+  async function refusesInput(target: EditorWorkspace, reason?: string) {
     const before = await readJournalSnapshot(target);
     expect(before.records).toHaveLength(2400);
     await expect(appendAuthorEdit(target, { from: text.body.length, to: text.body.length,
-      text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" })).rejects.toThrow();
+      text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" })).rejects.toThrow(reason);
     expect(await readJournalSnapshot(target)).toEqual(before);
   }
   try {
@@ -237,19 +243,23 @@ it("refuses input when a full working set cannot retire its prefix", async () =>
       if (batch === 0) {
         firstCollected = await readJournalSnapshot(workspace);
         // A first group that is not closed stops the prefix, so the working set fills to its limit (ADR 0036).
-        // The author keeps the text of a reconfirmation group, so input continues behind it.
+        // Behavior of today, owned by #1775: a kept reconfirmation group cannot leave, and input continues behind it.
         await replacePrefix(workspace, withFirstSettlement(firstUncollected!, reconfirmation));
+        await writeFences(workspace, []);
         await retainLocalRecovery(workspace, firstUncollected!.groups[0]!.journal_submission_group_id);
       }
     }
-    await refusesInput(workspace);
+    expect(await rebuildPendingProjection(workspace)).toMatchObject({ save_state: "saved" });
+    await refusesInput(workspace, "Local Edit Journal schema or partition is incompatible");
     // A refused group also stops the prefix.
     const firstGroupId = firstUncollected!.groups[0]!.journal_submission_group_id;
     await requestResult(workspace.database.transaction("metadata", "readwrite").objectStore("metadata")
       .delete(`${recoveryPrefix}${workspace.partition.journal_partition_id}:${firstGroupId}`));
     await replacePrefix(workspace, withFirstSettlement(firstUncollected!, refused));
-    await refusesInput(workspace);
+    expect(await rebuildPendingProjection(workspace)).toMatchObject({ save_state: "needs_attention" });
+    await refusesInput(workspace, "Local Edit Journal limit failed");
     await replacePrefix(workspace, firstCollected!);
+    await writeFences(workspace, [firstCollected!.fences[0], ...(await readJournalSnapshot(workspace)).fences]);
     const saved = await readJournalSnapshot(workspace);
     expect(saved.records).toHaveLength(2400);
     expect(saved.records.every((record) => record.author_edit_unit === undefined)).toBe(true);
@@ -296,10 +306,15 @@ it("refuses input when a full working set cannot retire its prefix", async () =>
         text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" })).rejects.toThrow();
     } finally { interrupted.mockRestore(); }
     expect(await readJournalSnapshot(reopened)).toEqual(saved);
+    // An applied first group that the collection did not take is closed, so it leaves with the groups after it.
+    await replacePrefix(reopened, firstUncollected!);
+    await writeFences(reopened, saved.fences.slice(1));
     await appendAuthorEdit(reopened, { from: text.body.length, to: text.body.length,
       text: "+", resultingBody: `${text.body}+`, inputOrigin: "typing" });
     const continued = await readJournalSnapshot(reopened);
     expect([continued.records.length, continued.workingBoundary?.last_sequence]).toEqual([1, 2400]);
+    expect((await retainedHistory(reopened)).records.filter((record) => record.author_edit_unit !== undefined))
+      .toHaveLength(240);
   } finally {
     if (workspace.kind === "editor-ready") workspace.database.close();
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
