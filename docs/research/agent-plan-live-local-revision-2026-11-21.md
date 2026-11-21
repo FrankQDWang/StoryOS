@@ -35,6 +35,8 @@ Run C kept its plan.
 
 ## Findings
 
+The executor sent findings F1 to F8 to the coordinator before the review request. The decision of the coordinator on them is on the ticket ([decision comment](https://github.com/FrankQDWang/StoryOS/issues/1764#issuecomment-7060765711)).
+
 | ID | Finding | Effect |
 | --- | --- | --- |
 | F1 | **Each Run sent one Proposal in its first `propose_edit` call, with one operation for each changed Block.** Run A changed 5 Blocks, and Run B changed 2 Blocks. Each operation waits for the decision of the author, so the author can accept, change, or refuse each change alone. | The count rules and the rule "one Proposal" show in the first call. |
