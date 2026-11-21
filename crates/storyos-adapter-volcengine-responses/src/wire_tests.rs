@@ -429,11 +429,18 @@ fn an_incremental_continuation_with_a_changed_input_sends_the_current_input_befo
         (
             serde_json::json!("resp-1"),
             serde_json::json!([
-                {"role": "user", "content": [{"type": "input_text", "text": format!(
-                    "{REPLACED_INPUT_LABEL}\n\nAuthor request:\nTighten this paragraph.\n\n\
+                {"role": "user", "content": [{"type": "input_text", "text":
+                    "The input of this author request changed after your last step. This input \
+                     replaces the earlier input of this author request: read the working text, \
+                     the references, and the target blocks only from this input. While a \
+                     Proposal that you opened for this request has a pending candidate for a \
+                     block, StoryOS can remove that block from the target blocks. When the text \
+                     under \"Author request\" is the same as in the earlier input, the author \
+                     sent no new message and made no new selection.\n\n\
+                     Author request:\nTighten this paragraph.\n\n\
                      Working text:\nThe rain fell hard.\n\nTarget blocks:\n[block_id: block-2] \
                      (pending Proposal candidate)\nThe wind stopped."
-                )}]},
+                }]},
                 result.clone(),
             ]),
             serde_json::json!([result]),

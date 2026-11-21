@@ -118,7 +118,7 @@ The mapping `v10` is the mapping `v9` with three changes of the request text:
 
 1. **The block of the writing rules.** Each tool-loop request has the block of the default writing rules for prose. It follows the first paragraphs of the tool loop and comes before the paragraph of `read_tool_result`. [#1774](https://github.com/FrankQDWang/StoryOS/issues/1774) changes three places of the block, by the findings of the live run of [#1762](https://github.com/FrankQDWang/StoryOS/issues/1762).
 2. **The paragraph on the one `propose_edit` call** ([#1774](https://github.com/FrankQDWang/StoryOS/issues/1774)). The Host instructions of the tool loop say that StoryOS accepts one `propose_edit` call for the author request. The paragraph follows the paragraph on the joinable blocks, and it comes before the paragraph on the Author references. It states the refusal `after_proposal` of ADR 0062.
-3. **The label of the replaced input** ([#1774](https://github.com/FrankQDWang/StoryOS/issues/1774)). The label of ADR 0085 gets two sentences. A Proposal of the Run holds its blocks, and only the text under "Author request" is a message of the author.
+3. **The label of the replaced input** ([#1774](https://github.com/FrankQDWang/StoryOS/issues/1774)). The label of ADR 0085 gets two sentences. StoryOS can remove a block with a pending candidate of a Proposal of the Run from the target blocks. When the text under "Author request" does not change, the author sent no new message and made no new selection.
 
 Other facts of the mapping `v10`:
 

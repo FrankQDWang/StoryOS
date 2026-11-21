@@ -213,7 +213,10 @@ Earlier author messages, in the exact words of the author, from before the summa
 pub(crate) const REPLACED_INPUT_LABEL: &str = "\
 The input of this author request changed after your last step. This input replaces the earlier \
 input of this author request: read the working text, the references, and the target blocks only \
-from this input.";
+from this input. While a Proposal that you opened for this request has a pending candidate for a \
+block, StoryOS can remove that block from the target blocks. When the text under \"Author \
+request\" is the same as in the earlier input, the author sent no new message and made no new \
+selection.";
 
 /// The canonical JSON body of a streamed request, which is also the committed Wire Payload
 /// Projection. Instructions do not carry forward with a prior response reference, so each
