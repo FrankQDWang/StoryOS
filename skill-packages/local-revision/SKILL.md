@@ -37,7 +37,7 @@ A habit is one of the habits that the default rules for prose of the Host instru
 
 ## One Proposal
 
-Send all changes in one propose_edit call.
+Send all changes in one propose_edit call. After the Proposal opens, call finish. Make no second Proposal, also when a later input of the request gives other target Blocks.
 
 ## The answer
 
