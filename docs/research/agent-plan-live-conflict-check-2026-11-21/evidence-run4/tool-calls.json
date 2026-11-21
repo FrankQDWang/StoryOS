@@ -1,0 +1,38 @@
+[
+  {
+    "tool_call_id": "01a1fd14-035a-7df2-9336-a7a364734c04",
+    "run_id": "01a1fd13-f1dc-7a32-9dd3-a67cd631d45f",
+    "decision_position": 0,
+    "call_position": 0,
+    "function_name": "read_chapter",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "chapter": 1,
+      "last_block": null,
+      "first_block": null
+    }
+  },
+  {
+    "tool_call_id": "01a1fd14-035d-75b2-9c81-83f6c1fab270",
+    "run_id": "01a1fd13-f1dc-7a32-9dd3-a67cd631d45f",
+    "decision_position": 0,
+    "call_position": 1,
+    "function_name": "read_memory_entry",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {
+      "entry": 1
+    }
+  },
+  {
+    "tool_call_id": "01a1fd15-79ca-7890-bca2-5c063e6d1942",
+    "run_id": "01a1fd13-f1dc-7a32-9dd3-a67cd631d45f",
+    "decision_position": 1,
+    "call_position": 0,
+    "function_name": "finish",
+    "state": "settled",
+    "refusal": null,
+    "arguments": {}
+  }
+]

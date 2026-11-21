@@ -1,0 +1,9 @@
+## Plan of Run 4 of the live run of `conflict-check`
+
+- **Purpose:** show the effect of the changed report rule ("List only the conflicts. Do not list the facts that agree.", the coordinator decision on finding F6) on the real Agent Plan route. One more AgentRun, so the run has 4 AgentRuns of the limit of 5.
+- **Product:** `1763-distribution-skillpackages` at `0f438dcec0cd8d0cc2ca39135fa830777186e4e7` (tree `795294e7bab68444310b01638d3f59867cb260c7`), the commit that changes `skill-packages/conflict-check/SKILL.md`, and the release package of `python3 scripts/package-release.py` on that clean commit. The topology, the settings, and the process environments are the same as for Runs 1 to 3.
+- **Fixed inputs:** a new database and a new Project 渡口 with the same two Chapters (`chapter-01.md`, `chapter-02.md` of the first tag) and the same four planted conflicts P1 to P4. Memory Entry 1 has the type, the origin `author_request`, the title, the description, and the text of entry 1 of Run 1. It is a direct SQL write in the form of `seedMemoryEntry` of the HTTP test support, so that no second request to remember is necessary.
+- **Run 4**, in a new Conversation, with the selected Skill `conflict-check`: "请检查这一章。" (the message of Run 2).
+- **Planned requests:** 3 (as Run 2). Hard cap: 8. Expected reported input: 5,000 to 10,000 tokens for each request, about 22,000 in total. The run script stops the Worker at more than 8 requests, more than 80,000 input tokens, a second Run, or a Run that is not an author Run.
+- **Rehearsal:** the same script on `host_fake` first.
+- **Record:** Run 4 is a new section of `docs/research/agent-plan-live-conflict-check-2026-11-21.md`, and F6 says what Run 4 shows. Raw evidence: the new tag `evidence/1763-live-conflict-check-run4-2026-11-21`. The first tag does not move.
