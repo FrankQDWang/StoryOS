@@ -77,7 +77,7 @@ After review round 1, the conditions of three sections became exclusive and comp
 
 ```diff
  ## The text to revise
- 
+
 -- When the author names a text, revise that text.
 -- When the author names no text, revise the text of the author references of the request.
 -- When the request has no author reference, revise the Working text.
@@ -86,7 +86,7 @@ After review round 1, the conditions of three sections became exclusive and comp
 +- When it names no text and the request has no author reference, revise the Working text.
 @@
  ## The count
- 
+
 -- Choose at most 5 places. Choose the most obvious place first.
 -- When the author request gives a number, choose at most that number of places.
 +- When the author request gives a number of places, choose at most that number of places.
@@ -95,7 +95,7 @@ After review round 1, the conditions of three sections became exclusive and comp
  - One place is one Block.
 @@
  ## Nothing to change
- 
+
 -When no place has a habit, make no Proposal, and say so in the final answer.
 +When you choose no place, make no Proposal, and say so in the final answer.
 ```
