@@ -242,14 +242,18 @@ before writing" of ADR 0096 applies.
    package. The Skill picker lists the SkillPackages of the distribution
    with their descriptions.
 2. Select the local revision and ask for a revision of a Chapter. The
-   assistant gives one Proposal with a candidate for each of two Blocks.
-   Each candidate keeps most of the text of its target Block, so
-   S10-REQ-004 gives it marks: the editor shows marks on its new words and a
-   tick at each removal with no replacement. The pointer on a mark shows the
-   old words of that mark in the target Block.
-3. Change the text of one candidate: the marks follow the text. Accept one
-   candidate and reject one. The manuscript has the accepted text with no
-   mark.
+   assistant gives one Proposal with a candidate for each of two Blocks. The
+   inputs of the journey are fixed. Each of the two candidates meets the
+   marks rule of S10-REQ-004: its target Block is not empty, and its text is
+   not almost all new. At least one mark replaces old words, and at least
+   one candidate has a removal with no replacement. The editor shows marks
+   on the new words of each candidate and a tick at each removal with no
+   replacement. The pointer on a mark that replaces old words shows those
+   old words in the target Block.
+3. Type a small number of new words into one candidate. That candidate
+   still meets the marks rule: the typed words get a mark, and the other
+   marks agree with the two current texts. Accept one candidate and reject
+   the other. The manuscript has the accepted text with no mark.
 4. Select the conflict check and ask for a check. The assistant answers with
    text and makes no Proposal.
 5. Continue to write with no model destination: the editor works, and no
