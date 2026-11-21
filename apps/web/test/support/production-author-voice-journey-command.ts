@@ -48,35 +48,46 @@ async function packagedSkills(): Promise<string[][]> {
 }
 
 /**
- * The text of one candidate in the notation of the fixture table of S10-REQ-004. A mark counts only with a visible
- * underline, and a tick only with a visible line. Other decorations give `?`.
+ * The text of one candidate in the notation of the fixture table of S10-REQ-004. A mark counts only when its text and
+ * its underline are visible, and a tick only when its line has a visible area. Other decorations give `?`.
  */
 function shown(candidate: Locator): Promise<string> {
-  return candidate.locator(".block-proposal-text").evaluate((text) => Array.from(text.childNodes, (node) => {
-    if (!(node instanceof Element)) return node.textContent ?? "";
-    const style = getComputedStyle(node);
-    const line = node.querySelector(".proposal-change-tick-line");
-    const lineStyle = line === null ? undefined : getComputedStyle(line);
-    if (node.matches(".proposal-change-tick")) {
-      return lineStyle !== undefined && parseFloat(lineStyle.width) > 0
-        && lineStyle.backgroundColor !== "rgba(0, 0, 0, 0)" ? "▏" : "?";
-    }
-    if (node.matches(".proposal-change-mark")) {
-      return style.textDecorationLine.includes("underline") && style.textDecorationColor !== "rgba(0, 0, 0, 0)"
-        ? `【${node.textContent}】` : "?";
-    }
-    return node.textContent ?? "";
-  }).join(""));
+  return candidate.locator(".block-proposal-text").evaluate((text) => {
+    const clear = "rgba(0, 0, 0, 0)";
+    // An element is visible when it has an area, it is not hidden, and it is not transparent.
+    const visible = (element: Element) => {
+      const style = getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+      return box.width > 0 && box.height > 0 && style.visibility === "visible" && Number(style.opacity) > 0;
+    };
+    return Array.from(text.childNodes, (node) => {
+      if (!(node instanceof Element)) return node.textContent ?? "";
+      const style = getComputedStyle(node);
+      if (node.matches(".proposal-change-tick")) {
+        const line = node.querySelector(".proposal-change-tick-line");
+        return line !== null && visible(line) && getComputedStyle(line).backgroundColor !== clear ? "▏" : "?";
+      }
+      if (node.matches(".proposal-change-mark")) {
+        return visible(node) && style.color !== clear && style.textDecorationLine.includes("underline")
+          && style.textDecorationColor !== clear ? `【${node.textContent}】` : "?";
+      }
+      return node.textContent ?? "";
+    }).join("");
+  });
 }
 
 /**
- * The text of each element in a Block or a candidate of the editor that has a visible background, in document order.
- * The line of a tick has its own colour, so it does not count.
+ * The text of each Block of the editor, and of each element in a Block or a candidate, that has a visible background,
+ * in document order. A candidate and the line of a tick have their own colours, so they do not count.
  */
 function paired(page: Page): Promise<string[]> {
-  return page.locator("[data-manuscript-editor] p *:not(.proposal-change-tick-line)").evaluateAll((elements) => elements
-    .filter((element) => getComputedStyle(element).backgroundColor !== "rgba(0, 0, 0, 0)")
-    .map((element) => element.textContent ?? ""));
+  return page.locator("[data-manuscript-editor] > p, [data-manuscript-editor] p *:not(.proposal-change-tick-line)")
+    .evaluateAll((elements) => elements.filter((element) => {
+      const style = getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+      return style.backgroundColor !== "rgba(0, 0, 0, 0)" && box.width > 0 && box.height > 0
+        && style.visibility === "visible" && Number(style.opacity) > 0;
+    }).map((element) => element.textContent ?? ""));
 }
 
 /** The author journey S10-JRN-001 (S10-EVD-003) on the packaged Server with the SkillPackages of the release package. */
