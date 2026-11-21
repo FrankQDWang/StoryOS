@@ -470,7 +470,7 @@ def watch_run(script, run, output):
                         return 2
                     print("check-lanes: processes of the Vitest run remain", flush=True)
                     return 1
-                continue
+                since = None
             time.sleep(1)
         return 0
     except (OSError, ValueError, subprocess.SubprocessError) as error:

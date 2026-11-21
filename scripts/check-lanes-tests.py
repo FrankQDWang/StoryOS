@@ -408,13 +408,22 @@ if sys.argv[1:] != ['--browser-start']:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     module.NO_EXIT_SECONDS, module.STOP_SECONDS = 1, 1
-    connected, scan, scans = module.connected_to_no_browser, module.process_table, []
+    connected, scan, end, scans = module.connected_to_no_browser, module.process_table, module.end_processes, []
 
     def examined(output):
         result = connected(output)
         with open(root / 'examinations', 'a') as file:
             file.write(f'{result}\\n')
+        if not result and (root / 'done').exists() and (root / 'again').exists() and not (root / 'again-trigger').exists():
+            (root / 'again-trigger').touch()
+            while not (root / 'again-done').exists():
+                time.sleep(0.05)
         return result
+
+    def ended(*arguments):
+        with open(root / 'stops', 'a') as file:
+            file.write(f'requested {time.time()}\\n')
+        return end(*arguments)
 
     def scanned():
         table = scan()
@@ -426,7 +435,7 @@ if sys.argv[1:] != ['--browser-start']:
                 time.sleep(0.05)
         return table
 
-    module.connected_to_no_browser, module.process_table = examined, scanned
+    module.connected_to_no_browser, module.process_table, module.end_processes = examined, scanned, ended
     code = module.main()
     if code == 2:
         with open(root / 'stops', 'a') as file:
@@ -467,13 +476,15 @@ if no_end:
         pid = subprocess.Popen(child, start_new_session=True, stdout=subprocess.DEVNULL).pid
     with open(root / 'children', 'a') as file:
         file.write(f'{pid}\\n')
-    if len(answer) == 4:
+    if len(answer) >= 4:
         (root / 'action').write_text(str(answer[2]))
+    if len(answer) == 5:
+        (root / 'again').touch()
 sys.stdout.write(answer[0])
 sys.stdout.flush()
 if no_end:
     stored(answer[0])
-    if len(answer) == 4:
+    if len(answer) >= 4:
         while not (root / 'trigger').exists():
             time.sleep(0.05)
         if answer[3] == 'move the child':
@@ -484,6 +495,13 @@ if no_end:
             sys.stdout.flush()
             stored(answer[3])
         (root / 'done').touch()
+    if len(answer) == 5:
+        while not (root / 'again-trigger').exists():
+            time.sleep(0.05)
+        sys.stdout.write(answer[4])
+        sys.stdout.flush()
+        stored(answer[4])
+        (root / 'again-done').write_text(str(time.time()))
     (root / 'written').touch()
     if code == 'no end, output closed':
         os.close(1)
@@ -510,10 +528,12 @@ def fake_browser_vitest_root(answers, failed_gaps=(), failed_tee=False):
     "no end, output closed" also closes the output of the fake, and "no end, diagnostics" writes a line each 0.2 s
     after its text. With "no end, child moved", a parent is between the
     child and the fake. The answer [text, code, scan, action] does the action at that scan of the processes of the
-    watch of the run: it writes the text `action`, or with "move the child", it ends the parent of the child.
+    watch of the run: it writes the text `action`, or with "move the child", it ends the parent of the child. The answer
+    [text, code, scan, action, again] also writes the text `again` when the next examination after the action is false.
     The waits with a number in failed_gaps fail. With failed_tee, a fake `tee` writes its input to its file and fails.
     Each other command of scripts/check-lanes.py goes to the runner, with a wait of 1 s for a run that does not exit.
-    Each examination of an output goes to <root>/examinations, and each stop of a run goes to <root>/stops.
+    Each examination of an output goes to <root>/examinations. Each request for a stop goes to <root>/stops before its
+    signals, and each stop that ended the processes of the run goes there after them.
     """
     root = Path(tempfile.mkdtemp(prefix="storyos-browser-vitest-"))
     for directory in ("scripts", "bin", "target/check"):
@@ -638,11 +658,26 @@ class BrowserVitestTests(unittest.TestCase):
                     while processes_of(roots[0]) and time.monotonic() < deadline:
                         time.sleep(0.1)
                     children, stops = ((roots[0] / name).read_text().splitlines() for name in ("children", "stops"))
-                    self.assertEqual((code, record, output.splitlines().count(line), len(children), len(stops)),
+                    self.assertEqual((code, record, output.splitlines().count(line), len(children),
+                                      stops.count("stopped")),
                                      expected, repr(output))
                     self.assertEqual(processes_of(roots[0]), [], repr(output))
                 finally:
                     kill_fake_processes(roots)
+
+    def test_a_new_summary_after_a_prevented_stop_waits_the_full_time(self):
+        # A failed summary prevents the stop at its last scan. Then a new connect failure comes at once.
+        again = NO_BROWSER.replace("b63626c2", "c74737d3")
+        roots = []
+        try:
+            code, output, record = self.browser_vitest([[NO_BROWSER, "no end", 2, FAILED_TEST, again], [PASSED, 0]],
+                                                       before=roots.append)
+            requests = [float(line.split()[1]) for line in (roots[0] / "stops").read_text().splitlines()
+                        if line.startswith("requested")]
+            self.assertEqual((code, record, len(requests)), (0, ["gap", "run", "gap", "run"], 1), repr(output))
+            self.assertGreaterEqual(requests[0] - float((roots[0] / "again-done").read_text()), 1, repr(output))
+        finally:
+            kill_fake_processes(roots)
 
     def test_a_failed_test_that_does_not_exit_is_not_stopped(self):
         cases = {
