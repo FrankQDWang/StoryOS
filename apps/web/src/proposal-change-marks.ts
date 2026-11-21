@@ -15,7 +15,7 @@ const marksKey = new PluginKey<MarksState>("storyosProposalChangeMarks");
 const CHANGE_ATTRIBUTE = "data-proposal-change";
 
 function candidateMarks(doc: ProseMirrorNode, previous: readonly CandidateMarks[]): CandidateMarks[] {
-  const known = new Map(previous.map((marks) => [`${marks.old}\u0000${marks.text}`, marks.runs]));
+  const known = new Map(previous.map((marks) => [JSON.stringify([marks.old, marks.text]), marks.runs]));
   const result: CandidateMarks[] = [];
   let target: { node: ProseMirrorNode; start: number } | undefined;
   doc.forEach((node, offset) => {
@@ -26,7 +26,7 @@ function candidateMarks(doc: ProseMirrorNode, previous: readonly CandidateMarks[
     if (target === undefined || target.node.attrs.id !== node.attrs.blockId) return;
     const old = target.node.textContent;
     const text = node.textContent;
-    const runs = known.get(`${old}\u0000${text}`) ?? proposalChangeRuns(old, text);
+    const runs = known.get(JSON.stringify([old, text])) ?? proposalChangeRuns(old, text);
     if (runs !== undefined) result.push({ old, text, target: target.start, candidate: offset + 1, runs });
   });
   return result;
@@ -75,11 +75,8 @@ function pairAt(view: EditorView, target: EventTarget | null): Pair | undefined 
   return candidate === undefined || run === undefined ? undefined : { candidate, run };
 }
 
-function showPair(view: EditorView, pair: Pair | undefined): void {
-  const current = marksKey.getState(view.state);
-  if (view.composing || current === undefined || current.stale
-    || current.pair?.candidate === pair?.candidate && current.pair?.run === pair?.run) return;
-  view.dispatch(view.state.tr.setMeta(marksKey, { pair }));
+function samePair(first: Pair | undefined, second: Pair | undefined): boolean {
+  return first?.candidate === second?.candidate && first?.run === second?.run;
 }
 
 /**
@@ -88,6 +85,13 @@ function showPair(view: EditorView, pair: Pair | undefined): void {
  */
 export function proposalChangeMarks(): Plugin<MarksState> {
   let composing = false;
+  // The pair of the mouse pointer. A composition shows it only after it ends.
+  let pointed: Pair | undefined;
+  const showPair = (view: EditorView): void => {
+    const current = marksKey.getState(view.state);
+    if (composing || current === undefined || current.stale || samePair(current.pair, pointed)) return;
+    view.dispatch(view.state.tr.setMeta(marksKey, { pair: pointed }));
+  };
   return new Plugin<MarksState>({
     key: marksKey,
     state: {
@@ -98,7 +102,10 @@ export function proposalChangeMarks(): Plugin<MarksState> {
             ? { ...value, decorations: value.decorations.map(transaction.mapping, transaction.doc), stale: true }
             : value;
         }
-        if (transaction.docChanged || value.stale) return marksState(state.doc, value.candidates);
+        if (transaction.docChanged || value.stale) {
+          pointed = undefined;
+          return marksState(state.doc, value.candidates);
+        }
         const meta = transaction.getMeta(marksKey) as { pair?: Pair } | undefined;
         if (meta === undefined || !("pair" in meta)) return value;
         return { ...value, pair: meta.pair, decorations: changeDecorations(state.doc, value.candidates, meta.pair) };
@@ -115,19 +122,27 @@ export function proposalChangeMarks(): Plugin<MarksState> {
           composing = false;
           // The marks follow the composed text after the editor reads it.
           setTimeout(() => {
-            if (!view.isDestroyed && marksKey.getState(view.state)?.stale === true) {
+            if (view.isDestroyed) return;
+            if (marksKey.getState(view.state)?.stale === true) {
               view.dispatch(view.state.tr.setMeta(marksKey, {}));
+            } else {
+              showPair(view);
             }
           });
           return false;
         },
-        mouseover: (view, event) => {
-          showPair(view, pairAt(view, event.target));
+        // Only a mouse shows a pair. A touch tap also gives compatibility mouse events, so they are not used.
+        pointerover: (view, event) => {
+          if (event.pointerType !== "mouse") return false;
+          pointed = pairAt(view, event.target);
+          showPair(view);
           return false;
         },
-        mouseout: (view, event) => {
+        pointerout: (view, event) => {
+          if (event.pointerType !== "mouse") return false;
           if (!(event.relatedTarget instanceof Node) || !view.dom.contains(event.relatedTarget)) {
-            showPair(view, undefined);
+            pointed = undefined;
+            showPair(view);
           }
           return false;
         },

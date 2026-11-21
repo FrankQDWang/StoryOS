@@ -194,10 +194,9 @@ it("keeps the decorations during an IME composition in a candidate and computes 
     && during.every((element, index) => element === before[index]) })
     .toEqual({ text: `${ROW_1.new}zhong`, same: true });
   await applyTrustedInput({ operation: "insert_text", text: "中" });
-  await expect.poll(() => candidateText(editor).textContent).toBe(`${ROW_1.new}中`);
-  await expect.poll(() => shownInEditor(candidateText(editor))).toBe(shownByRule(editor));
-  expect(shownInEditor(candidateText(editor))).toBe("他站在门口，【把钥匙从左手换到右手，说】：“妈，先借我两千。”"
-    + "母亲【看了他一眼，】没有问为什么，▏转身进了里屋。他听见抽屉被拉开【，又听见她在里面翻了很久。他低头去看自己的鞋尖，鞋带松了一边。中】");
+  await expect.poll(() => ({ text: candidateText(editor).textContent, shown: shownInEditor(candidateText(editor)) }))
+    .toEqual({ text: `${ROW_1.new}中`, shown: "他站在门口，【把钥匙从左手换到右手，说】：“妈，先借我两千。”"
+      + "母亲【看了他一眼，】没有问为什么，▏转身进了里屋。他听见抽屉被拉开【，又听见她在里面翻了很久。他低头去看自己的鞋尖，鞋带松了一边。中】" });
 });
 
 it("gives the same selection reference and clipboard text for a selection that crosses a mark and a tick", async () => {
@@ -270,9 +269,14 @@ it("writes the same Local Edit Journal record for an edit of a candidate with ma
   const root = createRoot(host);
   const block = test.workspace.openedProjection.blocks[0]!.manuscript_block_id;
   const failures: unknown[] = [];
-  // The Author Edit stays unsettled. This test examines only the Journal record.
+  // The test sends no request: it examines only the Journal record.
+  const requests: string[] = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    requests.push(`${init?.method ?? "GET"} ${input instanceof Request ? input.url : String(input)}`);
+    throw new Error("unexpected request");
+  };
   const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin,
-    fetchImpl: () => new Promise<Response>(() => {}), onFailure: (error) => { failures.push(error); } });
+    fetchImpl, onFailure: (error) => { failures.push(error); } });
   await withActEnvironment(async () => {
     try {
       await act(async () => { root.render(createElement(ManuscriptEditor, { blocks: test.workspace.openedProjection.blocks,
@@ -294,8 +298,45 @@ it("writes the same Local Edit Journal record for an edit of a candidate with ma
         unit: [{ kind: "replace_selection", from: 10, to: 10, text: "soon " }],
         target: { proposal_id: PROPOSAL, operation_id: PROPOSAL, revision_id: PROPOSAL, manuscript_block_id: block },
         failures: [] });
+      expect(requests).toEqual([]);
     } finally {
       await act(async () => { root.unmount(); }); writing.close(); host.remove(); await test.close();
     }
   });
+});
+
+it("shows no pair for a touch tap on a mark", () => {
+  const editor = openEditor(ROW_1.old, [candidate(ROW_1.new)]);
+  const mark = candidateText(editor).querySelectorAll(".proposal-change-mark")[1]!;
+  // A touch tap gives a touch pointer event and then compatibility mouse events.
+  mark.dispatchEvent(new PointerEvent("pointerover", { pointerType: "touch", bubbles: true }));
+  mark.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  expect(pairs(editor)).toEqual([]);
+});
+
+it("removes the pair when the pointer leaves during a composition that changes no text", async () => {
+  const editor = openEditor(ROW_1.old, [candidate(ROW_1.new)]);
+  const mark = () => candidateText(editor).querySelectorAll(".proposal-change-mark")[1]!;
+  await userEvent.hover(mark());
+  expect(pairs(editor).length).toBe(2);
+  editor.view.dom.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+  await userEvent.unhover(mark());
+  expect(pairs(editor).length).toBe(2);
+  editor.view.dom.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "" }));
+  await expect.poll(() => pairs(editor)).toEqual([]);
+});
+
+it("computes the runs of the current texts when the two texts change together", () => {
+  // The two pairs of texts give the same string when each pair is joined with U+0000.
+  const editor = openEditor("他走了。\u0000她来了。", [candidate("他走了。她来了。")]);
+  expect(shownInEditor(candidateText(editor))).toBe("他走了。▏她来了。");
+  const transaction = editor.state.tr.insertText("他走了。", position(editor, "target", 0),
+    position(editor, "target", 9));
+  const start = transaction.mapping.map(position(editor, "candidate", 0));
+  transaction.insertText("她来了。\u0000他走了。她来了。", start, start + 8).setMeta("storyos.hydrate", true);
+  editor.view.dispatch(transaction);
+  expect({ texts: [targetBlock(editor).textContent, candidateText(editor).textContent],
+    shown: shownInEditor(candidateText(editor)) }).toEqual({
+    texts: ["他走了。", "她来了。\u0000他走了。她来了。"],
+    shown: shownCandidate("她来了。\u0000他走了。她来了。", proposalChangeRuns("他走了。", "她来了。\u0000他走了。她来了。")) });
 });
