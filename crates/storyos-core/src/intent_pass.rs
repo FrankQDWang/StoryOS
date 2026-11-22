@@ -400,14 +400,18 @@ pub fn select_intent_pass_entry<'a>(
 
 /// The outcome of a pass whose call is valid, and the result text of the call. The result is a
 /// version of the entry only while the versions that the pass `read` are the current versions of
-/// the character in `entries`. Else no part of the result is kept: a change, a delete, or a new
-/// entry of the author after the start gives `NotKept` (ADR 0101 section 4).
+/// the character in `entries`, and while no consolidation pass of the Project is in progress. Else
+/// no part of the result is kept: a change, a delete, or a new entry of the author after the start
+/// gives `NotKept`. The consolidation work comes first: a version would move the Memory revision
+/// and make the running consolidation pass stale (ADR 0101 section 4).
 pub fn settle_intent_result(
     read: &IntentPassRead,
     entries: &[IntentPassEntryFacts],
+    consolidation_in_progress: bool,
 ) -> (IntentPassOutcome, ToolResultText) {
     let current = characters(entries).find(|needed| needed.entry.memory_entry_id == read.entry.0);
     let (outcome, text) = match current.is_some_and(|needed| needed.read() == *read) {
+        _ if consolidation_in_progress => (IntentPassOutcome::NotKept, INTENT_CONSOLIDATION_FIRST),
         true => (IntentPassOutcome::Recorded, INTENT_RECORDED),
         false => (IntentPassOutcome::NotKept, INTENT_NOT_KEPT),
     };
@@ -417,6 +421,10 @@ pub fn settle_intent_result(
 /// The result text of a valid call whose Character File changed after the start of the pass.
 const INTENT_NOT_KEPT: &str = "The Host did not keep the intent: the character file changed after \
                                the pass read it.";
+
+/// The result text of a valid call while a consolidation pass of the Project is in progress.
+const INTENT_CONSOLIDATION_FIRST: &str = "The Host did not keep the intent: a consolidation pass \
+                                          of the Memory is in progress.";
 
 #[cfg(test)]
 #[path = "intent_pass_tests.rs"]

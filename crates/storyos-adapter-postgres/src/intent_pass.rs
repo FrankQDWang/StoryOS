@@ -213,8 +213,9 @@ pub(crate) async fn persist_next_step(
 /// Executes the `record_character_intent` call `row` of a pass in the Tool Gateway transaction that
 /// checked the Run Lease fence. A refused call records nothing, and the Run continues to its next
 /// RunStep. A valid call takes the lock of the Memory head and writes one version of the entry of
-/// the pass with the result, when Core keeps the result for the versions that the pass read. Else
-/// the outcome is `not_kept`, and the Host writes no version. The settled call completes the Run.
+/// the pass with the result, when Core keeps the result for the versions that the pass read and no
+/// consolidation pass is in progress. Else the outcome is `not_kept`, and the Host writes no
+/// version. The settled call completes the Run.
 pub(crate) async fn execute(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -261,7 +262,27 @@ pub(crate) async fn execute(
     let facts = entry_facts(client, scope)
         .await
         .map_err(complete_unavailable)?;
-    let (outcome, result) = storyos_core::settle_intent_result(&read, &facts.entries);
+    // The lock of the consolidation row of the Project, which the claim of a consolidation pass
+    // takes, and then whether a consolidation pass is in progress. Thus the start of a
+    // consolidation pass, which pins the Memory revision, and this read cannot cross.
+    let consolidation_in_progress: bool = client
+        .query_one(
+            "WITH locked AS (SELECT 1 FROM storyos.memory_work_schedules
+                              WHERE (owner_user_id, project_id, work_kind, source_id) =
+                                    ($1::text::uuid, $2::text::uuid, 'consolidation',
+                                     $2::text::uuid)
+                              FOR UPDATE)
+             SELECT EXISTS (SELECT 1 FROM storyos.memory_consolidation_passes
+                             WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
+                               AND outcome IS NULL),
+                    (SELECT count(*) FROM locked)",
+            &[&keys[0], &keys[1]],
+        )
+        .await
+        .map_err(complete_unavailable)?
+        .get(/*idx*/ 0);
+    let (outcome, result) =
+        storyos_core::settle_intent_result(&read, &facts.entries, consolidation_in_progress);
     if outcome == IntentPassOutcome::NotKept {
         settle_pass(client, scope, &claim.run_id, outcome.label(), None).await?;
         resolve(client, claim, row, Resolution::settled(&result)).await?;
@@ -328,9 +349,8 @@ pub(crate) async fn settle_end(
     settle_pass(client, scope, &claim.run_id, "failed", Some(reason)).await
 }
 
-/// Writes the outcome of the running pass of the Run `run_id`. The settlement makes the
-/// consolidation row of the Project due when an observation waits, and the intent pass row due
-/// again when an entry needs a pass.
+/// Writes the outcome of the running pass of the Run `run_id`. The settlement makes the intent
+/// pass row of the Project due again when an entry needs a pass.
 async fn settle_pass(
     client: &Client,
     scope: &ProjectScope,
@@ -357,8 +377,6 @@ async fn settle_pass(
     if settled == 0 {
         return Ok(());
     }
-    // A consolidation pass does not start while an intent pass runs.
-    crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
     mark_due_when_needed(client, scope)
         .await
         .map_err(complete_unavailable)

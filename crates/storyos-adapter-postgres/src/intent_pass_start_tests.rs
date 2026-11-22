@@ -6,11 +6,11 @@ use std::time::SystemTime;
 
 use serde_json::json;
 use storyos_application::MemoryWorkOutcome;
-use storyos_core::{ConsolidationSkip, IntentPassSkip};
+use storyos_core::IntentPassSkip;
 
 use super::tests::{
     NOT_KEPT, age, change, character, claim, consolidate, file, finish, intent_due, intents,
-    make_due, outcomes, results, run_intent,
+    make_due, memory_revision, outcomes, results, run_intent,
 };
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
@@ -20,7 +20,7 @@ use crate::shared_tests::memory_capture::{project, run_capture};
 use crate::shared_tests::memory_conflict_flag_show::{run, write};
 use crate::shared_tests::memory_consolidation::{capture, run_pass, scripted, settled, start_pass};
 use crate::shared_tests::memory_consolidation_conflict::{conflict, entry_id};
-use crate::shared_tests::memory_consolidation_schedule::{claim_pass, pass_due};
+use crate::shared_tests::memory_consolidation_schedule::claim_pass;
 
 const FAKE: &str = "我明天一早去渡口，看看那条船还在不在。";
 
@@ -274,9 +274,10 @@ async fn one_pass_starts_in_a_minute_and_a_failed_pass_does_not_start_again() {
     );
 }
 
-/// A consolidation change and a `write_memory` change of the part of the author between the
-/// start and the settlement of a pass each give `not_kept`, with no intent version. The entry
-/// needs a pass again, and the later pass records a result for the new text.
+/// A consolidation pass that starts during an intent pass goes first: the intent pass settles
+/// with `not_kept`, writes no version, and leaves the Memory revision that the consolidation pass
+/// pinned, so that pass applies its operations. A `write_memory` change of the part of the author
+/// during a pass also gives `not_kept`. Each later pass records a result for the new text.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_text() {
@@ -284,62 +285,57 @@ async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_t
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "353").await;
     let project = (&scope, chapter_id.as_str());
-    consolidate(
-        &store,
-        &admin,
-        &scope,
-        &source,
-        &[character("林舟", "林舟是船夫。")],
-    )
-    .await;
+    let create = [character("林舟", "林舟是船夫。")];
+    consolidate(&store, &admin, &scope, &source, &create).await;
     let first = started(claim(&store, &admin, &scope).await);
     make_due(&admin, &scope).await;
     let running = (
         claim(&store, &admin, &scope).await,
         intent_due(&admin, &scope).await,
     );
-    // The test starts the consolidation pass directly, as the claim does not while a pass runs.
+    // An observation arrives, and the claim starts a consolidation pass during the intent pass.
     let changed = [change(1, "林舟", "林舟换了船。")];
-    consolidate(&store, &admin, &scope, &source, &changed).await;
-    finish(&store, &admin, &scope, &first).await;
-    let second = run_intent(&store, &admin, &scope).await;
-    run(&store, &admin, project, "355", &author_part("他怕水。")).await;
-    age(&admin, &scope).await;
-    let third = started(claim(&store, &admin, &scope).await);
-    // An observation waits during the pass: the claim of the consolidation row starts no pass, and
-    // the settlement of the intent pass makes the row due again.
     capture(
         &store,
         &admin,
         &scope,
         &source,
-        json!([scripted("脚本", &[])]),
+        json!([scripted("脚本", &changed)]),
     )
     .await;
-    let consolidation = (
-        claim_pass(&store, &admin, &scope).await,
-        pass_due(&admin, &scope).await,
-    );
+    let MemoryWorkOutcome::PassStarted(pass) = claim_pass(&store, &admin, &scope).await else {
+        panic!("the claim must start a consolidation pass");
+    };
+    let pinned = memory_revision(&admin, &scope).await;
+    finish(&store, &admin, &scope, &first).await;
+    let after_intent = memory_revision(&admin, &scope).await;
+    run_capture(&store, &admin, &scope, &pass.run_id).await;
+    let second = run_intent(&store, &admin, &scope).await;
+    run(&store, &admin, project, "355", &author_part("他怕水。")).await;
+    age(&admin, &scope).await;
+    let third = started(claim(&store, &admin, &scope).await);
     let author_change = write("change", json!({"entry": 2, "text": "他会游泳。"}));
     run(&store, &admin, project, "356", &author_change).await;
     finish(&store, &admin, &scope, &third).await;
-    let consolidation_due = pass_due(&admin, &scope).await;
-    run_pass(&store, &admin, &scope).await;
     let fourth = run_intent(&store, &admin, &scope).await;
-    let skipped = (
-        MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::PassInProgress),
-        MemoryWorkOutcome::PassSkipped(ConsolidationSkip::IntentPassInProgress),
-    );
+    let first_text = "The Host did not keep the intent: a consolidation pass of the Memory is in \
+                      progress.";
 
     assert_eq!(
-        (running, consolidation, consolidation_due),
         (
-            (skipped.0, json!(false)),
-            (skipped.1, Some(json!([true, true, null]))),
-            Some(json!([true, true, "00:30:00"]))
+            running,
+            after_intent,
+            settled(&admin, &pass.run_id).await[1].clone()
+        ),
+        (
+            (
+                MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::PassInProgress),
+                json!(false)
+            ),
+            pinned,
+            json!("applied")
         )
     );
-
     assert_eq!(
         (
             outcomes(&admin, &scope).await,
@@ -354,7 +350,7 @@ async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_t
                 [1, "not_kept", 2, 1],
                 [1, "recorded", 2, 2]
             ]),
-            [json!([NOT_KEPT]), json!([NOT_KEPT])],
+            [json!([first_text]), json!([NOT_KEPT])],
             [
                 told(None, "林舟换了船。"),
                 told(Some("他会游泳。"), "林舟换了船。")

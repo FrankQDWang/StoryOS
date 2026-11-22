@@ -339,9 +339,6 @@ async fn decide_and_start_pass(
                              WHERE latest.state = 'current'),
                     EXISTS (SELECT 1 FROM storyos.memory_consolidation_passes
                              WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
-                               AND outcome IS NULL),
-                    EXISTS (SELECT 1 FROM storyos.intent_passes
-                             WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
                                AND outcome IS NULL)",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )
@@ -352,7 +349,6 @@ async fn decide_and_start_pass(
         conflict_waits: row.get(/*idx*/ 1),
         entry_current: row.get(/*idx*/ 2),
         pass_in_progress: row.get(/*idx*/ 3),
-        intent_pass_in_progress: row.get(/*idx*/ 4),
     };
     if let Err(skip) = storyos_core::decide_consolidation(&facts) {
         return Ok(MemoryWorkOutcome::PassSkipped(skip));

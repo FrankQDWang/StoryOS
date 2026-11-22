@@ -259,8 +259,9 @@ fn a_due_mark_obeys_the_rate_and_only_a_character_write_needs_one() {
 }
 
 /// The result of a valid call is a version only while the versions that the pass read are the
-/// current versions of the character. A change of either part, a delete, a new entry of the
-/// author, and a delete of the entry of the author give `NotKept`.
+/// current versions of the character and no consolidation pass is in progress. A change of either
+/// part, a delete, a new entry of the author, a delete of the entry of the author, and a running
+/// consolidation pass give `NotKept`.
 #[test]
 fn a_result_is_kept_only_for_the_versions_that_the_pass_read() {
     let entries = |words: &[&str]| words.iter().copied().map(entry).collect::<Vec<_>>();
@@ -280,7 +281,7 @@ fn a_result_is_kept_only_for_the_versions_that_the_pass_read() {
         ]),
         entries(&["c 3 current character author 阿青 3"]),
     ]
-    .map(|entries| super::settle_intent_result(&read, &entries));
+    .map(|entries| super::settle_intent_result(&read, &entries, false));
     let recorded = (
         super::IntentPassOutcome::Recorded,
         crate::host_tool_result("The Host recorded the intent, and the pass is complete."),
@@ -305,6 +306,16 @@ fn a_result_is_kept_only_for_the_versions_that_the_pass_read() {
         ]
     );
     assert_eq!(not_kept().0.label(), "not_kept");
+    let current = entries(&[author, "c 3 current character - 阿青 2"]);
+    let text =
+        "The Host did not keep the intent: a consolidation pass of the Memory is in progress.";
+    assert_eq!(
+        super::settle_intent_result(&read, &current, true),
+        (
+            super::IntentPassOutcome::NotKept,
+            crate::host_tool_result(text)
+        )
+    );
 }
 
 /// Each reason of a claim that starts no pass, in the order of the rule, with its label. The

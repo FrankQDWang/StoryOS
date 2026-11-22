@@ -125,9 +125,6 @@ pub struct ConsolidationFacts {
     pub entry_current: bool,
     /// A pass of the Project is in progress.
     pub pass_in_progress: bool,
-    /// An intent pass of the Project is in progress. Its result moves the Memory revision, so a
-    /// pass that starts before its settlement is stale (ADR 0101 section 4).
-    pub intent_pass_in_progress: bool,
 }
 
 /// Why a claimed consolidation row started no pass. The due time becomes empty in each case.
@@ -137,8 +134,6 @@ pub enum ConsolidationSkip {
     NothingWaits,
     /// The settlement of that pass sets the due time again when an observation still waits.
     PassInProgress,
-    /// The settlement of that intent pass sets the due time again when an observation waits.
-    IntentPassInProgress,
     /// The admission of S7-D3b refused the start (ADR 0094 section 8).
     StartRefused,
 }
@@ -148,7 +143,6 @@ impl ConsolidationSkip {
         match self {
             Self::NothingWaits => "no_observation_waits",
             Self::PassInProgress => "pass_in_progress",
-            Self::IntentPassInProgress => "intent_pass_in_progress",
             Self::StartRefused => "start_refused",
         }
     }
@@ -164,9 +158,6 @@ pub fn decide_consolidation(facts: &ConsolidationFacts) -> Result<(), Consolidat
     }
     if facts.pass_in_progress {
         return Err(ConsolidationSkip::PassInProgress);
-    }
-    if facts.intent_pass_in_progress {
-        return Err(ConsolidationSkip::IntentPassInProgress);
     }
     Ok(())
 }

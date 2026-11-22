@@ -243,7 +243,7 @@ pub(super) async fn intents(admin: &Client, scope: &ProjectScope, number: u64) -
     .await
 }
 
-async fn memory_revision(admin: &Client, scope: &ProjectScope) -> Value {
+pub(super) async fn memory_revision(admin: &Client, scope: &ProjectScope) -> Value {
     json_of(
         admin,
         "SELECT to_jsonb(memory_revision)::text FROM storyos.project_memory_heads
