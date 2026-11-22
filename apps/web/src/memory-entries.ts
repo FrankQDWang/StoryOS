@@ -38,24 +38,21 @@ export function useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl }: {
   const flights = useRef(new Map<string, MemoryDeleteFlight>());
   // The entries that a delete removed. A read that started before the delete must not show them again.
   const removed = useRef(new Set<string>());
-  // The count of applied deletes, and the title of each deleted part of the author of a character with the count
-  // after its delete. A delete of that part ends the intent result that names it (ADR 0101 section 4), so a read that
-  // started before the delete must not show the result again.
-  const deletes = useRef(0);
-  const endedTitles = useRef<{ title: string; count: number }[]>([]);
+  // The count of applied deletes of a part of the author of a character. Such a delete ends the intent result that
+  // names the part (ADR 0101 section 4), and a read that started before the delete can still give that result.
+  const endingDeletes = useRef(0);
   const { owner_user_id: ownerUserId, project_id: projectId } = scope;
   useEffect(() => {
     let current = true;
-    const started = deletes.current;
+    const started = endingDeletes.current;
     listMemoryEntries({ baseUrl, fetchImpl, projectId })
       .then((read) => sameScope(read.project_scope, { owner_user_id: ownerUserId, project_id: projectId })
         ? read.entries : "failed" as const, () => "failed" as const)
       .then((read) => {
-        if (current) {
-          const ended = endedTitles.current.filter((title) => title.count > started).map((title) => title.title);
-          setEntries(read === "failed" ? read : withoutIntent(
-            read.filter((item) => !removed.current.has(item.memory_entry_id)), ended));
-        }
+        if (!current) return;
+        // The read overlapped a delete that ended a result, so the page discards it and reads again.
+        if (endingDeletes.current !== started) setReads((count) => count + 1);
+        else setEntries(read === "failed" ? read : read.filter((item) => !removed.current.has(item.memory_entry_id)));
       });
     return () => { current = false; };
   }, [baseUrl, fetchImpl, ownerUserId, projectId, reads]);
@@ -74,12 +71,11 @@ export function useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl }: {
     else flights.current.set(memoryEntryId, result.flight);
     if (result.outcome === "deleted") {
       removed.current.add(memoryEntryId);
-      deletes.current += 1;
-      const ended = entry.entry_type === "character" && entry.origin === "author_request" ? [entry.title] : [];
-      for (const title of ended) endedTitles.current.push({ title, count: deletes.current });
+      const ends = entry.entry_type === "character" && entry.origin === "author_request";
+      if (ends) endingDeletes.current += 1;
       setStep(memoryEntryId, undefined);
       setEntries((shown) => shown === "failed" || shown === undefined
-        ? shown : withoutIntent(shown.filter((item) => item.memory_entry_id !== memoryEntryId), ended));
+        ? shown : withoutIntent(shown.filter((item) => item.memory_entry_id !== memoryEntryId), ends ? [entry.title] : []));
       return;
     }
     setStep(memoryEntryId, result.outcome);

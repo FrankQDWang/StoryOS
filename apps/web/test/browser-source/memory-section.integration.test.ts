@@ -638,12 +638,14 @@ it("shows no block after the author deleted the part of the author that the resu
   expect([blockLines("[data-character-intent]"), blockLines("[data-character-questions]")]).toEqual([[], []]);
 });
 
-it("shows no block when a read that started before the delete of the part of the author gives the result later",
+it("reads again after a read that overlapped the delete of the part of the author, and shows the result of the new read",
   async () => {
     const background = character(5, "林舟", { intent: result() });
     const author = character(7, "林舟", { origin: "author_request" });
+    // After the delete, a later intent pass gives a new result that names no part of the author.
+    const later = { ...background, version: "3", intent: result({ text: "他想先去找阿青。", questions: [] }) };
     const reread = held();
-    const server = fakeServer([listed([background, author]), reread.answer],
+    const server = fakeServer([listed([background, author]), reread.answer, listed([later])],
       [deleted({ kind: "conflicted", reason: "entry_changed" }), applied(author.memory_entry_id)]);
     await settingsPage(server.fetchImpl);
     document.querySelector<HTMLButtonElement>('[data-settings-item="characters"]')!.click();
@@ -653,9 +655,10 @@ it("shows no block when a read that started before the delete of the part of the
     await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(2);
     await confirmDeleteInFile(7);
     await expect.poll(fileEntries).toEqual(["5"]);
-    reread.give(listed([{ ...background, version: "2", text: "他改了主意。" }, author]));
-    await expect.poll(() => document.querySelector("[data-character-file]")?.textContent?.includes("他改了主意。"))
-      .toBe(true);
-    expect([fileEntries(), blockLines("[data-character-intent]"), blockLines("[data-character-questions]")])
-      .toEqual([["5"], [], []]);
+    expect(blockLines("[data-character-intent]")).toEqual([]);
+    reread.give(listed([background, author]));
+    await expect.poll(() => blockLines("[data-character-intent]")).toEqual(["接下来想做什么", "他想先去找阿青。",
+      "写到《渡口》时的想法"]);
+    expect([server.paths.filter((path) => path === MEMORY).length, fileEntries(),
+      blockLines("[data-character-questions]")]).toEqual([3, ["5"], []]);
   });
