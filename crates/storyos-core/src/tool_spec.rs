@@ -56,6 +56,9 @@ pub enum ToolOperation {
     /// The Host Tool with which a consolidation pass gives its operations and ends (ADR 0094
     /// section 6).
     ApplyMemoryOperations,
+    /// The Host Tool with which an intent pass gives the intent of its character and ends (ADR
+    /// 0101 section 4).
+    RecordCharacterIntent,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -154,6 +157,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::SEARCH_MEMORY_TOOL_SPEC,
         &crate::RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
         &crate::APPLY_MEMORY_OPERATIONS_TOOL_SPEC,
+        &crate::RECORD_CHARACTER_INTENT_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -207,6 +211,10 @@ pub enum ToolIntake {
     },
     RecordMemoryObservations(Vec<crate::ObservationCandidate>),
     ApplyMemoryOperations(Vec<crate::MemoryOperationCandidate>),
+    RecordCharacterIntent {
+        intent: String,
+        questions: Vec<String>,
+    },
 }
 
 /// Why the arguments of a function call do not fit the typed intake.
@@ -353,6 +361,9 @@ impl ToolSpec {
             ToolOperation::ApplyMemoryOperations => {
                 crate::apply_memory_operations::tool_intake(arguments)
             }
+            ToolOperation::RecordCharacterIntent => {
+                crate::record_character_intent::intake(arguments)
+            }
         }
     }
 }
@@ -418,7 +429,8 @@ impl ServerArguments {
                 | ToolIntake::ReadMemoryEntry { .. }
                 | ToolIntake::SearchMemory { .. }
                 | ToolIntake::RecordMemoryObservations(_)
-                | ToolIntake::ApplyMemoryOperations(_),
+                | ToolIntake::ApplyMemoryOperations(_)
+                | ToolIntake::RecordCharacterIntent { .. },
             )
             | (
                 Self::Fetch { .. },
@@ -436,7 +448,8 @@ impl ServerArguments {
                 | ToolIntake::ReadMemoryEntry { .. }
                 | ToolIntake::SearchMemory { .. }
                 | ToolIntake::RecordMemoryObservations(_)
-                | ToolIntake::ApplyMemoryOperations(_),
+                | ToolIntake::ApplyMemoryOperations(_)
+                | ToolIntake::RecordCharacterIntent { .. },
             ) => {
                 return None;
             }

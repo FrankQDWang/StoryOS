@@ -86,7 +86,8 @@ impl ToolEffectRequest {
             | ToolIntake::ReadMemoryEntry { .. }
             | ToolIntake::SearchMemory { .. }
             | ToolIntake::RecordMemoryObservations(_)
-            | ToolIntake::ApplyMemoryOperations(_) => Vec::new(),
+            | ToolIntake::ApplyMemoryOperations(_)
+            | ToolIntake::RecordCharacterIntent { .. } => Vec::new(),
         };
         Some(Self {
             external_read: envelope.external_read,
@@ -136,6 +137,7 @@ impl GrantScope {
             | Self::ProjectWritingAssistanceV3
             | Self::ProjectWritingAssistanceV4
             | Self::ProjectWritingAssistanceV5
+            | Self::ProjectWritingAssistanceV6
             | Self::ManuscriptEmbeddingV1 => false,
         }
     }

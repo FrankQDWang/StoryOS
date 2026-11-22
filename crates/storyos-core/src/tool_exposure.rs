@@ -83,6 +83,7 @@ impl ExposureFacts<'_> {
                     | ToolOperation::ReadMemoryEntry
                     | ToolOperation::RecordMemoryObservations => true,
                     ToolOperation::ApplyMemoryOperations
+                    | ToolOperation::RecordCharacterIntent
                     | ToolOperation::ProposeEdit
                     | ToolOperation::SubmitResearch
                     | ToolOperation::ReadToolResult
@@ -101,6 +102,10 @@ impl ExposureFacts<'_> {
             AgentRunKind::MemoryConsolidation => {
                 return operation == ToolOperation::ApplyMemoryOperations;
             }
+            // An intent pass declares only its output Tool (ADR 0101 section 4).
+            AgentRunKind::IntentPass => {
+                return operation == ToolOperation::RecordCharacterIntent;
+            }
             AgentRunKind::Author => {}
         }
         match operation {
@@ -116,8 +121,11 @@ impl ExposureFacts<'_> {
             ToolOperation::WriteMemory => true,
             ToolOperation::ReadMemoryEntry | ToolOperation::SearchMemory => self.memory_use,
             ToolOperation::HybridSearchManuscript => self.hybrid_search,
-            // Only a capture records observations, and only a pass applies operations.
-            ToolOperation::RecordMemoryObservations | ToolOperation::ApplyMemoryOperations => false,
+            // Only a capture records observations, only a consolidation pass applies operations,
+            // and only an intent pass records an intent.
+            ToolOperation::RecordMemoryObservations
+            | ToolOperation::ApplyMemoryOperations
+            | ToolOperation::RecordCharacterIntent => false,
             // The web research Tools are Tools of the research binding, not Host Tools.
             ToolOperation::WebSearch | ToolOperation::WebFetch => false,
         }
@@ -169,6 +177,7 @@ impl ToolOperation {
             Self::SearchMemory => "search_memory",
             Self::RecordMemoryObservations => "record_memory_observations",
             Self::ApplyMemoryOperations => "apply_memory_operations",
+            Self::RecordCharacterIntent => "record_character_intent",
         }
     }
 
@@ -200,6 +209,7 @@ impl ToolOperation {
             Self::SearchMemory => crate::search_memory::DESCRIPTION,
             Self::RecordMemoryObservations => crate::record_memory_observations::DESCRIPTION,
             Self::ApplyMemoryOperations => crate::apply_memory_operations::DESCRIPTION,
+            Self::RecordCharacterIntent => crate::record_character_intent::DESCRIPTION,
         }
     }
 }
@@ -258,6 +268,7 @@ impl ExposedTool {
                 crate::record_memory_observations::parameters()
             }
             ToolOperation::ApplyMemoryOperations => crate::apply_memory_operations::parameters(),
+            ToolOperation::RecordCharacterIntent => crate::record_character_intent::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,
@@ -314,7 +325,9 @@ impl ToolExposure {
         // A background Run gets no research Tool.
         let bound = match facts.run_kind {
             AgentRunKind::Author => facts.bound,
-            AgentRunKind::MemoryCapture | AgentRunKind::MemoryConsolidation => &[],
+            AgentRunKind::MemoryCapture
+            | AgentRunKind::MemoryConsolidation
+            | AgentRunKind::IntentPass => &[],
         };
         for bound in bound {
             if bound.lifecycle != ToolRegistrationLifecycle::Active

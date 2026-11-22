@@ -825,7 +825,8 @@
         "memory_capture_input",
         "memory_delete_marks",
         "memory_entries",
-        "memory_observations"
+        "memory_observations",
+        "character_file"
       ],
       "type": "string"
     },
