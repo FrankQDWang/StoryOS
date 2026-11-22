@@ -195,8 +195,9 @@ async fn the_passes_wait_for_the_consolidation_work_of_the_project() {
     );
 }
 
-/// A Project starts at most one pass in one minute: the claim before that time starts no pass,
-/// and the row is due at the start of the last pass and one minute. A failed pass gets no second
+/// A Project starts at most one pass in one minute: the settlement makes the row due at the start
+/// of the last pass and one minute, and a claim before that time starts no pass and writes that
+/// due time again. A failed pass gets no second
 /// start for the same versions, also after two more claims.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -210,19 +211,28 @@ async fn one_pass_starts_in_a_minute_and_a_failed_pass_does_not_start_again() {
     ];
     consolidate(&store, &admin, &scope, &source, &operations).await;
     run_intent(&store, &admin, &scope).await;
+    // The due time of the row, whether it is the start of the pass and one minute, and whether it
+    // is later than now.
+    let row = || async {
+        let row = admin
+            .query_one(
+                "SELECT work.due_at, work.due_at = pass.started_at + interval '60 seconds',
+                        work.due_at > clock_timestamp()
+                   FROM storyos.memory_work_schedules AS work
+                   JOIN storyos.intent_passes AS pass USING (owner_user_id, project_id)
+                  WHERE work.project_id = $1::text::uuid AND work.work_kind = 'intent_pass'",
+                &[&scope.project_id.as_ref()],
+            )
+            .await
+            .unwrap();
+        let due_at: SystemTime = row.get(/*idx*/ 0);
+        (due_at, [row.get::<_, bool>(/*idx*/ 1), row.get(/*idx*/ 2)])
+    };
+    let settled = row().await;
+    // A claim before that time, for example of a due time that an earlier version wrote.
+    make_due(&admin, &scope).await;
     let limited = claim(&store, &admin, &scope).await;
-    let row = admin
-        .query_one(
-            "SELECT work.due_at, work.due_at = pass.started_at + interval '60 seconds',
-                    work.due_at > clock_timestamp()
-               FROM storyos.memory_work_schedules AS work
-               JOIN storyos.intent_passes AS pass USING (owner_user_id, project_id)
-              WHERE work.project_id = $1::text::uuid AND work.work_kind = 'intent_pass'",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    let due_at: SystemTime = row.get(/*idx*/ 0);
+    let (due_at, after_claim) = row().await;
     run_intent(&store, &admin, &scope).await;
     let mut again = Vec::new();
     for _ in 0..2 {
@@ -235,14 +245,16 @@ async fn one_pass_starts_in_a_minute_and_a_failed_pass_does_not_start_again() {
 
     assert_eq!(
         (
-            limited,
-            [row.get::<_, bool>(/*idx*/ 1), row.get(/*idx*/ 2)],
+            (settled, limited, after_claim),
             outcomes(&admin, &scope).await,
             again
         ),
         (
-            MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::RateLimited { due_at }),
-            [true, true],
+            (
+                (due_at, [true, true]),
+                MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::RateLimited { due_at }),
+                [true, true]
+            ),
             json!([[1, "failed", 1, null], [2, "recorded", 1, null]]),
             vec![
                 (
