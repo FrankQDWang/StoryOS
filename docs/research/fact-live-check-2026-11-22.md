@@ -74,7 +74,7 @@ The Host created entry 16 version 1 (Memory revision 38) with the origin `author
 
 **The words.** Against the message of the author, the text has two additions:
 
-- "这栋茶馆的房子": the author wrote "这栋房子". The words "茶馆的" are a word of the model.
+- "这栋茶馆的房子": the author wrote "这栋房子". The model added these words.
 - "作者说明这一点后面会用到": the author wrote "这一点后面会用到". The words "作者说明" are a label. The new sentence of #1818 says "Do not add a label, an explanation, or the title of another entry".
 
 Each other word of the text is a word of the author. The text has no fact of the manuscript and no title of another entry. In #1792 the text had the title of a foreshadowing entry and the words "后续情节会用到这一事实".

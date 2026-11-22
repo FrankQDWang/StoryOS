@@ -373,7 +373,9 @@ async fn a_request_with_the_memory_index_has_the_conflict_paragraph_of_adr_0094_
 
 /// ADR 0101 section 3: the complete Host instructions of the first request of a Run of the author
 /// that declares `write_memory`, with no Skill, Chapter, or Memory item. The paragraph of
-/// `write_memory` gives the two entries of a character.
+/// `write_memory` gives the two entries of a character. It has the two sentences of the amendment
+/// S11-12 of ADR 0053: a fact that the character knows is not foreshadowing, and an entry has no
+/// label, no explanation, and no title of another entry.
 #[tokio::test]
 async fn the_first_request_of_a_run_of_the_author_has_the_complete_host_instructions() {
     assert_eq!(

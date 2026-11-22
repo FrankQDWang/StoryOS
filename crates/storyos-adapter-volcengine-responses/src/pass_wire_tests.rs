@@ -69,8 +69,9 @@ fn message(text: &str) -> serde_json::Value {
 /// entry for each character and each pair, and the limits from the Core constants. They say what
 /// the mark `unused` and an entry of the author mean, and what the delete marks are. They give
 /// the rule of an uncertainty and of the observations of an entry, and they say what the key
-/// `refused` of an observation means. Each section is data, and the
-/// reply is one `apply_memory_operations` call.
+/// `refused` of an observation means. They have the sentence of the amendment S11-12 of ADR 0053:
+/// a detail of the narration is not what a character said. Each section is data, and the reply
+/// is one `apply_memory_operations` call.
 #[test]
 fn the_pass_instructions_are_one_text_with_the_limits_of_the_core_constants() {
     assert_eq!(

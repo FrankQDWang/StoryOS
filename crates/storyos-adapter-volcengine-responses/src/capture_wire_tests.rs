@@ -81,7 +81,8 @@ fn search(origin: ToolOutputOrigin) -> ToolOutput {
 /// capture of a Chapter looks for. They give the rule of an uncertainty
 /// and of a decision of the author, and they explain the delete marks. They give the rule of a
 /// conflict with an entry of the author (ADR 0094 section 7), and the sentence of an intent in an
-/// answer of the assistant (ADR 0101 section 5). They give the Host limits
+/// answer of the assistant (ADR 0101 section 5). They have the sentence of the amendment S11-12 of
+/// ADR 0053: a detail of the narration is not what a character said. They give the Host limits
 /// from the Core constants. Each section and each function result is data, and one
 /// `record_memory_observations` call ends the capture.
 #[test]
