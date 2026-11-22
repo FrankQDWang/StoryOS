@@ -48,7 +48,7 @@ Each idea must pass two questions: does it need setup before writing (then it is
 
 - **A conflict notice in the text.** When a new passage is in conflict with Agent Memory, for example a dead character who comes back or an age that does not fit, the editor marks the passage.
 - **Sleeping threads.** A hint from many Chapters before that has no result, and a character who did not appear for a long time, are in one list for the author and for the assistant.
-- **A pass that looks at the whole Memory again.** A general agent has a dreaming function: in a quiet time, it reads all its memory, joins duplicates, corrects old facts, and removes entries of no use. The consolidation pass of Stage 7 only joins the observations of one capture into the entries. The author wants such a pass after Stage 11 ([ADR 0101](docs/adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
+- **A dreaming function for Agent Memory.** A general agent has a dreaming function: in a quiet time, it reads all its memory, joins duplicates, corrects old facts, and removes entries of no use. The consolidation pass of Stage 7 already removes, merges, and compresses the entries (ADR 0094 section 6), but it starts only when an observation of a capture waits, and it cannot read the manuscript. The author wants a dreaming function after Stage 11, and its difference from that pass is not decided ([ADR 0101](docs/adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
 
 ### 4.3 When to make the world larger
 

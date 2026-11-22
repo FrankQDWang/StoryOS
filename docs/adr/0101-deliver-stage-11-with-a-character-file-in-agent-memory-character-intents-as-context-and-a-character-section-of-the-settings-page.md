@@ -12,7 +12,7 @@ The third problem of ADR 0096 is the plot: a model stays inside the known facts,
 
 The author gave these conditions:
 
-- The work starts with no request of the author. The author can have no professional training, and the attention of the author is limited. A start by the author stays possible.
+- The work starts with no request of the author. The author can have no professional training, and the attention of the author is limited. The author can also ask the assistant in a Conversation.
 - StoryOS does not simulate a world. The author finds a simulation not possible and its result not good. A character only says what it wants to do. The manuscript is the one truth, and the author decides what the manuscript gets.
 - The time is the time of the story, for example the three days that pass in the story. It is not only the moment at which a Chapter is complete.
 - Each character has its own context: what the character did, saw, and heard, what the character wants, and what the character hides.
@@ -49,7 +49,7 @@ The number of a stage is its identity, and it is not its place in the order (ADR
 
 - StoryOS does not simulate. No function of Stage 11 moves the story forward, and no function changes the manuscript or Agent Memory from an intent. A change of the manuscript by the assistant stays a Proposal.
 - A character proposes, and the author decides. An intent is a suggestion for the plot. It is not a fact of the story, and it is not an instruction.
-- Each character gets only its own file when it forms an intent. It does not get the manuscript, the Memory of the Project, or the file of another character.
+- Each character gets only its own file when it forms an intent. It does not get the manuscript, the Memory of the Project, or the file of another character. An intent uses only what the character can know.
 - The work is a part of Agent Memory. It uses the entries of the type character, the capture of a Chapter, and the consolidation pass. Stage 11 adds no structured character record, and the rule "no setup before writing" of ADR 0096 applies: the author fills no character sheet.
 - The mechanisms are instructions to the model and bounded background work, as in [ADR 0100](0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md).
 
@@ -61,23 +61,27 @@ The character file is the Memory of one character. It has two parts, and each pa
 - **The part of the background work.** The capture of a Chapter and the consolidation pass keep it current. It holds the view of the character: who the character is, what the character did, saw, and heard, in the order of the story, what the character wants at the end of the manuscript, and how the character speaks. A decision about the character that the author states in a Conversation goes into this part only when the character knows it.
 - **The limit of knowledge.** The part of the background work holds no fact that the character did not see and that no person told the character. It does not use the negative form ("the character does not know that …"), because that form gives the fact to the reader of the file.
 - **The length.** The limit of a character entry increases from 1,500 characters. The first value is 4,000 characters. One recorded live run on the sample manuscript measures how the file of a character grows with each Chapter, and the ticket of that run sets the value before the release. The instructions tell the model to keep the recent events in detail and to make the early events short.
-- A Project has at most one part of each kind for each character. The rule "one entry for each character" of ADR 0094 section 8 becomes "one entry of the author and one entry of the background work".
+- **Two entries with one title.** A Project has at most one part of each kind for each character. The rule "one entry for each character" of ADR 0094 section 8 becomes "one entry of the author and one entry of the background work". The check of one entry for each type and title (ADR 0094 section 6) compares a character entry only with the character entries of its own kind.
+- **A change by the author.** The Host refuses a change of the part of the background work by the request of the author, and the refusal tells the assistant to write the part of the author. A delete of each part by the author stays possible.
+- **The delete marks.** A delete mark of the part of the author does not stop a write of background work for the same character. A delete mark of the part of the background work stops a new part of the background work for that character, as ADR 0094 section 6 says, and it does not stop the part of the author.
 - The rule of a conflict of ADR 0094 section 7 stays: when the manuscript is against the part of the author, background work sets a conflict flag and changes no text.
 
 ### 4. The intent pass
 
 - An intent pass is background work for one character. It sends one model request. The input is the two parts of the file of that character and no other data. The request has no Tool that reads, searches, or writes.
-- The reply has two items. The first is the intent: what the character wants to do in the next period of story time, from the moment at which the file ends, in two or three sentences. The model selects the length of the period that fits the story. A character that does nothing says so. The second is at most three questions to the author about facts that the character must know and that the file does not have. The model asks, and it does not guess an answer.
+- **The words of the author in the pass.** The part of the author can hold a fact that the character does not know, for example a plan of the author for the future of the character. The Host instructions of the pass say so. They tell the model to take from the part of the author only what the character knows about itself and its past, and to use no other fact of that part in the intent.
+- The reply has two items. The first is the intent: what the character wants to do in the next period of story time. The period starts at the moment at which the file ends, and the model selects the length that fits the story. The intent has two or three sentences. A character that does nothing says so. The second item is at most three questions to the author about facts that the character must know and that the file does not have. The model asks, and it does not guess an answer.
 - An intent pass starts for a character after the file of that character changed. A Chapter in which the character occurs changes the file through the capture and the consolidation pass. A character that does not occur keeps its last intent, and the record says at which Chapter that intent was made.
 - The pass runs with no request of the author, as the capture does, and ordinary writing does not wait for it. The Host limits the rate of the passes of a Project.
 - An intent pass is for a character that has the part of the background work. A character that only the author described, and that the manuscript does not have, gets no pass.
-- The Host keeps the newest result of each character with the part of the background work, as it keeps a conflict flag (ADR 0094 section 7). A result changes no text of the file. A later change of that part removes the result, and the next pass gives a new one. A result is data of background work: it has no Instruction Authority, and it grants no permission.
+- The Host keeps the newest result of each character with the part of the background work, as it keeps a conflict flag (ADR 0094 section 7). A result changes no text of the file. A result is current only while the two parts of the file are the parts that the pass read. A later change of one of the two parts, also a new part of the author or a delete of it, removes the result at once: no Run gets it, and the settings page does not show it. The next pass gives a new one. A result is data of background work: it has no Instruction Authority, and it grants no permission.
 
 ### 5. The use of an intent
 
 - The writing workspace shows no intent and no question. The author decided this on 2026-11-22.
-- The Memory Index of a Run of the author has the newest intent in the line of each character. The Host instructions say that an intent is a suggestion from the file of the character alone, that it is not a fact, and that the author decides. The assistant uses an intent when it continues or rewrites a scene with that character. When the author asks what a character wants, the assistant answers from the intent and the file.
-- A capture and a consolidation pass do not get the intents, so that an intent does not become a fact of Memory.
+- The Memory Index of a Run of the author has the newest intent in the line of each character. The Host instructions say that an intent is a suggestion from the file of the character alone, that it is not a fact, and that the author decides. The assistant uses an intent when it continues or rewrites a scene with that character. When the author asks in a Conversation what a character wants, the assistant answers from the intent and the file in that Run. This question is the start by the author. It starts no intent pass.
+- A capture, a consolidation pass, and an intent pass do not get the intents, so that an intent does not become a fact of Memory.
+- An answer of the assistant can tell an intent to the author, and the capture of a Project Conversation reads that answer. The Host instructions of a capture say that an intent of a character in an answer of the assistant is not a decision of the author and not a fact of the story. The capture records it only when a message of the author makes it a decision.
 - The questions are for the author only. No Run gets them. The author reads them on the settings page and answers in a Conversation when the author wants. The answer goes into the file by the rules of section 3.
 
 ### 6. The settings page
@@ -96,7 +100,7 @@ The author approved a sketch of this page on 2026-11-22.
 - A simulation of the story, and a function that writes a scene from an intent with no request of the author.
 - A list of the intents in the writing workspace, and a notice to the author.
 - A small floating assistant that reminds the author, and voice. The author named them on 2026-11-22 as a possible later form.
-- A pass that looks at the whole Memory again, as the dreaming of a general agent does. The author wants it after Stage 11.
+- A dreaming function after the model of a general agent. The author wants it after Stage 11. Its difference from the consolidation pass of ADR 0094 section 6, which already removes, merges, and compresses the entries, is not decided.
 - Two parts for an entry of another type, for example a relationship.
 - An edit control for a Memory Entry, and a control that sets the intent pass on or off.
 - A structured record of a character, a relationship, or the timeline. ADR 0094 keeps them deferred.
@@ -115,7 +119,7 @@ The author approved a sketch of this page on 2026-11-22.
 - The delivery continuation and the release baseline get the new stage and its place in the order. `Todos.md` gets the two later ideas of section 7. This ADR adds no Requirement.
 - The specification of Stage 11 follows. With it, the delivery continuation gets the Requirements, the author journey, and the evidence rows of Stage 11, the glossary gets the new terms, and the proof owner covers Stage 11 with a new binding of the release sources.
 - The request mapping gets its next revision, and the Agent Plan route gets its next Registration. The new instructions of the capture and of the consolidation pass, the request of the intent pass, and the intents in a Run of the author each need a live run on the real route.
-- ADR 0094 changes in three places: the limit of a character entry, the rule of one entry for each character, and the effect of a request of the author on an entry of background work of the type character. The other rules of ADR 0094 stay.
+- ADR 0094 changes in these places, for an entry of the type character only: the limit of the text (section 3), the rule of one entry for each character (section 8), the check of one entry for each type and title and the effect of a delete mark (section 6), the effect of a request of the author on an entry of background work (section 5), and one more sentence in the Host instructions of a capture of a Project Conversation (section 5). The other rules of ADR 0094 stay.
 - Each intent pass is one model request with no request of the author. The cost of the background work of a Project increases with the number of the characters that occur in the new Chapters.
 - No database holds data ([ADR 0079](0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)), and a deployment has no upgrade edge. Thus Stage 11 has no step for the character entries of an earlier release: a Project of a Stage 11 deployment gets the new form from its first capture.
 - The settings page gets its first navigation. The exact-dist journeys of the settings page change with it.
