@@ -45,6 +45,14 @@ pub(super) async fn list_memory_entries(
                     source: source(flag.source),
                     flagged_at: flag.flagged_at,
                 }),
+                intent: entry
+                    .intent
+                    .map(|intent| contracts::MemoryEntryIntentInspect {
+                        text: intent.text,
+                        questions: intent.questions,
+                        chapter: intent.chapter.map(source),
+                        recorded_at: intent.recorded_at,
+                    }),
             })
             .collect(),
     }))

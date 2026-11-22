@@ -11,8 +11,8 @@ use crate::release1_memory_entries::{
     DELETE_MEMORY_ENTRY, DeleteMemoryEntryConflictReason, DeleteMemoryEntryEffect,
     DeleteMemoryEntryInput, DeleteMemoryEntryNoEffectReason, DeleteMemoryEntryRequest,
     DeleteMemoryEntryResponse, LIST_MEMORY_ENTRIES, ListMemoryEntriesResponse,
-    MemoryEntryFlagInspect, MemoryEntryInspect, MemoryEntryOriginInspect, MemoryEntrySourceInspect,
-    MemoryEntryTypeInspect, MemorySourceAvailability,
+    MemoryEntryFlagInspect, MemoryEntryInspect, MemoryEntryIntentInspect, MemoryEntryOriginInspect,
+    MemoryEntrySourceInspect, MemoryEntryTypeInspect, MemorySourceAvailability,
 };
 use crate::release1_operation_registry::RegisteredOperation;
 use crate::release1_project_activity::ProjectActivityKind;
@@ -38,6 +38,7 @@ pub(super) const LIST_MEMORY_ENTRIES_ROW: OperationRow = OperationRow {
         MemorySourceAvailability::decl,
         MemoryEntrySourceInspect::decl,
         MemoryEntryFlagInspect::decl,
+        MemoryEntryIntentInspect::decl,
         MemoryEntryInspect::decl,
         ListMemoryEntriesResponse::decl,
     ],
@@ -74,7 +75,10 @@ pub(super) const LIST_MEMORY_ENTRIES_ROW: OperationRow = OperationRow {
 const LIST_MEMORY_ENTRIES_RESPONSE: &[Patch] = &[
     Patch(
         Edit::NullableDefinition("MemoryEntrySourceInspect"),
-        &["/$defs/MemoryEntryInspect/properties/source"],
+        &[
+            "/$defs/MemoryEntryInspect/properties/source",
+            "/$defs/MemoryEntryIntentInspect/properties/chapter",
+        ],
     ),
     Patch(
         UUID,
@@ -99,6 +103,7 @@ const LIST_MEMORY_ENTRIES_RESPONSE: &[Patch] = &[
         &[
             "/$defs/MemoryEntryFlagInspect/properties/flagged_at",
             "/$defs/MemoryEntryInspect/properties/changed_at",
+            "/$defs/MemoryEntryIntentInspect/properties/recorded_at",
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
