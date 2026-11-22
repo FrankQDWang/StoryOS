@@ -63,7 +63,10 @@ the early events short, and keep the recent events in detail. It says what the c
 at the end of the manuscript and how the character speaks. It holds only what the character can \
 know: no fact that the character did not see and that no person told the character. The \
 character does not know what another character says in a scene without the character, or what \
-another character thinks, until a person tells the character. Do not write what the character is \
+another character thinks, until a person tells the character. \
+Write that a character said something only when the manuscript gives it as the words of that \
+character: a detail of the narration is not what the character said. \
+Do not write what the character is \
 for the plot, for example that the character is the key to a secret. Do not write that the \
 character does not know a fact, because that sentence gives the fact.
 
