@@ -286,10 +286,55 @@ part of the author and a part of the background work, an intent pass that
 gives each character only its own file, the intents as context of a Run of
 the author, and a section for the characters on the settings page of a
 Project. StoryOS does not simulate the story, and the author decides what the
-manuscript gets. A specification and a parent issue follow. Until then,
-Stage 11 has no Requirement, no author journey, and no evidence row, and the
-proof owner has nothing to cover for it. The rule "no setup before writing"
-of ADR 0096 applies.
+manuscript gets. The specification is
+[Deliver Stage 11: Character Intents](https://github.com/FrankQDWang/StoryOS/issues/1786).
+The Requirements, the author journey, and the evidence rows below came with
+it. The rule "no setup before writing" of ADR 0096 applies.
+
+| ID | Production obligation | Semantic owner |
+| --- | --- | --- |
+| S11-REQ-001 | Keep the Memory of one character as a character file with two parts, each one entry of the type character with the name of the character as its title. The part of the author holds what the author told the assistant to remember about the character and that the character knows, and background work never changes its text. The part of the background work holds the view of the character from the manuscript and holds no fact that the character cannot know. A request of the author does not make the part of the background work an entry of the author. A Project has at most one part of each kind for each character. | Context and Memory owners |
+| S11-REQ-002 | After the file of a character changed, start one intent pass for that character with no request of the author. The two parts of that file are the only source of knowledge about the character in the pass. A pass sends one model request. When the Host refuses the reply, the pass sends one more request with that refusal as a Tool result, so that the model can correct the reply. Its result is one intent and at most three questions to the author. The Host keeps the newest result with the part of the background work, and a result changes no text of the file. | Agent Run and Memory owners |
+| S11-REQ-003 | Give the current intent of each character to each Run of the author that pins its Memory revision, as data that is no fact and no instruction. Give no intent to a capture, to a consolidation pass, or to an intent pass, and give the questions to no Run. Show no intent and no question in the writing workspace. | Context and Model Gateway owners |
+| S11-REQ-004 | Give the settings page of a Project a navigation on its left side with the sections "项目说明", "记忆", and "人物". The section "人物" has a search of the names, and for the selected character the file with the part of the author first, the intent with the Chapter at which it was made, and the questions. The page has no control that edits a file, that starts a pass, or that answers a question. | Workspace owner |
+
+**Author journey S11-JRN-001.**
+
+1. Start the packaged Server and the packaged Worker with the fake model. A
+   Project has Chapters and one completed Run of the author. The capture of a
+   Chapter and a consolidation pass write the part of the background work of
+   one character, and an intent pass records one intent and its questions.
+2. Open the settings page. The navigation on the left side has "项目说明",
+   "记忆", and "人物". Select "人物". The list has the name of the character.
+   Type a part of the name into the search: the list keeps the name. Type
+   other characters: the list has no name.
+3. Select the character. The page shows the file, the block "接下来想做什么"
+   with the intent and the line of the Chapter, and the block
+   "助手还不清楚的事" with the questions. The section "记忆" has no group
+   "人物".
+4. In the writing workspace, tell the assistant to remember one fact of that
+   character. The Run completes. The settings page shows the part of the
+   author first, with the origin line "你让助手记住的", and then the part of
+   the background work. It shows no block of the intent until a new intent
+   pass records a result, because the file changed. The writing workspace
+   shows no intent and no question.
+5. Continue to write with no model destination: the editor works, and the
+   settings page shows the files that exist.
+
+The journey uses the fake model, which does not read an instruction text. The
+live runs of S11-EVD-001 and S11-EVD-002 show the effect of the instruction
+texts on the real route.
+
+| ID | Mandatory evidence |
+| --- | --- |
+| S11-EVD-001 | The tests of the two parts (the write rule, the refusal, the operations of a pass, and the delete marks), the exact instruction texts in the request tests, the new mapping revision and Registration, and one live run of the file on the real route with its evidence tag and its record under `docs/research/`. The record has the length of each file after each Chapter and the check of the limit of knowledge. |
+| S11-EVD-002 | The tests of the intent pass (start, input, result, the rule of one pass for each text, and the result that is not kept), the tests that no capture and no pass gets an intent, the exact request texts, and one live run of the pass and of a continuation with the intents on the real route with its evidence tag and its record. |
+| S11-EVD-003 | The tests of the response of `listMemoryEntries`, the browser tests of the navigation and of the section "人物", and the journey S11-JRN-001 on the exact dist. |
+
+Stage 11 adds no simulation of the story, no list and no notice of the
+intents in the writing workspace, no control that edits a Memory Entry, no
+control that starts an intent pass or sets it on or off, and no structured
+record of a character (ADR 0101 section 7).
 
 ## 9. Deferred scope outside MVP
 
@@ -438,7 +483,7 @@ unaffected Stage 6/8/9 promises, and audit forward/reverse coverage. Existing
 old bodies do not certify these changes. The current Stage 3 specification
 owns its accepted implementation handoff and pending final release evidence.
 The author released the execution of Stage 4 through Stage 7 and of
-Stage 10. Stage 11 waits for the approval of its specification (ADR 0101).
+Stage 10, and on 2026-11-22 the execution of Stage 11 (ADR 0101).
 Stage 8 and Stage 9 stay on EXECUTION HOLD until the author
 explicitly releases their execution (ADR 0096). This contract creates no
 implementation ticket or stage release.

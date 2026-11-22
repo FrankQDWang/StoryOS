@@ -29,8 +29,20 @@ Project Scope-bound, inspectable reference material that helps the Agent carry u
 _Avoid_: Authoritative State, Provider continuation, active context compaction, hidden persistent memory
 
 **Memory Index**:
-The bounded Context item of a Run that lists each current Memory Entry. A line has the type, the title, the description, and the conflict flag of one entry, and the lines are in groups by type. The item navigates to Agent Memory and never holds the text of an entry. The Agent reads an entry with a Host Tool ([ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md)).
+The bounded Context item of a Run that lists each current Memory Entry. A line has the type, the title, the description, and the conflict flag of one entry, and the lines are in groups by type. The line of the part of the author of a Character File has a mark. In a Run of the author, the line of the part of the background work of a Character File has the current Character Intent. The item navigates to Agent Memory and never holds the text of an entry. The Agent reads an entry with a Host Tool ([ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md), [ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
 _Avoid_: Memory navigation summary, whole Memory collection, loaded Memory
+
+**Character File**:
+The Agent Memory of one character: at most two Memory Entries of the type character with the name of the character as their title. The part of the author holds what the author told the assistant to remember about the character and that the character knows. Background work never changes the text of that part. The part of the background work holds the view of the character from the manuscript, and the capture of a Chapter and the consolidation pass keep it current. A Character File is not a structured record of a character ([ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
+_Avoid_: Character sheet, character record, character card, persona
+
+**Intent Pass**:
+Background work for one character that starts with no request of the author after the Character File of that character changed. The two parts of that Character File are the only source of knowledge about the character in its model request. After a refused reply, one more request also has the refusal of the Host as a Tool result. Its result is one Character Intent and at most three questions to the author. An Intent Pass simulates no story, and it changes no text of the Character File.
+_Avoid_: Simulation, character agent, dreaming, role play
+
+**Character Intent**:
+What one character wants to do next in the story, as the newest result of an Intent Pass. It is a suggestion that uses only the Character File. It is not a fact of the story, it has no Instruction Authority, and the author decides what the manuscript gets. It is current only while the two parts of the Character File are the parts that the Intent Pass read. Only a Run of the author gets a current Character Intent, and the settings page shows it.
+_Avoid_: Character plan, plot decision, character goal as a fact
 
 **Conversation Memory Settings**:
 The independent author settings on one exact Project Conversation that control new Agent Memory reads and that conversation's eligibility for future Memory extraction. They may change only when every associated foreground root AgentRun is Terminal, or none exists; independent background Memory work does not prevent the change, which neither deletes published Memory nor rewrites recorded context or earlier disclosure.
