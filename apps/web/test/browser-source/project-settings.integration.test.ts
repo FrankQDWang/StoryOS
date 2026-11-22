@@ -169,6 +169,7 @@ it("opens the settings page of a Project of the session and no other Project or 
     ["项目指令", null],
     ["保存后从下一次请求开始生效，进行中的请求不受影响。", null],
     ["记忆", null],
+    ["人物", null],
   ]);
   // The page opens no Editor Session.
   expect(server.sent.map(({ method, path }) => `${method} ${path}`)).toEqual([
@@ -286,12 +287,47 @@ it("asks one time before the author leaves with a text that is not saved", async
     .toEqual([[`/projects/${PROJECT}`, `/projects/${PROJECT}`], [], false]);
 });
 
+/** The words of the navigation, the selected item, and the visible sections. */
+function navigation() {
+  return [[...document.querySelectorAll("nav [data-settings-item]")].map((item) => item.textContent),
+    document.querySelector('nav [aria-current="true"]')?.textContent,
+    [...document.querySelectorAll(".settings-section")].filter((section) => section.checkVisibility())
+      .map((section) => section.querySelector("h2")?.textContent)];
+}
+
+it("shows the section of the selected item of the navigation (ADR 0101 section 6), and keeps the text that is not saved",
+  async () => {
+    const server = fakeServer();
+    const navigated = await settingsPage(server.fetchImpl);
+    const items = ["项目说明", "记忆", "人物"];
+    const shown = [navigation()];
+    for (const key of ["memory", "characters", "instruction"]) {
+      click(`[data-settings-item="${key}"]`);
+      await expect.poll(() => navigation()[1]).toBe(items[["instruction", "memory", "characters"].indexOf(key)]);
+      shown.push(navigation());
+    }
+    expect(shown).toEqual([[items, "项目说明", ["项目指令"]], [items, "记忆", ["记忆"]], [items, "人物", ["人物"]],
+      [items, "项目说明", ["项目指令"]]]);
+
+    type("Unsaved rule.");
+    await expect.poll(leavePrompt).toBe(true);
+    click('[data-settings-item="characters"]');
+    await expect.poll(() => navigation()[1]).toBe("人物");
+    click('[data-settings-item="instruction"]');
+    await expect.poll(() => navigation()[1]).toBe("项目说明");
+    expect([field()?.value, leavePrompt(), confirmStep()]).toEqual(["Unsaved rule.", true, undefined]);
+    click("[data-return-to-writing]");
+    await expect.poll(confirmStep).toBe("项目指令有未保存的修改。确定离开吗？离开留下");
+    expect([navigated, puts(server.sent)]).toEqual([[], []]);
+  });
+
 it("asks before a source link of a Memory entry leaves with a text that is not saved", async () => {
   // The test page must not leave, so each click that the page does not take ends here.
   const hold = (event: Event) => event.preventDefault();
   document.addEventListener("click", hold);
   const server = fakeServer([], [SOURCED]);
   const navigated = await settingsPage(server.fetchImpl);
+  click('[data-settings-item="memory"]');
   const source = "a[data-memory-entry-origin]";
   await expect.poll(() => document.querySelector(source)).not.toBeNull();
   click(source);

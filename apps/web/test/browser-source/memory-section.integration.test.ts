@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
+import { page } from "vitest/browser";
 
 import type { GetProjectResponse, MemoryEntryInspect }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -33,9 +34,9 @@ function entry(number: number, fields: Partial<MemoryEntryInspect>): MemoryEntry
 // One entry for each case of the origin line, in the order of the query.
 const ENTRIES: MemoryEntryInspect[] = [
   entry(4, { entry_type: "writing_preference", title: "语气", text: "克制。\n不用感叹号。" }),
-  entry(2, { entry_type: "character", title: "林舟", text: MARKUP, origin: "conversation",
+  entry(2, { entry_type: "relationship", title: "林舟", text: MARKUP, origin: "conversation",
     source: { kind: "conversation", conversation_id: CONVERSATION, availability: "unavailable" } }),
-  entry(3, { entry_type: "character", title: "阿青", origin: "chapter",
+  entry(3, { entry_type: "relationship", title: "阿青", origin: "chapter",
     source: { kind: "chapter", chapter_id: CHAPTER, title: "渡口", availability: "available" } }),
   entry(1, { title: "旧事", origin: "chapter",
     source: { kind: "chapter", chapter_id: CHAPTER, title: null, availability: "unavailable" } }),
@@ -150,7 +151,7 @@ it("shows each entry in the group of its type with its text, its origin line, an
   await settingsPage(fakeServer([listed(ENTRIES)]).fetchImpl);
   await expect.poll(() => document.querySelectorAll("[data-memory-entry]").length).toBe(4);
   const headings = [...document.querySelectorAll(".settings-section > h2")].map((heading) => heading.textContent);
-  expect(headings).toEqual(["项目指令", "记忆"]);
+  expect(headings).toEqual(["项目指令", "记忆", "人物"]);
   const time = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" });
   const shown = [...section()!.querySelectorAll<HTMLElement>("[data-memory-group]")].map((group) => [
     group.querySelector("h3")?.textContent,
@@ -167,7 +168,7 @@ it("shows each entry in the group of its type with its text, its origin line, an
   expect(shown).toEqual([
     ["写作偏好", [{ title: "语气", text: "克制。\n不用感叹号。", origin: "你让助手记住的", originKind: "conversation",
       links: [`/projects/${PROJECT}?conversation=${CONVERSATION}`], time: at(4) }]],
-    ["人物", [
+    ["关系", [
       { title: "林舟", text: MARKUP, origin: "来自对话来源已不可用", originKind: "unavailable", links: [],
         time: at(2) },
       { title: "阿青", text: "内容3。", origin: "来自章节《渡口》", originKind: "chapter",
@@ -334,12 +335,13 @@ it("does not show again a deleted entry when an earlier read gives it later", as
   expect([titles(), actions(4)]).toEqual([["语气", "阿青", "旧事"], ["删除", "这条记忆已经改变，没有删除。"]]);
 });
 
-it("shows the name of each of the six types in the order of the query", async () => {
+it("shows the name of each type in the order of the query, and no group 人物", async () => {
   const types = ["writing_preference", "foreshadowing", "character", "relationship", "major_event", "other"] as const;
   await settingsPage(fakeServer([listed(types.map((entryType, index) => entry(index + 1, { entry_type: entryType })))])
     .fetchImpl);
   await expect.poll(() => [...document.querySelectorAll("[data-memory-group] > h3")].map((name) => name.textContent))
-    .toEqual(["写作偏好", "伏笔", "人物", "关系", "重大事件", "其他"]);
+    .toEqual(["写作偏好", "伏笔", "关系", "重大事件", "其他"]);
+  expect(titles()).toEqual(["条目1", "条目2", "条目4", "条目5", "条目6"]);
 });
 
 it("shows one sentence for a Project with no entry", async () => {
@@ -354,6 +356,9 @@ it("reads again after a failed read, and the Project Instruction section stays u
     listed(ENTRIES.slice(0, 1))]);
   await settingsPage(server.fetchImpl);
   await expect.poll(sectionText).toEqual(["无法读取记忆，请稍后再试。", "重新读取"]);
+  // The section "人物" shows the same failure of the one read (#1793).
+  expect([...document.querySelectorAll("[data-character-section] p, [data-character-section] button")]
+    .map((element) => element.textContent)).toEqual(["无法读取记忆，请稍后再试。", "重新读取"]);
   const field = document.querySelector<HTMLTextAreaElement>("[data-project-instruction]")!;
   expect([field.readOnly, document.querySelector<HTMLButtonElement>("[data-project-instruction-save]")?.disabled])
     .toEqual([false, false]);
@@ -366,4 +371,186 @@ it("reads again after a failed read, and the Project Instruction section stays u
   await expect.poll(() => [...document.querySelectorAll("[data-memory-entry] h4")].map((title) => title.textContent))
     .toEqual(["语气"]);
   expect(server.paths.filter((path) => path === MEMORY).length).toBe(3);
+});
+
+// The section "人物" of the settings page (ADR 0101 section 6).
+const characters = () => document.querySelector<HTMLElement>("[data-character-section]");
+const names = () => [...document.querySelectorAll("[data-character-name]")].map((name) => name.textContent);
+const chosenName = () => document.querySelector('[data-character-name][aria-current="true"]')?.textContent;
+const fileEntries = () => [...document.querySelectorAll("[data-character-entry]")]
+  .map((item) => item.getAttribute("data-character-entry"));
+const searchFor = (text: string) => {
+  const field = document.querySelector<HTMLInputElement>("[data-character-search]")!;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, text);
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+};
+const pressInFile = (number: number, control: string) => document.querySelector<HTMLButtonElement>(
+  `[data-character-entry="${number}"] [data-memory-${control}]`)!.click();
+async function confirmDeleteInFile(number: number) {
+  pressInFile(number, "delete");
+  await expect.poll(() => document.querySelector(`[data-character-entry="${number}"] [data-memory-delete-confirm]`))
+    .not.toBeNull();
+  pressInFile(number, "delete-confirm");
+}
+async function openCharacters(entries: MemoryEntryInspect[], deletes: (Answer | Promise<Answer>)[] = []) {
+  const server = fakeServer([listed(entries)], deletes);
+  await settingsPage(server.fetchImpl);
+  document.querySelector<HTMLButtonElement>('[data-settings-item="characters"]')!.click();
+  await expect.poll(() => characters()?.checkVisibility()).toBe(true);
+  return server;
+}
+
+const character = (number: number, title: string, fields: Partial<MemoryEntryInspect> = {}) =>
+  entry(number, { entry_type: "character", title, origin: "chapter",
+    source: { kind: "chapter", chapter_id: CHAPTER, title: "渡口", availability: "available" }, ...fields });
+
+it("lists each character one time, and the search 搜索人物 keeps the names that hold the text (ADR 0101 section 6)",
+  async () => {
+    await openCharacters([character(5, "林舟"), entry(1, {}), character(6, "阿青", { origin: "author_request" }),
+      character(7, "林舟", { origin: "author_request" }), character(8, "青石")]);
+    await expect.poll(names).toEqual(["林舟", "阿青", "青石"]);
+    expect([chosenName(), document.querySelector("[data-character-search]")?.getAttribute("placeholder")])
+      .toEqual(["林舟", "搜索人物"]);
+    const shown: unknown[] = [];
+    for (const text of ["青", " 林舟 ", "林青", ""]) {
+      searchFor(text);
+      await expect.poll(() => (document.querySelector<HTMLInputElement>("[data-character-search]")?.value)).toBe(text);
+      shown.push([text, names(), chosenName() ?? null, document.querySelector("[data-character-file] h3")?.textContent
+        ?? null, characters()!.querySelectorAll("p").length]);
+    }
+    expect(shown).toEqual([
+      ["青", ["阿青", "青石"], "阿青", "阿青", 2],
+      [" 林舟 ", ["林舟"], "林舟", "林舟", 4],
+      ["林青", [], null, null, 0],
+      ["", ["林舟", "阿青", "青石"], "林舟", "林舟", 4],
+    ]);
+    document.querySelector<HTMLButtonElement>('[data-character-name="青石"]')!.click();
+    await expect.poll(chosenName).toBe("青石");
+    expect([document.querySelector("[data-character-file] h3")?.textContent, fileEntries()]).toEqual(["青石", ["8"]]);
+  });
+
+it("shows the file 档案 with the entry of the author first, its flag, and only the delete controls (ADR 0101 section 6)",
+  async () => {
+    const flag = { reason: "第三章说他会说话。", flagged_at: "2026-11-17T09:00:00.000Z",
+      source: { kind: "chapter" as const, chapter_id: CHAPTER, title: "渡口", availability: "available" as const } };
+    await openCharacters([character(5, "林舟", { text: "他看灯。" }),
+      character(7, "林舟", { origin: "author_request", text: "他怕水。", flag,
+        source: { kind: "conversation", conversation_id: CONVERSATION, availability: "available" } })]);
+    await expect.poll(fileEntries).toEqual(["7", "5"]);
+    const time = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" });
+    const file = document.querySelector<HTMLElement>("[data-character-file]")!;
+    expect([...file.querySelectorAll("h3, h4")].map((heading) => heading.textContent)).toEqual(["林舟", "档案"]);
+    expect([...file.querySelectorAll<HTMLElement>("[data-character-entry]")].map((item) => ({
+      flag: [...item.querySelectorAll("[data-memory-entry-flag] p")].map((line) => line.textContent),
+      text: item.querySelector(".memory-entry-text")?.textContent,
+      origin: item.querySelector("[data-memory-entry-origin]")?.textContent,
+      links: [...item.querySelectorAll("a")].map((link) => link.getAttribute("href")),
+      time: item.querySelector("time")?.textContent,
+    }))).toEqual([
+      { flag: ["可能已过时 第三章说他会说话。", "来自章节《渡口》", "可以在对话中告诉助手哪个是对的，或删除这条记忆。"], text: "他怕水。",
+        origin: "你让助手记住的", links: [`/projects/${PROJECT}?conversation=${CONVERSATION}`,
+          `/projects/${PROJECT}?chapter=${CHAPTER}`], time: time.format(new Date("2026-11-17T08:30:00.000Z")) },
+      { flag: [], text: "他看灯。", origin: "来自章节《渡口》", links: [`/projects/${PROJECT}?chapter=${CHAPTER}`],
+        time: time.format(new Date("2026-11-15T08:30:00.000Z")) },
+    ]);
+    // The section has no control that edits an entry, that starts a pass, or that answers a question.
+    expect([...characters()!.querySelectorAll("input, textarea, select, button")].map((control) =>
+      control.getAttribute("data-character-search") === null ? control.textContent : "search"))
+      .toEqual(["search", "林舟", "删除", "删除"]);
+  });
+
+it("keeps the file after the delete of its first part in the Memory Index, and then selects the next name",
+  async () => {
+    const [background, author] = [character(5, "林舟"), character(7, "林舟", { origin: "author_request" })];
+    const server = await openCharacters([background, character(6, "阿青"), author, character(8, "青石")],
+      [applied(background.memory_entry_id), applied(author.memory_entry_id)]);
+    await expect.poll(fileEntries).toEqual(["7", "5"]);
+    await confirmDeleteInFile(5);
+    await expect.poll(fileEntries).toEqual(["7"]);
+    // The name moves to the place of its other part in the Memory Index, and it stays selected.
+    expect([names(), chosenName()]).toEqual([["阿青", "林舟", "青石"], "林舟"]);
+    await confirmDeleteInFile(7);
+    await expect.poll(names).toEqual(["阿青", "青石"]);
+    expect([chosenName(), fileEntries(), server.paths.filter((path) => path === MEMORY).length])
+      .toEqual(["青石", ["8"], 1]);
+    expect(server.sent.filter((item) => item.method === "DELETE").map((item) => item.path))
+      .toEqual([`${MEMORY}/${background.memory_entry_id}`, `${MEMORY}/${author.memory_entry_id}`]);
+  });
+
+it("selects the next name when two deletes in progress remove each part of a character", async () => {
+  const [background, author] = [character(5, "林舟"), character(7, "林舟", { origin: "author_request" })];
+  const [first, second] = [held(), held()];
+  await openCharacters([character(6, "阿青"), background, author, character(8, "青石")],
+    [first.answer, second.answer]);
+  document.querySelector<HTMLButtonElement>('[data-character-name="林舟"]')!.click();
+  await expect.poll(fileEntries).toEqual(["7", "5"]);
+  await confirmDeleteInFile(7);
+  await confirmDeleteInFile(5);
+  first.give(applied(author.memory_entry_id));
+  second.give(applied(background.memory_entry_id));
+  await expect.poll(names).toEqual(["阿青", "青石"]);
+  expect([chosenName(), fileEntries()]).toEqual(["青石", ["8"]]);
+});
+
+it("selects the next name of the search result after the delete of the last part of a character", async () => {
+  const stone = character(7, "青石");
+  await openCharacters([character(5, "阿青"), stone, character(6, "林舟"), character(8, "小青")],
+    [applied(stone.memory_entry_id)]);
+  searchFor("青");
+  await expect.poll(names).toEqual(["阿青", "青石", "小青"]);
+  document.querySelector<HTMLButtonElement>('[data-character-name="青石"]')!.click();
+  await expect.poll(fileEntries).toEqual(["7"]);
+  await confirmDeleteInFile(7);
+  await expect.poll(names).toEqual(["阿青", "小青"]);
+  expect([chosenName(), fileEntries()]).toEqual(["小青", ["8"]]);
+});
+
+it("selects the next name of the current search when the search changes before the delete completes", async () => {
+  const stone = character(7, "青石");
+  const reply = held();
+  await openCharacters([character(5, "阿青"), stone, character(6, "林舟"), character(8, "小青")], [reply.answer]);
+  searchFor("青");
+  await expect.poll(names).toEqual(["阿青", "青石", "小青"]);
+  document.querySelector<HTMLButtonElement>('[data-character-name="青石"]')!.click();
+  await expect.poll(fileEntries).toEqual(["7"]);
+  await confirmDeleteInFile(7);
+  searchFor("");
+  await expect.poll(names).toEqual(["阿青", "青石", "林舟", "小青"]);
+  reply.give(applied(stone.memory_entry_id));
+  await expect.poll(names).toEqual(["阿青", "林舟", "小青"]);
+  expect([chosenName(), fileEntries()]).toEqual(["林舟", ["6"]]);
+});
+
+it("keeps the delete control inside the file column with a long Chapter title at the narrow width", async () => {
+  // 920 px is the `min-width` of the workspace.
+  const [width, height] = [innerWidth, innerHeight];
+  const styles = Object.assign(document.createElement("link"), { rel: "stylesheet", href: "/src/writing-workspace.css" });
+  const loaded = new Promise((resolve, reject) => { styles.onload = resolve; styles.onerror = reject; });
+  document.head.append(styles);
+  try {
+    await loaded;
+    await page.viewport(920, 700);
+    await openCharacters([character(5, "林舟", { source: { kind: "chapter", chapter_id: CHAPTER,
+      title: "Chapter".repeat(40), availability: "available" } }), character(7, "林舟", { origin: "author_request" })]);
+    await expect.poll(fileEntries).toEqual(["7", "5"]);
+    const file = document.querySelector("[data-character-file]")!.getBoundingClientRect();
+    const boxes = [...document.querySelectorAll("[data-character-entry] :is([data-memory-delete], .memory-entry-origin)")]
+      .map((element) => element.getBoundingClientRect());
+    expect([boxes.length, boxes.every((box) => box.left >= file.left && box.right <= file.right)]).toEqual([4, true]);
+  } finally {
+    styles.remove();
+    await page.viewport(width, height);
+  }
+});
+
+it("shows the sentence of an empty Memory and no list for a Project with no character", async () => {
+  await openCharacters([entry(1, {})]);
+  await expect.poll(() => [...characters()!.querySelectorAll("p, input, li")].map((element) => element.textContent))
+    .toEqual(["助手还没有记住任何内容。"]);
+});
+
+it("shows no entry and no sentence in the section 记忆 when each entry is a character", async () => {
+  await openCharacters([character(5, "林舟")]);
+  await expect.poll(names).toEqual(["林舟"]);
+  expect([...section()!.querySelectorAll("p, [data-memory-group]")].length).toBe(0);
 });

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode }
 
 import type { ProjectScope } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ProjectSettingsReadyState } from "./editor-types.ts";
+import { CharacterSection } from "./character-section.tsx";
+import { useMemoryEntries, type MemoryEntries } from "./memory-entries.ts";
 import { MemorySection } from "./memory-section.tsx";
 import { ProjectInstructionSection } from "./project-instruction-section.tsx";
 
@@ -10,14 +12,20 @@ export type SettingsSectionProps = {
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
+  /** The one read of the Memory Entries of the page. */
+  memory: MemoryEntries;
   /** The section tells the page when its field has a text that is not saved. */
   onUnsavedChange: (unsaved: boolean) => void;
 };
 
-/** The sections of the settings page in page order (ADR 0094 section 9). A later section is one more entry. */
-const SECTIONS: ReadonlyArray<{ key: string; Section: (props: SettingsSectionProps) => ReactNode }> = [
-  { key: "instruction", Section: ProjectInstructionSection },
-  { key: "memory", Section: MemorySection },
+/**
+ * The sections of the settings page in the order of the navigation (ADR 0094 section 9, ADR 0101 section 6). The author
+ * approved the item words with the sketch of the page on 2026-11-22.
+ */
+const SECTIONS: ReadonlyArray<{ key: string; item: string; Section: (props: SettingsSectionProps) => ReactNode }> = [
+  { key: "instruction", item: "项目说明", Section: ProjectInstructionSection },
+  { key: "memory", item: "记忆", Section: MemorySection },
+  { key: "characters", item: "人物", Section: CharacterSection },
 ];
 
 const projectSettingsPath = (projectId: string) => `/projects/${projectId}/settings`;
@@ -53,6 +61,8 @@ export function ProjectSettingsView({
   const { project_scope: scope, project } = state.project;
   const [unsaved, setUnsaved] = useState<ReadonlySet<string>>(new Set());
   const [leaving, setLeaving] = useState<string>();
+  const [shown, setShown] = useState(SECTIONS[0]!.key);
+  const memory = useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl });
   const discarded = useRef(false);
   const changes = useMemo(() => new Map(SECTIONS.map(({ key }) => [key, (value: boolean) => {
     setUnsaved((current) => {
@@ -91,10 +101,27 @@ export function ProjectSettingsView({
         <p>{project.title}</p>
       </header>
       <h1>项目设置</h1>
-      {SECTIONS.map(({ key, Section }) => (
-        <Section key={key} scope={scope} baseUrl={baseUrl} fetchImpl={fetchImpl} cryptoImpl={cryptoImpl}
-          onUnsavedChange={changes.get(key)!} />
-      ))}
+      <div className="settings-body">
+        <nav className="settings-nav">
+          <ul>
+            {SECTIONS.map(({ key, item }) => (
+              <li key={key}>
+                <button type="button" aria-current={key === shown ? "true" : undefined} data-settings-item={key}
+                  onClick={() => setShown(key)}>{item}</button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        {/* Each section stays mounted, so that a text that is not saved stays when the author selects another item. */}
+        <div className="settings-panels">
+          {SECTIONS.map(({ key, Section }) => (
+            <div key={key} hidden={key !== shown} data-settings-panel={key}>
+              <Section scope={scope} baseUrl={baseUrl} fetchImpl={fetchImpl} cryptoImpl={cryptoImpl} memory={memory}
+                onUnsavedChange={changes.get(key)!} />
+            </div>
+          ))}
+        </div>
+      </div>
       {leaving === undefined ? null : (
         <div className="settings-leave-confirm" role="alertdialog" aria-labelledby="settings-leave-question"
           data-settings-leave-confirm="">
