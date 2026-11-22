@@ -157,21 +157,88 @@ The record compares each sentence of the files of 顾青禾 (entry 3), 程立 (e
 
 ## Step 3
 
-- **The entry of the author for 顾青禾 does not exist.** R17 called `write_memory` one time (M22): `change` of entry 21, a foreshadowing entry that the pass of Chapter 6 created with the origin `chapter` and the title "七九开业与八三购房谜". The Host applied the change: entry 21 version 3 (Memory revision 67) has the origin `author_request`, the type `foreshadowing`, and the title "八三购房顾青禾占半股". The answer (M24) says: "我把原先的伏笔条目「七九开业与八三购房谜」更新为「八三购房顾青禾占半股」".
-- **The text of entry 21 has the words of the author and more.** Its first sentence has the fact of the author: "1983年房管所出售临水街一号这栋茶馆房子，总价四千二百元；顾青禾出了其中两千一百元（正好一半），所以茶馆的房子有她一半产权。" The other sentences come from the Memory Index and the Chapters, and the author did not say them, for example "七九开业旧报、照片中模糊双辫女的身份等线索仍未揭晓。"
-- **The entry of the background work kept its origin.** Entry 3 (顾青禾) was version 6 with the origin `chapter` before and after R17. The capture of the Conversation of step 3 (R18) read entry 21 and gave no observation.
-- **A later Chapter changed the entry of the background work.** The pass of Chapter 8 (R20) changed entry 3 to version 7 (Memory revision 70, 343 to 483 characters) with the fact of Chapter 8: "1983年房管所卖房，总价4200元，她把丈夫留下的抚恤金2100元全拿出，凑成半数". The pass of Chapter 10 (R24) changed it to version 8.
-- **The pass of Chapter 8 flagged entry 21.** It gave `flag_conflict` for entry 21 (version 4, Memory revision 82) with the reason "条目称青禾仍拒说原因、知遥仍在追问；本章她已公开说明2100元抚恤金为半股根由。" The conflict is with a sentence that the model added to the entry of the author, not with the fact of the author.
+### The request of the write
+
+R17 had three requests: M22 called `write_memory`, M23 called `finish`, and M24 gave the answer. The exact call of M22 (`tool-calls.json`):
+
+```json
+{"action": "change", "entry": 21, "type": "foreshadowing", "title": "八三购房顾青禾占半股",
+ "description": "八三购房总价四千二百元，顾青禾出两千一百，故茶馆房产有她一半；系半股根由，后面会用到。",
+ "text": "1983年房管所出售临水街一号这栋茶馆房子，总价四千二百元；顾青禾出了其中两千一百元（正好一半），所以茶馆的房子有她一半产权。\n\n这是她“一半”份额的根由，也对应沈怀山为何把茶馆每年一半收益归她、并借顾远学费暗中交付（顾青禾目前仍拒说原因，知遥尚在追问“为什么是一半”）。作者明确提示：这一点后面会用到——眼下正值青溪置业出价八十万收购、沈明川已单方签下意向书。\n\n七九开业旧报、照片中模糊双辫女的身份等线索仍未揭晓。"}
+```
+
+What the request M22 had:
+
+- **The Memory Index** had 28 entries. The group `{"type":"character"}` had the line `{"description":"茶馆四十余年帮工，爽利守秘；承认156笔汇款给儿子顾远作学费，实为沈怀山给她的一半茶馆收益，仍拒说原因。","id":3,"title":"顾青禾"}`. So 顾青禾 had a character entry of the background work (entry 3, version 6, origin `chapter`), and no line of the Index had `"author_part": true`. The group `{"type":"foreshadowing"}` had the line `{"description":"七九开业旧报、八三购房款与模糊双辫女仍未解；顾青禾又承认真正的一半收益旧约，知遥将诸线相连。","id":21,"title":"七九开业与八三购房谜"}`.
+- **The Host instructions** had the paragraph `WRITE_MEMORY_INSTRUCTION` and the sentences `WRITE_MEMORY_WORDS_INSTRUCTION` of the mapping `v11` (`crates/storyos-adapter-volcengine-responses/src/wire.rs`). On a character entry of the author, they say: "A character can have two entries with the same title. The entry with \"author_part\": true holds what the author told you about that character. Write there what the author tells you to remember about a character and that the character knows, and create it with the name of the character as its title when the section Memory index does not list it." The paragraph of the Memory Index of a Run of the author says nothing about a character entry of the author. It says: "An entry with the origin author_request changes only when the author asks."
+
+### Entry 21 before and after
+
+| Version | Memory revision | Origin | Type | Title | Text |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 39 | `chapter` | foreshadowing | 七九开业与八三购房谜 | the pass of Chapter 6 created it (231 characters) |
+| 2 | 61 | `chapter` | foreshadowing | 七九开业与八三购房谜 | the pass of Chapter 7 (236 characters) |
+| 3 | 67 | `author_request` | foreshadowing | 八三购房顾青禾占半股 | the call above (209 characters) |
+| 4 | 82 | `author_request` | foreshadowing | 八三购房顾青禾占半股 | the same text, with the conflict flag of the pass of Chapter 8 |
+
+**Entry 21 did not have the fact before the write.** Version 2 says that the money of the purchase was an open question: "沈怀山购房并重做招牌……她避答买价", and "知遥由此将“一半”、双辫女子、“同心”木箱与1983年购房款来源连在一起，诸谜仍未解开。" The fact of the author answers that question. So the model put the fact into the entry that held the question, not into an entry that held the fact.
+
+### The four facts of the criterion
+
+- **The entry of the author:** no character entry of the author exists for 顾青禾 after R17 or later. The fact is in entry 21 version 3. Its first sentence has the words of the author. The other sentences come from the Memory Index and the Chapters, for example "七九开业旧报、照片中模糊双辫女的身份等线索仍未揭晓。" This difference is finding F1, and the added sentences are finding F2.
+- **The entry of the background work kept its origin:** entry 3 was version 6 with the origin `chapter` before and after R17. The capture of the Conversation of step 3 (R18) read entry 21 with `read_memory_entry` and gave an empty list.
+- **A later Chapter changed the entry of the background work:** the pass of Chapter 8 (R20) changed entry 3 to version 7 (Memory revision 70, 343 to 483 characters) with the fact of Chapter 8: "1983年房管所卖房，总价4200元，她把丈夫留下的抚恤金2100元全拿出，凑成半数". The pass of Chapter 10 (R24) changed it to version 8.
+- **The flag of Chapter 8:** the pass of Chapter 8 gave `flag_conflict` for entry 21 with the reason "条目称青禾仍拒说原因、知遥仍在追问；本章她已公开说明2100元抚恤金为半股根由。" The conflict is with a sentence that the model added (F2), not with the fact of the author.
+
+## The refused calls of the capture of Chapter 10
+
+R23 had 8 RunSteps, the step limit of a capture. In M31 to M37 the model called `record_memory_observations` with 5 observations. The Host refused each of the 7 calls with `observation_invalid` and the same result text:
+
+> The Host refused this call because the observation 1 is not valid. Its type must be one of the six types. Its title and its text must not be empty, and its title must be one line. A conflict has only an entry and a reason of one line. It recorded no observation. Correct the list and call record_memory_observations again.
+
+| Call | Request | Observations (type, `entry`, title) |
+| --- | --- | --- |
+| 1 | M31 | character 2 沈知遥; major_event null 台风过境茶馆成避难所; major_event null 镇民大会与历史风貌街区; relationship 5 知遥与明川疏离; character 13 陆砚（修旧家具的木匠） |
+| 2 to 7 | M32 to M37 | the same five, with "镇民大会定历史风貌街区" as the third title and shorter texts |
+| 8 (settled) | M38 | major_event null 台风过境茶馆成避难所 |
+
+- **The observation and the rule:** in each refused call, observation 1 (type character, `"entry": 2`) failed the rule that an observation has no `entry` and no `reason` (`validate_observations` in `crates/storyos-core/src/record_memory_observations.rs`: `item.entry.is_none() && item.reason.is_none()`). Observations 4 (`"entry": 5`) and 5 (`"entry": 13`) failed the same rule, but the Host names only the first item that fails. This rule and the result text are older than #1787: they came with the conflict item of S7-D6b (commit `19dfd22f`, 2026-11-17). The capture of Chapter 4 (M13) was refused by the same rule for its observation 3 (type character, `"entry": 2`, title "知遥决定留镇远程办公"), and its next call had `"entry": null`.
+- **The text that #1787 added:** the paragraph of the capture of #1787 (`capture_instructions` in `crates/storyos-adapter-volcengine-responses/src/capture_wire.rs`) starts "An observation of the type character is for the entry of that character that comes from the manuscript." In this run, each refusal is for an observation that names the entry of a character or of a relationship.
+- **The cost:** the 7 refused requests had 63,151 input tokens. At the last RunStep, the model kept 1 of the 5 observations, so the town meeting of Chapter 10, the relationship of 知遥 and 沈明川, and the observations of 沈知遥 and 陆砚 have no observation.
 
 ## Findings
 
-Each finding names the instruction sentence of the mapping `v11` that the model did not obey, and a proposed change. The coordinator decides if a finding gets a ticket. This pull request changes no instruction text.
+Each finding gives the present sentence of the instruction of the mapping `v11` (the file and the constant or function), the quoted evidence, and the proposed sentence with its place. The coordinator decides the ticket. This pull request changes no instruction text.
 
-- **F1. The fact of the author about a character went into an entry of another type (M22).** The sentence: "Write there what the author tells you to remember about a character and that the character knows, and create it with the name of the character as its title when the section Memory index does not list it." The Index had the foreshadowing entry 21 on the same purchase, and the model changed it. Proposed change: add after that sentence "Do this also when an entry of another type has the same event."
-- **F2. The entry of the author has words that the author did not say (M22).** The sentence: "An entry holds only what the author said in this Conversation." The model added three sentences from the Index and the Chapters. One of them made the conflict of Chapter 8. Proposed change: add "Do not add a fact from the section Memory index or from a Chapter."
-- **F3. An observation with an entry number (M12–M14, M31–M38).** Two captures gave an observation of the type character with `"entry": 2` (and in M31 to M38 also `"entry": 5` and `"entry": 13`). The Host refused each call with `observation_invalid`: "Its type must be one of the six types. Its title and its text must not be empty, and its title must be one line. A conflict has only an entry and a reason of one line." The text does not say that an observation has no entry. In R23 the model sent the same list 7 times, then sent only one of its five observations at the 8th and last RunStep. The town meeting of Chapter 10, a relationship, and the observations of 沈知遥 and 陆砚 were lost, and the 7 refused requests had 63,151 input tokens. The capture sentence "An observation of the type character is for the entry of that character that comes from the manuscript" can be read as a request for the entry number. Proposed changes: add "An observation has \"entry\": null and \"reason\": null." to the result text of `observation_invalid`, and add "Give it with \"entry\": null. The pass finds the entry by its title." after the capture sentence.
-- **F4. A fact outside the knowledge of the character (M21, M38, M39).** The pass sentence: "It holds only what the character can know: no fact that the character did not see and that no person told the character." The file of 程立 has "从而揭穿明川“什么都没签”的说法" (pass of Chapter 7). The file of 顾青禾 had "末笔小圈是句号" (pass of Chapter 7; the pass of Chapter 8 removed it). The file of 赵德明 has the 长寿面 of another person (capture and pass of Chapter 10). Proposed change: add to the pass and the capture "A statement of another character in a scene without the character, and a thought of another character, are not in the file of the character."
-- **F5. The part of a character in the plot (M21, M28).** The file of 赵德明 has "是开启同心木箱的关键人" and "他知晓并守护怀山、青禾合开茶馆与共有房产的旧情". The pass sentence: "The file of a character from the manuscript has the view of the character." Proposed change: add "Do not write the part of the character in the story."
+### F1. The fact of the author about a character went into an entry of another type
+
+- **Present sentence:** `crates/storyos-adapter-volcengine-responses/src/wire.rs`, `WRITE_MEMORY_INSTRUCTION`: "Write there what the author tells you to remember about a character and that the character knows, and create it with the name of the character as its title when the section Memory index does not list it."
+- **Evidence:** M22 changed the foreshadowing entry 21 and did not create a character entry of the author (section [Step 3](#step-3)). The answer M24: "我把原先的伏笔条目「七九开业与八三购房谜」更新为「八三购房顾青禾占半股」".
+- **Proposed sentence:** in `WRITE_MEMORY_INSTRUCTION`, directly after the present sentence: "Do this also when an entry of another type has a question or a part of the same fact."
+
+### F2. The entry of the author has words that the author did not say
+
+- **Present sentences:** `crates/storyos-adapter-volcengine-responses/src/wire.rs`, `WRITE_MEMORY_WORDS_INSTRUCTION`: "An entry holds only what the author said in this Conversation. Do not add a quotation, a clue, a name, a relation, or another fact that you read in the manuscript or in Memory and that the author did not say."
+- **Evidence:** entry 21 version 3 has "这是她“一半”份额的根由，也对应沈怀山为何把茶馆每年一半收益归她、并借顾远学费暗中交付（顾青禾目前仍拒说原因，知遥尚在追问“为什么是一半”）。作者明确提示：这一点后面会用到——眼下正值青溪置业出价八十万收购、沈明川已单方签下意向书。" and "七九开业旧报、照片中模糊双辫女的身份等线索仍未揭晓。" The first of these sentences gave the conflict flag of the pass of Chapter 8.
+- **Proposed sentence:** in `WRITE_MEMORY_WORDS_INSTRUCTION`, directly after the two present sentences: "When you change an entry, replace its text with the words of the author, and do not keep a sentence of the old text that the author did not say."
+
+### F3. An observation with an entry number
+
+- **Present texts:** the result text of `observation_invalid`, `ObservationRefusal::result` in `crates/storyos-core/src/record_memory_observations.rs`: "the observation {position} is not valid. Its type must be one of the six types. Its title and its text must not be empty, and its title must be one line. A conflict has only an entry and a reason of one line". The capture sentence in `capture_instructions`, `crates/storyos-adapter-volcengine-responses/src/capture_wire.rs`: "An observation of the type character is for the entry of that character that comes from the manuscript."
+- **Evidence:** section [The refused calls of the capture of Chapter 10](#the-refused-calls-of-the-capture-of-chapter-10), and M13 of Chapter 4.
+- **Proposed sentences:** in the result text of `ObservationRefusal::Invalid`, after "its title must be one line.": "An observation has \"entry\": null and \"reason\": null." In `capture_instructions`, directly after the capture sentence: "Give it with \"entry\": null: the pass finds the entry by its title."
+
+### F4. A fact outside the knowledge of the character
+
+- **Present sentences:** `crates/storyos-adapter-volcengine-responses/src/pass_wire.rs`, `pass_instructions`: "It holds only what the character can know: no fact that the character did not see and that no person told the character." `capture_instructions`: "Do not give a fact that the character did not see and that no person told the character."
+- **Evidence:** the file of 程立 has "从而揭穿明川“什么都没签”的说法" (M21; 沈明川 says it to 知遥 in Chapter 2, with no 程立). The file of 顾青禾 version 6 had "末笔小圈是句号" (M21; the thought of 知遥 alone in Chapter 7). The capture of Chapter 10 has "赵德明讲十四年前大水时怀山拆门板搭床、给孩子煮长寿面" (M38), and the pass put it into the file of 赵德明 (M39), but in Chapter 10 another person tells of the 长寿面.
+- **Proposed sentence:** in `pass_instructions` and in `capture_instructions`, directly after each present sentence: "What another character says in a scene without the character, and what another character thinks, are not in the file of the character. Give each statement to the character who says it."
+
+### F5. The part of a character in the plot
+
+- **Present sentence:** `crates/storyos-adapter-volcengine-responses/src/pass_wire.rs`, `pass_instructions`: "The file of a character from the manuscript has the view of the character."
+- **Evidence:** the file of 赵德明 has "他受托守护爷爷旧事，是开启同心木箱的关键人" (version 3, M21) and "他知晓并守护怀山、青禾合开茶馆与共有房产的旧情" (versions 4 and 5, M28 and M39).
+- **Proposed sentence:** in `pass_instructions`, directly after the present sentence: "Do not write the part of the character in the story."
 
 ## Observations
 
