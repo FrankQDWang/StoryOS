@@ -21,6 +21,7 @@ fn entry(
         title: title.to_owned(),
         description: description.to_owned(),
         flagged: false,
+        author_part: false,
     }
 }
 

@@ -19,21 +19,29 @@ pub struct MemoryDeleteMark {
     pub entry_type: MemoryEntryType,
     pub title: String,
     pub description: String,
+    /// The deleted entry was the part of the author of a character file (ADR 0101 section 3). Its
+    /// mark does not stop the part of the background work of that character.
+    pub author_part: bool,
 }
 
 /// The text of the `memory_delete_marks` item of `marks`, which come newest first, and its
-/// projection mode. Each mark is the line `{"description", "title", "type"}`. When the marks are
+/// projection mode. Each mark is the line `{"description", "title", "type"}`, and the mark of the
+/// part of the author of a character file also has `"author_part": true`. When the marks are
 /// above the Context item limit (ADR 0052), the text holds the newest marks that fit and ends
 /// with the line `{"not_listed": count}`. Then the mode is `deterministic_excerpt`.
 pub fn memory_delete_marks_text(marks: &[MemoryDeleteMark]) -> (String, ProjectionMode) {
     let lines: Vec<String> = marks
         .iter()
         .map(|mark| {
-            canonical_json(&serde_json::json!({
+            let mut line = serde_json::json!({
                 "description": mark.description,
                 "title": mark.title,
                 "type": mark.entry_type.as_str(),
-            }))
+            });
+            if mark.author_part {
+                line["author_part"] = serde_json::Value::Bool(true);
+            }
+            canonical_json(&line)
         })
         .collect();
     let complete = lines.join("\n");

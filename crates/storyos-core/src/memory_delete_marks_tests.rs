@@ -5,6 +5,7 @@ fn mark(entry_type: MemoryEntryType, title: &str) -> MemoryDeleteMark {
         entry_type,
         title: title.to_owned(),
         description: format!("{title}的描述"),
+        author_part: false,
     }
 }
 
@@ -39,6 +40,7 @@ fn marks_above_the_item_limit_keep_the_newest_marks_that_fit() {
             entry_type: MemoryEntryType::Other,
             title: format!("第{index}条"),
             description: long.clone(),
+            author_part: false,
         })
         .collect();
     let (text, mode) = memory_delete_marks_text(&marks);

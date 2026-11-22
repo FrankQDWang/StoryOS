@@ -33,6 +33,7 @@ fn entry(number: u64, entry_type: MemoryEntryType, fields: [&str; 3]) -> Current
         description,
         text,
         flagged: false,
+        author_part: false,
     }
 }
 

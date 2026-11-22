@@ -165,6 +165,34 @@ fn a_valid_list_keeps_its_order_and_a_character_has_the_longer_text() {
     );
 }
 
+/// ADR 0101 section 3: an observation of a character has a text of at most 4,000 characters, and
+/// another type keeps the limit of 600 characters.
+#[test]
+fn an_observation_of_a_character_has_at_most_4000_characters() {
+    let text = |count: usize| "字".repeat(count);
+    let decided = [
+        item("character", "林舟", &text(4000)),
+        item("character", "林舟", &text(4001)),
+        item("other", "桥", &text(600)),
+        item("other", "桥", &text(601)),
+    ]
+    .map(|item| {
+        validate_observations(&[item], &AUTHOR)
+            .map(|_| ())
+            .map_err(ObservationRefusal::label)
+    });
+
+    assert_eq!(
+        decided,
+        [
+            Ok(()),
+            Err("observation_too_long"),
+            Ok(()),
+            Err("observation_too_long")
+        ]
+    );
+}
+
 /// A valid list settles the capture with its outcome and completes the Run. A refused list
 /// records no observation and does not complete the Run.
 #[test]

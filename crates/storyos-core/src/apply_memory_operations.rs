@@ -91,7 +91,7 @@ pub fn parameters() -> Value {
                             "One line, at most 100 characters. {VALUE_NULL}"
                         )),
                         "text": value(&format!(
-                            "Markdown, at most 600 characters, or 1500 for a character. {VALUE_NULL}"
+                            "Markdown, at most 600 characters, or 4000 for a character. {VALUE_NULL}"
                         )),
                         "observations": {
                             "type": "array",

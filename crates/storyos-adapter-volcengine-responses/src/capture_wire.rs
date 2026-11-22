@@ -37,20 +37,30 @@ message is an answer of the writing assistant, and it is not a decision of the \
 author.{conversation_rule} The section Chapter text has the text of one Chapter. The capture of a Chapter looks for \
 characters, relationships, and major events.
 
+An observation of the type character is for the entry of that character that comes from the \
+manuscript. Write it from the place of the character: what the character did, saw, and heard in \
+this material, what the character wants at its end, and how the character speaks. Give only what \
+the character can know. Do not give a fact that the character did not see and that no person \
+told the character. Do not write that the character does not know a fact, because that sentence \
+gives the fact. A decision of the author about a character goes into an observation of the type \
+character only when the character knows it. If not, give it the type other or foreshadowing.
+
 Each observation has one of the six types: {types}. The type other holds, for example, a \
 decision about the story that the manuscript does not have yet. Keep an uncertainty as an \
 uncertainty, and do not write a guess as a fact. Keep a decision of the author apart from a \
 proposal and from a guess: a proposal that the author did not accept is not a decision.
 
 The section Memory index lists the current entries: a line with a type starts a group, and each \
-line after it gives the id, the title, and the description of one entry. Do not record a fact \
-that an entry already holds, unless the input changes it. When the input is against an entry of \
-the author, give a conflict item with the id of the entry and a reason of one line. Do not \
-record the fact as an observation that corrects the entry. An entry of the author has the \
-origin {author} in the result of read_memory_entry. The section Chapter list has each \
+line after it gives the id, the title, and the description of one entry. A character can have \
+two entries with the same title: the line with \"author_part\": true is the entry of the author. \
+Do not record a fact that an entry already holds, unless the input changes it. When the input is \
+against an entry of the author, give a conflict item with the id of the entry and a reason of \
+one line. Do not record the fact as an observation that corrects the entry. An entry of the \
+author has the origin {author} in the result of read_memory_entry. The section Chapter list has each \
 Chapter of the manuscript in its order, with its number, its length in characters, and its \
 title. The section Deleted Memory entries lists entries that the author deleted: they are \
-examples of content that the author does not want.
+examples of content that the author does not want. A deleted entry with \"author_part\": true was the entry of the author for a character. It \
+does not stop an observation of that character.
 
 Give at most {observations} observations. A title has at most {title} characters. A text has at \
 most {text} characters, or {character} for a character. The capture has at most {steps} steps.

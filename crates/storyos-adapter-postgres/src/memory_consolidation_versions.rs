@@ -139,19 +139,22 @@ pub(crate) async fn pass_entries(
     rows.iter()
         .map(|row| {
             let number = |index| row.get::<_, &str>(index).parse().map_err(|_| invalid());
+            let entry_type = MemoryEntryType::parse(row.get(3)).ok_or_else(invalid)?;
+            let origin = MemoryEntryOrigin::parse(row.get(7)).ok_or_else(invalid)?;
             Ok(StoredEntry {
                 entry: PassMemoryEntry {
                     entry: CurrentMemoryEntry {
                         memory_entry_id: row.get(0),
                         number: number(1)?,
                         version: number(2)?,
-                        entry_type: MemoryEntryType::parse(row.get(3)).ok_or_else(invalid)?,
+                        entry_type,
                         title: row.get(4),
                         description: row.get(5),
                         text: row.get(6),
                         flagged: row.get(10),
+                        author_part: storyos_core::memory_author_part(entry_type, origin),
                     },
-                    origin: MemoryEntryOrigin::parse(row.get(7)).ok_or_else(invalid)?,
+                    origin,
                 },
                 changed_at: row.get(8),
                 sources: serde_json::from_str(row.get(9))?,

@@ -73,6 +73,7 @@ fn the_input_of_a_pass_has_the_mark_unused_and_the_delete_marks() {
                 description: "述。".to_owned(),
                 text: "文。".to_owned(),
                 flagged: false,
+                author_part: false,
             },
             origin: MemoryEntryOrigin::Chapter,
         };
@@ -83,6 +84,7 @@ fn the_input_of_a_pass_has_the_mark_unused_and_the_delete_marks() {
         entry_type: MemoryEntryType::Other,
         title: "旧灯".to_owned(),
         description: "述。".to_owned(),
+        author_part: false,
     }];
     let assemble = |marks: &[MemoryDeleteMark]| {
         let record = assemble_memory_consolidation_context(&MemoryConsolidationAssembly {

@@ -139,7 +139,7 @@ The stage names below are contract identifiers, not separate workflow runtimes:
     characters on the settings page
     ([ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
 
-The continuation contract defines `S5-*` through `S10-*`. The release order
+The continuation contract defines `S5-*` through `S11-*`. The release order
 after Stage 7 is
 Stage 10, then Stage 11: the number of a stage is its identity, and
 it is not its place in the order. Stage 8 and Stage 9 stay on EXECUTION HOLD.
@@ -723,7 +723,7 @@ Reuse current owners and stable Requirement IDs. No old child body can stand in
 for that alignment. The current [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361)
 owns its accepted implementation handoff and pending final release evidence.
 The author released the execution of Stage 4 through Stage 7 and of
-Stage 10. Stage 11 waits for the approval of its specification (ADR 0101).
+Stage 10, and on 2026-11-22 the execution of Stage 11 (ADR 0101).
 Stage 8 and Stage 9 stay on EXECUTION HOLD until the author
 explicitly releases their execution (ADR 0096).
 
