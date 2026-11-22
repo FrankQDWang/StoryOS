@@ -315,3 +315,27 @@ fn a_conflict_item_names_an_entry_of_the_author_with_a_short_reason() {
         )
     );
 }
+
+/// The live run of #1788 gave an observation of the type character with the number of the entry
+/// of that character. The Host refuses it, and the result tells the model that an observation has
+/// no entry and no reason (#1803).
+#[test]
+fn a_character_observation_with_an_entry_number_is_refused_with_the_rule_in_the_result() {
+    let mut character = item("character", "沈知遥", "她决定留镇。");
+    character.entry = Some(2);
+
+    let refusal = validate_observations(&[character], &AUTHOR).unwrap_err();
+
+    assert_eq!(
+        (refusal.label(), refusal.result().text),
+        (
+            "observation_invalid",
+            "The Host refused this call because the observation 1 is not valid. Its type must be \
+             one of the six types. Its title and its text must not be empty, and its title must \
+             be one line. An observation has \"entry\": null and \"reason\": null. A conflict has \
+             only an entry and a reason of one line. It recorded no observation. Correct the list \
+             and call record_memory_observations again."
+                .to_owned()
+        )
+    );
+}
