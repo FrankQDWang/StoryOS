@@ -276,7 +276,8 @@ async fn one_pass_starts_in_a_minute_and_a_failed_pass_does_not_start_again() {
 }
 
 /// A consolidation pass that the claim starts during an intent pass: when it settles first with a
-/// new text, the intent pass settles with `not_kept`. When it is still in progress at the intent
+/// new text, the intent pass settles with `not_kept`, and the next pass records a result for that
+/// text. When it is still in progress at the intent
 /// settlement, the consolidation work goes first: the intent pass settles with `not_kept`, writes
 /// no version, and leaves the Memory revision that the consolidation pass pinned, so that pass
 /// applies its operations. A `write_memory` change of the part of the author during a pass also
@@ -318,6 +319,9 @@ async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_t
     let applied_first = consolidation("林舟换了船。").await;
     run_capture(&store, &admin, &scope, &applied_first).await;
     finish(&store, &admin, &scope, &first).await;
+    let between = run_intent(&store, &admin, &scope).await;
+    // The part of the author gives the entry a need for the next pass.
+    run(&store, &admin, project, "355", &author_part("他怕水。")).await;
     age(&admin, &scope).await;
     let second = started(claim(&store, &admin, &scope).await);
     let in_progress = consolidation("林舟又换了船。").await;
@@ -326,7 +330,6 @@ async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_t
     let after_intent = memory_revision(&admin, &scope).await;
     run_capture(&store, &admin, &scope, &in_progress).await;
     let third = run_intent(&store, &admin, &scope).await;
-    run(&store, &admin, project, "355", &author_part("他怕水。")).await;
     age(&admin, &scope).await;
     let fourth = started(claim(&store, &admin, &scope).await);
     let author_change = write("change", json!({"entry": 2, "text": "他会游泳。"}));
@@ -359,28 +362,35 @@ async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_t
                 results(&admin, &second).await,
                 results(&admin, &fourth).await
             ],
-            [file(&admin, &third).await, file(&admin, &fifth).await],
+            [
+                file(&admin, &between).await,
+                file(&admin, &third).await,
+                file(&admin, &fifth).await
+            ],
             intents(&admin, &scope, 1).await
         ),
         (
             json!([
                 [1, "not_kept", 1, null],
-                [1, "not_kept", 2, null],
-                [1, "recorded", 3, null],
-                [1, "not_kept", 3, 1],
-                [1, "recorded", 3, 2]
+                [1, "recorded", 2, null],
+                [1, "not_kept", 2, 1],
+                [1, "recorded", 4, 1],
+                [1, "not_kept", 4, 1],
+                [1, "recorded", 4, 2]
             ]),
             [json!([NOT_KEPT]), json!([first_text]), json!([NOT_KEPT])],
             [
-                told(None, "林舟又换了船。"),
+                told(None, "林舟换了船。"),
+                told(Some("他怕水。"), "林舟又换了船。"),
                 told(Some("他会游泳。"), "林舟又换了船。")
             ],
             json!([
                 [1, "consolidation", null, null],
                 [2, "consolidation", null, null],
-                [3, "consolidation", null, null],
-                [4, "intent_pass", FAKE, ["我以前去过河对岸吗？"]],
-                [5, "intent_pass", FAKE, ["我以前去过河对岸吗？"]]
+                [3, "intent_pass", FAKE, ["我以前去过河对岸吗？"]],
+                [4, "consolidation", null, null],
+                [5, "intent_pass", FAKE, ["我以前去过河对岸吗？"]],
+                [6, "intent_pass", FAKE, ["我以前去过河对岸吗？"]]
             ])
         )
     );
