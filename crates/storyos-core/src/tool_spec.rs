@@ -157,6 +157,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::SEARCH_MEMORY_TOOL_SPEC,
         &crate::RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
         &crate::APPLY_MEMORY_OPERATIONS_TOOL_SPEC,
+        &crate::RECORD_CHARACTER_INTENT_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)

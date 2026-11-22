@@ -220,7 +220,7 @@ async fn source_project(
 async fn an_applied_pass_starts_one_intent_pass_that_records_a_version_with_the_intent() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let (scope, chapter, source) = source_project(&store, &admin, "4c0", 0x4c00).await;
+    let (scope, chapter, source) = source_project(&store, &admin, "4c0", 0x4ca0).await;
     let create = character("林舟", "林舟是渡口的船夫。");
     consolidate(&store, &admin, &scope, &source, &[create]).await;
     let (due, revision) = (
@@ -327,7 +327,7 @@ async fn an_applied_pass_starts_one_intent_pass_that_records_a_version_with_the_
 async fn refused_calls_write_no_version_and_the_passes_run_in_entry_order() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let (scope, _, source) = source_project(&store, &admin, "4c1", 0x4c10).await;
+    let (scope, _, source) = source_project(&store, &admin, "4c1", 0x4cb0).await;
     let call =
         |intent: &str, questions: &[&str]| json!({ "intent": intent, "questions": questions });
     let line_break = call("我去渡口。", &["我会\n游泳吗？"]);
@@ -468,7 +468,7 @@ async fn the_entry_of_the_author_gets_no_version_and_a_new_text_needs_a_pass_aga
             MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::NoEntryNeedsPass),
             json!([
                 ["applied", null, 2],
-                ["refused", "memory_entry_author_part", null]
+                ["refused", "author_entry", null]
             ]),
             json!(
                 "{\"name\":\"阿青\"}\n\nTold by the author:\n怕水\n\nFrom the manuscript:\n阿青是船夫。"
