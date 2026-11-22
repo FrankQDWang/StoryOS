@@ -1,11 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-
-import { listMemoryEntries } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { MemoryEntryInspect, MemoryEntrySourceInspect, MemoryEntryTypeInspect }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { deleteMemoryEntryOnce } from "./delete-memory-entry.ts";
-import type { MemoryDeleteFlight } from "./delete-memory-entry.ts";
-import { sameScope } from "./project-instruction.ts";
+import type { DeleteStep, MemoryEntries } from "./memory-entries.ts";
 import type { SettingsSectionProps } from "./project-settings.tsx";
 
 // The author approved the group names, the origin lines, and the two sentences on 2026-11-16.
@@ -18,7 +13,7 @@ const GROUP_NAMES: Record<MemoryEntryTypeInspect, string> = {
   other: "其他",
 };
 const ORIGIN_LINES = { author_request: "你让助手记住的", conversation: "来自对话" } as const;
-const EMPTY_SENTENCE = "助手还没有记住任何内容。";
+export const EMPTY_SENTENCE = "助手还没有记住任何内容。";
 const SOURCE_UNAVAILABLE = "来源已不可用";
 const READ_FAILED_SENTENCE = "无法读取记忆，请稍后再试。";
 // The ticket #1629 gives the three control words and the two sentences. The author approved them on 2026-11-17.
@@ -41,99 +36,73 @@ function groups(entries: readonly MemoryEntryInspect[]): Group[] {
   return result;
 }
 
-/** The step of the delete control of one entry, and the sentence under the entry after a delete. */
-type DeleteStep = "confirm" | "sending" | "changed" | "failed";
+/** The sentence of a failed read and the control that reads again. */
+export function ReadFailed({ memory }: { memory: MemoryEntries }) {
+  return (
+    <div role="alert" data-memory-read-failed="">
+      <p>{READ_FAILED_SENTENCE}</p>
+      <button type="button" data-memory-read-again="" onClick={memory.readAgain}>重新读取</button>
+    </div>
+  );
+}
 
 /**
  * The Memory section of the settings page (ADR 0094 section 9). It shows each current Memory Entry at the time of the
- * read. The only control that changes an entry is its delete control, and a delete has no undo.
+ * read, except the entries of the type character: the section "人物" shows them (ADR 0101 section 6). The only control
+ * that changes an entry is its delete control, and a delete has no undo.
  */
-export function MemorySection({ scope, baseUrl, fetchImpl, cryptoImpl }: SettingsSectionProps) {
-  const [entries, setEntries] = useState<readonly MemoryEntryInspect[] | "failed">();
-  const [reads, setReads] = useState(0);
-  // Each entry has its own step and its own delete intent, so a delete of one entry does not change another entry.
-  const [steps, setSteps] = useState<ReadonlyMap<string, DeleteStep>>(new Map());
-  const flights = useRef(new Map<string, MemoryDeleteFlight>());
-  // The entries that a delete removed. A read that started before the delete must not show them again.
-  const removed = useRef(new Set<string>());
-  const { owner_user_id: ownerUserId, project_id: projectId } = scope;
-  useEffect(() => {
-    let current = true;
-    listMemoryEntries({ baseUrl, fetchImpl, projectId })
-      .then((read) => sameScope(read.project_scope, { owner_user_id: ownerUserId, project_id: projectId })
-        ? read.entries : "failed" as const, () => "failed" as const)
-      .then((read) => {
-        if (current) {
-          setEntries(read === "failed" ? read : read.filter((item) => !removed.current.has(item.memory_entry_id)));
-        }
-      });
-    return () => { current = false; };
-  }, [baseUrl, fetchImpl, ownerUserId, projectId, reads]);
-  const time = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" });
-  const setStep = (memoryEntryId: string, step: DeleteStep | undefined) => setSteps((shown) => {
-    const next = new Map(shown);
-    if (step === undefined) next.delete(memoryEntryId);
-    else next.set(memoryEntryId, step);
-    return next;
-  });
-  const confirmDelete = async (entry: MemoryEntryInspect) => {
-    const memoryEntryId = entry.memory_entry_id;
-    setStep(memoryEntryId, "sending");
-    const result = await deleteMemoryEntryOnce({ baseUrl, fetchImpl, cryptoImpl, scope, memoryEntryId,
-      version: entry.version, flight: flights.current.get(memoryEntryId) });
-    if (result.flight === undefined) flights.current.delete(memoryEntryId);
-    else flights.current.set(memoryEntryId, result.flight);
-    if (result.outcome === "deleted") {
-      removed.current.add(memoryEntryId);
-      setStep(memoryEntryId, undefined);
-      setEntries((shown) => shown === "failed" || shown === undefined
-        ? shown : shown.filter((item) => item.memory_entry_id !== memoryEntryId));
-    } else {
-      setStep(memoryEntryId, result.outcome);
-      if (result.outcome === "changed") setReads((count) => count + 1);
-    }
-  };
+export function MemorySection({ scope, memory }: SettingsSectionProps) {
+  const { entries } = memory;
   return (
     <section className="settings-section memory-section" aria-labelledby="memory-heading" data-memory-section="">
       <h2 id="memory-heading">记忆</h2>
-      {entries === undefined ? null : entries === "failed" ? (
-        <div role="alert" data-memory-read-failed="">
-          <p>{READ_FAILED_SENTENCE}</p>
-          <button type="button" data-memory-read-again="" onClick={() => {
-            setEntries(undefined);
-            setReads((count) => count + 1);
-          }}>重新读取</button>
-        </div>
-      ) : entries.length === 0 ? (
-        <p data-memory-empty="">{EMPTY_SENTENCE}</p>
-      ) : groups(entries).map((group) => (
-        <section key={group.type} className="memory-group" data-memory-group={group.type}>
-          <h3>{GROUP_NAMES[group.type]}</h3>
-          <ul>
-            {group.entries.map((entry) => (
-              <li key={entry.memory_entry_id} className="memory-entry" data-memory-entry={entry.entry_number}>
-                <h4>{entry.title}</h4>
-                <Flag entry={entry} projectId={projectId} />
-                <p className="memory-entry-text">{entry.text}</p>
-                <p className="memory-entry-origin">
-                  <Origin entry={entry} projectId={projectId} />
-                  <time dateTime={entry.changed_at}>{time.format(new Date(entry.changed_at))}</time>
-                </p>
-                <div className="memory-entry-actions" data-memory-entry-actions="">
-                  <DeleteControl
-                    step={steps.get(entry.memory_entry_id)}
-                    onDelete={() => setStep(entry.memory_entry_id, "confirm")}
-                    onConfirm={() => void confirmDelete(entry)}
-                    onCancel={() => setStep(entry.memory_entry_id, undefined)}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      {entries === undefined ? null : entries === "failed" ? <ReadFailed memory={memory} />
+        : entries.length === 0 ? (
+          <p data-memory-empty="">{EMPTY_SENTENCE}</p>
+        ) : groups(entries.filter((entry) => entry.entry_type !== "character")).map((group) => (
+          <section key={group.type} className="memory-group" data-memory-group={group.type}>
+            <h3>{GROUP_NAMES[group.type]}</h3>
+            <ul>
+              {group.entries.map((entry) => (
+                <li key={entry.memory_entry_id} className="memory-entry" data-memory-entry={entry.entry_number}>
+                  <h4>{entry.title}</h4>
+                  <EntryParts entry={entry} projectId={scope.project_id} memory={memory} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
     </section>
   );
+}
+
+const TIME = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" });
+
+/** The parts of one entry under its title: the conflict flag, the text, the origin line, the time, and the delete control. */
+export function EntryParts({ entry, projectId, memory, onDeleted }: {
+  entry: MemoryEntryInspect;
+  projectId: string;
+  memory: MemoryEntries;
+  /** Runs after the delete removed the entry from the list. */
+  onDeleted?: () => void;
+}) {
+  const id = entry.memory_entry_id;
+  return <>
+    <Flag entry={entry} projectId={projectId} />
+    <p className="memory-entry-text">{entry.text}</p>
+    <p className="memory-entry-origin">
+      <Origin entry={entry} projectId={projectId} />
+      <time dateTime={entry.changed_at}>{TIME.format(new Date(entry.changed_at))}</time>
+    </p>
+    <div className="memory-entry-actions" data-memory-entry-actions="">
+      <DeleteControl
+        step={memory.steps.get(id)}
+        onDelete={() => memory.setStep(id, "confirm")}
+        onConfirm={() => void memory.confirmDelete(entry).then((left) => { if (left) onDeleted?.(); })}
+        onCancel={() => memory.setStep(id, undefined)}
+      />
+    </div>
+  </>;
 }
 
 /**
