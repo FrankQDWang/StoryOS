@@ -22,7 +22,7 @@ pub const WRITE_MEMORY_TOOL_SPEC: ToolSpec = ToolSpec {
 /// The Host limit of the text of an entry (initial value, S7-D7 can change it).
 pub const MEMORY_TEXT_MAX_CHARS: usize = 600;
 /// The Host limit of the text of an entry of the type `character` (initial value).
-pub const MEMORY_CHARACTER_TEXT_MAX_CHARS: usize = 1500;
+pub const MEMORY_CHARACTER_TEXT_MAX_CHARS: usize = 4000;
 /// The Host limit of the title of an entry (initial value).
 pub const MEMORY_TITLE_MAX_CHARS: usize = 30;
 /// The Host limit of the description of an entry (initial value).
@@ -61,7 +61,7 @@ pub(crate) fn parameters() -> Value {
             "title": value("One line, at most 30 characters. Null keeps the title."),
             "description": value("One line, at most 100 characters. Null keeps the description."),
             "text": value(
-                "Markdown, at most 600 characters, or 1500 for a character. Null keeps the text."
+                "Markdown, at most 600 characters, or 4000 for a character. Null keeps the text."
             )
         },
         "required": KEYS,
@@ -170,6 +170,19 @@ pub struct CurrentMemoryEntry {
     /// The current version has a conflict flag (ADR 0094 section 7). Its line in the Memory Index
     /// is longer, so the Index bound of a write counts it.
     pub flagged: bool,
+    /// The entry is a character entry with the origin `author_request`: the part of the author of
+    /// a character file (ADR 0101 section 3).
+    pub author_part: bool,
+}
+
+/// The writer of one version: the request of the author (`write_memory`) or background work (an
+/// operation of a consolidation pass). A character entry is in the class of its writer, and the
+/// check of one entry for each type and title compares it only with its own class (ADR 0101
+/// section 3).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MemoryWriter {
+    Author,
+    Background,
 }
 
 /// The version that one admitted write adds. `memory_entry_id` is `None` for a new entry. Only a
@@ -213,6 +226,8 @@ pub enum MemoryWriteRefusal {
     /// Another current entry has the type and the title. It has this number.
     Exists(u64),
     IndexFull,
+    /// A change of the author names the character entry of the background work with this number.
+    BackgroundPart(u64),
 }
 
 impl MemoryWriteRefusal {
@@ -224,6 +239,7 @@ impl MemoryWriteRefusal {
             Self::NotFound => "memory_entry_not_found",
             Self::Exists(_) => "memory_entry_exists",
             Self::IndexFull => "memory_index_full",
+            Self::BackgroundPart(_) => "memory_entry_background_part",
         }
     }
 
@@ -246,16 +262,29 @@ impl MemoryWriteRefusal {
                 "the entry {number} already has this type and this title: change that entry"
             ),
             Self::IndexFull => "Memory is full, so tell the author that Memory is full".to_owned(),
+            Self::BackgroundPart(number) => format!(
+                "the entry {number} of a character comes from the manuscript and you cannot \
+                 change it"
+            ),
         };
-        crate::host_tool_result(&format!(
-            "The Host refused this call because {reason}, so Memory did not change."
-        ))
+        let mut text =
+            format!("The Host refused this call because {reason}, so Memory did not change.");
+        if let Self::BackgroundPart(_) = self {
+            text.push_str(
+                " Write a fact that the character knows into the entry of that character with \
+                 \"author_part\": true. Create that entry with the name of the character as its \
+                 title when the section Memory index does not list it.",
+            );
+        }
+        crate::host_tool_result(&text)
     }
 }
 
-/// Decides one write from `write` and the current entries of the Project, and returns the version
-/// to write or the refusal. The checks are in the order of the refusals of S7-D1a2.
+/// Decides one write of `writer` from `write` and the current entries of the Project, and returns
+/// the version to write or the refusal. The checks are in the order of the refusals of S7-D1a2.
+/// The author cannot change a character entry of the background work (ADR 0101 section 3).
 pub fn decide_memory_write(
+    writer: MemoryWriter,
     write: &MemoryWrite,
     entries: &[CurrentMemoryEntry],
     next_entry_number: u64,
@@ -328,6 +357,13 @@ pub fn decide_memory_write(
             flag: None,
         },
         (_, None) => return Err(MemoryWriteRefusal::NotFound),
+        (MemoryWriteAction::Change, Some(entry))
+            if writer == MemoryWriter::Author
+                && entry.entry_type == MemoryEntryType::Character
+                && !entry.author_part =>
+        {
+            return Err(MemoryWriteRefusal::BackgroundPart(entry.number));
+        }
         (action, Some(entry)) => MemoryVersionWrite {
             action,
             memory_entry_id: Some(entry.memory_entry_id.clone()),
@@ -352,6 +388,8 @@ pub fn decide_memory_write(
     if version.state == MemoryEntryState::Deleted {
         return Ok(version);
     }
+    let author_part =
+        writer == MemoryWriter::Author && version.entry_type == MemoryEntryType::Character;
     let others = entries
         .iter()
         .filter(|entry| entry.number != version.number);
@@ -359,13 +397,15 @@ pub fn decide_memory_write(
         || write.title.is_some()
         || write.entry_type.is_some())
         && let Some(other) = others.clone().find(|entry| {
-            entry.entry_type == version.entry_type && entry.title.trim() == version.title
+            entry.entry_type == version.entry_type
+                && entry.author_part == author_part
+                && entry.title.trim() == version.title
         })
     {
         return Err(MemoryWriteRefusal::Exists(other.number));
     }
     // The written version has no flag, and each other line keeps its flag. Above the limit, the
-    // Index of a Run is an excerpt.
+    // Index of a Run is an excerpt. The check counts no intent.
     let index: Vec<MemoryIndexEntry> = others
         .map(|entry| MemoryIndexEntry {
             number: entry.number,
@@ -373,6 +413,8 @@ pub fn decide_memory_write(
             title: entry.title.clone(),
             description: entry.description.clone(),
             flagged: entry.flagged,
+            author_part: entry.author_part,
+            intent: None,
         })
         .chain([MemoryIndexEntry {
             number: version.number,
@@ -380,6 +422,8 @@ pub fn decide_memory_write(
             title: version.title.clone(),
             description: version.description.clone(),
             flagged: false,
+            author_part,
+            intent: None,
         }])
         .collect();
     match memory_index_text(&index).1 {

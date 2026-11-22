@@ -101,7 +101,11 @@ export type MemoryEntrySourceInspect = { "kind": "conversation", conversation_id
 
 export type MemoryEntryFlagInspect = { reason: string, source: MemoryEntrySourceInspect, flagged_at: string, };
 
-export type MemoryEntryInspect = { memory_entry_id: string, entry_number: string, version: string, entry_type: MemoryEntryTypeInspect, title: string, description: string, text: string, origin: MemoryEntryOriginInspect, source: MemoryEntrySourceInspect | null, changed_at: string, flag?: MemoryEntryFlagInspect, };
+export type MemoryIntentChapterInspect = { chapter_id: string, title: string | null, availability: MemorySourceAvailability, };
+
+export type MemoryEntryIntentInspect = { text: string, questions: Array<string>, chapter: MemoryIntentChapterInspect | null, recorded_at: string, };
+
+export type MemoryEntryInspect = { memory_entry_id: string, entry_number: string, version: string, entry_type: MemoryEntryTypeInspect, title: string, description: string, text: string, origin: MemoryEntryOriginInspect, source: MemoryEntrySourceInspect | null, changed_at: string, flag?: MemoryEntryFlagInspect, intent?: MemoryEntryIntentInspect, };
 
 export type ListMemoryEntriesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, entries: Array<MemoryEntryInspect>, };
 
@@ -381,7 +385,7 @@ export type AgentRunStatus = "queued" | "claimed" | "waiting" | "paused" | "comp
 
 export type ContextPurpose = "current_passage_assistance";
 
-export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result" | "skill_catalog" | "skill_instruction" | "skill_resource" | "chapter_list" | "manuscript_read_result" | "manuscript_search_result" | "memory_index" | "memory_read_result" | "memory_search_result" | "memory_capture_input" | "memory_delete_marks" | "memory_entries" | "memory_observations";
+export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result" | "skill_catalog" | "skill_instruction" | "skill_resource" | "chapter_list" | "manuscript_read_result" | "manuscript_search_result" | "memory_index" | "memory_read_result" | "memory_search_result" | "memory_capture_input" | "memory_delete_marks" | "memory_entries" | "memory_observations" | "character_file";
 
 export type ProjectionMode = "exact_required" | "derived_summary" | "deterministic_excerpt" | "tool_result_stub";
 

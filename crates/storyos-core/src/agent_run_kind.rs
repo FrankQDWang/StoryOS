@@ -16,15 +16,21 @@ pub enum AgentRunKind {
     MemoryCapture,
     /// One consolidation pass of the Memory Observations (ADR 0094 section 6).
     MemoryConsolidation,
+    /// One intent pass of a character (ADR 0101 section 4).
+    IntentPass,
 }
 
 impl AgentRunKind {
     /// Each kind, in the order of the closed list of `agent_runs.run_kind`.
-    pub const ALL: [Self; 3] = [Self::Author, Self::MemoryCapture, Self::MemoryConsolidation];
+    pub const ALL: [Self; 4] = [
+        Self::Author,
+        Self::MemoryCapture,
+        Self::MemoryConsolidation,
+        Self::IntentPass,
+    ];
 
     /// The kinds that the Worker claims and dispatches. A queued Run of another kind stays queued.
-    pub const DISPATCHED: [Self; 3] =
-        [Self::Author, Self::MemoryCapture, Self::MemoryConsolidation];
+    pub const DISPATCHED: [Self; 4] = Self::ALL;
 
     /// The persisted name of the kind.
     pub fn name(self) -> &'static str {
@@ -32,6 +38,7 @@ impl AgentRunKind {
             Self::Author => "author",
             Self::MemoryCapture => "memory_capture",
             Self::MemoryConsolidation => "memory_consolidation",
+            Self::IntentPass => "intent_pass",
         }
     }
 
@@ -45,7 +52,7 @@ impl AgentRunKind {
     fn has_conversation(self) -> bool {
         match self {
             Self::Author => true,
-            Self::MemoryCapture | Self::MemoryConsolidation => false,
+            Self::MemoryCapture | Self::MemoryConsolidation | Self::IntentPass => false,
         }
     }
 
@@ -64,6 +71,12 @@ impl AgentRunKind {
     fn compacts_on(self, requirement: Option<&[crate::ModelCapability]>) -> bool {
         self.has_conversation()
             && requirement.is_some_and(crate::model_registration::requirement_compacts)
+    }
+
+    /// Whether the Memory Index and the reads of Memory of a Run of the kind give the current
+    /// intent of each character. Only a Run of the author gets them (ADR 0101 section 5).
+    pub fn reads_intents(self) -> bool {
+        self == Self::Author
     }
 
     /// Whether the dispatch of the Run rebuilds an expired prior response. A background Run has
@@ -91,16 +104,20 @@ impl AgentRunKind {
     pub fn fixed_tool_choice(self) -> Option<ToolChoice> {
         match self {
             Self::Author => None,
-            Self::MemoryCapture | Self::MemoryConsolidation => Some(ToolChoice::Required),
+            Self::MemoryCapture | Self::MemoryConsolidation | Self::IntentPass => {
+                Some(ToolChoice::Required)
+            }
         }
     }
 
-    /// The most RunSteps of a Run of the kind. A consolidation pass sends one request.
+    /// The most RunSteps of a Run of the kind. A consolidation pass sends one request, and an
+    /// intent pass sends one more request after a refused call.
     pub fn max_run_steps(self) -> u64 {
         match self {
             Self::Author => crate::MAX_RUN_STEPS,
             Self::MemoryCapture => MEMORY_CAPTURE_MAX_RUN_STEPS,
             Self::MemoryConsolidation => crate::MEMORY_CONSOLIDATION_MAX_RUN_STEPS,
+            Self::IntentPass => crate::INTENT_PASS_MAX_RUN_STEPS,
         }
     }
 
@@ -116,6 +133,7 @@ impl AgentRunKind {
         match self {
             Self::MemoryCapture => Some(ToolOperation::RecordMemoryObservations),
             Self::MemoryConsolidation => Some(ToolOperation::ApplyMemoryOperations),
+            Self::IntentPass => Some(ToolOperation::RecordCharacterIntent),
             Self::Author => None,
         }
     }

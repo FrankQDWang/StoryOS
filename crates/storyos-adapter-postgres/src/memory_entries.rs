@@ -3,15 +3,28 @@
 //! last read of each entry. No diagnostic records a title, a description, or a text of an entry
 //! (ADR 0047).
 
+use std::collections::HashMap;
+
 use storyos_application::ProjectScope;
 use storyos_core::{
-    CurrentMemoryEntry, LastMemoryVersion, MemoryDeleteMark, MemoryEntryRead, MemoryEntryState,
-    MemoryEntryType, MemoryFlagSource, MemoryIndexEntry, MemoryReadFlag, MemorySourceReference,
-    MemoryVersionWrite,
+    AgentRunKind, CurrentMemoryEntry, LastMemoryVersion, MemoryDeleteMark, MemoryEntryOrigin,
+    MemoryEntryRead, MemoryEntryState, MemoryEntryType, MemoryFlagSource, MemoryIndexEntry,
+    MemoryReadFlag, MemorySourceReference, MemoryVersionWrite,
 };
 
 fn invalid(message: &'static str) -> Box<dyn std::error::Error + Send + Sync> {
     Box::new(std::io::Error::other(message))
+}
+
+/// The part of a character file of an entry with the type `entry_type` and the stored origin
+/// `origin` (`storyos_core::memory_author_part`).
+fn author_part(
+    entry_type: MemoryEntryType,
+    origin: &str,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let origin = MemoryEntryOrigin::parse(origin)
+        .ok_or_else(|| invalid("A Memory Entry origin is invalid"))?;
+    Ok(storyos_core::memory_author_part(entry_type, origin))
 }
 
 fn numeric(value: &str) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
@@ -55,19 +68,43 @@ pub(crate) async fn memory_revision_pin(
     ))
 }
 
-/// The current Memory Entries of the Project at `memory_revision`: for each entry, the version
-/// with the highest Memory revision that is not above it, when its state is `current`. The entry
-/// is flagged when that version is a flag version (ADR 0094 section 7).
+/// The text of the current intent of each entry with a current result at `memory_revision`, by
+/// its identity, when a Run of the kind `reader` gets the intents (ADR 0101 section 5).
+async fn intents(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    memory_revision: u64,
+    reader: AgentRunKind,
+) -> Result<HashMap<String, String>, Box<dyn std::error::Error + Send + Sync>> {
+    if !reader.reads_intents() {
+        return Ok(HashMap::new());
+    }
+    let values: [&(dyn tokio_postgres::types::ToSql + Sync); 2] =
+        [&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()];
+    let rows = crate::memory_entry_list::intents_at(client, &values, memory_revision).await?;
+    Ok((rows.into_iter())
+        .map(|(memory_entry_id, row)| (memory_entry_id, row.get(crate::memory_entry_list::INTENT)))
+        .collect())
+}
+
+/// The current Memory Entries of the Project at `memory_revision` for a Run of the kind
+/// `reader`: for each entry, the version with the highest Memory revision that is not above it,
+/// when its state is `current`. The entry is flagged when that version is a flag version (ADR
+/// 0094 section 7), and it has its current intent when the reader gets the intents.
 pub(crate) async fn read_memory_index(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     memory_revision: u64,
+    reader: AgentRunKind,
 ) -> Result<Vec<MemoryIndexEntry>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut intents = intents(client, scope, memory_revision, reader).await?;
     let rows = client
         .query(
-            "SELECT entry_number::text, entry_type, title, description, flag_reason IS NOT NULL
+            "SELECT entry_number::text, entry_type, title, description, flag_reason IS NOT NULL,
+                    origin, memory_entry_id::text
                FROM (SELECT DISTINCT ON (memory_entry_id)
-                            entry_number, state, entry_type, title, description, flag_reason
+                            memory_entry_id, entry_number, state, entry_type, origin, title,
+                            description, flag_reason
                        FROM storyos.memory_entry_versions
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                         AND memory_revision <= $3::text::numeric
@@ -82,13 +119,16 @@ pub(crate) async fn read_memory_index(
         .await?;
     rows.iter()
         .map(|row| {
+            let entry_type = MemoryEntryType::parse(row.get(1))
+                .ok_or_else(|| invalid("A Memory Entry type is invalid"))?;
             Ok(MemoryIndexEntry {
                 number: numeric(row.get(0))?,
-                entry_type: MemoryEntryType::parse(row.get(1))
-                    .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
+                entry_type,
                 title: row.get(2),
                 description: row.get(3),
                 flagged: row.get(4),
+                author_part: author_part(entry_type, row.get(5))?,
+                intent: intents.remove(row.get::<_, &str>(6)),
             })
         })
         .collect()
@@ -112,7 +152,9 @@ pub(crate) async fn memory_head(
 
 /// The marks of the entries that the author deleted, newest first (ADR 0094 section 8). A mark is
 /// the last version of an entry with the state `deleted`. Its cause is a delete by the author. A
-/// capture and the consolidation pass of S7-D4b read the marks. The read takes no lock.
+/// capture and the consolidation pass of S7-D4b read the marks. The read takes no lock. A delete
+/// writes the origin `author_request`, so the origin of the deleted entry is the origin of the
+/// version before the mark (ADR 0101 section 3).
 pub(crate) async fn read_delete_marks(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
@@ -120,9 +162,16 @@ pub(crate) async fn read_delete_marks(
     let causes = storyos_core::MEMORY_DELETE_MARK_CAUSES;
     let rows = client
         .query(
-            "SELECT entry_type, title, description
-               FROM (SELECT DISTINCT ON (memory_entry_id)
-                            memory_revision, state, entry_type, title, description, cause
+            "SELECT entry_type, title, description,
+                    COALESCE((SELECT prior.origin FROM storyos.memory_entry_versions AS prior
+                               WHERE (prior.owner_user_id, prior.project_id,
+                                      prior.memory_entry_id) =
+                                     (latest.owner_user_id, latest.project_id,
+                                      latest.memory_entry_id)
+                                 AND prior.memory_revision < latest.memory_revision
+                               ORDER BY prior.memory_revision DESC
+                               LIMIT 1), origin)
+               FROM (SELECT DISTINCT ON (memory_entry_id) *
                        FROM storyos.memory_entry_versions
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                       ORDER BY memory_entry_id, memory_revision DESC) AS latest
@@ -137,11 +186,13 @@ pub(crate) async fn read_delete_marks(
         .await?;
     rows.iter()
         .map(|row| {
+            let entry_type = MemoryEntryType::parse(row.get(0))
+                .ok_or_else(|| invalid("A Memory Entry type is invalid"))?;
             Ok(MemoryDeleteMark {
-                entry_type: MemoryEntryType::parse(row.get(0))
-                    .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
+                entry_type,
                 title: row.get(1),
                 description: row.get(2),
+                author_part: author_part(entry_type, row.get(3))?,
             })
         })
         .collect()
@@ -170,7 +221,7 @@ pub(crate) async fn current_memory(
     let rows = client
         .query(
             "SELECT memory_entry_id::text, entry_number::text, version::text, entry_type, title,
-                    description, text, flag_reason IS NOT NULL
+                    description, text, flag_reason IS NOT NULL, origin
                FROM (SELECT DISTINCT ON (memory_entry_id) *
                        FROM storyos.memory_entry_versions
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
@@ -182,16 +233,18 @@ pub(crate) async fn current_memory(
     let entries = rows
         .iter()
         .map(|row| {
+            let entry_type = MemoryEntryType::parse(row.get(3))
+                .ok_or_else(|| invalid("A Memory Entry type is invalid"))?;
             Ok(CurrentMemoryEntry {
                 memory_entry_id: row.get(0),
                 number: numeric(row.get(1))?,
                 version: numeric(row.get(2))?,
-                entry_type: MemoryEntryType::parse(row.get(3))
-                    .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
+                entry_type,
                 title: row.get(4),
                 description: row.get(5),
                 text: row.get(6),
                 flagged: row.get(7),
+                author_part: author_part(entry_type, row.get(8))?,
             })
         })
         .collect::<Result<_, Box<dyn std::error::Error + Send + Sync>>>()?;
@@ -260,22 +313,24 @@ pub(crate) async fn last_entry_version(
 /// the texts is the order of the times.
 pub(crate) const TIME_FORM: &str = r#"YYYY-MM-DD"T"HH24:MI:SS.MS"Z""#;
 
-/// The time of the last change of the entry of the row `latest` (ADR 0094 section 7): the time of
-/// its last version that is not a flag version.
+/// The time of the last change of the entry of the row `latest` (ADR 0094 section 7, ADR 0101
+/// section 4): the time of its last version that is not a flag version and not an intent version.
 pub(crate) const LAST_CHANGE: &str = "(SELECT changed.recorded_at
        FROM storyos.memory_entry_versions AS changed
       WHERE (changed.owner_user_id, changed.project_id, changed.memory_entry_id) =
             (latest.owner_user_id, latest.project_id, latest.memory_entry_id)
-        AND changed.flag_reason IS NULL
+        AND changed.flag_reason IS NULL AND changed.intent IS NULL
       ORDER BY changed.memory_revision DESC
       LIMIT 1)";
 
-/// The current version of the entry with the number `number` of the Project now, or `None` when no
-/// current entry has the number. A flag version gives its reason and its source now.
+/// The current version of the entry with the number `number` of the Project now for a Run of the
+/// kind `reader`, or `None` when no current entry has the number. A flag version gives its reason
+/// and its source now, and the entry has its current intent now when the reader gets the intents.
 pub(crate) async fn read_current_entry(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     number: i64,
+    reader: AgentRunKind,
 ) -> Result<Option<MemoryEntryRead>, Box<dyn std::error::Error + Send + Sync>> {
     let row = client
         .query_opt(
@@ -311,6 +366,10 @@ pub(crate) async fn read_current_entry(
         }),
         _ => None,
     };
+    let revision = memory_head(client, scope).await?;
+    let intent = intents(client, scope, revision, reader)
+        .await?
+        .remove(row.get::<_, &str>(0));
     let read = (|| {
         Ok(MemoryEntryRead {
             memory_entry_id: row.get(0),
@@ -323,6 +382,7 @@ pub(crate) async fn read_current_entry(
             changed_at: row.get(6),
             text: row.get(7),
             flag,
+            intent,
         })
     })();
     read.map(Some)

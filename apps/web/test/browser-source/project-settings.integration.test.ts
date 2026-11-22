@@ -6,11 +6,19 @@ import type {
   GetProjectResponse, MemoryEntryInspect,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 
+import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
+import statisticsFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-statistics.json";
+import openProposalsFixture
+  from "../../../../generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.json";
+import skillsFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-skills.json";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { ProjectSettingsView } from "../../src/project-settings.tsx";
 import { mountStage1View } from "../../src/stage1-view.tsx";
-import { OWNER, jsonResponse } from "./scenario.ts";
+import {
+  CHAPTER, OWNER, closeTrackedDatabases, createBrowserScenario, deleteJournal, emptyActivityStream, jsonResponse,
+  trackDatabase,
+} from "./scenario.ts";
 
 // The settings page of a Project and its Project Instruction section (ADR 0094 sections 2 and 9).
 const PROJECT = "018f0000-0000-7001-8000-0000000a2001";
@@ -169,6 +177,7 @@ it("opens the settings page of a Project of the session and no other Project or 
     ["项目指令", null],
     ["保存后从下一次请求开始生效，进行中的请求不受影响。", null],
     ["记忆", null],
+    ["人物", null],
   ]);
   // The page opens no Editor Session.
   expect(server.sent.map(({ method, path }) => `${method} ${path}`)).toEqual([
@@ -194,6 +203,70 @@ it("shows the gear control in the tree footer of a workspace with no Chapter", a
   expect(loaded.state.kind).toBe("empty-project-ready");
   await expect.poll(() => loaded.root.querySelector(".tree-panel .tree-footer a[aria-label=\"项目设置\"]")
     ?.getAttribute("href")).toBe(`/projects/${PROJECT}/settings`);
+});
+
+it("shows no intent and no question in the writing workspace of an open Chapter (ADR 0101 section 5)", async () => {
+  const scenario = createBrowserScenario();
+  const scope = scenario.project.project_scope;
+  const intent = { text: "他想在涨水前把船修好。", questions: ["母亲的信在谁手里？"], recorded_at: "2026-11-20T08:30:00.000Z",
+    chapter: { chapter_id: CHAPTER, title: "Chapter A", availability: "available" as const } };
+  const entries: MemoryEntryInspect[] = [{ memory_entry_id: "018f0000-0000-7001-8000-0000000a2030",
+    entry_number: "1", version: "2", entry_type: "character", title: "林舟", description: "船夫。", text: "他看灯。",
+    origin: "chapter", source: null, changed_at: "2026-11-20T08:00:00.000Z", intent }];
+  const project = `/api/v1/projects/${scope.project_id}`;
+  const routes = new Map<string, () => Response>([
+    ["GET /api/v1/protocol", () => jsonResponse(RELEASE_1_PROTOCOL_PROFILE)],
+    ["GET /api/v1/projects", () => jsonResponse({ schema_id: "storyos.query.project-list.response.v1",
+      correlation_id: "018f0000-0000-7001-8000-0000000a2031", owner_user_id: OWNER,
+      projects: [{ project_scope: scope, title: "Project A", revision: "1", open: scenario.project.project.open }] })],
+    [`GET ${project}`, () => jsonResponse(scenario.project)],
+    [`GET ${project}/chapters/${CHAPTER}`, () => jsonResponse(scenario.chapter)],
+    [`GET ${project}/manuscript/tree`, () => jsonResponse({ project_scope: scope, tree_revision: "1",
+      snapshot: { snapshot_id: "018f0000-0000-7001-8000-0000000a2032", project_scope: scope },
+      volumes: [{ volume_id: "018f0000-0000-7001-8000-0000000a2033", title: "Volume A", order: "1",
+        chapters: [{ chapter_id: CHAPTER, title: "Chapter A", order: "1" }] }] })],
+    [`POST ${project}/anti-forgery-challenges`, () => jsonResponse({ nonce: "a".repeat(64),
+      expires_at: "2026-11-20T08:05:00.000Z", limit_profile_revision: "storyos.foundation.absolute.v1" })],
+    [`POST ${project}/editor-sessions`, () => jsonResponse(scenario.session)],
+    [`GET ${project}/activity`, emptyActivityStream],
+    [`GET ${project}/chapters/${CHAPTER}/open-proposals`, () => jsonResponse({ ...openProposalsFixture,
+      project_scope: scope, chapter_id: CHAPTER, proposals: [] })],
+    [`GET ${project}/manuscript/statistics`, () => jsonResponse({ ...statisticsFixture, project_scope: scope })],
+    [`GET ${project}/assistance`, () => jsonResponse({ ...assistanceFixture, project_scope: scope })],
+    [`GET ${project}/skills`, () => jsonResponse({ ...skillsFixture, project_scope: scope, skills: [] })],
+  ]);
+  // The Memory Entries of the Project have a result, so that a read of them would show it.
+  const memory = `GET ${project}/memory-entries`;
+  routes.set(memory, () => jsonResponse({ schema_id: "storyos.query.memory-entries.response.v1",
+    correlation_id: "018f0000-0000-7001-8000-0000000a2034", project_scope: scope, entries }));
+  const requests: string[] = [];
+  const unexpected: string[] = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const request = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
+    requests.push(request);
+    const route = routes.get(request);
+    if (route === undefined) {
+      unexpected.push(request);
+      throw new Error(`unexpected request: ${request}`);
+    }
+    return route();
+  };
+  const openDatabases = new Set<IDBDatabase>();
+  await deleteJournal(scenario.journalName);
+  try {
+    const loaded = await open(`/projects/${scope.project_id}`, fetchImpl);
+    if (loaded.state.kind === "project-ready" && loaded.state.editor.kind === "editor-ready") {
+      trackDatabase(loaded.state.editor.database, openDatabases);
+    }
+    await expect.poll(() => loaded.root.querySelector("[contenteditable='true']") !== null).toBe(true);
+    await expect.poll(() => requests.includes(`GET ${project}/activity`)).toBe(true);
+    expect([[intent.text, ...intent.questions].filter((text) => document.body.textContent!.includes(text)),
+      requests.includes(memory), unexpected]).toEqual([[], false, []]);
+  } finally {
+    closeTrackedDatabases(openDatabases);
+    sessionStorage.removeItem(`active_session:${OWNER}:${scope.project_id}`);
+    await deleteJournal(scenario.journalName);
+  }
 });
 
 const SENTENCE = {
@@ -286,12 +359,47 @@ it("asks one time before the author leaves with a text that is not saved", async
     .toEqual([[`/projects/${PROJECT}`, `/projects/${PROJECT}`], [], false]);
 });
 
+/** The words of the navigation, the selected item, and the visible sections. */
+function navigation() {
+  return [[...document.querySelectorAll("nav [data-settings-item]")].map((item) => item.textContent),
+    document.querySelector('nav [aria-current="true"]')?.textContent,
+    [...document.querySelectorAll(".settings-section")].filter((section) => section.checkVisibility())
+      .map((section) => section.querySelector("h2")?.textContent)];
+}
+
+it("shows the section of the selected item of the navigation (ADR 0101 section 6), and keeps the text that is not saved",
+  async () => {
+    const server = fakeServer();
+    const navigated = await settingsPage(server.fetchImpl);
+    const items = ["项目说明", "记忆", "人物"];
+    const shown = [navigation()];
+    for (const key of ["memory", "characters", "instruction"]) {
+      click(`[data-settings-item="${key}"]`);
+      await expect.poll(() => navigation()[1]).toBe(items[["instruction", "memory", "characters"].indexOf(key)]);
+      shown.push(navigation());
+    }
+    expect(shown).toEqual([[items, "项目说明", ["项目指令"]], [items, "记忆", ["记忆"]], [items, "人物", ["人物"]],
+      [items, "项目说明", ["项目指令"]]]);
+
+    type("Unsaved rule.");
+    await expect.poll(leavePrompt).toBe(true);
+    click('[data-settings-item="characters"]');
+    await expect.poll(() => navigation()[1]).toBe("人物");
+    click('[data-settings-item="instruction"]');
+    await expect.poll(() => navigation()[1]).toBe("项目说明");
+    expect([field()?.value, leavePrompt(), confirmStep()]).toEqual(["Unsaved rule.", true, undefined]);
+    click("[data-return-to-writing]");
+    await expect.poll(confirmStep).toBe("项目指令有未保存的修改。确定离开吗？离开留下");
+    expect([navigated, puts(server.sent)]).toEqual([[], []]);
+  });
+
 it("asks before a source link of a Memory entry leaves with a text that is not saved", async () => {
   // The test page must not leave, so each click that the page does not take ends here.
   const hold = (event: Event) => event.preventDefault();
   document.addEventListener("click", hold);
   const server = fakeServer([], [SOURCED]);
   const navigated = await settingsPage(server.fetchImpl);
+  click('[data-settings-item="memory"]');
   const source = "a[data-memory-entry-origin]";
   await expect.poll(() => document.querySelector(source)).not.toBeNull();
   click(source);

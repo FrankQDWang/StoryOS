@@ -98,7 +98,7 @@ async fn the_first_request_of_a_capture_sends_its_reference_items() {
                 input,
                 {"source_class": "memory_index", "content": concat!(
                     "{\"type\":\"character\"}\n",
-                    "{\"description\":\"撑船的人。\",\"id\":1,\"title\":\"林舟\"}"
+                    "{\"author_part\":true,\"description\":\"撑船的人。\",\"id\":1,\"title\":\"林舟\"}"
                 )},
                 chapters,
                 {"source_class": "memory_delete_marks", "content": concat!(

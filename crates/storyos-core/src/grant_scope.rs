@@ -21,6 +21,9 @@ pub enum GrantScope {
     /// The fourth scope, the Stage 7 source classes of the manuscript and of Agent Memory, and
     /// the Purposes `memory_capture` and `memory_consolidation` (ADR 0094, ADR 0095).
     ProjectWritingAssistanceV5,
+    /// The fifth scope, the source class `character_file`, and the Purpose `intent_pass` (ADR
+    /// 0101 section 4).
+    ProjectWritingAssistanceV6,
     /// The research destination that `createAgentRun` binds (ADR 0090): the Purpose `research`,
     /// the source classes `agent_query` and `agent_url_selection`, no length bound, no Ambient
     /// Context. It covers no model request.
@@ -33,7 +36,7 @@ pub enum GrantScope {
 
 impl GrantScope {
     /// The scope that each new grant records.
-    pub const CURRENT: Self = Self::ProjectWritingAssistanceV5;
+    pub const CURRENT: Self = Self::ProjectWritingAssistanceV6;
 
     pub fn as_str(self) -> &'static str {
         match self {
@@ -42,6 +45,7 @@ impl GrantScope {
             Self::ProjectWritingAssistanceV3 => "project_writing_assistance_v3",
             Self::ProjectWritingAssistanceV4 => "project_writing_assistance_v4",
             Self::ProjectWritingAssistanceV5 => "project_writing_assistance_v5",
+            Self::ProjectWritingAssistanceV6 => "project_writing_assistance_v6",
             Self::ResearchToolV1 => "research_tool_v1",
             Self::ManuscriptEmbeddingV1 => "manuscript_embedding_v1",
         }
@@ -54,6 +58,7 @@ impl GrantScope {
             "project_writing_assistance_v3" => Some(Self::ProjectWritingAssistanceV3),
             "project_writing_assistance_v4" => Some(Self::ProjectWritingAssistanceV4),
             "project_writing_assistance_v5" => Some(Self::ProjectWritingAssistanceV5),
+            "project_writing_assistance_v6" => Some(Self::ProjectWritingAssistanceV6),
             "research_tool_v1" => Some(Self::ResearchToolV1),
             "manuscript_embedding_v1" => Some(Self::ManuscriptEmbeddingV1),
             _ => None,
@@ -70,6 +75,7 @@ impl GrantScope {
             Self::ProjectWritingAssistanceV3 => Some(3),
             Self::ProjectWritingAssistanceV4 => Some(4),
             Self::ProjectWritingAssistanceV5 => Some(5),
+            Self::ProjectWritingAssistanceV6 => Some(6),
             Self::ResearchToolV1 | Self::ManuscriptEmbeddingV1 => None,
         }
     }
@@ -89,6 +95,7 @@ impl GrantScope {
             ContextPurpose::CurrentPassageAssistance => 1,
             ContextPurpose::ActiveContextCompaction => 2,
             ContextPurpose::MemoryCapture | ContextPurpose::MemoryConsolidation => 5,
+            ContextPurpose::IntentPass => 6,
         };
         self.writing_revision()
             .is_some_and(|revision| revision >= first)
@@ -115,6 +122,7 @@ impl GrantScope {
             | ContextSourceClass::MemoryDeleteMarks
             | ContextSourceClass::MemoryEntries
             | ContextSourceClass::MemoryObservations => 5,
+            ContextSourceClass::CharacterFile => 6,
         };
         self.writing_revision()
             .is_some_and(|revision| revision >= first)

@@ -14,8 +14,18 @@ fn each_kind_has_its_persisted_name_and_the_worker_dispatches_each_kind() {
             AgentRunKind::ALL.map(|kind| AgentRunKind::parse(kind.name())),
         ),
         (
-            ["author", "memory_capture", "memory_consolidation"],
-            ["author", "memory_capture", "memory_consolidation"],
+            [
+                "author",
+                "memory_capture",
+                "memory_consolidation",
+                "intent_pass"
+            ],
+            [
+                "author",
+                "memory_capture",
+                "memory_consolidation",
+                "intent_pass"
+            ],
             AgentRunKind::ALL.map(Some)
         )
     );
@@ -42,10 +52,10 @@ fn only_a_run_of_the_author_compacts_with_a_registration_that_compacts() {
             AgentRunKind::ALL.map(|kind| kind.compacts_on(Some(STREAMED_CONTINUATION))),
         ],
         [
-            [true, false, false],
-            [true, false, false],
-            [false; 3],
-            [false; 3]
+            [true, false, false, false],
+            [true, false, false, false],
+            [false; 4],
+            [false; 4]
         ]
     );
 }
@@ -66,13 +76,14 @@ fn a_background_run_has_no_chapter_work_and_requires_a_call_in_each_request() {
             (true, true, true, None),
             (false, false, false, Some(ToolChoice::Required)),
             (false, false, false, Some(ToolChoice::Required)),
+            (false, false, false, Some(ToolChoice::Required)),
         ]
     );
 }
 
 /// A background Run has its own RunStep limit, and in its last RunStep the Host executes only its
-/// output call. A pass has one RunStep. A Run of the author keeps 24 RunSteps and executes no
-/// call of its last RunStep.
+/// output call. A consolidation pass has one RunStep, and an intent pass has two. A Run of the
+/// author keeps 24 RunSteps and executes no call of its last RunStep.
 #[test]
 fn each_kind_has_its_run_step_limit_and_its_last_run_step_rule() {
     let last = |kind: AgentRunKind| kind.max_run_steps() - 1;
@@ -80,6 +91,7 @@ fn each_kind_has_its_run_step_limit_and_its_last_run_step_rule() {
         ToolOperation::RecordMemoryObservations,
         ToolOperation::ApplyMemoryOperations,
         ToolOperation::ReadMemoryEntry,
+        ToolOperation::RecordCharacterIntent,
     ];
     assert_eq!(
         AgentRunKind::ALL.map(|kind| (
@@ -93,22 +105,29 @@ fn each_kind_has_its_run_step_limit_and_its_last_run_step_rule() {
             (
                 MAX_RUN_STEPS,
                 [RunStepLimit::Open, RunStepLimit::Last],
-                [false, false, false],
-                [true; 3],
+                [false; 4],
+                [true; 4],
                 false
             ),
             (
                 MEMORY_CAPTURE_MAX_RUN_STEPS,
                 [RunStepLimit::Open, RunStepLimit::Last],
-                [true, false, false],
-                [true; 3],
+                [true, false, false, false],
+                [true; 4],
                 true
             ),
             (
                 1,
                 [RunStepLimit::Last, RunStepLimit::Last],
-                [false, true, false],
-                [true; 3],
+                [false, true, false, false],
+                [true; 4],
+                true
+            ),
+            (
+                2,
+                [RunStepLimit::Open, RunStepLimit::Last],
+                [false, false, false, true],
+                [true; 4],
                 true
             ),
         ]
@@ -125,7 +144,7 @@ fn a_background_run_gives_way_to_a_queued_run_of_the_author_between_two_run_step
             [(0, true), (1, true), (1, false)]
                 .map(|(position, queued)| yields_to_author(position, queued)),
         ),
-        ([false, true, true], [false, true, false])
+        ([false, true, true, true], [false, true, false])
     );
 }
 
@@ -157,8 +176,17 @@ fn the_full_request_of_a_background_run_is_refused_at_the_window() {
     assert_eq!(
         [too_long(1_015_808), too_long(1_015_807)],
         [
-            [[false, false], [true, false], [true, false]],
-            [[false, false]; 3]
+            [[false, false], [true, false], [true, false], [true, false]],
+            [[false, false]; 4]
         ]
+    );
+}
+
+/// ADR 0101 section 5: only a Run of the author gets the current intents.
+#[test]
+fn only_a_run_of_the_author_reads_the_intents() {
+    assert_eq!(
+        AgentRunKind::ALL.map(AgentRunKind::reads_intents),
+        [true, false, false, false]
     );
 }

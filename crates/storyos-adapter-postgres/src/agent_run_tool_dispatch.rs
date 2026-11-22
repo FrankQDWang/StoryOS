@@ -73,11 +73,12 @@ impl ToolDispatchStore for PostgresProjectReader {
                     }
                     crate::agent_run_host_tool::execute(client, claim, &row, spec).await?;
                     // The settled output call of a background Run completed its Run (ADR 0094
-                    // sections 5 and 6).
+                    // sections 5 and 6, ADR 0101 section 4).
                     if matches!(
                         spec.operation,
                         storyos_core::ToolOperation::RecordMemoryObservations
                             | storyos_core::ToolOperation::ApplyMemoryOperations
+                            | storyos_core::ToolOperation::RecordCharacterIntent
                     ) && load_run_phase(client, claim).await?.settled()
                     {
                         return Ok(None);

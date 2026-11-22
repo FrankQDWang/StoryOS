@@ -130,6 +130,7 @@ fn a_read_gives_the_lines_and_the_exact_text_and_a_missing_entry_is_refused() {
         changed_at: "2026-11-17T08:00:00.000Z".to_owned(),
         text: "- 十年前落水\n\t- 从此不上船\n".to_owned(),
         flag: None,
+        intent: None,
     };
     assert_eq!(
         (
@@ -147,6 +148,71 @@ fn a_read_gives_the_lines_and_the_exact_text_and_a_missing_entry_is_refused() {
              section Memory index, so no result is available, and this is not an empty result."
                 .to_owned(),
             ContextSourceClass::MemoryReadResult,
+        )
+    );
+}
+
+/// ADR 0101 section 5: the result for an entry with an intent has the line `intent` after
+/// `changed_at`, and the lines of a conflict flag after it.
+#[test]
+fn a_read_of_an_entry_with_an_intent_gives_the_line_intent() {
+    let read = |flag| MemoryEntryRead {
+        memory_entry_id: "entry-1".to_owned(),
+        version: 4,
+        entry_type: MemoryEntryType::Character,
+        title: "林舟".to_owned(),
+        description: "船夫。".to_owned(),
+        origin: "conversation".to_owned(),
+        changed_at: "2026-11-17T08:00:00.000Z".to_owned(),
+        text: "林舟是船夫。".to_owned(),
+        flag,
+        intent: Some("我明天一早去渡口。".to_owned()),
+    };
+    let flag = MemoryReadFlag {
+        reason: "第三章说他在城里。".to_owned(),
+        source: MemoryFlagSource::Conversation,
+    };
+    let head = "type: character\ntitle: 林舟\ndescription: 船夫。\norigin: conversation\n\
+                changed_at: 2026-11-17T08:00:00.000Z\nintent: 我明天一早去渡口。";
+    assert_eq!(
+        [read(None).result().text, read(Some(flag)).result().text],
+        [
+            format!("{head}\n\n林舟是船夫。"),
+            format!(
+                "{head}\nconflict_flag: 第三章说他在城里。\nconflict_source: a Project \
+                 Conversation\n\n林舟是船夫。"
+            ),
+        ]
+    );
+}
+
+/// An intent with line breaks gives one line `intent`: each sequence of line breaks with the white
+/// space around it is one space. The result keeps one empty line, before the text.
+#[test]
+fn an_intent_with_line_breaks_gives_one_line() {
+    let read = MemoryEntryRead {
+        memory_entry_id: "entry-1".to_owned(),
+        version: 4,
+        entry_type: MemoryEntryType::Character,
+        title: "林舟".to_owned(),
+        description: "船夫。".to_owned(),
+        origin: "conversation".to_owned(),
+        changed_at: "2026-11-17T08:00:00.000Z".to_owned(),
+        text: "林舟是船夫。".to_owned(),
+        flag: None,
+        intent: Some("我明天去渡口。 \n\n  看那条船。\r\n还在不在".to_owned()),
+    };
+    let text = read.result().text;
+    assert_eq!(
+        (
+            text.lines().find(|line| line.starts_with("intent: ")),
+            text.matches("\n\n").count(),
+            text.split_once("\n\n").map(|(_, text)| text),
+        ),
+        (
+            Some("intent: 我明天去渡口。 看那条船。 还在不在"),
+            1,
+            Some("林舟是船夫。"),
         )
     );
 }
@@ -169,6 +235,7 @@ fn a_read_of_a_flagged_entry_gives_the_reason_and_the_source() {
             reason: "第三章说桥在下游。".to_owned(),
             source,
         }),
+        intent: None,
     };
     let head = "type: other\ntitle: 渡口\ndescription: 渡口在桥下。\norigin: author_request\n\
                 changed_at: 2026-11-17T08:00:00.000Z\nconflict_flag: 第三章说桥在下游。\n\

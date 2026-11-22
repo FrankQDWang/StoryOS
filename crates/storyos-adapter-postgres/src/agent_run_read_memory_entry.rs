@@ -1,5 +1,6 @@
 //! The in-process execution of a `read_memory_entry` call (ADR 0094 section 4). It reads the
-//! current version of the entry with the number of the call in the Project of the Run, and it
+//! current version of the entry with the number of the call in the Project of the Run, with the
+//! current intent only for a Run of the author (ADR 0101 section 5), and it
 //! settles the call with that version and writes one read row in the Tool Gateway transaction
 //! that settles it, or it refuses the call. It writes no Outbound Disclosure Event. No diagnostic
 //! records a value of an entry (ADR 0047).
@@ -18,7 +19,26 @@ pub(crate) async fn execute(
     entry: i64,
 ) -> Result<(), CompleteAgentRunError> {
     let scope = &claim.project_scope;
-    let read = crate::memory_entries::read_current_entry(client, scope, entry)
+    let kind: String = client
+        .query_one(
+            "SELECT run_kind FROM storyos.agent_runs
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(crate::agent_run_work::complete_unavailable)?
+        .get(0);
+    let reader = storyos_core::AgentRunKind::parse(&kind).ok_or_else(|| {
+        CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
+            "An AgentRun kind is invalid",
+        )))
+    })?;
+    let read = crate::memory_entries::read_current_entry(client, scope, entry, reader)
         .await
         .map_err(CompleteAgentRunError::Unavailable)?;
     let (state, refusal, result) = match read {

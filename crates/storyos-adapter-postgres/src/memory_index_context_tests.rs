@@ -26,7 +26,7 @@ use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
 /// The Index of the two entries that `seeded` writes at the Memory revision 2.
 const INDEX: &str = "{\"type\":\"foreshadowing\"}\n\
     {\"description\":\"铃声。\",\"id\":2,\"title\":\"铃\"}\n{\"type\":\"character\"}\n\
-    {\"description\":\"沉默的船夫。\",\"id\":1,\"title\":\"林舟\"}";
+    {\"author_part\":true,\"description\":\"沉默的船夫。\",\"id\":1,\"title\":\"林舟\"}";
 
 /// A Project of `prefix` whose first Run is complete, with two current entries at the Memory
 /// revision 2.
@@ -122,8 +122,8 @@ async fn a_run_keeps_its_pinned_index_and_a_later_run_gets_the_new_index() {
     )
     .await;
     complete(&store, &admin, &project.0, &later).await;
-    let new = "{\"type\":\"character\"}\n{\"description\":\"沉默的船夫。\",\"id\":1,\"title\":\"林舟\"}\n\
-               {\"description\":\"林舟的妹妹。\",\"id\":3,\"title\":\"阿青\"}";
+    let new = "{\"type\":\"character\"}\n{\"author_part\":true,\"description\":\"沉默的船夫。\",\"id\":1,\"title\":\"林舟\"}\n\
+               {\"author_part\":true,\"description\":\"林舟的妹妹。\",\"id\":3,\"title\":\"阿青\"}";
 
     // The request after the `finish` output continues with an unchanged input, so it sends no
     // Index, but its Context Assembly records the same item.

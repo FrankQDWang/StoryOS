@@ -79,7 +79,7 @@ pub(crate) fn parameters() -> Value {
                         },
                         "text": {
                             "type": ["string", "null"],
-                            "description": "Markdown, at most 600 characters, or 1500 for a \
+                            "description": "Markdown, at most 600 characters, or 4000 for a \
                                             character. Null for a conflict."
                         },
                         "entry": {
@@ -232,8 +232,9 @@ impl ObservationRefusal {
             }
             Self::Invalid { position } => format!(
                 "the observation {position} is not valid. Its type must be one of the six types. \
-                 Its title and its text must not be empty, and its title must be one line. A \
-                 conflict has only an entry and a reason of one line"
+                 Its title and its text must not be empty, and its title must be one line. An \
+                 observation has \"entry\": null and \"reason\": null. A conflict has only an \
+                 entry and a reason of one line"
             ),
             Self::ConflictEntryUnavailable { position } => format!(
                 "the conflict {position} names no current entry of the author. An entry of the \

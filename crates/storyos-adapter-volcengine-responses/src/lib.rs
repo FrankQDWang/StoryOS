@@ -2,6 +2,7 @@
 
 mod capture_wire;
 mod embedding;
+mod intent_wire;
 mod pass_wire;
 mod probe;
 mod response;
@@ -110,7 +111,16 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             (CreatePurpose::MemoryConsolidation, _) if create.pass_complete() => {
                 pass_wire::pass_body(create, &route.provider_model_id, bounds)
             }
-            (CreatePurpose::MemoryCapture(_) | CreatePurpose::MemoryConsolidation, _) => {
+            // The intent pass form (ADR 0101 section 4).
+            (CreatePurpose::IntentPass, _) if create.intent_pass_complete() => {
+                intent_wire::intent_pass_body(create, &route.provider_model_id, bounds)
+            }
+            (
+                CreatePurpose::MemoryCapture(_)
+                | CreatePurpose::MemoryConsolidation
+                | CreatePurpose::IntentPass,
+                _,
+            ) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
         };
@@ -209,7 +219,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
 /// Refuses each request on a mapping that is not the current one: a decision, a summary, a
 /// capture, a pass, a qualification probe, and a Retrieve (ADR 0097).
 fn current_mapping(route: &RequestRoute) -> Result<(), PreDispatchRefusal> {
-    match route.mapping_revision == storyos_core::AGENT_PLAN_WRITING_RULES_MAPPING_REVISION {
+    match route.mapping_revision == storyos_core::AGENT_PLAN_CHARACTER_FILE_MAPPING_REVISION {
         true => Ok(()),
         false => Err(PreDispatchRefusal::UnsupportedRequest),
     }

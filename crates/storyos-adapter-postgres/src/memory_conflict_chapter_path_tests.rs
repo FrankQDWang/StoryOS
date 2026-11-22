@@ -67,7 +67,7 @@ async fn a_chapter_capture_flags_an_entry_of_the_author_and_a_change_removes_the
     run(&store, &admin, project, "a02", &change).await;
     let after = run(&store, &admin, project, "a03", "SCRIPT:read_memory_entry 1").await;
     let result = |calls: Value| calls[1][0][3].as_str().unwrap().to_owned();
-    let line = "{\"description\":\"述。\",\"id\":1,\"title\":\"林舟\"}";
+    let line = "{\"author_part\":true,\"description\":\"述。\",\"id\":1,\"title\":\"林舟\"}";
     let index = |line: &str| json!([format!("{{\"type\":\"character\"}}\n{line}")]);
     let source = MemoryEntrySourceItem::Chapter {
         chapter_id: chapter_a.clone(),
@@ -89,7 +89,7 @@ async fn a_chapter_capture_flags_an_entry_of_the_author_and_a_change_removes_the
             MemoryWorkSource::Chapter(chapter_a.clone()),
             Some(json!([true, true, "now"])),
             json!(["completed", "applied", null, [], ["consumed"]]),
-            index(&line.replace("{", "{\"conflict_flag\":true,")),
+            index(&line.replace("\"description\"", "\"conflict_flag\":true,\"description\"")),
             index(line),
         )
     );

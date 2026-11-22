@@ -23,12 +23,19 @@ pub struct MemoryIndexEntry {
     /// `true` when the last version of the entry at the pinned revision is a flag version (ADR
     /// 0094 section 7). The Index does not hold the reason of the flag.
     pub flagged: bool,
+    /// The entry is the part of the author of a character file (ADR 0101 section 3).
+    pub author_part: bool,
+    /// The text of the current intent of the character, when the entry is the part of the
+    /// background work and the reader is a Run of the author (ADR 0101 section 5).
+    pub intent: Option<String>,
 }
 
 /// The text of the `memory_index` item and its projection mode. Each type that has an entry is
 /// one group, in the order of the type list. A group starts with the line `{"type": type}`, and
 /// each entry is the line `{"description", "id", "title"}`, in the order of the numbers. The line
-/// of an entry with a conflict flag also has the field `"conflict_flag": true`. When the
+/// of an entry with a conflict flag also has the field `"conflict_flag": true`, and the line of
+/// the part of the author of a character file has the field `"author_part": true`. The line of
+/// an entry with an intent has the field `"intent"` with its text. When the
 /// entries are above a Host limit, the text lists the entries in order up to the limit and ends
 /// with the line `{"not_listed": count}`. Then the mode is `deterministic_excerpt`.
 pub fn memory_index_text(entries: &[MemoryIndexEntry]) -> (String, ProjectionMode) {
@@ -63,8 +70,7 @@ fn render(entries: &[&MemoryIndexEntry]) -> String {
     lines.join("\n")
 }
 
-/// The line of one entry. An entry with no flag has the line of S7-D1a, so an Index with no flag
-/// has the same text as before the flag.
+/// The line of one entry. An entry with no flag and no part of the author has the line of S7-D1a.
 fn index_line(entry: &MemoryIndexEntry) -> String {
     let mut line = serde_json::json!({
         "id": entry.number,
@@ -73,6 +79,12 @@ fn index_line(entry: &MemoryIndexEntry) -> String {
     });
     if entry.flagged {
         line["conflict_flag"] = serde_json::Value::Bool(true);
+    }
+    if entry.author_part {
+        line["author_part"] = serde_json::Value::Bool(true);
+    }
+    if let Some(intent) = &entry.intent {
+        line["intent"] = serde_json::Value::String(intent.clone());
     }
     canonical_json(&line)
 }

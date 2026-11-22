@@ -25,6 +25,22 @@ pub fn admit_memory_consolidation(
     assistance_available: bool,
     grant_scope: Option<&str>,
 ) -> Result<(), CaptureRefusal> {
+    admit_background_purpose(
+        ContextPurpose::MemoryConsolidation,
+        binding,
+        assistance_available,
+        grant_scope,
+    )
+}
+
+/// The admission rule of a background pass of `purpose`: a current Model Use Binding, an
+/// available assistance, and a grant scope that names `purpose`.
+pub(crate) fn admit_background_purpose(
+    purpose: ContextPurpose,
+    binding: bool,
+    assistance_available: bool,
+    grant_scope: Option<&str>,
+) -> Result<(), CaptureRefusal> {
     if !binding {
         return Err(CaptureRefusal::NoModelUseBinding);
     }
@@ -33,7 +49,7 @@ pub fn admit_memory_consolidation(
     }
     let granted = grant_scope
         .and_then(GrantScope::parse)
-        .is_some_and(|scope| scope.names_purpose(ContextPurpose::MemoryConsolidation));
+        .is_some_and(|scope| scope.names_purpose(purpose));
     match granted {
         true => Ok(()),
         false => Err(CaptureRefusal::PurposeNotGranted),

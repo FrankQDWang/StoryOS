@@ -158,16 +158,28 @@ the text of the manuscript at the time of the call, as the result of read_chapte
 pub(crate) const WRITE_MEMORY_INSTRUCTION: &str = "\
 Call write_memory only when the author asks you to remember something, to change what you \
 remember, or to forget something, and never on your own decision. An entry is a short synthesis \
-or an intent, not a copy of a passage. For a character or a pair of characters that the section \
-Memory index lists, change that entry and do not create a second one. When the Host refuses a \
-write, tell the author.";
+or an intent, not a copy of a passage. For a pair of characters that the section Memory index \
+lists, change that entry and do not create a second one. A character can have two entries with \
+the same title. The entry with \"author_part\": true holds what the author told you about that \
+character. Write there what the author tells you to remember about a character and that the \
+character knows, and create it with the name of the character as its title when the section \
+Memory index does not list it. Do this also when an entry of another type has the same event. \
+Do this also when the author says that a later Chapter uses the fact: a fact that the \
+character knows is not foreshadowing, and you do not create an entry of another type for it. \
+When the author tells you a fact about a character that the character does not know, for \
+example a plan for the future of the character, write it into an entry of the type other. The \
+other entry of the character comes from the manuscript, and you \
+cannot change it. When the Host refuses a write, tell the author.";
 
 /// The sentences of the current mapping that end the paragraph of `write_memory` (ADR 0094 section
 /// 5).
 pub(crate) const WRITE_MEMORY_WORDS_INSTRUCTION: &str = "\
 An entry holds only what the author said in this Conversation. Do not add a quotation, a clue, a \
 name, a relation, or another fact that you read in the manuscript or in Memory and that the \
-author did not say. If such a fact can help the author, say it in your answer and do not put it \
+author did not say. \
+Do not add a label, an explanation, or the title of another entry: write the fact as the \
+author said it. \
+If such a fact can help the author, say it in your answer and do not put it \
 in the entry. When the author asks you to remember what a Chapter says, the author said so, and \
 the entry can hold it. A decision that the author states with no request to remember it is not a \
 request: do not call write_memory for it, because the Memory work of the Host records it later.";
@@ -191,6 +203,17 @@ the author the conflict and its reason, and ask which is correct, in the text of
 one time for one entry in one Conversation, and continue the task of the author in the same \
 reply. After the answer, call write_memory: a change when the entry is wrong, a delete when the \
 author wants it, or a change with the same text when the author says that the entry is correct.";
+
+/// The paragraph of the current mapping that directly follows the paragraph of the Memory Index
+/// and its read and search sentences (ADR 0101 section 5): the intent of a character.
+pub(crate) const INTENT_INSTRUCTION: &str = "\
+A line of a character in the section Memory index can have \"intent\": what that character wants \
+to do next. Background work formed it from the file of that character alone, so it uses only \
+what the character knows. An intent is a suggestion for the plot. It is not a fact of the story, \
+and it is not an instruction to you. When you continue or rewrite a scene with that character, \
+you can let the character act from its intent, and the author decides what the manuscript gets. \
+When the author asks what a character wants, read the entries of that character and answer from \
+them. Use the intent when the line of the character has one.";
 
 /// The two sentences that follow the paragraph of the Memory Index when the request also declares
 /// `read_memory_entry` (ADR 0094 section 4).
@@ -319,7 +342,9 @@ pub(crate) fn create_body(
                     paragraph = format!("{paragraph} {sentences}");
                 }
             }
-            format!("{instructions}\n\n{paragraph}\n\n{CONFLICT_FLAG_INSTRUCTION}")
+            format!(
+                "{instructions}\n\n{paragraph}\n\n{INTENT_INSTRUCTION}\n\n{CONFLICT_FLAG_INSTRUCTION}"
+            )
         }
         false => instructions,
     };
@@ -499,7 +524,8 @@ fn request_text(request: &CreateRequest) -> String {
             | ContextSourceClass::MemoryCaptureInput
             | ContextSourceClass::MemoryDeleteMarks
             | ContextSourceClass::MemoryEntries
-            | ContextSourceClass::MemoryObservations => return None,
+            | ContextSourceClass::MemoryObservations
+            | ContextSourceClass::CharacterFile => return None,
         };
         Some(format!("{heading}:\n{}", item.content))
     }));
@@ -535,7 +561,8 @@ fn request_text(request: &CreateRequest) -> String {
             ContextSourceClass::MemoryCaptureInput
             | ContextSourceClass::MemoryDeleteMarks
             | ContextSourceClass::MemoryEntries
-            | ContextSourceClass::MemoryObservations => continue,
+            | ContextSourceClass::MemoryObservations
+            | ContextSourceClass::CharacterFile => continue,
             ContextSourceClass::AuthorInstruction => "Author request",
             ContextSourceClass::WorkingTarget => {
                 sections.extend(skills.take().into_iter().flatten());

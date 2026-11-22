@@ -48,6 +48,7 @@ fn the_input_of_a_pass_has_one_line_for_each_entry_and_each_observation() {
             description: "船夫。".to_owned(),
             text: "沉默的船夫。".to_owned(),
             flagged: false,
+            author_part: false,
         },
         origin: MemoryEntryOrigin::Chapter,
     };
@@ -231,6 +232,7 @@ fn the_expected_input_of_a_pass_counts_each_section() {
                 description: "船夫。".to_owned(),
                 text: "沉默的船夫。".to_owned(),
                 flagged: false,
+                author_part: false,
             },
             origin: MemoryEntryOrigin::Conversation,
         },
@@ -249,6 +251,7 @@ fn the_expected_input_of_a_pass_counts_each_section() {
         entry_type: MemoryEntryType::Other,
         title: "旧船".to_owned(),
         description: "作者不要的内容。".to_owned(),
+        author_part: false,
     }];
     let record = assemble_memory_consolidation_context(&MemoryConsolidationAssembly {
         operation_requirement_id: "requirement".to_owned(),

@@ -568,6 +568,8 @@ fn the_expected_input_counts_the_memory_index_with_the_current_input() {
             title: "Lin".to_owned(),
             description: "A quiet ferryman.".to_owned(),
             flagged: false,
+            author_part: false,
+            intent: None,
         }],
     );
     let index_tokens = decision.selected.last().map(|item| item.token_count);

@@ -165,6 +165,34 @@ fn a_valid_list_keeps_its_order_and_a_character_has_the_longer_text() {
     );
 }
 
+/// ADR 0101 section 3: an observation of a character has a text of at most 4,000 characters, and
+/// another type keeps the limit of 600 characters.
+#[test]
+fn an_observation_of_a_character_has_at_most_4000_characters() {
+    let text = |count: usize| "字".repeat(count);
+    let decided = [
+        item("character", "林舟", &text(4000)),
+        item("character", "林舟", &text(4001)),
+        item("other", "桥", &text(600)),
+        item("other", "桥", &text(601)),
+    ]
+    .map(|item| {
+        validate_observations(&[item], &AUTHOR)
+            .map(|_| ())
+            .map_err(ObservationRefusal::label)
+    });
+
+    assert_eq!(
+        decided,
+        [
+            Ok(()),
+            Err("observation_too_long"),
+            Ok(()),
+            Err("observation_too_long")
+        ]
+    );
+}
+
 /// A valid list settles the capture with its outcome and completes the Run. A refused list
 /// records no observation and does not complete the Run.
 #[test]
@@ -284,6 +312,30 @@ fn a_conflict_item_names_an_entry_of_the_author_with_a_short_reason() {
                 reason: "长".repeat(100)
             }),
             true
+        )
+    );
+}
+
+/// The live run of #1788 gave an observation of the type character with the number of the entry
+/// of that character. The Host refuses it, and the result tells the model that an observation has
+/// no entry and no reason (#1803).
+#[test]
+fn a_character_observation_with_an_entry_number_is_refused_with_the_rule_in_the_result() {
+    let mut character = item("character", "沈知遥", "她决定留镇。");
+    character.entry = Some(2);
+
+    let refusal = validate_observations(&[character], &AUTHOR).unwrap_err();
+
+    assert_eq!(
+        (refusal.label(), refusal.result().text),
+        (
+            "observation_invalid",
+            "The Host refused this call because the observation 1 is not valid. Its type must be \
+             one of the six types. Its title and its text must not be empty, and its title must \
+             be one line. An observation has \"entry\": null and \"reason\": null. A conflict has \
+             only an entry and a reason of one line. It recorded no observation. Correct the list \
+             and call record_memory_observations again."
+                .to_owned()
         )
     );
 }

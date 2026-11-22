@@ -15,16 +15,17 @@ contract, approved the specification of Stage 11 on 2026-11-22
 ([Deliver Stage 11: Character Intents](https://github.com/FrankQDWang/StoryOS/issues/1786),
 [ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
 [Add the Stage 11 Requirements to the Release Sources and Bind the Proof Documents to Them](https://github.com/FrankQDWang/StoryOS/pull/1796)
-accepted the two sources with the rows of Stage 11 at
-`f4a072c6de1d3901dd6e2e328193d6fee562239e`, tree
-`49bf6f0cb929f066a5b483e53eaf491f6908c943`.
+accepted the two sources with the rows of Stage 11. The last change of a
+source by the tickets of Stage 11 is at
+`46adce3e255976c5b851a543f8e07027ef1e82f2`, tree
+`31b31a15904be1e34dbd740aede730eb8562aa5d`.
 That commit is the exact source snapshot
 consumed by both proof documents, not the release owner's earlier Claim baseline.
 
 | Accepted source | UTF-8/LF SHA-256 |
 | --- | --- |
 | [Editor-first release](ai-independent-editor-first-release-baseline-and-handoff-criteria.md) | `58caa4df6bb3bc17ec5aa16fb51b939579fe06f685c1cf2bfb5dfd7e30066937` |
-| [Product continuation](storyos-product-delivery-continuation.md) | `611b2c9423faa23bcc15ee82a0005d52888683ae953f6c43d859b36fae66bfbe` |
+| [Product continuation](storyos-product-delivery-continuation.md) | `63a46034ff59733d6f7a4b73c5d87d1b168766784199de776dfc5360b782a523` |
 
 The continuation source owns the exact 71-source disposition inventory:
 original Issues 2 through 65, 67 through 70, and 75 through 77. Its additional

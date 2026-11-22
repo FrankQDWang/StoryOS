@@ -18,6 +18,7 @@ mod create_agent_run;
 mod create_chapter;
 mod create_project;
 mod create_volume;
+mod current_intent;
 mod delete_chapter;
 mod delete_memory_entry;
 mod delete_volume;
@@ -31,6 +32,7 @@ mod host_fake_profile;
 mod host_tool;
 mod hybrid_search_manuscript;
 mod instruction_binding;
+mod intent_pass;
 mod load_skill;
 mod manuscript_payload;
 mod manuscript_use;
@@ -51,6 +53,7 @@ mod read_memory_entry;
 mod read_skill_resource;
 mod read_tool_result;
 mod rebuild_expired_reference;
+mod record_character_intent;
 mod record_memory_observations;
 mod research_destination;
 mod research_source;
@@ -174,6 +177,7 @@ pub use create_volume::{
     CreateVolume, CreateVolumeApplied, CreateVolumeConflict, CreateVolumeRefusal,
     CreateVolumeResult, create_volume,
 };
+pub use current_intent::{MemoryVersionFacts, MemoryVersionKind, current_intents};
 pub use delete_chapter::{
     ChapterRemovalLifecycle, DeleteChapter, DeleteChapterApplied, DeleteChapterConflict,
     DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteChapterResult,
@@ -227,6 +231,14 @@ pub use hybrid_search_manuscript::{
 pub use instruction_binding::{
     BoundInstruction, assemble_instruction_binding, project_instruction_binding,
 };
+pub use intent_pass::{
+    CharacterFile, INTENT_PASS_MAX_RUN_STEPS, IntentPassAssembly, IntentPassEntryFacts,
+    IntentPassFacts, IntentPassOutcome, IntentPassRead, IntentPassRecord, IntentPassSkip,
+    NeededCharacter, admit_intent_pass, assemble_intent_pass_context, decide_intent_pass,
+    intent_pass_chapter, intent_pass_due, intent_pass_failure, intent_pass_sends_again,
+    next_intent_pass_context, select_intent_pass_entry, settle_intent_result,
+    write_can_change_character,
+};
 pub use load_skill::{
     LOAD_SKILL_TOOL_SPEC, LoadSkillRefusal, SKILL_LOAD_LIMIT, SkillLoadFacts, admit_skill_load,
     skill_load_result,
@@ -256,7 +268,7 @@ pub use memory_delete_marks::{
 };
 pub use memory_entry::{
     MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference,
-    memory_revision_pin,
+    memory_author_part, memory_revision_pin,
 };
 pub use memory_index::{
     MEMORY_INDEX_MAX_ENTRIES, MEMORY_INDEX_TOKEN_LIMIT, MemoryIndexEntry, assemble_memory_index,
@@ -328,6 +340,11 @@ pub use readable_export_command::{
 pub use rebuild_expired_reference::{
     ContinuationReferenceCondition, ExpiryRebuildBlock, ExpiryRebuildDecision,
     ExpiryRebuildDisposition, ExpiryRebuildFacts, decide_confirmed_expiry_rebuild,
+};
+pub(crate) use record_character_intent::RECORD_CHARACTER_INTENT_TOOL_SPEC;
+pub use record_character_intent::{
+    CHARACTER_INTENT_MAX_CHARS, CHARACTER_QUESTION_MAX_CHARS, CHARACTER_QUESTIONS_MAX,
+    IntentCallSettlement, settle_intent_call,
 };
 pub use record_memory_observations::{
     CAPTURE_OBSERVATIONS_MAX, CaptureOutcome, MemoryObservation, ObservationCallSettlement,
@@ -415,7 +432,7 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_WRITING_RULES_MAPPING_REVISION,
+    AGENT_PLAN_CHARACTER_FILE_MAPPING_REVISION, AGENT_PLAN_REGISTRATION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };
@@ -478,7 +495,8 @@ pub use withdraw_proposal::{
 pub use write_memory::{
     CurrentMemoryEntry, MEMORY_CHARACTER_TEXT_MAX_CHARS, MEMORY_DESCRIPTION_MAX_CHARS,
     MEMORY_TEXT_MAX_CHARS, MEMORY_TITLE_MAX_CHARS, MemoryVersionWrite, MemoryWrite,
-    MemoryWriteAction, MemoryWriteRefusal, WRITE_MEMORY_TOOL_SPEC, decide_memory_write,
+    MemoryWriteAction, MemoryWriteRefusal, MemoryWriter, WRITE_MEMORY_TOOL_SPEC,
+    decide_memory_write,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]

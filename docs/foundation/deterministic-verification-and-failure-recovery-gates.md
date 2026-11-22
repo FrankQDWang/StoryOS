@@ -3,8 +3,8 @@
 - Status: current product delivery verification contract for [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60)
 - Canonical issue: [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60)
 - Contract revision: `proof-responses-memory-2026-09-15-v1`
-- Exact release-source snapshot consumed: `f4a072c6de1d3901dd6e2e328193d6fee562239e`
-- Exact source tree consumed: `49bf6f0cb929f066a5b483e53eaf491f6908c943`
+- Exact release-source snapshot consumed: `46adce3e255976c5b851a543f8e07027ef1e82f2`
+- Exact source tree consumed: `31b31a15904be1e34dbd740aede730eb8562aa5d`
 - Predecessor release-contract revision: `release-responses-memory-2026-09-14-v1`
 - Release baseline owner: [AI-Independent Editor-First Release Baseline and Handoff Criteria](ai-independent-editor-first-release-baseline-and-handoff-criteria.md)
 - Deterministic-method ADR: [ADR 0012](../adr/0012-adopt-deterministic-contract-verification.md)

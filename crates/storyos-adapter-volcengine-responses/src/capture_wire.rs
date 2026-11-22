@@ -12,9 +12,16 @@ pub(crate) const CONVERSATION_CAPTURE_RULE: &str = " In a capture of a Project C
 observation is a decision, a preference, or an intent that the messages have. You can read the manuscript to understand a message, and you do not \
 record a fact that only the manuscript has.";
 
+/// The sentence of the current mapping after the rule of a capture of a Project Conversation (ADR
+/// 0101 section 5): an intent in an answer of the assistant.
+pub(crate) const CAPTURE_INTENT_RULE: &str = " An answer of the assistant can tell what a \
+character wants to do next. That is a suggestion of background work: it is not a decision of the \
+author and not a fact of the story, and you record it only when a message of the author makes it \
+a decision.";
+
 /// The Host instructions of a capture. Each number comes from a Core constant.
 pub(crate) fn capture_instructions() -> String {
-    let conversation_rule = CONVERSATION_CAPTURE_RULE;
+    let conversation_rule = format!("{CONVERSATION_CAPTURE_RULE}{CAPTURE_INTENT_RULE}");
     let types = storyos_core::MemoryEntryType::ALL
         .map(storyos_core::MemoryEntryType::as_str)
         .join(", ");
@@ -37,20 +44,36 @@ message is an answer of the writing assistant, and it is not a decision of the \
 author.{conversation_rule} The section Chapter text has the text of one Chapter. The capture of a Chapter looks for \
 characters, relationships, and major events.
 
+An observation of the type character is for the entry of that character that comes from the \
+manuscript. Its title is the name of the character. Give it with \"entry\": null: the pass finds \
+the entry by its title. Write it from the place of the character: what the character did, saw, \
+and heard in this material, what the character wants at its end, and how the character speaks. \
+Give only what the character can know. Do not give a fact that the character did not see and \
+that no person told the character. The character does not know what another character says in \
+a scene without the character, or what another character thinks, until a person tells the \
+character. \
+Write that a character said something only when the manuscript gives it as the words of that \
+character: a detail of the narration is not what the character said. \
+Do not write that the character does not know a fact, because that sentence \
+gives the fact. A decision of the author about a character goes into an observation of the type \
+character only when the character knows it. If not, give it the type other or foreshadowing.
+
 Each observation has one of the six types: {types}. The type other holds, for example, a \
 decision about the story that the manuscript does not have yet. Keep an uncertainty as an \
 uncertainty, and do not write a guess as a fact. Keep a decision of the author apart from a \
 proposal and from a guess: a proposal that the author did not accept is not a decision.
 
 The section Memory index lists the current entries: a line with a type starts a group, and each \
-line after it gives the id, the title, and the description of one entry. Do not record a fact \
-that an entry already holds, unless the input changes it. When the input is against an entry of \
-the author, give a conflict item with the id of the entry and a reason of one line. Do not \
-record the fact as an observation that corrects the entry. An entry of the author has the \
-origin {author} in the result of read_memory_entry. The section Chapter list has each \
+line after it gives the id, the title, and the description of one entry. A character can have \
+two entries with the same title: the line with \"author_part\": true is the entry of the author. \
+Do not record a fact that an entry already holds, unless the input changes it. When the input is \
+against an entry of the author, give a conflict item with the id of the entry and a reason of \
+one line. Do not record the fact as an observation that corrects the entry. An entry of the \
+author has the origin {author} in the result of read_memory_entry. The section Chapter list has each \
 Chapter of the manuscript in its order, with its number, its length in characters, and its \
 title. The section Deleted Memory entries lists entries that the author deleted: they are \
-examples of content that the author does not want.
+examples of content that the author does not want. A deleted entry with \"author_part\": true was the entry of the author for a character. It \
+does not stop an observation of that character.
 
 Give at most {observations} observations. A title has at most {title} characters. A text has at \
 most {text} characters, or {character} for a character. The capture has at most {steps} steps.
@@ -134,7 +157,8 @@ fn capture_text(request: &CreateRequest, kind: CaptureInputKind) -> String {
                 | ContextSourceClass::MemoryReadResult
                 | ContextSourceClass::MemorySearchResult
                 | ContextSourceClass::MemoryEntries
-                | ContextSourceClass::MemoryObservations => return None,
+                | ContextSourceClass::MemoryObservations
+                | ContextSourceClass::CharacterFile => return None,
             };
             Some(format!("{heading}:\n{}", item.content))
         })

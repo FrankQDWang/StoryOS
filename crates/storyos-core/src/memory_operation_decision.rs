@@ -6,8 +6,8 @@
 use crate::{
     AdmittedOperation, CurrentMemoryEntry, MEMORY_DESCRIPTION_MAX_CHARS, MemoryDeleteMark,
     MemoryEntryOrigin, MemoryEntryType, MemoryOperationAction, MemoryOperationCandidate,
-    MemoryOperationRefusal, MemoryWrite, MemoryWriteAction, MemoryWriteRefusal, PassMemoryEntry,
-    PassObservation,
+    MemoryOperationRefusal, MemoryWrite, MemoryWriteAction, MemoryWriteRefusal, MemoryWriter,
+    PassMemoryEntry, PassObservation,
 };
 
 /// The write of `candidate`, or the refusal of its shape. Create needs a type, update and merge
@@ -150,6 +150,10 @@ pub(crate) fn decide_with_entries(
                         text: admitted.version.text.clone(),
                         // A flag version has its flag, and each other written version removes it.
                         flagged: admitted.version.flag.is_some(),
+                        author_part: crate::memory_author_part(
+                            admitted.version.entry_type,
+                            admitted.origin,
+                        ),
                     },
                     origin: admitted.origin,
                 });
@@ -250,10 +254,14 @@ fn decide_one(
         .filter(|e| !others.contains(&e.entry.number))
         .map(|e| e.entry.clone())
         .collect();
-    let version = crate::decide_memory_write(&write, &entries, next_entry_number)
+    let background = MemoryWriter::Background;
+    let version = crate::decide_memory_write(background, &write, &entries, next_entry_number)
         .map_err(MemoryOperationRefusal::Write)?;
+    // The mark of the part of the author of a character does not stop the part of the background.
     let marked = marks.iter().any(|mark| {
-        mark.entry_type == version.entry_type && mark.title.trim() == version.title.trim()
+        !mark.author_part
+            && mark.entry_type == version.entry_type
+            && mark.title.trim() == version.title.trim()
     });
     if marked && version.action != MemoryWriteAction::Delete {
         return Err(MemoryOperationRefusal::DeletedByAuthor);
@@ -270,7 +278,7 @@ fn decide_one(
         };
         let entries = [entry.entry.clone()];
         merged.push(
-            crate::decide_memory_write(&delete, &entries, next_entry_number)
+            crate::decide_memory_write(background, &delete, &entries, next_entry_number)
                 .map_err(MemoryOperationRefusal::Write)?,
         );
     }

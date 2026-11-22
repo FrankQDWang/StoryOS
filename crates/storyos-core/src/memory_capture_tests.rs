@@ -169,6 +169,8 @@ fn a_capture_gets_its_reference_items_after_its_input_and_keeps_them() {
         title: "林舟".to_owned(),
         description: "撑船的人。".to_owned(),
         flagged: false,
+        author_part: false,
+        intent: None,
     }];
     let chapters = [crate::ChapterListEntry {
         volume_order: 1,
@@ -181,6 +183,7 @@ fn a_capture_gets_its_reference_items_after_its_input_and_keeps_them() {
         entry_type: crate::MemoryEntryType::Other,
         title: "旧船".to_owned(),
         description: "作者不要的内容。".to_owned(),
+        author_part: false,
     }];
     let references = |memory_head| CaptureReferences {
         memory_head,
@@ -258,6 +261,8 @@ fn the_expected_input_of_a_capture_counts_each_section() {
                 title: "林舟".to_owned(),
                 description: "撑船的人。".to_owned(),
                 flagged: false,
+                author_part: false,
+                intent: None,
             }],
             chapters: &[crate::ChapterListEntry {
                 volume_order: 1,
@@ -270,6 +275,7 @@ fn the_expected_input_of_a_capture_counts_each_section() {
                 entry_type: crate::MemoryEntryType::Other,
                 title: "旧船".to_owned(),
                 description: "作者不要的内容。".to_owned(),
+                author_part: false,
             }],
         },
     );

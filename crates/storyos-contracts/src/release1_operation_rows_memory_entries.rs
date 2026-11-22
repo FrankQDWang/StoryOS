@@ -11,8 +11,9 @@ use crate::release1_memory_entries::{
     DELETE_MEMORY_ENTRY, DeleteMemoryEntryConflictReason, DeleteMemoryEntryEffect,
     DeleteMemoryEntryInput, DeleteMemoryEntryNoEffectReason, DeleteMemoryEntryRequest,
     DeleteMemoryEntryResponse, LIST_MEMORY_ENTRIES, ListMemoryEntriesResponse,
-    MemoryEntryFlagInspect, MemoryEntryInspect, MemoryEntryOriginInspect, MemoryEntrySourceInspect,
-    MemoryEntryTypeInspect, MemorySourceAvailability,
+    MemoryEntryFlagInspect, MemoryEntryInspect, MemoryEntryIntentInspect, MemoryEntryOriginInspect,
+    MemoryEntrySourceInspect, MemoryEntryTypeInspect, MemoryIntentChapterInspect,
+    MemorySourceAvailability,
 };
 use crate::release1_operation_registry::RegisteredOperation;
 use crate::release1_project_activity::ProjectActivityKind;
@@ -38,6 +39,8 @@ pub(super) const LIST_MEMORY_ENTRIES_ROW: OperationRow = OperationRow {
         MemorySourceAvailability::decl,
         MemoryEntrySourceInspect::decl,
         MemoryEntryFlagInspect::decl,
+        MemoryIntentChapterInspect::decl,
+        MemoryEntryIntentInspect::decl,
         MemoryEntryInspect::decl,
         ListMemoryEntriesResponse::decl,
     ],
@@ -77,11 +80,16 @@ const LIST_MEMORY_ENTRIES_RESPONSE: &[Patch] = &[
         &["/$defs/MemoryEntryInspect/properties/source"],
     ),
     Patch(
+        Edit::NullableDefinition("MemoryIntentChapterInspect"),
+        &["/$defs/MemoryEntryIntentInspect/properties/chapter"],
+    ),
+    Patch(
         UUID,
         &[
             "/$defs/MemoryEntryInspect/properties/memory_entry_id",
             "/$defs/MemoryEntrySourceInspect/oneOf/0/properties/conversation_id",
             "/$defs/MemoryEntrySourceInspect/oneOf/1/properties/chapter_id",
+            "/$defs/MemoryIntentChapterInspect/properties/chapter_id",
             "/$defs/ProjectScope/properties/owner_user_id",
             "/$defs/ProjectScope/properties/project_id",
             "/properties/correlation_id",
@@ -99,6 +107,7 @@ const LIST_MEMORY_ENTRIES_RESPONSE: &[Patch] = &[
         &[
             "/$defs/MemoryEntryFlagInspect/properties/flagged_at",
             "/$defs/MemoryEntryInspect/properties/changed_at",
+            "/$defs/MemoryEntryIntentInspect/properties/recorded_at",
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
