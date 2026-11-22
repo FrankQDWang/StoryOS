@@ -46,6 +46,8 @@ pub enum ContextPurpose {
     MemoryCapture,
     /// The consolidation pass of the Memory Observations (ADR 0094 section 6).
     MemoryConsolidation,
+    /// The intent pass of one character (ADR 0101 section 4).
+    IntentPass,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -97,6 +99,8 @@ pub enum ContextSourceClass {
     MemoryEntries,
     /// The Memory Observations that a consolidation pass gets (ADR 0094 section 6).
     MemoryObservations,
+    /// The Character File that an intent pass gets (ADR 0101 section 4).
+    CharacterFile,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
