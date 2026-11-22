@@ -197,6 +197,22 @@ it("shows the gear control in the tree footer of a workspace with no Chapter", a
     ?.getAttribute("href")).toBe(`/projects/${PROJECT}/settings`);
 });
 
+it("shows no intent and no question in the writing workspace of a Project with a result (ADR 0101 section 5)",
+  async () => {
+    const intent = { text: "他想在涨水前把船修好。", questions: ["母亲的信在谁手里？"], recorded_at: "2026-11-20T08:30:00.000Z",
+      chapter: null };
+    const entries: MemoryEntryInspect[] = [{ memory_entry_id: "018f0000-0000-7001-8000-0000000a2030",
+      entry_number: "1", version: "2", entry_type: "character", title: "林舟", description: "船夫。", text: "他看灯。",
+      origin: "chapter", source: null, changed_at: "2026-11-20T08:00:00.000Z", intent }];
+    const server = fakeServer([], entries);
+    const loaded = await open(`/projects/${PROJECT}`, server.fetchImpl);
+    await expect.poll(() => loaded.root.querySelector(".tree-panel .tree-footer a[aria-label=\"项目设置\"]"))
+      .not.toBeNull();
+    expect([loaded.state.kind, [intent.text, ...intent.questions].filter((text) =>
+      document.body.textContent!.includes(text)), server.sent.some((request) => request.path === MEMORY)])
+      .toEqual(["empty-project-ready", [], false]);
+  });
+
 const SENTENCE = {
   applied: "已保存。新的指令从下一次请求开始生效。",
   unchanged: "没有改动。",

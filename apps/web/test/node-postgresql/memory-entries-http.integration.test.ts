@@ -103,7 +103,7 @@ function nextRevision(projectId: string, entries = 0): string {
   return `UPDATE storyos.project_memory_heads SET memory_revision = memory_revision + 1,
       next_entry_number = next_entry_number + ${entries}
     WHERE owner_user_id = '${USER_A}' AND project_id = '${projectId}'
-    RETURNING memory_revision, next_entry_number - ${entries} AS entry_number`;
+    RETURNING memory_revision, next_entry_number - ${entries} AS new_number`;
 }
 
 /** Writes the part of the background work of the character `title`, as the capture of a Chapter writes it. */
@@ -113,7 +113,7 @@ async function backgroundPart(projectId: string, title: string): Promise<string>
     WITH head AS (${nextRevision(projectId, 1)})
     INSERT INTO storyos.memory_entry_versions (owner_user_id, project_id, memory_entry_id, entry_number, version,
       memory_revision, state, entry_type, origin, title, description, text, cause, source_references)
-    SELECT '${USER_A}', '${projectId}', '${memoryEntryId}', entry_number, 1, memory_revision, 'current', 'character',
+    SELECT '${USER_A}', '${projectId}', '${memoryEntryId}', new_number, 1, memory_revision, 'current', 'character',
       'chapter', '${title}', '渡口的人。', '${title}在渡口。', '{"kind": "chapter_capture"}', '[]' FROM head`);
   return memoryEntryId;
 }

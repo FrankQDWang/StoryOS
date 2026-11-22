@@ -1,12 +1,16 @@
 import { useState, type ReactNode } from "react";
 
-import type { MemoryEntryInspect } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { MemoryEntryInspect, MemoryEntryIntentInspect }
+  from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { EMPTY_SENTENCE, EntryDelete, Flag, OriginLine, ReadFailed } from "./memory-section.tsx";
 import type { SettingsSectionProps } from "./project-settings.tsx";
 
 /** The author approved the placeholder and the heading with the sketch of the page on 2026-11-22. */
 const SEARCH_PLACEHOLDER = "搜索人物";
 const FILE_HEADING = "档案";
+/** The author approved the headings of the two blocks of an intent result with the sketch (ADR 0101 section 6). */
+const INTENT_HEADING = "接下来想做什么";
+const QUESTIONS_HEADING = "助手还不清楚的事";
 
 /**
  * The entries of the type character by name, in the order of the Memory Index. Two entries with one title are one
@@ -46,6 +50,8 @@ export function CharacterSection({ scope, memory }: SettingsSectionProps) {
   const selected = [chosen?.name, ...following].find((name) => name !== undefined && names.includes(name))
     ?? names[0];
   const file = selected === undefined ? undefined : files.get(selected);
+  // Only the part of the background work has a current intent result (ADR 0101 section 4).
+  const intent = file?.find((entry) => entry.intent !== undefined)?.intent;
   const keep = () => {
     if (selected === undefined) return;
     const at = all.indexOf(selected);
@@ -83,10 +89,37 @@ export function CharacterSection({ scope, memory }: SettingsSectionProps) {
                 <p className="memory-entry-text">{entry.text}</p>
               </div>
             ))}
+            {intent === undefined ? null : <IntentBlocks intent={intent} />}
           </article>
         )}
       </div>
     </CharacterFrame>
+  );
+}
+
+/**
+ * The block "接下来想做什么" with the intent and the Chapter at which the pass made it, and the block "助手还不清楚的事"
+ * with the questions. A block with no content is not shown. The blocks have no control (ADR 0101 section 6).
+ */
+function IntentBlocks({ intent }: { intent: MemoryEntryIntentInspect }) {
+  const chapter = intent.chapter;
+  const title = chapter?.kind === "chapter" && chapter.availability === "available" ? chapter.title : null;
+  return (
+    <>
+      <div className="character-intent" data-character-intent="">
+        <h4>{INTENT_HEADING}</h4>
+        <p className="character-intent-text">{intent.text}</p>
+        {title === null ? null : <p className="character-intent-chapter">{`写到《${title}》时的想法`}</p>}
+      </div>
+      {intent.questions.length === 0 ? null : (
+        <div className="character-intent" data-character-questions="">
+          <h4>{QUESTIONS_HEADING}</h4>
+          <ul>
+            {intent.questions.map((question, index) => <li key={index}>{question}</li>)}
+          </ul>
+        </div>
+      )}
+    </>
   );
 }
 
