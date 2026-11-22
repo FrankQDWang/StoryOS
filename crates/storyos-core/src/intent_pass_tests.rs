@@ -146,8 +146,10 @@ fn pass(read: &super::IntentPassRead, outcome: &str) -> super::IntentPassRecord 
 /// that needs a pass. An entry of the author, a deleted entry, an entry of another type, and a
 /// character with only the entry of the author get no pass. A new version of the entry of the
 /// author needs a pass again, also when an earlier recorded pass read the same pair. A pair that
-/// a failed pass read gets no second pass, also after a pass of another pair. A pair that only a
-/// not-kept pass or a running pass read needs a pass.
+/// a failed pass read gets no second pass, also after a failed pass of another pair, while no
+/// later result is recorded. After a recorded pass of another pair, the pair needs a pass again,
+/// because the stored result is for the other pair. A pair that only a not-kept pass or a running
+/// pass read needs a pass.
 #[test]
 fn the_next_pass_is_for_the_lowest_entry_that_needs_a_pass() {
     let entries = [
@@ -187,7 +189,17 @@ fn the_next_pass_is_for_the_lowest_entry_that_needs_a_pass() {
         pick(&[pass(&c_read, "failed"), b_done.clone()]),
         pick(&[
             pass(&c_read, "failed"),
+            pass(&c_other, "failed"),
+            b_done.clone(),
+        ]),
+        pick(&[
+            pass(&c_read, "failed"),
             pass(&c_other, "recorded"),
+            b_done.clone(),
+        ]),
+        pick(&[
+            pass(&c_other, "recorded"),
+            pass(&c_read, "failed"),
             b_done.clone(),
         ]),
         pick(&[pass(&c_read, "not_kept"), b_done.clone()]),
@@ -202,6 +214,8 @@ fn the_next_pass_is_for_the_lowest_entry_that_needs_a_pass() {
             Some("ca"),
             Some("ca"),
             None,
+            None,
+            Some("ca"),
             None,
             Some("ca"),
             Some("ca")

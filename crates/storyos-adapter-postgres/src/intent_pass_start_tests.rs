@@ -50,40 +50,40 @@ fn author_part(text: &str) -> String {
 }
 
 /// An applied `write_memory` create of the part of the author and an applied delete of it each
-/// make the row due, and the next pass reads the file of that time. A write of an entry of another
-/// type does not make the row due.
+/// make the row due, and the next pass reads the file of that time. While a character needs a
+/// pass and the row is not due, an applied create and an applied delete of an entry of another
+/// type leave the row not due.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_write_and_a_delete_of_the_author_make_the_row_due() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, source) = project(&store, &admin, "350").await;
-    consolidate(
-        &store,
-        &admin,
-        &scope,
-        &source,
-        &[character("林舟", "林舟是船夫。")],
-    )
-    .await;
-    let mut files = vec![file(&admin, &run_intent(&store, &admin, &scope).await).await];
-    // A write of an entry of another type does not make the row due.
-    let place =
-        json!({"type": "place", "title": "渡口", "description": "河边。", "text": "渡口。"});
-    let place = write("create", place);
-    run(&store, &admin, (&scope, &chapter_id), "357", &place).await;
+    let project = (&scope, chapter_id.as_str());
+    let create = [character("林舟", "林舟是船夫。")];
+    consolidate(&store, &admin, &scope, &source, &create).await;
+    let first = started(claim(&store, &admin, &scope).await);
+    // The claim during the running pass makes the row not due. 林舟 still needs a pass.
+    make_due(&admin, &scope).await;
+    claim(&store, &admin, &scope).await;
+    let other =
+        json!({"type": "other", "title": "渡口", "description": "河边。", "text": "渡口。"});
+    run(&store, &admin, project, "357", &write("create", other)).await;
     let mut due = vec![intent_due(&admin, &scope).await];
-    run(
-        &store,
-        &admin,
-        (&scope, &chapter_id),
-        "354",
-        &author_part("他怕水。"),
-    )
-    .await;
+    let other = entry_id(&admin, &scope, 2).await;
+    delete_entry(&store, &scope, 0x35a1, &other, 1)
+        .await
+        .unwrap();
+    due.push(intent_due(&admin, &scope).await);
+    let states = "SELECT jsonb_agg(state ORDER BY version)::text FROM storyos.memory_entry_versions
+                   WHERE project_id = $1::text::uuid AND entry_number = 2";
+    let states = json_of(&admin, states, &[&scope.project_id.as_ref()]).await;
+    finish(&store, &admin, &scope, &first).await;
+    let mut files = vec![file(&admin, &first).await];
+    run(&store, &admin, project, "354", &author_part("他怕水。")).await;
     due.push(intent_due(&admin, &scope).await);
     files.push(file(&admin, &run_intent(&store, &admin, &scope).await).await);
-    let author = entry_id(&admin, &scope, 2).await;
+    let author = entry_id(&admin, &scope, 3).await;
     delete_entry(&store, &scope, 0x35a0, &author, 1)
         .await
         .unwrap();
@@ -91,9 +91,10 @@ async fn a_write_and_a_delete_of_the_author_make_the_row_due() {
     files.push(file(&admin, &run_intent(&store, &admin, &scope).await).await);
 
     assert_eq!(
-        (due, files, outcomes(&admin, &scope).await),
+        (states, due, files, outcomes(&admin, &scope).await),
         (
-            vec![json!(false), json!(true), json!(true)],
+            json!(["current", "deleted"]),
+            vec![json!(false), json!(false), json!(true), json!(true)],
             vec![
                 told(None, "林舟是船夫。"),
                 told(Some("他怕水。"), "林舟是船夫。"),
@@ -274,10 +275,12 @@ async fn one_pass_starts_in_a_minute_and_a_failed_pass_does_not_start_again() {
     );
 }
 
-/// A consolidation pass that starts during an intent pass goes first: the intent pass settles
-/// with `not_kept`, writes no version, and leaves the Memory revision that the consolidation pass
-/// pinned, so that pass applies its operations. A `write_memory` change of the part of the author
-/// during a pass also gives `not_kept`. Each later pass records a result for the new text.
+/// A consolidation pass that the claim starts during an intent pass: when it settles first with a
+/// new text, the intent pass settles with `not_kept`. When it is still in progress at the intent
+/// settlement, the consolidation work goes first: the intent pass settles with `not_kept`, writes
+/// no version, and leaves the Memory revision that the consolidation pass pinned, so that pass
+/// applies its operations. A `write_memory` change of the part of the author during a pass also
+/// gives `not_kept`. Each later pass records a result for the new text.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_text() {
@@ -287,79 +290,97 @@ async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_t
     let project = (&scope, chapter_id.as_str());
     let create = [character("林舟", "林舟是船夫。")];
     consolidate(&store, &admin, &scope, &source, &create).await;
+    // An observation arrives during the intent pass, and the claim starts a consolidation pass.
+    let consolidation = |text: &'static str| {
+        let (store, admin, scope, source) = (&store, &admin, &scope, &source);
+        async move {
+            let changed = [change(1, "林舟", text)];
+            capture(
+                store,
+                admin,
+                scope,
+                source,
+                json!([scripted("脚本", &changed)]),
+            )
+            .await;
+            let MemoryWorkOutcome::PassStarted(pass) = claim_pass(store, admin, scope).await else {
+                panic!("the claim must start a consolidation pass");
+            };
+            pass.run_id
+        }
+    };
     let first = started(claim(&store, &admin, &scope).await);
     make_due(&admin, &scope).await;
     let running = (
         claim(&store, &admin, &scope).await,
         intent_due(&admin, &scope).await,
     );
-    // An observation arrives, and the claim starts a consolidation pass during the intent pass.
-    let changed = [change(1, "林舟", "林舟换了船。")];
-    capture(
-        &store,
-        &admin,
-        &scope,
-        &source,
-        json!([scripted("脚本", &changed)]),
-    )
-    .await;
-    let MemoryWorkOutcome::PassStarted(pass) = claim_pass(&store, &admin, &scope).await else {
-        panic!("the claim must start a consolidation pass");
-    };
-    let pinned = memory_revision(&admin, &scope).await;
+    let applied_first = consolidation("林舟换了船。").await;
+    run_capture(&store, &admin, &scope, &applied_first).await;
     finish(&store, &admin, &scope, &first).await;
+    age(&admin, &scope).await;
+    let second = started(claim(&store, &admin, &scope).await);
+    let in_progress = consolidation("林舟又换了船。").await;
+    let pinned = memory_revision(&admin, &scope).await;
+    finish(&store, &admin, &scope, &second).await;
     let after_intent = memory_revision(&admin, &scope).await;
-    run_capture(&store, &admin, &scope, &pass.run_id).await;
-    let second = run_intent(&store, &admin, &scope).await;
+    run_capture(&store, &admin, &scope, &in_progress).await;
+    let third = run_intent(&store, &admin, &scope).await;
     run(&store, &admin, project, "355", &author_part("他怕水。")).await;
     age(&admin, &scope).await;
-    let third = started(claim(&store, &admin, &scope).await);
+    let fourth = started(claim(&store, &admin, &scope).await);
     let author_change = write("change", json!({"entry": 2, "text": "他会游泳。"}));
     run(&store, &admin, project, "356", &author_change).await;
-    finish(&store, &admin, &scope, &third).await;
-    let fourth = run_intent(&store, &admin, &scope).await;
+    finish(&store, &admin, &scope, &fourth).await;
+    let fifth = run_intent(&store, &admin, &scope).await;
     let first_text = "The Host did not keep the intent: a consolidation pass of the Memory is in \
                       progress.";
+    let applied = [
+        settled(&admin, &applied_first).await[1].clone(),
+        settled(&admin, &in_progress).await[1].clone(),
+    ];
 
     assert_eq!(
-        (
-            running,
-            after_intent,
-            settled(&admin, &pass.run_id).await[1].clone()
-        ),
+        (running, after_intent, applied),
         (
             (
                 MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::PassInProgress),
                 json!(false)
             ),
             pinned,
-            json!("applied")
+            [json!("applied"), json!("applied")]
         )
     );
     assert_eq!(
         (
             outcomes(&admin, &scope).await,
-            [results(&admin, &first).await, results(&admin, &third).await],
-            [file(&admin, &second).await, file(&admin, &fourth).await],
+            [
+                results(&admin, &first).await,
+                results(&admin, &second).await,
+                results(&admin, &fourth).await
+            ],
+            [file(&admin, &third).await, file(&admin, &fifth).await],
             intents(&admin, &scope, 1).await
         ),
         (
             json!([
                 [1, "not_kept", 1, null],
-                [1, "recorded", 2, null],
-                [1, "not_kept", 2, 1],
-                [1, "recorded", 2, 2]
+                [1, "not_kept", 2, null],
+                [1, "recorded", 3, null],
+                [1, "not_kept", 3, 1],
+                [1, "recorded", 3, 2]
             ]),
-            [json!([first_text]), json!([NOT_KEPT])],
+            [json!([NOT_KEPT]), json!([first_text]), json!([NOT_KEPT])],
             [
-                told(None, "林舟换了船。"),
-                told(Some("他会游泳。"), "林舟换了船。")
+                told(None, "林舟又换了船。"),
+                told(Some("他会游泳。"), "林舟又换了船。")
             ],
             json!([
                 [1, "consolidation", null, null],
                 [2, "consolidation", null, null],
-                [3, "intent_pass", FAKE, ["我以前去过河对岸吗？"]],
-                [4, "intent_pass", FAKE, ["我以前去过河对岸吗？"]]
+                [3, "consolidation", null, null],
+                [4, "intent_pass", FAKE, ["我以前去过河对岸吗？"]],
+                [5, "intent_pass", FAKE, ["我以前去过河对岸吗？"]]
             ])
         )
     );

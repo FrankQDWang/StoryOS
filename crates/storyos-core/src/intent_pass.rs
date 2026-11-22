@@ -378,22 +378,26 @@ fn characters(entries: &[IntentPassEntryFacts]) -> impl Iterator<Item = NeededCh
 /// work with the lowest number that needs a pass. The versions of a character are the version of
 /// the last change of the entry and the version of the last change of the current character entry
 /// of the author with the same title. A character needs a pass unless its last recorded pass read
-/// its versions, or a failed pass read them: a failed pass gets no second start for the same
-/// versions. A character with only the entry of the author needs no pass (ADR 0101 section 4).
-/// `passes` is in start order.
+/// its versions, or a failed pass after that read them: a failed pass gets no second start for the
+/// same versions while no later result is recorded. A character with only the entry of the author
+/// needs no pass (ADR 0101 section 4). `passes` is in start order.
 pub fn select_intent_pass_entry<'a>(
     entries: &'a [IntentPassEntryFacts],
     passes: &[IntentPassRecord],
 ) -> Option<NeededCharacter<'a>> {
     let ended = |pass: &IntentPassRecord, outcome: &str| pass.outcome.as_deref() == Some(outcome);
+    let recorded = IntentPassOutcome::Recorded.label();
     characters(entries)
         .filter(|needed| {
             let read = needed.read();
-            let failed = (passes.iter()).any(|pass| ended(pass, "failed") && pass.read == read);
-            let recorded = IntentPassOutcome::Recorded.label();
-            let last = (passes.iter().rev())
-                .find(|pass| ended(pass, recorded) && pass.read.entry.0 == read.entry.0);
-            !failed && last.is_none_or(|pass| pass.read != read)
+            let own = (passes.iter())
+                .filter(|pass| pass.read.entry.0 == read.entry.0)
+                .collect::<Vec<_>>();
+            let last = own.iter().rposition(|pass| ended(pass, recorded));
+            // The passes of the entry after its last recorded pass.
+            let after = &own[last.map_or(0, |last| last + 1)..];
+            let failed = (after.iter()).any(|pass| ended(pass, "failed") && pass.read == read);
+            !failed && last.is_none_or(|last| own[last].read != read)
         })
         .min_by_key(|needed| needed.entry.entry_number)
 }
