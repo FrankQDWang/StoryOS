@@ -169,7 +169,7 @@ pub use manuscript_tree::{
     GetManuscriptTree, ManuscriptTreeReader, VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
 };
 pub use memory_capture::{MemoryCaptureSource, MemoryCaptureStartRefusal, StartedMemoryCapture};
-pub use memory_consolidation::StartedMemoryConsolidation;
+pub use memory_consolidation::{StartedIntentPass, StartedMemoryConsolidation};
 pub use memory_entries::{
     MemoryEntryFlagItem, MemoryEntryListItem, MemoryEntryReader, MemoryEntrySourceItem,
     list_memory_entries,

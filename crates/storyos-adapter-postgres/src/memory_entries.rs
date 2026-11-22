@@ -288,13 +288,13 @@ pub(crate) async fn last_entry_version(
 /// the texts is the order of the times.
 pub(crate) const TIME_FORM: &str = r#"YYYY-MM-DD"T"HH24:MI:SS.MS"Z""#;
 
-/// The time of the last change of the entry of the row `latest` (ADR 0094 section 7): the time of
-/// its last version that is not a flag version.
+/// The time of the last change of the entry of the row `latest` (ADR 0094 section 7, ADR 0101
+/// section 4): the time of its last version that is not a flag version and not an intent version.
 pub(crate) const LAST_CHANGE: &str = "(SELECT changed.recorded_at
        FROM storyos.memory_entry_versions AS changed
       WHERE (changed.owner_user_id, changed.project_id, changed.memory_entry_id) =
             (latest.owner_user_id, latest.project_id, latest.memory_entry_id)
-        AND changed.flag_reason IS NULL
+        AND changed.flag_reason IS NULL AND changed.intent IS NULL
       ORDER BY changed.memory_revision DESC
       LIMIT 1)";
 

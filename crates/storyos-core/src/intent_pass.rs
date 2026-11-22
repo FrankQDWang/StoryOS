@@ -1,5 +1,6 @@
-//! The admission and the input of an intent pass (ADR 0101 section 4): the Context Assembly of its
-//! RunSteps from the Character File that the store loads (ADR 0039).
+//! The input, the start rule, and the outcome of an intent pass (ADR 0101 section 4): the Context
+//! Assembly of its RunSteps from the Character File that the store loads (ADR 0039), the decision
+//! of a claimed schedule row, and the outcome of a pass whose Run ends with no settled call.
 
 use crate::assemble_context::{
     CONTEXT_ITEM_TOKEN_LIMIT, ConsideredSource, ContextCause, ContextPurpose, ContextSourceClass,
@@ -8,7 +9,7 @@ use crate::assemble_context::{
     SelectedProjection, TOKEN_COUNTING_ALGORITHM_REVISION, TOKEN_COUNTING_PROFILE_REVISION,
     count_context_item_tokens,
 };
-use crate::{CaptureRefusal, ToolResultCandidate};
+use crate::{CaptureRefusal, CaptureRunEnd, ToolResultCandidate};
 
 /// The most RunSteps of one intent pass: one request, and one more after a refused call.
 pub const INTENT_PASS_MAX_RUN_STEPS: u64 = 2;
@@ -148,6 +149,87 @@ pub fn next_intent_pass_context(
     record.considered.retain(|source| file(source.source_class));
     crate::assemble_tool_result_continuation(&mut record, candidates);
     record
+}
+
+/// The outcome of an intent pass whose call settled.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IntentPassOutcome {
+    /// The result is a version of the part of the background work.
+    Recorded,
+    /// The part of the background work changed after the start of the pass, so the result is not
+    /// kept.
+    NotKept,
+}
+
+impl IntentPassOutcome {
+    /// The persisted name of the outcome, for `intent_passes.outcome`.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Recorded => "recorded",
+            Self::NotKept => "not_kept",
+        }
+    }
+}
+
+/// The failure reason of a running intent pass from the facts of its Run. `None`: the pass
+/// continues. A pass that ends with no settled `record_character_intent` call fails, and it
+/// records no result.
+pub fn intent_pass_failure(end: CaptureRunEnd<'_>) -> Option<&str> {
+    match end {
+        // The last RunStep ended with no call, or with a call that the Host refused.
+        CaptureRunEnd::LastRunStepEnded
+        | CaptureRunEnd::Status {
+            status: "completed",
+            ..
+        } => Some("no_intent_call"),
+        CaptureRunEnd::Status {
+            status: "queued" | "claimed",
+            ..
+        } => None,
+        CaptureRunEnd::Status { status, reason } => Some(reason.unwrap_or(status)),
+    }
+}
+
+/// The facts of one claimed intent pass row of a Project.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IntentPassFacts {
+    /// A character entry of the background work needs a pass.
+    pub entry_needs_pass: bool,
+    /// An intent pass of the Project is in progress.
+    pub pass_in_progress: bool,
+}
+
+/// Why a claimed intent pass row started no pass. The due time becomes empty in each case.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IntentPassSkip {
+    /// The next settlement that makes the row due sets the due time again.
+    NoEntryNeedsPass,
+    /// The settlement of that pass sets the due time again when an entry still needs a pass.
+    PassInProgress,
+    /// The admission refused the start.
+    StartRefused,
+}
+
+impl IntentPassSkip {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::NoEntryNeedsPass => "no_entry_needs_pass",
+            Self::PassInProgress => "pass_in_progress",
+            Self::StartRefused => "start_refused",
+        }
+    }
+}
+
+/// Decides whether a claimed intent pass row starts one pass. `Ok`: one pass starts, when the
+/// admission of the start permits it.
+pub fn decide_intent_pass(facts: &IntentPassFacts) -> Result<(), IntentPassSkip> {
+    if !facts.entry_needs_pass {
+        return Err(IntentPassSkip::NoEntryNeedsPass);
+    }
+    if facts.pass_in_progress {
+        return Err(IntentPassSkip::PassInProgress);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

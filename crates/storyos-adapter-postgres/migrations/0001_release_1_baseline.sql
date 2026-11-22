@@ -3818,8 +3818,14 @@ CREATE TABLE storyos.memory_entry_versions (
     recorded_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
     flag_reason text,
     flag_source jsonb,
+    intent text,
+    intent_questions jsonb,
+    intent_chapter_id uuid,
+    intent_author_entry_id uuid,
+    intent_author_version numeric(20,0),
     CONSTRAINT memory_entry_versions_bounds CHECK (((entry_number >= (1)::numeric) AND (entry_number <= '18446744073709551615'::numeric) AND (version >= (1)::numeric) AND (version <= '18446744073709551615'::numeric) AND (memory_revision >= (1)::numeric) AND (memory_revision <= '18446744073709551615'::numeric))),
     CONSTRAINT memory_entry_versions_flag CHECK (((COALESCE((cause ->> 'kind'::text), ''::text) = 'conflict_flag'::text) = (flag_reason IS NOT NULL)) AND ((flag_reason IS NULL) = (flag_source IS NULL)) AND ((flag_reason IS NULL) OR ((char_length(flag_reason) >= 1) AND (state = 'current'::text) AND (jsonb_typeof(flag_source) = 'object'::text)))),
+    CONSTRAINT memory_entry_versions_intent CHECK (((COALESCE((cause ->> 'kind'::text), ''::text) = 'intent_pass'::text) = (intent IS NOT NULL)) AND ((intent IS NULL) = (intent_questions IS NULL)) AND ((intent_author_entry_id IS NULL) = (intent_author_version IS NULL)) AND ((intent IS NOT NULL) OR ((intent_chapter_id IS NULL) AND (intent_author_entry_id IS NULL))) AND ((intent IS NULL) OR ((char_length(intent) >= 1) AND (char_length(intent) <= 150) AND (jsonb_typeof(intent_questions) = 'array'::text) AND (jsonb_array_length(intent_questions) <= 3) AND (state = 'current'::text) AND (entry_type = 'character'::text) AND (origin <> 'author_request'::text)))),
     CONSTRAINT memory_entry_versions_state_check CHECK ((state = ANY (ARRAY['current'::text, 'deleted'::text]))),
     CONSTRAINT memory_entry_versions_type_check CHECK ((entry_type = ANY (ARRAY['writing_preference'::text, 'foreshadowing'::text, 'character'::text, 'relationship'::text, 'major_event'::text, 'other'::text]))),
     CONSTRAINT memory_entry_versions_origin_check CHECK ((origin = ANY (ARRAY['author_request'::text, 'conversation'::text, 'chapter'::text]))),
@@ -3912,7 +3918,7 @@ GRANT SELECT,INSERT ON TABLE storyos.conversation_memory_settings TO storyos_run
 
 -- The kind of an AgentRun (ADR 0094 section 5). A Run of the author has its Project Conversation, its
 -- Conversation Memory Settings revision, its Chapter, its author message, and the Receipt of
--- `createAgentRun`. A background Run (`memory_capture`, `memory_consolidation`) has none of them, so
+-- `createAgentRun`. A background Run (`memory_capture`, `memory_consolidation`, `intent_pass`) has none of them, so
 -- the two foreign keys of these columns use `MATCH SIMPLE`, as the current Chapter of a Project does,
 -- and `agent_runs_kind_shape` refuses each other form. For the same reason, the Conversation of
 -- `model_attempts` and the Receipt of `operation_requirements` and of `context_assembly_manifests`
@@ -3946,7 +3952,7 @@ CREATE TABLE storyos.agent_runs (
     CONSTRAINT agent_runs_claim_generation_check CHECK ((claim_generation >= 0)),
     CONSTRAINT agent_runs_fence_token_check CHECK ((fence_token >= 0)),
     CONSTRAINT agent_runs_kind_shape CHECK (((((run_kind = 'author'::text) AND (conversation_id IS NOT NULL) AND (memory_settings_revision IS NOT NULL) AND (chapter_id IS NOT NULL) AND (author_message IS NOT NULL) AND (receipt_id IS NOT NULL)) OR ((run_kind <> 'author'::text) AND (conversation_id IS NULL) AND (memory_settings_revision IS NULL) AND (chapter_id IS NULL) AND (author_message IS NULL) AND (receipt_id IS NULL))) IS TRUE)),
-    CONSTRAINT agent_runs_run_kind_check CHECK ((run_kind = ANY (ARRAY['author'::text, 'memory_capture'::text, 'memory_consolidation'::text]))),
+    CONSTRAINT agent_runs_run_kind_check CHECK ((run_kind = ANY (ARRAY['author'::text, 'memory_capture'::text, 'memory_consolidation'::text, 'intent_pass'::text]))),
     CONSTRAINT agent_runs_pkey PRIMARY KEY (owner_user_id, project_id, run_id),
     CONSTRAINT agent_runs_binding_registration_fkey FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) MATCH FULL,
     CONSTRAINT agent_runs_owner_user_id_project_id_conversation_id_memory_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision),
@@ -4232,7 +4238,9 @@ GRANT SELECT,INSERT,UPDATE ON TABLE storyos.passage_index_work TO storyos_runtim
 -- The source of the kind `conversation_capture` is a Project Conversation, and `conversation_id` names it
 -- too. The completion of a Run of the author in the Conversation sets the due time in the transaction of
 -- the settlement. The source of the kind `consolidation` is the Project. The settlement of a capture that
--- stored observations and the settlement of a pass set its due time. The source of the kind `chapter_capture`
+-- stored observations and the settlement of a pass set its due time. The source of the kind `intent_pass` is
+-- the Project (ADR 0101 section 4). The settlement of a consolidation pass that applied operations and the
+-- settlement of an intent pass set its due time. The source of the kind `chapter_capture`
 -- is a Chapter, and `chapter_id` names it too. Each Authoritative Commit that changes the text of the Chapter
 -- sets its due time in the transaction of the commit. A `held` row waits for a Project that cannot do
 -- background work, and it has no due time. A Worker claims a due row with a row lock in the Worker scope,
@@ -4249,7 +4257,7 @@ CREATE TABLE storyos.memory_work_schedules (
     due_at timestamp with time zone,
     held boolean DEFAULT false NOT NULL,
     CONSTRAINT memory_work_schedules_pkey PRIMARY KEY (owner_user_id, project_id, work_kind, source_id),
-    CONSTRAINT memory_work_schedules_source_check CHECK (((((work_kind = 'conversation_capture'::text) AND (conversation_id = source_id) AND (chapter_id IS NULL)) OR ((work_kind = 'consolidation'::text) AND (conversation_id IS NULL) AND (chapter_id IS NULL) AND (source_id = project_id)) OR ((work_kind = 'chapter_capture'::text) AND (conversation_id IS NULL) AND (chapter_id = source_id))) IS TRUE)),
+    CONSTRAINT memory_work_schedules_source_check CHECK (((((work_kind = 'conversation_capture'::text) AND (conversation_id = source_id) AND (chapter_id IS NULL)) OR ((work_kind = 'consolidation'::text) AND (conversation_id IS NULL) AND (chapter_id IS NULL) AND (source_id = project_id)) OR ((work_kind = 'chapter_capture'::text) AND (conversation_id IS NULL) AND (chapter_id = source_id)) OR ((work_kind = 'intent_pass'::text) AND (conversation_id IS NULL) AND (chapter_id IS NULL) AND (source_id = project_id))) IS TRUE)),
     CONSTRAINT memory_work_schedules_held_check CHECK (((NOT held) OR ((work_kind = 'chapter_capture'::text) AND (due_at IS NULL)))),
     CONSTRAINT memory_work_schedules_conversation_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id),
     CONSTRAINT memory_work_schedules_chapter_fkey FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id)
@@ -4445,6 +4453,46 @@ CREATE POLICY memory_consolidation_passes_exact_scope ON storyos.memory_consolid
 GRANT SELECT,INSERT ON TABLE storyos.memory_consolidation_passes TO storyos_runtime;
 
 GRANT UPDATE(outcome, failure_reason, operations) ON TABLE storyos.memory_consolidation_passes TO storyos_runtime;
+
+-- Intent passes (ADR 0101 section 4). One row for each pass: its background Run, its start time, the
+-- character entry of the background work and the version that the pass read, the version of the entry of
+-- the author with the same title that it read (none when the character had none), and the last live
+-- Chapter with text at the start. A recorded result is one version of the entry with the cause
+-- `intent_pass`. The runtime role can read and insert a row, it can change only the outcome and the
+-- failure reason, and it cannot delete a row.
+
+CREATE TABLE storyos.intent_passes (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    pass_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    started_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    memory_entry_id uuid NOT NULL,
+    entry_version numeric(20,0) NOT NULL,
+    author_entry_id uuid,
+    author_version numeric(20,0),
+    chapter_id uuid,
+    outcome text,
+    failure_reason text,
+    CONSTRAINT intent_passes_pkey PRIMARY KEY (owner_user_id, project_id, pass_id),
+    CONSTRAINT intent_passes_run_key UNIQUE (owner_user_id, project_id, run_id),
+    CONSTRAINT intent_passes_author_shape CHECK (((author_entry_id IS NULL) = (author_version IS NULL))),
+    CONSTRAINT intent_passes_outcome_check CHECK ((((outcome IS NULL) OR (outcome = ANY (ARRAY['recorded'::text, 'not_kept'::text, 'failed'::text]))) AND (COALESCE((outcome = 'failed'::text), false) = (failure_reason IS NOT NULL)) AND ((failure_reason IS NULL) OR ((char_length(failure_reason) >= 1) AND (char_length(failure_reason) <= 64)))) IS TRUE),
+    CONSTRAINT intent_passes_run_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT intent_passes_entry_fkey FOREIGN KEY (owner_user_id, project_id, memory_entry_id, entry_version) REFERENCES storyos.memory_entry_versions(owner_user_id, project_id, memory_entry_id, version) MATCH FULL,
+    CONSTRAINT intent_passes_author_fkey FOREIGN KEY (owner_user_id, project_id, author_entry_id, author_version) REFERENCES storyos.memory_entry_versions(owner_user_id, project_id, memory_entry_id, version),
+    CONSTRAINT intent_passes_chapter_fkey FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id)
+);
+
+ALTER TABLE storyos.intent_passes ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.intent_passes FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY intent_passes_exact_scope ON storyos.intent_passes USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.intent_passes TO storyos_runtime;
+
+GRANT UPDATE(outcome, failure_reason) ON TABLE storyos.intent_passes TO storyos_runtime;
 
 -- Source Snapshots and Source Gaps. The settlement of a research ToolCall writes them in its own
 -- transaction: one immutable Snapshot for each captured search entry or page, and one Gap for each
