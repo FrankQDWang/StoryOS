@@ -392,8 +392,10 @@ async function confirmDeleteInFile(number: number) {
     .not.toBeNull();
   pressInFile(number, "delete-confirm");
 }
-async function openCharacters(entries: MemoryEntryInspect[], deletes: (Answer | Promise<Answer>)[] = []) {
-  const server = fakeServer([listed(entries)], deletes);
+/** Opens the section "人物" with `entries`. `later` has the answers of the reads after the first read. */
+async function openCharacters(entries: MemoryEntryInspect[], deletes: (Answer | Promise<Answer>)[] = [],
+  later: (Answer | Promise<Answer>)[] = []) {
+  const server = fakeServer([listed(entries), ...later], deletes);
   await settingsPage(server.fetchImpl);
   document.querySelector<HTMLButtonElement>('[data-settings-item="characters"]')!.click();
   await expect.poll(() => characters()?.checkVisibility()).toBe(true);
@@ -462,8 +464,10 @@ it("shows the file 档案 with the entry of the author first, its flag, and only
 it("keeps the file after the delete of its first part in the Memory Index, and then selects the next name",
   async () => {
     const [background, author] = [character(5, "林舟"), character(7, "林舟", { origin: "author_request" })];
+    // The delete of the part of the author starts a new read.
     const server = await openCharacters([background, character(6, "阿青"), author, character(8, "青石")],
-      [applied(background.memory_entry_id), applied(author.memory_entry_id)]);
+      [applied(background.memory_entry_id), applied(author.memory_entry_id)],
+      [listed([character(6, "阿青"), character(8, "青石")])]);
     await expect.poll(fileEntries).toEqual(["7", "5"]);
     await confirmDeleteInFile(5);
     await expect.poll(fileEntries).toEqual(["7"]);
@@ -472,7 +476,7 @@ it("keeps the file after the delete of its first part in the Memory Index, and t
     await confirmDeleteInFile(7);
     await expect.poll(names).toEqual(["阿青", "青石"]);
     expect([chosenName(), fileEntries(), server.paths.filter((path) => path === MEMORY).length])
-      .toEqual(["青石", ["8"], 1]);
+      .toEqual(["青石", ["8"], 2]);
     expect(server.sent.filter((item) => item.method === "DELETE").map((item) => item.path))
       .toEqual([`${MEMORY}/${background.memory_entry_id}`, `${MEMORY}/${author.memory_entry_id}`]);
   });
@@ -480,8 +484,9 @@ it("keeps the file after the delete of its first part in the Memory Index, and t
 it("selects the next name when two deletes in progress remove each part of a character", async () => {
   const [background, author] = [character(5, "林舟"), character(7, "林舟", { origin: "author_request" })];
   const [first, second] = [held(), held()];
+  // The delete of the part of the author starts a new read, which can end before the other delete.
   await openCharacters([character(6, "阿青"), background, author, character(8, "青石")],
-    [first.answer, second.answer]);
+    [first.answer, second.answer], [listed([character(6, "阿青"), background, character(8, "青石")])]);
   document.querySelector<HTMLButtonElement>('[data-character-name="林舟"]')!.click();
   await expect.poll(fileEntries).toEqual(["7", "5"]);
   await confirmDeleteInFile(7);
@@ -630,22 +635,51 @@ it("shows no block after the author deleted the part of the background work of a
 });
 
 it("shows no block after the author deleted the part of the author that the result names", async () => {
+  const background = character(5, "林舟", { intent: result() });
   const author = character(7, "林舟", { origin: "author_request" });
-  await openCharacters([character(5, "林舟", { intent: result() }), author], [applied(author.memory_entry_id)]);
+  // The read after the delete gives no result, because the result named the deleted part.
+  const reread = held();
+  const server = fakeServer([listed([background, author]), reread.answer], [applied(author.memory_entry_id)]);
+  await settingsPage(server.fetchImpl);
+  document.querySelector<HTMLButtonElement>('[data-settings-item="characters"]')!.click();
   await expect.poll(() => blockLines("[data-character-intent]").length).toBe(3);
   await confirmDeleteInFile(7);
   await expect.poll(fileEntries).toEqual(["5"]);
+  // Until the read after the delete ends, the page shows no result for the character.
+  await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(2);
   expect([blockLines("[data-character-intent]"), blockLines("[data-character-questions]")]).toEqual([[], []]);
+  reread.give(listed([character(5, "林舟")]));
+  await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(2);
+  expect([fileEntries(), blockLines("[data-character-intent]"), blockLines("[data-character-questions]")])
+    .toEqual([["5"], [], []]);
 });
 
-it("reads again after a read that overlapped the delete of the part of the author, and shows the result of the new read",
+it("reads again after the delete of a part of the author, and shows a result that is current again", async () => {
+  // The result names no part of the author. The author made a part after the pass, so the result is not current until
+  // the author deletes that part (#1791 item 1).
+  const background = character(5, "林舟");
+  const author = character(7, "林舟", { origin: "author_request" });
+  const server = fakeServer([listed([background, author]), listed([{ ...background, intent: result() }])],
+    [applied(author.memory_entry_id)]);
+  await settingsPage(server.fetchImpl);
+  document.querySelector<HTMLButtonElement>('[data-settings-item="characters"]')!.click();
+  await expect.poll(fileEntries).toEqual(["7", "5"]);
+  expect(blockLines("[data-character-intent]")).toEqual([]);
+  await confirmDeleteInFile(7);
+  await expect.poll(() => blockLines("[data-character-intent]"))
+    .toEqual(["接下来想做什么", INTENT, "写到《渡口》时的想法"]);
+  expect([server.paths.filter((path) => path === MEMORY).length, fileEntries(),
+    blockLines("[data-character-questions]")]).toEqual([2, ["5"], ["助手还不清楚的事", ...QUESTIONS]]);
+});
+
+it("does not show a read that started before the delete of the part of the author, and shows the read after it",
   async () => {
     const background = character(5, "林舟", { intent: result() });
     const author = character(7, "林舟", { origin: "author_request" });
     // After the delete, a later intent pass gives a new result that names no part of the author.
     const later = { ...background, version: "3", intent: result({ text: "他想先去找阿青。", questions: [] }) };
-    const reread = held();
-    const server = fakeServer([listed([background, author]), reread.answer, listed([later])],
+    const [reread, after] = [held(), held()];
+    const server = fakeServer([listed([background, author]), reread.answer, after.answer],
       [deleted({ kind: "conflicted", reason: "entry_changed" }), applied(author.memory_entry_id)]);
     await settingsPage(server.fetchImpl);
     document.querySelector<HTMLButtonElement>('[data-settings-item="characters"]')!.click();
@@ -654,9 +688,14 @@ it("reads again after a read that overlapped the delete of the part of the autho
     await confirmDeleteInFile(5);
     await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(2);
     await confirmDeleteInFile(7);
-    await expect.poll(fileEntries).toEqual(["5"]);
-    expect(blockLines("[data-character-intent]")).toEqual([]);
+    await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(3);
+    expect([fileEntries(), blockLines("[data-character-intent]")]).toEqual([["5"], []]);
+    // The read that started before the delete gives the ended result, and the page does not show it.
     reread.give(listed([background, author]));
+    await reread.answer;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect([fileEntries(), blockLines("[data-character-intent]")]).toEqual([["5"], []]);
+    after.give(listed([later]));
     await expect.poll(() => blockLines("[data-character-intent]")).toEqual(["接下来想做什么", "他想先去找阿青。",
       "写到《渡口》时的想法"]);
     expect([server.paths.filter((path) => path === MEMORY).length, fileEntries(),

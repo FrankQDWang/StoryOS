@@ -68,7 +68,7 @@ fn current_character<'v, 'a>(
 /// the newest version that is not a flag version and not a version with an intent. The rule reads
 /// the state at the revision, and not the history: when the two parts are again the parts that
 /// the pass read, the result is current again.
-pub fn current_intent<'v, 'a>(
+pub(crate) fn current_intent<'v, 'a>(
     entry: &'v [MemoryVersionFacts<'a>],
     author: &[MemoryVersionFacts<'a>],
     memory_revision: u64,

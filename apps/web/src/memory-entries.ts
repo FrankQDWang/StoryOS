@@ -38,21 +38,15 @@ export function useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl }: {
   const flights = useRef(new Map<string, MemoryDeleteFlight>());
   // The entries that a delete removed. A read that started before the delete must not show them again.
   const removed = useRef(new Set<string>());
-  // The count of applied deletes of a part of the author of a character. Such a delete ends the intent result that
-  // names the part (ADR 0101 section 4), and a read that started before the delete can still give that result.
-  const endingDeletes = useRef(0);
   const { owner_user_id: ownerUserId, project_id: projectId } = scope;
   useEffect(() => {
     let current = true;
-    const started = endingDeletes.current;
     listMemoryEntries({ baseUrl, fetchImpl, projectId })
       .then((read) => sameScope(read.project_scope, { owner_user_id: ownerUserId, project_id: projectId })
         ? read.entries : "failed" as const, () => "failed" as const)
       .then((read) => {
         if (!current) return;
-        // The read overlapped a delete that ended a result, so the page discards it and reads again.
-        if (endingDeletes.current !== started) setReads((count) => count + 1);
-        else setEntries(read === "failed" ? read : read.filter((item) => !removed.current.has(item.memory_entry_id)));
+        setEntries(read === "failed" ? read : read.filter((item) => !removed.current.has(item.memory_entry_id)));
       });
     return () => { current = false; };
   }, [baseUrl, fetchImpl, ownerUserId, projectId, reads]);
@@ -71,11 +65,14 @@ export function useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl }: {
     else flights.current.set(memoryEntryId, result.flight);
     if (result.outcome === "deleted") {
       removed.current.add(memoryEntryId);
-      const ends = entry.entry_type === "character" && entry.origin === "author_request";
-      if (ends) endingDeletes.current += 1;
+      // A delete of a part of the author of a character can end a result or make an older result current again (ADR
+      // 0101 section 4). The page shows no result for that title until a new read gives the current result. The new
+      // read also ends each read that started before the delete, so that read is not shown.
+      const author = entry.entry_type === "character" && entry.origin === "author_request";
       setStep(memoryEntryId, undefined);
       setEntries((shown) => shown === "failed" || shown === undefined
-        ? shown : withoutIntent(shown.filter((item) => item.memory_entry_id !== memoryEntryId), ends ? [entry.title] : []));
+        ? shown : withoutIntent(shown.filter((item) => item.memory_entry_id !== memoryEntryId), author ? [entry.title] : []));
+      if (author) setReads((count) => count + 1);
       return;
     }
     setStep(memoryEntryId, result.outcome);
