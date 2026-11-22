@@ -1,0 +1,443 @@
+[
+  {
+    "at": "2026-11-22T04:54:07.526401+00:00",
+    "kind": "run",
+    "ref": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+    "role": "author",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T04:54:07.579079+00:00",
+    "kind": "model",
+    "ref": "01a2019a-bbd8-74c3-98e7-092a6d10bc6e",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T04:54:11.462813+00:00",
+    "kind": "model",
+    "ref": "01a2019a-cb02-7312-9c5f-6689fa7b9d43",
+    "role": "decision",
+    "position": 1
+  },
+  {
+    "at": "2026-11-22T04:54:18.288676+00:00",
+    "kind": "run",
+    "ref": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T04:54:18.317727+00:00",
+    "kind": "model",
+    "ref": "01a2019a-e5cc-7483-a9b4-32b3bbf2be1b",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T04:54:29.284968+00:00",
+    "kind": "run",
+    "ref": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T04:54:29.310265+00:00",
+    "kind": "model",
+    "ref": "01a2019b-10bd-7d70-9c64-b9d346b236d6",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T04:55:31.519544+00:00",
+    "kind": "run",
+    "ref": "01a2019c-03be-78c1-92af-da1de4e065a0",
+    "role": "memory_consolidation",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T04:55:31.577836+00:00",
+    "kind": "model",
+    "ref": "01a2019c-03f7-7eb1-be32-b6c99e202002",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T04:56:29.318021+00:00",
+    "kind": "run",
+    "ref": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T04:56:29.366235+00:00",
+    "kind": "model",
+    "ref": "01a2019c-e5b4-7bd1-9a18-bf9039030c89",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T04:56:38.08227+00:00",
+    "kind": "model",
+    "ref": "01a2019d-07c1-7c93-8f09-ddccf0f8a3c6",
+    "role": "decision",
+    "position": 1
+  },
+  {
+    "at": "2026-11-22T04:57:35.247589+00:00",
+    "kind": "run",
+    "ref": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+    "role": "memory_consolidation",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T04:57:35.303647+00:00",
+    "kind": "model",
+    "ref": "01a2019d-e745-72b0-9ab6-bc84474c5b3a",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T04:58:42.791613+00:00",
+    "kind": "run",
+    "ref": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T04:58:42.823971+00:00",
+    "kind": "model",
+    "ref": "01a2019e-ef06-7b02-9d1e-3acca28deeac",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T04:58:58.505987+00:00",
+    "kind": "model",
+    "ref": "01a2019f-2c49-70c2-8fc9-3abb61dbffc6",
+    "role": "decision",
+    "position": 1
+  },
+  {
+    "at": "2026-11-22T05:00:11.406116+00:00",
+    "kind": "run",
+    "ref": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+    "role": "memory_consolidation",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:00:11.427021+00:00",
+    "kind": "model",
+    "ref": "01a201a0-4922-7e83-9060-78c1e19b64e4",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:06:01.363336+00:00",
+    "kind": "run",
+    "ref": "01a201a5-a013-7b92-ae48-581da6639620",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:06:01.388067+00:00",
+    "kind": "model",
+    "ref": "01a201a5-a02b-7e20-8a1f-42a750c2bf46",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:06:16.316144+00:00",
+    "kind": "model",
+    "ref": "01a201a5-da7b-7313-b45f-2389bf0503f2",
+    "role": "decision",
+    "position": 1
+  },
+  {
+    "at": "2026-11-22T05:07:07.986565+00:00",
+    "kind": "model",
+    "ref": "01a201a6-a451-7731-ab75-3495517b2e5c",
+    "role": "decision",
+    "position": 2
+  },
+  {
+    "at": "2026-11-22T05:07:25.097293+00:00",
+    "kind": "run",
+    "ref": "01a201a6-e728-7572-a001-0f525d35fafb",
+    "role": "memory_consolidation",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:07:25.117936+00:00",
+    "kind": "model",
+    "ref": "01a201a6-e73d-7891-b47e-2e45f78b2d3d",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:10:33.938037+00:00",
+    "kind": "run",
+    "ref": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:10:33.969404+00:00",
+    "kind": "model",
+    "ref": "01a201a9-c8f0-7fa3-9efb-40fa99ca048b",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:12:18.536712+00:00",
+    "kind": "run",
+    "ref": "01a201ab-6167-7d11-82be-16a406c18a26",
+    "role": "memory_consolidation",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:12:18.56108+00:00",
+    "kind": "model",
+    "ref": "01a201ab-617f-70b1-9a8d-ed689802877a",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:14:34.733279+00:00",
+    "kind": "run",
+    "ref": "01a201ad-756c-76b2-9738-4aacd434b090",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:14:34.760236+00:00",
+    "kind": "model",
+    "ref": "01a201ad-7587-7140-8f27-2efa65e229bd",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:15:53.434048+00:00",
+    "kind": "run",
+    "ref": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+    "role": "memory_consolidation",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:15:53.456694+00:00",
+    "kind": "model",
+    "ref": "01a201ae-a8ef-74d1-8e62-10d44ed26ec5",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:17:48.694373+00:00",
+    "kind": "run",
+    "ref": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:17:48.719851+00:00",
+    "kind": "model",
+    "ref": "01a201b0-6b2e-79b2-ac7b-fa3aff0bca07",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:19:22.86024+00:00",
+    "kind": "run",
+    "ref": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+    "role": "memory_consolidation",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:19:22.882548+00:00",
+    "kind": "model",
+    "ref": "01a201b1-db01-7bb0-90bd-bd70ab3c0405",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:25:44.274244+00:00",
+    "kind": "run",
+    "ref": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+    "role": "author",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:25:44.309389+00:00",
+    "kind": "model",
+    "ref": "01a201b7-acf3-7112-92fd-44055efaa474",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:27:17.164227+00:00",
+    "kind": "model",
+    "ref": "01a201b9-17a4-7982-bcdc-a94bad43421f",
+    "role": "decision",
+    "position": 1
+  },
+  {
+    "at": "2026-11-22T05:27:26.059782+00:00",
+    "kind": "model",
+    "ref": "01a201b9-3a66-7653-b35a-5263118ccbf6",
+    "role": "decision",
+    "position": 2
+  },
+  {
+    "at": "2026-11-22T05:27:38.51216+00:00",
+    "kind": "run",
+    "ref": "01a201b9-6b0f-7601-91ce-99f6252c5b33",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:27:38.537899+00:00",
+    "kind": "model",
+    "ref": "01a201b9-6b29-7520-8238-fbbe117b2267",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:28:04.968492+00:00",
+    "kind": "model",
+    "ref": "01a201b9-d267-7f00-bc28-9591baf90e58",
+    "role": "decision",
+    "position": 1
+  },
+  {
+    "at": "2026-11-22T05:28:10.402771+00:00",
+    "kind": "run",
+    "ref": "01a201b9-e7a2-7173-b0c8-39cd708b8853",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:28:10.431958+00:00",
+    "kind": "model",
+    "ref": "01a201b9-e7bf-7df1-856c-74f975efdb8d",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:29:49.915496+00:00",
+    "kind": "run",
+    "ref": "01a201bb-6c59-7fa2-900e-941eb9993e91",
+    "role": "memory_consolidation",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:29:49.939686+00:00",
+    "kind": "model",
+    "ref": "01a201bb-6c72-7983-bf6d-5daf4a470ae8",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:36:52.524555+00:00",
+    "kind": "run",
+    "ref": "01a201c1-df2c-71f3-9d65-576a9adb83c7",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:36:52.554498+00:00",
+    "kind": "model",
+    "ref": "01a201c1-df49-7d40-b95e-f9568455143d",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:38:42.742038+00:00",
+    "kind": "run",
+    "ref": "01a201c3-8dd4-7a10-b394-f97d93ffed6f",
+    "role": "memory_consolidation",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:38:42.766129+00:00",
+    "kind": "model",
+    "ref": "01a201c3-8dec-7b42-b533-e7247328e960",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:44:43.239407+00:00",
+    "kind": "run",
+    "ref": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+    "role": "memory_capture",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:44:43.268536+00:00",
+    "kind": "model",
+    "ref": "01a201c9-0e04-7fe3-a34d-968790bf73ca",
+    "role": "decision",
+    "position": 0
+  },
+  {
+    "at": "2026-11-22T05:46:14.089654+00:00",
+    "kind": "model",
+    "ref": "01a201ca-70c5-7cf1-b510-63f6a8609002",
+    "role": "decision",
+    "position": 1
+  },
+  {
+    "at": "2026-11-22T05:46:56.724892+00:00",
+    "kind": "model",
+    "ref": "01a201cb-1750-7262-9516-7048f0ea7691",
+    "role": "decision",
+    "position": 2
+  },
+  {
+    "at": "2026-11-22T05:47:15.168343+00:00",
+    "kind": "model",
+    "ref": "01a201cb-5f5b-7a80-b368-a35e0d4c4f3f",
+    "role": "decision",
+    "position": 3
+  },
+  {
+    "at": "2026-11-22T05:47:49.675908+00:00",
+    "kind": "model",
+    "ref": "01a201cb-e626-7723-916a-304bb049c091",
+    "role": "decision",
+    "position": 4
+  },
+  {
+    "at": "2026-11-22T05:48:09.41123+00:00",
+    "kind": "model",
+    "ref": "01a201cc-333d-75f2-81e5-4c54c553a931",
+    "role": "decision",
+    "position": 5
+  },
+  {
+    "at": "2026-11-22T05:48:47.417461+00:00",
+    "kind": "model",
+    "ref": "01a201cc-c7b3-7020-8ca4-046711059c96",
+    "role": "decision",
+    "position": 6
+  },
+  {
+    "at": "2026-11-22T05:49:17.526102+00:00",
+    "kind": "model",
+    "ref": "01a201cd-3d4f-7653-af83-fd8376730f01",
+    "role": "decision",
+    "position": 7
+  },
+  {
+    "at": "2026-11-22T05:49:47.302103+00:00",
+    "kind": "run",
+    "ref": "01a201cd-b1a1-78a0-bec2-ba596b1e5c58",
+    "role": "memory_consolidation",
+    "position": null
+  },
+  {
+    "at": "2026-11-22T05:49:47.326145+00:00",
+    "kind": "model",
+    "ref": "01a201cd-b1b8-7491-9f8c-59e21c65a6ab",
+    "role": "decision",
+    "position": 0
+  }
+]

@@ -1,0 +1,2425 @@
+[
+  {
+    "at": "2026-11-22T04:54:07.501Z",
+    "after": "before Run opening",
+    "requests": 0,
+    "input": null,
+    "request_max": null,
+    "runs": 0,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T04:54:18.101Z",
+    "after": "Run opening",
+    "requests": 2,
+    "input": 8606,
+    "request_max": 4396,
+    "runs": 1,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T04:54:28.940Z",
+    "after": "capture conversation opening",
+    "requests": 3,
+    "input": 10852,
+    "request_max": 4396,
+    "runs": 2,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T04:55:32.505Z",
+    "after": "capture chapter 1",
+    "requests": 5,
+    "input": 15284,
+    "request_max": 4432,
+    "runs": 4,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": null
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T04:56:25.914Z",
+    "after": "pass chapter 1",
+    "requests": 5,
+    "input": 17960,
+    "request_max": 4432,
+    "runs": 4,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T04:57:34.868Z",
+    "after": "capture chapter 2",
+    "requests": 7,
+    "input": 28286,
+    "request_max": 5884,
+    "runs": 5,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T04:58:42.468Z",
+    "after": "pass chapter 2",
+    "requests": 8,
+    "input": 32050,
+    "request_max": 5884,
+    "runs": 6,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:00:11.258Z",
+    "after": "capture chapter 3",
+    "requests": 10,
+    "input": 42241,
+    "request_max": 5884,
+    "runs": 7,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:06:01.097Z",
+    "after": "pass chapter 3",
+    "requests": 11,
+    "input": 46562,
+    "request_max": 5884,
+    "runs": 8,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:07:24.953Z",
+    "after": "capture chapter 4",
+    "requests": 14,
+    "input": 63171,
+    "request_max": 6331,
+    "runs": 9,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:10:33.649Z",
+    "after": "pass chapter 4",
+    "requests": 15,
+    "input": 68911,
+    "request_max": 6331,
+    "runs": 10,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:12:18.362Z",
+    "after": "capture chapter 5",
+    "requests": 16,
+    "input": 74029,
+    "request_max": 6331,
+    "runs": 11,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:14:34.466Z",
+    "after": "pass chapter 5",
+    "requests": 17,
+    "input": 81148,
+    "request_max": 7119,
+    "runs": 12,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:15:53.275Z",
+    "after": "capture chapter 6",
+    "requests": 18,
+    "input": 86241,
+    "request_max": 7119,
+    "runs": 13,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:17:48.417Z",
+    "after": "pass chapter 6",
+    "requests": 19,
+    "input": 94250,
+    "request_max": 8009,
+    "runs": 14,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:19:22.695Z",
+    "after": "capture chapter 7",
+    "requests": 20,
+    "input": 99753,
+    "request_max": 8009,
+    "runs": 15,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:25:44.119Z",
+    "after": "pass chapter 7",
+    "requests": 21,
+    "input": 108577,
+    "request_max": 8824,
+    "runs": 16,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8824
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:25:44.259Z",
+    "after": "before Run remember 顾青禾",
+    "requests": 21,
+    "input": 108577,
+    "request_max": 8824,
+    "runs": 16,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8824
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:27:38.245Z",
+    "after": "Run remember 顾青禾",
+    "requests": 24,
+    "input": 157723,
+    "request_max": 18064,
+    "runs": 17,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+        "run_kind": "author",
+        "requests": 3,
+        "input": 49146
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8824
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:28:10.049Z",
+    "after": "capture conversation step 3",
+    "requests": 26,
+    "input": 166174,
+    "request_max": 18064,
+    "runs": 18,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201b9-6b0f-7601-91ce-99f6252c5b33",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 8451
+      },
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+        "run_kind": "author",
+        "requests": 3,
+        "input": 49146
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8824
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:29:49.745Z",
+    "after": "capture chapter 8",
+    "requests": 27,
+    "input": 171866,
+    "request_max": 18064,
+    "runs": 19,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201b9-6b0f-7601-91ce-99f6252c5b33",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 8451
+      },
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+        "run_kind": "author",
+        "requests": 3,
+        "input": 49146
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8824
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201b9-e7a2-7173-b0c8-39cd708b8853",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5692
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:36:52.260Z",
+    "after": "pass chapter 8",
+    "requests": 28,
+    "input": 182432,
+    "request_max": 18064,
+    "runs": 20,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201b9-6b0f-7601-91ce-99f6252c5b33",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 8451
+      },
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201bb-6c59-7fa2-900e-941eb9993e91",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 10566
+      },
+      {
+        "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+        "run_kind": "author",
+        "requests": 3,
+        "input": 49146
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8824
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201b9-e7a2-7173-b0c8-39cd708b8853",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5692
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:38:42.591Z",
+    "after": "capture chapter 9",
+    "requests": 29,
+    "input": 188214,
+    "request_max": 18064,
+    "runs": 21,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201b9-6b0f-7601-91ce-99f6252c5b33",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 8451
+      },
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201bb-6c59-7fa2-900e-941eb9993e91",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 10566
+      },
+      {
+        "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+        "run_kind": "author",
+        "requests": 3,
+        "input": 49146
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8824
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201b9-e7a2-7173-b0c8-39cd708b8853",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5692
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      },
+      {
+        "run_id": "01a201c1-df2c-71f3-9d65-576a9adb83c7",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5782
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:44:42.948Z",
+    "after": "pass chapter 9",
+    "requests": 30,
+    "input": 199084,
+    "request_max": 18064,
+    "runs": 22,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201bb-6c59-7fa2-900e-941eb9993e91",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 10566
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a201c3-8dd4-7a10-b394-f97d93ffed6f",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 10870
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a201c1-df2c-71f3-9d65-576a9adb83c7",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5782
+      },
+      {
+        "run_id": "01a201b9-6b0f-7601-91ce-99f6252c5b33",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 8451
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+        "run_kind": "author",
+        "requests": 3,
+        "input": 49146
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8824
+      },
+      {
+        "run_id": "01a201b9-e7a2-7173-b0c8-39cd708b8853",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5692
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:49:47.146Z",
+    "after": "capture chapter 10",
+    "requests": 38,
+    "input": 275093,
+    "request_max": 18064,
+    "runs": 23,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201bb-6c59-7fa2-900e-941eb9993e91",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 10566
+      },
+      {
+        "run_id": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+        "run_kind": "memory_capture",
+        "requests": 8,
+        "input": 76009
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a201c3-8dd4-7a10-b394-f97d93ffed6f",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 10870
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a201c1-df2c-71f3-9d65-576a9adb83c7",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5782
+      },
+      {
+        "run_id": "01a201b9-6b0f-7601-91ce-99f6252c5b33",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 8451
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+        "run_kind": "author",
+        "requests": 3,
+        "input": 49146
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8824
+      },
+      {
+        "run_id": "01a201b9-e7a2-7173-b0c8-39cd708b8853",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5692
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:53:37.604Z",
+    "after": "pass chapter 10",
+    "requests": 39,
+    "input": 286472,
+    "request_max": 18064,
+    "runs": 24,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201bb-6c59-7fa2-900e-941eb9993e91",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 10566
+      },
+      {
+        "run_id": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+        "run_kind": "memory_capture",
+        "requests": 8,
+        "input": 76009
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a201c3-8dd4-7a10-b394-f97d93ffed6f",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 10870
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a201c1-df2c-71f3-9d65-576a9adb83c7",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5782
+      },
+      {
+        "run_id": "01a201b9-6b0f-7601-91ce-99f6252c5b33",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 8451
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201cd-b1a1-78a0-bec2-ba596b1e5c58",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 11379
+      },
+      {
+        "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+        "run_kind": "author",
+        "requests": 3,
+        "input": 49146
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8824
+      },
+      {
+        "run_id": "01a201b9-e7a2-7173-b0c8-39cd708b8853",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5692
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  },
+  {
+    "at": "2026-11-22T05:53:37.739Z",
+    "after": "the end",
+    "requests": 39,
+    "input": 286472,
+    "request_max": 18064,
+    "runs": 24,
+    "failed": 0,
+    "embedding": 0,
+    "exa": 0,
+    "per_run": [
+      {
+        "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+        "run_kind": "memory_capture",
+        "requests": 3,
+        "input": 16609
+      },
+      {
+        "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5503
+      },
+      {
+        "run_id": "01a201bb-6c59-7fa2-900e-941eb9993e91",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 10566
+      },
+      {
+        "run_id": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+        "run_kind": "memory_capture",
+        "requests": 8,
+        "input": 76009
+      },
+      {
+        "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10191
+      },
+      {
+        "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 5740
+      },
+      {
+        "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 2246
+      },
+      {
+        "run_id": "01a201c3-8dd4-7a10-b394-f97d93ffed6f",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 10870
+      },
+      {
+        "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 4432
+      },
+      {
+        "run_id": "01a201c1-df2c-71f3-9d65-576a9adb83c7",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5782
+      },
+      {
+        "run_id": "01a201b9-6b0f-7601-91ce-99f6252c5b33",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 8451
+      },
+      {
+        "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+        "run_kind": "author",
+        "requests": 2,
+        "input": 8606
+      },
+      {
+        "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5093
+      },
+      {
+        "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 2676
+      },
+      {
+        "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 4321
+      },
+      {
+        "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+        "run_kind": "memory_capture",
+        "requests": 2,
+        "input": 10326
+      },
+      {
+        "run_id": "01a201cd-b1a1-78a0-bec2-ba596b1e5c58",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 11379
+      },
+      {
+        "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+        "run_kind": "author",
+        "requests": 3,
+        "input": 49146
+      },
+      {
+        "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 7119
+      },
+      {
+        "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8824
+      },
+      {
+        "run_id": "01a201b9-e7a2-7173-b0c8-39cd708b8853",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5692
+      },
+      {
+        "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 8009
+      },
+      {
+        "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+        "run_kind": "memory_consolidation",
+        "requests": 1,
+        "input": 3764
+      },
+      {
+        "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+        "run_kind": "memory_capture",
+        "requests": 1,
+        "input": 5118
+      }
+    ],
+    "result": "pass"
+  }
+]

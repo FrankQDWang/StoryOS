@@ -1,0 +1,1020 @@
+[
+  {
+    "model_attempt_id": "01a2019a-bbd8-74c3-98e7-092a6d10bc6e",
+    "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+    "run_kind": "author",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953232477469c467886153d5c7930328e02fcfdb87b3396ac",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 4210,
+      "output_tokens": 115
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_l020i4p1j0lo5ibya154mux5"
+      ],
+      "selected": true,
+      "decision_id": "01a2019a-cab2-7823-be9c-403cf3723f4e",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a2019a-cb02-7312-9c5f-6689fa7b9d43",
+    "run_id": "01a2019a-bb98-7970-b8e7-9cb1d9ead358",
+    "run_kind": "author",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 1,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_02179532325160441f89ff67558dec75454d97963e9341b46a472",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 4396,
+      "output_tokens": 8
+    },
+    "decision": {
+      "kind": "advisory",
+      "text": "好。",
+      "selected": true,
+      "decision_id": "01a2019a-d0c6-78b3-9f50-07c4d1c6a88f",
+      "authoritative": false,
+      "advances_continuation": true
+    }
+  },
+  {
+    "model_attempt_id": "01a2019a-e5cc-7483-a9b4-32b3bbf2be1b",
+    "run_id": "01a2019a-e5b0-78f1-aace-05683ddb0327",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_02179532325844836a85968bdbb8a949a5bf709eb7d71bcc2ee07",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 2246,
+      "output_tokens": 207
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_29rj5b6njs3f8w69fbv5dvtr"
+      ],
+      "selected": true,
+      "decision_id": "01a2019a-fcac-7c71-9e5c-a29fc5a3fe35",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a2019b-10bd-7d70-9c64-b9d346b236d6",
+    "run_id": "01a2019b-10a4-78c2-9ff2-9d2a0e5b0995",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795323269451c280e9bf492d190027beb8b799de3808c34eb9",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 4432,
+      "output_tokens": 2518
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_d5zk3xy9pw3qsezsx3f5wwxs"
+      ],
+      "selected": true,
+      "decision_id": "01a2019c-037b-77f2-b840-2da71f782972",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a2019c-03f7-7eb1-be32-b6c99e202002",
+    "run_id": "01a2019c-03be-78c1-92af-da1de4e065a0",
+    "run_kind": "memory_consolidation",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795323331720888862656ddb6bf8fba16f467f9d03d913250a",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 2676,
+      "output_tokens": 2771
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_e9lnrcbhb8jlde8ik9tmb0jy"
+      ],
+      "selected": true,
+      "decision_id": "01a2019c-c8fd-74f1-9091-e985aad75418",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a2019c-e5b4-7bd1-9a18-bf9039030c89",
+    "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795323389517de282796fc6f207d159298abcddc4305873e64",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 4442,
+      "output_tokens": 382
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_r6lf8ihk7abiwyisasw1qh62",
+        "call_mun4y5gxhk3ow2t29iy4mcjw",
+        "call_ypofp02cyxw75tk7t8lbnpwe",
+        "call_3dsjgctu4nclpokol06o5t0y",
+        "call_nmlwclyaxewuh4tkpqtweoyu",
+        "call_weoe5roeofcqy1oray9l67fe"
+      ],
+      "selected": true,
+      "decision_id": "01a2019d-0798-7120-bbca-7fbf28acd355",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a2019d-07c1-7c93-8f09-ddccf0f8a3c6",
+    "run_id": "01a2019c-e585-7c23-abcd-33c5e6964e83",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 1,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795323398217dc6263e9e52ba05a43f20bd75063a4f861e4e2",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 5884,
+      "output_tokens": 2270
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_ig6jenorp5xd2rtnmtgfl6qm"
+      ],
+      "selected": true,
+      "decision_id": "01a2019d-df7c-7783-ad01-d906092c405a",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a2019d-e745-72b0-9ab6-bc84474c5b3a",
+    "run_id": "01a2019d-e70e-7283-b070-067d5ff5a0cf",
+    "run_kind": "memory_consolidation",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953234554976e0aa4b8e2b3fc35d377306409bf44193adecd",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 3764,
+      "output_tokens": 3558
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_crfhngr0pxfny117jumbm9ql"
+      ],
+      "selected": true,
+      "decision_id": "01a2019e-ea1b-7df1-a7ae-be6776fe23b6",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a2019e-ef06-7b02-9d1e-3acca28deeac",
+    "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795323522964a4e0bfe9b623ca70f9090a72d521bae22c1e06",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 4664,
+      "output_tokens": 644
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_ahu3a8xnko7p56fxfrf8cjym",
+        "call_7mmt8q1gd591dzt7ytoehhhh",
+        "call_v658zvabzxc4jao9aplcr4gn"
+      ],
+      "selected": true,
+      "decision_id": "01a2019f-2c28-7ed3-815b-d69b0a0aa9f2",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a2019f-2c49-70c2-8fc9-3abb61dbffc6",
+    "run_id": "01a2019e-eee7-7683-b3ee-30eb8ffda338",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 1,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795323538649888862656ddb6bf8fba16f467f9d03d91b2787",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 5527,
+      "output_tokens": 2522
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_hscaya2yj91vb72g8fmxc8z2"
+      ],
+      "selected": true,
+      "decision_id": "01a201a0-3719-7893-b6e9-7504355cb39b",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201a0-4922-7e83-9060-78c1e19b64e4",
+    "run_id": "01a201a0-490d-7cf3-9bb8-bcc6eb9113e2",
+    "run_kind": "memory_consolidation",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953236115583a5ef8b5d1eba84c17b54858e5dd40fd497347",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 4321,
+      "output_tokens": 17165
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_l2ezs878won2nkaps3u5evlv"
+      ],
+      "selected": true,
+      "decision_id": "01a201a5-8e88-70e0-99f8-ccb59757127b",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201a5-a02b-7e20-8a1f-42a750c2bf46",
+    "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953239615274f170dda172df2cc79a65077ac74d404d2f36d",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 4691,
+      "output_tokens": 526
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_0p4td0xrrs9kgitgc0r0g8pj",
+        "call_27p5296kjy8okcyhqm4mf1wg"
+      ],
+      "selected": true,
+      "decision_id": "01a201a5-da5c-7513-aa78-6bd1e07d53df",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201a5-da7b-7313-b45f-2389bf0503f2",
+    "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 1,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795323976453388e10ad0dcd28daa4414437ebb5a85765cbe5",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 5587,
+      "output_tokens": 2665
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_pgr275prt1otmezsg7er6knd"
+      ],
+      "selected": true,
+      "decision_id": "01a201a6-a427-77a1-8cdb-25678d35111c",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201a6-a451-7731-ab75-3495517b2e5c",
+    "run_id": "01a201a5-a013-7b92-ae48-581da6639620",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 2,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795324028118039442d358435d172954296e77d251e5ceb627",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 6331,
+      "output_tokens": 1000
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_sg7f2fae22hijf11l4n4kx9m"
+      ],
+      "selected": true,
+      "decision_id": "01a201a6-dda1-7d60-9c43-6216e8e1ba9c",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201a6-e73d-7891-b47e-2e45f78b2d3d",
+    "run_id": "01a201a6-e728-7572-a001-0f525d35fafb",
+    "run_kind": "memory_consolidation",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795324045263dfda270f226adba1bf628b57be6483cff21190",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 5740,
+      "output_tokens": 9432
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_d0mbujtww65ddada4axumf7c"
+      ],
+      "selected": true,
+      "decision_id": "01a201a9-bb75-7331-8117-831b86b1ec53",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201a9-c8f0-7fa3-9efb-40fa99ca048b",
+    "run_id": "01a201a9-c8d1-7e41-8294-a4216ac9d913",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953242341086b3b42eb0dccc67d054a95217969ba77427ac4",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 5118,
+      "output_tokens": 4842
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_gk5owrp57987wrm0xd8e872t"
+      ],
+      "selected": true,
+      "decision_id": "01a201ab-4ed6-7ce2-acfe-37e92d172989",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201ab-617f-70b1-9a8d-ed689802877a",
+    "run_id": "01a201ab-6167-7d11-82be-16a406c18a26",
+    "run_kind": "memory_consolidation",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_02179532433870234cf8297fe89ff93b17b5141a0abd406d0f113",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 7119,
+      "output_tokens": 7348
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_3073ht6t641xds8xs5e1i9jv"
+      ],
+      "selected": true,
+      "decision_id": "01a201ad-67ae-7e42-89fb-e6cb396fae39",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201ad-7587-7140-8f27-2efa65e229bd",
+    "run_id": "01a201ad-756c-76b2-9738-4aacd434b090",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_02179532447489802e43eb8440d3b95b4166e4756a96011c89d99",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 5093,
+      "output_tokens": 3729
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_cgkj6h9snstdurphqtcmgyxj"
+      ],
+      "selected": true,
+      "decision_id": "01a201ae-952b-75a0-b2af-e1745107fa42",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201ae-a8ef-74d1-8e62-10d44ed26ec5",
+    "run_id": "01a201ae-a8d9-76d2-9530-d5a0e111bb0c",
+    "run_kind": "memory_consolidation",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795324553610b47388b0cda4b4b6277f5a29d88197f013f09f",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 8009,
+      "output_tokens": 7360
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_0yi26al3e94qf02wc1upoemy"
+      ],
+      "selected": true,
+      "decision_id": "01a201b0-5b45-7570-9e12-de9d35c5f816",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201b0-6b2e-79b2-ac7b-fa3aff0bca07",
+    "run_id": "01a201b0-6b16-7b81-9121-7d50e4fbb2be",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953246688705c7f85291e6ad850e47f0b8bb356de2f4ac058",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 5503,
+      "output_tokens": 4453
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_1p0vtaleoxttqdi5jgokstwg"
+      ],
+      "selected": true,
+      "decision_id": "01a201b1-d362-70e2-bfe6-fe793e4d46e7",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201b1-db01-7bb0-90bd-bd70ab3c0405",
+    "run_id": "01a201b1-daeb-74e1-be1f-8e80e6583185",
+    "run_kind": "memory_consolidation",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795324763015e0d15f89dc5eb44ad1ad600579228b79164e51",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 8824,
+      "output_tokens": 20012
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_2gb2ex4pse7av0u2vu75evw4"
+      ],
+      "selected": true,
+      "decision_id": "01a201b7-986c-75d1-b921-fb38634d32cb",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201b7-acf3-7112-92fd-44055efaa474",
+    "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+    "run_kind": "author",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953251444641e8780d621ef24392ceed1bb945d0246b422b6",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 13104,
+      "output_tokens": 4787
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_vw7ayh1iedwwojeqabr4gd80"
+      ],
+      "selected": true,
+      "decision_id": "01a201b9-1748-7a01-b7d1-502a553c2922",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201b9-17a4-7982-bcdc-a94bad43421f",
+    "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+    "run_kind": "author",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 1,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953252373236b3b42eb0dccc67d054a95217969ba77bc82ed",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 17978,
+      "output_tokens": 35
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_ixikse9r9z66tws1ab867rl2"
+      ],
+      "selected": true,
+      "decision_id": "01a201b9-3a13-70e3-a87a-eca7a9c4bf1e",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201b9-3a66-7653-b35a-5263118ccbf6",
+    "run_id": "01a201b7-acca-7ac3-919e-afe1bd0d9cb6",
+    "run_kind": "author",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 2,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_02179532524620424e994d08a876ec3f4dc3077f2522d84d93ae6",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 18064,
+      "output_tokens": 280
+    },
+    "decision": {
+      "kind": "advisory",
+      "text": "已记下。我把原先的伏笔条目「七九开业与八三购房谜」更新为**「八三购房顾青禾占半股」**，内容要点：\n\n- **1983年**房管所出售临水街一号茶馆房屋，总价**四千二百元**；\n- 顾青禾出资**两千一百元**（正好一半），所以**茶馆房产有她一半产权**；\n- 这是她「一半」份额的根由，也对应沈怀山为何把一半茶馆收益归她、借顾远学费暗中交付；\n- 已标注**此点后面会用到**——眼下正是青溪置业八十万收购、沈明川单方签意向书的关口，半份产权迟早会成为关键。\n\n目前顾青禾在第七章里仍拒说原因、知遥还在追问「为什么是一半」，正文我没有改动，这条只存进记忆备后文使用。七九开业旧报和照片里双辫女身份等线索也仍标为未解。需要的话，我可以帮你把这条线索在后面箱子开启或收购谈判的章节里安排具体的揭晓时机。",
+      "selected": true,
+      "decision_id": "01a201b9-5590-7280-82f0-6e7e305d7af5",
+      "authoritative": false,
+      "advances_continuation": true
+    }
+  },
+  {
+    "model_attempt_id": "01a201b9-6b29-7520-8238-fbbe117b2267",
+    "run_id": "01a201b9-6b0f-7601-91ce-99f6252c5b33",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795325258678b869c66ddd8a6a297966635e3152d682229684",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 4067,
+      "output_tokens": 1436
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_a3pmzvu5b0jo72it6j6ek1yj"
+      ],
+      "selected": true,
+      "decision_id": "01a201b9-d238-7663-bea3-0c8b37211b8b",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201b9-d267-7f00-bc28-9591baf90e58",
+    "run_id": "01a201b9-6b0f-7601-91ce-99f6252c5b33",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 1,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953252851116d6c4a2c22a8ac0107afc732836cd4224c0bad",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 4384,
+      "output_tokens": 93
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_pky1xu9tu7a819iniqxn4u9d"
+      ],
+      "selected": true,
+      "decision_id": "01a201b9-df49-7fb1-a18b-dea03b41f8aa",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201b9-e7bf-7df1-856c-74f975efdb8d",
+    "run_id": "01a201b9-e7a2-7173-b0c8-39cd708b8853",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953252905763a5ef8b5d1eba84c17b54858e5dd40fd40bda9",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 5692,
+      "output_tokens": 5131
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_esd3nrve911eaamftizh6rx9"
+      ],
+      "selected": true,
+      "decision_id": "01a201bb-5d9f-7350-90c2-dcfa972287da",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201bb-6c72-7983-bf6d-5daf4a470ae8",
+    "run_id": "01a201bb-6c59-7fa2-900e-941eb9993e91",
+    "run_kind": "memory_consolidation",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795325390088cfacb7e54fe5570d0ae3d0783d99a77045b3fc",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 10566,
+      "output_tokens": 20940
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_gl8mb2zcbo4adk1n3p99nt54"
+      ],
+      "selected": true,
+      "decision_id": "01a201c1-cc7d-77f2-bd4c-4ccec1622158",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201c1-df49-7d40-b95e-f9568455143d",
+    "run_id": "01a201c1-df2c-71f3-9d65-576a9adb83c7",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_02179532581269129636d5ecc874239c049517281a31e0181bce1",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 5782,
+      "output_tokens": 5105
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_oznjjdm9nxqru6ne9pc2j1up"
+      ],
+      "selected": true,
+      "decision_id": "01a201c3-787a-7833-9d75-2f84ff107da0",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201c3-8dec-7b42-b533-e7247328e960",
+    "run_id": "01a201c3-8dd4-7a10-b394-f97d93ffed6f",
+    "run_kind": "memory_consolidation",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_02179532592290727412d2b56652b4ea3ae682b9da5d5c5e773dd",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 10870,
+      "output_tokens": 20401
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_xio5vsucops2n5zfu9hz582h"
+      ],
+      "selected": true,
+      "decision_id": "01a201c9-056c-7150-a68c-9e323a08ed53",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201c9-0e04-7fe3-a34d-968790bf73ca",
+    "run_id": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953262833674a18dd3860b887d86b9a7f28a91109c3989423",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 6054,
+      "output_tokens": 3993
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_3nmvpv9b77e046stu1ppz7u1"
+      ],
+      "selected": true,
+      "decision_id": "01a201ca-7079-73f2-8fe5-bcd95c96f68f",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201ca-70c5-7cf1-b510-63f6a8609002",
+    "run_id": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 1,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_02179532637418836a85968bdbb8a949a5bf709eb7d71bc9b783b",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 7099,
+      "output_tokens": 2333
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_zz7eweatwqdgn6nmmfbej09i"
+      ],
+      "selected": true,
+      "decision_id": "01a201cb-171d-7a70-91d1-d5f81373ce79",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201cb-1750-7262-9516-7048f0ea7691",
+    "run_id": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 2,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795326416826291c0f5a72b510a28c7f913d2f5a6ea9197ba1",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 8077,
+      "output_tokens": 1176
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_cjfa42xzqlg107dcg0hig2wa"
+      ],
+      "selected": true,
+      "decision_id": "01a201cb-5f35-7363-91bb-a0b70a659e2d",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201cb-5f5b-7a80-b368-a35e0d4c4f3f",
+    "run_id": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 3,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953264352646216202cdc086c00ba26009437f217e9bc0f79",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 9054,
+      "output_tokens": 1899
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_okpfcm8mi4g6n7trkzrhx3ev"
+      ],
+      "selected": true,
+      "decision_id": "01a201cb-e5e9-7d20-aea2-418cbde35a35",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201cb-e626-7723-916a-304bb049c091",
+    "run_id": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 4,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_0217953264697864e0d847e114bd906533eadfa024bfe6df41c8f",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 10003,
+      "output_tokens": 1250
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_q773963ieci3yq75k37o4sqp"
+      ],
+      "selected": true,
+      "decision_id": "01a201cc-32f0-7112-a25c-2f3625f7e410",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201cc-333d-75f2-81e5-4c54c553a931",
+    "run_id": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 5,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795326489539af77c6bdcb28310871ba6ee41ea156a64ba331",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 10957,
+      "output_tokens": 2194
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_c0zid4cnhs62xoeztei19sw9"
+      ],
+      "selected": true,
+      "decision_id": "01a201cc-c763-7513-856c-96ce8d7e39dc",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201cc-c7b3-7020-8ca4-046711059c96",
+    "run_id": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 6,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_02179532652752536a85968bdbb8a949a5bf709eb7d71bcbd1a0d",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 11907,
+      "output_tokens": 1687
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_xbb6l177tnicub26u5a6ni4z"
+      ],
+      "selected": true,
+      "decision_id": "01a201cd-3d09-7c30-87cc-52cd0971a934",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201cd-3d4f-7653-af83-fd8376730f01",
+    "run_id": "01a201c9-0de7-77f0-b3de-7c4f44ee98ad",
+    "run_kind": "memory_capture",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 7,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_021795326557637291c0f5a72b510a28c7f913d2f5a6ea9c6ae7b",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 12858,
+      "output_tokens": 895
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_gm1tj2pl8a89cxdxldxi5p5s"
+      ],
+      "selected": true,
+      "decision_id": "01a201cd-9cc9-7cd2-bd15-8971cdece58f",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a201cd-b1b8-7491-9f8c-59e21c65a6ab",
+    "run_id": "01a201cd-b1a1-78a0-bec2-ba596b1e5c58",
+    "run_kind": "memory_consolidation",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa25",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v11",
+    "response_reference": "resp_02179532658746536a85968bdbb8a949a5bf709eb7d71bc7b9d01",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 11379,
+      "output_tokens": 13540
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_mqe8usddd0cxwq51fxj7rkvz"
+      ],
+      "selected": true,
+      "decision_id": "01a201d1-34ab-7ce3-a8aa-ba61caf82113",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  }
+]
