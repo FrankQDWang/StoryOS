@@ -117,14 +117,13 @@ pub(crate) async fn start(
         crate::manuscript_search::LiveChapterReadExtent::AllChapters,
     )
     .await?;
-    let chapter_id = (chapters.iter().rev())
-        .find(|chapter| {
-            chapter
-                .blocks
-                .iter()
-                .any(|block| !block.text.trim().is_empty())
+    let texts = (chapters.iter())
+        .map(|chapter| {
+            let blocks = chapter.blocks.iter().map(|block| block.text.as_str());
+            (chapter.chapter_id.as_ref(), blocks.collect())
         })
-        .map(|chapter| chapter.chapter_id.as_ref().to_owned());
+        .collect::<Vec<_>>();
+    let chapter_id = storyos_core::intent_pass_chapter(&texts);
     let (run_id, pass_id) = (Uuid::now_v7().to_string(), Uuid::now_v7().to_string());
     insert_background_run(
         client,
@@ -204,8 +203,7 @@ pub(crate) async fn persist_next_step(
 /// Executes the `record_character_intent` call `row` of a pass in the Tool Gateway transaction that
 /// checked the Run Lease fence. A refused call records nothing, and the Run continues to its next
 /// RunStep. A valid call takes the lock of the Memory head and writes one version of the entry of
-/// the pass with the result, when the entry has the version that the pass read. The settled call
-/// completes the Run.
+/// the pass with the result. The settled call completes the Run.
 pub(crate) async fn execute(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -227,34 +225,22 @@ pub(crate) async fn execute(
     crate::memory_entries::lock_memory_head(client, scope)
         .await
         .map_err(CompleteAgentRunError::Unavailable)?;
-    // A delete or a new text of the entry during the pass is a version of a change.
-    let pass = client
+    let pass_id: String = client
         .query_opt(
-            &format!(
-                "SELECT pass.pass_id::text,
-                        COALESCE((SELECT changed.version = pass.entry_version
-                                    FROM ({CHANGES}) AS changed
-                                   WHERE changed.memory_entry_id = pass.memory_entry_id), false)
-                   FROM storyos.intent_passes AS pass
-                  WHERE (pass.owner_user_id, pass.project_id, pass.run_id) =
-                        ($1::text::uuid, $2::text::uuid, $3::text::uuid)
-                    AND pass.outcome IS NULL"
-            ),
+            "SELECT pass_id::text FROM storyos.intent_passes
+              WHERE (owner_user_id, project_id, run_id) =
+                    ($1::text::uuid, $2::text::uuid, $3::text::uuid)
+                AND outcome IS NULL",
             &[&keys[0], &keys[1], &claim.run_id],
         )
         .await
         .map_err(complete_unavailable)?
-        .ok_or_else(|| damaged("The running intent pass of the Run is missing"))?;
-    let pass_id: String = pass.get(/*idx*/ 0);
-    let outcome = match pass.get(/*idx*/ 1) {
-        true => IntentPassOutcome::Recorded,
-        false => IntentPassOutcome::NotKept,
-    };
-    if outcome == IntentPassOutcome::Recorded {
-        let cause = json!({ "kind": "intent_pass", "run_id": claim.run_id, "pass_id": pass_id });
-        client
-            .execute(
-                "WITH head AS (
+        .ok_or_else(|| damaged("The running intent pass of the Run is missing"))?
+        .get(/*idx*/ 0);
+    let cause = json!({ "kind": "intent_pass", "run_id": claim.run_id, "pass_id": pass_id });
+    client
+        .execute(
+            "WITH head AS (
                      UPDATE storyos.project_memory_heads SET memory_revision = memory_revision + 1
                       WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
                   RETURNING memory_revision),
@@ -279,19 +265,19 @@ pub(crate) async fn execute(
                         latest.source_references, $5, $6::text::jsonb, pass.chapter_id,
                         pass.author_entry_id, pass.author_version
                    FROM latest, head, pass",
-                &[
-                    &keys[0],
-                    &keys[1],
-                    &pass_id,
-                    &cause.to_string(),
-                    &valid.intent,
-                    &json!(valid.questions).to_string(),
-                ],
-            )
-            .await
-            .map_err(complete_unavailable)?;
-    }
-    settle_pass(client, scope, &claim.run_id, outcome.label(), None).await?;
+            &[
+                &keys[0],
+                &keys[1],
+                &pass_id,
+                &cause.to_string(),
+                &valid.intent,
+                &json!(valid.questions).to_string(),
+            ],
+        )
+        .await
+        .map_err(complete_unavailable)?;
+    let recorded = IntentPassOutcome::Recorded.label();
+    settle_pass(client, scope, &claim.run_id, recorded, None).await?;
     resolve(client, claim, row, Resolution::settled(result)).await?;
     crate::agent_run_work::complete(client, claim).await?;
     Ok(())

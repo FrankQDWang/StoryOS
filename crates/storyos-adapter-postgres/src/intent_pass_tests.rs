@@ -10,13 +10,18 @@ use storyos_application::{
 use storyos_core::IntentPassSkip;
 use tokio_postgres::Client;
 
+use storyos_adapter_fake_destination::FakeDestination;
+use storyos_application::{NoContractFaults, complete_agent_run};
+
 use crate::PostgresProjectReader;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_background_run::claim_in_project;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::memory_capture::{park_queued_author_runs, project, run_capture};
+use crate::shared_tests::memory_capture::{park_queued_author_runs, project};
 use crate::shared_tests::memory_consolidation::{capture, run_pass, scripted, settled};
 use crate::shared_tests::memory_entries::{archived_rows, write_versions};
+use crate::shared_tests::model_gateway::RuntimeClock;
 
 /// A consolidation create of the character `title` with `text`.
 fn character(title: &str, text: &str) -> Value {
@@ -53,7 +58,8 @@ async fn consolidate(
     run_pass(store, admin, scope).await.run_id
 }
 
-/// Makes the intent pass row of the Project due now, and each other row not due, and claims it.
+/// Makes each due row of the schedule not due, except the intent pass row of the Project, so that
+/// the claim can take only that row. The due time of that row stays as the settlement wrote it.
 async fn claim(
     store: &PostgresProjectReader,
     admin: &Client,
@@ -61,11 +67,24 @@ async fn claim(
 ) -> MemoryWorkOutcome {
     admin
         .execute(
-            "UPDATE storyos.memory_work_schedules SET due_at = NULL WHERE due_at IS NOT NULL",
-            &[],
+            "UPDATE storyos.memory_work_schedules SET due_at = NULL
+              WHERE due_at IS NOT NULL
+                AND NOT (project_id = $1::text::uuid AND work_kind = 'intent_pass')",
+            &[&scope.project_id.as_ref()],
         )
         .await
         .unwrap();
+    let claimed = store.claim_due_memory_work().await.unwrap().unwrap();
+    assert_eq!(
+        (&claimed.project_scope, &claimed.source),
+        (scope, &MemoryWorkSource::ProjectIntents)
+    );
+    claimed.outcome
+}
+
+/// Makes the intent pass row of the Project due now with no settlement. A test uses it only where
+/// no settlement makes the row due.
+async fn make_due(admin: &Client, scope: &ProjectScope) {
     admin
         .execute(
             "INSERT INTO storyos.memory_work_schedules
@@ -78,21 +97,48 @@ async fn claim(
         )
         .await
         .unwrap();
-    let claimed = store.claim_due_memory_work().await.unwrap().unwrap();
-    assert_eq!(
-        (&claimed.project_scope, &claimed.source),
-        (scope, &MemoryWorkSource::ProjectIntents)
-    );
-    claimed.outcome
 }
 
-/// Claims the intent pass row and completes the pass that it starts. Returns its Run.
+/// Makes the intent pass row of the Project due with no settlement, and claims it: a claim that
+/// must start no pass.
+async fn claim_made_due(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+) -> MemoryWorkOutcome {
+    make_due(admin, scope).await;
+    claim(store, admin, scope).await
+}
+
+/// Claims the intent pass row, then completes the Run of the pass that it starts through the
+/// claim of the Worker, one RunStep for each claim. Returns the Run.
 async fn run_intent(store: &PostgresProjectReader, admin: &Client, scope: &ProjectScope) -> String {
     let MemoryWorkOutcome::IntentPassStarted(started) = claim(store, admin, scope).await else {
         panic!("the claim must start an intent pass");
     };
-    run_capture(store, admin, scope, &started.run_id).await;
-    started.run_id
+    for _ in 0..=storyos_core::INTENT_PASS_MAX_RUN_STEPS {
+        let claimed = claim_in_project(store, scope).await.unwrap();
+        assert_eq!(claimed.run_id, started.run_id);
+        complete_agent_run(
+            store,
+            &FakeDestination,
+            &NoContractFaults,
+            &RuntimeClock,
+            &claimed,
+        )
+        .await
+        .unwrap();
+        let status = json_of(
+            admin,
+            "SELECT to_jsonb(status)::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+            &[&started.run_id],
+        )
+        .await;
+        if status != json!("queued") {
+            return started.run_id;
+        }
+    }
+    panic!("the intent pass {} did not end", started.run_id);
 }
 
 /// Whether the intent pass row of the Project is due.
@@ -107,7 +153,8 @@ async fn intent_due(admin: &Client, scope: &ProjectScope) -> Value {
 }
 
 /// Each pass of the Project in start order: the entry number, the outcome, the failure reason,
-/// the versions that it read, the Run kind and status, and the state and refusal of each call.
+/// the versions that it read, the Run kind and status, the number of its RunSteps, and the state
+/// and refusal of each call.
 async fn passes(admin: &Client, scope: &ProjectScope) -> Value {
     json_of(
         admin,
@@ -116,6 +163,9 @@ async fn passes(admin: &Client, scope: &ProjectScope) -> Value {
                         WHERE version.memory_entry_id = pass.memory_entry_id),
                       pass.outcome, pass.failure_reason, pass.entry_version, pass.author_version,
                       run.run_kind, run.status,
+                      (SELECT count(*) FROM storyos.context_assembly_manifests AS manifest
+                        WHERE manifest.run_id = pass.run_id
+                          AND manifest.manifest_role = 'decision'),
                       (SELECT COALESCE(jsonb_agg(jsonb_build_array(call.state, call.refusal)
                                                  ORDER BY call.decision_position), '[]')
                          FROM storyos.tool_calls AS call WHERE call.run_id = pass.run_id))
@@ -277,7 +327,7 @@ async fn an_applied_pass_starts_one_intent_pass_that_records_a_version_with_the_
             (before.clone(), changed_at(&store, &admin, &scope).await),
             context,
             archived,
-            claim(&store, &admin, &scope).await
+            claim_made_due(&store, &admin, &scope).await
         ),
         (
             (json!(true), json!(2), json!(3)),
@@ -289,6 +339,7 @@ async fn an_applied_pass_starts_one_intent_pass_that_records_a_version_with_the_
                 null,
                 "intent_pass",
                 "completed",
+                1,
                 [["settled", null]]
             ]]),
             json!([
@@ -355,6 +406,8 @@ async fn refused_calls_write_no_version_and_the_passes_run_in_entry_order() {
         .execute(policy, &[&project_id, &"available"])
         .await
         .unwrap();
+    // The refused start made the row not due, and no settlement makes it due again.
+    make_due(&admin, &scope).await;
     let (mut due, mut versions) = (Vec::new(), Vec::new());
     for number in [2, 3, 4] {
         run_intent(&store, &admin, &scope).await;
@@ -379,6 +432,7 @@ async fn refused_calls_write_no_version_and_the_passes_run_in_entry_order() {
                     null,
                     "intent_pass",
                     "completed",
+                    2,
                     [["refused", "question_invalid"], ["settled", null]]
                 ],
                 [
@@ -389,6 +443,7 @@ async fn refused_calls_write_no_version_and_the_passes_run_in_entry_order() {
                     null,
                     "intent_pass",
                     "completed",
+                    2,
                     [
                         ["refused", "intent_too_long"],
                         ["refused", "too_many_questions"]
@@ -402,6 +457,7 @@ async fn refused_calls_write_no_version_and_the_passes_run_in_entry_order() {
                     null,
                     "intent_pass",
                     "completed",
+                    1,
                     []
                 ]
             ]),
@@ -433,7 +489,7 @@ async fn the_entry_of_the_author_gets_no_version_and_a_new_text_needs_a_pass_aga
         &[(1, 1, 1, "current", "character", "阿青", "怕水")],
     )
     .await;
-    let author_only = claim(&store, &admin, &scope).await;
+    let author_only = claim_made_due(&store, &admin, &scope).await;
     let operations = [character("阿青", "阿青是船夫。"), change(1, "阿青", "改。")];
     let first = consolidate(&store, &admin, &scope, &source, &operations).await;
     let first_pass = run_intent(&store, &admin, &scope).await;
@@ -481,6 +537,7 @@ async fn the_entry_of_the_author_gets_no_version_and_a_new_text_needs_a_pass_aga
                     1,
                     "intent_pass",
                     "completed",
+                    1,
                     [["settled", null]]
                 ],
                 [
@@ -491,6 +548,7 @@ async fn the_entry_of_the_author_gets_no_version_and_a_new_text_needs_a_pass_aga
                     1,
                     "intent_pass",
                     "completed",
+                    1,
                     [["settled", null]]
                 ]
             ]),

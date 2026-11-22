@@ -90,6 +90,14 @@ pub(crate) async fn open_next_step(
         let (candidates, position) = (results.candidates(), next_position.as_str());
         match run.kind {
             AgentRunKind::IntentPass => {
+                // Only a refused call gives the second request. A reply with no call ends the
+                // pass, as its last RunStep does (ADR 0101 section 4).
+                let states = candidates.iter().map(|candidate| candidate.state);
+                if !storyos_core::intent_pass_sends_again(states) {
+                    let end = storyos_core::CaptureRunEnd::LastRunStepEnded;
+                    crate::intent_pass::settle_end(client, claim, end).await?;
+                    return crate::agent_run_work::complete(client, claim).await;
+                }
                 crate::intent_pass::persist_next_step(
                     client,
                     claim,

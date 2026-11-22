@@ -232,7 +232,8 @@ pub use instruction_binding::{
 pub use intent_pass::{
     CharacterFile, INTENT_PASS_MAX_RUN_STEPS, IntentPassAssembly, IntentPassFacts,
     IntentPassOutcome, IntentPassSkip, admit_intent_pass, assemble_intent_pass_context,
-    decide_intent_pass, intent_pass_failure, next_intent_pass_context,
+    decide_intent_pass, intent_pass_chapter, intent_pass_failure, intent_pass_sends_again,
+    next_intent_pass_context,
 };
 pub use load_skill::{
     LOAD_SKILL_TOOL_SPEC, LoadSkillRefusal, SKILL_LOAD_LIMIT, SkillLoadFacts, admit_skill_load,

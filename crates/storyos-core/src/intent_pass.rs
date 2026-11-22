@@ -9,7 +9,7 @@ use crate::assemble_context::{
     SelectedProjection, TOKEN_COUNTING_ALGORITHM_REVISION, TOKEN_COUNTING_PROFILE_REVISION,
     count_context_item_tokens,
 };
-use crate::{CaptureRefusal, CaptureRunEnd, ToolResultCandidate};
+use crate::{CaptureRefusal, CaptureRunEnd, ToolCallState, ToolResultCandidate};
 
 /// The most RunSteps of one intent pass: one request, and one more after a refused call.
 pub const INTENT_PASS_MAX_RUN_STEPS: u64 = 2;
@@ -151,14 +151,29 @@ pub fn next_intent_pass_context(
     record
 }
 
+/// Whether an intent pass sends its second request after a RunStep whose calls have the states
+/// `states`. Only a call that the Host refused gives the second request, with the refusal as its
+/// Tool result. A reply with no call ends the pass (ADR 0101 section 4).
+pub fn intent_pass_sends_again(states: impl IntoIterator<Item = ToolCallState>) -> bool {
+    states
+        .into_iter()
+        .any(|state| state == ToolCallState::Refused)
+}
+
+/// The Chapter of an intent pass: the last Chapter of `chapters` that has text when the pass
+/// starts. `chapters` has each live Chapter in Chapter order, with its ID and the text of each of
+/// its blocks. A block of only white space has no text.
+pub fn intent_pass_chapter<'a>(chapters: &[(&'a str, Vec<&str>)]) -> Option<&'a str> {
+    (chapters.iter().rev())
+        .find(|(_, blocks)| blocks.iter().any(|text| !text.trim().is_empty()))
+        .map(|(chapter_id, _)| *chapter_id)
+}
+
 /// The outcome of an intent pass whose call settled.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IntentPassOutcome {
     /// The result is a version of the part of the background work.
     Recorded,
-    /// The part of the background work changed after the start of the pass, so the result is not
-    /// kept.
-    NotKept,
 }
 
 impl IntentPassOutcome {
@@ -166,7 +181,6 @@ impl IntentPassOutcome {
     pub fn label(self) -> &'static str {
         match self {
             Self::Recorded => "recorded",
-            Self::NotKept => "not_kept",
         }
     }
 }

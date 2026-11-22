@@ -81,3 +81,31 @@ fn the_context_of_a_pass_has_only_the_file_item() {
         ]
     );
 }
+
+/// Only a refused call gives the second request. A reply with no call, and a settled call, end
+/// the pass.
+#[test]
+fn only_a_refused_call_gives_the_second_request() {
+    use crate::ToolCallState::{Refused, Settled};
+    let states: [&[crate::ToolCallState]; 4] = [&[], &[Settled], &[Refused], &[Settled, Refused]];
+    assert_eq!(
+        states.map(|states| super::intent_pass_sends_again(states.iter().copied())),
+        [false, false, true, true]
+    );
+}
+
+/// The Chapter of a pass is the last Chapter in Chapter order with a block that has text. A
+/// Chapter with no block, or with only white space, has no text.
+#[test]
+fn the_chapter_of_a_pass_is_the_last_chapter_with_text() {
+    let chapter = |chapters: &[(&'static str, Vec<&str>)]| super::intent_pass_chapter(chapters);
+    assert_eq!(
+        [
+            chapter(&[("a", vec!["林舟。"]), ("b", vec!["  \n"]), ("c", vec![])]),
+            chapter(&[("a", vec!["林舟。"]), ("b", vec!["", "阿青。"])]),
+            chapter(&[("a", vec![" "])]),
+            chapter(&[]),
+        ],
+        [Some("a"), Some("b"), None, None]
+    );
+}
