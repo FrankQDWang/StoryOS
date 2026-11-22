@@ -139,9 +139,9 @@ impl ModelProviderAdapter for FakeDestination {
             CreatePurpose::IntentPass => {
                 wire["purpose"] = serde_json::json!("intent_pass");
             }
-            CreatePurpose::Decision
-            | CreatePurpose::CompactionSummary
-            | CreatePurpose::ToolQualification(_) => {}
+            CreatePurpose::Decision => {}
+            CreatePurpose::CompactionSummary => {}
+            CreatePurpose::ToolQualification(_) => {}
         }
         wire["tools"] = create
             .tool_exposure
@@ -201,9 +201,9 @@ impl ModelProviderAdapter for FakeDestination {
                     CreatePurpose::MemoryCapture(_) => capture_plan::plan(create),
                     CreatePurpose::MemoryConsolidation => consolidation_plan::plan(create),
                     CreatePurpose::IntentPass => intent_plan::plan(create),
-                    CreatePurpose::Decision
-                    | CreatePurpose::CompactionSummary
-                    | CreatePurpose::ToolQualification(_) => tool_loop_plan::plan(create),
+                    CreatePurpose::Decision => tool_loop_plan::plan(create),
+                    CreatePurpose::CompactionSummary => tool_loop_plan::plan(create),
+                    CreatePurpose::ToolQualification(_) => tool_loop_plan::plan(create),
                 };
                 let reference = recovery_plan::mint_response_reference(
                     &projection.digest,

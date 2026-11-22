@@ -38,17 +38,19 @@ export function useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl }: {
   const flights = useRef(new Map<string, MemoryDeleteFlight>());
   // The entries that a delete removed. A read that started before the delete must not show them again.
   const removed = useRef(new Set<string>());
+  // The number of the newest read. Only that read can show its entries.
+  const reading = useRef(0);
   const { owner_user_id: ownerUserId, project_id: projectId } = scope;
   useEffect(() => {
-    let current = true;
+    const read = ++reading.current;
     listMemoryEntries({ baseUrl, fetchImpl, projectId })
-      .then((read) => sameScope(read.project_scope, { owner_user_id: ownerUserId, project_id: projectId })
-        ? read.entries : "failed" as const, () => "failed" as const)
-      .then((read) => {
-        if (!current) return;
-        setEntries(read === "failed" ? read : read.filter((item) => !removed.current.has(item.memory_entry_id)));
+      .then((response) => sameScope(response.project_scope, { owner_user_id: ownerUserId, project_id: projectId })
+        ? response.entries : "failed" as const, () => "failed" as const)
+      .then((answer) => {
+        if (reading.current !== read) return;
+        setEntries(answer === "failed" ? answer : answer.filter((item) => !removed.current.has(item.memory_entry_id)));
       });
-    return () => { current = false; };
+    return () => { reading.current += 1; };
   }, [baseUrl, fetchImpl, ownerUserId, projectId, reads]);
   const setStep = (memoryEntryId: string, step: DeleteStep | undefined) => setSteps((shown) => {
     const next = new Map(shown);
@@ -65,14 +67,15 @@ export function useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl }: {
     else flights.current.set(memoryEntryId, result.flight);
     if (result.outcome === "deleted") {
       removed.current.add(memoryEntryId);
-      // A delete of a part of the author of a character can end a result or make an older result current again (ADR
-      // 0101 section 4). The page shows no result for that title until a new read gives the current result. The new
-      // read also ends each read that started before the delete, so that read is not shown.
+      // The delete can end a Character Intent or make an older one current again, so only a new read shows it.
       const author = entry.entry_type === "character" && entry.origin === "author_request";
       setStep(memoryEntryId, undefined);
       setEntries((shown) => shown === "failed" || shown === undefined
         ? shown : withoutIntent(shown.filter((item) => item.memory_entry_id !== memoryEntryId), author ? [entry.title] : []));
-      if (author) setReads((count) => count + 1);
+      if (author) {
+        reading.current += 1;
+        setReads((count) => count + 1);
+      }
       return;
     }
     setStep(memoryEntryId, result.outcome);

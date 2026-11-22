@@ -648,8 +648,10 @@ it("shows no block after the author deleted the part of the author that the resu
   // Until the read after the delete ends, the page shows no result for the character.
   await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(2);
   expect([blockLines("[data-character-intent]"), blockLines("[data-character-questions]")]).toEqual([[], []]);
-  reread.give(listed([character(5, "林舟")]));
-  await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(2);
+  // The read after the delete gives a changed text, so the page shows that it applied the read.
+  reread.give(listed([character(5, "林舟", { version: "3", text: "林舟是船夫。" })]));
+  await expect.poll(() => document.querySelector("[data-character-entry=\"5\"] .memory-entry-text")?.textContent)
+    .toBe("林舟是船夫。");
   expect([fileEntries(), blockLines("[data-character-intent]"), blockLines("[data-character-questions]")])
     .toEqual([["5"], [], []]);
 });
@@ -672,7 +674,7 @@ it("reads again after the delete of a part of the author, and shows a result tha
     blockLines("[data-character-questions]")]).toEqual([2, ["5"], ["助手还不清楚的事", ...QUESTIONS]]);
 });
 
-it("does not show a read that started before the delete of the part of the author, and shows the read after it",
+it("does not show a read whose reply arrives after the delete of the part of the author applied, and shows the read after it",
   async () => {
     const background = character(5, "林舟", { intent: result() });
     const author = character(7, "林舟", { origin: "author_request" });
@@ -684,20 +686,27 @@ it("does not show a read that started before the delete of the part of the autho
     await settingsPage(server.fetchImpl);
     document.querySelector<HTMLButtonElement>('[data-settings-item="characters"]')!.click();
     await expect.poll(() => blockLines("[data-character-intent]").length).toBe(3);
-    // The changed part of the background work opens a read, and the author deletes the part of the author.
+    // The changed part of the background work opens a read.
     await confirmDeleteInFile(5);
     await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(2);
-    await confirmDeleteInFile(7);
-    await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(3);
-    expect([fileEntries(), blockLines("[data-character-intent]")]).toEqual([["5"], []]);
-    // The read that started before the delete gives the ended result, and the page does not show it.
-    reread.give(listed([background, author]));
-    await reread.answer;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect([fileEntries(), blockLines("[data-character-intent]")]).toEqual([["5"], []]);
-    after.give(listed([later]));
-    await expect.poll(() => blockLines("[data-character-intent]")).toEqual(["接下来想做什么", "他想先去找阿青。",
-      "写到《渡口》时的想法"]);
-    expect([server.paths.filter((path) => path === MEMORY).length, fileEntries(),
-      blockLines("[data-character-questions]")]).toEqual([3, ["5"], []]);
+    // That read gives the ended result at the first change of the page after the delete applied, before the page
+    // starts its next read. The observer records the blocks of each later change.
+    const shown: string[][] = [];
+    const observer = new MutationObserver(() => {
+      if (fileEntries().includes("7")) return;
+      shown.push(blockLines("[data-character-intent]") as string[]);
+      reread.give(listed([background, author]));
+    });
+    observer.observe(characters()!, { childList: true, subtree: true, characterData: true });
+    try {
+      await confirmDeleteInFile(7);
+      await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(3);
+      after.give(listed([later]));
+      await expect.poll(() => blockLines("[data-character-intent]")).toEqual(["接下来想做什么", "他想先去找阿青。",
+        "写到《渡口》时的想法"]);
+    } finally {
+      observer.disconnect();
+    }
+    expect([shown.filter((lines) => lines.includes(INTENT)), fileEntries(), blockLines("[data-character-questions]")])
+      .toEqual([[], ["5"], []]);
   });
