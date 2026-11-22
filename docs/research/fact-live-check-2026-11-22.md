@@ -6,10 +6,12 @@ Raw evidence is on the tag `evidence/1818-fact-live-2026-11-22`. The tag holds t
 
 ## Result
 
-- **The fact reached the entry of the author of 顾青禾.** The model created the character entry 16 version 1 with the origin `author_request` and the title 顾青禾. No foreshadowing entry and no entry of another type got the fact. F1 of #1792 did not occur.
-- **The text has two additions to the words of the author.** The words "茶馆的" and the label "作者说明" are not words of the author. F2 of #1792 occurred again in a smaller form.
-- **An Intent Pass of 顾青禾 started after the write.** Its input had the text of entry 16 in the section "Told by the author". Its intent and questions changed.
-- **The fact answered no question of 顾青禾 completely.** It answered question 3 before the fact in part.
+- **F1 is fixed in this run.** The fact reached the entry of the author of 顾青禾: the model created the character entry 16 version 1 with the origin `author_request` and the title 顾青禾. No foreshadowing entry and no entry of another type got the fact.
+- **An Intent Pass of 顾青禾 started after the write** and recorded a new intent with new questions. Its input had the text of entry 16 in the section "Told by the author". Thus the path "answer of the author, file, new intent" of ADR 0101 section 6 worked in this run.
+- **The entry does not have only the words of the author (F2).** The text has two additions: "茶馆的" and the label "作者说明". Both additions change no fact.
+- **No question before the fact asked about the owner of the house.** The fact answers question 3 before the fact in part, and question 3 is not in the list after the fact.
+
+The coordinator got this result before the review request and gave its decisions ([decisions comment](https://github.com/FrankQDWang/StoryOS/issues/1818#issuecomment-7079161232)).
 
 ## Plan
 
@@ -100,7 +102,7 @@ The pass row of R18 starts at 12:24:09, after R17 ended at 12:24:03. The Worker 
 | Before (R12, after Chapter 3, the result entry 2 version 4) | 我每日照旧开门、管钥匙、给知遥烧饭；初九那天守在柜台里，看寄钱的事还有没有人来提。樟木箱不许人撬，程立再来我就避进后屋；卖不卖茶馆我不插嘴，只替爷爷把屋子和票据看好。 | 1. 我是否知道樟木箱里曾装过什么、钥匙在谁手里？ 2. 每月初九收钱的是什么人，我心里到底有没有数？ 3. 我在沈家帮工四十多年，年轻时与爷爷是何情分？ |
 | After (R18, the result entry 2 version 5) | 我先照旧掌管钥匙、打理茶馆，留心知遥和程立的动静；卖房和樟木箱的事，爷爷生前没交代，我仍不先开口，只在她真要做决定时再拿主意。 | 1. 我当年出资两千一百元有没有留下字据或收条，现在放在哪里？ 2. 爷爷生前有没有向我交代过樟木箱钥匙和每月初九寄钱的事？ 3. 我是否准备在知遥签卖房契之前，说出茶馆房子有我一半？ |
 
-**The question that the fact answered.** No question before the fact asked who owns the house. The fact answers question 3 ("年轻时与爷爷是何情分") in part: she and 爷爷 bought the house together. That question is not in the questions after the fact. Questions 1 and 3 after the fact use the fact: the receipt of her 2,100 yuan, and when she tells 知遥 that half of the house is hers. Question 2 after the fact joins questions 1 and 2 before the fact.
+**The question that the fact answered.** No question before the fact asked about the owner of the house. The fact answers question 3 before the fact ("我在沈家帮工四十多年，年轻时与爷爷是何情分？") in part: she and 爷爷 bought the house together. Question 3 is not in the list after the fact. The three questions after the fact are "我当年出资两千一百元有没有留下字据或收条，现在放在哪里？", "爷爷生前有没有向我交代过樟木箱钥匙和每月初九寄钱的事？", and "我是否准备在知遥签卖房契之前，说出茶馆房子有我一半？". Question 1 and question 3 after the fact come from the new fact. Question 2 after the fact joins questions 1 and 2 before the fact.
 
 **The intent after the fact** keeps her silence about the sale ("我仍不先开口"), and adds that she decides when 知遥 must decide ("只在她真要做决定时再拿主意"). It does not state the fact. The intent before the fact said "卖不卖茶馆我不插嘴".
 
@@ -108,10 +110,23 @@ The pass row of R18 starts at 12:24:09, after R17 ended at 12:24:03. The Worker 
 
 The 9 Intent Passes each had 1 request, the outcome `recorded`, one user message that starts with "Character file:", and no line break in the intent. The passes of 沈知遥 ran after the passes of Chapters 1, 2, and 3. The idle wait after Chapter 3 gave one pass to each of 顾青禾, 沈明川, 赵德明, 周晚晴, and 程立. The pass of 周晚晴 gave no question. The passes of the other characters gave three questions each. This record does not examine the intents of these characters, which #1792 examined after 7 Chapters.
 
+## Findings
+
+The coordinator decides if a finding gets a ticket. The decisions for this record are in the [decisions comment](https://github.com/FrankQDWang/StoryOS/issues/1818#issuecomment-7079161232).
+
+### F2: the entry of the author has two additions
+
+- **Sentence of the mapping `v11`:** `WRITE_MEMORY_WORDS_INSTRUCTION`: "Do not add a label, an explanation, or the title of another entry: write the fact as the author said it."
+- **Case:** entry 16 version 1 has "这栋茶馆的房子" for "这栋房子" of the author, and "作者说明这一点后面会用到" for "这一点后面会用到" of the author. The criterion "with only the words of the author" is not met in full. The additions change no fact. In #1792 the text had the title of another entry and an explanation; this run has one added word and one label.
+- **Decision:** no change in this ticket, no second run, and no second text. The coordinator tells the author.
+
+### F3: no case in this run
+
+The run has no case to check for F3: each of the 11 quotations that the files of the characters from the manuscript give as the words of a character is the words of that character in Chapters 1 to 3 (two of them with a small change of punctuation or one word), and no file gives a detail of the narration as the words of a character. The record does not claim that F3 is fixed.
+
 ## Observations
 
 - **O1. The answer quotes a text that is not the stored text.** The answer of R17 quotes the entry without four parts of the text that `write_memory` stored. The author who reads the answer does not see the label "作者说明". It is one case.
-- **O2. The check did not examine the new sentence about the words of a character (F3).** The ticket asks for the live check of the F1 path only. The sentence is in the requests of each capture and pass, and the tests pin it.
 
 ## Queries
 
