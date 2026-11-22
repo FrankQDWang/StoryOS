@@ -164,7 +164,7 @@ async fn with_failed_memory_work_an_edit_commits_and_a_run_has_the_index_of_befo
             "completed".to_owned(),
             // The Index of entry 1 only: the fact that waits and the failed work add no line.
             json!([
-                "{\"type\":\"character\"}\n{\"description\":\"述。\",\"id\":1,\"title\":\"林舟\"}"
+                "{\"type\":\"character\"}\n{\"author_part\":true,\"description\":\"述。\",\"id\":1,\"title\":\"林舟\"}"
             ]),
             lines_before,
         )

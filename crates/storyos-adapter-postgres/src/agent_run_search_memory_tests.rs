@@ -94,7 +94,7 @@ async fn a_search_finds_the_current_entries_and_the_request_sends_its_result() {
         ),
         (
             json!([r#"{"type":"character"}
-{"description":"渡口船工。","id":1,"title":"林雪"}"#]),
+{"author_part":true,"description":"渡口船工。","id":1,"title":"林雪"}"#]),
             json!(["completed", [settled(&text), finish()]]),
             0,
             json!([

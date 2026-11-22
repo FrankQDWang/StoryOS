@@ -126,7 +126,7 @@ async fn a_delete_mark_stops_only_a_new_entry_of_its_own_class() {
     )
     .await;
     let id = entry_id(&admin, &scope, 3).await;
-    assert!(delete(&store, &scope, 0x6f05, &id, 1).await.is_ok());
+    assert!(delete(&store, &scope, 0x6fa5, &id, 1).await.is_ok());
     let created = create("character", "阿青", json!([1]));
     let refused = pass_on((&store, &admin), &scope, &source, &[created]).await;
     let author = json!({"type": "character", "title": "阿青", "description": "述。",

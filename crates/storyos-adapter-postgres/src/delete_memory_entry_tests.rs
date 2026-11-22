@@ -237,7 +237,7 @@ async fn a_run_that_pinned_its_index_before_the_delete_lists_the_entry_and_its_r
             true,
             true,
             json!([r#"{"type":"character"}
-{"description":"渡口的船夫。","id":1,"title":"阿青"}"#]),
+{"author_part":true,"description":"渡口的船夫。","id":1,"title":"阿青"}"#]),
             json!(["completed", [read_refused(), finish()]]),
         )
     );

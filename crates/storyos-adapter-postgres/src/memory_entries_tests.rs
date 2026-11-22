@@ -33,7 +33,7 @@ async fn the_runtime_role_cannot_change_a_version_and_each_project_reads_only_it
         title: title.to_owned(),
         description: description.to_owned(),
         flagged: false,
-        author_part: false,
+        author_part: entry_type == MemoryEntryType::Character,
     };
     let statements = [
         "SELECT 1 FROM storyos.memory_entry_versions

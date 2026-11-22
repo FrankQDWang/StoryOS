@@ -126,3 +126,25 @@ Other facts of the mapping `v10`:
 - The declared schema of each function does not change. Thus the mapping `v10` declares the Host Tool Registration `018f0000-0000-7001-8000-0000000e0104` of the mapping `v9`.
 - The code keeps only `fa24` and the mapping `v10` (ADR 0097).
 - The Stage 10 tickets change the mapping `v10` in place until the aggregate pull request of [#1760](https://github.com/FrankQDWang/StoryOS/issues/1760) merges into `main`. The reasons are those of the amendment of 2026-11-14 above (ADR 0093 section 3).
+
+## Amendment 2026-11-22: the head Model Registration takes the mapping v11
+
+[ADR 0101](0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md) section 3 ([#1787](https://github.com/FrankQDWang/StoryOS/issues/1787)) gives the mapping `storyos.volcengine-agent-plan.responses.create.v11` to a new head Model Registration. That Registration is `018f0000-0000-7001-8000-00000000fa25`.
+
+- `fa25` is Registration `fa24` with the mapping `v11`. It keeps the adapter, the API surface, the provider model, and the requirement of `fa24`.
+- It also keeps the capability profile and the request bounds of `fa24`. Thus it needs no new qualification.
+- No capability of the requirement changes. The request form changes only in the text of the Host instructions and in the limit that the texts and the schema descriptions give.
+
+The mapping `v11` is the mapping `v10` with three changes of the request text, for the two parts of a character file:
+
+1. **The paragraph of `write_memory`.** A character can have two entries with the same title. The model writes what the author tells it to remember about a character and that the character knows into the entry with `"author_part": true`, and it creates that entry when the Memory Index does not list it. A fact that the character does not know goes into an entry of the type other. The model cannot change the other entry of the character.
+2. **The Host instructions of a capture.** A paragraph gives the form of an observation of the type character: the view of the character and only what the character can know. The paragraph of the Memory Index says that the line with `"author_part": true` is the entry of the author.
+3. **The Host instructions of a consolidation pass.** The pass keeps one entry of the background work for each character beside the entry of the author, and a paragraph gives the form of the file of a character from the manuscript.
+
+Other facts of the mapping `v11`:
+
+- The limit of a character text is 4,000 characters. The texts of a capture and of a pass and the schema descriptions of `write_memory`, `record_memory_observations`, and `apply_memory_operations` give this number.
+- The Memory Index line of a character entry of the author has the field `"author_part": true`, in a Run of the author and in a capture.
+- Each declared schema keeps its keys and its types, and only the descriptions give the new limit. Thus the mapping `v11` declares the Host Tool Registration `018f0000-0000-7001-8000-0000000e0104` of the mapping `v10`.
+- The code keeps only `fa25` and the mapping `v11` (ADR 0097).
+- The Stage 11 tickets change the mapping `v11` in place until the aggregate pull request of [#1786](https://github.com/FrankQDWang/StoryOS/issues/1786) merges into `main`. The reasons are those of the amendment of 2026-11-14 above (ADR 0093 section 3).
