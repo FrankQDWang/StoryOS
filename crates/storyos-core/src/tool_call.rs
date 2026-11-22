@@ -128,6 +128,9 @@ impl ValidatedToolCall {
             ToolIntake::ApplyMemoryOperations(operations) => {
                 crate::apply_memory_operations::arguments(operations)
             }
+            ToolIntake::RecordCharacterIntent { intent, questions } => {
+                json!({ "intent": intent, "questions": questions })
+            }
         }
     }
 

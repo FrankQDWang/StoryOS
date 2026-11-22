@@ -246,6 +246,7 @@ pub enum ContextSourceClass {
     MemoryDeleteMarks,
     MemoryEntries,
     MemoryObservations,
+    CharacterFile,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

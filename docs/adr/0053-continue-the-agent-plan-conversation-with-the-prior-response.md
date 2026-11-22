@@ -145,6 +145,7 @@ Other facts of the mapping `v11`:
 
 - The limit of a character text is 4,000 characters. The texts of a capture and of a pass and the schema descriptions of `write_memory`, `record_memory_observations`, and `apply_memory_operations` give this number.
 - The Memory Index line of a character entry of the author has the field `"author_part": true`, in a Run of the author and in a capture. The line of a deleted character entry of the author in the delete marks of a capture and of a pass has the same field.
-- Each declared schema keeps its keys and its types, and only the descriptions give the new limit. Thus the mapping `v11` declares the Host Tool Registration `018f0000-0000-7001-8000-0000000e0104` of the mapping `v10`.
+- Each declared schema keeps its keys and its types, and only the descriptions give the new limit.
+- [S11-03](https://github.com/FrankQDWang/StoryOS/issues/1789) adds the output Tool `record_character_intent` of an intent pass (ADR 0101 section 4). Thus the mapping `v11` declares the new Host Tool Registration `018f0000-0000-7001-8000-0000000e0105`: the Host Tools of `…0e0104` and `record_character_intent`. Only a Run of the kind `intent_pass` declares the new Tool. The code keeps only `…0e0105` (ADR 0097), and the Stage 11 tickets change it in place by the rule of the next item.
 - The code keeps only `fa25` and the mapping `v11` (ADR 0097).
 - The Stage 11 tickets change the mapping `v11` in place until the aggregate pull request of [#1786](https://github.com/FrankQDWang/StoryOS/issues/1786) merges into `main`. The reasons are those of the amendment of 2026-11-14 above (ADR 0093 section 3).

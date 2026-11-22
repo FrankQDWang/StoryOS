@@ -72,6 +72,11 @@ pub(crate) async fn execute(
         ToolIntake::ApplyMemoryOperations(operations) => {
             return crate::memory_consolidation::execute(client, claim, row, operations).await;
         }
+        // No store path writes an intent pass Run yet (S11-03B, #1800), and no other Run kind
+        // exposes the function.
+        ToolIntake::RecordCharacterIntent { .. } => {
+            return Err(damaged("The store has no intent pass"));
+        }
         ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } | ToolIntake::Finish => {}
     }
     let refused_beside: bool = client

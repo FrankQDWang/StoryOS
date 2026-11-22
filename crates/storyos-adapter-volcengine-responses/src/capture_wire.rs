@@ -144,7 +144,8 @@ fn capture_text(request: &CreateRequest, kind: CaptureInputKind) -> String {
                 | ContextSourceClass::MemoryReadResult
                 | ContextSourceClass::MemorySearchResult
                 | ContextSourceClass::MemoryEntries
-                | ContextSourceClass::MemoryObservations => return None,
+                | ContextSourceClass::MemoryObservations
+                | ContextSourceClass::CharacterFile => return None,
             };
             Some(format!("{heading}:\n{}", item.content))
         })

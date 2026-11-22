@@ -505,7 +505,8 @@ fn request_text(request: &CreateRequest) -> String {
             | ContextSourceClass::MemoryCaptureInput
             | ContextSourceClass::MemoryDeleteMarks
             | ContextSourceClass::MemoryEntries
-            | ContextSourceClass::MemoryObservations => return None,
+            | ContextSourceClass::MemoryObservations
+            | ContextSourceClass::CharacterFile => return None,
         };
         Some(format!("{heading}:\n{}", item.content))
     }));
@@ -541,7 +542,8 @@ fn request_text(request: &CreateRequest) -> String {
             ContextSourceClass::MemoryCaptureInput
             | ContextSourceClass::MemoryDeleteMarks
             | ContextSourceClass::MemoryEntries
-            | ContextSourceClass::MemoryObservations => continue,
+            | ContextSourceClass::MemoryObservations
+            | ContextSourceClass::CharacterFile => continue,
             ContextSourceClass::AuthorInstruction => "Author request",
             ContextSourceClass::WorkingTarget => {
                 sections.extend(skills.take().into_iter().flatten());

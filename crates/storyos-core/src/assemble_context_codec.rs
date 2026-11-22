@@ -395,6 +395,7 @@ fn encode_purpose(purpose: ContextPurpose) -> &'static str {
         ContextPurpose::ActiveContextCompaction => "active_context_compaction",
         ContextPurpose::MemoryCapture => "memory_capture",
         ContextPurpose::MemoryConsolidation => "memory_consolidation",
+        ContextPurpose::IntentPass => "intent_pass",
     }
 }
 
@@ -404,6 +405,7 @@ fn decode_purpose(value: &str) -> Option<ContextPurpose> {
         "active_context_compaction" => Some(ContextPurpose::ActiveContextCompaction),
         "memory_capture" => Some(ContextPurpose::MemoryCapture),
         "memory_consolidation" => Some(ContextPurpose::MemoryConsolidation),
+        "intent_pass" => Some(ContextPurpose::IntentPass),
         _ => None,
     }
 }
@@ -436,6 +438,7 @@ fn encode_source_class(class: ContextSourceClass) -> &'static str {
         ContextSourceClass::MemoryDeleteMarks => "memory_delete_marks",
         ContextSourceClass::MemoryEntries => "memory_entries",
         ContextSourceClass::MemoryObservations => "memory_observations",
+        ContextSourceClass::CharacterFile => "character_file",
     }
 }
 
@@ -460,6 +463,7 @@ fn decode_source_class(value: &str) -> Option<ContextSourceClass> {
         "memory_delete_marks" => Some(ContextSourceClass::MemoryDeleteMarks),
         "memory_entries" => Some(ContextSourceClass::MemoryEntries),
         "memory_observations" => Some(ContextSourceClass::MemoryObservations),
+        "character_file" => Some(ContextSourceClass::CharacterFile),
         _ => None,
     }
 }

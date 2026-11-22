@@ -98,7 +98,8 @@ impl<A: ModelProviderAdapter + Sync> ModelProviderAdapter for RealWire<A> {
                 CreatePurpose::Decision
                 | CreatePurpose::ToolQualification(_)
                 | CreatePurpose::MemoryCapture(_)
-                | CreatePurpose::MemoryConsolidation => "decision",
+                | CreatePurpose::MemoryConsolidation
+                | CreatePurpose::IntentPass => "decision",
             };
             self.bodies.lock().unwrap().push(json!([
                 purpose,
