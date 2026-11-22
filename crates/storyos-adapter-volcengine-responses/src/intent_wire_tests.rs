@@ -137,35 +137,38 @@ async fn a_request_for_a_character_with_no_part_of_the_author_has_no_such_part()
     );
 }
 
-/// The second RunStep continues the response of the first one: it sends the refusal of the Host
-/// as the output of the refused call, and not the file again.
+/// The second RunStep sends the full input again with the refused call and the refusal of the Host
+/// as its output, and no prior response reference (ADR 0085).
 #[tokio::test]
-async fn the_second_request_sends_the_refusal_as_the_output_of_the_call() {
+async fn the_second_request_sends_the_file_the_call_and_the_refusal() {
     let second = CreateRequest {
-        previous_response_reference: Some("resp_1".to_owned()),
         tool_outputs: vec![ToolOutput {
             call_id: "call_intent".to_owned(),
             name: "record_character_intent".to_owned(),
             arguments: "{}".to_owned(),
             output: "The Host refused this call.".to_owned(),
-            origin: ToolOutputOrigin::PriorResponse,
+            origin: ToolOutputOrigin::EarlierStep,
         }],
         ..intent_pass(&FILE, CURRENT)
     };
     let second = body(second).await;
+    let input = second["input"].as_array().unwrap();
     assert_eq!(
-        (&second["previous_response_id"], &second["input"]),
+        (second.get("previous_response_id"), &input[1..]),
         (
-            &json!("resp_1"),
-            &json!([{"type": "function_call_output", "call_id": "call_intent",
-                     "output": "The Host refused this call."}])
+            None,
+            &[
+                json!({"type": "function_call", "call_id": "call_intent",
+                       "name": "record_character_intent", "arguments": "{}"}),
+                json!({"type": "function_call_output", "call_id": "call_intent",
+                       "output": "The Host refused this call."})
+            ][..]
         )
     );
 }
 
 /// ADR 0093 section 3: the adapter refuses an intent pass of an earlier mapping, with no file
-/// item, with no output Tool, or with a prior response reference in its first RunStep, before
-/// dispatch.
+/// item, with no output Tool, or with a prior response reference, before dispatch.
 #[tokio::test]
 async fn the_adapter_refuses_an_intent_pass_of_an_earlier_mapping_or_of_another_form() {
     let full = || intent_pass(&FILE, CURRENT);

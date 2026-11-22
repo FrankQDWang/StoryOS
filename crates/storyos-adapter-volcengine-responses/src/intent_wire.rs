@@ -42,8 +42,8 @@ Host refuses a call, correct the call one time."
     )
 }
 
-/// The canonical JSON body of one RunStep of an intent pass. The second RunStep sends the Tool
-/// output of the refused call with the prior response reference (ADR 0085).
+/// The canonical JSON body of one RunStep of an intent pass. The second RunStep sends the full
+/// input again with the refused call and its Tool output (ADR 0085).
 pub(crate) fn intent_pass_body(
     request: &CreateRequest,
     provider_model_id: &str,
@@ -54,7 +54,7 @@ pub(crate) fn intent_pass_body(
         .map(|item| format!("Character file:\n{}", item.content))
         .collect::<Vec<_>>()
         .join("\n\n");
-    let mut body = serde_json::json!({
+    let body = serde_json::json!({
         "model": provider_model_id,
         "instructions": intent_pass_instructions(),
         "input": crate::wire::input(request, &file),
@@ -77,9 +77,6 @@ pub(crate) fn intent_pass_body(
             .collect::<Vec<_>>(),
         "tool_choice": request.tool_choice.as_str(),
     });
-    if let Some(reference) = &request.previous_response_reference {
-        body["previous_response_id"] = serde_json::json!(reference);
-    }
     storyos_core::canonical_json(&body)
 }
 
