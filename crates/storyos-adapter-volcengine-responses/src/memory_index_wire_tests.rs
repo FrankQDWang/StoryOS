@@ -100,7 +100,8 @@ async fn each_request_has_the_write_memory_paragraph_of_adr_0094() {
          \"author_part\": true holds what the author told you about that character. Write there \
          what the author tells you to remember about a character and that the character knows, \
          and create it with the name of the character as its title when the section Memory index \
-         does not list it. When the author tells you a fact about a character that the character \
+         does not list it. Do this also when an entry of another type has the same event. \
+         When the author tells you a fact about a character that the character \
          does not know, for example a plan for the future of the character, write it into an \
          entry of the type other. The other entry of the character comes from the manuscript, and \
          you cannot change it. When the Host refuses a write, tell the author. An entry holds only \
@@ -320,7 +321,8 @@ lists, change that entry and do not create a second one. A character can have tw
 the same title. The entry with \"author_part\": true holds what the author told you about that \
 character. Write there what the author tells you to remember about a character and that the \
 character knows, and create it with the name of the character as its title when the section \
-Memory index does not list it. When the author tells you a fact about a character that the \
+Memory index does not list it. Do this also when an entry of another type has the same event. \
+When the author tells you a fact about a character that the \
 character does not know, for example a plan for the future of the character, write it into an \
 entry of the type other. The other entry of the character comes from the manuscript, and you \
 cannot change it. When the Host refuses a write, tell the author. An entry holds only what the \

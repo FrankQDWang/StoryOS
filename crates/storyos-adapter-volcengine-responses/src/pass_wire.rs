@@ -61,8 +61,11 @@ The file of a character from the manuscript has the view of the character. It sa
 character is. It tells what the character did, saw, and heard, in the order of the story: make \
 the early events short, and keep the recent events in detail. It says what the character wants \
 at the end of the manuscript and how the character speaks. It holds only what the character can \
-know: no fact that the character did not see and that no person told the character. Do not write \
-that the character does not know a fact, because that sentence gives the fact.
+know: no fact that the character did not see and that no person told the character. The \
+character does not know what another character says in a scene without the character, or what \
+another character thinks, until a person tells the character. Do not write what the character is \
+for the plot, for example that the character is the key to a secret. Do not write that the \
+character does not know a fact, because that sentence gives the fact.
 
 The Memory Index lists at most {entries} entries in at most {index_tokens} tokens. A text has at \
 most {text} characters, or {character} for a character. An entry with \"unused\": true had no \
