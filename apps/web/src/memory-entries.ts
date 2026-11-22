@@ -70,8 +70,12 @@ export function useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl }: {
       // A delete of the part of the author of a character ends the intent result that names it (ADR 0101 section 4).
       const named = entry.entry_type === "character" && entry.origin === "author_request";
       setEntries((shown) => shown === "failed" || shown === undefined
-        ? shown : shown.filter((item) => item.memory_entry_id !== memoryEntryId).map((item) =>
-          named && item.intent !== undefined && item.title === entry.title ? { ...item, intent: undefined } : item));
+        ? shown : shown.filter((item) => item.memory_entry_id !== memoryEntryId).map((item) => {
+          if (!named || item.title !== entry.title) return item;
+          const next = { ...item };
+          delete next.intent;
+          return next;
+        }));
       return;
     }
     setStep(memoryEntryId, result.outcome);
