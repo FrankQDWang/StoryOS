@@ -72,8 +72,9 @@ async function flagFirstEntry(projectId: string, chapterId: string): Promise<voi
 }
 
 /**
- * ADR 0094 section 9: the author asks the assistant to remember an entry, and opens the settings page with the gear.
- * The entry is in the group of its type. It shows its text, its origin line, and the link to its source Conversation.
+ * ADR 0094 section 9 and ADR 0101 section 6: the author asks the assistant to remember a character, and opens the
+ * settings page with the gear. The section "人物" has the file of the character with its text, its origin line, and the
+ * link to its source Conversation. The section "记忆" has the other entries and no group "人物".
  * The origin line of an entry from a Chapter opens the workspace at that Chapter (S7-D2c). A flagged entry shows
  * "可能已过时", the reason, and the link to the source of the conflict (S7-D6). The author deletes each
  * entry on the settings page, and the next Run sends no Memory index (S7-D2b).
@@ -111,25 +112,29 @@ export async function verifyProductionMemorySettings(context: BrowserContext): P
     assert.equal((await settleRun(server.baseUrl, setup, runId)).status, "completed");
     await page.locator(`[data-assistant-run-id="${runId}"][data-assistant-dispatch="completed"]`).waitFor();
 
-    // 2. The author opens the settings page with the gear, and finds the entry in the group `人物`.
+    // 2. The author opens the settings page with the gear, selects "人物", and finds the file of the character.
     await page.locator('.tree-footer a[aria-label="项目设置"]').click();
     await page.waitForURL(`${workspace}/settings`);
-    const group = page.locator('[data-memory-group="character"]');
-    await expect(group.locator("h3")).toHaveText("人物");
-    const entry = group.locator("[data-memory-entry]");
+    await page.locator('[data-settings-item="characters"]').click();
+    await expect(page.locator("[data-character-name]")).toHaveText([TITLE]);
+    const file = page.locator("[data-character-file]");
+    await expect(file.locator("h3")).toHaveText(TITLE);
+    const entry = file.locator("[data-character-entry]");
     await expect(entry).toHaveCount(1);
-    await expect(entry.locator("h4")).toHaveText(TITLE);
     assert.equal(await entry.locator(".memory-entry-text").textContent(), TEXT);
     const origin = entry.locator('a[data-memory-entry-origin="conversation"]');
     await expect(origin).toHaveText("你让助手记住的");
     assert.equal(await origin.getAttribute("href"),
       `/projects/${setup.projectId}?conversation=${body.conversation_id}`);
-    await expect(page.locator("[data-memory-group]")).toHaveCount(1);
+    await page.locator('[data-settings-item="memory"]').click();
+    await expect(page.locator("[data-memory-group]")).toHaveCount(0);
 
     // 3. An entry from Chapter B shows its link. The link opens the workspace, and Chapter B becomes current.
     const chapterB = await addChapter(server.baseUrl, setup);
     await writeChapterEntry(setup.projectId, chapterB);
     await page.reload();
+    await page.locator('[data-settings-item="memory"]').click();
+    await expect(page.locator("[data-memory-group]")).toHaveCount(1);
     const chapterOrigin = page.locator('[data-memory-group="foreshadowing"] a[data-memory-entry-origin="chapter"]');
     await expect(chapterOrigin).toHaveText("来自章节《Chapter B》");
     assert.equal(await chapterOrigin.getAttribute("href"), `/projects/${setup.projectId}?chapter=${chapterB}`);
@@ -140,26 +145,30 @@ export async function verifyProductionMemorySettings(context: BrowserContext): P
     const opened = await getProject({ baseUrl: server.baseUrl, projectId: setup.projectId, fetchImpl: setup.fetchImpl });
     assert.deepEqual(opened.project.open, { kind: "current_chapter", current_chapter_id: chapterB });
 
-    // 4. A flag of entry 1 shows "可能已过时", the reason, and the link to Chapter B. The text stays.
+    // 4. A flag of entry 1 shows "可能已过时", the reason, and the link to Chapter B in the file. The text stays.
     await flagFirstEntry(setup.projectId, chapterB);
     await page.goto(`${workspace}/settings`);
-    const flag = page.locator('[data-memory-group="character"] [data-memory-entry-flag="flagged"]');
+    await page.locator('[data-settings-item="characters"]').click();
+    const flag = file.locator('[data-memory-entry-flag="flagged"]');
     await expect(flag.locator("strong")).toHaveText("可能已过时");
     await expect(flag.locator("[data-memory-flag-reason]")).toHaveText(FLAG_REASON);
     const flagSource = flag.locator('a[data-memory-flag-source="chapter"]');
     await expect(flagSource).toHaveText("来自章节《Chapter B》");
     assert.equal(await flagSource.getAttribute("href"), `/projects/${setup.projectId}?chapter=${chapterB}`);
-    assert.equal(await page.locator('[data-memory-group="character"] .memory-entry-text').textContent(), TEXT);
+    assert.equal(await entry.locator(".memory-entry-text").textContent(), TEXT);
 
-    // 5. The author deletes each entry with "删除" and "确认删除". Each entry leaves the section with no sentence.
-    for (const type of ["character", "foreshadowing"]) {
-      const item = page.locator(`[data-memory-group="${type}"] [data-memory-entry]`);
-      await item.locator("[data-memory-delete]").click();
-      await item.locator("[data-memory-delete-confirm]").click();
-      await expect(page.locator(`[data-memory-group="${type}"]`)).toHaveCount(0);
-    }
+    // 5. The author deletes each entry with "删除" and "确认删除". Each entry leaves its section with no sentence.
+    await entry.locator("[data-memory-delete]").click();
+    await entry.locator("[data-memory-delete-confirm]").click();
+    await expect(page.locator("[data-character-name]")).toHaveCount(0);
+    await page.locator('[data-settings-item="memory"]').click();
+    const item = page.locator('[data-memory-group="foreshadowing"] [data-memory-entry]');
+    await item.locator("[data-memory-delete]").click();
+    await item.locator("[data-memory-delete-confirm]").click();
+    await expect(page.locator("[data-memory-group]")).toHaveCount(0);
     await expect(page.locator("[data-memory-empty]")).toHaveText("助手还没有记住任何内容。");
-    await expect(page.locator("[data-memory-section] [role=alert]")).toHaveCount(0);
+    await expect(page.locator("[data-character-empty]")).toHaveText("助手还没有记住任何内容。");
+    await expect(page.locator(".settings-panels [role=alert]")).toHaveCount(0);
 
     // 6. The request of the next Run has Context and no Memory index.
     await page.goto(workspace);
