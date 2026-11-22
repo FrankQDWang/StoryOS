@@ -50,9 +50,19 @@ This pass has four duties. Remove what is out of date. Merge what is duplicated.
 too long. Write what is new from the observations.
 
 The section Memory entries has the current entries, one JSON line for each entry, with its \
-number as id. Each entry has one of the six types: {types}. Keep one entry for each character \
-and one entry for each pair of characters. Put a new detail of a character or of a relationship \
-into its entry, and do not write a second entry for it.
+number as id. Each entry has one of the six types: {types}. Keep one entry for each pair of \
+characters, and put a new detail of a relationship into its entry. A character can have two \
+entries with the same title. The entry with the origin {author} holds what the author told the \
+assistant, and the pass cannot change it. The other entry is the file of the character from the \
+manuscript: keep one such entry for each character, put each new detail of the character into \
+it, and do not copy the entry of the author into it.
+
+The file of a character from the manuscript has the view of the character. It says who the \
+character is. It tells what the character did, saw, and heard, in the order of the story: make \
+the early events short, and keep the recent events in detail. It says what the character wants \
+at the end of the manuscript and how the character speaks. It holds only what the character can \
+know: no fact that the character did not see and that no person told the character. Do not write \
+that the character does not know a fact, because that sentence gives the fact.
 
 The Memory Index lists at most {entries} entries in at most {index_tokens} tokens. A text has at \
 most {text} characters, or {character} for a character. An entry with \"unused\": true had no \

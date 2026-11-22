@@ -415,7 +415,7 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_WRITING_RULES_MAPPING_REVISION,
+    AGENT_PLAN_CHARACTER_FILE_MAPPING_REVISION, AGENT_PLAN_REGISTRATION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };
@@ -478,7 +478,8 @@ pub use withdraw_proposal::{
 pub use write_memory::{
     CurrentMemoryEntry, MEMORY_CHARACTER_TEXT_MAX_CHARS, MEMORY_DESCRIPTION_MAX_CHARS,
     MEMORY_TEXT_MAX_CHARS, MEMORY_TITLE_MAX_CHARS, MemoryVersionWrite, MemoryWrite,
-    MemoryWriteAction, MemoryWriteRefusal, WRITE_MEMORY_TOOL_SPEC, decide_memory_write,
+    MemoryWriteAction, MemoryWriteRefusal, MemoryWriter, WRITE_MEMORY_TOOL_SPEC,
+    decide_memory_write,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]

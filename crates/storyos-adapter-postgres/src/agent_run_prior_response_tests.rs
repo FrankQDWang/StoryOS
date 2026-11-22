@@ -62,7 +62,7 @@ impl<A: ModelProviderAdapter + Sync> ModelProviderAdapter for RealWire<A> {
                     model_attempt_id: "018f0000-0000-7001-8000-000000057f00".to_owned(),
                 }),
                 route: RequestRoute {
-                    mapping_revision: storyos_core::AGENT_PLAN_WRITING_RULES_MAPPING_REVISION
+                    mapping_revision: storyos_core::AGENT_PLAN_CHARACTER_FILE_MAPPING_REVISION
                         .to_owned(),
                     endpoint: Some("http://127.0.0.1:9".to_owned()),
                     bounds: Some(RequestBounds {

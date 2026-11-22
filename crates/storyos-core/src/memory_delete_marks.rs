@@ -19,6 +19,9 @@ pub struct MemoryDeleteMark {
     pub entry_type: MemoryEntryType,
     pub title: String,
     pub description: String,
+    /// The deleted entry was the part of the author of a character file (ADR 0101 section 3). Its
+    /// mark does not stop the part of the background work of that character.
+    pub author_part: bool,
 }
 
 /// The text of the `memory_delete_marks` item of `marks`, which come newest first, and its

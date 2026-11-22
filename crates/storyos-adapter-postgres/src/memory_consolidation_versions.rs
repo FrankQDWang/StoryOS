@@ -124,7 +124,8 @@ pub(crate) async fn pass_entries(
             &format!(
                 "SELECT memory_entry_id::text, entry_number::text, version::text, entry_type,
                         title, description, text, origin, to_char({LAST_CHANGE} AT TIME ZONE 'UTC',
-                        '{TIME_FORM}'), source_references::text, flag_reason IS NOT NULL
+                        '{TIME_FORM}'), source_references::text, flag_reason IS NOT NULL,
+                        entry_type = 'character' AND origin = 'author_request'
                    FROM (SELECT DISTINCT ON (memory_entry_id) *
                            FROM storyos.memory_entry_versions
                           WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
@@ -150,6 +151,7 @@ pub(crate) async fn pass_entries(
                         description: row.get(5),
                         text: row.get(6),
                         flagged: row.get(10),
+                        author_part: row.get(11),
                     },
                     origin: MemoryEntryOrigin::parse(row.get(7)).ok_or_else(invalid)?,
                 },

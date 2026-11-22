@@ -18,6 +18,7 @@ fn entry(number: u64, origin: MemoryEntryOrigin, title: &str) -> PassMemoryEntry
             description: "述。".to_owned(),
             text: "文。".to_owned(),
             flagged: false,
+            author_part: false,
         },
         origin,
     }
@@ -557,6 +558,7 @@ fn a_delete_mark_refuses_its_type_and_title() {
         entry_type: MemoryEntryType::Other,
         title: " 旧灯 ".to_owned(),
         description: "述。".to_owned(),
+        author_part: false,
     }];
     let facts = pass(&entries, &observations, &marks);
     let candidates = operations(json!([
@@ -575,6 +577,102 @@ fn a_delete_mark_refuses_its_type_and_title() {
             "deleted_by_author",
             "Create 6 chapter 1",
             "Delete 5 chapter 0",
+        ]
+    );
+}
+
+/// A character entry with the origin `origin`: the part of the author for `author_request`, else
+/// the part of the background work.
+fn character(number: u64, origin: MemoryEntryOrigin, title: &str) -> PassMemoryEntry {
+    let mut entry = entry(number, origin, title);
+    entry.entry.entry_type = MemoryEntryType::Character;
+    entry.entry.author_part = origin == MemoryEntryOrigin::AuthorRequest;
+    entry
+}
+
+/// ADR 0101 section 3: a pass creates and updates the character entry of the background work
+/// while the character entry of the author with the same title is current. An operation on the
+/// entry of the author is still refused, a second entry of the background work with the same
+/// title is refused, and a relationship keeps one entry for its type and title.
+#[test]
+fn a_pass_writes_the_part_of_the_background_beside_the_part_of_the_author() {
+    let mut relationship = entry(4, MemoryEntryOrigin::AuthorRequest, "林舟与阿青");
+    relationship.entry.entry_type = MemoryEntryType::Relationship;
+    let entries = [
+        character(1, MemoryEntryOrigin::AuthorRequest, "林舟"),
+        character(2, MemoryEntryOrigin::Chapter, "林舟"),
+        character(3, MemoryEntryOrigin::AuthorRequest, "阿青"),
+        relationship,
+    ];
+    let observations = [observation("chapter")];
+    let facts = pass(&entries, &observations, &[]);
+    let candidates = operations(json!([
+        update(2, "林舟"),
+        create("character", "阿青", "文。", json!([1])),
+        create("character", " 阿青 ", "文。", json!([1])),
+        update(1, "林舟"),
+        create("relationship", "林舟与阿青", "文。", json!([1])),
+    ]));
+
+    assert_eq!(
+        decided(&candidates, &facts),
+        [
+            "Change 2 chapter 1",
+            "Create 5 chapter 1",
+            "memory_entry_exists",
+            "author_entry",
+            "memory_entry_exists",
+        ]
+    );
+}
+
+/// ADR 0101 section 3: the delete mark of the part of the author of a character does not refuse
+/// an operation on the part of the background work with the same title. The mark of the part of
+/// the background work refuses a new part of the background work with its title.
+#[test]
+fn a_delete_mark_of_the_part_of_the_author_does_not_stop_the_part_of_the_background() {
+    let entries = [character(1, MemoryEntryOrigin::Chapter, "林舟")];
+    let observations = [observation("chapter")];
+    let mark = |title: &str, author_part: bool| MemoryDeleteMark {
+        entry_type: MemoryEntryType::Character,
+        title: title.to_owned(),
+        description: "述。".to_owned(),
+        author_part,
+    };
+    let marks = [mark("林舟", true), mark("阿青", false)];
+    let facts = pass(&entries, &observations, &marks);
+    let candidates = operations(json!([
+        update(1, "林舟"),
+        create("character", "阿青", "文。", json!([1])),
+    ]));
+
+    assert_eq!(
+        decided(&candidates, &facts),
+        ["Change 1 chapter 1", "deleted_by_author"]
+    );
+}
+
+/// ADR 0101 section 3: an operation of a pass gives a character a text of at most 4,000
+/// characters, and another type keeps the limit of 600 characters.
+#[test]
+fn an_operation_gives_a_character_at_most_4000_characters() {
+    let observations = [observation("chapter")];
+    let facts = pass(&[], &observations, &[]);
+    let text = |count: usize| "字".repeat(count);
+    let candidates = operations(json!([
+        create("character", "林舟", &text(4000), json!([1])),
+        create("character", "阿青", &text(4001), json!([1])),
+        create("other", "桥", &text(600), json!([1])),
+        create("other", "渡口", &text(601), json!([1])),
+    ]));
+
+    assert_eq!(
+        decided(&candidates, &facts),
+        [
+            "Create 1 chapter 1",
+            "memory_entry_too_long",
+            "Create 2 chapter 1",
+            "memory_entry_too_long",
         ]
     );
 }

@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use super::{
     CurrentMemoryEntry, MEMORY_CHARACTER_TEXT_MAX_CHARS, MEMORY_DESCRIPTION_MAX_CHARS,
     MEMORY_TEXT_MAX_CHARS, MEMORY_TITLE_MAX_CHARS, MemoryVersionWrite, MemoryWrite,
-    MemoryWriteRefusal, WRITE_MEMORY_TOOL_SPEC, decide_memory_write,
+    MemoryWriteRefusal, MemoryWriter, WRITE_MEMORY_TOOL_SPEC, decide_memory_write,
 };
 use crate::{IntakeRefusal, MemoryEntryType, ToolIntake};
 
@@ -17,6 +17,7 @@ fn entry(number: u64, entry_type: MemoryEntryType, title: &str) -> CurrentMemory
         description: "一句话。".to_owned(),
         text: "正文。".to_owned(),
         flagged: false,
+        author_part: entry_type == MemoryEntryType::Character,
     }
 }
 
@@ -45,7 +46,7 @@ fn decide(write: &MemoryWrite) -> Result<MemoryVersionWrite, MemoryWriteRefusal>
         entry(1, MemoryEntryType::Character, "林舟"),
         entry(2, MemoryEntryType::Foreshadowing, "铜铃"),
     ];
-    decide_memory_write(write, &entries, 7)
+    decide_memory_write(MemoryWriter::Author, write, &entries, 7)
 }
 
 /// ADR 0094 section 5: `create` writes version 1 with the next number, `change` the next version
@@ -178,7 +179,7 @@ fn a_value_at_its_limit_is_admitted() {
             decide(&at_limit).is_ok(),
             decide(&character).is_ok(),
             decide(&create("other", "标题", "第一行\n\t第二行")).is_ok(),
-            decide_memory_write(&retyped, &entries, 2),
+            decide_memory_write(MemoryWriter::Author, &retyped, &entries, 2),
         ),
         (true, true, true, Err(MemoryWriteRefusal::TooLong))
     );
@@ -208,9 +209,16 @@ fn a_write_above_the_index_limits_is_refused_with_memory_index_full() {
 
     assert_eq!(
         (
-            decide_memory_write(&create("other", "第301件", "x"), &entries, 301),
-            decide_memory_write(&change, &entries, 301).map(|version| version.version),
-            decide_memory_write(&create("other", "3", "x"), &long, 3).map(|version| version.number),
+            decide_memory_write(
+                MemoryWriter::Author,
+                &create("other", "第301件", "x"),
+                &entries,
+                301
+            ),
+            decide_memory_write(MemoryWriter::Author, &change, &entries, 301)
+                .map(|version| version.version),
+            decide_memory_write(MemoryWriter::Author, &create("other", "3", "x"), &long, 3)
+                .map(|version| version.number),
             refusal.contains("Memory is full"),
         ),
         (Err(MemoryWriteRefusal::IndexFull), Ok(3), Ok(3), true)
@@ -231,8 +239,14 @@ fn the_index_bound_of_a_write_counts_the_conflict_flags() {
             .collect()
     };
     let new = create("other", "新条目", "x");
-    let decide =
-        |count: u64, flagged: bool| decide_memory_write(&new, &others(count, flagged), count + 1);
+    let decide = |count: u64, flagged: bool| {
+        decide_memory_write(
+            MemoryWriter::Author,
+            &new,
+            &others(count, flagged),
+            count + 1,
+        )
+    };
     // The largest count of other entries that lets the create fit with no flag.
     let fits = (1..300)
         .take_while(|&count| decide(count, false).is_ok())
@@ -242,6 +256,94 @@ fn the_index_bound_of_a_write_counts_the_conflict_flags() {
     assert_eq!(
         (decide(fits, false).is_ok(), decide(fits, true)),
         (true, Err(MemoryWriteRefusal::IndexFull))
+    );
+}
+
+/// ADR 0101 section 3: a character has one entry of the author and one entry of the background
+/// work with the same title. A create of the author beside the entry of the background work is
+/// admitted, a second entry of the author is refused, and the author changes only the entry of
+/// the author. A change of the entry of the background work is refused, and its delete is
+/// admitted. A relationship keeps one entry for its type and title.
+#[test]
+fn the_author_writes_the_part_of_the_author_beside_the_part_of_the_background() {
+    let background = |number: u64, entry_type: MemoryEntryType, title: &str| CurrentMemoryEntry {
+        author_part: false,
+        ..entry(number, entry_type, title)
+    };
+    let only_background = [
+        background(1, MemoryEntryType::Character, "林舟"),
+        background(2, MemoryEntryType::Relationship, "林舟与阿青"),
+    ];
+    let with_author: Vec<_> = (only_background.iter().cloned())
+        .chain([entry(3, MemoryEntryType::Character, "林舟")])
+        .collect();
+    let decide = |write: &MemoryWrite, entries: &[CurrentMemoryEntry]| {
+        decide_memory_write(MemoryWriter::Author, write, entries, 4)
+            .map(|version| (version.number, version.version, version.state.as_str()))
+    };
+    let change = |entry: u64| write(json!({"action": "change", "entry": entry, "text": "新文。"}));
+    let refusal = MemoryWriteRefusal::BackgroundPart(1);
+
+    assert_eq!(
+        [
+            decide(&create("character", "林舟", "他会游泳。"), &only_background),
+            decide(&create("character", " 林舟 ", "x"), &with_author),
+            decide(&change(3), &with_author),
+            decide(&change(1), &with_author),
+            decide(
+                &write(json!({"action": "delete", "entry": 1})),
+                &with_author
+            ),
+            decide(&create("relationship", "林舟与阿青", "x"), &with_author),
+        ],
+        [
+            Ok((4, 1, "current")),
+            Err(MemoryWriteRefusal::Exists(3)),
+            Ok((3, 3, "current")),
+            Err(refusal),
+            Ok((1, 3, "deleted")),
+            Err(MemoryWriteRefusal::Exists(2)),
+        ]
+    );
+    assert_eq!(
+        (refusal.label(), refusal.result().text),
+        (
+            "memory_entry_background_part",
+            "The Host refused this call because the entry 1 of a character comes from the \
+             manuscript and you cannot change it, so Memory did not change. Write a fact that the \
+             character knows into the entry of that character with \"author_part\": true. Create \
+             that entry with the name of the character as its title when the section Memory index \
+             does not list it."
+                .to_owned()
+        )
+    );
+}
+
+/// ADR 0101 section 3: the text of a character entry has at most 4,000 characters, and the text
+/// of another type keeps the limit of 600 characters.
+#[test]
+fn a_character_text_has_at_most_4000_characters() {
+    let text = |count: usize| "字".repeat(count);
+    let decided = [
+        create("character", "阿青", &text(4000)),
+        create("character", "阿青", &text(4001)),
+        create("other", "标题", &text(600)),
+        create("other", "标题", &text(601)),
+    ]
+    .map(|write| {
+        decide(&write)
+            .map(|_| ())
+            .map_err(MemoryWriteRefusal::label)
+    });
+
+    assert_eq!(
+        decided,
+        [
+            Ok(()),
+            Err("memory_entry_too_long"),
+            Ok(()),
+            Err("memory_entry_too_long")
+        ]
     );
 }
 

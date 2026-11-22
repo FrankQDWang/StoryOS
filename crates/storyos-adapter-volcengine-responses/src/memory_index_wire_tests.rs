@@ -4,7 +4,7 @@ use storyos_core::ContextSourceClass;
 
 use crate::skill_wire_tests::{body, closing, first, item, summary};
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_WRITING_RULES_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_CHARACTER_FILE_MAPPING_REVISION;
 
 /// A request of the current mapping with `context`.
 fn current(context: Vec<storyos_application::RequestContextItem>) -> CreateRequest {
@@ -83,17 +83,27 @@ async fn the_memory_index_is_one_exact_section_after_the_chapter_list_with_its_p
 /// ADR 0094 section 5: each decision and closing request of the current mapping declares
 /// `write_memory` and has one paragraph: the model calls the Tool only when the author asks for a
 /// lasting change of Memory and never on its own decision, an entry is a short synthesis or an
-/// intent and not a copy of a passage, a character or a pair of characters that the Index lists
-/// gets a change and not a second entry, and the model tells the author when the Host refuses a
-/// write. The paragraph also says that an entry holds only what the author said in this
-/// Conversation. A summary request has no paragraph.
+/// intent and not a copy of a passage, a pair of characters that the Index lists gets a change and
+/// not a second entry, and the model tells the author when the Host refuses a write. The
+/// paragraph gives the two entries of a character of ADR 0101 section 3: the model writes a fact
+/// that the character knows into the entry with `"author_part": true`, a fact that the character
+/// does not know into an entry of the type other, and it cannot change the other entry. The
+/// paragraph also says that an entry holds only what the author said in this Conversation. A
+/// summary request has no paragraph.
 #[tokio::test]
 async fn each_request_has_the_write_memory_paragraph_of_adr_0094() {
     let paragraph = "Call write_memory only when the author asks you to remember something, to \
          change what you remember, or to forget something, and never on your own decision. An \
-         entry is a short synthesis or an intent, not a copy of a passage. For a character or a \
-         pair of characters that the section Memory index lists, change that entry and do not \
-         create a second one. When the Host refuses a write, tell the author. An entry holds only \
+         entry is a short synthesis or an intent, not a copy of a passage. For a pair of \
+         characters that the section Memory index lists, change that entry and do not create a \
+         second one. A character can have two entries with the same title. The entry with \
+         \"author_part\": true holds what the author told you about that character. Write there \
+         what the author tells you to remember about a character and that the character knows, \
+         and create it with the name of the character as its title when the section Memory index \
+         does not list it. When the author tells you a fact about a character that the character \
+         does not know, for example a plan for the future of the character, write it into an \
+         entry of the type other. The other entry of the character comes from the manuscript, and \
+         you cannot change it. When the Host refuses a write, tell the author. An entry holds only \
          what the author said in this Conversation. Do not add a quotation, a clue, a name, a \
          relation, or another fact that you read in the manuscript or in Memory and that the \
          author did not say. If such a fact can help the author, say it in your answer and do not \

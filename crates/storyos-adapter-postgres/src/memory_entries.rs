@@ -65,9 +65,11 @@ pub(crate) async fn read_memory_index(
 ) -> Result<Vec<MemoryIndexEntry>, Box<dyn std::error::Error + Send + Sync>> {
     let rows = client
         .query(
-            "SELECT entry_number::text, entry_type, title, description, flag_reason IS NOT NULL
+            "SELECT entry_number::text, entry_type, title, description, flag_reason IS NOT NULL,
+                    entry_type = 'character' AND origin = 'author_request'
                FROM (SELECT DISTINCT ON (memory_entry_id)
-                            entry_number, state, entry_type, title, description, flag_reason
+                            entry_number, state, entry_type, origin, title, description,
+                            flag_reason
                        FROM storyos.memory_entry_versions
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                         AND memory_revision <= $3::text::numeric
@@ -89,6 +91,7 @@ pub(crate) async fn read_memory_index(
                 title: row.get(2),
                 description: row.get(3),
                 flagged: row.get(4),
+                author_part: row.get(5),
             })
         })
         .collect()
@@ -112,7 +115,9 @@ pub(crate) async fn memory_head(
 
 /// The marks of the entries that the author deleted, newest first (ADR 0094 section 8). A mark is
 /// the last version of an entry with the state `deleted`. Its cause is a delete by the author. A
-/// capture and the consolidation pass of S7-D4b read the marks. The read takes no lock.
+/// capture and the consolidation pass of S7-D4b read the marks. The read takes no lock. A delete
+/// writes the origin `author_request`, so the class of a mark is the origin of the version before
+/// it (ADR 0101 section 3).
 pub(crate) async fn read_delete_marks(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
@@ -120,9 +125,15 @@ pub(crate) async fn read_delete_marks(
     let causes = storyos_core::MEMORY_DELETE_MARK_CAUSES;
     let rows = client
         .query(
-            "SELECT entry_type, title, description
-               FROM (SELECT DISTINCT ON (memory_entry_id)
-                            memory_revision, state, entry_type, title, description, cause
+            "SELECT entry_type, title, description,
+                    entry_type = 'character' AND COALESCE((
+                        SELECT prior.origin FROM storyos.memory_entry_versions AS prior
+                         WHERE (prior.owner_user_id, prior.project_id, prior.memory_entry_id) =
+                               (latest.owner_user_id, latest.project_id, latest.memory_entry_id)
+                           AND prior.memory_revision < latest.memory_revision
+                         ORDER BY prior.memory_revision DESC
+                         LIMIT 1), origin) = 'author_request'
+               FROM (SELECT DISTINCT ON (memory_entry_id) *
                        FROM storyos.memory_entry_versions
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                       ORDER BY memory_entry_id, memory_revision DESC) AS latest
@@ -142,6 +153,7 @@ pub(crate) async fn read_delete_marks(
                     .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
                 title: row.get(1),
                 description: row.get(2),
+                author_part: row.get(3),
             })
         })
         .collect()
@@ -170,7 +182,8 @@ pub(crate) async fn current_memory(
     let rows = client
         .query(
             "SELECT memory_entry_id::text, entry_number::text, version::text, entry_type, title,
-                    description, text, flag_reason IS NOT NULL
+                    description, text, flag_reason IS NOT NULL,
+                    entry_type = 'character' AND origin = 'author_request'
                FROM (SELECT DISTINCT ON (memory_entry_id) *
                        FROM storyos.memory_entry_versions
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
@@ -192,6 +205,7 @@ pub(crate) async fn current_memory(
                 description: row.get(5),
                 text: row.get(6),
                 flagged: row.get(7),
+                author_part: row.get(8),
             })
         })
         .collect::<Result<_, Box<dyn std::error::Error + Send + Sync>>>()?;
