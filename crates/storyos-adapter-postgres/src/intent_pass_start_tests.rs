@@ -50,7 +50,8 @@ fn author_part(text: &str) -> String {
 }
 
 /// An applied `write_memory` create of the part of the author and an applied delete of it each
-/// make the row due, and the next pass reads the file of that time.
+/// make the row due, and the next pass reads the file of that time. A write of an entry of another
+/// type does not make the row due.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_write_and_a_delete_of_the_author_make_the_row_due() {
@@ -66,6 +67,12 @@ async fn a_write_and_a_delete_of_the_author_make_the_row_due() {
     )
     .await;
     let mut files = vec![file(&admin, &run_intent(&store, &admin, &scope).await).await];
+    // A write of an entry of another type does not make the row due.
+    let place =
+        json!({"type": "place", "title": "渡口", "description": "河边。", "text": "渡口。"});
+    let place = write("create", place);
+    run(&store, &admin, (&scope, &chapter_id), "357", &place).await;
+    let mut due = vec![intent_due(&admin, &scope).await];
     run(
         &store,
         &admin,
@@ -74,7 +81,7 @@ async fn a_write_and_a_delete_of_the_author_make_the_row_due() {
         &author_part("他怕水。"),
     )
     .await;
-    let mut due = vec![intent_due(&admin, &scope).await];
+    due.push(intent_due(&admin, &scope).await);
     files.push(file(&admin, &run_intent(&store, &admin, &scope).await).await);
     let author = entry_id(&admin, &scope, 2).await;
     delete_entry(&store, &scope, 0x35a0, &author, 1)
@@ -86,7 +93,7 @@ async fn a_write_and_a_delete_of_the_author_make_the_row_due() {
     assert_eq!(
         (due, files, outcomes(&admin, &scope).await),
         (
-            vec![json!(true), json!(true)],
+            vec![json!(false), json!(true), json!(true)],
             vec![
                 told(None, "林舟是船夫。"),
                 told(Some("他怕水。"), "林舟是船夫。"),
@@ -229,7 +236,7 @@ async fn one_pass_starts_in_a_minute_and_a_failed_pass_does_not_start_again() {
         (due_at, [row.get::<_, bool>(/*idx*/ 1), row.get(/*idx*/ 2)])
     };
     let settled = row().await;
-    // A claim before that time, for example of a due time that an earlier version wrote.
+    // A claim before that time.
     make_due(&admin, &scope).await;
     let limited = claim(&store, &admin, &scope).await;
     let (due_at, after_claim) = row().await;
