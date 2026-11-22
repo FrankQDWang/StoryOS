@@ -3,8 +3,8 @@
 - Status: current product delivery verification contract for [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60)
 - Canonical issue: [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60)
 - Contract revision: `proof-responses-memory-2026-09-15-v1`
-- Exact release-source snapshot consumed: `0369459a2b3c33e46aef8cb014a9475e66d21781`
-- Exact source tree consumed: `bdb1ed9636e5d310cfcc52bcea20ab66214ef210`
+- Exact release-source snapshot consumed: `181774b98635dfef9257f39a635f97ebf0cec017`
+- Exact source tree consumed: `e7a4c461c68eecb3eb1c92a5fe98120336044813`
 - Predecessor release-contract revision: `release-responses-memory-2026-09-14-v1`
 - Release baseline owner: [AI-Independent Editor-First Release Baseline and Handoff Criteria](ai-independent-editor-first-release-baseline-and-handoff-criteria.md)
 - Deterministic-method ADR: [ADR 0012](../adr/0012-adopt-deterministic-contract-verification.md)
@@ -931,7 +931,8 @@ adds to its matching subfield. It never expands to the union of all stages or to
 
 The separate `SMAP-RELEASE-STAGE-1` through `SMAP-RELEASE-STAGE-11` selectors
 are release branches in the release order. In that order, Stage 10 and then
-Stage 11 come after Stage 7 and before Stage 8
+Stage 11 come after Stage 7. A later ADR decides the stage after Stage 11,
+and Stage 8 and Stage 9 stay on EXECUTION HOLD
 ([ADR 0096](../adr/0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md),
 [ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
 Each consumes exactly one mandatory map and its
