@@ -221,6 +221,20 @@ fn the_next_pass_is_for_the_lowest_entry_that_needs_a_pass() {
             Some("ca")
         ]
     );
+    // #1790 item 5 with no part of the author now: (a) a failed pass on (v1, none), then a result
+    // on (v1, a1), then a delete of the part of the author -> a pass. (b) A failed pass on
+    // (v1, none), then a pass on (v1, a1) that is not kept, because the part of the author is
+    // deleted during it -> no pass: no result was recorded after the failed pass.
+    let alone = ["c 3 current character - 阿青 1"].map(entry);
+    let (none, a1) = (read("c", "1", None), read("c", "1", Some(("a", "1"))));
+    let decide = |later: &str| {
+        let passes = [pass(&none, "failed"), pass(&a1, later)];
+        super::select_intent_pass_entry(&alone, &passes).map(|needed| needed.entry.title.clone())
+    };
+    assert_eq!(
+        [decide("recorded"), decide("not_kept")],
+        [Some("阿青".to_owned()), None]
+    );
 }
 
 /// A due mark is due now, or one minute after the last start when that is later. A write can

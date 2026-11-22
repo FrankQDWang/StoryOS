@@ -375,12 +375,13 @@ fn characters(entries: &[IntentPassEntryFacts]) -> impl Iterator<Item = NeededCh
 }
 
 /// The character that the next intent pass is for: the current character entry of the background
-/// work with the lowest number that needs a pass. The versions of a character are the version of
-/// the last change of the entry and the version of the last change of the current character entry
-/// of the author with the same title. A character needs a pass unless its last recorded pass read
-/// its versions, or a failed pass after that read them: a failed pass gets no second start for the
-/// same versions while no later result is recorded. A character with only the entry of the author
-/// needs no pass (ADR 0101 section 4). `passes` is in start order.
+/// work with the lowest number that needs a pass. The two versions of a character are the version
+/// of the last change of the entry and the version of the last change of the current character
+/// entry of the author with the same title. An entry needs a pass unless the last pass of the
+/// entry that recorded a result read the current two versions, or a failed pass later than that
+/// pass read the current two versions. A pass that is not kept does not count as a pass that
+/// recorded a result or as a pass that failed (#1790 items 4 and 5). A character with only the
+/// entry of the author needs no pass (ADR 0101 section 4). `passes` is in start order.
 pub fn select_intent_pass_entry<'a>(
     entries: &'a [IntentPassEntryFacts],
     passes: &[IntentPassRecord],
