@@ -1,8 +1,8 @@
 //! The request body of one RunStep of an intent pass on the current mapping (ADR 0101 section 4).
 //! The request has no author message. Its user message has the Character File as one section. It
 //! declares the one function `record_character_intent` as a strict function with `tool_choice:
-//! "required"`. The second RunStep continues the response of the first one with the refusal of
-//! the Host as a function output.
+//! "required"`. The second RunStep sends the full input again with the refused call and the
+//! refusal of the Host as its function output (ADR 0085).
 
 use storyos_application::{CreateRequest, RequestBounds};
 use storyos_core::ContextSourceClass;

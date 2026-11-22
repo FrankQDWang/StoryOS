@@ -285,15 +285,28 @@ impl CreateRequest {
     }
 
     /// Whether an intent pass request has the form of each intent pass mapping (ADR 0101 section
-    /// 4): the file item, the output Tool, and no prior response reference. A background Run has no
-    /// prior binding, so its second RunStep sends the full input with the Tool outputs of the Run
-    /// (ADR 0085). An adapter refuses an intent pass request without this form before dispatch.
+    /// 4): exactly one file item and no item of another class than the Tool results of the Run,
+    /// exactly the one output Tool, `tool_choice: "required"`, and no prior response reference. A
+    /// background Run has no prior binding, so its second RunStep sends the full input with the
+    /// Tool outputs of the Run (ADR 0085). An adapter refuses an intent pass request without this
+    /// form before dispatch.
     pub fn intent_pass_complete(&self) -> bool {
-        let file = (self.context.iter())
-            .any(|item| item.source_class == ContextSourceClass::CharacterFile);
-        let output = (self.tool_exposure.tools.iter())
-            .any(|tool| tool.spec.operation == storyos_core::ToolOperation::RecordCharacterIntent);
-        file && output && self.previous_response_reference.is_none()
+        let class = |wanted: ContextSourceClass| {
+            (self.context.iter())
+                .filter(|item| item.source_class == wanted)
+                .count()
+        };
+        let files = class(ContextSourceClass::CharacterFile);
+        let others = self.context.len() - files - class(ContextSourceClass::ToolResult);
+        let output = match self.tool_exposure.tools.as_slice() {
+            [tool] => tool.spec.operation == storyos_core::ToolOperation::RecordCharacterIntent,
+            _ => false,
+        };
+        files == 1
+            && others == 0
+            && output
+            && self.tool_choice == storyos_core::ToolChoice::Required
+            && self.previous_response_reference.is_none()
     }
 }
 

@@ -31,7 +31,7 @@ pub struct HostToolRegistration {
 /// `ExposureFacts::has_host_tool` decides which of them a RunStep declares.
 pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     id: "host_tools",
-    revision: "018f0000-0000-7001-8000-0000000e0104",
+    revision: "018f0000-0000-7001-8000-0000000e0105",
     kind: ToolRegistrationKind::Host,
     adapter_revision: "storyos.host-tool.v1",
     tools: &[

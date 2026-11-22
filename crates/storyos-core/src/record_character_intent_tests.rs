@@ -6,11 +6,12 @@ use super::{
 use crate::{IntakeRefusal, ToolIntake};
 
 /// Each value above a limit of ADR 0101 section 4 is refused with its own label, and a value at
-/// each limit is valid without its outer white space.
+/// each limit is valid. Each limit counts the outer white space, and a question with an outer line
+/// break is invalid.
 #[test]
 fn a_call_above_a_limit_is_refused_and_a_call_at_each_limit_is_valid() {
     let question = |count: usize| "问".repeat(count);
-    let calls: [(String, Vec<String>); 6] = [
+    let calls: [(String, Vec<String>); 8] = [
         ("想".repeat(151), vec![]),
         ("想去渡口。".to_owned(), vec![question(5); 4]),
         ("想去渡口。".to_owned(), vec![question(5), question(101)]),
@@ -19,10 +20,9 @@ fn a_call_above_a_limit_is_refused_and_a_call_at_each_limit_is_valid() {
             "想去渡口。".to_owned(),
             vec!["船在哪里？\n谁的船？".to_owned()],
         ),
-        (
-            format!(" {} ", "想".repeat(150)),
-            vec![format!(" {} ", question(100)); 3],
-        ),
+        (format!(" {} ", "想".repeat(149)), vec![]),
+        ("想去渡口。".to_owned(), vec![format!("{}\n", question(5))]),
+        ("想".repeat(150), vec![question(100); 3]),
     ];
     let results = calls.map(|(intent, questions)| {
         validate_character_intent(&intent, &questions).map_err(IntentRefusal::label)
@@ -34,6 +34,8 @@ fn a_call_above_a_limit_is_refused_and_a_call_at_each_limit_is_valid() {
             Err("too_many_questions"),
             Err("question_too_long"),
             Err("intent_empty"),
+            Err("question_invalid"),
+            Err("intent_too_long"),
             Err("question_invalid"),
             Ok(CharacterIntent {
                 intent: "想".repeat(150),

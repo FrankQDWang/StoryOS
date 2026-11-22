@@ -152,18 +152,20 @@ async fn the_second_request_sends_the_file_the_call_and_the_refusal() {
         ..intent_pass(&FILE, CURRENT)
     };
     let second = body(second).await;
-    let input = second["input"].as_array().unwrap();
+    let mut input = message(
+        "Character file:\n{\"name\":\"林舟\"}\n\nTold by the author:\n\
+         林舟怕水，这件事只有他自己知道。\n\nFrom the manuscript:\n\
+         林舟是渡口的船夫。他昨夜看见河上有灯。",
+    );
+    input.as_array_mut().unwrap().extend([
+        json!({"type": "function_call", "call_id": "call_intent",
+               "name": "record_character_intent", "arguments": "{}"}),
+        json!({"type": "function_call_output", "call_id": "call_intent",
+               "output": "The Host refused this call."}),
+    ]);
     assert_eq!(
-        (second.get("previous_response_id"), &input[1..]),
-        (
-            None,
-            &[
-                json!({"type": "function_call", "call_id": "call_intent",
-                       "name": "record_character_intent", "arguments": "{}"}),
-                json!({"type": "function_call_output", "call_id": "call_intent",
-                       "output": "The Host refused this call."})
-            ][..]
-        )
+        (second.get("previous_response_id"), &second["input"]),
+        (None, &input)
     );
 }
 
@@ -221,4 +223,31 @@ async fn the_adapter_refuses_an_intent_pass_with_no_output_tool() {
             Some(PreDispatchRefusal::UnsupportedRequest)
         )
     );
+}
+
+/// The adapter refuses an intent pass of another form before dispatch: a second file item, an
+/// item of another class, a second Tool, or a Tool choice other than `required`.
+#[tokio::test]
+async fn the_adapter_refuses_an_intent_pass_of_another_form() {
+    let full = || intent_pass(&FILE, CURRENT);
+    let mut two_files = full();
+    two_files.context.push(two_files.context[0].clone());
+    let mut other_item = full();
+    other_item
+        .context
+        .push(item(ContextSourceClass::MemoryIndex, "{}"));
+    let mut two_tools = full();
+    two_tools
+        .tool_exposure
+        .tools
+        .push(two_tools.tool_exposure.tools[0].clone());
+    let no_choice = CreateRequest {
+        tool_choice: ToolChoice::None,
+        ..full()
+    };
+    let mut refusals = Vec::new();
+    for request in [two_files, other_item, two_tools, no_choice] {
+        refusals.push(refusal(request).await);
+    }
+    assert_eq!(refusals, [Some(PreDispatchRefusal::UnsupportedRequest); 4]);
 }

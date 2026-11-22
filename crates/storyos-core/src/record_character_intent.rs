@@ -130,8 +130,7 @@ impl IntentRefusal {
     }
 }
 
-/// The validated result of one call: the intent and the questions, each without its outer white
-/// space.
+/// The validated result of one call: the intent and the questions as the call gave them.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CharacterIntent {
     pub intent: String,
@@ -139,13 +138,14 @@ pub struct CharacterIntent {
 }
 
 /// Validates one call with the Host limits (ADR 0101 section 4): the intent first, then the count
-/// of the questions, and then each question in list order.
+/// of the questions, and then each question in list order. Each limit counts the characters of
+/// the text as the call gave it, and the Host keeps that text. An intent of only white space is
+/// empty, and a question of only white space or with a control character anywhere is invalid.
 pub fn validate_character_intent(
     intent: &str,
     questions: &[String],
 ) -> Result<CharacterIntent, IntentRefusal> {
-    let intent = intent.trim();
-    if intent.is_empty() {
+    if intent.trim().is_empty() {
         return Err(IntentRefusal::IntentEmpty);
     }
     if intent.chars().count() > CHARACTER_INTENT_MAX_CHARS {
@@ -154,20 +154,17 @@ pub fn validate_character_intent(
     if questions.len() > CHARACTER_QUESTIONS_MAX {
         return Err(IntentRefusal::TooManyQuestions);
     }
-    let mut valid = Vec::new();
     for (position, question) in (1..).zip(questions) {
-        let question = question.trim();
-        if question.is_empty() || question.chars().any(char::is_control) {
+        if question.trim().is_empty() || question.chars().any(char::is_control) {
             return Err(IntentRefusal::QuestionInvalid { position });
         }
         if question.chars().count() > CHARACTER_QUESTION_MAX_CHARS {
             return Err(IntentRefusal::QuestionTooLong { position });
         }
-        valid.push(question.to_owned());
     }
     Ok(CharacterIntent {
         intent: intent.to_owned(),
-        questions: valid,
+        questions: questions.to_vec(),
     })
 }
 
