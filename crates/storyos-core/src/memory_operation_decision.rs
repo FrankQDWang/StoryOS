@@ -150,8 +150,10 @@ pub(crate) fn decide_with_entries(
                         text: admitted.version.text.clone(),
                         // A flag version has its flag, and each other written version removes it.
                         flagged: admitted.version.flag.is_some(),
-                        author_part: admitted.version.entry_type == MemoryEntryType::Character
-                            && admitted.origin == MemoryEntryOrigin::AuthorRequest,
+                        author_part: crate::memory_author_part(
+                            admitted.version.entry_type,
+                            admitted.origin,
+                        ),
                     },
                     origin: admitted.origin,
                 });

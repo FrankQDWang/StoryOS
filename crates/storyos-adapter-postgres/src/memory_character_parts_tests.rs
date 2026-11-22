@@ -1,7 +1,7 @@
 //! The two parts of a character file (ADR 0101 section 3): the part of the author that
 //! `write_memory` writes beside the part of the background work, the refusal of a change of the
 //! part of the background work, the field `"author_part": true` of the Memory Index of a Run of
-//! the author and of a capture, and the class of a delete mark. The lead of these tests is `6f`.
+//! the author and of a capture, and the class of a delete mark. The lead of these tests is `9e`.
 
 use serde_json::{Value, json};
 use storyos_core::MemoryWriteRefusal;
@@ -41,7 +41,7 @@ fn character(text: &str) -> Value {
 async fn write_memory_writes_the_part_of_the_author_beside_the_part_of_the_background() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, source) = project(&store, &admin, "6f0").await;
+    let (scope, chapter_id, source) = project(&store, &admin, "9e0").await;
     let project = (&scope, chapter_id.as_str());
     seed(&admin, &scope, &[(1, "character", "chapter", "林舟")]).await;
     let message = [
@@ -51,8 +51,8 @@ async fn write_memory_writes_the_part_of_the_author_beside_the_part_of_the_backg
         write("change", json!({"entry": 1, "text": "他怕水。"})),
     ]
     .join("\n");
-    let writing = run(&store, &admin, project, "6f1", &message).await;
-    let next = run(&store, &admin, project, "6f2", "Help.").await;
+    let writing = run(&store, &admin, project, "9e1", &message).await;
+    let next = run(&store, &admin, project, "9e2", "Help.").await;
     let capture = start(&store, &scope, &source, &script(&[record(json!([]))]))
         .await
         .unwrap();
@@ -99,10 +99,10 @@ async fn write_memory_writes_the_part_of_the_author_beside_the_part_of_the_backg
 /// `deleted_by_author`, and a `create` of `write_memory` with that title is applied.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_delete_mark_stops_only_a_new_entry_of_its_own_class() {
+async fn a_delete_mark_stops_only_an_entry_of_its_own_class() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, source) = project(&store, &admin, "6f3").await;
+    let (scope, chapter_id, source) = project(&store, &admin, "9e3").await;
     let project = (&scope, chapter_id.as_str());
     let rows = [
         (1, "character", "chapter", "林舟"),
@@ -114,7 +114,7 @@ async fn a_delete_mark_stops_only_a_new_entry_of_its_own_class() {
         &store,
         &admin,
         project,
-        "6f4",
+        "9e4",
         &write("delete", json!({"entry": 2})),
     )
     .await;
@@ -126,12 +126,12 @@ async fn a_delete_mark_stops_only_a_new_entry_of_its_own_class() {
     )
     .await;
     let id = entry_id(&admin, &scope, 3).await;
-    assert!(delete(&store, &scope, 0x6fa5, &id, 1).await.is_ok());
+    assert!(delete(&store, &scope, 0x9ea5, &id, 1).await.is_ok());
     let created = create("character", "阿青", json!([1]));
     let refused = pass_on((&store, &admin), &scope, &source, &[created]).await;
     let author = json!({"type": "character", "title": "阿青", "description": "述。",
                         "text": "她是渡口的船主。"});
-    let writing = run(&store, &admin, project, "6f6", &write("create", author)).await;
+    let writing = run(&store, &admin, project, "9e6", &write("create", author)).await;
 
     assert_eq!(
         (

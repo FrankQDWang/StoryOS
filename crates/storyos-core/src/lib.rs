@@ -256,7 +256,7 @@ pub use memory_delete_marks::{
 };
 pub use memory_entry::{
     MemoryEntryOrigin, MemoryEntryState, MemoryEntryType, MemorySourceReference,
-    memory_revision_pin,
+    memory_author_part, memory_revision_pin,
 };
 pub use memory_index::{
     MEMORY_INDEX_MAX_ENTRIES, MEMORY_INDEX_TOKEN_LIMIT, MemoryIndexEntry, assemble_memory_index,

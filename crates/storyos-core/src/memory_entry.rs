@@ -64,6 +64,13 @@ impl MemoryEntryOrigin {
     }
 }
 
+/// A character entry with the origin `author_request` is the part of the author of a character
+/// file, and each other character entry is the part of the background work (ADR 0101 section 3).
+/// An entry of another type has no part.
+pub fn memory_author_part(entry_type: MemoryEntryType, origin: MemoryEntryOrigin) -> bool {
+    entry_type == MemoryEntryType::Character && origin == MemoryEntryOrigin::AuthorRequest
+}
+
 /// The state of one version of a Memory Entry. A `Deleted` version keeps the title and the
 /// description as the mark of the delete.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
