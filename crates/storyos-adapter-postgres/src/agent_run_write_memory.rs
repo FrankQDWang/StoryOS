@@ -26,7 +26,9 @@ pub(crate) async fn execute(
     let (revision, next, entries) = current_memory(client, scope)
         .await
         .map_err(CompleteAgentRunError::Unavailable)?;
-    let (state, refusal, result) = match storyos_core::decide_memory_write(write, &entries, next) {
+    let author = storyos_core::MemoryWriter::Author;
+    let decision = storyos_core::decide_memory_write(author, write, &entries, next);
+    let (state, refusal, result) = match decision {
         Ok(version) => {
             // A background Run has no Conversation (S7-D3a), and it cannot write an entry.
             let conversation_id: String = client
@@ -78,3 +80,7 @@ pub(crate) async fn execute(
 #[cfg(test)]
 #[path = "agent_run_write_memory_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "memory_character_parts_tests.rs"]
+mod character_parts_tests;

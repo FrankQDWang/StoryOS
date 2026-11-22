@@ -153,7 +153,7 @@ async fn a_create_and_a_change_of_one_response_settle_in_order_and_the_next_run_
     ));
     // The writing Run keeps the Index of its start, and the next Run gets the entry.
     let index = "{\"type\":\"character\"}\n\
-                 {\"description\":\"沉默的船夫。\",\"id\":1,\"title\":\"林舟\"}";
+                 {\"author_part\":true,\"description\":\"沉默的船夫。\",\"id\":1,\"title\":\"林舟\"}";
     assert_eq!(
         (
             first_index(&admin, &run_id).await,

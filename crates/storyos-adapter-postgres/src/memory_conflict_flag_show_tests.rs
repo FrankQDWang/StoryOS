@@ -68,7 +68,7 @@ async fn the_whole_path_flags_an_entry_of_the_author_and_a_change_removes_the_fl
     run(&store, &admin, project, "903", &change).await;
     let after = run(&store, &admin, project, "904", "SCRIPT:read_memory_entry 1").await;
     let result = |calls: Value| calls[1][0][3].as_str().unwrap().to_owned();
-    let line = "{\"description\":\"述。\",\"id\":1,\"title\":\"林舟\"}";
+    let line = "{\"author_part\":true,\"description\":\"述。\",\"id\":1,\"title\":\"林舟\"}";
     let index = |line: &str| json!([format!("{{\"type\":\"character\"}}\n{line}")]);
 
     assert_eq!(
@@ -79,7 +79,7 @@ async fn the_whole_path_flags_an_entry_of_the_author_and_a_change_removes_the_fl
         ),
         (
             index(line),
-            index(&line.replace("{", "{\"conflict_flag\":true,")),
+            index(&line.replace("\"description\"", "\"conflict_flag\":true,\"description\"")),
             index(line)
         )
     );

@@ -5,13 +5,24 @@
 
 use storyos_application::ProjectScope;
 use storyos_core::{
-    CurrentMemoryEntry, LastMemoryVersion, MemoryDeleteMark, MemoryEntryRead, MemoryEntryState,
-    MemoryEntryType, MemoryFlagSource, MemoryIndexEntry, MemoryReadFlag, MemorySourceReference,
-    MemoryVersionWrite,
+    CurrentMemoryEntry, LastMemoryVersion, MemoryDeleteMark, MemoryEntryOrigin, MemoryEntryRead,
+    MemoryEntryState, MemoryEntryType, MemoryFlagSource, MemoryIndexEntry, MemoryReadFlag,
+    MemorySourceReference, MemoryVersionWrite,
 };
 
 fn invalid(message: &'static str) -> Box<dyn std::error::Error + Send + Sync> {
     Box::new(std::io::Error::other(message))
+}
+
+/// The part of a character file of an entry with the type `entry_type` and the stored origin
+/// `origin` (`storyos_core::memory_author_part`).
+fn author_part(
+    entry_type: MemoryEntryType,
+    origin: &str,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let origin = MemoryEntryOrigin::parse(origin)
+        .ok_or_else(|| invalid("A Memory Entry origin is invalid"))?;
+    Ok(storyos_core::memory_author_part(entry_type, origin))
 }
 
 fn numeric(value: &str) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
@@ -65,9 +76,11 @@ pub(crate) async fn read_memory_index(
 ) -> Result<Vec<MemoryIndexEntry>, Box<dyn std::error::Error + Send + Sync>> {
     let rows = client
         .query(
-            "SELECT entry_number::text, entry_type, title, description, flag_reason IS NOT NULL
+            "SELECT entry_number::text, entry_type, title, description, flag_reason IS NOT NULL,
+                    origin
                FROM (SELECT DISTINCT ON (memory_entry_id)
-                            entry_number, state, entry_type, title, description, flag_reason
+                            entry_number, state, entry_type, origin, title, description,
+                            flag_reason
                        FROM storyos.memory_entry_versions
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                         AND memory_revision <= $3::text::numeric
@@ -82,13 +95,15 @@ pub(crate) async fn read_memory_index(
         .await?;
     rows.iter()
         .map(|row| {
+            let entry_type = MemoryEntryType::parse(row.get(1))
+                .ok_or_else(|| invalid("A Memory Entry type is invalid"))?;
             Ok(MemoryIndexEntry {
                 number: numeric(row.get(0))?,
-                entry_type: MemoryEntryType::parse(row.get(1))
-                    .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
+                entry_type,
                 title: row.get(2),
                 description: row.get(3),
                 flagged: row.get(4),
+                author_part: author_part(entry_type, row.get(5))?,
             })
         })
         .collect()
@@ -112,7 +127,9 @@ pub(crate) async fn memory_head(
 
 /// The marks of the entries that the author deleted, newest first (ADR 0094 section 8). A mark is
 /// the last version of an entry with the state `deleted`. Its cause is a delete by the author. A
-/// capture and the consolidation pass of S7-D4b read the marks. The read takes no lock.
+/// capture and the consolidation pass of S7-D4b read the marks. The read takes no lock. A delete
+/// writes the origin `author_request`, so the origin of the deleted entry is the origin of the
+/// version before the mark (ADR 0101 section 3).
 pub(crate) async fn read_delete_marks(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
@@ -120,9 +137,16 @@ pub(crate) async fn read_delete_marks(
     let causes = storyos_core::MEMORY_DELETE_MARK_CAUSES;
     let rows = client
         .query(
-            "SELECT entry_type, title, description
-               FROM (SELECT DISTINCT ON (memory_entry_id)
-                            memory_revision, state, entry_type, title, description, cause
+            "SELECT entry_type, title, description,
+                    COALESCE((SELECT prior.origin FROM storyos.memory_entry_versions AS prior
+                               WHERE (prior.owner_user_id, prior.project_id,
+                                      prior.memory_entry_id) =
+                                     (latest.owner_user_id, latest.project_id,
+                                      latest.memory_entry_id)
+                                 AND prior.memory_revision < latest.memory_revision
+                               ORDER BY prior.memory_revision DESC
+                               LIMIT 1), origin)
+               FROM (SELECT DISTINCT ON (memory_entry_id) *
                        FROM storyos.memory_entry_versions
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                       ORDER BY memory_entry_id, memory_revision DESC) AS latest
@@ -137,11 +161,13 @@ pub(crate) async fn read_delete_marks(
         .await?;
     rows.iter()
         .map(|row| {
+            let entry_type = MemoryEntryType::parse(row.get(0))
+                .ok_or_else(|| invalid("A Memory Entry type is invalid"))?;
             Ok(MemoryDeleteMark {
-                entry_type: MemoryEntryType::parse(row.get(0))
-                    .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
+                entry_type,
                 title: row.get(1),
                 description: row.get(2),
+                author_part: author_part(entry_type, row.get(3))?,
             })
         })
         .collect()
@@ -170,7 +196,7 @@ pub(crate) async fn current_memory(
     let rows = client
         .query(
             "SELECT memory_entry_id::text, entry_number::text, version::text, entry_type, title,
-                    description, text, flag_reason IS NOT NULL
+                    description, text, flag_reason IS NOT NULL, origin
                FROM (SELECT DISTINCT ON (memory_entry_id) *
                        FROM storyos.memory_entry_versions
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
@@ -182,16 +208,18 @@ pub(crate) async fn current_memory(
     let entries = rows
         .iter()
         .map(|row| {
+            let entry_type = MemoryEntryType::parse(row.get(3))
+                .ok_or_else(|| invalid("A Memory Entry type is invalid"))?;
             Ok(CurrentMemoryEntry {
                 memory_entry_id: row.get(0),
                 number: numeric(row.get(1))?,
                 version: numeric(row.get(2))?,
-                entry_type: MemoryEntryType::parse(row.get(3))
-                    .ok_or_else(|| invalid("A Memory Entry type is invalid"))?,
+                entry_type,
                 title: row.get(4),
                 description: row.get(5),
                 text: row.get(6),
                 flagged: row.get(7),
+                author_part: author_part(entry_type, row.get(8))?,
             })
         })
         .collect::<Result<_, Box<dyn std::error::Error + Send + Sync>>>()?;

@@ -158,9 +158,15 @@ the text of the manuscript at the time of the call, as the result of read_chapte
 pub(crate) const WRITE_MEMORY_INSTRUCTION: &str = "\
 Call write_memory only when the author asks you to remember something, to change what you \
 remember, or to forget something, and never on your own decision. An entry is a short synthesis \
-or an intent, not a copy of a passage. For a character or a pair of characters that the section \
-Memory index lists, change that entry and do not create a second one. When the Host refuses a \
-write, tell the author.";
+or an intent, not a copy of a passage. For a pair of characters that the section Memory index \
+lists, change that entry and do not create a second one. A character can have two entries with \
+the same title. The entry with \"author_part\": true holds what the author told you about that \
+character. Write there what the author tells you to remember about a character and that the \
+character knows, and create it with the name of the character as its title when the section \
+Memory index does not list it. When the author tells you a fact about a character that the \
+character does not know, for example a plan for the future of the character, write it into an \
+entry of the type other. The other entry of the character comes from the manuscript, and you \
+cannot change it. When the Host refuses a write, tell the author.";
 
 /// The sentences of the current mapping that end the paragraph of `write_memory` (ADR 0094 section
 /// 5).

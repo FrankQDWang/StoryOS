@@ -79,7 +79,7 @@ pub(crate) fn parameters() -> Value {
                         },
                         "text": {
                             "type": ["string", "null"],
-                            "description": "Markdown, at most 600 characters, or 1500 for a \
+                            "description": "Markdown, at most 600 characters, or 4000 for a \
                                             character. Null for a conflict."
                         },
                         "entry": {

@@ -209,7 +209,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
 /// Refuses each request on a mapping that is not the current one: a decision, a summary, a
 /// capture, a pass, a qualification probe, and a Retrieve (ADR 0097).
 fn current_mapping(route: &RequestRoute) -> Result<(), PreDispatchRefusal> {
-    match route.mapping_revision == storyos_core::AGENT_PLAN_WRITING_RULES_MAPPING_REVISION {
+    match route.mapping_revision == storyos_core::AGENT_PLAN_CHARACTER_FILE_MAPPING_REVISION {
         true => Ok(()),
         false => Err(PreDispatchRefusal::UnsupportedRequest),
     }
