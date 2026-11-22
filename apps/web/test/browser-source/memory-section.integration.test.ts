@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
+import { page } from "vitest/browser";
 
 import type { GetProjectResponse, MemoryEntryInspect }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -391,7 +392,7 @@ async function confirmDeleteInFile(number: number) {
     .not.toBeNull();
   pressInFile(number, "delete-confirm");
 }
-async function openCharacters(entries: MemoryEntryInspect[], deletes: Answer[] = []) {
+async function openCharacters(entries: MemoryEntryInspect[], deletes: (Answer | Promise<Answer>)[] = []) {
   const server = fakeServer([listed(entries)], deletes);
   await settingsPage(server.fetchImpl);
   document.querySelector<HTMLButtonElement>('[data-settings-item="characters"]')!.click();
@@ -403,7 +404,7 @@ const character = (number: number, title: string, fields: Partial<MemoryEntryIns
   entry(number, { entry_type: "character", title, origin: "chapter",
     source: { kind: "chapter", chapter_id: CHAPTER, title: "渡口", availability: "available" }, ...fields });
 
-it("lists each character one time in the order of the query, and the search keeps the names that hold the text",
+it("lists each character one time, and the search 搜索人物 keeps the names that hold the text (ADR 0101 section 6)",
   async () => {
     await openCharacters([character(5, "林舟"), entry(1, {}), character(6, "阿青", { origin: "author_request" }),
       character(7, "林舟", { origin: "author_request" }), character(8, "青石")]);
@@ -428,7 +429,7 @@ it("lists each character one time in the order of the query, and the search keep
     expect([document.querySelector("[data-character-file] h3")?.textContent, fileEntries()]).toEqual(["青石", ["8"]]);
   });
 
-it("shows the file of a character with the entry of the author first, its flag, and only the delete controls",
+it("shows the file 档案 with the entry of the author first, its flag, and only the delete controls (ADR 0101 section 6)",
   async () => {
     const flag = { reason: "第三章说他会说话。", flagged_at: "2026-11-17T09:00:00.000Z",
       source: { kind: "chapter" as const, chapter_id: CHAPTER, title: "渡口", availability: "available" as const } };
@@ -458,23 +459,60 @@ it("shows the file of a character with the entry of the author first, its flag, 
       .toEqual(["search", "林舟", "删除", "删除"]);
   });
 
-it("removes only the deleted entry of a file, and selects the next name after the last entry of a character",
+it("keeps the file after the delete of its first part in the Memory Index, and then selects the next name",
   async () => {
-    const [author, background] = [character(7, "林舟", { origin: "author_request" }), character(5, "林舟")];
-    const server = await openCharacters([character(6, "阿青"), background, author, character(8, "青石")],
-      [applied(author.memory_entry_id), applied(background.memory_entry_id)]);
-    document.querySelector<HTMLButtonElement>('[data-character-name="林舟"]')!.click();
+    const [background, author] = [character(5, "林舟"), character(7, "林舟", { origin: "author_request" })];
+    const server = await openCharacters([background, character(6, "阿青"), author, character(8, "青石")],
+      [applied(background.memory_entry_id), applied(author.memory_entry_id)]);
     await expect.poll(fileEntries).toEqual(["7", "5"]);
-    await confirmDeleteInFile(7);
-    await expect.poll(fileEntries).toEqual(["5"]);
-    expect([names(), chosenName()]).toEqual([["阿青", "林舟", "青石"], "林舟"]);
     await confirmDeleteInFile(5);
+    await expect.poll(fileEntries).toEqual(["7"]);
+    // The name moves to the place of its other part in the Memory Index, and it stays selected.
+    expect([names(), chosenName()]).toEqual([["阿青", "林舟", "青石"], "林舟"]);
+    await confirmDeleteInFile(7);
     await expect.poll(names).toEqual(["阿青", "青石"]);
     expect([chosenName(), fileEntries(), server.paths.filter((path) => path === MEMORY).length])
       .toEqual(["青石", ["8"], 1]);
     expect(server.sent.filter((item) => item.method === "DELETE").map((item) => item.path))
-      .toEqual([`${MEMORY}/${author.memory_entry_id}`, `${MEMORY}/${background.memory_entry_id}`]);
+      .toEqual([`${MEMORY}/${background.memory_entry_id}`, `${MEMORY}/${author.memory_entry_id}`]);
   });
+
+it("selects the next name when two deletes in progress remove each part of a character", async () => {
+  const [background, author] = [character(5, "林舟"), character(7, "林舟", { origin: "author_request" })];
+  const [first, second] = [held(), held()];
+  await openCharacters([character(6, "阿青"), background, author, character(8, "青石")],
+    [first.answer, second.answer]);
+  document.querySelector<HTMLButtonElement>('[data-character-name="林舟"]')!.click();
+  await expect.poll(fileEntries).toEqual(["7", "5"]);
+  await confirmDeleteInFile(7);
+  await confirmDeleteInFile(5);
+  first.give(applied(author.memory_entry_id));
+  second.give(applied(background.memory_entry_id));
+  await expect.poll(names).toEqual(["阿青", "青石"]);
+  expect([chosenName(), fileEntries()]).toEqual(["青石", ["8"]]);
+});
+
+it("keeps the delete control inside the file column with a long Chapter title at the narrow width", async () => {
+  // 920 px is the `min-width` of the workspace.
+  const [width, height] = [innerWidth, innerHeight];
+  const styles = Object.assign(document.createElement("link"), { rel: "stylesheet", href: "/src/writing-workspace.css" });
+  const loaded = new Promise((resolve, reject) => { styles.onload = resolve; styles.onerror = reject; });
+  document.head.append(styles);
+  try {
+    await loaded;
+    await page.viewport(920, 700);
+    await openCharacters([character(5, "林舟", { source: { kind: "chapter", chapter_id: CHAPTER,
+      title: "Chapter".repeat(40), availability: "available" } }), character(7, "林舟", { origin: "author_request" })]);
+    await expect.poll(fileEntries).toEqual(["7", "5"]);
+    const file = document.querySelector("[data-character-file]")!.getBoundingClientRect();
+    const boxes = [...document.querySelectorAll("[data-character-entry] :is([data-memory-delete], .memory-entry-origin)")]
+      .map((element) => element.getBoundingClientRect());
+    expect([boxes.length, boxes.every((box) => box.left >= file.left && box.right <= file.right)]).toEqual([4, true]);
+  } finally {
+    styles.remove();
+    await page.viewport(width, height);
+  }
+});
 
 it("shows the sentence of an empty Memory and no list for a Project with no character", async () => {
   await openCharacters([entry(1, {})]);

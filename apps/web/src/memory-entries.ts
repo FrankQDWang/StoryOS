@@ -12,13 +12,13 @@ export type DeleteStep = "confirm" | "sending" | "changed" | "failed";
 
 /** The current Memory Entries of the settings page and the delete steps of each entry. */
 export type MemoryEntries = {
-  /** `undefined` until the first read settles. */
+  /** `undefined` while the first read or a read after "重新读取" is open. */
   entries: readonly MemoryEntryInspect[] | "failed" | undefined;
   steps: ReadonlyMap<string, DeleteStep>;
   readAgain: () => void;
   setStep: (memoryEntryId: string, step: DeleteStep | undefined) => void;
-  /** Sends the delete of `entry` and gives `true` when the entry left the list. */
-  confirmDelete: (entry: MemoryEntryInspect) => Promise<boolean>;
+  /** Sends the delete of `entry`. */
+  confirmDelete: (entry: MemoryEntryInspect) => Promise<void>;
 };
 
 /**
@@ -69,11 +69,10 @@ export function useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl }: {
       setStep(memoryEntryId, undefined);
       setEntries((shown) => shown === "failed" || shown === undefined
         ? shown : shown.filter((item) => item.memory_entry_id !== memoryEntryId));
-      return true;
+      return;
     }
     setStep(memoryEntryId, result.outcome);
     if (result.outcome === "changed") setReads((count) => count + 1);
-    return false;
   };
   const readAgain = () => {
     setEntries(undefined);

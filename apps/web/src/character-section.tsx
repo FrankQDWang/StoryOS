@@ -30,21 +30,23 @@ function characters(entries: readonly MemoryEntryInspect[]): Map<string, MemoryE
  */
 export function CharacterSection({ scope, memory }: SettingsSectionProps) {
   const [search, setSearch] = useState("");
-  const [chosen, setChosen] = useState<string>();
+  // The selected name and its place in the list of all names when the author confirmed a delete in its file.
+  const [chosen, setChosen] = useState<{ name: string; place?: number }>();
   const { entries } = memory;
   if (entries === undefined) return <CharacterFrame />;
   if (entries === "failed") return <CharacterFrame><ReadFailed memory={memory} /></CharacterFrame>;
   const files = characters(entries);
   if (files.size === 0) return <CharacterFrame><p data-character-empty="">{EMPTY_SENTENCE}</p></CharacterFrame>;
+  const all = [...files.keys()];
   const term = search.trim();
-  const names = [...files.keys()].filter((name) => name.includes(term));
-  const selected = chosen !== undefined && names.includes(chosen) ? chosen : names[0];
+  const names = all.filter((name) => name.includes(term));
+  // When a delete removed the last part of the selected character, the name that took its place is selected.
+  const next = chosen?.place === undefined || files.has(chosen.name) ? undefined
+    : all[Math.min(chosen.place, all.length - 1)];
+  const selected = [chosen?.name, next].find((name) => name !== undefined && names.includes(name)) ?? names[0];
   const file = selected === undefined ? undefined : files.get(selected);
-  // The delete of the last entry of a character removes its name, and the next name of the list is selected.
-  const afterDelete = (name: string) => {
-    if (files.get(name)?.length !== 1) return;
-    const at = names.indexOf(name);
-    setChosen(names[at + 1] ?? names[at - 1]);
+  const keep = () => {
+    if (selected !== undefined) setChosen({ name: selected, place: all.indexOf(selected) });
   };
   return (
     <CharacterFrame>
@@ -56,27 +58,28 @@ export function CharacterSection({ scope, memory }: SettingsSectionProps) {
             {names.map((name) => (
               <li key={name}>
                 <button type="button" aria-current={name === selected ? "true" : undefined}
-                  data-character-name={name} onClick={() => setChosen(name)}>{name}</button>
+                  data-character-name={name} onClick={() => setChosen({ name })}>{name}</button>
               </li>
             ))}
           </ul>
         </div>
         {selected === undefined || file === undefined ? null : (
+          // The order of the sketch: the name with the delete control of the first part, its origin line, "档案",
+          // and its text. Each later part has its origin line and its delete control on its first line.
           <article className="character-file" aria-labelledby="character-file-name" data-character-file="">
-            <h3 id="character-file-name">{selected}</h3>
-            <h4>{FILE_HEADING}</h4>
-            <ul>
-              {file.map((entry) => (
-                <li key={entry.memory_entry_id} className="character-part" data-character-entry={entry.entry_number}>
-                  <div className="character-part-head">
-                    <OriginLine entry={entry} projectId={scope.project_id} />
-                    <EntryDelete entry={entry} memory={memory} onDeleted={() => afterDelete(selected)} />
-                  </div>
-                  <Flag entry={entry} projectId={scope.project_id} />
-                  <p className="memory-entry-text">{entry.text}</p>
-                </li>
-              ))}
-            </ul>
+            {file.map((entry, index) => (
+              <div key={entry.memory_entry_id} className="character-part" data-character-entry={entry.entry_number}>
+                <div className="character-part-head">
+                  {index === 0 ? <h3 id="character-file-name">{selected}</h3>
+                    : <OriginLine entry={entry} projectId={scope.project_id} />}
+                  <EntryDelete entry={entry} memory={memory} onConfirm={keep} />
+                </div>
+                {index === 0 ? <OriginLine entry={entry} projectId={scope.project_id} /> : null}
+                <Flag entry={entry} projectId={scope.project_id} />
+                {index === 0 ? <h4>{FILE_HEADING}</h4> : null}
+                <p className="memory-entry-text">{entry.text}</p>
+              </div>
+            ))}
           </article>
         )}
       </div>

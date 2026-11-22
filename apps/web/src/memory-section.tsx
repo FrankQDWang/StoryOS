@@ -93,11 +93,11 @@ export function OriginLine({ entry, projectId }: { entry: MemoryEntryInspect; pr
 }
 
 /** The delete control of an entry and the sentence under it after a delete that did not apply. */
-export function EntryDelete({ entry, memory, onDeleted }: {
+export function EntryDelete({ entry, memory, onConfirm }: {
   entry: MemoryEntryInspect;
   memory: MemoryEntries;
-  /** Runs after the delete removed the entry from the list. */
-  onDeleted?: () => void;
+  /** Runs when the author presses "确认删除", before the command is sent. */
+  onConfirm?: () => void;
 }) {
   const id = entry.memory_entry_id;
   return (
@@ -105,7 +105,10 @@ export function EntryDelete({ entry, memory, onDeleted }: {
       <DeleteControl
         step={memory.steps.get(id)}
         onDelete={() => memory.setStep(id, "confirm")}
-        onConfirm={() => void memory.confirmDelete(entry).then((left) => { if (left) onDeleted?.(); })}
+        onConfirm={() => {
+          onConfirm?.();
+          void memory.confirmDelete(entry);
+        }}
         onCancel={() => memory.setStep(id, undefined)}
       />
     </div>
