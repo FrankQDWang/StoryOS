@@ -14,8 +14,18 @@ fn each_kind_has_its_persisted_name_and_the_worker_dispatches_each_kind() {
             AgentRunKind::ALL.map(|kind| AgentRunKind::parse(kind.name())),
         ),
         (
-            ["author", "memory_capture", "memory_consolidation", "intent_pass"],
-            ["author", "memory_capture", "memory_consolidation", "intent_pass"],
+            [
+                "author",
+                "memory_capture",
+                "memory_consolidation",
+                "intent_pass"
+            ],
+            [
+                "author",
+                "memory_capture",
+                "memory_consolidation",
+                "intent_pass"
+            ],
             AgentRunKind::ALL.map(Some)
         )
     );

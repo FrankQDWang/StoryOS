@@ -6,7 +6,9 @@
 
 use std::future::Future;
 
-use storyos_core::{ChapterCaptureSkip, ConsolidationSkip, ConversationCaptureSkip, IntentPassSkip};
+use storyos_core::{
+    ChapterCaptureSkip, ConsolidationSkip, ConversationCaptureSkip, IntentPassSkip,
+};
 
 use crate::{
     DiagnosticField, ProjectReadError, ProjectScope, StartedIntentPass, StartedMemoryCapture,

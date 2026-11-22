@@ -466,10 +466,7 @@ async fn the_entry_of_the_author_gets_no_version_and_a_new_text_needs_a_pass_aga
         ),
         (
             MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::NoEntryNeedsPass),
-            json!([
-                ["applied", null, 2],
-                ["refused", "author_entry", null]
-            ]),
+            json!([["applied", null, 2], ["refused", "author_entry", null]]),
             json!(
                 "{\"name\":\"阿青\"}\n\nTold by the author:\n怕水\n\nFrom the manuscript:\n阿青是船夫。"
             ),

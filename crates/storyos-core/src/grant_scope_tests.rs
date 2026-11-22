@@ -307,7 +307,10 @@ fn the_fifth_scope_covers_the_stage_7_items_and_only_the_sixth_covers_the_intent
     // The sixth scope names the Stage 11 class and Purpose first (ADR 0101 section 4).
     assert_eq!(
         [
-            admitted(&with_item(request.clone(), ContextSourceClass::CharacterFile)),
+            admitted(&with_item(
+                request.clone(),
+                ContextSourceClass::CharacterFile
+            )),
             admitted(&with_purpose(
                 crate::assemble_context::ContextPurpose::IntentPass
             )),

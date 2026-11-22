@@ -71,7 +71,9 @@ pub struct IntentPassAssembly<'a> {
 /// The Context Assembly of an intent pass: the Purpose `intent_pass`, the cause `host_schedule`,
 /// and the one `character_file` item. The pass has no Memory Index, no Chapter, and no other entry
 /// (ADR 0101 section 4).
-pub fn assemble_intent_pass_context(input: &IntentPassAssembly<'_>) -> CurrentPassageAssemblyRecord {
+pub fn assemble_intent_pass_context(
+    input: &IntentPassAssembly<'_>,
+) -> CurrentPassageAssemblyRecord {
     let content = input.file.text();
     let item = SelectedProjection {
         source_class: ContextSourceClass::CharacterFile,
@@ -138,7 +140,9 @@ pub fn next_intent_pass_context(
 ) -> CurrentPassageAssemblyRecord {
     let mut record = before.clone();
     let requirement = &mut record.operation_requirement;
-    requirement.input_snapshot_id.clone_from(&operation_requirement_id);
+    requirement
+        .input_snapshot_id
+        .clone_from(&operation_requirement_id);
     requirement.operation_requirement_id = operation_requirement_id;
     let file = |class: ContextSourceClass| class == ContextSourceClass::CharacterFile;
     record.selected.retain(|item| file(item.source_class));

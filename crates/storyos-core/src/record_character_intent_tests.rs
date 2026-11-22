@@ -15,8 +15,14 @@ fn a_call_above_a_limit_is_refused_and_a_call_at_each_limit_is_valid() {
         ("想去渡口。".to_owned(), vec![question(5); 4]),
         ("想去渡口。".to_owned(), vec![question(5), question(101)]),
         (" \n ".to_owned(), vec![]),
-        ("想去渡口。".to_owned(), vec!["船在哪里？\n谁的船？".to_owned()]),
-        (format!(" {} ", "想".repeat(150)), vec![format!(" {} ", question(100)); 3]),
+        (
+            "想去渡口。".to_owned(),
+            vec!["船在哪里？\n谁的船？".to_owned()],
+        ),
+        (
+            format!(" {} ", "想".repeat(150)),
+            vec![format!(" {} ", question(100)); 3],
+        ),
     ];
     let results = calls.map(|(intent, questions)| {
         validate_character_intent(&intent, &questions).map_err(IntentRefusal::label)

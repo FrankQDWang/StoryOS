@@ -361,7 +361,9 @@ impl ToolSpec {
             ToolOperation::ApplyMemoryOperations => {
                 crate::apply_memory_operations::tool_intake(arguments)
             }
-            ToolOperation::RecordCharacterIntent => crate::record_character_intent::intake(arguments),
+            ToolOperation::RecordCharacterIntent => {
+                crate::record_character_intent::intake(arguments)
+            }
         }
     }
 }

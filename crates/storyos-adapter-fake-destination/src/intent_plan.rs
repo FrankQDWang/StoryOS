@@ -28,7 +28,9 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
         .nth(step);
     let arguments = match scripted {
         Some("SCRIPT:intent-no-call") => return complete("The character does nothing."),
-        Some(line) => line.strip_prefix("SCRIPT:intent ").unwrap_or(FAKE_INTENT_ARGUMENTS),
+        Some(line) => line
+            .strip_prefix("SCRIPT:intent ")
+            .unwrap_or(FAKE_INTENT_ARGUMENTS),
         None => FAKE_INTENT_ARGUMENTS,
     };
     FakeCreate {
@@ -37,7 +39,11 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
             call_id: Some(format!("call_intent_{step}")),
             arguments: Some(arguments.to_owned()),
             native_type: Some(storyos_core::FUNCTION_CALL_NATIVE_TYPE.to_owned()),
-            name: Some(ToolOperation::RecordCharacterIntent.function_name().to_owned()),
+            name: Some(
+                ToolOperation::RecordCharacterIntent
+                    .function_name()
+                    .to_owned(),
+            ),
             ..evidence_item(
                 StreamItemRole::Tool,
                 StreamItemState::Complete,
