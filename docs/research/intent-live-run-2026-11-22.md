@@ -162,9 +162,8 @@ The record compares each sentence of the files of 顾青禾 (entry 3 version 6, 
 
 ### 程立 (version 2)
 
-- **A fact that the character cannot know:** none found. The fact of #1788 ("从而揭穿明川“什么都没签”的说法") is not in the file.
+- **A fact that the character cannot know:** "不知沈家隐情". The sentence has the negative form. It tells that the family has a secret that he does not know, and thus it gives the fact (finding [F4](#f4-a-sentence-of-the-file-gives-the-part-of-the-character-in-the-plot-with-the-negative-form)). The fact of #1788 ("从而揭穿明川“什么都没签”的说法") is not in the file.
 - **A sentence about the part of the character in the plot:** "他只负责推进谈判". The sentence gives his part in the plot.
-- **The negative form:** "不知沈家隐情". The sentence tells that the family has a secret that he does not know, and thus it gives the fact (finding [F4](#f4-a-sentence-of-the-file-gives-the-part-of-the-character-in-the-plot-with-the-negative-form)).
 - **A statement that the file gives to a character who is not its speaker:** none found. "我就直说了" and "当然，当然" are his words in Chapter 3.
 
 ### 赵德明 (version 4)
@@ -393,10 +392,12 @@ The record compares each sentence of the files of 顾青禾 (entry 3 version 6, 
 
 - **The characters that act, and the agreement with an intent:**
   - 赵德明 acts as his intent says: "他拄着木拐杖" (intent "拄着拐杖"), "从贴身的内袋摸出一个手帕包" (intent "贴身带好"), "这箱子，是你自己要开的？" (intent "见面确认是她主动问起后"), "你爷爷交代的。……等你回来了，自己开口问了，才能给。" (intent "再把钥匙和怀山的交代交给她"). The place is the teahouse.
-  - 沈知遥 acts as her intent says: "明天赵德明把钥匙送来后，我要在茶馆楼上当面打开“同心”樟木箱，逐件清点旧物、字据和照片" agrees with "拿着钥匙和信上了楼" and "她把信和账本一摞一摞搬到桌上的棉布上". The scene does not show her intent "查清前不签程立的合同".
+  - 沈知遥 acts as her intent says: "明天赵德明把钥匙送来后，我要在茶馆楼上当面打开“同心”樟木箱，逐件清点旧物、字据和照片" agrees with "拿着钥匙和信上了楼" and "她把信和账本一摞一摞搬到桌上的棉布上". Her intent says "当面打开", but she opens the box alone. The scene does not show her intent "查清前不签程立的合同".
   - 顾青禾 acts as her intent says: "知遥若追过来，我就借……看锅避开；卖馆和同心箱的事，仍等沈家自己拿主意" agrees with "“锅上坐着水。”顾青禾说，“你们开。”" and "没朝楼上看，拎着豆腐进了灶屋".
 - **Events that the Chapters and the file of the acting character do not support:**
   - The heading "第八章 契" inside the text of Chapter 7. The author asked for the next scene of Chapter 7.
+  - 赵德明 takes the key from the inner pocket of his coat, in a 手帕包 ("从贴身的内袋摸出一个手帕包"). Only his intent ("贴身带好") gives a place for the key. The Chapters and the description of his file do not.
+  - 赵德明 stays downstairs ("我不上去了……你爷爷的东西，你一个人看。"), and 知遥 opens the box alone. The Chapters and the files do not support it, and the intent of 知遥 says "当面打开".
   - The letter of 爷爷 to 知遥 that 赵德明 brings ("这是你爷爷走前个把月，单交给我的"). The file of 赵德明 has only "怀山的交代" in words.
   - The contract and the receipt with the names 沈怀山 and 顾青禾. The Chapters do not have them. The fact of 2,100 yuan is in entry 36 of the author, not in a Chapter.
   - The bundle of letters "收件人却不姓沈", the second photo of 爷爷, and the 月饼盒.
