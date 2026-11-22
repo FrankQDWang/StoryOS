@@ -14,7 +14,7 @@ use storyos_application::{
 };
 use storyos_core::{
     ConsolidationFacts, ConsolidationSkip, ConversationCaptureFacts, ConversationCaptureSkip,
-    ConversationRole, ConversationRunMessages,
+    ConversationRole, ConversationRunMessages, IntentPassFacts, IntentPassSkip,
 };
 use tokio_postgres::Client;
 
@@ -27,6 +27,8 @@ use crate::{PostgresProjectReader, read_error};
 const CONVERSATION_CAPTURE: &str = "conversation_capture";
 /// The kind of the schedule row of the consolidation pass of a Project.
 const CONSOLIDATION: &str = "consolidation";
+/// The kind of the schedule row of the intent pass of a Project (ADR 0101 section 4).
+const INTENT_PASS: &str = "intent_pass";
 
 /// Sets the due time of the schedule row of the Conversation of the completed Run of the author
 /// `claim`, in the transaction of its settlement. A background Run has no Conversation, so it
@@ -165,6 +167,30 @@ pub(crate) async fn mark_consolidation_due(
     Ok(())
 }
 
+/// Makes the intent pass row of the Project of `scope` due now, in the transaction of the
+/// settlement of a consolidation pass that applied operations or of an intent pass.
+pub(crate) async fn mark_intent_pass_due(
+    client: &Client,
+    scope: &ProjectScope,
+) -> Result<(), CompleteAgentRunError> {
+    client
+        .execute(
+            "INSERT INTO storyos.memory_work_schedules
+               (owner_user_id, project_id, work_kind, source_id, due_at)
+             VALUES ($1::text::uuid, $2::text::uuid, $3, $2::text::uuid, clock_timestamp())
+             ON CONFLICT (owner_user_id, project_id, work_kind, source_id)
+             DO UPDATE SET due_at = EXCLUDED.due_at",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &INTENT_PASS,
+            ],
+        )
+        .await
+        .map_err(complete_unavailable)?;
+    Ok(())
+}
+
 impl MemoryWorkScheduleStore for PostgresProjectReader {
     async fn memory_work_due(&self) -> Result<bool, ProjectReadError> {
         let client = self.connect().await?;
@@ -226,7 +252,7 @@ async fn claim_and_decide(
                     (next_work.owner_user_id, next_work.project_id, next_work.work_kind,
                      next_work.source_id)
           RETURNING work.owner_user_id::text, work.project_id::text, work.conversation_id::text,
-                    work.chapter_id::text, next_work.due_at",
+                    work.chapter_id::text, next_work.due_at, work.work_kind",
             &[],
         )
         .await
@@ -244,6 +270,9 @@ async fn claim_and_decide(
     ) {
         (Some(conversation_id), _) => MemoryWorkSource::Conversation(conversation_id),
         (None, Some(chapter_id)) => MemoryWorkSource::Chapter(chapter_id),
+        (None, None) if row.get::<_, &str>(/*idx*/ 5) == INTENT_PASS => {
+            MemoryWorkSource::ProjectIntents
+        }
         (None, None) => MemoryWorkSource::Project,
     };
     client
@@ -264,6 +293,10 @@ async fn claim_and_decide(
         MemoryWorkSource::Project => (
             MemoryWorkSource::Project,
             decide_and_start_pass(client, &scope).await?,
+        ),
+        MemoryWorkSource::ProjectIntents => (
+            MemoryWorkSource::ProjectIntents,
+            decide_and_start_intent_pass(client, &scope).await?,
         ),
         // The decision can be for another due Chapter of the Project that is first in order.
         MemoryWorkSource::Chapter(claimed) => {
@@ -333,6 +366,52 @@ async fn decide_and_start_pass(
                 .map_err(read_error)?;
             Ok(MemoryWorkOutcome::PassSkipped(
                 ConsolidationSkip::StartRefused,
+            ))
+        }
+    }
+}
+
+/// Decides for the intent pass row of the Project and starts one pass for the first entry that
+/// needs one, or none. A refused start writes no row, and the empty due time stays.
+async fn decide_and_start_intent_pass(
+    client: &PooledClient,
+    scope: &ProjectScope,
+) -> Result<MemoryWorkOutcome, ProjectReadError> {
+    let entry = crate::intent_pass::needed_entry(client, scope)
+        .await
+        .map_err(read_error)?;
+    let pass_in_progress: bool = client
+        .query_one(
+            "SELECT EXISTS (SELECT 1 FROM storyos.intent_passes
+                             WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
+                               AND outcome IS NULL)",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .map_err(read_error)?
+        .get(/*idx*/ 0);
+    let facts = IntentPassFacts {
+        entry_needs_pass: entry.is_some(),
+        pass_in_progress,
+    };
+    let skip = storyos_core::decide_intent_pass(&facts).err();
+    let (None, Some(entry)) = (skip, entry) else {
+        let skip = skip.unwrap_or(IntentPassSkip::NoEntryNeedsPass);
+        return Ok(MemoryWorkOutcome::IntentPassSkipped(skip));
+    };
+    client
+        .batch_execute("SAVEPOINT intent_pass_start")
+        .await
+        .map_err(read_error)?;
+    match crate::intent_pass::start(client, scope, &entry).await? {
+        Ok(started) => Ok(MemoryWorkOutcome::IntentPassStarted(started)),
+        Err(_) => {
+            client
+                .batch_execute("ROLLBACK TO SAVEPOINT intent_pass_start")
+                .await
+                .map_err(read_error)?;
+            Ok(MemoryWorkOutcome::IntentPassSkipped(
+                IntentPassSkip::StartRefused,
             ))
         }
     }

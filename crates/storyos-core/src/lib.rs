@@ -31,6 +31,7 @@ mod host_fake_profile;
 mod host_tool;
 mod hybrid_search_manuscript;
 mod instruction_binding;
+mod intent_pass;
 mod load_skill;
 mod manuscript_payload;
 mod manuscript_use;
@@ -51,6 +52,7 @@ mod read_memory_entry;
 mod read_skill_resource;
 mod read_tool_result;
 mod rebuild_expired_reference;
+mod record_character_intent;
 mod record_memory_observations;
 mod research_destination;
 mod research_source;
@@ -227,6 +229,11 @@ pub use hybrid_search_manuscript::{
 pub use instruction_binding::{
     BoundInstruction, assemble_instruction_binding, project_instruction_binding,
 };
+pub use intent_pass::{
+    CharacterFile, INTENT_PASS_MAX_RUN_STEPS, IntentPassAssembly, IntentPassFacts,
+    IntentPassOutcome, IntentPassSkip, admit_intent_pass, assemble_intent_pass_context,
+    decide_intent_pass, intent_pass_failure, next_intent_pass_context,
+};
 pub use load_skill::{
     LOAD_SKILL_TOOL_SPEC, LoadSkillRefusal, SKILL_LOAD_LIMIT, SkillLoadFacts, admit_skill_load,
     skill_load_result,
@@ -328,6 +335,11 @@ pub use readable_export_command::{
 pub use rebuild_expired_reference::{
     ContinuationReferenceCondition, ExpiryRebuildBlock, ExpiryRebuildDecision,
     ExpiryRebuildDisposition, ExpiryRebuildFacts, decide_confirmed_expiry_rebuild,
+};
+pub use record_character_intent::{
+    CHARACTER_INTENT_MAX_CHARS, CHARACTER_QUESTION_MAX_CHARS, CHARACTER_QUESTIONS_MAX,
+    CharacterIntent, IntentCallSettlement, IntentRefusal, RECORD_CHARACTER_INTENT_TOOL_SPEC,
+    settle_intent_call, validate_character_intent,
 };
 pub use record_memory_observations::{
     CAPTURE_OBSERVATIONS_MAX, CaptureOutcome, MemoryObservation, ObservationCallSettlement,

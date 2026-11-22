@@ -169,6 +169,7 @@ mod editor_session_acknowledgement;
 mod embedding_attempt;
 mod export_work;
 mod get_proposal;
+mod intent_pass;
 mod list_projects;
 mod manuscript_block;
 mod manuscript_search;

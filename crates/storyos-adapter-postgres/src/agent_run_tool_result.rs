@@ -7,7 +7,7 @@
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ToolOutput, ToolOutputOrigin};
 use storyos_core::{
-    CurrentPassageAssemblyRecord, ToolCallState, ToolResultCandidate, ToolResultForm,
+    AgentRunKind, CurrentPassageAssemblyRecord, ToolCallState, ToolResultCandidate, ToolResultForm,
     ToolResultOutput,
 };
 
@@ -82,18 +82,36 @@ pub(crate) async fn open_next_step(
             let end = storyos_core::CaptureRunEnd::LastRunStepEnded;
             crate::memory_capture::settle_end(client, claim, end).await?;
             crate::memory_consolidation::settle_end(client, claim, end).await?;
+            crate::intent_pass::settle_end(client, claim, end).await?;
             return crate::agent_run_work::complete(client, claim).await;
         }
         let results = RunToolResults::load(client, claim).await?;
         let next_position = crate::agent_run_steering::next_position(&run.decision_position)?;
-        crate::memory_capture::persist_next_step(
-            client,
-            claim,
-            retained,
-            &next_position,
-            &results.candidates(),
-        )
-        .await?;
+        let (candidates, position) = (results.candidates(), next_position.as_str());
+        match run.kind {
+            AgentRunKind::IntentPass => {
+                crate::intent_pass::persist_next_step(
+                    client,
+                    claim,
+                    retained,
+                    position,
+                    &candidates,
+                )
+                .await?;
+            }
+            AgentRunKind::MemoryCapture
+            | AgentRunKind::MemoryConsolidation
+            | AgentRunKind::Author => {
+                crate::memory_capture::persist_next_step(
+                    client,
+                    claim,
+                    retained,
+                    position,
+                    &candidates,
+                )
+                .await?;
+            }
+        }
         return activate_step(client, claim, &next_position).await;
     }
     let mut retained = retained.clone();

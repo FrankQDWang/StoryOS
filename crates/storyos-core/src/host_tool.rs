@@ -25,8 +25,9 @@ pub struct HostToolRegistration {
 /// `load_skill` and `read_skill_resource` (ADR 0089 section 3), `read_chapter`,
 /// `search_manuscript`, `hybrid_search_manuscript`, the Memory Tools `write_memory`,
 /// `read_memory_entry`, and `search_memory`, the output Tool `record_memory_observations` of a
-/// capture, and the output Tool `apply_memory_operations` of a consolidation pass (ADR 0094,
-/// ADR 0095). The Tools are before `finish`.
+/// capture, the output Tool `apply_memory_operations` of a consolidation pass (ADR 0094, ADR
+/// 0095), and the output Tool `record_character_intent` of an intent pass (ADR 0101). The Tools
+/// are before `finish`.
 /// `ExposureFacts::has_host_tool` decides which of them a RunStep declares.
 pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     id: "host_tools",
@@ -47,6 +48,7 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
         &SEARCH_MEMORY_TOOL_SPEC,
         &RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
         &crate::APPLY_MEMORY_OPERATIONS_TOOL_SPEC,
+        &crate::RECORD_CHARACTER_INTENT_TOOL_SPEC,
         &FINISH_TOOL_SPEC,
     ],
 };
@@ -72,7 +74,8 @@ pub fn host_tool_result_class(spec: &ToolSpec) -> ContextSourceClass {
         | ToolOperation::ReadSkillResource
         | ToolOperation::WriteMemory
         | ToolOperation::RecordMemoryObservations
-        | ToolOperation::ApplyMemoryOperations => ContextSourceClass::ToolResult,
+        | ToolOperation::ApplyMemoryOperations
+        | ToolOperation::RecordCharacterIntent => ContextSourceClass::ToolResult,
     }
 }
 
@@ -117,7 +120,8 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         // `write_memory`, because it writes a Memory Entry, `read_memory_entry`, because it
         // reads a Memory Entry and records the read, `search_memory`, because it reads the
         // Memory Entries, `record_memory_observations`, because it writes the observations, and
-        // `apply_memory_operations`, because it writes the Memory Entries.
+        // `apply_memory_operations`, because it writes the Memory Entries, and
+        // `record_character_intent`, because it writes a version of a Memory Entry.
         ToolIntake::WebSearch { .. }
         | ToolIntake::WebFetch { .. }
         | ToolIntake::ProposeEdit(_)
@@ -132,7 +136,8 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         | ToolIntake::ReadMemoryEntry { .. }
         | ToolIntake::SearchMemory { .. }
         | ToolIntake::RecordMemoryObservations(_)
-        | ToolIntake::ApplyMemoryOperations(_) => None,
+        | ToolIntake::ApplyMemoryOperations(_)
+        | ToolIntake::RecordCharacterIntent { .. } => None,
     }
 }
 

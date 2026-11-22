@@ -6,10 +6,10 @@
 
 use std::future::Future;
 
-use storyos_core::{ChapterCaptureSkip, ConsolidationSkip, ConversationCaptureSkip};
+use storyos_core::{ChapterCaptureSkip, ConsolidationSkip, ConversationCaptureSkip, IntentPassSkip};
 
 use crate::{
-    DiagnosticField, ProjectReadError, ProjectScope, StartedMemoryCapture,
+    DiagnosticField, ProjectReadError, ProjectScope, StartedIntentPass, StartedMemoryCapture,
     StartedMemoryConsolidation,
 };
 
@@ -22,15 +22,19 @@ pub enum MemoryWorkOutcome {
     PassSkipped(ConsolidationSkip),
     /// A claimed row of a Chapter started no capture. A Chapter capture that starts is `Started`.
     ChapterSkipped(ChapterCaptureSkip),
+    IntentPassStarted(StartedIntentPass),
+    IntentPassSkipped(IntentPassSkip),
 }
 
 /// The source of one schedule row: a Project Conversation or a Chapter for a capture, or the
-/// Project for a consolidation pass.
+/// Project for a consolidation pass or for an intent pass.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MemoryWorkSource {
     Conversation(String),
     Project,
     Chapter(String),
+    /// The Project for an intent pass (ADR 0101 section 4).
+    ProjectIntents,
 }
 
 impl MemoryWorkSource {
@@ -40,6 +44,7 @@ impl MemoryWorkSource {
             Self::Conversation(_) => "conversation_capture",
             Self::Project => "consolidation",
             Self::Chapter(_) => "chapter_capture",
+            Self::ProjectIntents => "intent_pass",
         }
     }
 }
@@ -62,6 +67,8 @@ impl DiagnosticField for MemoryWorkOutcome {
             Self::PassStarted(_) => "pass_started",
             Self::PassSkipped(skip) => skip.label(),
             Self::ChapterSkipped(skip) => skip.label(),
+            Self::IntentPassStarted(_) => "intent_pass_started",
+            Self::IntentPassSkipped(skip) => skip.label(),
         }
     }
 }

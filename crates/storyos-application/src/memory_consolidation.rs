@@ -8,3 +8,10 @@ pub struct StartedMemoryConsolidation {
     pub pass_id: String,
     pub run_id: String,
 }
+
+/// The intent pass that a start queued (ADR 0101 section 4).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StartedIntentPass {
+    pub pass_id: String,
+    pub run_id: String,
+}

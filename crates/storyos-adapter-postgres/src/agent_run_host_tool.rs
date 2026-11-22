@@ -72,6 +72,9 @@ pub(crate) async fn execute(
         ToolIntake::ApplyMemoryOperations(operations) => {
             return crate::memory_consolidation::execute(client, claim, row, operations).await;
         }
+        ToolIntake::RecordCharacterIntent { intent, questions } => {
+            return crate::intent_pass::execute(client, claim, row, intent, questions).await;
+        }
         ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } | ToolIntake::Finish => {}
     }
     let refused_beside: bool = client

@@ -4,6 +4,7 @@ mod capture_plan;
 mod consolidation_plan;
 mod create_plan;
 mod embedding;
+mod intent_plan;
 mod load_plan;
 mod propose_edit_plan;
 mod prose_changes;
@@ -22,6 +23,7 @@ pub use embedding::{
     EMBEDDING_INPUT_TOO_LONG, EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER,
     EMBEDDING_UNKNOWN_MARKER, FakeEmbeddingExchange, FakeEmbeddings, fake_vector,
 };
+pub use intent_plan::FAKE_INTENT_ARGUMENTS;
 pub use load_plan::LOAD_REASON;
 pub use tool_loop_plan::LIMIT_ANSWER;
 
@@ -112,6 +114,11 @@ impl ModelProviderAdapter for FakeDestination {
         if create.purpose == CreatePurpose::MemoryConsolidation && !create.pass_complete() {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
+        // The real route refuses an intent pass request with no file item, no output Tool, or a
+        // prior response reference in its first RunStep.
+        if create.purpose == CreatePurpose::IntentPass && !create.intent_pass_complete() {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        }
         let mapping_revision = HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
         let mut wire = current_input(create);
         wire["mapping_revision"] = serde_json::json!(mapping_revision);
@@ -129,6 +136,9 @@ impl ModelProviderAdapter for FakeDestination {
             }
             CreatePurpose::MemoryConsolidation => {
                 wire["purpose"] = serde_json::json!("memory_consolidation");
+            }
+            CreatePurpose::IntentPass => {
+                wire["purpose"] = serde_json::json!("intent_pass");
             }
             _ => {}
         }
@@ -189,6 +199,7 @@ impl ModelProviderAdapter for FakeDestination {
                 let planned = match create.purpose {
                     CreatePurpose::MemoryCapture(_) => capture_plan::plan(create),
                     CreatePurpose::MemoryConsolidation => consolidation_plan::plan(create),
+                    CreatePurpose::IntentPass => intent_plan::plan(create),
                     _ => tool_loop_plan::plan(create),
                 };
                 let reference = recovery_plan::mint_response_reference(
