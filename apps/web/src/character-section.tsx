@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 
 import type { MemoryEntryInspect } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { EMPTY_SENTENCE, EntryParts, ReadFailed } from "./memory-section.tsx";
+import { EMPTY_SENTENCE, EntryDelete, Flag, OriginLine, ReadFailed } from "./memory-section.tsx";
 import type { SettingsSectionProps } from "./project-settings.tsx";
 
 /** The author approved the placeholder and the heading with the sketch of the page on 2026-11-22. */
@@ -67,9 +67,13 @@ export function CharacterSection({ scope, memory }: SettingsSectionProps) {
             <h4>{FILE_HEADING}</h4>
             <ul>
               {file.map((entry) => (
-                <li key={entry.memory_entry_id} className="memory-entry" data-character-entry={entry.entry_number}>
-                  <EntryParts entry={entry} projectId={scope.project_id} memory={memory}
-                    onDeleted={() => afterDelete(selected)} />
+                <li key={entry.memory_entry_id} className="character-part" data-character-entry={entry.entry_number}>
+                  <div className="character-part-head">
+                    <OriginLine entry={entry} projectId={scope.project_id} />
+                    <EntryDelete entry={entry} memory={memory} onDeleted={() => afterDelete(selected)} />
+                  </div>
+                  <Flag entry={entry} projectId={scope.project_id} />
+                  <p className="memory-entry-text">{entry.text}</p>
                 </li>
               ))}
             </ul>

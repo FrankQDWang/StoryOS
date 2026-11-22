@@ -355,6 +355,9 @@ it("reads again after a failed read, and the Project Instruction section stays u
     listed(ENTRIES.slice(0, 1))]);
   await settingsPage(server.fetchImpl);
   await expect.poll(sectionText).toEqual(["无法读取记忆，请稍后再试。", "重新读取"]);
+  // The section "人物" shows the same failure of the one read (#1793).
+  expect([...document.querySelectorAll("[data-character-section] p, [data-character-section] button")]
+    .map((element) => element.textContent)).toEqual(["无法读取记忆，请稍后再试。", "重新读取"]);
   const field = document.querySelector<HTMLTextAreaElement>("[data-project-instruction]")!;
   expect([field.readOnly, document.querySelector<HTMLButtonElement>("[data-project-instruction-save]")?.disabled])
     .toEqual([false, false]);
@@ -444,8 +447,8 @@ it("shows the file of a character with the entry of the author first, its flag, 
       time: item.querySelector("time")?.textContent,
     }))).toEqual([
       { flag: ["可能已过时 第三章说他会说话。", "来自章节《渡口》", "可以在对话中告诉助手哪个是对的，或删除这条记忆。"], text: "他怕水。",
-        origin: "你让助手记住的", links: [`/projects/${PROJECT}?chapter=${CHAPTER}`,
-          `/projects/${PROJECT}?conversation=${CONVERSATION}`], time: time.format(new Date("2026-11-17T08:30:00.000Z")) },
+        origin: "你让助手记住的", links: [`/projects/${PROJECT}?conversation=${CONVERSATION}`,
+          `/projects/${PROJECT}?chapter=${CHAPTER}`], time: time.format(new Date("2026-11-17T08:30:00.000Z")) },
       { flag: [], text: "他看灯。", origin: "来自章节《渡口》", links: [`/projects/${PROJECT}?chapter=${CHAPTER}`],
         time: time.format(new Date("2026-11-15T08:30:00.000Z")) },
     ]);
@@ -477,4 +480,10 @@ it("shows the sentence of an empty Memory and no list for a Project with no char
   await openCharacters([entry(1, {})]);
   await expect.poll(() => [...characters()!.querySelectorAll("p, input, li")].map((element) => element.textContent))
     .toEqual(["助手还没有记住任何内容。"]);
+});
+
+it("shows no entry and no sentence in the section 记忆 when each entry is a character", async () => {
+  await openCharacters([character(5, "林舟")]);
+  await expect.poll(names).toEqual(["林舟"]);
+  expect([...section()!.querySelectorAll("p, [data-memory-group]")].length).toBe(0);
 });

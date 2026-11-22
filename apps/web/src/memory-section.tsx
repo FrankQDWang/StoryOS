@@ -57,6 +57,7 @@ export function MemorySection({ scope, memory }: SettingsSectionProps) {
     <section className="settings-section memory-section" aria-labelledby="memory-heading" data-memory-section="">
       <h2 id="memory-heading">记忆</h2>
       {entries === undefined ? null : entries === "failed" ? <ReadFailed memory={memory} />
+        // When each entry is a character, the section shows no entry and no sentence (#1793).
         : entries.length === 0 ? (
           <p data-memory-empty="">{EMPTY_SENTENCE}</p>
         ) : groups(entries.filter((entry) => entry.entry_type !== "character")).map((group) => (
@@ -66,7 +67,10 @@ export function MemorySection({ scope, memory }: SettingsSectionProps) {
               {group.entries.map((entry) => (
                 <li key={entry.memory_entry_id} className="memory-entry" data-memory-entry={entry.entry_number}>
                   <h4>{entry.title}</h4>
-                  <EntryParts entry={entry} projectId={scope.project_id} memory={memory} />
+                  <Flag entry={entry} projectId={scope.project_id} />
+                  <p className="memory-entry-text">{entry.text}</p>
+                  <OriginLine entry={entry} projectId={scope.project_id} />
+                  <EntryDelete entry={entry} memory={memory} />
                 </li>
               ))}
             </ul>
@@ -78,22 +82,25 @@ export function MemorySection({ scope, memory }: SettingsSectionProps) {
 
 const TIME = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" });
 
-/** The parts of one entry under its title: the conflict flag, the text, the origin line, the time, and the delete control. */
-export function EntryParts({ entry, projectId, memory, onDeleted }: {
+/** The origin line of an entry and the time of its last change. */
+export function OriginLine({ entry, projectId }: { entry: MemoryEntryInspect; projectId: string }) {
+  return (
+    <p className="memory-entry-origin">
+      <Origin entry={entry} projectId={projectId} />
+      <time dateTime={entry.changed_at}>{TIME.format(new Date(entry.changed_at))}</time>
+    </p>
+  );
+}
+
+/** The delete control of an entry and the sentence under it after a delete that did not apply. */
+export function EntryDelete({ entry, memory, onDeleted }: {
   entry: MemoryEntryInspect;
-  projectId: string;
   memory: MemoryEntries;
   /** Runs after the delete removed the entry from the list. */
   onDeleted?: () => void;
 }) {
   const id = entry.memory_entry_id;
-  return <>
-    <Flag entry={entry} projectId={projectId} />
-    <p className="memory-entry-text">{entry.text}</p>
-    <p className="memory-entry-origin">
-      <Origin entry={entry} projectId={projectId} />
-      <time dateTime={entry.changed_at}>{TIME.format(new Date(entry.changed_at))}</time>
-    </p>
+  return (
     <div className="memory-entry-actions" data-memory-entry-actions="">
       <DeleteControl
         step={memory.steps.get(id)}
@@ -102,7 +109,7 @@ export function EntryParts({ entry, projectId, memory, onDeleted }: {
         onCancel={() => memory.setStep(id, undefined)}
       />
     </div>
-  </>;
+  );
 }
 
 /**
@@ -145,7 +152,7 @@ function Origin({ entry, projectId }: { entry: MemoryEntryInspect; projectId: st
  * The conflict flag of an entry below its title (ADR 0094 section 7): "可能已过时", the reason, the source of the conflict,
  * and the sentence that tells the author what to do. An entry with no flag has an empty place. No control removes a flag.
  */
-function Flag({ entry, projectId }: { entry: MemoryEntryInspect; projectId: string }) {
+export function Flag({ entry, projectId }: { entry: MemoryEntryInspect; projectId: string }) {
   const { flag } = entry;
   if (flag === undefined) return <div className="memory-entry-flag" data-memory-entry-flag="" />;
   const line = flag.source.kind === "chapter" ? chapterLine(flag.source) : ORIGIN_LINES.conversation;

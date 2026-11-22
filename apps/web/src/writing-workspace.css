@@ -558,12 +558,13 @@ li[data-chapter-id] { position: relative; }
 .project-settings header a { color: var(--ink); text-decoration: none; }
 .project-settings header p { margin: 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .project-settings h1 { margin: 40px 0 28px; font-family: "Noto Serif SC", "Songti SC", serif; font-size: 26px; font-weight: 600; }
-/* The navigation on the left side and the selected section on the right side (ADR 0101 section 6). */
-.settings-body { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 40px; align-items: start; }
+/* The navigation on the left side and the selected section on the right side. The measures are those of the sketch of
+   ADR 0101 section 6 (#1793). */
+.settings-body { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 32px; align-items: start; }
 .settings-nav ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.settings-nav button { display: block; width: 100%; padding: 7px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); text-align: left; cursor: pointer; }
+.settings-nav button { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); text-align: left; cursor: pointer; }
 .settings-nav button:hover { background: var(--hover); color: var(--ink); }
-.settings-nav button[aria-current="true"] { background: var(--hover); color: var(--ink); font-weight: 600; }
+.settings-nav button[aria-current="true"] { background: #f1f0ee; color: var(--ink); font-weight: 500; }
 .settings-section { padding: 0 0 20px; }
 .settings-section h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
 .settings-section textarea { display: block; width: 100%; min-height: 220px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); line-height: 1.8; resize: vertical; }
@@ -582,12 +583,21 @@ li[data-chapter-id] { position: relative; }
 .settings-leave-confirm { position: fixed; z-index: 10; top: 96px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 8px; background: white; box-shadow: 0 6px 24px rgba(54, 51, 46, 0.14); }
 .settings-leave-confirm p { margin: 0; }
 .settings-leave-confirm button { padding: 4px 14px; border: 1px solid #d9d6d0; border-radius: 6px; background: white; cursor: pointer; }
-.character-columns { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 28px; align-items: start; }
-.character-list input { width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); }
-.character-list ul { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 8px 0 0; padding: 0; list-style: none; }
-.settings-section .character-list button { display: block; width: 100%; padding: 6px 10px; overflow: hidden; border: 0; border-radius: 6px; background: transparent; color: var(--ink); text-align: left; white-space: nowrap; text-overflow: ellipsis; }
+.character-columns { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: stretch; border: 1px solid var(--line); border-radius: 8px; background: white; }
+.character-list { min-width: 0; padding: 12px; border-right: 1px solid var(--line); }
+.character-list input { width: 100%; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); }
+.character-list ul { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 10px 0 0; padding: 0; list-style: none; }
+.settings-section .character-list button { display: block; width: 100%; padding: 6px 8px; overflow: hidden; border: 0; border-radius: 6px; background: transparent; color: var(--ink); text-align: left; white-space: nowrap; text-overflow: ellipsis; }
 .settings-section .character-list button:hover { background: var(--hover); }
-.settings-section .character-list button[aria-current="true"] { background: var(--hover); font-weight: 600; }
-.character-file h3 { margin: 0 0 16px; overflow-wrap: anywhere; font-family: "Noto Serif SC", "Songti SC", serif; font-size: 20px; font-weight: 600; }
-.character-file h4 { margin: 0 0 4px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.settings-section .character-list button[aria-current="true"] { background: #f1f0ee; font-weight: 500; }
+.character-file { min-width: 0; padding: 16px 18px; }
+.character-file h3 { margin: 0 0 12px; overflow-wrap: anywhere; font-size: 16px; font-weight: 500; }
+.character-file h4 { margin: 0; font-size: 13px; font-weight: 500; }
 .character-file ul { margin: 0; padding: 0; list-style: none; }
+.character-part { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.character-part:last-child { border-bottom: 0; }
+.character-part-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.character-part .memory-entry-origin { font-size: 12px; }
+.character-part .memory-entry-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.character-part .memory-entry-actions p { flex-basis: 100%; margin: 0; text-align: right; }
+.character-part .memory-entry-text { color: #3f3d38; font-size: 13px; line-height: 1.7; }
