@@ -207,10 +207,11 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
     assert.deepEqual(await part(0), [MANUSCRIPT, "来自章节《Chapter B》"]);
     await assertIntent(FIRST);
     // The two sections show one read, and the file came from it. When each entry is a character, the section "记忆"
-    // shows no entry and no sentence (#1793).
+    // shows no entry and the sentence of #1824.
     await page.locator('[data-settings-item="memory"]').click();
     await expect(page.locator("[data-memory-section] h2")).toHaveText("记忆");
-    await expect(page.locator("[data-memory-section] [data-memory-group], [data-memory-empty]")).toHaveCount(0);
+    await expect(page.locator("[data-memory-section] [data-memory-group]")).toHaveCount(0);
+    await expect(page.locator("[data-memory-empty]")).toHaveText("这里还没有人物以外的记忆。");
     await expect(page.locator("[data-memory-section]")).not.toContainText(NAME);
 
     // 4. Statement 2 resets the Challenge rate windows. The author tells the assistant to remember a fact of the

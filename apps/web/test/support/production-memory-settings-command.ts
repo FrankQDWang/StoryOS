@@ -157,10 +157,12 @@ export async function verifyProductionMemorySettings(context: BrowserContext): P
     assert.equal(await flagSource.getAttribute("href"), `/projects/${setup.projectId}?chapter=${chapterB}`);
     assert.equal(await entry.locator(".memory-entry-text").textContent(), TEXT);
 
-    // 5. The author deletes each entry with "删除" and "确认删除". Each entry leaves its section with no sentence.
+    // 5. The author deletes each entry with "删除" and "确认删除". Each entry leaves its section with no notice, and the
+    // section shows the sentence of its new state (#1824).
     await entry.locator("[data-memory-delete]").click();
     await entry.locator("[data-memory-delete-confirm]").click();
     await expect(page.locator("[data-character-name]")).toHaveCount(0);
+    await expect(page.locator("[data-character-empty]")).toHaveText("助手还没有记住任何人物。");
     await page.locator('[data-settings-item="memory"]').click();
     const item = page.locator('[data-memory-group="foreshadowing"] [data-memory-entry]');
     await item.locator("[data-memory-delete]").click();

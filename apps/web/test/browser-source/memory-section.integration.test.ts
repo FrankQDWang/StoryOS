@@ -344,10 +344,12 @@ it("shows the name of each type in the order of the query, and no group 人物",
   expect(titles()).toEqual(["条目1", "条目2", "条目4", "条目5", "条目6"]);
 });
 
-it("shows one sentence for a Project with no entry", async () => {
+it("shows one sentence in each section for a Project with no entry", async () => {
   await settingsPage(fakeServer([listed([])]).fetchImpl);
   await expect.poll(sectionText).toEqual(["助手还没有记住任何内容。"]);
   expect(document.querySelectorAll("[data-memory-group]").length).toBe(0);
+  expect([...document.querySelectorAll("[data-character-section] :is(p, input, li)")]
+    .map((element) => element.textContent)).toEqual(["助手还没有记住任何内容。"]);
 });
 
 it("reads again after a failed read, and the Project Instruction section stays usable", async () => {
@@ -548,16 +550,17 @@ it("keeps the delete control inside the file column with a long Chapter title at
   }
 });
 
-it("shows the sentence of an empty Memory and no list for a Project with no character", async () => {
+it("shows 助手还没有记住任何人物。 and no search and no list for a Project with entries and no character", async () => {
   await openCharacters([entry(1, {})]);
   await expect.poll(() => [...characters()!.querySelectorAll("p, input, li")].map((element) => element.textContent))
-    .toEqual(["助手还没有记住任何内容。"]);
+    .toEqual(["助手还没有记住任何人物。"]);
 });
 
-it("shows no entry and no sentence in the section 记忆 when each entry is a character", async () => {
+it("shows 这里还没有人物以外的记忆。 and no group in the section 记忆 when each entry is a character", async () => {
   await openCharacters([character(5, "林舟")]);
   await expect.poll(names).toEqual(["林舟"]);
-  expect([...section()!.querySelectorAll("p, [data-memory-group]")].length).toBe(0);
+  expect([sectionText(), section()!.querySelectorAll("[data-memory-group]").length])
+    .toEqual([["这里还没有人物以外的记忆。"], 0]);
 });
 
 // The intent result of a character on the settings page (ADR 0101 sections 5 and 6).

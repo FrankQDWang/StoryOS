@@ -11,6 +11,8 @@ const FILE_HEADING = "档案";
 /** The author approved the headings of the two blocks of an intent result with the sketch (ADR 0101 section 6). */
 const INTENT_HEADING = "接下来想做什么";
 const QUESTIONS_HEADING = "助手还不清楚的事";
+// The ticket #1824 gives the sentence of a Memory with no character entry. The author approved it on 2026-11-22.
+const NO_CHARACTER_SENTENCE = "助手还没有记住任何人物。";
 
 /**
  * The entries of the type character by name, in the order of the Memory Index. Two entries with one title are one
@@ -41,7 +43,11 @@ export function CharacterSection({ scope, memory }: SettingsSectionProps) {
   if (entries === undefined) return <CharacterFrame />;
   if (entries === "failed") return <CharacterFrame><ReadFailed memory={memory} /></CharacterFrame>;
   const files = characters(entries);
-  if (files.size === 0) return <CharacterFrame><p data-character-empty="">{EMPTY_SENTENCE}</p></CharacterFrame>;
+  if (files.size === 0) {
+    return <CharacterFrame>
+      <p data-character-empty="">{entries.length === 0 ? EMPTY_SENTENCE : NO_CHARACTER_SENTENCE}</p>
+    </CharacterFrame>;
+  }
   const all = [...files.keys()];
   const term = search.trim();
   const names = all.filter((name) => name.includes(term));
