@@ -43,14 +43,14 @@ async function workUntil(what: string, done: () => Promise<boolean>) {
 }
 
 /**
- * The writing workspace shows no intent and no question (ADR 0101 section 5). The messages of the author hold the
- * script lines of the fake model, so the check leaves them out.
+ * The writing workspace shows no intent and no question (ADR 0101 section 5). The messages of the author and the text
+ * of Chapter B hold the script lines of the fake model, so the check leaves out the messages and the editor.
  */
 async function assertNoIntent(page: Page) {
   await expect(page.locator("[data-character-intent], [data-character-questions]")).toHaveCount(0);
   const shown = await page.locator("body").evaluate((body) => {
     const copy = body.cloneNode(true) as HTMLElement;
-    for (const message of copy.querySelectorAll(".assistant-author-message")) message.remove();
+    for (const typed of copy.querySelectorAll(".assistant-author-message, [data-manuscript-editor]")) typed.remove();
     return copy.textContent ?? "";
   });
   for (const text of ["接下来想做什么", "助手还不清楚的事", FIRST.intent, ...FIRST.questions, SECOND.intent,
