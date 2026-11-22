@@ -109,7 +109,7 @@ The length is in characters, after the pass of the Chapter. Each character entry
 
 - After Chapter 10: 31 current entries, 11 of them for a character, and 9,142 characters of text in all.
 - The largest text is 618 characters (entry 12). The largest growth of one text for one Chapter is +253 (entry 2, Chapter 3). The largest first text is 343 characters (entry 31, Chapter 9).
-- Of the 69 changes of a character text from one Chapter to the next, 33 made the text longer (median +70), 8 made it shorter, and 28 kept its length. The pass of Chapter 6 made entry 2 shorter by 125 characters and entry 3 shorter by 94: the pass rewrites the whole text and makes the early events short.
+- Of the 69 comparisons of a character text from one Chapter to the next, 33 show a longer text (median +70), 8 show a shorter text, and in 28 the text stayed the same. The pass of Chapter 6 made entry 2 shorter by 125 characters and entry 3 shorter by 94: the pass rewrites the whole text and makes the early events short.
 - No call was refused with `memory_entry_too_long` or `observation_too_long`.
 
 ### The value of the limit
@@ -132,14 +132,17 @@ The record compares each sentence of the files of 顾青禾 (entry 3), 程立 (e
 - **A fact that the character cannot know:** none found.
 - **The negative form:** no sentence of the form "她不知道……". Sentences with a negative: "不诉苦、不邀功", "眼红未哭", "怀山写了约四十年却未寄的信".
 - **A fact that the Chapters do not have:** "情绪极克制，不诉苦、不邀功，只在无人处掉泪". No Chapter says that she never complains or that she cries only alone.
-- **Events of the character that the file does not have:** the events of Chapters 3, 4, and 7 above; in Chapter 9 she gives 知南 a cup of 龙井; in Chapter 10 she looks at the well first, says "台风天，冷……算冬天", gives 陆砚 the hot 姜汤, and puts a coat on 陆小满.
+- **Events of the character that the file does not have:** the events of Chapters 3, 4, and 7 above; in Chapter 9 she gives 知南 a cup of 龙井; in Chapter 10 she looks at the well first, sets the pot of 葱 upright again ("她把葱扶起来，重新压上"), sits behind the counter and makes a cup of 老白茶, says "台风天，冷……算冬天", gives 陆砚 a cup of the hot 姜汤 ("把一杯热姜汤放在陆砚面前"), puts a coat on 陆小满, and goes home before the end of the day ("顾青禾已经回家了"). The file has only "她在馆里煮姜汤驱寒" of these events.
 
 ### 程立 after Chapter 7 and after Chapter 10 (version 2, 298 characters, no change after Chapter 7)
 
-- **A fact that the character cannot know:** "从而揭穿明川“什么都没签”的说法". 沈明川 says that he signed nothing to 知遥 in Chapter 2, and 程立 is not there.
+The two snapshots have the same text, so each item is for both snapshots, except the last item.
+
+- **A fact that the character cannot know:** none found. "从而揭穿明川“什么都没签”的说法" is a fact that a person told him: in Chapter 7, 知遥 tells him "我爸爸跟我说，他什么都没签。", and he answers "那可能是沈先生记错了。"
 - **The negative form:** none. "不打领带" is his clothing, and "意向书无法律强制力" is his statement.
-- **A fact that the Chapters do not have:** none found.
-- **Events of the character that the file does not have, after Chapter 10:** in Chapter 10 he sits in the first row of the town meeting and speaks first, about the plan of the street, the price, and the safety of the old houses ("老房子不安全，这次没出事是运气好"). 沈明川 tells him that the letter of intent is void ("我跟程立说了，意向书作废"). The captures of Chapters 8 to 10 gave no observation of 程立 (see [Findings](#findings), F3, and [Observations](#observations), O1).
+- **Facts that the Chapters do not have:** "他称沈明川表示由长孙女知遥决定" changes a discussion into a decision. In Chapter 3 he says "沈先生的意思是，这件事要跟您商量。他说您是长孙女，老人家生前最疼您。" "见知遥拖延，他二次登门" gives a reason for the second visit, and Chapter 7 gives no reason.
+- **Events of the character that the file does not have:** in Chapter 3 he puts the papers away and leaves only the drawing ("程立把文件收起来，只留下那张效果图"), and at the end he says "老房子很有味道……我们会好好保护的。"; in Chapter 7 he stands at the counter and does not sit, says "沈小姐，有件事我想您应该知道", and answers 知遥 "那可能是沈先生记错了。"
+- **Events of the character that the file does not have, only after Chapter 10:** in Chapter 10 he sits in the first row of the town meeting and speaks first, about the plan of the street, the price, and the safety of the old houses ("老房子不安全，这次没出事是运气好"). 沈明川 tells him that the letter of intent is void ("我跟程立说了，意向书作废"). The captures of Chapters 8 to 10 gave no observation of 程立 (see [Findings](#findings), F3, and [Observations](#observations), O1).
 
 ### 赵德明 after Chapter 7 (version 3, 213 characters)
 
@@ -231,8 +234,8 @@ Each finding gives the present sentence of the instruction of the mapping `v11` 
 ### F4. A fact outside the knowledge of the character
 
 - **Present sentences:** `crates/storyos-adapter-volcengine-responses/src/pass_wire.rs`, `pass_instructions`: "It holds only what the character can know: no fact that the character did not see and that no person told the character." `capture_instructions`: "Do not give a fact that the character did not see and that no person told the character."
-- **Evidence:** the file of 程立 has "从而揭穿明川“什么都没签”的说法" (M21; 沈明川 says it to 知遥 in Chapter 2, with no 程立). The file of 顾青禾 version 6 had "末笔小圈是句号" (M21; the thought of 知遥 alone in Chapter 7). The capture of Chapter 10 has "赵德明讲十四年前大水时怀山拆门板搭床、给孩子煮长寿面" (M38), and the pass put it into the file of 赵德明 (M39), but in Chapter 10 another person tells of the 长寿面.
-- **Proposed sentence:** in `pass_instructions` and in `capture_instructions`, directly after each present sentence: "What another character says in a scene without the character, and what another character thinks, are not in the file of the character. Give each statement to the character who says it."
+- **Evidence:** the file of 顾青禾 version 6 had "末笔小圈是句号" (M21; the thought of 知遥 alone in Chapter 7: "那是爷爷画的句号。"). The capture of Chapter 10 has "赵德明讲十四年前大水时怀山拆门板搭床、给孩子煮长寿面" (M38), and the pass put it into the file of 赵德明 (M39), but in Chapter 10 another person tells of the 长寿面 ("“我记得。”有人说"). The file of 程立 is not evidence: in Chapter 7, 知遥 tells 程立 what 沈明川 said (section [The files of three characters](#the-files-of-three-characters)).
+- **Proposed sentence:** in `pass_instructions` and in `capture_instructions`, directly after each present sentence: "What another character says in a scene without the character, and what another character thinks, are such facts until a person tells them to the character. Give each statement to the character who says it." The words "until a person tells them to the character" keep the exception of ADR 0101 for a fact that a person tells the character.
 
 ### F5. The part of a character in the plot
 
@@ -245,7 +248,7 @@ Each finding gives the present sentence of the instruction of the mapping `v11` 
 These observations need no change of an instruction text.
 
 - **O1. The file of 程立 did not change after Chapter 7.** The captures of Chapters 8 and 9 each used their 5 observations for other facts, and the capture of Chapter 10 lost its observations (F3). A minor character gets no observation when a Chapter has more than 5 facts.
-- **O2. A text of a character gets shorter.** 8 of 69 changes made a text shorter, by up to 125 characters. The pass makes the early events short, as decision 12 of #1786 says.
+- **O2. A text of a character gets shorter.** 8 of 69 comparisons show a shorter text, by up to 125 characters. The pass makes the early events short, as decision 12 of #1786 says.
 - **O3. The pass of Chapter 10 updated 9 entries from one observation of a major event (M39).** Each update of the character entries 2, 3, 8, 12, 13, 14, 20, and 31 and of the relationship entry 16 names observation 1. The pass put the events of the typhoon night into the files of 8 characters.
 - **O4. No capture of a Conversation recorded the fact of the author.** R18 read entry 21 with `read_memory_entry` and gave an empty list, because the entry holds the fact.
 - **O5. The capture of Chapter 4 gave a decision of 知遥 as a character observation with the title "知遥决定留镇远程办公".** The title is not the name of the character. The pass of Chapter 4 put the fact into entry 2 (沈知遥) and into entries 1 and 12.
