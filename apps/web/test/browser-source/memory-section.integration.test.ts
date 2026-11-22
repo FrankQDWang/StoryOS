@@ -554,3 +554,111 @@ it("shows no entry and no sentence in the section 记忆 when each entry is a ch
   await expect.poll(names).toEqual(["林舟"]);
   expect([...section()!.querySelectorAll("p, [data-memory-group]")].length).toBe(0);
 });
+
+// The intent result of a character on the settings page (ADR 0101 sections 5 and 6).
+const INTENT = "他想在涨水前把船修好，再去问母亲那封信的事。";
+const QUESTIONS = ["母亲的信在谁手里？", "他知道阿青要走吗？"];
+const result = (fields: Partial<NonNullable<MemoryEntryInspect["intent"]>> = {}) => ({ text: INTENT,
+  questions: QUESTIONS, recorded_at: "2026-11-20T08:30:00.000Z",
+  chapter: { chapter_id: CHAPTER, title: "渡口", availability: "available" as const },
+  ...fields });
+const blockLines = (selector: string) => [...document.querySelectorAll(`[data-character-file] ${selector} :is(h4, p, li)`)]
+  .map((line) => line.textContent);
+
+it("shows 接下来想做什么 with the intent and its Chapter, and 助手还不清楚的事 with each question, with no control",
+  async () => {
+    // The sketch of ADR 0101 section 6 gives the measures of the block.
+    const styles = Object.assign(document.createElement("link"), { rel: "stylesheet", href: "/src/writing-workspace.css" });
+    const loaded = new Promise((resolve, reject) => { styles.onload = resolve; styles.onerror = reject; });
+    document.head.append(styles);
+    try {
+      await loaded;
+      await openCharacters([entry(1, {}), character(5, "林舟", { intent: result() }),
+        character(7, "林舟", { origin: "author_request" })]);
+      await expect.poll(() => blockLines("[data-character-intent]"))
+        .toEqual(["接下来想做什么", INTENT, "写到《渡口》时的想法"]);
+      const file = document.querySelector<HTMLElement>("[data-character-file]")!;
+      expect([[...file.querySelectorAll("h3, h4")].map((heading) => heading.textContent), blockLines("[data-character-questions]"),
+        [...file.children].map((child) => child.getAttribute("data-character-entry") ?? child.querySelector("h4")?.textContent)]).toEqual([
+        ["林舟", "档案", "接下来想做什么", "助手还不清楚的事"], ["助手还不清楚的事", ...QUESTIONS],
+        ["7", "5", "接下来想做什么", "助手还不清楚的事"]]);
+      const block = getComputedStyle(file.querySelector("[data-character-intent]")!);
+      const line = (selector: string) => getComputedStyle(file.querySelector(`[data-character-intent] ${selector}`)!);
+      expect([block.marginTop, block.padding, block.borderRadius !== "0px", line("h4").fontSize, line("h4").fontWeight,
+        line(".character-intent-text").fontSize, line(".character-intent-text").lineHeight,
+        line(".character-intent-chapter").fontSize]).toEqual(["16px", "10px 12px", true, "13px", "500", "13px",
+        "22.1px", "12px"]);
+      expect([...characters()!.querySelectorAll("input, textarea, select, button")].map((control) =>
+        control.getAttribute("data-character-search") === null ? control.textContent : "search"))
+        .toEqual(["search", "林舟", "删除", "删除"]);
+      // The section 记忆 shows no intent and no question.
+      expect([INTENT, ...QUESTIONS].filter((text) => section()!.textContent!.includes(text))).toEqual([]);
+    } finally {
+      styles.remove();
+    }
+  });
+
+it("shows no question block with no question, no Chapter line with no available Chapter, and no block with no result",
+  async () => {
+    await openCharacters([
+      character(5, "林舟", { intent: result({ questions: [], chapter: { chapter_id: CHAPTER, title: null,
+        availability: "unavailable" } }) }),
+      character(6, "阿青"),
+      character(8, "青石", { intent: result({ chapter: null }) }),
+    ]);
+    const shown: unknown[] = [];
+    for (const name of ["林舟", "阿青", "青石"]) {
+      document.querySelector<HTMLButtonElement>(`[data-character-name="${name}"]`)!.click();
+      await expect.poll(() => document.querySelector("[data-character-file] h3")?.textContent).toBe(name);
+      shown.push([name, blockLines("[data-character-intent]"), blockLines("[data-character-questions]")]);
+    }
+    expect(shown).toEqual([
+      ["林舟", ["接下来想做什么", INTENT], []],
+      ["阿青", [], []],
+      ["青石", ["接下来想做什么", INTENT], ["助手还不清楚的事", ...QUESTIONS]],
+    ]);
+  });
+
+it("shows no block after the author deleted the part of the background work of a character", async () => {
+  const background = character(5, "林舟", { intent: result() });
+  await openCharacters([background, character(7, "林舟", { origin: "author_request" })],
+    [applied(background.memory_entry_id)]);
+  await expect.poll(() => blockLines("[data-character-intent]").length).toBe(3);
+  await confirmDeleteInFile(5);
+  await expect.poll(fileEntries).toEqual(["7"]);
+  expect([blockLines("[data-character-intent]"), blockLines("[data-character-questions]")]).toEqual([[], []]);
+});
+
+it("shows no block after the author deleted the part of the author that the result names", async () => {
+  const author = character(7, "林舟", { origin: "author_request" });
+  await openCharacters([character(5, "林舟", { intent: result() }), author], [applied(author.memory_entry_id)]);
+  await expect.poll(() => blockLines("[data-character-intent]").length).toBe(3);
+  await confirmDeleteInFile(7);
+  await expect.poll(fileEntries).toEqual(["5"]);
+  expect([blockLines("[data-character-intent]"), blockLines("[data-character-questions]")]).toEqual([[], []]);
+});
+
+it("reads again after a read that overlapped the delete of the part of the author, and shows the result of the new read",
+  async () => {
+    const background = character(5, "林舟", { intent: result() });
+    const author = character(7, "林舟", { origin: "author_request" });
+    // After the delete, a later intent pass gives a new result that names no part of the author.
+    const later = { ...background, version: "3", intent: result({ text: "他想先去找阿青。", questions: [] }) };
+    const reread = held();
+    const server = fakeServer([listed([background, author]), reread.answer, listed([later])],
+      [deleted({ kind: "conflicted", reason: "entry_changed" }), applied(author.memory_entry_id)]);
+    await settingsPage(server.fetchImpl);
+    document.querySelector<HTMLButtonElement>('[data-settings-item="characters"]')!.click();
+    await expect.poll(() => blockLines("[data-character-intent]").length).toBe(3);
+    // The changed part of the background work opens a read, and the author deletes the part of the author.
+    await confirmDeleteInFile(5);
+    await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(2);
+    await confirmDeleteInFile(7);
+    await expect.poll(fileEntries).toEqual(["5"]);
+    expect(blockLines("[data-character-intent]")).toEqual([]);
+    reread.give(listed([background, author]));
+    await expect.poll(() => blockLines("[data-character-intent]")).toEqual(["接下来想做什么", "他想先去找阿青。",
+      "写到《渡口》时的想法"]);
+    expect([server.paths.filter((path) => path === MEMORY).length, fileEntries(),
+      blockLines("[data-character-questions]")]).toEqual([3, ["5"], []]);
+  });
