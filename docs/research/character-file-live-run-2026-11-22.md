@@ -118,21 +118,32 @@ The length is in characters, after the pass of the Chapter. Each character entry
 
 ## The files of three characters
 
-The record compares each sentence of the files of 顾青禾 (entry 3), 程立 (entry 11), and 赵德明 (entry 8) after Chapter 7 and after Chapter 10 with the Chapters. `entries.json` has the full texts. The quoted words are from the file or from the Chapter.
+The record compares each sentence of the files of 顾青禾 (entry 3), 程立 (entry 11), and 赵德明 (entry 8) after Chapter 7 and after Chapter 10 with the Chapters. `entries.json` has the full texts. The quoted words are from the file or from the Chapter. The item "Events of the character that the file does not have" gives, for each Chapter, each act and each statement of the character in that Chapter that the file does not have. A file of a few hundred characters cannot have each event, so this item is a measure of what the pass keeps, not a defect.
 
 ### 顾青禾 after Chapter 7 (version 6, 343 characters)
 
 - **A fact that the character cannot know:** "顾远2003年毕业，末笔小圈是句号". In Chapter 7 only 知遥 finds the meaning of the circle, alone: "后面那个小小的圆圈，她现在知道是什么意思了。那是爷爷画的句号。"
 - **The negative form:** no sentence of the form "她不知道……". Three sentences have a negative for what she said or refused: "称没见过钥匙", "初称不知道", "她仍不肯解释“为什么是一半”".
 - **A fact that the Chapters do not have:** "她长期回避沈家隐事" is a reading of her acts, and no Chapter says it.
-- **Events of the character that the file does not have:** in Chapter 3 she goes into the back room when 程立 comes, and she brings 知遥 a bowl of 阳春面; in Chapter 4 she names 陆砚 for the repair of the chairs ("河那边的陆砚，做木工的") and gives him 老白茶; in Chapter 7 she reads the copy of the letter of intent and says "你爸爸是这样的人，一直都是", and she says that 顾远 "给你爷爷磕了三个头".
+- **Events of the character that the file does not have:**
+  - Chapter 1: she tells how 沈怀山 died ("他坐在柜台后面那把藤椅上，像是睡着了。手里还拿着账本"), says "镇上的事，还是我和赵师傅跑的", brings two cups of 龙井, carries the case of 知遥 up the stairs and says "第七级", and finds a pin for the certificate.
+  - Chapter 2: at the funeral she stands at the back and does not cry ("手里攥着一块手帕，攥得很紧"); she says of the papers "都留着吧，你以后慢慢看"; she finds 知遥 on the threshold, and later stands at the counter and looks at the empty cabinet ("看着那个空了的柜门，一动不动").
+  - Chapter 3: her hand stops when 知遥 asks about the money of each 初九 ("择菜的手停了一下"); she goes into the back room when 程立 comes; she brings 知遥 a bowl of 阳春面; she looks at the drawing for a long time and shakes her head.
+  - Chapter 4: she says "这些东西，你爷爷早就想修了", names 陆砚 for the repair of the chairs ("河那边的陆砚，做木工的"), tells the way ("老桥近一点"), and gives 陆砚 老白茶 ("小陆来了。喝口茶再走").
+  - Chapter 5: she asks "开了做什么？", says "老白茶十块，太便宜了" and "那是三年前的价钱", says that she drinks 老白茶 only in winter and white water in the other seasons, and calls 知遥 in to eat.
+  - Chapter 6: she gives two cups of 菊花 and holds a cup of white water; she says "他说，房子是自己的了，才算真正开始"; she laughs and then makes her face stern.
+  - Chapter 7: she reads the copy of the letter of intent that 程立 left and says "你爸爸是这样的人，一直都是"; she says that 顾远 is an engineer in 深圳, that he came to the funeral, and that he "给你爷爷磕了三个头".
 
 ### 顾青禾 after Chapter 10 (version 8, 512 characters)
 
 - **A fact that the character cannot know:** none found.
 - **The negative form:** no sentence of the form "她不知道……". Sentences with a negative: "不诉苦、不邀功", "眼红未哭", "怀山写了约四十年却未寄的信".
 - **A fact that the Chapters do not have:** "情绪极克制，不诉苦、不邀功，只在无人处掉泪". No Chapter says that she never complains or that she cries only alone.
-- **Events of the character that the file does not have:** the events of Chapters 3, 4, and 7 above; in Chapter 9 she gives 知南 a cup of 龙井; in Chapter 10 she looks at the well first, sets the pot of 葱 upright again ("她把葱扶起来，重新压上"), sits behind the counter and makes a cup of 老白茶, says "台风天，冷……算冬天", gives 陆砚 a cup of the hot 姜汤 ("把一杯热姜汤放在陆砚面前"), puts a coat on 陆小满, and goes home before the end of the day ("顾青禾已经回家了"). The file has only "她在馆里煮姜汤驱寒" of these events.
+- **Events of the character that the file does not have:**
+  - Chapters 1 to 7: version 8 keeps these Chapters in one sentence ("她多年照管知遥、帮办丧事，长期回避同心箱、买价和汇款旧事"). Thus it does not have the events of Chapters 1 to 7 in the list of version 6 above, and it does not have these events of version 6: the room of 知遥 that 沈怀山 did not let her touch, the words "别撬", the first answer "不知道" about the money, the drawing that she turned over, the tea that she bought for the trial opening, and the year 1983 of the signboard.
+  - Chapter 8: she walks to the box and stands beside it without a word; she touches the photograph in the newspaper of 1979 ("伸手摸了摸照片上那个模糊的人影"), says "照片是黑白的，看不出来", and tells that 小刘 of the photo shop took it ("我们俩都不信，以为他吹牛。结果真登了"); she folds the letter and puts it back into the envelope.
+  - Chapter 9: she gives 知南 a cup of 龙井.
+  - Chapter 10: she looks at the well first and sets the pot of 葱 upright again ("她把葱扶起来，重新压上"), sits behind the counter and makes a cup of 老白茶, says "台风天，冷……算冬天", gives 陆砚 a cup of the hot 姜汤 ("把一杯热姜汤放在陆砚面前"), puts a coat on 陆小满, and goes home before the end of the day ("顾青禾已经回家了"). The file has only "她在馆里煮姜汤驱寒" of the events of Chapter 10.
 
 ### 程立 after Chapter 7 and after Chapter 10 (version 2, 298 characters, no change after Chapter 7)
 
@@ -141,7 +152,9 @@ The two snapshots have the same text, so each item is for both snapshots, except
 - **A fact that the character cannot know:** none found. "从而揭穿明川“什么都没签”的说法" is a fact that a person told him: in Chapter 7, 知遥 tells him "我爸爸跟我说，他什么都没签。", and he answers "那可能是沈先生记错了。"
 - **The negative form:** none. "不打领带" is his clothing, and "意向书无法律强制力" is his statement.
 - **Facts that the Chapters do not have:** "他称沈明川表示由长孙女知遥决定" changes a discussion into a decision. In Chapter 3 he says "沈先生的意思是，这件事要跟您商量。他说您是长孙女，老人家生前最疼您。" "见知遥拖延，他二次登门" gives a reason for the second visit, and Chapter 7 gives no reason.
-- **Events of the character that the file does not have:** in Chapter 3 he puts the papers away and leaves only the drawing ("程立把文件收起来，只留下那张效果图"), and at the end he says "老房子很有味道……我们会好好保护的。"; in Chapter 7 he stands at the counter and does not sit, says "沈小姐，有件事我想您应该知道", and answers 知遥 "那可能是沈先生记错了。"
+- **Events of the character that the file does not have:**
+  - Chapter 3: he says "沈先生应该跟您提过我们公司"; he compares the price with the new flats of the town ("一百平米也就六七十万"); he puts the papers away and leaves only the drawing ("程立把文件收起来，只留下那张效果图"); at the end he says "老房子很有味道……我们会好好保护的。"
+  - Chapter 7: he stands at the counter and does not sit; he says "沈小姐，有件事我想您应该知道" and "我不太清楚沈先生有没有跟您说过"; his smile stops when 知遥 tells him what her father said; he answers "那可能是沈先生记错了。"; he leaves a copy of the letter of intent ("那份意向书的复印件……是程立留下的").
 - **Events of the character that the file does not have, only after Chapter 10:** in Chapter 10 he sits in the first row of the town meeting and speaks first, about the plan of the street, the price, and the safety of the old houses ("老房子不安全，这次没出事是运气好"). 沈明川 tells him that the letter of intent is void ("我跟程立说了，意向书作废"). The captures of Chapters 8 to 10 gave no observation of 程立 (see [Findings](#findings), F3, and [Observations](#observations), O1).
 
 ### 赵德明 after Chapter 7 (version 3, 213 characters)
@@ -149,14 +162,20 @@ The two snapshots have the same text, so each item is for both snapshots, except
 - **A fact that the character cannot know:** none found.
 - **The negative form:** none.
 - **A fact that the Chapters do not have:** "他受托守护爷爷旧事，是开启同心木箱的关键人" gives his part in the plot, not his view.
-- **Events of the character that the file does not have:** none found.
+- **Events of the character that the file does not have:**
+  - Chapter 1: 知遥 remembers that he sat at the table by the window with his bamboo pipe and told her about the river ("抽一根竹子做的烟斗，给她讲河里的事情").
+  - Chapter 2: he says "长这么大了。"
+  - Chapter 7: he does not hear well, and 知遥 says the question three times on the telephone ("赵德明耳朵背，她说了三遍，他才听明白").
 
 ### 赵德明 after Chapter 10 (version 5, 361 characters)
 
 - **A fact that the character cannot know:** none found.
 - **The negative form:** none.
-- **Facts that the Chapters do not have:** "还给孩子煮长寿面" is given to 赵德明, but in Chapter 10 another person tells it ("“我记得。”有人说，“……怀山给煮了一碗长寿面。”"). The capture of Chapter 10 has the same error in its observation (M38). "他知晓并守护怀山、青禾合开茶馆与共有房产的旧情" and "话少而语意重，关键处只下断语" are readings, not facts of a Chapter.
-- **Events of the character that the file does not have:** in Chapter 8 he explains the two 同心 seals ("怀山一枚，青禾一枚。青禾那枚，八几年的时候掉到河里去了"); in Chapter 10 he claps after the speech of 知遥 at the town meeting.
+- **Facts that the Chapters do not have:** "还给孩子煮长寿面" is given to 赵德明, but in Chapter 10 another person tells it ("“我记得。”有人说，“……怀山给煮了一碗长寿面。”"). The capture of Chapter 10 has the same error in its observation (M38). This is finding F6. "他知晓并守护怀山、青禾合开茶馆与共有房产的旧情" and "话少而语意重，关键处只下断语" are readings, not facts of a Chapter.
+- **Events of the character that the file does not have:**
+  - Chapters 1, 2, and 7: the events in the list of version 3 above.
+  - Chapter 8: 陆小满 brings him on her bicycle, because he wants to come that day ("赵爷爷非要今天来，说一天都不能等"); he takes the key out of a handkerchief ("钥匙柄上拴着一根褪了色的红绳"); he stops 陆小满 with his stick; he gives the reason of the receipt ("一个寡妇，一个鳏夫，房子写在一起，镇上的人要说闲话的"); he explains the two 同心 seals ("怀山一枚，青禾一枚。青禾那枚，八几年的时候掉到河里去了"); he eats a small half bowl of noodles ("说老了，吃不动"); he coughs, and his pipe almost falls; he goes home on the bicycle and looks back at the signboard.
+  - Chapter 10: he tells the children about the flood of fourteen years ago, and he says "那时候怀山把门板都拆了……给人家搭床。" (the file has this event); he claps after the speech of 知遥 at the town meeting.
 
 ## Step 3
 
@@ -234,14 +253,20 @@ Each finding gives the present sentence of the instruction of the mapping `v11` 
 ### F4. A fact outside the knowledge of the character
 
 - **Present sentences:** `crates/storyos-adapter-volcengine-responses/src/pass_wire.rs`, `pass_instructions`: "It holds only what the character can know: no fact that the character did not see and that no person told the character." `capture_instructions`: "Do not give a fact that the character did not see and that no person told the character."
-- **Evidence:** the file of 顾青禾 version 6 had "末笔小圈是句号" (M21; the thought of 知遥 alone in Chapter 7: "那是爷爷画的句号。"). The capture of Chapter 10 has "赵德明讲十四年前大水时怀山拆门板搭床、给孩子煮长寿面" (M38), and the pass put it into the file of 赵德明 (M39), but in Chapter 10 another person tells of the 长寿面 ("“我记得。”有人说"). The file of 程立 is not evidence: in Chapter 7, 知遥 tells 程立 what 沈明川 said (section [The files of three characters](#the-files-of-three-characters)).
-- **Proposed sentence:** in `pass_instructions` and in `capture_instructions`, directly after each present sentence: "The character does not know what another character says in a scene without the character, or what another character thinks, until a person tells the character." The words "until a person tells the character" keep the exception of ADR 0101 for a fact that a person tells the character. This sentence does not apply to the evidence of the 长寿面, where the capture gives the words of one person to another character who is in the scene.
+- **Evidence:** the file of 顾青禾 version 6 had "末笔小圈是句号" (M21; the thought of 知遥 alone in Chapter 7: "那是爷爷画的句号。"). The file of 程立 is not evidence: in Chapter 7, 知遥 tells 程立 what 沈明川 said (section [The files of three characters](#the-files-of-three-characters)).
+- **Proposed sentence:** in `pass_instructions` and in `capture_instructions`, directly after each present sentence: "The character does not know what another character says in a scene without the character, or what another character thinks, until a person tells the character." The words "until a person tells the character" keep the exception of ADR 0101 for a fact that a person tells the character. The words of the 长寿面 in the file of 赵德明 are finding F6.
 
 ### F5. The part of a character in the plot
 
 - **Present sentence:** `crates/storyos-adapter-volcengine-responses/src/pass_wire.rs`, `pass_instructions`: "The file of a character from the manuscript has the view of the character."
 - **Evidence:** the file of 赵德明 has "他受托守护爷爷旧事，是开启同心木箱的关键人" (version 3, M21) and "他知晓并守护怀山、青禾合开茶馆与共有房产的旧情" (versions 4 and 5, M28 and M39).
 - **Proposed sentence:** in `pass_instructions`, directly after the present sentence: "Do not write the part of the character in the story."
+
+### F6. The words of one person given to another character
+
+- **Present sentences:** no instruction says who the speaker of a statement is. The nearest sentences: `capture_instructions` in `crates/storyos-adapter-volcengine-responses/src/capture_wire.rs`: "Write it from the place of the character: what the character did, saw, and heard in this material, what the character wants at its end, and how the character speaks." `pass_instructions` in `crates/storyos-adapter-volcengine-responses/src/pass_wire.rs`: "It tells what the character did, saw, and heard, in the order of the story: make the early events short, and keep the recent events in detail."
+- **Evidence:** in Chapter 10, 赵德明 says "那时候怀山把门板都拆了……给人家搭床。", and then a person that the Chapter does not name says "我记得。……我家孩子就是在这里过的周岁，怀山给煮了一碗长寿面。" (`fixtures/memory-calibration/chapter-10.md`, lines 81 and 83). The capture of Chapter 10 gives both statements to 赵德明: "赵德明讲十四年前大水时怀山拆门板搭床、给孩子煮长寿面" (M38). The pass put the two statements into the file of 赵德明: "他讲起十四年前大水时怀山拆门板搭床、还给孩子煮长寿面" (M39, version 5).
+- **Proposed sentence:** in `capture_instructions` and in `pass_instructions`, directly after each sentence above: "Give a statement only to the character that the Chapter names as its speaker. When the Chapter does not name the speaker, do not give the statement to a character."
 
 ## Observations
 
