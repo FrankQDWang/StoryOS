@@ -33,11 +33,11 @@ The bounded Context item of a Run that lists each current Memory Entry. A line h
 _Avoid_: Memory navigation summary, whole Memory collection, loaded Memory
 
 **Character File**:
-The Agent Memory of one character: at most two Memory Entries of the type character with the name of the character as their title. The part of the author holds what the author told the assistant to remember about the character and that the character knows, and background work never changes its text. The part of the background work holds the view of the character from the manuscript, and the capture of a Chapter and the consolidation pass keep it current. A Character File is not a structured record of a character ([ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
+The Agent Memory of one character: at most two Memory Entries of the type character with the name of the character as their title. The part of the author holds what the author told the assistant to remember about the character and that the character knows. Background work never changes the text of that part. The part of the background work holds the view of the character from the manuscript, and the capture of a Chapter and the consolidation pass keep it current. A Character File is not a structured record of a character ([ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
 _Avoid_: Character sheet, character record, character card, persona
 
 **Intent Pass**:
-Background work for one character that starts with no request of the author after the Character File of that character changed. The only data of its model request is the two parts of that Character File. Its result is one Character Intent and at most three questions to the author. An Intent Pass simulates no story, and it changes no text of the Character File.
+Background work for one character that starts with no request of the author after the Character File of that character changed. The two parts of that Character File are the only source of knowledge about the character in its model request. After a refused reply, one more request also has the refusal of the Host as a Tool result. Its result is one Character Intent and at most three questions to the author. An Intent Pass simulates no story, and it changes no text of the Character File.
 _Avoid_: Simulation, character agent, dreaming, role play
 
 **Character Intent**:
