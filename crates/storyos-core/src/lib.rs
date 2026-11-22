@@ -177,7 +177,7 @@ pub use create_volume::{
     CreateVolume, CreateVolumeApplied, CreateVolumeConflict, CreateVolumeRefusal,
     CreateVolumeResult, create_volume,
 };
-pub use current_intent::{MemoryVersionFacts, MemoryVersionKind, current_intent, current_intents};
+pub use current_intent::{MemoryVersionFacts, MemoryVersionKind, current_intents};
 pub use delete_chapter::{
     ChapterRemovalLifecycle, DeleteChapter, DeleteChapterApplied, DeleteChapterConflict,
     DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteChapterResult,
@@ -232,12 +232,12 @@ pub use instruction_binding::{
     BoundInstruction, assemble_instruction_binding, project_instruction_binding,
 };
 pub use intent_pass::{
-    CharacterFile, INTENT_PASS_INTERVAL, INTENT_PASS_MAX_RUN_STEPS, IntentPassAssembly,
-    IntentPassEntryFacts, IntentPassFacts, IntentPassOutcome, IntentPassRead, IntentPassRecord,
-    IntentPassSkip, NeededCharacter, admit_intent_pass, assemble_intent_pass_context,
-    decide_intent_pass, intent_pass_chapter, intent_pass_due, intent_pass_failure,
-    intent_pass_sends_again, next_intent_pass_context, select_intent_pass_entry,
-    settle_intent_result, write_can_change_character,
+    CharacterFile, INTENT_PASS_MAX_RUN_STEPS, IntentPassAssembly, IntentPassEntryFacts,
+    IntentPassFacts, IntentPassOutcome, IntentPassRead, IntentPassRecord, IntentPassSkip,
+    NeededCharacter, admit_intent_pass, assemble_intent_pass_context, decide_intent_pass,
+    intent_pass_chapter, intent_pass_due, intent_pass_failure, intent_pass_sends_again,
+    next_intent_pass_context, select_intent_pass_entry, settle_intent_result,
+    write_can_change_character,
 };
 pub use load_skill::{
     LOAD_SKILL_TOOL_SPEC, LoadSkillRefusal, SKILL_LOAD_LIMIT, SkillLoadFacts, admit_skill_load,
@@ -341,10 +341,10 @@ pub use rebuild_expired_reference::{
     ContinuationReferenceCondition, ExpiryRebuildBlock, ExpiryRebuildDecision,
     ExpiryRebuildDisposition, ExpiryRebuildFacts, decide_confirmed_expiry_rebuild,
 };
+pub(crate) use record_character_intent::RECORD_CHARACTER_INTENT_TOOL_SPEC;
 pub use record_character_intent::{
     CHARACTER_INTENT_MAX_CHARS, CHARACTER_QUESTION_MAX_CHARS, CHARACTER_QUESTIONS_MAX,
-    CharacterIntent, IntentCallSettlement, IntentRefusal, RECORD_CHARACTER_INTENT_TOOL_SPEC,
-    settle_intent_call, validate_character_intent,
+    IntentCallSettlement, settle_intent_call,
 };
 pub use record_memory_observations::{
     CAPTURE_OBSERVATIONS_MAX, CaptureOutcome, MemoryObservation, ObservationCallSettlement,
