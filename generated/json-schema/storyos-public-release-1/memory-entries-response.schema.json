@@ -24,7 +24,7 @@
     },
     "MemoryEntryInspect": {
       "additionalProperties": false,
-      "description": "The current version of one Memory Entry. The `source` is `null` when the version has no source\nreference that the Host can decode. Only an entry with a conflict flag has `flag`.",
+      "description": "The current version of one Memory Entry. The `source` is `null` when the version has no source\nreference that the Host can decode. Only an entry with a conflict flag has `flag`. Only a\ncharacter entry of the background work with a current intent result has `intent`.",
       "properties": {
         "changed_at": {
           "format": "date-time",
@@ -42,6 +42,9 @@
         },
         "flag": {
           "$ref": "#/$defs/MemoryEntryFlagInspect"
+        },
+        "intent": {
+          "$ref": "#/$defs/MemoryEntryIntentInspect"
         },
         "memory_entry_id": {
           "format": "uuid",
@@ -82,6 +85,42 @@
         "origin",
         "source",
         "changed_at"
+      ],
+      "type": "object"
+    },
+    "MemoryEntryIntentInspect": {
+      "additionalProperties": false,
+      "description": "The current result of the intent pass of a character entry of the background work (ADR 0101\nsections 4 and 6): the intent, at most three questions to the author, the Chapter at which the\npass made the result, and the time of the result. The `chapter` is `null` when the pass had no\nChapter.",
+      "properties": {
+        "chapter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryIntentChapterInspect"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "questions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "questions",
+        "chapter",
+        "recorded_at"
       ],
       "type": "object"
     },
@@ -160,6 +199,31 @@
         "other"
       ],
       "type": "string"
+    },
+    "MemoryIntentChapterInspect": {
+      "additionalProperties": false,
+      "description": "The Chapter at which an intent pass made its result, in the form of the Chapter source of an\nentry: the `title` is `null` when the Chapter is unavailable.",
+      "properties": {
+        "availability": {
+          "$ref": "#/$defs/MemorySourceAvailability"
+        },
+        "chapter_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "chapter_id",
+        "title",
+        "availability"
+      ],
+      "type": "object"
     },
     "MemorySourceAvailability": {
       "description": "`available` when the Project has the record of the source now (Memory contract, section 10).",

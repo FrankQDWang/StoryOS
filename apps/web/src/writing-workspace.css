@@ -595,7 +595,7 @@ li[data-chapter-id] { position: relative; }
 .character-file h4 { margin: 12px 0 4px; font-size: 13px; font-weight: 500; }
 .character-part { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .character-part:first-child { padding-top: 0; }
-.character-part:last-child { padding-bottom: 0; border-bottom: 0; }
+.character-part:last-child, .character-part:has(+ .character-intent) { padding-bottom: 0; border-bottom: 0; }
 .character-part-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .character-part-head > :first-child { flex: 1; min-width: 0; }
 .character-part .memory-entry-origin { margin-top: 4px; overflow-wrap: anywhere; font-size: 12px; }
@@ -604,3 +604,9 @@ li[data-chapter-id] { position: relative; }
 .character-part .memory-entry-actions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: 60%; }
 .character-part .memory-entry-actions p { flex-basis: 100%; margin: 0; text-align: right; }
 .character-part .memory-entry-text { color: #3f3d38; font-size: 13px; line-height: 1.7; }
+.character-intent { margin-top: 16px; padding: 10px 12px; border-radius: 6px; background: var(--tree-panel); overflow-wrap: anywhere; }
+.character-intent + .character-intent { margin-top: 8px; }
+.character-file .character-intent h4 { margin: 0 0 4px; }
+.character-intent-text, .character-intent ul { margin: 0; font-size: 13px; line-height: 1.7; }
+.character-intent ul { padding-left: 18px; }
+.character-intent-chapter { margin: 4px 0 0; color: var(--muted); font-size: 12px; }

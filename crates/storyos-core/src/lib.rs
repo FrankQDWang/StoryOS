@@ -18,6 +18,7 @@ mod create_agent_run;
 mod create_chapter;
 mod create_project;
 mod create_volume;
+mod current_intent;
 mod delete_chapter;
 mod delete_memory_entry;
 mod delete_volume;
@@ -176,6 +177,7 @@ pub use create_volume::{
     CreateVolume, CreateVolumeApplied, CreateVolumeConflict, CreateVolumeRefusal,
     CreateVolumeResult, create_volume,
 };
+pub use current_intent::{MemoryVersionFacts, MemoryVersionKind, current_intent, current_intents};
 pub use delete_chapter::{
     ChapterRemovalLifecycle, DeleteChapter, DeleteChapterApplied, DeleteChapterConflict,
     DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteChapterResult,

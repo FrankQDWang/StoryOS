@@ -34,6 +34,27 @@ pub struct MemoryEntryFlagItem {
     pub flagged_at: String,
 }
 
+/// The Chapter of an intent result. `title` is the title of the Chapter when it is in the
+/// manuscript tree now.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemoryIntentChapterItem {
+    pub chapter_id: String,
+    pub title: Option<String>,
+    pub available: bool,
+}
+
+/// The current result of the intent pass of a character entry of the background work (ADR 0101
+/// section 4).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemoryEntryIntentItem {
+    pub text: String,
+    pub questions: Vec<String>,
+    /// `None` when the pass had no Chapter.
+    pub chapter: Option<MemoryIntentChapterItem>,
+    /// The time of the intent version, RFC 3339 in UTC with milliseconds.
+    pub recorded_at: String,
+}
+
 /// The current version of one Memory Entry.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryEntryListItem {
@@ -51,6 +72,9 @@ pub struct MemoryEntryListItem {
     pub changed_at: String,
     /// `Some` when the current version is a flag version.
     pub flag: Option<MemoryEntryFlagItem>,
+    /// `Some` for a character entry of the background work with a current result at the current
+    /// Memory revision.
+    pub intent: Option<MemoryEntryIntentItem>,
 }
 
 /// Reads the current Memory Entries under an already authenticated exact Project Scope. The read
