@@ -133,12 +133,18 @@ The stage names below are contract identifiers, not separate workflow runtimes:
     StoryOS distribution, and marks on the new words of a Proposal candidate
     ([ADR 0096](../adr/0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md),
     [ADR 0100](../adr/0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md)).
+11. **Character intents.** Work on a plot that grows from the characters: a
+    character file in Agent Memory, an intent pass for each character, the
+    intents as context of a Run of the author, and a section for the
+    characters on the settings page
+    ([ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
 
 The continuation contract defines `S5-*` through `S10-*`. The release order
 after Stage 7 is
-Stage 10, then Stage 8 and Stage 9: the number of a stage is its identity, and
-it is not its place in the order. Stage 8 and Stage 9 stay on EXECUTION HOLD,
-and the author decides again about each of them after the release of Stage 10.
+Stage 10, then Stage 11: the number of a stage is its identity, and
+it is not its place in the order. Stage 8 and Stage 9 stay on EXECUTION HOLD.
+ADR 0101 records the order that the author agreed for the work after Stage 11,
+and a later ADR decides about Stage 8 and about Stage 9 when that work starts.
 The last stage that the author keeps completes the current local MVP route.
 [Eval](eval-evidence-foundation.md) is outside
 MVP and has no current design, implementation, or release gate. Stage order is the
@@ -717,7 +723,8 @@ Reuse current owners and stable Requirement IDs. No old child body can stand in
 for that alignment. The current [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361)
 owns its accepted implementation handoff and pending final release evidence.
 The author released the execution of Stage 4 through Stage 7 and of
-Stage 10. Stage 8 and Stage 9 stay on EXECUTION HOLD until the author
+Stage 10. Stage 11 waits for the approval of its specification (ADR 0101).
+Stage 8 and Stage 9 stay on EXECUTION HOLD until the author
 explicitly releases their execution (ADR 0096).
 
 ## 10. Explicit non-scope of this contract

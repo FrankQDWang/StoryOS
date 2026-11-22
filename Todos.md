@@ -48,10 +48,14 @@ Each idea must pass two questions: does it need setup before writing (then it is
 
 - **A conflict notice in the text.** When a new passage is in conflict with Agent Memory, for example a dead character who comes back or an age that does not fit, the editor marks the passage.
 - **Sleeping threads.** A hint from many Chapters before that has no result, and a character who did not appear for a long time, are in one list for the author and for the assistant.
+- **A dreaming function for Agent Memory.** A general agent has a dreaming function: in a quiet time, it reads all its memory, joins duplicates, corrects old facts, and removes entries of no use. The consolidation pass of Stage 7 already removes, merges, and compresses the entries (ADR 0094 section 6), but it starts only when an observation of a capture waits, and it cannot read the manuscript. The author wants a dreaming function after Stage 11, and its difference from that pass is not decided ([ADR 0101](docs/adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
 
 ### 4.3 When to make the world larger
 
+- **A plot that grows from the characters.** Decided: [ADR 0101](docs/adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md) sets the scope of Stage 11. Each character says what it wants to do next, from its own file, and the author decides.
+
 - **Directions before prose.** Before the assistant writes, it gives three directions of one sentence each: one that uses only the known people and places, one that brings back a sleeping thread or character, and one that adds a new person or place. The author selects one, and then the assistant writes.
+- **A small floating assistant.** A small assistant floats beside the text, as in a general coding agent. It reminds the author with no request, and the author can speak with it by voice. The author named it on 2026-11-22 as a possible later form and has not decided it. Stage 11 shows no intent in the writing workspace (ADR 0101).
 
 ### 4.4 Proof of the position
 
@@ -62,7 +66,7 @@ Each idea must pass two questions: does it need setup before writing (then it is
 
 - **The scope of the author-voice stage.** Decided: [ADR 0100](docs/adr/0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md).
 - **The production model.** Which vendor, which account, and which cost. See section 4.1.
-- **Stage 8 and Stage 9.** The author decides again about them after the author-voice stage.
+- **Stage 8 and Stage 9.** The author agreed to an order for the work after Stage 11: the base for more than one Provider, then a smaller Stage 9, and the withdrawal of Stage 8 in its present form ([ADR 0101](docs/adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)). A later ADR decides each item when its work starts.
 
 ## 6. Parked items from the Stage 7 work
 
