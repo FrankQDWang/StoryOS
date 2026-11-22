@@ -205,27 +205,20 @@ async fn read_facts(
     Ok(Some((rows, conversations, chapters, intents)))
 }
 
-/// The columns of a row of `VERSIONS` after the facts of the rule.
-const INTENT: usize = 11;
-const QUESTIONS: usize = 12;
-const CHAPTER: usize = 13;
-const RECORDED_AT: usize = 14;
+/// The columns of a row of `VERSIONS` that give the result of a version with an intent.
+const INTENT: usize = 10;
+const QUESTIONS: usize = 11;
+const CHAPTER: usize = 12;
+const RECORDED_AT: usize = 13;
 
-/// Each version of the entries of the Project, with the version of the part of the background
-/// work that the pass of an intent version read.
-const VERSIONS: &str = "SELECT version.memory_entry_id::text, version.version::text,
-        version.memory_revision::text, version.state, version.entry_type,
-        version.origin = 'author_request', version.title, version.flag_reason IS NOT NULL,
-        pass.entry_version::text, version.intent_author_entry_id::text,
-        version.intent_author_version::text, version.intent, version.intent_questions::text,
-        version.intent_chapter_id::text,
-        to_char(version.recorded_at AT TIME ZONE 'UTC', $3)
-   FROM storyos.memory_entry_versions AS version
-   LEFT JOIN storyos.intent_passes AS pass
-     ON version.intent IS NOT NULL
-    AND (pass.owner_user_id, pass.project_id, pass.pass_id) =
-        (version.owner_user_id, version.project_id, (version.cause ->> 'pass_id')::uuid)
-  WHERE version.owner_user_id = $1::text::uuid AND version.project_id = $2::text::uuid";
+/// Each version of the entries of the Project.
+const VERSIONS: &str =
+    "SELECT memory_entry_id::text, version::text, memory_revision::text, state, entry_type,
+        origin = 'author_request', title, flag_reason IS NOT NULL, intent_author_entry_id::text,
+        intent_author_version::text, intent, intent_questions::text, intent_chapter_id::text,
+        to_char(recorded_at AT TIME ZONE 'UTC', $3)
+   FROM storyos.memory_entry_versions
+  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid";
 
 /// The intent version of each entry with a current result at the current Memory revision, by the
 /// rule of Core.
@@ -251,26 +244,20 @@ async fn current_intents(
         .map_err(read_error)?;
     let numbers = (rows.iter())
         .map(|row| {
-            let number = |index| row.get::<_, Option<&str>>(index).map(counter).transpose();
-            Ok((
-                counter(row.get(1))?,
-                counter(row.get(2))?,
-                number(8)?,
-                number(10)?,
-            ))
+            let named = row.get::<_, Option<&str>>(9).map(counter).transpose();
+            Ok((counter(row.get(1))?, counter(row.get(2))?, named?))
         })
         .collect::<Result<Vec<_>, ProjectReadError>>()?;
     let facts = (rows.iter().zip(&numbers))
-        .map(|(row, &(version, memory_revision, read, author_version))| {
+        .map(|(row, &(version, memory_revision, named))| {
             let kind = match (row.get::<_, Option<&str>>(INTENT), row.get::<_, bool>(7)) {
                 (Some(_), _) => MemoryVersionKind::Intent {
-                    entry_version: read.ok_or_else(|| damaged("An intent pass is missing"))?,
-                    author: row.get::<_, Option<&str>>(9).zip(author_version),
+                    author: row.get::<_, Option<&str>>(8).zip(named),
                 },
                 (None, true) => MemoryVersionKind::Flag,
                 (None, false) => MemoryVersionKind::Change,
             };
-            Ok(MemoryVersionFacts {
+            MemoryVersionFacts {
                 memory_entry_id: row.get(0),
                 version,
                 memory_revision,
@@ -279,9 +266,9 @@ async fn current_intents(
                 author: row.get(5),
                 title: row.get(6),
                 kind,
-            })
+            }
         })
-        .collect::<Result<Vec<_>, ProjectReadError>>()?;
+        .collect::<Vec<_>>();
     let current: HashSet<(String, u64)> = (storyos_core::current_intents(&facts, revision))
         .into_iter()
         .map(|(memory_entry_id, version)| (memory_entry_id.to_owned(), version))

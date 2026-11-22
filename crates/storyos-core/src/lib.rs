@@ -177,7 +177,7 @@ pub use create_volume::{
     CreateVolume, CreateVolumeApplied, CreateVolumeConflict, CreateVolumeRefusal,
     CreateVolumeResult, create_volume,
 };
-pub use current_intent::{MemoryVersionFacts, MemoryVersionKind, current_intents};
+pub use current_intent::{MemoryVersionFacts, MemoryVersionKind, current_intent, current_intents};
 pub use delete_chapter::{
     ChapterRemovalLifecycle, DeleteChapter, DeleteChapterApplied, DeleteChapterConflict,
     DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteChapterResult,

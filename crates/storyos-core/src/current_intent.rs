@@ -6,17 +6,13 @@
 /// The kind of one version of a Memory Entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MemoryVersionKind<'a> {
-    /// A version that changes the entry: not a flag version and not an intent version.
+    /// A version that changes the entry: not a flag version and not a version with an intent.
     Change,
-    /// A flag version (ADR 0094 section 7). It does not change the text of the entry.
+    /// A flag version (ADR 0094 section 7). It changes no text.
     Flag,
-    /// An intent version: the result of the intent pass that read the version `entry_version` of
-    /// the part of the background work and the version `author` of the part of the author, when
-    /// the pass read one.
-    Intent {
-        entry_version: u64,
-        author: Option<(&'a str, u64)>,
-    },
+    /// A version with an intent. `author` is the entry of the author and the version of it that
+    /// the result names, when the pass read one.
+    Intent { author: Option<(&'a str, u64)> },
 }
 
 /// The facts of one version of a Memory Entry of a Project.
@@ -33,94 +29,97 @@ pub struct MemoryVersionFacts<'a> {
     pub kind: MemoryVersionKind<'a>,
 }
 
-/// The facts of one entry at a Memory revision: its newest version, the version of its last
-/// change, and its newest intent version.
-struct EntryAt<'a> {
-    latest: MemoryVersionFacts<'a>,
-    change: Option<MemoryVersionFacts<'a>>,
-    intent: Option<MemoryVersionFacts<'a>>,
+/// The versions of one entry at `memory_revision`: a version after that revision is not a part of
+/// the Memory.
+fn at<'v, 'a>(
+    versions: &'v [MemoryVersionFacts<'a>],
+    memory_revision: u64,
+) -> impl Iterator<Item = &'v MemoryVersionFacts<'a>> {
+    (versions.iter()).filter(move |version| version.memory_revision <= memory_revision)
 }
 
-impl EntryAt<'_> {
-    fn character(&self) -> bool {
-        self.latest.state == "current" && self.latest.entry_type == "character"
-    }
-
-    fn change_version(&self) -> Option<u64> {
-        self.change.map(|change| change.version)
-    }
+fn newest<'v, 'a>(
+    versions: impl Iterator<Item = &'v MemoryVersionFacts<'a>>,
+) -> Option<&'v MemoryVersionFacts<'a>>
+where
+    'a: 'v,
+{
+    versions.max_by_key(|version| version.memory_revision)
 }
 
-/// The ID and the intent version of each character entry of the background work that has a current
-/// result at `memory_revision`, in the order of `versions`. `versions` has the versions of the
-/// entries of one Project. A version after `memory_revision` is not a part of the Memory.
+/// The newest version of the entry at `memory_revision`, when it is a current character entry.
+fn current_character<'v, 'a>(
+    versions: &'v [MemoryVersionFacts<'a>],
+    memory_revision: u64,
+) -> Option<&'v MemoryVersionFacts<'a>> {
+    newest(at(versions, memory_revision))
+        .filter(|latest| latest.state == "current" && latest.entry_type == "character")
+}
+
+/// The version with the current result of one character at `memory_revision`, or `None`.
+/// `entry` has the versions of the part of the background work. `author` has the versions of the
+/// part of the author with the same title, or no version when the Project has no such part.
 ///
-/// The result of the newest intent version of an entry is current when the entry is a current
-/// character entry of the background work, the pass read the version of the last change of the
-/// entry, and the part of the author is the part that the pass read: the same entry at the version
-/// of its last change, or no current character entry of the author with the title when the pass
-/// read none. A flag version changes no part, so it does not change the result.
+/// The result is current when (1) the part of the background work is a current character entry,
+/// (2) its newest version that is not a flag version is a version with an intent, and (3) the part
+/// of the author that the result names is current at the version of its last change that the
+/// result names, or the result names no part and the Project has no current part of the author. A
+/// flag version changes no text, so it does not end a result. The version of the last change is
+/// the newest version that is not a flag version and not a version with an intent.
+pub fn current_intent<'v, 'a>(
+    entry: &'v [MemoryVersionFacts<'a>],
+    author: &[MemoryVersionFacts<'a>],
+    memory_revision: u64,
+) -> Option<&'v MemoryVersionFacts<'a>> {
+    let background = current_character(entry, memory_revision).filter(|latest| !latest.author)?;
+    let result = newest(at(entry, memory_revision).filter(|v| v.kind != MemoryVersionKind::Flag))?;
+    let MemoryVersionKind::Intent { author: named } = result.kind else {
+        return None;
+    };
+    let part = current_character(author, memory_revision)
+        .filter(|latest| latest.author && latest.title == background.title);
+    let last_change =
+        newest(at(author, memory_revision).filter(|v| v.kind == MemoryVersionKind::Change));
+    let read = match (named, part) {
+        (None, None) => true,
+        (Some((memory_entry_id, version)), Some(part)) => {
+            part.memory_entry_id == memory_entry_id
+                && last_change.map(|change| change.version) == Some(version)
+        }
+        _ => false,
+    };
+    read.then_some(result)
+}
+
+/// The ID and the version of the result of each character of the Project with a current result at
+/// `memory_revision`, by `current_intent`. `versions` has the versions of the entries of one
+/// Project.
 pub fn current_intents<'a>(
     versions: &[MemoryVersionFacts<'a>],
     memory_revision: u64,
 ) -> Vec<(&'a str, u64)> {
-    let mut entries: Vec<EntryAt<'a>> = Vec::new();
-    for version in versions
-        .iter()
-        .filter(|v| v.memory_revision <= memory_revision)
-    {
-        let at = match entries
-            .iter_mut()
-            .find(|entry| entry.latest.memory_entry_id == version.memory_entry_id)
+    let mut entries: Vec<Vec<MemoryVersionFacts<'a>>> = Vec::new();
+    for version in versions {
+        match (entries.iter_mut()).find(|entry| entry[0].memory_entry_id == version.memory_entry_id)
         {
-            Some(at) => at,
-            None => {
-                entries.push(EntryAt {
-                    latest: *version,
-                    change: None,
-                    intent: None,
-                });
-                entries.last_mut().expect("the entry was pushed")
-            }
-        };
-        let newer = |kept: Option<MemoryVersionFacts<'a>>| {
-            kept.is_none_or(|kept| kept.memory_revision < version.memory_revision)
-        };
-        if at.latest.memory_revision < version.memory_revision {
-            at.latest = *version;
-        }
-        match version.kind {
-            MemoryVersionKind::Change if newer(at.change) => at.change = Some(*version),
-            MemoryVersionKind::Intent { .. } if newer(at.intent) => at.intent = Some(*version),
-            _ => {}
+            Some(entry) => entry.push(*version),
+            None => entries.push(vec![*version]),
         }
     }
-    let author_part = |title: &str| {
+    let author = |title: &str| {
         (entries.iter())
-            .find(|entry| entry.character() && entry.latest.author && entry.latest.title == title)
+            .find(|entry| {
+                current_character(entry, memory_revision)
+                    .is_some_and(|latest| latest.author && latest.title == title)
+            })
+            .map_or(&[][..], Vec::as_slice)
     };
     (entries.iter())
-        .filter(|entry| entry.character() && !entry.latest.author)
         .filter_map(|entry| {
-            let intent = entry.intent?;
-            let MemoryVersionKind::Intent {
-                entry_version,
-                author,
-            } = intent.kind
-            else {
-                return None;
-            };
-            let author_now = author_part(entry.latest.title);
-            let author_read = match (author, author_now) {
-                (None, None) => true,
-                (Some((id, version)), Some(now)) => {
-                    now.latest.memory_entry_id == id && now.change_version() == Some(version)
-                }
-                _ => false,
-            };
-            (entry.change_version() == Some(entry_version) && author_read)
-                .then_some((intent.memory_entry_id, intent.version))
+            let title = current_character(entry, memory_revision)?.title;
+            current_intent(entry, author(title), memory_revision)
         })
+        .map(|result| (result.memory_entry_id, result.version))
         .collect()
 }
 
