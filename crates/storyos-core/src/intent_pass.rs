@@ -217,7 +217,7 @@ pub fn intent_pass_failure(end: CaptureRunEnd<'_>) -> Option<&str> {
 
 /// The shortest time from the start of one intent pass of a Project to the start of the next
 /// (ADR 0101 section 4).
-pub const INTENT_PASS_INTERVAL: Duration = Duration::from_secs(/*1 minute*/ 60);
+pub(crate) const INTENT_PASS_INTERVAL: Duration = Duration::from_secs(/*1 minute*/ 60);
 
 /// The facts of one claimed intent pass row of a Project.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

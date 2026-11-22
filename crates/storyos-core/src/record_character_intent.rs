@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::{IntakeRefusal, ToolCallState, ToolIntake, ToolOperation, ToolResultText, ToolSpec};
 
-pub const RECORD_CHARACTER_INTENT_TOOL_SPEC: ToolSpec = ToolSpec {
+pub(crate) const RECORD_CHARACTER_INTENT_TOOL_SPEC: ToolSpec = ToolSpec {
     revision: "storyos.tool.record-character-intent.v1",
     operation: ToolOperation::RecordCharacterIntent,
     intake_contract: &[],
@@ -142,7 +142,7 @@ pub struct CharacterIntent {
 /// the text as the call gave it, and the Host keeps that text. An intent of only white space is
 /// empty, and a question of only white space or with a line break or another control character
 /// anywhere is invalid.
-pub fn validate_character_intent(
+pub(crate) fn validate_character_intent(
     intent: &str,
     questions: &[String],
 ) -> Result<CharacterIntent, IntentRefusal> {
