@@ -81,7 +81,8 @@ fn search(origin: ToolOutputOrigin) -> ToolOutput {
 /// capture of a Chapter looks for. They give the rule of an uncertainty
 /// and of a decision of the author, and they explain the delete marks. They give the rule of a
 /// conflict with an entry of the author (ADR 0094 section 7), and the sentence of an intent in an
-/// answer of the assistant (ADR 0101 section 5). They give the Host limits
+/// answer of the assistant (ADR 0101 section 5). They have the sentence of the amendment S11-12 of
+/// ADR 0053: a detail of the narration is not what a character said. They give the Host limits
 /// from the Core constants. Each section and each function result is data, and one
 /// `record_memory_observations` call ends the capture.
 #[test]
@@ -112,7 +113,10 @@ and heard in this material, what the character wants at its end, and how the cha
 Give only what the character can know. Do not give a fact that the character did not see and \
 that no person told the character. The character does not know what another character says in \
 a scene without the character, or what another character thinks, until a person tells the \
-character. Do not write that the character does not know a fact, because that sentence \
+character. \
+Write that a character said something only when the manuscript gives it as the words of that \
+character: a detail of the narration is not what the character said. \
+Do not write that the character does not know a fact, because that sentence \
 gives the fact. A decision of the author about a character goes into an observation of the type \
 character only when the character knows it. If not, give it the type other or foreshadowing.
 

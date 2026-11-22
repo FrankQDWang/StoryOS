@@ -77,13 +77,20 @@ const USE_WITHOUT_INDEX: &str = "You are the writing assistant of one novel auth
     told you about that character. Write there what the author tells you to remember about a \
     character and that the character knows, and create it with the name of the character as its \
     title when the section Memory index does not list it. Do this also when an entry of another \
-    type has the same event. When the author tells you a fact about a character that the \
+    type has the same event. \
+    Do this also when the author says that a later Chapter uses the fact: a fact that the \
+    character knows is not foreshadowing, and you do not create an entry of another type for \
+    it. \
+    When the author tells you a fact about a character that the \
     character does not know, for example a plan for the future of the character, write it into \
     an entry of the type other. The other entry of the character comes from the manuscript, and \
     you cannot change it. When the Host refuses a write, tell the author. An entry holds only \
     what the author said in this Conversation. Do not add a quotation, a clue, a name, a \
     relation, or another fact that you read in the manuscript or in Memory and that the author \
-    did not say. If such a fact can help the author, say it in your answer and do not put it in \
+    did not say. \
+    Do not add a label, an explanation, or the title of another entry: write the fact as the \
+    author said it. \
+    If such a fact can help the author, say it in your answer and do not put it in \
     the entry. When the author asks you to remember what a Chapter says, the author said so, \
     and the entry can hold it. A decision that the author states with no request to remember it \
     is not a request: do not call write_memory for it, because the Memory work of the Host \
@@ -216,13 +223,19 @@ async fn each_request_has_the_write_memory_paragraph_of_adr_0094() {
          what the author tells you to remember about a character and that the character knows, \
          and create it with the name of the character as its title when the section Memory index \
          does not list it. Do this also when an entry of another type has the same event. \
+         Do this also when the author says that a later Chapter uses the fact: a fact that the \
+         character knows is not foreshadowing, and you do not create an entry of another type \
+         for it. \
          When the author tells you a fact about a character that the character \
          does not know, for example a plan for the future of the character, write it into an \
          entry of the type other. The other entry of the character comes from the manuscript, and \
          you cannot change it. When the Host refuses a write, tell the author. An entry holds only \
          what the author said in this Conversation. Do not add a quotation, a clue, a name, a \
          relation, or another fact that you read in the manuscript or in Memory and that the \
-         author did not say. If such a fact can help the author, say it in your answer and do not \
+         author did not say. \
+         Do not add a label, an explanation, or the title of another entry: write the fact as \
+         the author said it. \
+         If such a fact can help the author, say it in your answer and do not \
          put it in the entry. When the author asks you to remember what a Chapter says, the \
          author said so, and the entry can hold it. A decision that the author states with no \
          request to remember it is not a request: do not call write_memory for it, because the \
@@ -360,7 +373,9 @@ async fn a_request_with_the_memory_index_has_the_conflict_paragraph_of_adr_0094_
 
 /// ADR 0101 section 3: the complete Host instructions of the first request of a Run of the author
 /// that declares `write_memory`, with no Skill, Chapter, or Memory item. The paragraph of
-/// `write_memory` gives the two entries of a character.
+/// `write_memory` gives the two entries of a character. It has the two sentences of the amendment
+/// S11-12 of ADR 0053: a fact that the character knows is not foreshadowing, and an entry has no
+/// label, no explanation, and no title of another entry.
 #[tokio::test]
 async fn the_first_request_of_a_run_of_the_author_has_the_complete_host_instructions() {
     assert_eq!(
@@ -453,12 +468,17 @@ the same title. The entry with \"author_part\": true holds what the author told 
 character. Write there what the author tells you to remember about a character and that the \
 character knows, and create it with the name of the character as its title when the section \
 Memory index does not list it. Do this also when an entry of another type has the same event. \
+Do this also when the author says that a later Chapter uses the fact: a fact that the \
+character knows is not foreshadowing, and you do not create an entry of another type for it. \
 When the author tells you a fact about a character that the \
 character does not know, for example a plan for the future of the character, write it into an \
 entry of the type other. The other entry of the character comes from the manuscript, and you \
 cannot change it. When the Host refuses a write, tell the author. An entry holds only what the \
 author said in this Conversation. Do not add a quotation, a clue, a name, a relation, or another \
-fact that you read in the manuscript or in Memory and that the author did not say. If such a \
+fact that you read in the manuscript or in Memory and that the author did not say. \
+Do not add a label, an explanation, or the title of another entry: write the fact as the \
+author said it. \
+If such a \
 fact can help the author, say it in your answer and do not put it in the entry. When the author \
 asks you to remember what a Chapter says, the author said so, and the entry can hold it. A \
 decision that the author states with no request to remember it is not a request: do not call \

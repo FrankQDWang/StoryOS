@@ -69,8 +69,9 @@ fn message(text: &str) -> serde_json::Value {
 /// entry for each character and each pair, and the limits from the Core constants. They say what
 /// the mark `unused` and an entry of the author mean, and what the delete marks are. They give
 /// the rule of an uncertainty and of the observations of an entry, and they say what the key
-/// `refused` of an observation means. Each section is data, and the
-/// reply is one `apply_memory_operations` call.
+/// `refused` of an observation means. They have the sentence of the amendment S11-12 of ADR 0053:
+/// a detail of the narration is not what a character said. Each section is data, and the reply
+/// is one `apply_memory_operations` call.
 #[test]
 fn the_pass_instructions_are_one_text_with_the_limits_of_the_core_constants() {
     assert_eq!(
@@ -99,7 +100,10 @@ the early events short, and keep the recent events in detail. It says what the c
 at the end of the manuscript and how the character speaks. It holds only what the character can \
 know: no fact that the character did not see and that no person told the character. The \
 character does not know what another character says in a scene without the character, or what \
-another character thinks, until a person tells the character. Do not write what the character is \
+another character thinks, until a person tells the character. \
+Write that a character said something only when the manuscript gives it as the words of that \
+character: a detail of the narration is not what the character said. \
+Do not write what the character is \
 for the plot, for example that the character is the key to a secret. Do not write that the \
 character does not know a fact, because that sentence gives the fact.
 
