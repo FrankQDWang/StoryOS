@@ -238,6 +238,10 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
       "unavailable");
     await expect(page.locator('[data-assistant-availability="unavailable"] .assistant-status').first())
       .toHaveText(EMPTY_LINE);
+    // The editor session of the first Server still holds the writer lease, because that Server stopped before the page
+    // released it. So the author takes over the writing, as after any other end of a session.
+    await page.locator("[data-take-over-writer]").click();
+    await page.locator(EDITOR).waitFor();
     await typeInChapter(setup.chapterId, ["雨停了，林舟把船推下了水。"]);
     await expect.poll(() => chapterText(setup.chapterId), { timeout: 10_000 }).toContain("林舟把船推下了水");
     await assertNoIntent(page);
