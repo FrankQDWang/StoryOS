@@ -330,10 +330,11 @@ async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_t
     let after_intent = memory_revision(&admin, &scope).await;
     run_capture(&store, &admin, &scope, &in_progress).await;
     let third = run_intent(&store, &admin, &scope).await;
+    let author_change = |text| write("change", json!({"entry": 2, "text": text}));
+    run(&store, &admin, project, "358", &author_change("他会撑船。")).await;
     age(&admin, &scope).await;
     let fourth = started(claim(&store, &admin, &scope).await);
-    let author_change = write("change", json!({"entry": 2, "text": "他会游泳。"}));
-    run(&store, &admin, project, "356", &author_change).await;
+    run(&store, &admin, project, "356", &author_change("他会游泳。")).await;
     finish(&store, &admin, &scope, &fourth).await;
     let fifth = run_intent(&store, &admin, &scope).await;
     let first_text = "The Host did not keep the intent: a consolidation pass of the Memory is in \
@@ -375,8 +376,8 @@ async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_t
                 [1, "recorded", 2, null],
                 [1, "not_kept", 2, 1],
                 [1, "recorded", 4, 1],
-                [1, "not_kept", 4, 1],
-                [1, "recorded", 4, 2]
+                [1, "not_kept", 4, 2],
+                [1, "recorded", 4, 3]
             ]),
             [json!([NOT_KEPT]), json!([first_text]), json!([NOT_KEPT])],
             [
