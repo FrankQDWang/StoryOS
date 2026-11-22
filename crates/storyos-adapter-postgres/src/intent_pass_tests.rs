@@ -381,7 +381,10 @@ async fn an_applied_pass_starts_one_intent_pass_that_records_a_version_with_the_
             archived,
             {
                 make_due(&admin, &scope).await;
-                claim(&store, &admin, &scope).await
+                (
+                    claim(&store, &admin, &scope).await,
+                    intent_due(&admin, &scope).await,
+                )
             }
         ),
         (
@@ -418,7 +421,10 @@ async fn an_applied_pass_starts_one_intent_pass_that_records_a_version_with_the_
                 true,
                 true
             ),
-            MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::NoEntryNeedsPass)
+            (
+                MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::NoEntryNeedsPass),
+                json!(false)
+            )
         )
     );
 }
@@ -456,6 +462,7 @@ async fn refused_calls_write_no_version_and_the_passes_run_in_entry_order() {
     let refused = (
         claim(&store, &admin, &scope).await,
         passes(&admin, &scope).await,
+        intent_due(&admin, &scope).await,
     );
     admin
         .execute(policy, &[&project_id, &"available"])
@@ -475,7 +482,8 @@ async fn refused_calls_write_no_version_and_the_passes_run_in_entry_order() {
         (
             (
                 MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::StartRefused),
-                json!([])
+                json!([]),
+                json!(false)
             ),
             vec![json!(true), json!(true), json!(false)],
             json!([

@@ -110,9 +110,11 @@ impl ProjectCommand for DeleteMemoryEntryInput {
             .await
             .map_err(unavailable)?;
         // A delete of a character entry can need an intent pass (ADR 0101 section 4).
-        crate::intent_pass::mark_due_when_needed(client, &envelope.project_scope)
-            .await
-            .map_err(unavailable)?;
+        if storyos_core::write_can_change_character(&version, &[]) {
+            crate::intent_pass::mark_due_when_needed(client, &envelope.project_scope)
+                .await
+                .map_err(unavailable)?;
+        }
         Ok(CommandWrite {
             profile: ActivityWrite {
                 activity: json!({

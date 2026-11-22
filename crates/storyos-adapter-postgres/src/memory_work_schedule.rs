@@ -167,19 +167,17 @@ pub(crate) async fn mark_consolidation_due(
     Ok(())
 }
 
-/// Makes the intent pass row of the Project of `scope` due at `due_at`, or now when `due_at` is
-/// `None`.
+/// Makes the intent pass row of the Project of `scope` due at `due_at`.
 pub(crate) async fn mark_intent_pass_due(
     client: &Client,
     scope: &ProjectScope,
-    due_at: Option<SystemTime>,
+    due_at: SystemTime,
 ) -> Result<(), tokio_postgres::Error> {
     client
         .execute(
             "INSERT INTO storyos.memory_work_schedules
                (owner_user_id, project_id, work_kind, source_id, due_at)
-             VALUES ($1::text::uuid, $2::text::uuid, $3, $2::text::uuid,
-                     COALESCE($4, clock_timestamp()))
+             VALUES ($1::text::uuid, $2::text::uuid, $3, $2::text::uuid, $4)
              ON CONFLICT (owner_user_id, project_id, work_kind, source_id)
              DO UPDATE SET due_at = EXCLUDED.due_at",
             &[
@@ -341,6 +339,9 @@ async fn decide_and_start_pass(
                              WHERE latest.state = 'current'),
                     EXISTS (SELECT 1 FROM storyos.memory_consolidation_passes
                              WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
+                               AND outcome IS NULL),
+                    EXISTS (SELECT 1 FROM storyos.intent_passes
+                             WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
                                AND outcome IS NULL)",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )
@@ -351,6 +352,7 @@ async fn decide_and_start_pass(
         conflict_waits: row.get(/*idx*/ 1),
         entry_current: row.get(/*idx*/ 2),
         pass_in_progress: row.get(/*idx*/ 3),
+        intent_pass_in_progress: row.get(/*idx*/ 4),
     };
     if let Err(skip) = storyos_core::decide_consolidation(&facts) {
         return Ok(MemoryWorkOutcome::PassSkipped(skip));
@@ -414,7 +416,7 @@ async fn decide_and_start_intent_pass(
     let (None, Some(entry)) = (skip, entry) else {
         let skip = skip.unwrap_or(IntentPassSkip::NoEntryNeedsPass);
         if let IntentPassSkip::RateLimited { due_at } = skip {
-            mark_intent_pass_due(client, scope, Some(due_at))
+            mark_intent_pass_due(client, scope, due_at)
                 .await
                 .map_err(read_error)?;
         }

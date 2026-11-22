@@ -11,7 +11,7 @@ use storyos_application::{
 use storyos_core::{
     AgentRunKind, CaptureRefusal, CaptureRunEnd, CharacterFile, CurrentPassageAssemblyRecord,
     IntentCallSettlement, IntentPassAssembly, IntentPassEntryFacts, IntentPassOutcome,
-    IntentPassRead, NeededCharacter, ToolResultCandidate,
+    IntentPassRead, IntentPassRecord, NeededCharacter, ToolResultCandidate,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -33,7 +33,7 @@ const CHANGES: &str = "SELECT DISTINCT ON (memory_entry_id) *
 /// version and its last change, and the versions that each pass read, in start order.
 pub(crate) struct EntryFacts {
     entries: Vec<IntentPassEntryFacts>,
-    passes: Vec<IntentPassRead>,
+    passes: Vec<IntentPassRecord>,
 }
 
 impl EntryFacts {
@@ -81,7 +81,7 @@ pub(crate) async fn entry_facts(
     let passes = client
         .query(
             "SELECT memory_entry_id::text, entry_version::text, author_entry_id::text,
-                    author_version::text
+                    author_version::text, outcome
                FROM storyos.intent_passes
               WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
               ORDER BY started_at, pass_id",
@@ -89,9 +89,12 @@ pub(crate) async fn entry_facts(
         )
         .await?;
     let passes = (passes.iter())
-        .map(|row| IntentPassRead {
-            entry: (row.get(0), row.get(1)),
-            author: row.get::<_, Option<String>>(2).zip(row.get(3)),
+        .map(|row| IntentPassRecord {
+            read: IntentPassRead {
+                entry: (row.get(0), row.get(1)),
+                author: row.get::<_, Option<String>>(2).zip(row.get(3)),
+            },
+            outcome: row.get(4),
         })
         .collect::<Vec<_>>();
     Ok(EntryFacts { entries, passes })
@@ -325,8 +328,9 @@ pub(crate) async fn settle_end(
     settle_pass(client, scope, &claim.run_id, "failed", Some(reason)).await
 }
 
-/// Writes the outcome of the running pass of the Run `run_id`. The settlement makes the intent
-/// pass row of the Project due again when an entry needs a pass.
+/// Writes the outcome of the running pass of the Run `run_id`. The settlement makes the
+/// consolidation row of the Project due when an observation waits, and the intent pass row due
+/// again when an entry needs a pass.
 async fn settle_pass(
     client: &Client,
     scope: &ProjectScope,
@@ -353,22 +357,33 @@ async fn settle_pass(
     if settled == 0 {
         return Ok(());
     }
+    // A consolidation pass does not start while an intent pass runs.
+    crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
     mark_due_when_needed(client, scope)
         .await
         .map_err(complete_unavailable)
 }
 
-/// Makes the intent pass row of the Project of `scope` due now when a character entry needs a
-/// pass. The settlement of an intent pass and of a consolidation pass with each outcome, and each
+/// Makes the intent pass row of the Project of `scope` due when a character entry needs a pass, at
+/// the due time of Core. The settlement of an intent pass and of a consolidation pass with each outcome, and each
 /// applied write of the author on a Memory Entry, use it (ADR 0101 section 4).
 pub(crate) async fn mark_due_when_needed(
     client: &Client,
     scope: &ProjectScope,
 ) -> Result<(), tokio_postgres::Error> {
-    if entry_facts(client, scope).await?.needed().is_some() {
-        crate::memory_work_schedule::mark_intent_pass_due(client, scope, /*due_at*/ None).await?;
+    if entry_facts(client, scope).await?.needed().is_none() {
+        return Ok(());
     }
-    Ok(())
+    let row = client
+        .query_one(
+            "SELECT clock_timestamp(), (SELECT max(started_at) FROM storyos.intent_passes
+                                         WHERE (owner_user_id, project_id) =
+                                               ($1::text::uuid, $2::text::uuid))",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await?;
+    let due_at = storyos_core::intent_pass_due(row.get(/*idx*/ 0), row.get(/*idx*/ 1));
+    crate::memory_work_schedule::mark_intent_pass_due(client, scope, due_at).await
 }
 
 #[cfg(test)]

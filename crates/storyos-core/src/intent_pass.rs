@@ -283,13 +283,31 @@ pub fn decide_intent_pass(facts: &IntentPassFacts) -> Result<(), IntentPassSkip>
     if facts.consolidation_in_progress {
         return Err(IntentPassSkip::ConsolidationInProgress);
     }
-    let due_at = facts
-        .last_pass_start
-        .map(|start| start + INTENT_PASS_INTERVAL);
-    match due_at.filter(|due_at| *due_at > facts.now) {
-        Some(due_at) => Err(IntentPassSkip::RateLimited { due_at }),
-        None => Ok(()),
+    let due_at = intent_pass_due(facts.now, facts.last_pass_start);
+    match due_at > facts.now {
+        true => Err(IntentPassSkip::RateLimited { due_at }),
+        false => Ok(()),
     }
+}
+
+/// The due time of the intent pass row of a Project that a due mark at `now` writes: `now`, or the
+/// start of the last pass `last_pass_start` and `INTENT_PASS_INTERVAL` if that is later. Thus a
+/// due mark never makes the row due before the rate permits a start.
+pub fn intent_pass_due(now: SystemTime, last_pass_start: Option<SystemTime>) -> SystemTime {
+    let earliest = last_pass_start.map(|start| start + INTENT_PASS_INTERVAL);
+    earliest.map_or(now, |earliest| now.max(earliest))
+}
+
+/// Whether the applied Memory write `version` can change a Character File: the type of the version
+/// or of the entry before it in `entries` is `character` (a change can change the type).
+pub fn write_can_change_character(
+    version: &crate::MemoryVersionWrite,
+    entries: &[crate::CurrentMemoryEntry],
+) -> bool {
+    let character = crate::MemoryEntryType::Character;
+    let before = (entries.iter())
+        .find(|entry| version.memory_entry_id.as_ref() == Some(&entry.memory_entry_id));
+    version.entry_type == character || before.is_some_and(|entry| entry.entry_type == character)
 }
 
 /// The facts of one Memory Entry of a Project for the start rule of an intent pass: the state and
@@ -313,6 +331,14 @@ pub struct IntentPassEntryFacts {
 pub struct IntentPassRead {
     pub entry: (String, String),
     pub author: Option<(String, String)>,
+}
+
+/// One intent pass of the Project: the versions that it read, and its outcome label, or `None`
+/// while it runs.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IntentPassRecord {
+    pub read: IntentPassRead,
+    pub outcome: Option<String>,
 }
 
 /// The character that needs a pass: its entry of the background work, and the author entry.
@@ -349,20 +375,25 @@ fn characters(entries: &[IntentPassEntryFacts]) -> impl Iterator<Item = NeededCh
 }
 
 /// The character that the next intent pass is for: the current character entry of the background
-/// work with the lowest number whose last pass read other versions, or that has no pass. The
-/// versions are the version of the last change of the entry and the version of the last change of
-/// the current character entry of the author with the same title. A character with only the entry
-/// of the author needs no pass (ADR 0101 section 4). `passes` is in start order. A pass with each
-/// outcome counts, so a failed pass gets no second start for the same versions.
+/// work with the lowest number that needs a pass. The versions of a character are the version of
+/// the last change of the entry and the version of the last change of the current character entry
+/// of the author with the same title. A character needs a pass unless its last recorded pass read
+/// its versions, or a failed pass read them: a failed pass gets no second start for the same
+/// versions. A character with only the entry of the author needs no pass (ADR 0101 section 4).
+/// `passes` is in start order.
 pub fn select_intent_pass_entry<'a>(
     entries: &'a [IntentPassEntryFacts],
-    passes: &[IntentPassRead],
+    passes: &[IntentPassRecord],
 ) -> Option<NeededCharacter<'a>> {
+    let ended = |pass: &IntentPassRecord, outcome: &str| pass.outcome.as_deref() == Some(outcome);
     characters(entries)
         .filter(|needed| {
-            let entry = &needed.entry.memory_entry_id;
-            let last = passes.iter().rev().find(|pass| pass.entry.0 == *entry);
-            last != Some(&needed.read())
+            let read = needed.read();
+            let failed = (passes.iter()).any(|pass| ended(pass, "failed") && pass.read == read);
+            let recorded = IntentPassOutcome::Recorded.label();
+            let last = (passes.iter().rev())
+                .find(|pass| ended(pass, recorded) && pass.read.entry.0 == read.entry.0);
+            !failed && last.is_none_or(|pass| pass.read != read)
         })
         .min_by_key(|needed| needed.entry.entry_number)
 }

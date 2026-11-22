@@ -288,7 +288,8 @@ fn a_waiting_observation_makes_the_project_due_after_the_interval_of_the_last_pa
 }
 
 /// The decision of a claimed consolidation row, in its order: nothing for a pass, then a pass in
-/// progress. A waiting conflict is something for a pass only when the Project has a current entry.
+/// progress, then an intent pass in progress. A waiting conflict is something for a pass only when
+/// the Project has a current entry.
 #[test]
 fn the_consolidation_decision_follows_its_order() {
     let decide = |[
@@ -296,23 +297,26 @@ fn the_consolidation_decision_follows_its_order() {
         conflict_waits,
         entry_current,
         pass_in_progress,
-    ]: [bool; 4]| {
+        intent_pass_in_progress,
+    ]: [bool; 5]| {
         decide_consolidation(&ConsolidationFacts {
             observation_waits,
             conflict_waits,
             entry_current,
             pass_in_progress,
+            intent_pass_in_progress,
         })
     };
     use ConsolidationSkip::*;
     assert_eq!(
         [
-            [false, false, true, true],
-            [false, false, true, false],
-            [false, true, false, false],
-            [false, true, true, false],
-            [true, false, false, true],
-            [true, false, false, false],
+            [false, false, true, true, true],
+            [false, false, true, false, false],
+            [false, true, false, false, false],
+            [false, true, true, false, false],
+            [true, false, false, true, true],
+            [true, false, false, false, true],
+            [true, false, false, false, false],
         ]
         .map(decide),
         [
@@ -321,11 +325,23 @@ fn the_consolidation_decision_follows_its_order() {
             Err(NothingWaits),
             Ok(()),
             Err(PassInProgress),
+            Err(IntentPassInProgress),
             Ok(())
         ]
     );
     assert_eq!(
-        [NothingWaits, PassInProgress, StartRefused].map(ConsolidationSkip::label),
-        ["no_observation_waits", "pass_in_progress", "start_refused"]
+        [
+            NothingWaits,
+            PassInProgress,
+            IntentPassInProgress,
+            StartRefused
+        ]
+        .map(ConsolidationSkip::label),
+        [
+            "no_observation_waits",
+            "pass_in_progress",
+            "intent_pass_in_progress",
+            "start_refused"
+        ]
     );
 }

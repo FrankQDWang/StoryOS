@@ -6,7 +6,7 @@ use std::time::SystemTime;
 
 use serde_json::json;
 use storyos_application::MemoryWorkOutcome;
-use storyos_core::IntentPassSkip;
+use storyos_core::{ConsolidationSkip, IntentPassSkip};
 
 use super::tests::{
     NOT_KEPT, age, change, character, claim, consolidate, file, finish, intent_due, intents,
@@ -20,6 +20,7 @@ use crate::shared_tests::memory_capture::{project, run_capture};
 use crate::shared_tests::memory_conflict_flag_show::{run, write};
 use crate::shared_tests::memory_consolidation::{capture, run_pass, scripted, settled, start_pass};
 use crate::shared_tests::memory_consolidation_conflict::{conflict, entry_id};
+use crate::shared_tests::memory_consolidation_schedule::{claim_pass, pass_due};
 
 const FAKE: &str = "我明天一早去渡口，看看那条船还在不在。";
 
@@ -226,7 +227,10 @@ async fn one_pass_starts_in_a_minute_and_a_failed_pass_does_not_start_again() {
     let mut again = Vec::new();
     for _ in 0..2 {
         make_due(&admin, &scope).await;
-        again.push(claim(&store, &admin, &scope).await);
+        again.push((
+            claim(&store, &admin, &scope).await,
+            intent_due(&admin, &scope).await,
+        ));
     }
 
     assert_eq!(
@@ -240,7 +244,13 @@ async fn one_pass_starts_in_a_minute_and_a_failed_pass_does_not_start_again() {
             MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::RateLimited { due_at }),
             [true, true],
             json!([[1, "failed", 1, null], [2, "recorded", 1, null]]),
-            vec![MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::NoEntryNeedsPass); 2]
+            vec![
+                (
+                    MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::NoEntryNeedsPass),
+                    json!(false)
+                );
+                2
+            ]
         )
     );
 }
@@ -264,6 +274,12 @@ async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_t
     )
     .await;
     let first = started(claim(&store, &admin, &scope).await);
+    make_due(&admin, &scope).await;
+    let running = (
+        claim(&store, &admin, &scope).await,
+        intent_due(&admin, &scope).await,
+    );
+    // The test starts the consolidation pass directly, as the claim does not while a pass runs.
     let changed = [change(1, "林舟", "林舟换了船。")];
     consolidate(&store, &admin, &scope, &source, &changed).await;
     finish(&store, &admin, &scope, &first).await;
@@ -271,10 +287,39 @@ async fn a_change_during_a_pass_keeps_no_result_and_a_later_pass_reads_the_new_t
     run(&store, &admin, project, "355", &author_part("他怕水。")).await;
     age(&admin, &scope).await;
     let third = started(claim(&store, &admin, &scope).await);
+    // An observation waits during the pass: the claim of the consolidation row starts no pass, and
+    // the settlement of the intent pass makes the row due again.
+    capture(
+        &store,
+        &admin,
+        &scope,
+        &source,
+        json!([scripted("脚本", &[])]),
+    )
+    .await;
+    let consolidation = (
+        claim_pass(&store, &admin, &scope).await,
+        pass_due(&admin, &scope).await,
+    );
     let author_change = write("change", json!({"entry": 2, "text": "他会游泳。"}));
     run(&store, &admin, project, "356", &author_change).await;
     finish(&store, &admin, &scope, &third).await;
+    let consolidation_due = pass_due(&admin, &scope).await;
+    run_pass(&store, &admin, &scope).await;
     let fourth = run_intent(&store, &admin, &scope).await;
+    let skipped = (
+        MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::PassInProgress),
+        MemoryWorkOutcome::PassSkipped(ConsolidationSkip::IntentPassInProgress),
+    );
+
+    assert_eq!(
+        (running, consolidation, consolidation_due),
+        (
+            (skipped.0, json!(false)),
+            (skipped.1, Some(json!([true, true, null]))),
+            Some(json!([true, true, "00:30:00"]))
+        )
+    );
 
     assert_eq!(
         (

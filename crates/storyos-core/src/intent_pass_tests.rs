@@ -134,12 +134,22 @@ fn read(entry: &str, version: &str, author: Option<(&str, &str)>) -> super::Inte
     }
 }
 
+/// A pass with the outcome `outcome` that read `read`.
+fn pass(read: &super::IntentPassRead, outcome: &str) -> super::IntentPassRecord {
+    super::IntentPassRecord {
+        read: read.clone(),
+        outcome: Some(outcome.to_owned()),
+    }
+}
+
 /// The selection takes the current character entry of the background work with the lowest number
-/// whose last pass read another version pair. An entry of the author, a deleted entry, an entry of
-/// another type, and a character with only the entry of the author get no pass. A new version of
-/// the entry of the author needs a pass again, also when an earlier pass read the same pair.
+/// that needs a pass. An entry of the author, a deleted entry, an entry of another type, and a
+/// character with only the entry of the author get no pass. A new version of the entry of the
+/// author needs a pass again, also when an earlier recorded pass read the same pair. A pair that
+/// a failed pass read gets no second pass, also after a pass of another pair. A pair that only a
+/// not-kept pass or a running pass read needs a pass.
 #[test]
-fn the_next_pass_is_for_the_lowest_entry_with_no_pass_for_its_versions() {
+fn the_next_pass_is_for_the_lowest_entry_that_needs_a_pass() {
     let entries = [
         "a 1 current character author 阿青 1",
         "b 4 current character - 林舟 1",
@@ -150,23 +160,101 @@ fn the_next_pass_is_for_the_lowest_entry_with_no_pass_for_its_versions() {
     ]
     .map(entry);
     // The entry and the author entry of the selection, as one word.
-    let pick = |passes: &[super::IntentPassRead]| {
+    let pick = |passes: &[super::IntentPassRecord]| {
         let needed = super::select_intent_pass_entry(&entries, passes)?;
         let author = needed.author.map_or("", |author| &author.memory_entry_id);
         Some(format!("{}{author}", needed.entry.memory_entry_id))
     };
-    let c_read = read("c", "2", Some(("a", "1")));
-    let b_read = read("b", "1", None);
+    let (c_read, b_read) = (read("c", "2", Some(("a", "1"))), read("b", "1", None));
+    let (c_other, b_done) = (read("c", "2", None), pass(&b_read, "recorded"));
+    let running = super::IntentPassRecord {
+        read: c_read.clone(),
+        outcome: None,
+    };
     let picks = [
         pick(&[]),
-        pick(std::slice::from_ref(&c_read)),
-        pick(&[c_read.clone(), b_read.clone()]),
-        pick(&[read("c", "2", Some(("a", "0"))), b_read.clone()]),
-        pick(&[c_read.clone(), read("c", "2", None), b_read]),
+        pick(&[pass(&c_read, "recorded")]),
+        pick(&[pass(&c_read, "recorded"), b_done.clone()]),
+        pick(&[
+            pass(&read("c", "2", Some(("a", "0"))), "recorded"),
+            b_done.clone(),
+        ]),
+        pick(&[
+            pass(&c_read, "recorded"),
+            pass(&c_other, "recorded"),
+            b_done.clone(),
+        ]),
+        pick(&[pass(&c_read, "failed"), b_done.clone()]),
+        pick(&[
+            pass(&c_read, "failed"),
+            pass(&c_other, "recorded"),
+            b_done.clone(),
+        ]),
+        pick(&[pass(&c_read, "not_kept"), b_done.clone()]),
+        pick(&[running, b_done]),
     ];
     assert_eq!(
         picks.each_ref().map(Option::as_deref),
-        [Some("ca"), Some("b"), None, Some("ca"), Some("ca")]
+        [
+            Some("ca"),
+            Some("b"),
+            None,
+            Some("ca"),
+            Some("ca"),
+            None,
+            None,
+            Some("ca"),
+            Some("ca")
+        ]
+    );
+}
+
+/// A due mark is due now, or one minute after the last start when that is later. A write can
+/// change a Character File when the version or the entry before it is a character entry.
+#[test]
+fn a_due_mark_obeys_the_rate_and_only_a_character_write_needs_one() {
+    use std::time::{Duration, SystemTime};
+    let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
+    let started = |seconds| Some(now - Duration::from_secs(seconds));
+    assert_eq!(
+        [None, started(61), started(60), started(10)].map(|last| super::intent_pass_due(now, last)),
+        [now, now, now, now + Duration::from_secs(50)]
+    );
+    let memory = |entry_type| crate::CurrentMemoryEntry {
+        memory_entry_id: "a".to_owned(),
+        number: 1,
+        version: 1,
+        entry_type,
+        title: "林舟".to_owned(),
+        description: String::new(),
+        text: String::new(),
+        flagged: false,
+        author_part: false,
+    };
+    let write = |id: Option<&str>, entry_type| crate::MemoryVersionWrite {
+        action: crate::MemoryWriteAction::Change,
+        memory_entry_id: id.map(str::to_owned),
+        number: 1,
+        version: 2,
+        state: crate::MemoryEntryState::Current,
+        entry_type,
+        title: "林舟".to_owned(),
+        description: String::new(),
+        text: String::new(),
+        flag: None,
+    };
+    use crate::MemoryEntryType::{Character, Other};
+    let can = |version: crate::MemoryVersionWrite, before| {
+        super::write_can_change_character(&version, &[memory(before)])
+    };
+    assert_eq!(
+        [
+            can(write(Some("a"), Character), Other),
+            can(write(Some("a"), Other), Character),
+            can(write(Some("a"), Other), Other),
+            can(write(None, Other), Character),
+        ],
+        [true, true, false, false]
     );
 }
 
