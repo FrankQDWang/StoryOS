@@ -149,29 +149,23 @@ fn the_next_pass_is_for_the_lowest_entry_with_no_pass_for_its_versions() {
         "f 6 current character author 小满 1",
     ]
     .map(entry);
+    // The entry and the author entry of the selection, as one word.
     let pick = |passes: &[super::IntentPassRead]| {
-        super::select_intent_pass_entry(&entries, passes).map(|needed| {
-            (
-                needed.entry.memory_entry_id.as_str(),
-                needed.author.map(|a| a.memory_entry_id.as_str()),
-            )
-        })
+        let needed = super::select_intent_pass_entry(&entries, passes)?;
+        let author = needed.author.map_or("", |author| &author.memory_entry_id);
+        Some(format!("{}{author}", needed.entry.memory_entry_id))
     };
     let c_read = read("c", "2", Some(("a", "1")));
     let b_read = read("b", "1", None);
+    let picks = [
+        pick(&[]),
+        pick(std::slice::from_ref(&c_read)),
+        pick(&[c_read.clone(), b_read.clone()]),
+        pick(&[read("c", "2", Some(("a", "0"))), b_read]),
+    ];
     assert_eq!(
-        [
-            pick(&[]),
-            pick(std::slice::from_ref(&c_read)),
-            pick(&[c_read.clone(), b_read.clone()]),
-            pick(&[read("c", "2", Some(("a", "0"))), b_read]),
-        ],
-        [
-            Some(("c", Some("a"))),
-            Some(("b", None)),
-            None,
-            Some(("c", Some("a")))
-        ]
+        picks.each_ref().map(Option::as_deref),
+        [Some("ca"), Some("b"), None, Some("ca")]
     );
 }
 
@@ -186,7 +180,12 @@ fn a_result_is_kept_only_for_a_current_character_entry_of_the_background_work() 
         ("current", "place", "chapter"),
     ]
     .map(|(state, entry_type, origin)| super::settle_intent_result(state, entry_type, origin));
-    let not_current = Err("entry_not_current");
-    let recorded = Ok(super::IntentPassOutcome::Recorded);
-    assert_eq!(now, [recorded, not_current, not_current, not_current]);
+    let text = "The Host did not record the intent: the entry is no longer a current character \
+                entry of the background work.";
+    let not_current = || (Err("entry_not_current"), crate::host_tool_result(text));
+    let recorded = (
+        Ok(super::IntentPassOutcome::Recorded),
+        crate::host_tool_result("The Host recorded the intent, and the pass is complete."),
+    );
+    assert_eq!(now, [recorded, not_current(), not_current(), not_current()]);
 }

@@ -90,10 +90,7 @@ pub(crate) async fn entry_facts(
     let passes = (passes.iter())
         .map(|row| IntentPassRead {
             entry: (row.get(0), row.get(1)),
-            author: match (row.get(2), row.get(3)) {
-                (Some(id), Some(version)) => Some((id, version)),
-                _ => None,
-            },
+            author: row.get::<_, Option<String>>(2).zip(row.get(3)),
         })
         .collect::<Vec<_>>();
     Ok(EntryFacts { entries, passes })
@@ -222,13 +219,13 @@ pub(crate) async fn execute(
     questions: &[String],
 ) -> Result<(), CompleteAgentRunError> {
     let settlement = storyos_core::settle_intent_call(intent, questions);
-    let (result, valid) = match &settlement {
+    let valid = match &settlement {
         IntentCallSettlement::Refused { refusal, result } => {
             let state = settlement.call_state();
             let resolution = Resolution::host(state, Some(refusal.label()), Some(result));
             return resolve(client, claim, row, resolution).await;
         }
-        IntentCallSettlement::Settled { intent, result } => (result, intent),
+        IntentCallSettlement::Settled { intent, .. } => intent,
     };
     let scope = &claim.project_scope;
     let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
@@ -258,9 +255,10 @@ pub(crate) async fn execute(
     let pass_id: String = pass.get(/*idx*/ 0);
     let state = pass.get(/*idx*/ 1);
     let (entry_type, origin) = (pass.get(/*idx*/ 2), pass.get(/*idx*/ 3));
-    if let Err(reason) = storyos_core::settle_intent_result(state, entry_type, origin) {
+    let (outcome, result) = storyos_core::settle_intent_result(state, entry_type, origin);
+    if let Err(reason) = outcome {
         settle_pass(client, scope, &claim.run_id, "failed", Some(reason)).await?;
-        resolve(client, claim, row, Resolution::settled(result)).await?;
+        resolve(client, claim, row, Resolution::settled(&result)).await?;
         return crate::agent_run_work::complete(client, claim)
             .await
             .map(drop);
@@ -306,7 +304,7 @@ pub(crate) async fn execute(
         .map_err(complete_unavailable)?;
     let recorded = IntentPassOutcome::Recorded.label();
     settle_pass(client, scope, &claim.run_id, recorded, None).await?;
-    resolve(client, claim, row, Resolution::settled(result)).await?;
+    resolve(client, claim, row, Resolution::settled(&result)).await?;
     crate::agent_run_work::complete(client, claim).await?;
     Ok(())
 }

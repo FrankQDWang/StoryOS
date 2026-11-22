@@ -9,7 +9,11 @@ use crate::assemble_context::{
     SelectedProjection, TOKEN_COUNTING_ALGORITHM_REVISION, TOKEN_COUNTING_PROFILE_REVISION,
     count_context_item_tokens,
 };
-use crate::{CaptureRefusal, CaptureRunEnd, ToolCallState, ToolResultCandidate};
+use crate::record_character_intent::INTENT_RECORDED;
+use crate::{
+    CaptureRefusal, CaptureRunEnd, ToolCallState, ToolResultCandidate, ToolResultText,
+    host_tool_result,
+};
 
 /// The most RunSteps of one intent pass: one request, and one more after a refused call.
 pub const INTENT_PASS_MAX_RUN_STEPS: u64 = 2;
@@ -248,33 +252,28 @@ pub fn decide_intent_pass(facts: &IntentPassFacts) -> Result<(), IntentPassSkip>
 
 /// The facts of one Memory Entry of a Project for the start rule of an intent pass: the state and
 /// the type of its last version, and the facts of the version of its last change, which is not a
-/// flag version and not an intent version (ADR 0094 section 7).
+/// flag version and not an intent version (ADR 0094 section 7). `author`: the last change has the
+/// origin of a request of the author.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IntentPassEntryFacts {
     pub memory_entry_id: String,
     pub entry_number: u64,
-    /// The state of the last version.
     pub state: String,
-    /// The type of the last version.
     pub entry_type: String,
-    /// The last change has the origin of a request of the author.
     pub author: bool,
     pub title: String,
-    /// The version of the last change.
     pub version: String,
     pub text: String,
 }
 
-/// The versions that one intent pass read: the entry of the background work and its version, and
-/// the entry of the author and its version, when the character had one.
+/// The entries and versions that one intent pass read: the background work, and the author part.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IntentPassRead {
     pub entry: (String, String),
     pub author: Option<(String, String)>,
 }
 
-/// The character that needs a pass: its entry of the background work, and the entry of the author
-/// with the same title, when the Project has one.
+/// The character that needs a pass: its entry of the background work, and the author entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NeededCharacter<'a> {
     pub entry: &'a IntentPassEntryFacts,
@@ -309,21 +308,27 @@ pub fn select_intent_pass_entry<'a>(
         .min_by_key(|needed| needed.entry.entry_number)
 }
 
-/// The outcome of a pass whose call is valid, from the state, the type, and the origin of the last
-/// version of its entry. The result is a
-/// version of the entry only while the entry is a current character entry of the background work.
-/// After a delete of the entry, or after the author took it, the pass fails with
-/// `entry_not_current` and records no result.
+/// The outcome of a pass whose call is valid, and the result text of the call, from the state,
+/// the type, and the origin of the last version of its entry. The result is a version of the entry
+/// only while the entry is a current character entry of the background work. Else the pass fails
+/// with `entry_not_current` and records no result.
 pub fn settle_intent_result(
     state: &str,
     entry_type: &str,
     origin: &str,
-) -> Result<IntentPassOutcome, &'static str> {
-    match state == "current" && entry_type == "character" && origin != "author_request" {
-        true => Ok(IntentPassOutcome::Recorded),
-        false => Err("entry_not_current"),
-    }
+) -> (Result<IntentPassOutcome, &'static str>, ToolResultText) {
+    let (outcome, text) =
+        match state == "current" && entry_type == "character" && origin != "author_request" {
+            true => (Ok(IntentPassOutcome::Recorded), INTENT_RECORDED),
+            false => (Err("entry_not_current"), INTENT_NOT_CURRENT),
+        };
+    (outcome, host_tool_result(text))
 }
+
+/// The result text of a valid call whose entry is no longer a current character entry of the
+/// background work.
+const INTENT_NOT_CURRENT: &str = "The Host did not record the intent: the entry is no longer a \
+                                  current character entry of the background work.";
 
 #[cfg(test)]
 #[path = "intent_pass_tests.rs"]

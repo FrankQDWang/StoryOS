@@ -572,24 +572,21 @@ async fn a_delete_during_a_pass_fails_the_pass_and_writes_no_version() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "4c3").await;
-    consolidate(
-        &store,
-        &admin,
-        &scope,
-        &source,
-        &[character("林舟", "林舟是船夫。")],
-    )
-    .await;
+    let create = [character("林舟", "林舟是船夫。")];
+    consolidate(&store, &admin, &scope, &source, &create).await;
     let MemoryWorkOutcome::IntentPassStarted(started) = claim(&store, &admin, &scope).await else {
         panic!("the claim must start an intent pass");
     };
     consolidate(&store, &admin, &scope, &source, &[delete(1)]).await;
     let revision = memory_revision(&admin, &scope).await;
     finish(&store, &admin, &scope, &started.run_id).await;
+    let result = "SELECT jsonb_agg(result_text)::text FROM storyos.tool_calls
+                   WHERE run_id = $1::text::uuid";
 
     assert_eq!(
         (
             passes(&admin, &scope).await,
+            json_of(&admin, result, &[&started.run_id]).await,
             intents(&admin, &scope, 1).await,
             memory_revision(&admin, &scope).await,
             claim(&store, &admin, &scope).await
@@ -606,6 +603,9 @@ async fn a_delete_during_a_pass_fails_the_pass_and_writes_no_version() {
                 1,
                 [["settled", null]]
             ]]),
+            json!([
+                "The Host did not record the intent: the entry is no longer a current character entry of the background work."
+            ]),
             json!([
                 [1, "consolidation", null, null],
                 [2, "consolidation", null, null]
