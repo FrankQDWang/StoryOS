@@ -112,7 +112,8 @@ fn each_other_binding_or_registration_exposes_nothing() {
 
 #[test]
 fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mapping() {
-    // A Run of the author never records Memory Observations and never applies a pass.
+    // A Run of the author never records Memory Observations, never applies a pass, and never
+    // records an intent.
     let host = |registration: &'static crate::HostToolRegistration| ToolExposure {
         tools: registration
             .tools
@@ -122,6 +123,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
                     spec.operation,
                     crate::ToolOperation::RecordMemoryObservations
                         | crate::ToolOperation::ApplyMemoryOperations
+                        | crate::ToolOperation::RecordCharacterIntent
                 )
             })
             .map(|spec| ExposedTool {
@@ -194,7 +196,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             HOST_TOOL_REGISTRATION.revision,
             HOST_TOOL_REGISTRATION.tools.len(),
         ),
-        ("018f0000-0000-7001-8000-0000000e0104", 14)
+        ("018f0000-0000-7001-8000-0000000e0104", 15)
     );
     let declared = host(&HOST_TOOL_REGISTRATION);
     assert_eq!(
@@ -478,9 +480,14 @@ fn a_background_run_gets_only_the_tools_of_its_kind() {
     );
     assert!(author_only.iter().all(|name| author.contains(name)));
     assert_eq!(
-        names(crate::AgentRunKind::MemoryConsolidation, true),
-        ["apply_memory_operations"]
+        [
+            crate::AgentRunKind::MemoryConsolidation,
+            crate::AgentRunKind::IntentPass
+        ]
+        .map(|kind| names(kind, true)),
+        [["apply_memory_operations"], ["record_character_intent"]]
     );
     assert!(!author.contains(&"record_memory_observations"));
     assert!(!author.contains(&"apply_memory_operations"));
+    assert!(!author.contains(&"record_character_intent"));
 }
