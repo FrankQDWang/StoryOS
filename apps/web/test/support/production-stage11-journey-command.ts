@@ -23,6 +23,8 @@ const SECOND = { intent: "他想先去河对岸找阿禾，问清那场火。", 
 const MANUSCRIPT = `林舟是渡口的船夫，话不多。\nSCRIPT:intent ${JSON.stringify(FIRST)}`;
 const AUTHOR = `林舟左手有一道旧疤，是那年失火时留下的。\nSCRIPT:intent ${JSON.stringify(SECOND)}`;
 const EMPTY_LINE = "写作助手当前不可用。你仍可以直接写作。";
+// The text answer of the fake model.
+const ADVICE = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
 
 /** The capture script line of Chapter B: one fact whose text holds the `create` operation of the consolidation pass. */
 const CAPTURE = `SCRIPT:capture record_memory_observations ${JSON.stringify({ observations: [{ kind: "observation",
@@ -59,10 +61,12 @@ async function assertNoIntent(page: Page) {
 
 /**
  * ADR 0101 and the author journey S11-JRN-001 (S11-EVD-003): one Project does each step in order, in the production
- * client of the packaged Server, with the fake destination. The journey writes no product row directly. Each SQL
- * statement of the test administrator connection makes a row of the background work due, moves the start of the last
- * intent pass back by the rate interval as the store tests of the pass do, resets the Command Challenge rate windows of
- * the Project, or parks the rows of the Project at the end. So the journey has no wait for a time of the product.
+ * client of the packaged Server, with the fake destination. The journey adds no product row and changes no text of a
+ * row. Each SQL statement of the test administrator connection changes only a time or a count: it makes a row of the
+ * background work due (`memory_work_schedules.due_at`), moves the start of the last intent pass and the due time of its
+ * row back by the rate interval as the store tests of the pass do (`intent_passes.started_at` and `due_at`), resets the
+ * Command Challenge rate windows of the Project (`issued_count`), or parks the rows of the Project at the end
+ * (`due_at`). So the journey has no wait for a time of the product.
  */
 export async function verifyProductionStage11Journey(context: BrowserContext): Promise<void> {
   const started: (() => Promise<unknown>)[] = [];
@@ -138,6 +142,15 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
     // The text of the part `index` of the file, and its origin line.
     const part = async (index: number) => [await parts.nth(index).locator(".memory-entry-text").textContent(),
       await parts.nth(index).locator("a[data-memory-entry-origin]").textContent()];
+    // The result lines of the current Run of the panel, and of each earlier Run of the Conversation.
+    const answers = page.locator("[data-assistant-current-run] .assistant-result");
+    const earlier = (runId: string) => page.locator(`[data-assistant-history-run="${runId}"] .assistant-result`);
+    // After the workspace opens, the panel shows the last Run again. The checks of the workspace wait for it.
+    const restored = async (runId: string, lines: string[]) => {
+      await page.locator(`#writing-assistant-panel[data-assistant-run-id="${runId}"][data-assistant-dispatch="completed"]`)
+        .waitFor();
+      await expect(answers).toHaveText(lines);
+    };
     const assertIntent = async (result: typeof FIRST) => {
       await expect(intent.locator("h4")).toHaveText("接下来想做什么");
       await expect(intent.locator(".character-intent-text")).toHaveText(result.intent);
@@ -153,7 +166,8 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
     await typeInChapter(chapterB, ["林舟在渡口等了一夜，雨没有停。", CAPTURE]);
     await expect.poll(() => chapterText(chapterB), { timeout: 10_000 }).toContain("record_memory_observations");
     await page.locator('[data-assistant-availability="available"]').waitFor();
-    await message("开头这一句怎么样？");
+    const firstRun = await message("开头这一句怎么样？");
+    await expect(answers).toHaveText([ADVICE]);
     await value(`UPDATE storyos.memory_work_schedules SET due_at = clock_timestamp()
       WHERE project_id = '${project}'::uuid AND work_kind = 'chapter_capture' AND source_id = '${chapterB}'::uuid`);
     await workUntil("the capture, the consolidation pass, and the intent pass of step 1", async () =>
@@ -162,6 +176,7 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
       ["observations_recorded", "applied"]);
     await page.reload();
     await page.locator('[data-assistant-availability="available"]').waitFor();
+    await restored(firstRun.runId, [ADVICE]);
     await assertNoIntent(page);
 
     // 2. The navigation has its three items. The list of the section "人物" has the name, a part of the name keeps it,
@@ -182,6 +197,7 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
     await page.locator(`[data-character-name="${NAME}"]`).click();
     await expect(file.locator("h3")).toHaveText(NAME);
     await expect(parts).toHaveCount(1);
+    await expect(file.locator(".character-part h4")).toHaveText(["档案"]);
     assert.deepEqual(await part(0), [MANUSCRIPT, "来自章节《Chapter B》"]);
     await assertIntent(FIRST);
     // The two sections show one read, and the file came from it. When each entry is a character, the section "记忆"
@@ -199,14 +215,15 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
     await resetChallenges();
     await page.goto(workspace());
     await page.locator('[data-assistant-availability="available"]').waitFor();
-    await message(`记住林舟的这件事。\nSCRIPT:write_memory create ${JSON.stringify({ type: "character", title: NAME,
-      description: "左手的旧疤。", text: AUTHOR })}`);
-    await expect(page.locator("[data-assistant-current-run] .assistant-result").first()).toHaveText(`已记住：${NAME}`);
+    const secondRun = await message(`记住林舟的这件事。\nSCRIPT:write_memory create ${JSON.stringify({ type: "character",
+      title: NAME, description: "左手的旧疤。", text: AUTHOR })}`);
+    await expect(answers).toHaveText([`已记住：${NAME}`, ADVICE]);
     await assertNoIntent(page);
     await openSection("characters");
     await expect(parts).toHaveCount(2);
     assert.deepEqual([await part(0), await part(1)],
       [[AUTHOR, "你让助手记住的"], [MANUSCRIPT, "来自章节《Chapter B》"]]);
+    await expect(file.locator(".character-part h4")).toHaveText(["档案"]);
     await expect(intent).toHaveCount(0);
     await expect(questions).toHaveCount(0);
     assert.equal(await value(`WITH moved AS (UPDATE storyos.intent_passes SET started_at = started_at - interval '61 seconds'
@@ -220,6 +237,8 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
     await assertIntent(SECOND);
     await page.goto(workspace());
     await page.locator('[data-assistant-availability="available"]').waitFor();
+    await restored(secondRun.runId, [`已记住：${NAME}`, ADVICE]);
+    await expect(earlier(firstRun.runId)).toHaveText([ADVICE]);
     await assertNoIntent(page);
 
     // 5. Statement 4 resets the Challenge rate windows. The deployment restarts with no model destination on the same
@@ -238,6 +257,8 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
       "unavailable");
     await expect(page.locator('[data-assistant-availability="unavailable"] .assistant-status').first())
       .toHaveText(EMPTY_LINE);
+    // With no model destination, the panel shows no Run.
+    await expect(page.locator("[data-assistant-current-run], [data-assistant-history-run]")).toHaveCount(0);
     // The editor session of the first Server still holds the writer lease, because that Server stopped before the page
     // released it. So the author takes over the writing, as after each other end of a session.
     await page.locator("[data-take-over-writer]").click();
@@ -249,6 +270,7 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
     await expect(page.locator("[data-character-name]")).toHaveText([NAME]);
     assert.deepEqual([await part(0), await part(1)],
       [[AUTHOR, "你让助手记住的"], [MANUSCRIPT, "来自章节《Chapter B》"]]);
+    await expect(file.locator(".character-part h4")).toHaveText(["档案"]);
     await assertIntent(SECOND);
     assert.deepEqual(errors, []);
 
@@ -258,9 +280,15 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
         WHERE project_id = '${project}'::uuid AND due_at IS NOT NULL)
       + (SELECT count(*) FROM storyos.agent_runs WHERE project_id = '${project}'::uuid
           AND status IN ('queued', 'claimed', 'waiting', 'paused')))::text`), "0");
-    // The editor can send the typed lines in one or more Author Edits, so the count leaves out that kind.
-    await assertProjectReceipts([project], { projects: 1, kinds: "listed", receipts: { createProject: 1,
-      updateProjectAssistance: 1, createVolume: 1, createChapter: 2, createAgentRun: 2 } });
+    // The editor can send the typed lines of one Chapter in one or more Author Edits. So the journey reads that count,
+    // and each of the two typed Chapters gives at least one. Each other kind has its exact count: the two Chapter
+    // selections, the takeover of step 5, and the two Runs.
+    const edits = Number(await value(`SELECT count(*)::text FROM storyos.domain_receipts
+      WHERE project_id = '${project}'::uuid AND command_kind = 'applyAuthorEdit'`));
+    assert.ok(edits >= 2, `the journey has ${edits} Author Edits`);
+    await assertProjectReceipts([project], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,
+      createVolume: 1, createChapter: 2, setCurrentChapter: 2, applyAuthorEdit: edits, createAgentRun: 2,
+      takeOverProjectWriter: 1 } });
   } finally {
     for (const close of started.reverse()) await close();
   }
