@@ -138,13 +138,13 @@ Other facts of the mapping `v10`:
 The mapping `v11` is the mapping `v10` with three changes of the request text, for the two parts of a character file:
 
 1. **The paragraph of `write_memory`.** A character can have two entries with the same title. The model writes what the author tells it to remember about a character and that the character knows into the entry with `"author_part": true`, and it creates that entry when the Memory Index does not list it. A fact that the character does not know goes into an entry of the type other. The model cannot change the other entry of the character.
-2. **The Host instructions of a capture.** A paragraph gives the form of an observation of the type character: the view of the character and only what the character can know. The paragraph of the Memory Index says that the line with `"author_part": true` is the entry of the author.
-3. **The Host instructions of a consolidation pass.** The pass keeps one entry of the background work for each character beside the entry of the author, and a paragraph gives the form of the file of a character from the manuscript.
+2. **The Host instructions of a capture.** A paragraph gives the form of an observation of the type character: the view of the character and only what the character can know. The paragraph of the Memory Index says that the line with `"author_part": true` is the entry of the author. The paragraph of the delete marks says that a deleted entry with `"author_part": true` does not stop an observation of that character.
+3. **The Host instructions of a consolidation pass.** The pass keeps one entry of the background work for each character beside the entry of the author, and a paragraph gives the form of the file of a character from the manuscript. The paragraph of the delete marks says that a deleted entry with `"author_part": true` does not stop a write of the entry of that character that comes from the manuscript.
 
 Other facts of the mapping `v11`:
 
 - The limit of a character text is 4,000 characters. The texts of a capture and of a pass and the schema descriptions of `write_memory`, `record_memory_observations`, and `apply_memory_operations` give this number.
-- The Memory Index line of a character entry of the author has the field `"author_part": true`, in a Run of the author and in a capture.
+- The Memory Index line of a character entry of the author has the field `"author_part": true`, in a Run of the author and in a capture. The line of a deleted character entry of the author in the delete marks of a capture and of a pass has the same field.
 - Each declared schema keeps its keys and its types, and only the descriptions give the new limit. Thus the mapping `v11` declares the Host Tool Registration `018f0000-0000-7001-8000-0000000e0104` of the mapping `v10`.
 - The code keeps only `fa25` and the mapping `v11` (ADR 0097).
 - The Stage 11 tickets change the mapping `v11` in place until the aggregate pull request of [#1786](https://github.com/FrankQDWang/StoryOS/issues/1786) merges into `main`. The reasons are those of the amendment of 2026-11-14 above (ADR 0093 section 3).

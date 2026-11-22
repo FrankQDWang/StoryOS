@@ -59,7 +59,8 @@ one line. Do not record the fact as an observation that corrects the entry. An e
 author has the origin {author} in the result of read_memory_entry. The section Chapter list has each \
 Chapter of the manuscript in its order, with its number, its length in characters, and its \
 title. The section Deleted Memory entries lists entries that the author deleted: they are \
-examples of content that the author does not want.
+examples of content that the author does not want. A deleted entry with \"author_part\": true was the entry of the author for a character. It \
+does not stop an observation of that character.
 
 Give at most {observations} observations. A title has at most {title} characters. A text has at \
 most {text} characters, or {character} for a character. The capture has at most {steps} steps.

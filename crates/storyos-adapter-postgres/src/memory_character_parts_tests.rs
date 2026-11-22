@@ -11,12 +11,29 @@ use crate::shared_tests::agent_run_write_memory::{first_index, refused, versions
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::delete_memory_entry::delete;
+use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{project, run_capture, start};
 use crate::shared_tests::memory_capture_loop::{record, script};
 use crate::shared_tests::memory_conflict_flag_show::{run, write};
-use crate::shared_tests::memory_consolidation::{create, settled, update};
+use crate::shared_tests::memory_consolidation::{create, run_pass, scripted, settled, update};
 use crate::shared_tests::memory_consolidation_conflict::entry_id;
 use crate::shared_tests::memory_consolidation_merge::{pass_on, seed};
+
+/// The text of each `memory_delete_marks` item of the decision Context Assembly at the RunStep 0
+/// of the Run.
+async fn first_marks(admin: &tokio_postgres::Client, run_id: &str) -> Value {
+    json_of(
+        admin,
+        "SELECT COALESCE(jsonb_path_query_array(payload,
+                      '$.selected[*] ? (@.source_class == \"memory_delete_marks\").content'),
+                      '[]')::text
+               FROM storyos.context_assembly_manifests
+              WHERE run_id = $1::text::uuid AND manifest_role = 'decision'
+                AND decision_position = 0",
+        &[&run_id],
+    )
+    .await
+}
 
 fn settled_call(text: &str) -> Value {
     json!(["write_memory", "settled", null, text, true])
@@ -96,7 +113,9 @@ async fn write_memory_writes_the_part_of_the_author_beside_the_part_of_the_backg
 /// A delete mark has the class of the entry that the author deleted. After a delete of the part
 /// of the author of 林舟, a pass updates the part of the background work of 林舟. After a delete of
 /// the part of the background work of 阿青, a `create` of a pass with that title is refused with
-/// `deleted_by_author`, and a `create` of `write_memory` with that title is applied.
+/// `deleted_by_author`, and a `create` of `write_memory` with that title is applied. The delete
+/// marks item of the capture and of the pass after the two deletes has `"author_part": true` in
+/// the line of the part of the author only.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_delete_mark_stops_only_an_entry_of_its_own_class() {
@@ -128,16 +147,27 @@ async fn a_delete_mark_stops_only_an_entry_of_its_own_class() {
     let id = entry_id(&admin, &scope, 3).await;
     assert!(delete(&store, &scope, 0x9ea5, &id, 1).await.is_ok());
     let created = create("character", "阿青", json!([1]));
-    let refused = pass_on((&store, &admin), &scope, &source, &[created]).await;
+    let observations = json!([scripted("脚本", &[created])]);
+    let capture = start(&store, &scope, &source, &script(&[record(observations)]))
+        .await
+        .unwrap();
+    run_capture(&store, &admin, &scope, &capture.run_id).await;
+    let refused = run_pass(&store, &admin, &scope).await;
     let author = json!({"type": "character", "title": "阿青", "description": "述。",
                         "text": "她是渡口的船主。"});
     let writing = run(&store, &admin, project, "9e6", &write("create", author)).await;
+    let marks = json!([concat!(
+        "{\"description\":\"述。\",\"title\":\"阿青\",\"type\":\"character\"}\n",
+        "{\"author_part\":true,\"description\":\"述。\",\"title\":\"林舟\",\"type\":\"character\"}"
+    )]);
 
     assert_eq!(
         (
             settled(&admin, &updated.run_id).await[3].clone(),
             settled(&admin, &refused.run_id).await[3].clone(),
             calls(&admin, &writing).await,
+            first_marks(&admin, &capture.run_id).await,
+            first_marks(&admin, &refused.run_id).await,
         ),
         (
             json!([["applied", null, 1]]),
@@ -148,7 +178,9 @@ async fn a_delete_mark_stops_only_an_entry_of_its_own_class() {
                     settled_call("The Host created the Memory entry 4 with the title \"阿青\"."),
                     finish()
                 ]
-            ])
+            ]),
+            marks.clone(),
+            marks,
         )
     );
 }
