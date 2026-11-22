@@ -412,6 +412,7 @@ Each finding names the instruction sentence of the mapping `v11` that the model 
 
 ### F1. The fact of the author about a character went into a new foreshadowing entry
 
+- **Ticket:** #1818.
 - **Present sentence:** `WRITE_MEMORY_INSTRUCTION` in `crates/storyos-adapter-volcengine-responses/src/wire.rs`: "Write there what the author tells you to remember about a character and that the character knows, and create it with the name of the character as its title when the section Memory index does not list it. Do this also when an entry of another type has the same event." (the second sentence is the change of #1803).
 - **Evidence:** M36 created the foreshadowing entry 36 "1983年购房款真相" with the fact of 顾青禾 (R5 of `key.md`). 顾青禾 paid the money, so she knows the fact. The Index had the foreshadowing entry 29 "1983年购房款之谜". The author said "这一点后面会用到", and the model gave the type foreshadowing. This is F1 of #1788 again, after #1803.
 - **Effect:** the file of 顾青禾 did not get the fact, so no Intent Pass started, and her question Q1 stays open.
@@ -419,12 +420,14 @@ Each finding names the instruction sentence of the mapping `v11` that the model 
 
 ### F2. The entry of the author has words that the author did not say
 
+- **Ticket:** #1818.
 - **Present sentence:** `WRITE_MEMORY_WORDS_INSTRUCTION` in `crates/storyos-adapter-volcengine-responses/src/wire.rs`: "An entry holds only what the author said in this Conversation. Do not add a quotation, a clue, a name, a relation, or another fact that you read in the manuscript or in Memory and that the author did not say. If such a fact can help the author, say it in your answer and do not put it in the entry." (the change of #1803).
 - **Evidence:** entry 36 has "作者交代的伏笔：", "（正好一半）", "产权", and the sentence "它同时解答了正文中的两个悬案：……" with the titles of two entries of Memory. The answer of R34 also tells the two links, as the sentence permits. This is F2 of #1788 again, after #1803.
 - **Proposed change:** add after the present sentences: "Do not name another entry in the text of an entry. Use the words of the author for the fact, and add no word that explains it."
 
 ### F3. A detail of the narration is given to the words of a character
 
+- **Ticket:** #1818.
 - **Present sentences:** no instruction says who the speaker of a statement is (the same as F6 of #1788). The nearest sentence: `capture_instructions` in `crates/storyos-adapter-volcengine-responses/src/capture_wire.rs`: "Write it from the place of the character: what the character did, saw, and heard in this material, what the character wants at its end, and how the character speaks."
 - **Evidence:** the file of 顾青禾 (version 6) and the relationship entry 34 have "她说顾远……葬礼时戴眼镜、个子高，站在灵堂最后磕了三个响头". 顾青禾 does not say "戴眼镜" in Chapter 7. It is the memory of 知遥 in the narration (`fixtures/memory-calibration/chapter-07.md`, line 105). This is the second case of F6 of #1788. In #1788 the words of an unnamed person went to 赵德明; here a detail that the narrator gives from the view of 知遥 went to the words of 顾青禾.
 - **Proposed change:** the sentence that #1788 proposed for F6, with the narration: after the sentence above in `capture_instructions`, and after "It tells what the character did, saw, and heard, in the order of the story" in `pass_instructions`: "Give a statement only to the character who says it in the Chapter. When the Chapter does not tell who says a statement, or when the narrator tells it, write that a person says it or that the narration tells it, and do not give it to a character."
