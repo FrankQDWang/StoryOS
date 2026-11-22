@@ -140,7 +140,8 @@ pub struct CharacterIntent {
 /// Validates one call with the Host limits (ADR 0101 section 4): the intent first, then the count
 /// of the questions, and then each question in list order. Each limit counts the characters of
 /// the text as the call gave it, and the Host keeps that text. An intent of only white space is
-/// empty, and a question of only white space or with a control character anywhere is invalid.
+/// empty, and a question of only white space or with a line break or another control character
+/// anywhere is invalid.
 pub fn validate_character_intent(
     intent: &str,
     questions: &[String],
@@ -155,7 +156,7 @@ pub fn validate_character_intent(
         return Err(IntentRefusal::TooManyQuestions);
     }
     for (position, question) in (1..).zip(questions) {
-        if question.trim().is_empty() || question.chars().any(char::is_control) {
+        if question.trim().is_empty() || question.chars().any(breaks_line) {
             return Err(IntentRefusal::QuestionInvalid { position });
         }
         if question.chars().count() > CHARACTER_QUESTION_MAX_CHARS {
@@ -166,6 +167,11 @@ pub fn validate_character_intent(
         intent: intent.to_owned(),
         questions: questions.to_vec(),
     })
+}
+
+/// Whether `character` ends a line or is another control character: a question is one line.
+fn breaks_line(character: char) -> bool {
+    character.is_control() || matches!(character, '\u{2028}' | '\u{2029}')
 }
 
 /// The settlement of one `record_character_intent` call.

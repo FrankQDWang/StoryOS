@@ -121,7 +121,7 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         // reads a Memory Entry and records the read, `search_memory`, because it reads the
         // Memory Entries, `record_memory_observations`, because it writes the observations, and
         // `apply_memory_operations`, because it writes the Memory Entries, and
-        // `record_character_intent`, because it writes a version of a Memory Entry.
+        // `record_character_intent`, because the store keeps its result with the character entry.
         ToolIntake::WebSearch { .. }
         | ToolIntake::WebFetch { .. }
         | ToolIntake::ProposeEdit(_)
