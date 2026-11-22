@@ -12,7 +12,7 @@ use storyos_core::{
 use crate::create_plan::{FakeCreate, complete, evidence_item};
 
 /// The fixed arguments of the fake reply.
-pub const FAKE_INTENT_ARGUMENTS: &str =
+pub(crate) const FAKE_INTENT_ARGUMENTS: &str =
     r#"{"intent":"我明天一早去渡口，看看那条船还在不在。","questions":["我以前去过河对岸吗？"]}"#;
 
 /// The scripted response of the RunStep of `request`. Each RunStep has one call, so the number of

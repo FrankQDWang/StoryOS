@@ -3,7 +3,8 @@ use storyos_application::{
 };
 use storyos_core::{AgentRunKind, CharacterFile, ContextSourceClass, ExposureFacts, ToolExposure};
 
-use crate::{FAKE_INTENT_ARGUMENTS, FakeDestination, FakeExchange, FakePlan};
+use crate::intent_plan::FAKE_INTENT_ARGUMENTS;
+use crate::{FakeDestination, FakeExchange, FakePlan};
 
 /// The first request of an intent pass for the file with the manuscript part `manuscript_text`.
 fn intent_pass(manuscript_text: &str) -> CreateRequest {
