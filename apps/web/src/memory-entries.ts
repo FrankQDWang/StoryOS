@@ -38,15 +38,23 @@ export function useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl }: {
   const flights = useRef(new Map<string, MemoryDeleteFlight>());
   // The entries that a delete removed. A read that started before the delete must not show them again.
   const removed = useRef(new Set<string>());
+  // The count of applied deletes, and the title of each deleted part of the author of a character with the count
+  // after its delete. A delete of that part ends the intent result that names it (ADR 0101 section 4), so a read that
+  // started before the delete must not show the result again.
+  const deletes = useRef(0);
+  const endedTitles = useRef<{ title: string; count: number }[]>([]);
   const { owner_user_id: ownerUserId, project_id: projectId } = scope;
   useEffect(() => {
     let current = true;
+    const started = deletes.current;
     listMemoryEntries({ baseUrl, fetchImpl, projectId })
       .then((read) => sameScope(read.project_scope, { owner_user_id: ownerUserId, project_id: projectId })
         ? read.entries : "failed" as const, () => "failed" as const)
       .then((read) => {
         if (current) {
-          setEntries(read === "failed" ? read : read.filter((item) => !removed.current.has(item.memory_entry_id)));
+          const ended = endedTitles.current.filter((title) => title.count > started).map((title) => title.title);
+          setEntries(read === "failed" ? read : withoutIntent(
+            read.filter((item) => !removed.current.has(item.memory_entry_id)), ended));
         }
       });
     return () => { current = false; };
@@ -66,16 +74,12 @@ export function useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl }: {
     else flights.current.set(memoryEntryId, result.flight);
     if (result.outcome === "deleted") {
       removed.current.add(memoryEntryId);
+      deletes.current += 1;
+      const ended = entry.entry_type === "character" && entry.origin === "author_request" ? [entry.title] : [];
+      for (const title of ended) endedTitles.current.push({ title, count: deletes.current });
       setStep(memoryEntryId, undefined);
-      // A delete of the part of the author of a character ends the intent result that names it (ADR 0101 section 4).
-      const named = entry.entry_type === "character" && entry.origin === "author_request";
       setEntries((shown) => shown === "failed" || shown === undefined
-        ? shown : shown.filter((item) => item.memory_entry_id !== memoryEntryId).map((item) => {
-          if (!named || item.title !== entry.title) return item;
-          const next = { ...item };
-          delete next.intent;
-          return next;
-        }));
+        ? shown : withoutIntent(shown.filter((item) => item.memory_entry_id !== memoryEntryId), ended));
       return;
     }
     setStep(memoryEntryId, result.outcome);
@@ -86,4 +90,14 @@ export function useMemoryEntries({ scope, baseUrl, fetchImpl, cryptoImpl }: {
     setReads((count) => count + 1);
   };
   return { entries, steps, readAgain, setStep, confirmDelete };
+}
+
+/** The entries, with no intent result on a character entry with one of the titles `ended`. */
+function withoutIntent(entries: readonly MemoryEntryInspect[], ended: readonly string[]): MemoryEntryInspect[] {
+  return entries.map((item) => {
+    if (item.entry_type !== "character" || !ended.includes(item.title)) return item;
+    const next = { ...item };
+    delete next.intent;
+    return next;
+  });
 }

@@ -175,7 +175,7 @@ test("listMemoryEntries gives the current intent result only for a character ent
     deleteChapterInput(story, removed, await story.treeRevision()))).response.effect.kind, "authoritative_applied");
 
   // Only the two parts of the background work have the result, with the time of the version with the intent. The
-  // Chapter of a deleted result is unavailable.
+  // Chapter "第二章" was deleted, so the result of 阿青 has an unavailable Chapter.
   const intents = async () => Object.fromEntries((await list()).map((entry) =>
     [`${entry.title} ${entry.origin}`, "intent" in entry ? entry.intent : "none"]));
   assert.deepEqual(await intents(), {

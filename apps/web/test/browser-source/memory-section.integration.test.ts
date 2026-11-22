@@ -637,3 +637,25 @@ it("shows no block after the author deleted the part of the author that the resu
   await expect.poll(fileEntries).toEqual(["5"]);
   expect([blockLines("[data-character-intent]"), blockLines("[data-character-questions]")]).toEqual([[], []]);
 });
+
+it("shows no block when a read that started before the delete of the part of the author gives the result later",
+  async () => {
+    const background = character(5, "林舟", { intent: result() });
+    const author = character(7, "林舟", { origin: "author_request" });
+    const reread = held();
+    const server = fakeServer([listed([background, author]), reread.answer],
+      [deleted({ kind: "conflicted", reason: "entry_changed" }), applied(author.memory_entry_id)]);
+    await settingsPage(server.fetchImpl);
+    document.querySelector<HTMLButtonElement>('[data-settings-item="characters"]')!.click();
+    await expect.poll(() => blockLines("[data-character-intent]").length).toBe(3);
+    // The changed part of the background work opens a read, and the author deletes the part of the author.
+    await confirmDeleteInFile(5);
+    await expect.poll(() => server.paths.filter((path) => path === MEMORY).length).toBe(2);
+    await confirmDeleteInFile(7);
+    await expect.poll(fileEntries).toEqual(["5"]);
+    reread.give(listed([{ ...background, version: "2", text: "他改了主意。" }, author]));
+    await expect.poll(() => document.querySelector("[data-character-file]")?.textContent?.includes("他改了主意。"))
+      .toBe(true);
+    expect([fileEntries(), blockLines("[data-character-intent]"), blockLines("[data-character-questions]")])
+      .toEqual([["5"], [], []]);
+  });
