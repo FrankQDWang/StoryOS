@@ -135,9 +135,9 @@ fn read(entry: &str, version: &str, author: Option<(&str, &str)>) -> super::Inte
 }
 
 /// The selection takes the current character entry of the background work with the lowest number
-/// that has no pass for its version pair. An entry of the author, a deleted entry, an entry of
+/// whose last pass read another version pair. An entry of the author, a deleted entry, an entry of
 /// another type, and a character with only the entry of the author get no pass. A new version of
-/// the entry of the author needs a pass again.
+/// the entry of the author needs a pass again, also when an earlier pass read the same pair.
 #[test]
 fn the_next_pass_is_for_the_lowest_entry_with_no_pass_for_its_versions() {
     let entries = [
@@ -161,11 +161,12 @@ fn the_next_pass_is_for_the_lowest_entry_with_no_pass_for_its_versions() {
         pick(&[]),
         pick(std::slice::from_ref(&c_read)),
         pick(&[c_read.clone(), b_read.clone()]),
-        pick(&[read("c", "2", Some(("a", "0"))), b_read]),
+        pick(&[read("c", "2", Some(("a", "0"))), b_read.clone()]),
+        pick(&[c_read.clone(), read("c", "2", None), b_read]),
     ];
     assert_eq!(
         picks.each_ref().map(Option::as_deref),
-        [Some("ca"), Some("b"), None, Some("ca")]
+        [Some("ca"), Some("b"), None, Some("ca"), Some("ca")]
     );
 }
 

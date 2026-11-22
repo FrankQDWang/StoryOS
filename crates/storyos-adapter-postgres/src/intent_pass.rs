@@ -30,7 +30,7 @@ const CHANGES: &str = "SELECT DISTINCT ON (memory_entry_id) *
       ORDER BY memory_entry_id, memory_revision DESC";
 
 /// The facts of the start rule of an intent pass: each Memory Entry of the Project with its last
-/// version and its last change, and the versions that each pass read.
+/// version and its last change, and the versions that each pass read, in start order.
 pub(crate) struct EntryFacts {
     entries: Vec<IntentPassEntryFacts>,
     passes: Vec<IntentPassRead>,
@@ -83,7 +83,8 @@ pub(crate) async fn entry_facts(
             "SELECT memory_entry_id::text, entry_version::text, author_entry_id::text,
                     author_version::text
                FROM storyos.intent_passes
-              WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)",
+              WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
+              ORDER BY started_at, pass_id",
             &[&keys[0], &keys[1]],
         )
         .await?;
