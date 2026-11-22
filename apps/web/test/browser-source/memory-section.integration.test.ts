@@ -492,6 +492,19 @@ it("selects the next name when two deletes in progress remove each part of a cha
   expect([chosenName(), fileEntries()]).toEqual(["青石", ["8"]]);
 });
 
+it("selects the next name of the search result after the delete of the last part of a character", async () => {
+  const stone = character(7, "青石");
+  await openCharacters([character(5, "阿青"), stone, character(6, "林舟"), character(8, "小青")],
+    [applied(stone.memory_entry_id)]);
+  searchFor("青");
+  await expect.poll(names).toEqual(["阿青", "青石", "小青"]);
+  document.querySelector<HTMLButtonElement>('[data-character-name="青石"]')!.click();
+  await expect.poll(fileEntries).toEqual(["7"]);
+  await confirmDeleteInFile(7);
+  await expect.poll(names).toEqual(["阿青", "小青"]);
+  expect([chosenName(), fileEntries()]).toEqual(["小青", ["8"]]);
+});
+
 it("keeps the delete control inside the file column with a long Chapter title at the narrow width", async () => {
   // 920 px is the `min-width` of the workspace.
   const [width, height] = [innerWidth, innerHeight];

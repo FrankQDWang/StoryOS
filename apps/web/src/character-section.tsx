@@ -30,23 +30,24 @@ function characters(entries: readonly MemoryEntryInspect[]): Map<string, MemoryE
  */
 export function CharacterSection({ scope, memory }: SettingsSectionProps) {
   const [search, setSearch] = useState("");
-  // The selected name and its place in the list of all names when the author confirmed a delete in its file.
-  const [chosen, setChosen] = useState<{ name: string; place?: number }>();
+  // The selected name. After "确认删除" in its file, also the names around it in the list, the next names first.
+  const [chosen, setChosen] = useState<{ name: string; following?: readonly string[] }>();
   const { entries } = memory;
   if (entries === undefined) return <CharacterFrame />;
   if (entries === "failed") return <CharacterFrame><ReadFailed memory={memory} /></CharacterFrame>;
   const files = characters(entries);
   if (files.size === 0) return <CharacterFrame><p data-character-empty="">{EMPTY_SENTENCE}</p></CharacterFrame>;
-  const all = [...files.keys()];
   const term = search.trim();
-  const names = all.filter((name) => name.includes(term));
-  // When a delete removed the last part of the selected character, the name that took its place is selected.
-  const next = chosen?.place === undefined || files.has(chosen.name) ? undefined
-    : all[Math.min(chosen.place, all.length - 1)];
-  const selected = [chosen?.name, next].find((name) => name !== undefined && names.includes(name)) ?? names[0];
+  const names = [...files.keys()].filter((name) => name.includes(term));
+  // When a delete removed the last part of the selected character, the next name of the list is selected.
+  const following = chosen === undefined || files.has(chosen.name) ? [] : chosen.following ?? [];
+  const selected = [chosen?.name, ...following].find((name) => name !== undefined && names.includes(name))
+    ?? names[0];
   const file = selected === undefined ? undefined : files.get(selected);
   const keep = () => {
-    if (selected !== undefined) setChosen({ name: selected, place: all.indexOf(selected) });
+    if (selected === undefined) return;
+    const at = names.indexOf(selected);
+    setChosen({ name: selected, following: [...names.slice(at + 1), ...names.slice(0, at).reverse()] });
   };
   return (
     <CharacterFrame>
