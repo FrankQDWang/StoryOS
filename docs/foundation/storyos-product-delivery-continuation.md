@@ -27,11 +27,13 @@ continuation arrive in Stages 3 and 4. Stage 7 adds background Project Memory;
 it does not postpone those earlier foundations or change their identities.
 
 The serial release order is Stage 5 through Stage 7, then Stage 10, then
-Stage 8 and Stage 9
-([ADR 0096](../adr/0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md)).
+Stage 11
+([ADR 0096](../adr/0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md),
+[ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
 A stage number is the identity of the stage, and it is not its place in the
-order. Stage 8 and Stage 9 stay on EXECUTION HOLD, and the author decides
-again about each of them after the release of Stage 10. Each stage starts
+order. Stage 8 and Stage 9 stay on EXECUTION HOLD. ADR 0101 records the order
+that the author agreed for the work after Stage 11, and a later ADR decides
+about Stage 8 and about Stage 9 when that work starts. Each stage starts
 from the preceding released main. This order is a release gate, not a claim
 that all preceding features are code dependencies. Child tickets name only
 the actual contract, interface, data, or acceptance inputs they need.
@@ -274,7 +276,22 @@ Stage 10 adds no automatic capture of a preference, no second model, no mark
 on a machine phrase, no trial that compares models or prompts, and no change
 of the production model (ADR 0100 section 5).
 
-## 8. Deferred scope outside MVP
+## 8. Stage 11: Character intents
+
+Stage 11 comes after the release of Stage 10 and before Stage 8 and Stage 9
+([ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
+It works on the third problem of the author: the plot grows from the
+characters. ADR 0101 sets its scope: a character file in Agent Memory with a
+part of the author and a part of the background work, an intent pass that
+gives each character only its own file, the intents as context of a Run of
+the author, and a section for the characters on the settings page of a
+Project. StoryOS does not simulate the story, and the author decides what the
+manuscript gets. A specification and a parent issue follow. Until then,
+Stage 11 has no Requirement, no author journey, and no evidence row, and the
+proof owner has nothing to cover for it. The rule "no setup before writing"
+of ADR 0096 applies.
+
+## 9. Deferred scope outside MVP
 
 [Eval](eval-evidence-foundation.md) is a future observation surface outside
 MVP. It has no current stage, Requirement, author journey, evidence bundle,
@@ -282,7 +299,7 @@ implementation ticket, or release dependency. Its page, APIs, and behavior are
 not being designed or implemented. The last stage that the author keeps after
 the decision of ADR 0096 section 5 completes this local MVP route.
 
-## 9. Canonical semantic owners
+## 10. Canonical semantic owners
 
 | Surface | Owner and required source |
 | --- | --- |
@@ -303,7 +320,7 @@ the decision of ADR 0096 section 5 completes this local MVP route.
 | Persistence and retention | [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) and [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64): their [storage](postgresql-project-storage-isolation-and-migration-contract.md) and [retention](run-event-mailbox-snapshot-retention-and-archival-semantics.md) contracts, with ADR 0004 and ADRs 0008–0011. |
 | Trust, protocol, and architecture | [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57), [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), and [Define the Modular-Monolith and Repository Governance Boundaries](https://github.com/FrankQDWang/StoryOS/issues/59): their [threat](storyos-service-client-external-trust-boundaries-threat-model.md), [protocol](versioned-command-query-artifact-event-protocol.md), and [governance](modular-monolith-and-repository-governance-boundaries.md) contracts. |
 
-## 10. Retained-source coverage
+## 11. Retained-source coverage
 
 The following source inventory accounts for every original Wayfinder design
 child. A source can constrain more than one stage. The named production
@@ -399,7 +416,7 @@ and [[Automated Architecture Review] Own the Production Protected Web Client Hos
 Their current ADR 0015, ADR 0016, repository, and verification boundaries
 apply to every added stage; their completed implementation is reusable.
 
-## 11. Planning handoff and decision boundaries
+## 12. Planning handoff and decision boundaries
 
 The release correction delivers these requirements to the existing proof
 owner. That owner must cover every current requirement, journey, evidence,
@@ -421,7 +438,8 @@ unaffected Stage 6/8/9 promises, and audit forward/reverse coverage. Existing
 old bodies do not certify these changes. The current Stage 3 specification
 owns its accepted implementation handoff and pending final release evidence.
 The author released the execution of Stage 4 through Stage 7 and of
-Stage 10. Stage 8 and Stage 9 stay on EXECUTION HOLD until the author
+Stage 10. Stage 11 waits for the approval of its specification (ADR 0101).
+Stage 8 and Stage 9 stay on EXECUTION HOLD until the author
 explicitly releases their execution (ADR 0096). This contract creates no
 implementation ticket or stage release.
 
