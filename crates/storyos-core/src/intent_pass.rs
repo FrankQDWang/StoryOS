@@ -1,6 +1,9 @@
 //! The input, the start rule, and the outcome of an intent pass (ADR 0101 section 4): the Context
 //! Assembly of its RunSteps from the Character File that the store loads (ADR 0039), the decision
-//! of a claimed schedule row, and the outcome of a pass whose Run ends with no settled call.
+//! of a claimed schedule row, the outcome of a settled call, and the outcome of a pass whose Run
+//! ends with no settled call.
+
+use std::time::{Duration, SystemTime};
 
 use crate::assemble_context::{
     CONTEXT_ITEM_TOKEN_LIMIT, ConsideredSource, ContextCause, ContextPurpose, ContextSourceClass,
@@ -178,6 +181,9 @@ pub fn intent_pass_chapter<'a>(chapters: &[(&'a str, Vec<&str>)]) -> Option<&'a 
 pub enum IntentPassOutcome {
     /// The result is a version of the part of the background work.
     Recorded,
+    /// A part of the Character File changed after the start, so the Host wrote no version, and
+    /// the entry needs a pass again.
+    NotKept,
 }
 
 impl IntentPassOutcome {
@@ -185,6 +191,7 @@ impl IntentPassOutcome {
     pub fn label(self) -> &'static str {
         match self {
             Self::Recorded => "recorded",
+            Self::NotKept => "not_kept",
         }
     }
 }
@@ -208,6 +215,10 @@ pub fn intent_pass_failure(end: CaptureRunEnd<'_>) -> Option<&str> {
     }
 }
 
+/// The shortest time from the start of one intent pass of a Project to the start of the next
+/// (ADR 0101 section 4).
+pub const INTENT_PASS_INTERVAL: Duration = Duration::from_secs(/*1 minute*/ 60);
+
 /// The facts of one claimed intent pass row of a Project.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IntentPassFacts {
@@ -215,15 +226,30 @@ pub struct IntentPassFacts {
     pub entry_needs_pass: bool,
     /// An intent pass of the Project is in progress.
     pub pass_in_progress: bool,
+    /// An observation of a request waits in the Project. A conflict item is not one.
+    pub observation_waits: bool,
+    /// A consolidation pass of the Project is in progress.
+    pub consolidation_in_progress: bool,
+    /// The time of the claim.
+    pub now: SystemTime,
+    /// The start of the last intent pass of the Project.
+    pub last_pass_start: Option<SystemTime>,
 }
 
-/// Why a claimed intent pass row started no pass. The due time becomes empty in each case.
+/// Why a claimed intent pass row started no pass. The due time becomes empty, except after
+/// `RateLimited`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IntentPassSkip {
     /// The next settlement that makes the row due sets the due time again.
     NoEntryNeedsPass,
     /// The settlement of that pass sets the due time again when an entry still needs a pass.
     PassInProgress,
+    /// The settlement of the consolidation pass of the observation sets the due time again.
+    ObservationWaits,
+    /// The settlement of that consolidation pass sets the due time again.
+    ConsolidationInProgress,
+    /// The row is due at `due_at`, the first time that the rate permits a start.
+    RateLimited { due_at: SystemTime },
     /// The admission refused the start.
     StartRefused,
 }
@@ -233,13 +259,17 @@ impl IntentPassSkip {
         match self {
             Self::NoEntryNeedsPass => "no_entry_needs_pass",
             Self::PassInProgress => "pass_in_progress",
+            Self::ObservationWaits => "observation_waits",
+            Self::ConsolidationInProgress => "consolidation_in_progress",
+            Self::RateLimited { .. } => "rate_limited",
             Self::StartRefused => "start_refused",
         }
     }
 }
 
 /// Decides whether a claimed intent pass row starts one pass. `Ok`: one pass starts, when the
-/// admission of the start permits it.
+/// admission of the start permits it. The consolidation work of the Project goes first, and a
+/// Project starts at most one intent pass in `INTENT_PASS_INTERVAL` (ADR 0101 section 4).
 pub fn decide_intent_pass(facts: &IntentPassFacts) -> Result<(), IntentPassSkip> {
     if !facts.entry_needs_pass {
         return Err(IntentPassSkip::NoEntryNeedsPass);
@@ -247,7 +277,19 @@ pub fn decide_intent_pass(facts: &IntentPassFacts) -> Result<(), IntentPassSkip>
     if facts.pass_in_progress {
         return Err(IntentPassSkip::PassInProgress);
     }
-    Ok(())
+    if facts.observation_waits {
+        return Err(IntentPassSkip::ObservationWaits);
+    }
+    if facts.consolidation_in_progress {
+        return Err(IntentPassSkip::ConsolidationInProgress);
+    }
+    let due_at = facts
+        .last_pass_start
+        .map(|start| start + INTENT_PASS_INTERVAL);
+    match due_at.filter(|due_at| *due_at > facts.now) {
+        Some(due_at) => Err(IntentPassSkip::RateLimited { due_at }),
+        None => Ok(()),
+    }
 }
 
 /// The facts of one Memory Entry of a Project for the start rule of an intent pass: the state and
@@ -280,55 +322,65 @@ pub struct NeededCharacter<'a> {
     pub author: Option<&'a IntentPassEntryFacts>,
 }
 
-/// The character that the next intent pass is for: the current character entry of the background
-/// work with the lowest number that has no pass for the version of its last change and the
-/// version of the last change of the current character entry of the author with the same title.
-/// A character with only the entry of the author needs no pass (ADR 0101 section 4).
-pub fn select_intent_pass_entry<'a>(
-    entries: &'a [IntentPassEntryFacts],
-    passes: &[IntentPassRead],
-) -> Option<NeededCharacter<'a>> {
+impl NeededCharacter<'_> {
+    /// The entries and versions that a pass of this character reads.
+    pub fn read(&self) -> IntentPassRead {
+        let key =
+            |entry: &IntentPassEntryFacts| (entry.memory_entry_id.clone(), entry.version.clone());
+        IntentPassRead {
+            entry: key(self.entry),
+            author: self.author.map(key),
+        }
+    }
+}
+
+/// Each character of `entries`: each current character entry of the background work, with the
+/// current character entry of the author with the same title.
+fn characters(entries: &[IntentPassEntryFacts]) -> impl Iterator<Item = NeededCharacter<'_>> {
     let character =
         |entry: &&IntentPassEntryFacts| entry.state == "current" && entry.entry_type == "character";
-    let key = |entry: &IntentPassEntryFacts| (entry.memory_entry_id.clone(), entry.version.clone());
     (entries.iter().filter(character))
         .filter(|entry| !entry.author)
-        .map(|entry| NeededCharacter {
+        .map(move |entry| NeededCharacter {
             entry,
             author: (entries.iter().filter(character))
                 .find(|author| author.author && author.title == entry.title),
         })
-        .filter(|needed| {
-            let read = IntentPassRead {
-                entry: key(needed.entry),
-                author: needed.author.map(key),
-            };
-            !passes.contains(&read)
-        })
+}
+
+/// The character that the next intent pass is for: the current character entry of the background
+/// work with the lowest number that has no pass for the version of its last change and the
+/// version of the last change of the current character entry of the author with the same title.
+/// A character with only the entry of the author needs no pass (ADR 0101 section 4). A pass with
+/// each outcome counts, so a failed pass gets no second start for the same versions.
+pub fn select_intent_pass_entry<'a>(
+    entries: &'a [IntentPassEntryFacts],
+    passes: &[IntentPassRead],
+) -> Option<NeededCharacter<'a>> {
+    characters(entries)
+        .filter(|needed| !passes.contains(&needed.read()))
         .min_by_key(|needed| needed.entry.entry_number)
 }
 
-/// The outcome of a pass whose call is valid, and the result text of the call, from the state,
-/// the type, and the origin of the last version of its entry. The result is a version of the entry
-/// only while the entry is a current character entry of the background work. Else the pass fails
-/// with `entry_not_current` and records no result.
+/// The outcome of a pass whose call is valid, and the result text of the call. The result is a
+/// version of the entry only while the versions that the pass `read` are the current versions of
+/// the character in `entries`. Else no part of the result is kept: a change, a delete, or a new
+/// entry of the author after the start gives `NotKept` (ADR 0101 section 4).
 pub fn settle_intent_result(
-    state: &str,
-    entry_type: &str,
-    origin: &str,
-) -> (Result<IntentPassOutcome, &'static str>, ToolResultText) {
-    let (outcome, text) =
-        match state == "current" && entry_type == "character" && origin != "author_request" {
-            true => (Ok(IntentPassOutcome::Recorded), INTENT_RECORDED),
-            false => (Err("entry_not_current"), INTENT_NOT_CURRENT),
-        };
+    read: &IntentPassRead,
+    entries: &[IntentPassEntryFacts],
+) -> (IntentPassOutcome, ToolResultText) {
+    let current = characters(entries).find(|needed| needed.entry.memory_entry_id == read.entry.0);
+    let (outcome, text) = match current.is_some_and(|needed| needed.read() == *read) {
+        true => (IntentPassOutcome::Recorded, INTENT_RECORDED),
+        false => (IntentPassOutcome::NotKept, INTENT_NOT_KEPT),
+    };
     (outcome, host_tool_result(text))
 }
 
-/// The result text of a valid call whose entry is no longer a current character entry of the
-/// background work.
-const INTENT_NOT_CURRENT: &str = "The Host did not record the intent: the entry is no longer a \
-                                  current character entry of the background work.";
+/// The result text of a valid call whose Character File changed after the start of the pass.
+const INTENT_NOT_KEPT: &str = "The Host did not keep the intent: the character file changed after \
+                               the pass read it.";
 
 #[cfg(test)]
 #[path = "intent_pass_tests.rs"]

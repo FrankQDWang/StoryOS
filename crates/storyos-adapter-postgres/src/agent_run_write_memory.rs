@@ -60,6 +60,10 @@ pub(crate) async fn execute(
             write_memory_version(client, scope, written, &source)
                 .await
                 .map_err(CompleteAgentRunError::Unavailable)?;
+            // A change of a character entry can need an intent pass (ADR 0101 section 4).
+            crate::intent_pass::mark_due_when_needed(client, scope)
+                .await
+                .map_err(crate::agent_run_work::complete_unavailable)?;
             (ToolCallState::Settled, None, version.result())
         }
         Err(refusal) => (

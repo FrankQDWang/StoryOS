@@ -209,8 +209,8 @@ pub(crate) async fn persist_next_step(
 /// Executes the `record_character_intent` call `row` of a pass in the Tool Gateway transaction that
 /// checked the Run Lease fence. A refused call records nothing, and the Run continues to its next
 /// RunStep. A valid call takes the lock of the Memory head and writes one version of the entry of
-/// the pass with the result, while Core keeps the result for the last version of the entry. Else
-/// the pass fails with the reason of Core. The settled call completes the Run.
+/// the pass with the result, when Core keeps the result for the versions that the pass read. Else
+/// the outcome is `not_kept`, and the Host writes no version. The settled call completes the Run.
 pub(crate) async fn execute(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -232,32 +232,34 @@ pub(crate) async fn execute(
     crate::memory_entries::lock_memory_head(client, scope)
         .await
         .map_err(CompleteAgentRunError::Unavailable)?;
-    // The facts of the last version of the entry of the pass, after the lock of the Memory head.
+    // The versions that the pass read, and the facts of the entries after the lock of the Memory
+    // head.
     let pass = client
         .query_opt(
-            "SELECT pass.pass_id::text, latest.state, latest.entry_type, latest.origin
-               FROM storyos.intent_passes AS pass
-               CROSS JOIN LATERAL (
-                     SELECT version.state, version.entry_type, version.origin
-                       FROM storyos.memory_entry_versions AS version
-                      WHERE (version.owner_user_id, version.project_id, version.memory_entry_id) =
-                            (pass.owner_user_id, pass.project_id, pass.memory_entry_id)
-                      ORDER BY version.memory_revision DESC
-                      LIMIT 1) AS latest
-              WHERE (pass.owner_user_id, pass.project_id, pass.run_id) =
+            "SELECT pass_id::text, memory_entry_id::text, entry_version::text,
+                    author_entry_id::text, author_version::text
+               FROM storyos.intent_passes
+              WHERE (owner_user_id, project_id, run_id) =
                     ($1::text::uuid, $2::text::uuid, $3::text::uuid)
-                AND pass.outcome IS NULL",
+                AND outcome IS NULL",
             &[&keys[0], &keys[1], &claim.run_id],
         )
         .await
         .map_err(complete_unavailable)?
         .ok_or_else(|| damaged("The running intent pass of the Run is missing"))?;
     let pass_id: String = pass.get(/*idx*/ 0);
-    let state = pass.get(/*idx*/ 1);
-    let (entry_type, origin) = (pass.get(/*idx*/ 2), pass.get(/*idx*/ 3));
-    let (outcome, result) = storyos_core::settle_intent_result(state, entry_type, origin);
-    if let Err(reason) = outcome {
-        settle_pass(client, scope, &claim.run_id, "failed", Some(reason)).await?;
+    let read = IntentPassRead {
+        entry: (pass.get(/*idx*/ 1), pass.get(/*idx*/ 2)),
+        author: pass
+            .get::<_, Option<String>>(/*idx*/ 3)
+            .zip(pass.get(/*idx*/ 4)),
+    };
+    let facts = entry_facts(client, scope)
+        .await
+        .map_err(complete_unavailable)?;
+    let (outcome, result) = storyos_core::settle_intent_result(&read, &facts.entries);
+    if outcome == IntentPassOutcome::NotKept {
+        settle_pass(client, scope, &claim.run_id, outcome.label(), None).await?;
         resolve(client, claim, row, Resolution::settled(&result)).await?;
         return crate::agent_run_work::complete(client, claim)
             .await
@@ -302,8 +304,7 @@ pub(crate) async fn execute(
         )
         .await
         .map_err(complete_unavailable)?;
-    let recorded = IntentPassOutcome::Recorded.label();
-    settle_pass(client, scope, &claim.run_id, recorded, None).await?;
+    settle_pass(client, scope, &claim.run_id, outcome.label(), None).await?;
     resolve(client, claim, row, Resolution::settled(&result)).await?;
     crate::agent_run_work::complete(client, claim).await?;
     Ok(())
@@ -324,7 +325,7 @@ pub(crate) async fn settle_end(
 }
 
 /// Writes the outcome of the running pass of the Run `run_id`. The settlement makes the intent
-/// pass row of the Project due again when another entry needs a pass.
+/// pass row of the Project due again when an entry needs a pass.
 async fn settle_pass(
     client: &Client,
     scope: &ProjectScope,
@@ -351,11 +352,20 @@ async fn settle_pass(
     if settled == 0 {
         return Ok(());
     }
-    let facts = entry_facts(client, scope)
+    mark_due_when_needed(client, scope)
         .await
-        .map_err(complete_unavailable)?;
-    if facts.needed().is_some() {
-        crate::memory_work_schedule::mark_intent_pass_due(client, scope).await?;
+        .map_err(complete_unavailable)
+}
+
+/// Makes the intent pass row of the Project of `scope` due now when a character entry needs a
+/// pass. The settlement of an intent pass and of a consolidation pass with each outcome, and each
+/// applied write of the author on a Memory Entry, use it (ADR 0101 section 4).
+pub(crate) async fn mark_due_when_needed(
+    client: &Client,
+    scope: &ProjectScope,
+) -> Result<(), tokio_postgres::Error> {
+    if entry_facts(client, scope).await?.needed().is_some() {
+        crate::memory_work_schedule::mark_intent_pass_due(client, scope, /*due_at*/ None).await?;
     }
     Ok(())
 }
@@ -363,3 +373,7 @@ async fn settle_pass(
 #[cfg(test)]
 #[path = "intent_pass_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "intent_pass_start_tests.rs"]
+mod start_tests;

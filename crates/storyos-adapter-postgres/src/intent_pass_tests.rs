@@ -24,7 +24,7 @@ use crate::shared_tests::memory_entries::{archived_rows, write_versions};
 use crate::shared_tests::model_gateway::RuntimeClock;
 
 /// A consolidation create of the character `title` with `text`.
-fn character(title: &str, text: &str) -> Value {
+pub(super) fn character(title: &str, text: &str) -> Value {
     json!({
         "action": "create", "entry": null, "entries": null, "type": "character", "title": title,
         "description": "船夫。", "text": text, "observations": [1], "reason": null
@@ -32,7 +32,7 @@ fn character(title: &str, text: &str) -> Value {
 }
 
 /// A consolidation update of the entry `entry` to the title `title` and the text `text`.
-fn change(entry: u64, title: &str, text: &str) -> Value {
+pub(super) fn change(entry: u64, title: &str, text: &str) -> Value {
     json!({
         "action": "update", "entry": entry, "entries": null, "type": null, "title": title,
         "description": "船夫。", "text": text, "observations": [1], "reason": null
@@ -40,13 +40,13 @@ fn change(entry: u64, title: &str, text: &str) -> Value {
 }
 
 /// The text `text` with one fake script line for each call of `calls`, in order.
-fn with_calls(text: &str, calls: &[Value]) -> String {
+pub(super) fn with_calls(text: &str, calls: &[Value]) -> String {
     let lines = calls.iter().map(|call| format!("\nSCRIPT:intent {call}"));
     format!("{text}{}", lines.collect::<String>())
 }
 
 /// Settles one capture and one consolidation pass of `operations` in the Project of `scope`.
-async fn consolidate(
+pub(super) async fn consolidate(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
@@ -60,7 +60,7 @@ async fn consolidate(
 
 /// Makes each due row of the schedule not due, except the intent pass row of the Project, so that
 /// the claim can take only that row. The due time of that row stays as the settlement wrote it.
-async fn claim(
+pub(super) async fn claim(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
@@ -85,7 +85,7 @@ async fn claim(
 /// Makes the intent pass row of the Project due now with no settlement. A test uses it only where
 /// no settlement makes the row due: before a claim that must start no pass, and after a refused
 /// start.
-async fn make_due(admin: &Client, scope: &ProjectScope) {
+pub(super) async fn make_due(admin: &Client, scope: &ProjectScope) {
     admin
         .execute(
             "INSERT INTO storyos.memory_work_schedules
@@ -100,8 +100,59 @@ async fn make_due(admin: &Client, scope: &ProjectScope) {
         .unwrap();
 }
 
+/// Moves the start of each pass of the Project and the due time of its intent pass row back by
+/// more than the interval of the rate, as if that time went by.
+pub(super) async fn age(admin: &Client, scope: &ProjectScope) {
+    for table in [
+        "intent_passes SET started_at = started_at",
+        "memory_work_schedules SET due_at = due_at",
+    ] {
+        let sql = format!(
+            "UPDATE storyos.{table} - interval '61 seconds' WHERE project_id = $1::text::uuid"
+        );
+        admin
+            .execute(&sql, &[&scope.project_id.as_ref()])
+            .await
+            .unwrap();
+    }
+}
+
+/// The content of the file item of the first RunStep of the pass of the Run `run_id`.
+pub(super) async fn file(admin: &Client, run_id: &str) -> Value {
+    json_of(
+        admin,
+        "SELECT to_jsonb(item ->> 'content')::text
+           FROM storyos.context_assembly_manifests AS manifest,
+                jsonb_array_elements(manifest.payload -> 'selected') AS item
+          WHERE manifest.run_id = $1::text::uuid AND manifest.manifest_role = 'decision'
+            AND manifest.decision_position = 0",
+        &[&run_id],
+    )
+    .await
+}
+
+/// Each pass of the Project in start order: the entry number, the outcome, and the versions that
+/// it read.
+pub(super) async fn outcomes(admin: &Client, scope: &ProjectScope) -> Value {
+    let passes = passes(admin, scope).await;
+    let row = |pass: &Value| json!([pass[0], pass[1], pass[3], pass[4]]);
+    passes.as_array().unwrap().iter().map(row).collect()
+}
+
+/// The result text of each call of the Run `run_id`.
+pub(super) async fn results(admin: &Client, run_id: &str) -> Value {
+    let sql =
+        "SELECT jsonb_agg(result_text)::text FROM storyos.tool_calls WHERE run_id = $1::text::uuid";
+    json_of(admin, sql, &[&run_id]).await
+}
+
 /// Claims the intent pass row, then completes the Run of the pass that it starts. Returns the Run.
-async fn run_intent(store: &PostgresProjectReader, admin: &Client, scope: &ProjectScope) -> String {
+pub(super) async fn run_intent(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+) -> String {
+    age(admin, scope).await;
     let MemoryWorkOutcome::IntentPassStarted(started) = claim(store, admin, scope).await else {
         panic!("the claim must start an intent pass");
     };
@@ -111,7 +162,12 @@ async fn run_intent(store: &PostgresProjectReader, admin: &Client, scope: &Proje
 
 /// Completes the intent pass Run `run_id` through the claim of the Worker, one RunStep for each
 /// claim.
-async fn finish(store: &PostgresProjectReader, admin: &Client, scope: &ProjectScope, run_id: &str) {
+pub(super) async fn finish(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    run_id: &str,
+) {
     for _ in 0..=storyos_core::INTENT_PASS_MAX_RUN_STEPS {
         let claimed = claim_in_project(store, scope).await.unwrap();
         assert_eq!(claimed.run_id, run_id);
@@ -138,7 +194,7 @@ async fn finish(store: &PostgresProjectReader, admin: &Client, scope: &ProjectSc
 }
 
 /// Whether the intent pass row of the Project is due.
-async fn intent_due(admin: &Client, scope: &ProjectScope) -> Value {
+pub(super) async fn intent_due(admin: &Client, scope: &ProjectScope) -> Value {
     json_of(
         admin,
         "SELECT to_jsonb(due_at IS NOT NULL)::text FROM storyos.memory_work_schedules
@@ -175,7 +231,7 @@ async fn passes(admin: &Client, scope: &ProjectScope) -> Value {
 
 /// Each version of the entry `number` in version order: the version, the cause kind, the intent,
 /// and the questions.
-async fn intents(admin: &Client, scope: &ProjectScope, number: u64) -> Value {
+pub(super) async fn intents(admin: &Client, scope: &ProjectScope, number: u64) -> Value {
     json_of(
         admin,
         "SELECT jsonb_agg(jsonb_build_array(version, cause ->> 'kind', intent, intent_questions)
@@ -493,15 +549,7 @@ async fn the_entry_of_the_author_gets_no_version_and_a_new_text_needs_a_pass_aga
     let operations = [character("阿青", "阿青是船夫。"), change(1, "阿青", "改。")];
     let first = consolidate(&store, &admin, &scope, &source, &operations).await;
     let first_pass = run_intent(&store, &admin, &scope).await;
-    let file = json_of(
-        &admin,
-        "SELECT to_jsonb(item ->> 'content')::text
-           FROM storyos.context_assembly_manifests AS manifest,
-                jsonb_array_elements(manifest.payload -> 'selected') AS item
-          WHERE manifest.run_id = $1::text::uuid AND manifest.manifest_role = 'decision'",
-        &[&first_pass],
-    )
-    .await;
+    let file = file(&admin, &first_pass).await;
     let new_text = [change(2, "阿青", "阿青换了船。")];
     let changed = consolidate(&store, &admin, &scope, &source, &new_text).await;
     let again = intent_due(&admin, &scope).await;
@@ -564,11 +612,10 @@ async fn the_entry_of_the_author_gets_no_version_and_a_new_text_needs_a_pass_aga
 }
 
 /// A consolidation pass deletes the entry after the start of an intent pass: the valid call
-/// settles, the pass fails with `entry_not_current`, the entry gets no intent version, and the
-/// next claim starts no pass.
+/// settles, the outcome is `not_kept`, the entry gets no intent version, and the row is not due.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_delete_during_a_pass_fails_the_pass_and_writes_no_version() {
+async fn a_delete_during_a_pass_keeps_no_result_and_writes_no_version() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, _, source) = project(&store, &admin, "4c3").await;
@@ -580,22 +627,20 @@ async fn a_delete_during_a_pass_fails_the_pass_and_writes_no_version() {
     consolidate(&store, &admin, &scope, &source, &[delete(1)]).await;
     let revision = memory_revision(&admin, &scope).await;
     finish(&store, &admin, &scope, &started.run_id).await;
-    let result = "SELECT jsonb_agg(result_text)::text FROM storyos.tool_calls
-                   WHERE run_id = $1::text::uuid";
 
     assert_eq!(
         (
             passes(&admin, &scope).await,
-            json_of(&admin, result, &[&started.run_id]).await,
+            results(&admin, &started.run_id).await,
             intents(&admin, &scope, 1).await,
             memory_revision(&admin, &scope).await,
-            claim(&store, &admin, &scope).await
+            intent_due(&admin, &scope).await
         ),
         (
             json!([[
                 1,
-                "failed",
-                "entry_not_current",
+                "not_kept",
+                null,
                 1,
                 null,
                 "intent_pass",
@@ -603,15 +648,17 @@ async fn a_delete_during_a_pass_fails_the_pass_and_writes_no_version() {
                 1,
                 [["settled", null]]
             ]]),
-            json!([
-                "The Host did not record the intent: the entry is no longer a current character entry of the background work."
-            ]),
+            json!([NOT_KEPT]),
             json!([
                 [1, "consolidation", null, null],
                 [2, "consolidation", null, null]
             ]),
             revision,
-            MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::NoEntryNeedsPass)
+            json!(false)
         )
     );
 }
+
+/// The result text of a valid call whose Character File changed after the start of the pass.
+pub(super) const NOT_KEPT: &str =
+    "The Host did not keep the intent: the character file changed after the pass read it.";

@@ -230,10 +230,10 @@ pub use instruction_binding::{
     BoundInstruction, assemble_instruction_binding, project_instruction_binding,
 };
 pub use intent_pass::{
-    CharacterFile, INTENT_PASS_MAX_RUN_STEPS, IntentPassAssembly, IntentPassEntryFacts,
-    IntentPassFacts, IntentPassOutcome, IntentPassRead, IntentPassSkip, NeededCharacter,
-    admit_intent_pass, assemble_intent_pass_context, decide_intent_pass, intent_pass_chapter,
-    intent_pass_failure, intent_pass_sends_again, next_intent_pass_context,
+    CharacterFile, INTENT_PASS_INTERVAL, INTENT_PASS_MAX_RUN_STEPS, IntentPassAssembly,
+    IntentPassEntryFacts, IntentPassFacts, IntentPassOutcome, IntentPassRead, IntentPassSkip,
+    NeededCharacter, admit_intent_pass, assemble_intent_pass_context, decide_intent_pass,
+    intent_pass_chapter, intent_pass_failure, intent_pass_sends_again, next_intent_pass_context,
     select_intent_pass_entry, settle_intent_result,
 };
 pub use load_skill::{
