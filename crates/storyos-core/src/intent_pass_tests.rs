@@ -134,12 +134,24 @@ fn read(entry: &str, version: &str, author: Option<(&str, &str)>) -> super::Inte
     }
 }
 
+/// A pass with the outcome `outcome` that read `read`.
+fn pass(read: &super::IntentPassRead, outcome: &str) -> super::IntentPassRecord {
+    super::IntentPassRecord {
+        read: read.clone(),
+        outcome: Some(outcome.to_owned()),
+    }
+}
+
 /// The selection takes the current character entry of the background work with the lowest number
-/// that has no pass for its version pair. An entry of the author, a deleted entry, an entry of
-/// another type, and a character with only the entry of the author get no pass. A new version of
-/// the entry of the author needs a pass again.
+/// that needs a pass. An entry of the author, a deleted entry, an entry of another type, and a
+/// character with only the entry of the author get no pass. A new version of the entry of the
+/// author needs a pass again, also when an earlier recorded pass read the same pair. A pair that
+/// a failed pass read gets no second pass, also after a failed pass of another pair, while no
+/// later result is recorded. After a recorded pass of another pair, the pair needs a pass again,
+/// because the stored result is for the other pair. A pair that only a not-kept pass or a running
+/// pass read needs a pass.
 #[test]
-fn the_next_pass_is_for_the_lowest_entry_with_no_pass_for_its_versions() {
+fn the_next_pass_is_for_the_lowest_entry_that_needs_a_pass() {
     let entries = [
         "a 1 current character author 阿青 1",
         "b 4 current character - 林舟 1",
@@ -150,42 +162,238 @@ fn the_next_pass_is_for_the_lowest_entry_with_no_pass_for_its_versions() {
     ]
     .map(entry);
     // The entry and the author entry of the selection, as one word.
-    let pick = |passes: &[super::IntentPassRead]| {
+    let pick = |passes: &[super::IntentPassRecord]| {
         let needed = super::select_intent_pass_entry(&entries, passes)?;
         let author = needed.author.map_or("", |author| &author.memory_entry_id);
         Some(format!("{}{author}", needed.entry.memory_entry_id))
     };
-    let c_read = read("c", "2", Some(("a", "1")));
-    let b_read = read("b", "1", None);
+    let (c_read, b_read) = (read("c", "2", Some(("a", "1"))), read("b", "1", None));
+    let (c_other, b_done) = (read("c", "2", None), pass(&b_read, "recorded"));
+    let running = super::IntentPassRecord {
+        read: c_read.clone(),
+        outcome: None,
+    };
     let picks = [
         pick(&[]),
-        pick(std::slice::from_ref(&c_read)),
-        pick(&[c_read.clone(), b_read.clone()]),
-        pick(&[read("c", "2", Some(("a", "0"))), b_read]),
+        pick(&[pass(&c_read, "recorded")]),
+        pick(&[pass(&c_read, "recorded"), b_done.clone()]),
+        pick(&[
+            pass(&read("c", "2", Some(("a", "0"))), "recorded"),
+            b_done.clone(),
+        ]),
+        pick(&[
+            pass(&c_read, "recorded"),
+            pass(&c_other, "recorded"),
+            b_done.clone(),
+        ]),
+        pick(&[pass(&c_read, "failed"), b_done.clone()]),
+        pick(&[
+            pass(&c_read, "failed"),
+            pass(&c_other, "failed"),
+            b_done.clone(),
+        ]),
+        pick(&[
+            pass(&c_read, "failed"),
+            pass(&c_other, "recorded"),
+            b_done.clone(),
+        ]),
+        pick(&[
+            pass(&c_other, "recorded"),
+            pass(&c_read, "failed"),
+            b_done.clone(),
+        ]),
+        pick(&[pass(&c_read, "not_kept"), b_done.clone()]),
+        pick(&[running, b_done]),
     ];
     assert_eq!(
         picks.each_ref().map(Option::as_deref),
-        [Some("ca"), Some("b"), None, Some("ca")]
+        [
+            Some("ca"),
+            Some("b"),
+            None,
+            Some("ca"),
+            Some("ca"),
+            None,
+            None,
+            Some("ca"),
+            None,
+            Some("ca"),
+            Some("ca")
+        ]
+    );
+    // #1790 item 5 with no part of the author now: (a) a failed pass on (v1, none), then a result
+    // on (v1, a1), then a delete of the part of the author -> a pass. (b) A failed pass on
+    // (v1, none), then a pass on (v1, a1) that is not kept, because the part of the author is
+    // deleted during it -> no pass: no result was recorded after the failed pass.
+    let alone = ["c 3 current character - 阿青 1"].map(entry);
+    let (none, a1) = (read("c", "1", None), read("c", "1", Some(("a", "1"))));
+    let decide = |later: &str| {
+        let passes = [pass(&none, "failed"), pass(&a1, later)];
+        super::select_intent_pass_entry(&alone, &passes).map(|needed| needed.entry.title.clone())
+    };
+    assert_eq!(
+        [decide("recorded"), decide("not_kept")],
+        [Some("阿青".to_owned()), None]
     );
 }
 
-/// The result of a valid call is a version only while the entry is a current character entry of
-/// the background work.
+/// A due mark is due now, or one minute after the last start when that is later. A write can
+/// change a Character File when the version or the entry before it is a character entry.
 #[test]
-fn a_result_is_kept_only_for_a_current_character_entry_of_the_background_work() {
-    let now = [
-        ("current", "character", "chapter"),
-        ("deleted", "character", "chapter"),
-        ("current", "character", "author_request"),
-        ("current", "place", "chapter"),
+fn a_due_mark_obeys_the_rate_and_only_a_character_write_needs_one() {
+    use std::time::{Duration, SystemTime};
+    let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
+    let started = |seconds| Some(now - Duration::from_secs(seconds));
+    assert_eq!(
+        [None, started(61), started(60), started(10)].map(|last| super::intent_pass_due(now, last)),
+        [now, now, now, now + Duration::from_secs(50)]
+    );
+    let memory = |entry_type| crate::CurrentMemoryEntry {
+        memory_entry_id: "a".to_owned(),
+        number: 1,
+        version: 1,
+        entry_type,
+        title: "林舟".to_owned(),
+        description: String::new(),
+        text: String::new(),
+        flagged: false,
+        author_part: false,
+    };
+    let write = |id: Option<&str>, entry_type| crate::MemoryVersionWrite {
+        action: crate::MemoryWriteAction::Change,
+        memory_entry_id: id.map(str::to_owned),
+        number: 1,
+        version: 2,
+        state: crate::MemoryEntryState::Current,
+        entry_type,
+        title: "林舟".to_owned(),
+        description: String::new(),
+        text: String::new(),
+        flag: None,
+    };
+    use crate::MemoryEntryType::{Character, Other};
+    let can = |version: crate::MemoryVersionWrite, before| {
+        super::write_can_change_character(&version, &[memory(before)])
+    };
+    assert_eq!(
+        [
+            can(write(Some("a"), Character), Other),
+            can(write(Some("a"), Other), Character),
+            can(write(Some("a"), Other), Other),
+            can(write(None, Other), Character),
+        ],
+        [true, true, false, false]
+    );
+}
+
+/// The result of a valid call is a version only while the versions that the pass read are the
+/// current versions of the character and no consolidation pass is in progress. A change of either
+/// part, a delete, a new entry of the author, a delete of the entry of the author, and a running
+/// consolidation pass give `NotKept`.
+#[test]
+fn a_result_is_kept_only_for_the_versions_that_the_pass_read() {
+    let entries = |words: &[&str]| words.iter().copied().map(entry).collect::<Vec<_>>();
+    let author = "a 1 current character author 阿青 1";
+    let read = read("c", "2", Some(("a", "1")));
+    let outcomes = [
+        entries(&[author, "c 3 current character - 阿青 2"]),
+        entries(&[author, "c 3 current character - 阿青 3"]),
+        entries(&[author, "c 3 deleted character - 阿青 3"]),
+        entries(&[
+            "a 1 current character author 阿青 2",
+            "c 3 current character - 阿青 2",
+        ]),
+        entries(&[
+            "a 1 deleted character author 阿青 2",
+            "c 3 current character - 阿青 2",
+        ]),
+        entries(&["c 3 current character author 阿青 3"]),
     ]
-    .map(|(state, entry_type, origin)| super::settle_intent_result(state, entry_type, origin));
-    let text = "The Host did not record the intent: the entry is no longer a current character \
-                entry of the background work.";
-    let not_current = || (Err("entry_not_current"), crate::host_tool_result(text));
+    .map(|entries| super::settle_intent_result(&read, &entries, false));
     let recorded = (
-        Ok(super::IntentPassOutcome::Recorded),
+        super::IntentPassOutcome::Recorded,
         crate::host_tool_result("The Host recorded the intent, and the pass is complete."),
     );
-    assert_eq!(now, [recorded, not_current(), not_current(), not_current()]);
+    let text =
+        "The Host did not keep the intent: the character file changed after the pass read it.";
+    let not_kept = || {
+        (
+            super::IntentPassOutcome::NotKept,
+            crate::host_tool_result(text),
+        )
+    };
+    assert_eq!(
+        outcomes,
+        [
+            recorded,
+            not_kept(),
+            not_kept(),
+            not_kept(),
+            not_kept(),
+            not_kept()
+        ]
+    );
+    assert_eq!(not_kept().0.label(), "not_kept");
+    let current = entries(&[author, "c 3 current character - 阿青 2"]);
+    let text =
+        "The Host did not keep the intent: a consolidation pass of the Memory is in progress.";
+    assert_eq!(
+        super::settle_intent_result(&read, &current, true),
+        (
+            super::IntentPassOutcome::NotKept,
+            crate::host_tool_result(text)
+        )
+    );
+}
+
+/// Each reason of a claim that starts no pass, in the order of the rule, with its label. The
+/// rate permits the next start one minute after the last start.
+#[test]
+fn each_claim_that_starts_no_pass_has_one_reason() {
+    use std::time::{Duration, SystemTime};
+    let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
+    let ready = super::IntentPassFacts {
+        entry_needs_pass: true,
+        pass_in_progress: false,
+        observation_waits: false,
+        consolidation_in_progress: false,
+        now,
+        last_pass_start: Some(now - Duration::from_secs(60)),
+    };
+    let decide = |change: fn(&mut super::IntentPassFacts)| {
+        let mut facts = ready;
+        change(&mut facts);
+        super::decide_intent_pass(&facts).map_err(|skip| (skip, skip.label()))
+    };
+    let due_at = now + Duration::from_secs(59);
+    let skip = super::IntentPassSkip::RateLimited { due_at };
+    assert_eq!(
+        [
+            decide(|facts| facts.entry_needs_pass = false),
+            decide(|facts| (facts.pass_in_progress, facts.observation_waits) = (true, true)),
+            decide(
+                |facts| (facts.observation_waits, facts.consolidation_in_progress) = (true, true)
+            ),
+            decide(|facts| facts.consolidation_in_progress = true),
+            decide(|facts| facts.last_pass_start = Some(facts.now - Duration::from_secs(1))),
+            decide(|_| ()),
+            decide(|facts| facts.last_pass_start = None),
+        ],
+        [
+            Err((
+                super::IntentPassSkip::NoEntryNeedsPass,
+                "no_entry_needs_pass"
+            )),
+            Err((super::IntentPassSkip::PassInProgress, "pass_in_progress")),
+            Err((super::IntentPassSkip::ObservationWaits, "observation_waits")),
+            Err((
+                super::IntentPassSkip::ConsolidationInProgress,
+                "consolidation_in_progress"
+            )),
+            Err((skip, "rate_limited")),
+            Ok(()),
+            Ok(()),
+        ]
+    );
+    assert_eq!(super::IntentPassSkip::StartRefused.label(), "start_refused");
 }

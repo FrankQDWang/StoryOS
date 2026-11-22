@@ -305,10 +305,10 @@ pub(crate) async fn execute(
         .await
         .map_err(complete_unavailable)?;
     crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
-    // An applied operation can change a character entry (ADR 0101 section 4).
-    if settlement.outcome == storyos_core::ConsolidationOutcome::Applied {
-        crate::memory_work_schedule::mark_intent_pass_due(client, scope).await?;
-    }
+    // The intent passes wait for the consolidation pass (ADR 0101 section 4).
+    crate::intent_pass::mark_due_when_needed(client, scope)
+        .await
+        .map_err(complete_unavailable)?;
     resolve(client, claim, row, Resolution::settled(&settlement.result)).await?;
     crate::agent_run_work::complete(client, claim).await?;
     Ok(())
@@ -316,7 +316,7 @@ pub(crate) async fn execute(
 
 /// Fails the running pass of the Run, when the Run has one, with the reason that Core gives from
 /// `end`. It applies nothing. A Run with no running pass is not changed. The settlement of a pass
-/// with each outcome can make the consolidation row of the Project due.
+/// with each outcome can make the consolidation row and the intent pass row of the Project due.
 pub(crate) async fn settle_end(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -342,6 +342,9 @@ pub(crate) async fn settle_end(
         .map_err(complete_unavailable)?;
     if failed > 0 {
         crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
+        crate::intent_pass::mark_due_when_needed(client, scope)
+            .await
+            .map_err(complete_unavailable)?;
     }
     Ok(())
 }

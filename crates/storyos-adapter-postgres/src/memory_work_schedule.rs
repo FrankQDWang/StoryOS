@@ -167,27 +167,27 @@ pub(crate) async fn mark_consolidation_due(
     Ok(())
 }
 
-/// Makes the intent pass row of the Project of `scope` due now, in the transaction of the
-/// settlement of a consolidation pass that applied operations or of an intent pass.
+/// Makes the intent pass row of the Project of `scope` due at `due_at`.
 pub(crate) async fn mark_intent_pass_due(
     client: &Client,
     scope: &ProjectScope,
-) -> Result<(), CompleteAgentRunError> {
+    due_at: SystemTime,
+) -> Result<(), tokio_postgres::Error> {
     client
         .execute(
             "INSERT INTO storyos.memory_work_schedules
                (owner_user_id, project_id, work_kind, source_id, due_at)
-             VALUES ($1::text::uuid, $2::text::uuid, $3, $2::text::uuid, clock_timestamp())
+             VALUES ($1::text::uuid, $2::text::uuid, $3, $2::text::uuid, $4)
              ON CONFLICT (owner_user_id, project_id, work_kind, source_id)
              DO UPDATE SET due_at = EXCLUDED.due_at",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &INTENT_PASS,
+                &due_at,
             ],
         )
-        .await
-        .map_err(complete_unavailable)?;
+        .await?;
     Ok(())
 }
 
@@ -372,7 +372,8 @@ async fn decide_and_start_pass(
 }
 
 /// Decides for the intent pass row of the Project and starts one pass for the first entry that
-/// needs one, or none. A refused start writes no row, and the empty due time stays.
+/// needs one, or none. A refused start writes no row, and the empty due time stays. When the rate
+/// does not permit a start, the row is due at the time that the rate permits.
 async fn decide_and_start_intent_pass(
     client: &PooledClient,
     scope: &ProjectScope,
@@ -381,23 +382,40 @@ async fn decide_and_start_intent_pass(
         .await
         .map_err(read_error)?;
     let entry = facts.needed();
-    let pass_in_progress: bool = client
+    let row = client
         .query_one(
             "SELECT EXISTS (SELECT 1 FROM storyos.intent_passes
                              WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
-                               AND outcome IS NULL)",
+                               AND outcome IS NULL),
+                    EXISTS (SELECT 1 FROM storyos.memory_observations
+                             WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
+                               AND state = 'waiting' AND kind = 'observation'),
+                    EXISTS (SELECT 1 FROM storyos.memory_consolidation_passes
+                             WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)
+                               AND outcome IS NULL),
+                    clock_timestamp(),
+                    (SELECT max(started_at) FROM storyos.intent_passes
+                      WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid))",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )
         .await
-        .map_err(read_error)?
-        .get(/*idx*/ 0);
+        .map_err(read_error)?;
     let facts = IntentPassFacts {
         entry_needs_pass: entry.is_some(),
-        pass_in_progress,
+        pass_in_progress: row.get(/*idx*/ 0),
+        observation_waits: row.get(/*idx*/ 1),
+        consolidation_in_progress: row.get(/*idx*/ 2),
+        now: row.get(/*idx*/ 3),
+        last_pass_start: row.get(/*idx*/ 4),
     };
     let skip = storyos_core::decide_intent_pass(&facts).err();
     let (None, Some(entry)) = (skip, entry) else {
         let skip = skip.unwrap_or(IntentPassSkip::NoEntryNeedsPass);
+        if let IntentPassSkip::RateLimited { due_at } = skip {
+            mark_intent_pass_due(client, scope, due_at)
+                .await
+                .map_err(read_error)?;
+        }
         return Ok(MemoryWorkOutcome::IntentPassSkipped(skip));
     };
     client
