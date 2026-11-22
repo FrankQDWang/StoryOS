@@ -12,9 +12,16 @@ pub(crate) const CONVERSATION_CAPTURE_RULE: &str = " In a capture of a Project C
 observation is a decision, a preference, or an intent that the messages have. You can read the manuscript to understand a message, and you do not \
 record a fact that only the manuscript has.";
 
+/// The sentence of the current mapping after the rule of a capture of a Project Conversation (ADR
+/// 0101 section 5): an intent in an answer of the assistant.
+pub(crate) const CAPTURE_INTENT_RULE: &str = " An answer of the assistant can tell what a \
+character wants to do next. That is a suggestion of background work: it is not a decision of the \
+author and not a fact of the story, and you record it only when a message of the author makes it \
+a decision.";
+
 /// The Host instructions of a capture. Each number comes from a Core constant.
 pub(crate) fn capture_instructions() -> String {
-    let conversation_rule = CONVERSATION_CAPTURE_RULE;
+    let conversation_rule = format!("{CONVERSATION_CAPTURE_RULE}{CAPTURE_INTENT_RULE}");
     let types = storyos_core::MemoryEntryType::ALL
         .map(storyos_core::MemoryEntryType::as_str)
         .join(", ");

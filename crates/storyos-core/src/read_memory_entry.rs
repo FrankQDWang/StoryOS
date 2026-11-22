@@ -80,6 +80,9 @@ pub struct MemoryEntryRead {
     pub text: String,
     /// The conflict flag of the version, when it is a flag version (ADR 0094 section 7).
     pub flag: Option<MemoryReadFlag>,
+    /// The text of the current intent of the character, when the entry is the part of the
+    /// background work and the reader is a Run of the author (ADR 0101 section 5).
+    pub intent: Option<String>,
 }
 
 /// The conflict flag of an entry in the result of a read: the reason and the source.
@@ -115,9 +118,12 @@ impl MemoryFlagSource {
 impl MemoryEntryRead {
     /// The result of the settled read: the lines `type`, `title`, `description`, `origin`, and
     /// `changed_at`, an empty line, and then the exact text of the entry. A title and a
-    /// description are one line, so each line has one value. An entry with a conflict flag has
-    /// the lines `conflict_flag` with the reason and `conflict_source` after `changed_at`.
+    /// description are one line, so each line has one value. An entry with an intent has the
+    /// line `intent` after `changed_at`. An entry with a conflict flag has the lines
+    /// `conflict_flag` with the reason and `conflict_source` after them.
     pub fn result(&self) -> ToolResultText {
+        let intent =
+            (self.intent.as_ref()).map_or(String::new(), |intent| format!("\nintent: {intent}"));
         let flag = self.flag.as_ref().map_or(String::new(), |flag| {
             format!(
                 "\nconflict_flag: {}\nconflict_source: {}",
@@ -126,7 +132,7 @@ impl MemoryEntryRead {
             )
         });
         crate::host_tool_result(&format!(
-            "type: {}\ntitle: {}\ndescription: {}\norigin: {}\nchanged_at: {}{flag}\n\n{}",
+            "type: {}\ntitle: {}\ndescription: {}\norigin: {}\nchanged_at: {}{intent}{flag}\n\n{}",
             self.entry_type.as_str(),
             self.title,
             self.description,

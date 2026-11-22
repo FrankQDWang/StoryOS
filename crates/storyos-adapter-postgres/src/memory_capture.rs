@@ -227,9 +227,14 @@ async fn add_references(
     let memory_head = crate::memory_entries::memory_head(client, scope)
         .await
         .map_err(unavailable)?;
-    let memory_index = crate::memory_entries::read_memory_index(client, scope, memory_head)
-        .await
-        .map_err(unavailable)?;
+    let memory_index = crate::memory_entries::read_memory_index(
+        client,
+        scope,
+        memory_head,
+        storyos_core::AgentRunKind::MemoryCapture,
+    )
+    .await
+    .map_err(unavailable)?;
     let chapters = crate::create_agent_run::context::chapter_list_entries(client, scope).await?;
     let delete_marks = crate::memory_entries::read_delete_marks(client, scope)
         .await

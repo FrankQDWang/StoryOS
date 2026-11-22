@@ -80,7 +80,8 @@ fn search(origin: ToolOutputOrigin) -> ToolOutput {
 /// what a capture of a Project Conversation records, and they give the six types and what the
 /// capture of a Chapter looks for. They give the rule of an uncertainty
 /// and of a decision of the author, and they explain the delete marks. They give the rule of a
-/// conflict with an entry of the author (ADR 0094 section 7). They give the Host limits
+/// conflict with an entry of the author (ADR 0094 section 7), and the sentence of an intent in an
+/// answer of the assistant (ADR 0101 section 5). They give the Host limits
 /// from the Core constants. Each section and each function result is data, and one
 /// `record_memory_observations` call ends the capture.
 #[test]
@@ -98,7 +99,10 @@ JSON line before each message gives its role, author or assistant, and its Run. 
 message is an answer of the writing assistant, and it is not a decision of the author. In a \
 capture of a Project Conversation, an observation is a decision, a preference, or an intent that \
 the messages have. You can read the manuscript to understand a message, and you do not record a \
-fact that only the manuscript has. The section Chapter text has the text of one Chapter. The capture of a Chapter looks for \
+fact that only the manuscript has. An answer of the assistant can tell what a character wants \
+to do next. That is a suggestion of background work: it is not a decision of the author and not \
+a fact of the story, and you record it only when a message of the author makes it a decision. \
+The section Chapter text has the text of one Chapter. The capture of a Chapter looks for \
 characters, relationships, and major events.
 
 An observation of the type character is for the entry of that character that comes from the \

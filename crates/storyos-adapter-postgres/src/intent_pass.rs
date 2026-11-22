@@ -411,3 +411,7 @@ mod tests;
 #[cfg(test)]
 #[path = "intent_pass_start_tests.rs"]
 mod start_tests;
+
+#[cfg(test)]
+#[path = "intent_pass_context_tests.rs"]
+mod context_tests;

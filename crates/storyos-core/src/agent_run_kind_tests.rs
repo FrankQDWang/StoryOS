@@ -181,3 +181,12 @@ fn the_full_request_of_a_background_run_is_refused_at_the_window() {
         ]
     );
 }
+
+/// ADR 0101 section 5: only a Run of the author gets the current intents.
+#[test]
+fn only_a_run_of_the_author_reads_the_intents() {
+    assert_eq!(
+        AgentRunKind::ALL.map(AgentRunKind::reads_intents),
+        [true, false, false, false]
+    );
+}

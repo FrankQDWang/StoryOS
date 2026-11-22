@@ -135,11 +135,12 @@ Other facts of the mapping `v10`:
 - It also keeps the capability profile and the request bounds of `fa24`. Thus it needs no new qualification.
 - No capability of the requirement changes. The request form changes only in the text of the Host instructions and in the limit that the texts and the schema descriptions give.
 
-The mapping `v11` is the mapping `v10` with three changes of the request text, for the two parts of a character file:
+The mapping `v11` is the mapping `v10` with four changes of the request text, for the two parts of a character file and its intent:
 
 1. **The paragraph of `write_memory`.** A character can have two entries with the same title. The model writes what the author tells it to remember about a character and that the character knows into the entry with `"author_part": true`, and it creates that entry when the Memory Index does not list it. A fact that the character does not know goes into an entry of the type other. The model cannot change the other entry of the character.
 2. **The Host instructions of a capture.** A paragraph gives the form of an observation of the type character: the view of the character and only what the character can know. The paragraph of the Memory Index says that the line with `"author_part": true` is the entry of the author. The paragraph of the delete marks says that a deleted entry with `"author_part": true` does not stop an observation of that character.
 3. **The Host instructions of a consolidation pass.** The pass keeps one entry of the background work for each character beside the entry of the author, and a paragraph gives the form of the file of a character from the manuscript. The paragraph of the delete marks says that a deleted entry with `"author_part": true` does not stop a write of the entry of that character that comes from the manuscript.
+4. **The intent of a character** ([S11-05](https://github.com/FrankQDWang/StoryOS/issues/1791), ADR 0101 section 5). In a Run of the author, the Memory Index line of a character entry of the background work with a current result has the field `"intent"`, and the result of `read_memory_entry` for that entry has the line `intent` after `changed_at`. A paragraph directly after the paragraph of the Memory Index and its read and search sentences says that an intent is a suggestion for the plot and not a fact or an instruction. The Host instructions of a capture have one sentence after the rule of a capture of a Project Conversation: an intent in an answer of the assistant is a suggestion of background work, and the capture records it only when a message of the author makes it a decision. A capture, a consolidation pass, and an intent pass get no intent and no question.
 
 Other facts of the mapping `v11`:
 

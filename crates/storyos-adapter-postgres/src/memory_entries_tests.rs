@@ -24,7 +24,13 @@ async fn the_runtime_role_cannot_change_a_version_and_each_project_reads_only_it
     let versions = [(1, 1, 1, "current", "other", "渡口", "旧渡口。")];
     write_versions(&admin, &second, &versions).await;
     let index = async |scope: &ProjectScope| {
-        let entries = crate::memory_entries::read_memory_index(&admin, scope, 1).await;
+        let entries = crate::memory_entries::read_memory_index(
+            &admin,
+            scope,
+            1,
+            storyos_core::AgentRunKind::Author,
+        );
+        let entries = entries.await;
         entries.unwrap()
     };
     let entry = |entry_type, title: &str, description: &str| MemoryIndexEntry {
@@ -34,6 +40,7 @@ async fn the_runtime_role_cannot_change_a_version_and_each_project_reads_only_it
         description: description.to_owned(),
         flagged: false,
         author_part: entry_type == MemoryEntryType::Character,
+        intent: None,
     };
     let statements = [
         "SELECT 1 FROM storyos.memory_entry_versions

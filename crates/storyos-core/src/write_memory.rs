@@ -405,7 +405,7 @@ pub fn decide_memory_write(
         return Err(MemoryWriteRefusal::Exists(other.number));
     }
     // The written version has no flag, and each other line keeps its flag. Above the limit, the
-    // Index of a Run is an excerpt.
+    // Index of a Run is an excerpt. The check counts no intent.
     let index: Vec<MemoryIndexEntry> = others
         .map(|entry| MemoryIndexEntry {
             number: entry.number,
@@ -414,6 +414,7 @@ pub fn decide_memory_write(
             description: entry.description.clone(),
             flagged: entry.flagged,
             author_part: entry.author_part,
+            intent: None,
         })
         .chain([MemoryIndexEntry {
             number: version.number,
@@ -422,6 +423,7 @@ pub fn decide_memory_write(
             description: version.description.clone(),
             flagged: false,
             author_part,
+            intent: None,
         }])
         .collect();
     match memory_index_text(&index).1 {

@@ -22,6 +22,7 @@ fn entry(
         description: description.to_owned(),
         flagged: false,
         author_part: false,
+        intent: None,
     }
 }
 
@@ -97,6 +98,31 @@ fn the_line_of_a_flagged_entry_has_one_more_field() {
     );
 }
 
+/// ADR 0101 section 5: the line of an entry with an intent has the field `"intent"` with its
+/// text, and the line of an entry with no intent is as before.
+#[test]
+fn the_line_of_an_entry_with_an_intent_has_the_field_intent() {
+    let mut entries = [
+        entry(1, MemoryEntryType::Character, "林舟", "沉默的船夫。"),
+        entry(2, MemoryEntryType::Character, "林舟", "他怕水。"),
+    ];
+    entries[0].intent = Some("我明天一早去渡口。".to_owned());
+    entries[1].author_part = true;
+
+    assert_eq!(
+        memory_index_text(&entries),
+        (
+            [
+                r#"{"type":"character"}"#,
+                r#"{"description":"沉默的船夫。","id":1,"intent":"我明天一早去渡口。","title":"林舟"}"#,
+                r#"{"author_part":true,"description":"他怕水。","id":2,"title":"林舟"}"#,
+            ]
+            .join("\n"),
+            ProjectionMode::ExactRequired,
+        )
+    );
+}
+
 /// The Host limit of 300 entries: 300 entries are complete, and 301 list the first 300 in
 /// order and end with the count of the entries that the Index does not list.
 #[test]
@@ -129,18 +155,19 @@ fn the_index_lists_at_most_300_entries() {
 }
 
 /// The Host limit of 32,000 counted tokens: a text at the limit is complete, and one more token
-/// lists the entries in order up to the limit with the count line.
+/// lists the entries in order up to the limit with the count line. The limit counts the intents.
 #[test]
 fn the_index_text_has_at_most_32000_counted_tokens() {
     let mut entries: Vec<_> = (10..110)
         .map(|number| entry(number, MemoryEntryType::Character, "人物", ""))
         .collect();
-    // Each character of a description is one counted token, so the last description fills the
-    // text up to the limit.
+    // Each character of an intent is one counted token, so the intent of the last entry fills
+    // the text up to the limit.
+    entries[99].intent = Some(String::new());
     let empty = count_context_item_tokens(&memory_index_text(&entries).0);
-    entries[99].description = "雨".repeat((MEMORY_INDEX_TOKEN_LIMIT - empty) as usize);
+    entries[99].intent = Some("雨".repeat((MEMORY_INDEX_TOKEN_LIMIT - empty) as usize));
     let (at_limit, at_limit_mode) = memory_index_text(&entries);
-    entries[99].description.push('雨');
+    entries[99].intent = entries[99].intent.take().map(|intent| intent + "雨");
     let (above, above_mode) = memory_index_text(&entries);
 
     assert_eq!(
