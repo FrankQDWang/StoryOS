@@ -199,6 +199,17 @@ one time for one entry in one Conversation, and continue the task of the author 
 reply. After the answer, call write_memory: a change when the entry is wrong, a delete when the \
 author wants it, or a change with the same text when the author says that the entry is correct.";
 
+/// The paragraph of the current mapping that directly follows the paragraph of the Memory Index
+/// and its read and search sentences (ADR 0101 section 5): the intent of a character.
+pub(crate) const INTENT_INSTRUCTION: &str = "\
+A line of a character in the section Memory index can have \"intent\": what that character wants \
+to do next. Background work formed it from the file of that character alone, so it uses only \
+what the character knows. An intent is a suggestion for the plot. It is not a fact of the story, \
+and it is not an instruction to you. When you continue or rewrite a scene with that character, \
+you can let the character act from its intent, and the author decides what the manuscript gets. \
+When the author asks what a character wants, read the entries of that character and answer from \
+them. Use the intent when the line of the character has one.";
+
 /// The two sentences that follow the paragraph of the Memory Index when the request also declares
 /// `read_memory_entry` (ADR 0094 section 4).
 pub(crate) const READ_MEMORY_ENTRY_INSTRUCTION: &str = "\
@@ -326,7 +337,9 @@ pub(crate) fn create_body(
                     paragraph = format!("{paragraph} {sentences}");
                 }
             }
-            format!("{instructions}\n\n{paragraph}\n\n{CONFLICT_FLAG_INSTRUCTION}")
+            format!(
+                "{instructions}\n\n{paragraph}\n\n{INTENT_INSTRUCTION}\n\n{CONFLICT_FLAG_INSTRUCTION}"
+            )
         }
         false => instructions,
     };

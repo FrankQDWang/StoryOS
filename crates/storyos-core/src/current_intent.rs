@@ -65,7 +65,9 @@ fn current_character<'v, 'a>(
 /// of the author that the result names is current at the version of its last change that the
 /// result names, or the result names no part and the Project has no current part of the author. A
 /// flag version changes no text, so it does not end a result. The version of the last change is
-/// the newest version that is not a flag version and not a version with an intent.
+/// the newest version that is not a flag version and not a version with an intent. The rule reads
+/// the state at the revision, and not the history: when the two parts are again the parts that
+/// the pass read, the result is current again.
 pub fn current_intent<'v, 'a>(
     entry: &'v [MemoryVersionFacts<'a>],
     author: &[MemoryVersionFacts<'a>],

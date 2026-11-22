@@ -159,11 +159,14 @@ pub(crate) async fn persist_current_passage_assembly(
         .map_err(|error| CreateAgentRunError::Unavailable(Box::new(error)))?;
     storyos_core::assemble_chapter_list(&mut record, &chapters);
     let memory = match command.memory_revision {
-        Some(revision) => {
-            crate::memory_entries::read_memory_index(client, command.project_scope, revision)
-                .await
-                .map_err(CreateAgentRunError::Unavailable)?
-        }
+        Some(revision) => crate::memory_entries::read_memory_index(
+            client,
+            command.project_scope,
+            revision,
+            storyos_core::AgentRunKind::Author,
+        )
+        .await
+        .map_err(CreateAgentRunError::Unavailable)?,
         None => Vec::new(),
     };
     storyos_core::assemble_memory_index(&mut record, command.memory_revision, &memory);

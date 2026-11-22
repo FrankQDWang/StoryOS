@@ -73,6 +73,12 @@ impl AgentRunKind {
             && requirement.is_some_and(crate::model_registration::requirement_compacts)
     }
 
+    /// Whether the Memory Index and the reads of Memory of a Run of the kind give the current
+    /// intent of each character. Only a Run of the author gets them (ADR 0101 section 5).
+    pub fn reads_intents(self) -> bool {
+        self == Self::Author
+    }
+
     /// Whether the dispatch of the Run rebuilds an expired prior response. A background Run has
     /// no Conversation, so it has no prior response (ADR 0091).
     pub fn rebuilds_expired_reference(self) -> bool {

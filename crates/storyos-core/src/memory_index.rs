@@ -25,13 +25,17 @@ pub struct MemoryIndexEntry {
     pub flagged: bool,
     /// The entry is the part of the author of a character file (ADR 0101 section 3).
     pub author_part: bool,
+    /// The text of the current intent of the character, when the entry is the part of the
+    /// background work and the reader is a Run of the author (ADR 0101 section 5).
+    pub intent: Option<String>,
 }
 
 /// The text of the `memory_index` item and its projection mode. Each type that has an entry is
 /// one group, in the order of the type list. A group starts with the line `{"type": type}`, and
 /// each entry is the line `{"description", "id", "title"}`, in the order of the numbers. The line
 /// of an entry with a conflict flag also has the field `"conflict_flag": true`, and the line of
-/// the part of the author of a character file has the field `"author_part": true`. When the
+/// the part of the author of a character file has the field `"author_part": true`. The line of
+/// an entry with an intent has the field `"intent"` with its text. When the
 /// entries are above a Host limit, the text lists the entries in order up to the limit and ends
 /// with the line `{"not_listed": count}`. Then the mode is `deterministic_excerpt`.
 pub fn memory_index_text(entries: &[MemoryIndexEntry]) -> (String, ProjectionMode) {
@@ -78,6 +82,9 @@ fn index_line(entry: &MemoryIndexEntry) -> String {
     }
     if entry.author_part {
         line["author_part"] = serde_json::Value::Bool(true);
+    }
+    if let Some(intent) = &entry.intent {
+        line["intent"] = serde_json::Value::String(intent.clone());
     }
     canonical_json(&line)
 }

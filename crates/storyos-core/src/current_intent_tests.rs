@@ -152,3 +152,16 @@ fn the_read_of_a_project_finds_the_part_of_the_author_by_its_title() {
     let renamed = [versions, vec![other]].concat();
     assert_eq!(current_intents(&renamed, 4), []);
 }
+
+/// The rule reads the state at the revision, and not the history. A result that names no part of
+/// the author is not current while a new part of the author is current, and it is current again
+/// after the delete of that part.
+#[test]
+fn a_result_is_current_again_when_the_parts_are_again_the_parts_that_the_pass_read() {
+    let entry = [change(MANUSCRIPT, 1, 1), intent(2, 2, None)];
+    let author = [change(AUTHOR, 1, 3), deleted(AUTHOR, 2, 4)];
+    assert_eq!(
+        [2, 3, 4].map(|revision| result(&entry, &author, revision)),
+        [Some(2), None, Some(2)]
+    );
+}

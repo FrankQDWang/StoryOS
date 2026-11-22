@@ -206,7 +206,7 @@ async fn read_facts(
 }
 
 /// The columns of a row of `VERSIONS` that give the result of a version with an intent.
-const INTENT: usize = 10;
+pub(crate) const INTENT: usize = 10;
 const QUESTIONS: usize = 11;
 const CHAPTER: usize = 12;
 const RECORDED_AT: usize = 13;
@@ -237,7 +237,16 @@ async fn current_intents(
     let Some(head) = head else {
         return Ok(HashMap::new());
     };
-    let revision = counter(head.get(0))?;
+    intents_at(client, values, counter(head.get(0))?).await
+}
+
+/// The intent version of each entry with a current result at the Memory revision `revision`, by
+/// the rule of Core. A Run of the author reads it at its pinned revision (ADR 0101 section 5).
+pub(crate) async fn intents_at(
+    client: &impl tokio_postgres::GenericClient,
+    values: &[&(dyn tokio_postgres::types::ToSql + Sync); 2],
+    revision: u64,
+) -> Result<HashMap<String, tokio_postgres::Row>, ProjectReadError> {
     let rows = client
         .query(VERSIONS, &[values[0], values[1], &TIME_FORM])
         .await

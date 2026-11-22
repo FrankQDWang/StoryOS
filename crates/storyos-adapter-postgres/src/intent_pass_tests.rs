@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use storyos_application::{
     MemoryCaptureSource, MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource, ProjectScope,
 };
-use storyos_core::IntentPassSkip;
+use storyos_core::{AgentRunKind, IntentPassSkip};
 use tokio_postgres::Client;
 
 use storyos_adapter_fake_destination::FakeDestination;
@@ -265,7 +265,8 @@ async fn changed_at(
         .unwrap()
         .into_iter()
         .find(|entry| entry.number == 2);
-    let read = crate::memory_entries::read_current_entry(admin, scope, 2).await;
+    let read = crate::memory_entries::read_current_entry(admin, scope, 2, AgentRunKind::Author);
+    let read = read.await;
     [
         listed.unwrap().changed_at,
         read.unwrap().unwrap().changed_at,

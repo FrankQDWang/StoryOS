@@ -170,6 +170,7 @@ fn a_capture_gets_its_reference_items_after_its_input_and_keeps_them() {
         description: "撑船的人。".to_owned(),
         flagged: false,
         author_part: false,
+        intent: None,
     }];
     let chapters = [crate::ChapterListEntry {
         volume_order: 1,
@@ -261,6 +262,7 @@ fn the_expected_input_of_a_capture_counts_each_section() {
                 description: "撑船的人。".to_owned(),
                 flagged: false,
                 author_part: false,
+                intent: None,
             }],
             chapters: &[crate::ChapterListEntry {
                 volume_order: 1,
