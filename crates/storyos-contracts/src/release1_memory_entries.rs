@@ -124,17 +124,33 @@ pub struct MemoryEntryFlagInspect {
     pub flagged_at: String,
 }
 
+/// A string or null. The field is required.
+fn nullable_title_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({"type": ["string", "null"]})
+}
+
+/// The Chapter at which an intent pass made its result, in the form of the Chapter source of an
+/// entry: the `title` is `null` when the Chapter is unavailable.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryIntentChapterInspect {
+    pub chapter_id: String,
+    #[schemars(required, schema_with = "nullable_title_schema")]
+    pub title: Option<String>,
+    pub availability: MemorySourceAvailability,
+}
+
 /// The current result of the intent pass of a character entry of the background work (ADR 0101
 /// sections 4 and 6): the intent, at most three questions to the author, the Chapter at which the
-/// pass made the result in the form of the source of an entry, and the time of the result. The
-/// `chapter` is `null` when the pass had no Chapter.
+/// pass made the result, and the time of the result. The `chapter` is `null` when the pass had no
+/// Chapter.
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct MemoryEntryIntentInspect {
     pub text: String,
     pub questions: Vec<String>,
     #[schemars(required)]
-    pub chapter: Option<MemoryEntrySourceInspect>,
+    pub chapter: Option<MemoryIntentChapterInspect>,
     pub recorded_at: String,
 }
 

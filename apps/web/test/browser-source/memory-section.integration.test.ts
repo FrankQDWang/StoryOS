@@ -560,7 +560,7 @@ const INTENT = "他想在涨水前把船修好，再去问母亲那封信的事�
 const QUESTIONS = ["母亲的信在谁手里？", "他知道阿青要走吗？"];
 const result = (fields: Partial<NonNullable<MemoryEntryInspect["intent"]>> = {}) => ({ text: INTENT,
   questions: QUESTIONS, recorded_at: "2026-11-20T08:30:00.000Z",
-  chapter: { kind: "chapter" as const, chapter_id: CHAPTER, title: "渡口", availability: "available" as const },
+  chapter: { chapter_id: CHAPTER, title: "渡口", availability: "available" as const },
   ...fields });
 const blockLines = (selector: string) => [...document.querySelectorAll(`[data-character-file] ${selector} :is(h4, p, li)`)]
   .map((line) => line.textContent);
@@ -579,9 +579,9 @@ it("shows 接下来想做什么 with the intent and its Chapter, and 助手还�
         .toEqual(["接下来想做什么", INTENT, "写到《渡口》时的想法"]);
       const file = document.querySelector<HTMLElement>("[data-character-file]")!;
       expect([[...file.querySelectorAll("h3, h4")].map((heading) => heading.textContent), blockLines("[data-character-questions]"),
-        [...file.children].map((child) => child.getAttribute("data-character-entry") ?? child.className)]).toEqual([
+        [...file.children].map((child) => child.getAttribute("data-character-entry") ?? child.querySelector("h4")?.textContent)]).toEqual([
         ["林舟", "档案", "接下来想做什么", "助手还不清楚的事"], ["助手还不清楚的事", ...QUESTIONS],
-        ["7", "5", "character-intent", "character-intent"]]);
+        ["7", "5", "接下来想做什么", "助手还不清楚的事"]]);
       const block = getComputedStyle(file.querySelector("[data-character-intent]")!);
       const line = (selector: string) => getComputedStyle(file.querySelector(`[data-character-intent] ${selector}`)!);
       expect([block.marginTop, block.padding, block.borderRadius !== "0px", line("h4").fontSize, line("h4").fontWeight,
@@ -601,7 +601,7 @@ it("shows 接下来想做什么 with the intent and its Chapter, and 助手还�
 it("shows no question block with no question, no Chapter line with no available Chapter, and no block with no result",
   async () => {
     await openCharacters([
-      character(5, "林舟", { intent: result({ questions: [], chapter: { kind: "chapter", chapter_id: CHAPTER, title: null,
+      character(5, "林舟", { intent: result({ questions: [], chapter: { chapter_id: CHAPTER, title: null,
         availability: "unavailable" } }) }),
       character(6, "阿青"),
       character(8, "青石", { intent: result({ chapter: null }) }),
@@ -626,5 +626,14 @@ it("shows no block after the author deleted the part of the background work of a
   await expect.poll(() => blockLines("[data-character-intent]").length).toBe(3);
   await confirmDeleteInFile(5);
   await expect.poll(fileEntries).toEqual(["7"]);
+  expect([blockLines("[data-character-intent]"), blockLines("[data-character-questions]")]).toEqual([[], []]);
+});
+
+it("shows no block after the author deleted the part of the author that the result names", async () => {
+  const author = character(7, "林舟", { origin: "author_request" });
+  await openCharacters([character(5, "林舟", { intent: result() }), author], [applied(author.memory_entry_id)]);
+  await expect.poll(() => blockLines("[data-character-intent]").length).toBe(3);
+  await confirmDeleteInFile(7);
+  await expect.poll(fileEntries).toEqual(["5"]);
   expect([blockLines("[data-character-intent]"), blockLines("[data-character-questions]")]).toEqual([[], []]);
 });

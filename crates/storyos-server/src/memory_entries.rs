@@ -50,7 +50,13 @@ pub(super) async fn list_memory_entries(
                     .map(|intent| contracts::MemoryEntryIntentInspect {
                         text: intent.text,
                         questions: intent.questions,
-                        chapter: intent.chapter.map(source),
+                        chapter: intent.chapter.map(|chapter| {
+                            contracts::MemoryIntentChapterInspect {
+                                availability: availability(chapter.available),
+                                chapter_id: chapter.chapter_id,
+                                title: chapter.title,
+                            }
+                        }),
                         recorded_at: intent.recorded_at,
                     }),
             })

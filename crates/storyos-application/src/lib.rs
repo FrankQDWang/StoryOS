@@ -172,7 +172,7 @@ pub use memory_capture::{MemoryCaptureSource, MemoryCaptureStartRefusal, Started
 pub use memory_consolidation::{StartedIntentPass, StartedMemoryConsolidation};
 pub use memory_entries::{
     MemoryEntryFlagItem, MemoryEntryIntentItem, MemoryEntryListItem, MemoryEntryReader,
-    MemoryEntrySourceItem, list_memory_entries,
+    MemoryEntrySourceItem, MemoryIntentChapterItem, list_memory_entries,
 };
 pub use memory_work_schedule::{
     ClaimedMemoryWork, MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource,

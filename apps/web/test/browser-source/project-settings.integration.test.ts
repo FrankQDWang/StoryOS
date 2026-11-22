@@ -10,7 +10,10 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/sto
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { ProjectSettingsView } from "../../src/project-settings.tsx";
 import { mountStage1View } from "../../src/stage1-view.tsx";
-import { OWNER, jsonResponse } from "./scenario.ts";
+import {
+  CHAPTER, OWNER, closeTrackedDatabases, createBrowserScenario, deleteJournal, emptyActivityStream, jsonResponse,
+  trackDatabase,
+} from "./scenario.ts";
 
 // The settings page of a Project and its Project Instruction section (ADR 0094 sections 2 and 9).
 const PROJECT = "018f0000-0000-7001-8000-0000000a2001";
@@ -197,21 +200,61 @@ it("shows the gear control in the tree footer of a workspace with no Chapter", a
     ?.getAttribute("href")).toBe(`/projects/${PROJECT}/settings`);
 });
 
-it("shows no intent and no question in the writing workspace of a Project with a result (ADR 0101 section 5)",
-  async () => {
-    const intent = { text: "他想在涨水前把船修好。", questions: ["母亲的信在谁手里？"], recorded_at: "2026-11-20T08:30:00.000Z",
-      chapter: null };
-    const entries: MemoryEntryInspect[] = [{ memory_entry_id: "018f0000-0000-7001-8000-0000000a2030",
-      entry_number: "1", version: "2", entry_type: "character", title: "林舟", description: "船夫。", text: "他看灯。",
-      origin: "chapter", source: null, changed_at: "2026-11-20T08:00:00.000Z", intent }];
-    const server = fakeServer([], entries);
-    const loaded = await open(`/projects/${PROJECT}`, server.fetchImpl);
-    await expect.poll(() => loaded.root.querySelector(".tree-panel .tree-footer a[aria-label=\"项目设置\"]"))
-      .not.toBeNull();
-    expect([loaded.state.kind, [intent.text, ...intent.questions].filter((text) =>
-      document.body.textContent!.includes(text)), server.sent.some((request) => request.path === MEMORY)])
-      .toEqual(["empty-project-ready", [], false]);
-  });
+it("shows no intent and no question in the writing workspace of an open Chapter (ADR 0101 section 5)", async () => {
+  const scenario = createBrowserScenario();
+  const scope = scenario.project.project_scope;
+  const intent = { text: "他想在涨水前把船修好。", questions: ["母亲的信在谁手里？"], recorded_at: "2026-11-20T08:30:00.000Z",
+    chapter: { chapter_id: CHAPTER, title: "Chapter A", availability: "available" as const } };
+  const entries: MemoryEntryInspect[] = [{ memory_entry_id: "018f0000-0000-7001-8000-0000000a2030",
+    entry_number: "1", version: "2", entry_type: "character", title: "林舟", description: "船夫。", text: "他看灯。",
+    origin: "chapter", source: null, changed_at: "2026-11-20T08:00:00.000Z", intent }];
+  const requests: string[] = [];
+  const fetchImpl: typeof fetch = async (input) => {
+    const path = new URL(input instanceof Request ? input.url : input).pathname;
+    requests.push(path);
+    if (path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
+    if (path === "/api/v1/projects") {
+      return jsonResponse({ schema_id: "storyos.query.project-list.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-0000000a2031", owner_user_id: OWNER,
+        projects: [{ project_scope: scope, title: "Project A", revision: "1", open: scenario.project.project.open }] });
+    }
+    if (path === `/api/v1/projects/${scope.project_id}`) return jsonResponse(scenario.project);
+    if (path === `/api/v1/projects/${scope.project_id}/chapters/${CHAPTER}`) return jsonResponse(scenario.chapter);
+    if (path === `/api/v1/projects/${scope.project_id}/manuscript/tree`) {
+      return jsonResponse({ project_scope: scope, tree_revision: "1",
+        snapshot: { snapshot_id: "018f0000-0000-7001-8000-0000000a2032", project_scope: scope },
+        volumes: [{ volume_id: "018f0000-0000-7001-8000-0000000a2033", title: "Volume A", order: "1",
+          chapters: [{ chapter_id: CHAPTER, title: "Chapter A", order: "1" }] }] });
+    }
+    if (path === `/api/v1/projects/${scope.project_id}/memory-entries`) {
+      return jsonResponse({ schema_id: "storyos.query.memory-entries.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-0000000a2034", project_scope: scope, entries });
+    }
+    if (path.endsWith("/anti-forgery-challenges")) {
+      return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-11-20T08:05:00.000Z",
+        limit_profile_revision: "storyos.foundation.absolute.v1" });
+    }
+    if (path.endsWith("/editor-sessions")) return jsonResponse(scenario.session);
+    if (path.endsWith("/activity")) return emptyActivityStream();
+    throw new Error(`unexpected request: ${path}`);
+  };
+  const openDatabases = new Set<IDBDatabase>();
+  await deleteJournal(scenario.journalName);
+  try {
+    const loaded = await open(`/projects/${scope.project_id}`, fetchImpl);
+    if (loaded.state.kind === "project-ready" && loaded.state.editor.kind === "editor-ready") {
+      trackDatabase(loaded.state.editor.database, openDatabases);
+    }
+    await expect.poll(() => loaded.root.querySelector("[contenteditable='true']") !== null).toBe(true);
+    await expect.poll(() => requests.some((path) => path.endsWith("/activity"))).toBe(true);
+    expect([[intent.text, ...intent.questions].filter((text) => document.body.textContent!.includes(text)),
+      requests.some((path) => path.endsWith("/memory-entries"))]).toEqual([[], false]);
+  } finally {
+    closeTrackedDatabases(openDatabases);
+    sessionStorage.removeItem(`active_session:${OWNER}:${scope.project_id}`);
+    await deleteJournal(scenario.journalName);
+  }
+});
 
 const SENTENCE = {
   applied: "已保存。新的指令从下一次请求开始生效。",

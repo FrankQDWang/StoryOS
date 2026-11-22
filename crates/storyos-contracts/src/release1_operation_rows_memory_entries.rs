@@ -12,7 +12,8 @@ use crate::release1_memory_entries::{
     DeleteMemoryEntryInput, DeleteMemoryEntryNoEffectReason, DeleteMemoryEntryRequest,
     DeleteMemoryEntryResponse, LIST_MEMORY_ENTRIES, ListMemoryEntriesResponse,
     MemoryEntryFlagInspect, MemoryEntryInspect, MemoryEntryIntentInspect, MemoryEntryOriginInspect,
-    MemoryEntrySourceInspect, MemoryEntryTypeInspect, MemorySourceAvailability,
+    MemoryEntrySourceInspect, MemoryEntryTypeInspect, MemoryIntentChapterInspect,
+    MemorySourceAvailability,
 };
 use crate::release1_operation_registry::RegisteredOperation;
 use crate::release1_project_activity::ProjectActivityKind;
@@ -38,6 +39,7 @@ pub(super) const LIST_MEMORY_ENTRIES_ROW: OperationRow = OperationRow {
         MemorySourceAvailability::decl,
         MemoryEntrySourceInspect::decl,
         MemoryEntryFlagInspect::decl,
+        MemoryIntentChapterInspect::decl,
         MemoryEntryIntentInspect::decl,
         MemoryEntryInspect::decl,
         ListMemoryEntriesResponse::decl,
@@ -75,10 +77,11 @@ pub(super) const LIST_MEMORY_ENTRIES_ROW: OperationRow = OperationRow {
 const LIST_MEMORY_ENTRIES_RESPONSE: &[Patch] = &[
     Patch(
         Edit::NullableDefinition("MemoryEntrySourceInspect"),
-        &[
-            "/$defs/MemoryEntryInspect/properties/source",
-            "/$defs/MemoryEntryIntentInspect/properties/chapter",
-        ],
+        &["/$defs/MemoryEntryInspect/properties/source"],
+    ),
+    Patch(
+        Edit::NullableDefinition("MemoryIntentChapterInspect"),
+        &["/$defs/MemoryEntryIntentInspect/properties/chapter"],
     ),
     Patch(
         UUID,
@@ -86,6 +89,7 @@ const LIST_MEMORY_ENTRIES_RESPONSE: &[Patch] = &[
             "/$defs/MemoryEntryInspect/properties/memory_entry_id",
             "/$defs/MemoryEntrySourceInspect/oneOf/0/properties/conversation_id",
             "/$defs/MemoryEntrySourceInspect/oneOf/1/properties/chapter_id",
+            "/$defs/MemoryIntentChapterInspect/properties/chapter_id",
             "/$defs/ProjectScope/properties/owner_user_id",
             "/$defs/ProjectScope/properties/project_id",
             "/properties/correlation_id",

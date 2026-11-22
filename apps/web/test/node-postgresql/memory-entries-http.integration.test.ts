@@ -120,20 +120,20 @@ async function backgroundPart(projectId: string, title: string): Promise<string>
 
 /**
  * Writes the version 2 of the part of the background work `memoryEntryId` with the result of one intent pass, as an
- * intent pass writes it (ADR 0101 section 4). The result names the version 1 of the part of the author
- * `authorEntryId`, when it is not `null`.
+ * intent pass writes it (ADR 0101 section 4), at the time `recordedAt`. The result names the version 1 of the part of
+ * the author `authorEntryId`, when it is not `null`.
  */
 async function recordIntent(projectId: string, memoryEntryId: string, chapterId: string, authorEntryId: string | null,
-  intent: string, questions: readonly string[]): Promise<void> {
+  intent: string, questions: readonly string[], recordedAt: string): Promise<void> {
   const [author, version] = authorEntryId === null ? ["NULL", "NULL"] : [`'${authorEntryId}'::uuid`, "1"];
   await queryStoryOSPostgres(`
     WITH head AS (${nextRevision(projectId)})
     INSERT INTO storyos.memory_entry_versions (owner_user_id, project_id, memory_entry_id, entry_number, version,
       memory_revision, state, entry_type, origin, title, description, text, cause, source_references, intent,
-      intent_questions, intent_chapter_id, intent_author_entry_id, intent_author_version)
+      intent_questions, intent_chapter_id, intent_author_entry_id, intent_author_version, recorded_at)
     SELECT owner_user_id, project_id, memory_entry_id, entry_number, 2, head.memory_revision, state, entry_type,
       origin, title, description, text, '{"kind": "intent_pass"}', source_references, '${intent}',
-      '${JSON.stringify(questions)}', '${chapterId}', ${author}, ${version}
+      '${JSON.stringify(questions)}', '${chapterId}', ${author}, ${version}, '${recordedAt}'::timestamptz
       FROM storyos.memory_entry_versions, head
      WHERE project_id = '${projectId}' AND memory_entry_id = '${memoryEntryId}' AND version = 1`);
 }
@@ -169,29 +169,23 @@ test("listMemoryEntries gives the current intent result only for a character ent
   const linZhou = await backgroundPart(story.projectId, "林舟");
   const aQing = await backgroundPart(story.projectId, "阿青");
   await recordIntent(story.projectId, linZhou, kept, author.memory_entry_id,
-    "他想在涨水前把船修好，再去问母亲那封信的事。", ["母亲的信在谁手里？", "他知道阿青要走吗？"]);
-  await recordIntent(story.projectId, aQing, removed, null, "她想离开渡口。", []);
+    "他想在涨水前把船修好，再去问母亲那封信的事。", ["母亲的信在谁手里？", "他知道阿青要走吗？"], "2026-11-20T08:30:00.000Z");
+  await recordIntent(story.projectId, aQing, removed, null, "她想离开渡口。", [], "2026-11-20T09:15:00.000Z");
   assert.equal((await story.send("deleteChapter",
     deleteChapterInput(story, removed, await story.treeRevision()))).response.effect.kind, "authoritative_applied");
 
-  // Only the two parts of the background work have the result. The Chapter of a deleted result is unavailable.
+  // Only the two parts of the background work have the result, with the time of the version with the intent. The
+  // Chapter of a deleted result is unavailable.
   const intents = async () => Object.fromEntries((await list()).map((entry) =>
     [`${entry.title} ${entry.origin}`, "intent" in entry ? entry.intent : "none"]));
-  const shown = await intents();
-  const recorded = (title: string) => {
-    const result = shown[`${title} chapter`];
-    return typeof result === "object" ? result.recorded_at : "";
-  };
-  assert.match(recorded("林舟"), DATE_TIME);
-  assert.match(recorded("阿青"), DATE_TIME);
-  assert.deepEqual(shown, {
+  assert.deepEqual(await intents(), {
     "灯塔 author_request": "none",
     "林舟 author_request": "none",
     "林舟 chapter": { text: "他想在涨水前把船修好，再去问母亲那封信的事。",
-      questions: ["母亲的信在谁手里？", "他知道阿青要走吗？"], recorded_at: recorded("林舟"),
-      chapter: { kind: "chapter", chapter_id: kept, title: "第一章", availability: "available" } },
-    "阿青 chapter": { text: "她想离开渡口。", questions: [], recorded_at: recorded("阿青"),
-      chapter: { kind: "chapter", chapter_id: removed, title: null, availability: "unavailable" } },
+      questions: ["母亲的信在谁手里？", "他知道阿青要走吗？"], recorded_at: "2026-11-20T08:30:00.000Z",
+      chapter: { chapter_id: kept, title: "第一章", availability: "available" } },
+    "阿青 chapter": { text: "她想离开渡口。", questions: [], recorded_at: "2026-11-20T09:15:00.000Z",
+      chapter: { chapter_id: removed, title: null, availability: "unavailable" } },
     "林舟与阿青 author_request": "none",
   });
 

@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use storyos_application::{
     MemoryEntryFlagItem, MemoryEntryIntentItem, MemoryEntryListItem, MemoryEntryReader,
-    MemoryEntrySourceItem, ProjectReadError, ProjectScope,
+    MemoryEntrySourceItem, MemoryIntentChapterItem, ProjectReadError, ProjectScope,
 };
 use storyos_core::{
     MemoryEntryOrigin, MemoryEntryType, MemorySourceReference, MemoryVersionFacts,
@@ -79,7 +79,7 @@ impl MemoryEntryReader for PostgresProjectReader {
                 .map_err(|_| damaged("A Memory intent has invalid questions"))?;
             let chapter = (row.get::<_, Option<String>>(CHAPTER)).map(|chapter_id| {
                 let title = chapters.get(&chapter_id).cloned();
-                MemoryEntrySourceItem::Chapter {
+                MemoryIntentChapterItem {
                     available: title.is_some(),
                     chapter_id,
                     title,

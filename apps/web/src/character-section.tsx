@@ -103,7 +103,7 @@ export function CharacterSection({ scope, memory }: SettingsSectionProps) {
  */
 function IntentBlocks({ intent }: { intent: MemoryEntryIntentInspect }) {
   const chapter = intent.chapter;
-  const title = chapter?.kind === "chapter" && chapter.availability === "available" ? chapter.title : null;
+  const title = chapter?.availability === "available" ? chapter.title : null;
   return (
     <>
       <div className="character-intent" data-character-intent="">

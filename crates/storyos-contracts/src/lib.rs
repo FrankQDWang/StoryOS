@@ -191,7 +191,7 @@ pub use release1_memory_entries::{
     LIST_MEMORY_ENTRIES_METHOD, LIST_MEMORY_ENTRIES_PATH, LIST_MEMORY_ENTRIES_RESPONSE_SCHEMA_ID,
     ListMemoryEntriesResponse, MemoryEntryFlagInspect, MemoryEntryInspect,
     MemoryEntryIntentInspect, MemoryEntryOriginInspect, MemoryEntrySourceInspect,
-    MemoryEntryTypeInspect, MemorySourceAvailability,
+    MemoryEntryTypeInspect, MemoryIntentChapterInspect, MemorySourceAvailability,
 };
 pub use release1_open_proposal_list::{
     LIST_CHAPTER_OPEN_PROPOSALS_METHOD, LIST_CHAPTER_OPEN_PROPOSALS_PATH,

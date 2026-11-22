@@ -101,7 +101,9 @@ export type MemoryEntrySourceInspect = { "kind": "conversation", conversation_id
 
 export type MemoryEntryFlagInspect = { reason: string, source: MemoryEntrySourceInspect, flagged_at: string, };
 
-export type MemoryEntryIntentInspect = { text: string, questions: Array<string>, chapter: MemoryEntrySourceInspect | null, recorded_at: string, };
+export type MemoryIntentChapterInspect = { chapter_id: string, title: string | null, availability: MemorySourceAvailability, };
+
+export type MemoryEntryIntentInspect = { text: string, questions: Array<string>, chapter: MemoryIntentChapterInspect | null, recorded_at: string, };
 
 export type MemoryEntryInspect = { memory_entry_id: string, entry_number: string, version: string, entry_type: MemoryEntryTypeInspect, title: string, description: string, text: string, origin: MemoryEntryOriginInspect, source: MemoryEntrySourceInspect | null, changed_at: string, flag?: MemoryEntryFlagInspect, intent?: MemoryEntryIntentInspect, };
 

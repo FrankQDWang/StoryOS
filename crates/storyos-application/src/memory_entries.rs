@@ -34,14 +34,23 @@ pub struct MemoryEntryFlagItem {
     pub flagged_at: String,
 }
 
+/// The Chapter of an intent result. `title` is the title of the Chapter when it is in the
+/// manuscript tree now.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemoryIntentChapterItem {
+    pub chapter_id: String,
+    pub title: Option<String>,
+    pub available: bool,
+}
+
 /// The current result of the intent pass of a character entry of the background work (ADR 0101
 /// section 4).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryEntryIntentItem {
     pub text: String,
     pub questions: Vec<String>,
-    /// A `Chapter` source, or `None` when the pass had no Chapter.
-    pub chapter: Option<MemoryEntrySourceItem>,
+    /// `None` when the pass had no Chapter.
+    pub chapter: Option<MemoryIntentChapterItem>,
     /// The time of the intent version, RFC 3339 in UTC with milliseconds.
     pub recorded_at: String,
 }

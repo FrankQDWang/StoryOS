@@ -90,12 +90,12 @@
     },
     "MemoryEntryIntentInspect": {
       "additionalProperties": false,
-      "description": "The current result of the intent pass of a character entry of the background work (ADR 0101\nsections 4 and 6): the intent, at most three questions to the author, the Chapter at which the\npass made the result in the form of the source of an entry, and the time of the result. The\n`chapter` is `null` when the pass had no Chapter.",
+      "description": "The current result of the intent pass of a character entry of the background work (ADR 0101\nsections 4 and 6): the intent, at most three questions to the author, the Chapter at which the\npass made the result, and the time of the result. The `chapter` is `null` when the pass had no\nChapter.",
       "properties": {
         "chapter": {
           "anyOf": [
             {
-              "$ref": "#/$defs/MemoryEntrySourceInspect"
+              "$ref": "#/$defs/MemoryIntentChapterInspect"
             },
             {
               "type": "null"
@@ -199,6 +199,31 @@
         "other"
       ],
       "type": "string"
+    },
+    "MemoryIntentChapterInspect": {
+      "additionalProperties": false,
+      "description": "The Chapter at which an intent pass made its result, in the form of the Chapter source of an\nentry: the `title` is `null` when the Chapter is unavailable.",
+      "properties": {
+        "availability": {
+          "$ref": "#/$defs/MemorySourceAvailability"
+        },
+        "chapter_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "chapter_id",
+        "title",
+        "availability"
+      ],
+      "type": "object"
     },
     "MemorySourceAvailability": {
       "description": "`available` when the Project has the record of the source now (Memory contract, section 10).",
