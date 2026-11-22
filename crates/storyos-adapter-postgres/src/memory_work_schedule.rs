@@ -377,9 +377,10 @@ async fn decide_and_start_intent_pass(
     client: &PooledClient,
     scope: &ProjectScope,
 ) -> Result<MemoryWorkOutcome, ProjectReadError> {
-    let entry = crate::intent_pass::needed_entry(client, scope)
+    let facts = crate::intent_pass::entry_facts(client, scope)
         .await
         .map_err(read_error)?;
+    let entry = facts.needed();
     let pass_in_progress: bool = client
         .query_one(
             "SELECT EXISTS (SELECT 1 FROM storyos.intent_passes
@@ -403,7 +404,7 @@ async fn decide_and_start_intent_pass(
         .batch_execute("SAVEPOINT intent_pass_start")
         .await
         .map_err(read_error)?;
-    match crate::intent_pass::start(client, scope, &entry).await? {
+    match crate::intent_pass::start(client, scope, entry).await? {
         Ok(started) => Ok(MemoryWorkOutcome::IntentPassStarted(started)),
         Err(_) => {
             client

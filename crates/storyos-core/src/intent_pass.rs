@@ -246,6 +246,85 @@ pub fn decide_intent_pass(facts: &IntentPassFacts) -> Result<(), IntentPassSkip>
     Ok(())
 }
 
+/// The facts of one Memory Entry of a Project for the start rule of an intent pass: the state and
+/// the type of its last version, and the facts of the version of its last change, which is not a
+/// flag version and not an intent version (ADR 0094 section 7).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IntentPassEntryFacts {
+    pub memory_entry_id: String,
+    pub entry_number: u64,
+    /// The state of the last version.
+    pub state: String,
+    /// The type of the last version.
+    pub entry_type: String,
+    /// The last change has the origin of a request of the author.
+    pub author: bool,
+    pub title: String,
+    /// The version of the last change.
+    pub version: String,
+    pub text: String,
+}
+
+/// The versions that one intent pass read: the entry of the background work and its version, and
+/// the entry of the author and its version, when the character had one.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IntentPassRead {
+    pub entry: (String, String),
+    pub author: Option<(String, String)>,
+}
+
+/// The character that needs a pass: its entry of the background work, and the entry of the author
+/// with the same title, when the Project has one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NeededCharacter<'a> {
+    pub entry: &'a IntentPassEntryFacts,
+    pub author: Option<&'a IntentPassEntryFacts>,
+}
+
+/// The character that the next intent pass is for: the current character entry of the background
+/// work with the lowest number that has no pass for the version of its last change and the
+/// version of the last change of the current character entry of the author with the same title.
+/// A character with only the entry of the author needs no pass (ADR 0101 section 4).
+pub fn select_intent_pass_entry<'a>(
+    entries: &'a [IntentPassEntryFacts],
+    passes: &[IntentPassRead],
+) -> Option<NeededCharacter<'a>> {
+    let character =
+        |entry: &&IntentPassEntryFacts| entry.state == "current" && entry.entry_type == "character";
+    let key = |entry: &IntentPassEntryFacts| (entry.memory_entry_id.clone(), entry.version.clone());
+    (entries.iter().filter(character))
+        .filter(|entry| !entry.author)
+        .map(|entry| NeededCharacter {
+            entry,
+            author: (entries.iter().filter(character))
+                .find(|author| author.author && author.title == entry.title),
+        })
+        .filter(|needed| {
+            let read = IntentPassRead {
+                entry: key(needed.entry),
+                author: needed.author.map(key),
+            };
+            !passes.contains(&read)
+        })
+        .min_by_key(|needed| needed.entry.entry_number)
+}
+
+/// The outcome of a pass whose call is valid, from the state, the type, and the origin of the last
+/// version of its entry. The result is a
+/// version of the entry only while the entry is a current character entry of the background work.
+/// After a delete of the entry, or after the author took it, the pass fails with
+/// `entry_not_current` and records no result.
+pub fn settle_intent_result(
+    state: &str,
+    entry_type: &str,
+    origin: &str,
+) -> Result<IntentPassOutcome, &'static str> {
+    match state == "current" && entry_type == "character" && origin != "author_request" {
+        true => Ok(IntentPassOutcome::Recorded),
+        false => Err("entry_not_current"),
+    }
+}
+
 #[cfg(test)]
 #[path = "intent_pass_tests.rs"]
 mod tests;

@@ -19,7 +19,7 @@ use crate::shared_tests::command_sequence_background_run::claim_in_project;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{park_queued_author_runs, project};
-use crate::shared_tests::memory_consolidation::{capture, run_pass, scripted, settled};
+use crate::shared_tests::memory_consolidation::{capture, delete, run_pass, scripted, settled};
 use crate::shared_tests::memory_entries::{archived_rows, write_versions};
 use crate::shared_tests::model_gateway::RuntimeClock;
 
@@ -83,7 +83,8 @@ async fn claim(
 }
 
 /// Makes the intent pass row of the Project due now with no settlement. A test uses it only where
-/// no settlement makes the row due.
+/// no settlement makes the row due: before a claim that must start no pass, and after a refused
+/// start.
 async fn make_due(admin: &Client, scope: &ProjectScope) {
     admin
         .execute(
@@ -99,26 +100,21 @@ async fn make_due(admin: &Client, scope: &ProjectScope) {
         .unwrap();
 }
 
-/// Makes the intent pass row of the Project due with no settlement, and claims it: a claim that
-/// must start no pass.
-async fn claim_made_due(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    scope: &ProjectScope,
-) -> MemoryWorkOutcome {
-    make_due(admin, scope).await;
-    claim(store, admin, scope).await
-}
-
-/// Claims the intent pass row, then completes the Run of the pass that it starts through the
-/// claim of the Worker, one RunStep for each claim. Returns the Run.
+/// Claims the intent pass row, then completes the Run of the pass that it starts. Returns the Run.
 async fn run_intent(store: &PostgresProjectReader, admin: &Client, scope: &ProjectScope) -> String {
     let MemoryWorkOutcome::IntentPassStarted(started) = claim(store, admin, scope).await else {
         panic!("the claim must start an intent pass");
     };
+    finish(store, admin, scope, &started.run_id).await;
+    started.run_id
+}
+
+/// Completes the intent pass Run `run_id` through the claim of the Worker, one RunStep for each
+/// claim.
+async fn finish(store: &PostgresProjectReader, admin: &Client, scope: &ProjectScope, run_id: &str) {
     for _ in 0..=storyos_core::INTENT_PASS_MAX_RUN_STEPS {
         let claimed = claim_in_project(store, scope).await.unwrap();
-        assert_eq!(claimed.run_id, started.run_id);
+        assert_eq!(claimed.run_id, run_id);
         complete_agent_run(
             store,
             &FakeDestination,
@@ -131,14 +127,14 @@ async fn run_intent(store: &PostgresProjectReader, admin: &Client, scope: &Proje
         let status = json_of(
             admin,
             "SELECT to_jsonb(status)::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&started.run_id],
+            &[&run_id],
         )
         .await;
         if status != json!("queued") {
-            return started.run_id;
+            return;
         }
     }
-    panic!("the intent pass {} did not end", started.run_id);
+    panic!("the intent pass {run_id} did not end");
 }
 
 /// Whether the intent pass row of the Project is due.
@@ -327,7 +323,10 @@ async fn an_applied_pass_starts_one_intent_pass_that_records_a_version_with_the_
             (before.clone(), changed_at(&store, &admin, &scope).await),
             context,
             archived,
-            claim_made_due(&store, &admin, &scope).await
+            {
+                make_due(&admin, &scope).await;
+                claim(&store, &admin, &scope).await
+            }
         ),
         (
             (json!(true), json!(2), json!(3)),
@@ -489,7 +488,8 @@ async fn the_entry_of_the_author_gets_no_version_and_a_new_text_needs_a_pass_aga
         &[(1, 1, 1, "current", "character", "阿青", "怕水")],
     )
     .await;
-    let author_only = claim_made_due(&store, &admin, &scope).await;
+    make_due(&admin, &scope).await;
+    let author_only = claim(&store, &admin, &scope).await;
     let operations = [character("阿青", "阿青是船夫。"), change(1, "阿青", "改。")];
     let first = consolidate(&store, &admin, &scope, &source, &operations).await;
     let first_pass = run_intent(&store, &admin, &scope).await;
@@ -559,6 +559,59 @@ async fn the_entry_of_the_author_gets_no_version_and_a_new_text_needs_a_pass_aga
                 [3, "consolidation", null, null],
                 [4, "intent_pass", fake, questions]
             ])
+        )
+    );
+}
+
+/// A consolidation pass deletes the entry after the start of an intent pass: the valid call
+/// settles, the pass fails with `entry_not_current`, the entry gets no intent version, and the
+/// next claim starts no pass.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_delete_during_a_pass_fails_the_pass_and_writes_no_version() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let (scope, _, source) = project(&store, &admin, "4c3").await;
+    consolidate(
+        &store,
+        &admin,
+        &scope,
+        &source,
+        &[character("林舟", "林舟是船夫。")],
+    )
+    .await;
+    let MemoryWorkOutcome::IntentPassStarted(started) = claim(&store, &admin, &scope).await else {
+        panic!("the claim must start an intent pass");
+    };
+    consolidate(&store, &admin, &scope, &source, &[delete(1)]).await;
+    let revision = memory_revision(&admin, &scope).await;
+    finish(&store, &admin, &scope, &started.run_id).await;
+
+    assert_eq!(
+        (
+            passes(&admin, &scope).await,
+            intents(&admin, &scope, 1).await,
+            memory_revision(&admin, &scope).await,
+            claim(&store, &admin, &scope).await
+        ),
+        (
+            json!([[
+                1,
+                "failed",
+                "entry_not_current",
+                1,
+                null,
+                "intent_pass",
+                "completed",
+                1,
+                [["settled", null]]
+            ]]),
+            json!([
+                [1, "consolidation", null, null],
+                [2, "consolidation", null, null]
+            ]),
+            revision,
+            MemoryWorkOutcome::IntentPassSkipped(IntentPassSkip::NoEntryNeedsPass)
         )
     );
 }

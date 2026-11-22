@@ -109,3 +109,84 @@ fn the_chapter_of_a_pass_is_the_last_chapter_with_text() {
         [Some("a"), Some("b"), None, None]
     );
 }
+
+/// One entry from the words `id number state type author title version`. The word `author` is
+/// `author` for an entry of the author.
+fn entry(words: &str) -> super::IntentPassEntryFacts {
+    let words = words.split(' ').collect::<Vec<_>>();
+    super::IntentPassEntryFacts {
+        memory_entry_id: words[0].to_owned(),
+        entry_number: words[1].parse().unwrap(),
+        state: words[2].to_owned(),
+        entry_type: words[3].to_owned(),
+        author: words[4] == "author",
+        title: words[5].to_owned(),
+        version: words[6].to_owned(),
+        text: format!("{}。", words[5]),
+    }
+}
+
+/// The pass that read `entry` at `version`, and the entry of the author `author`.
+fn read(entry: &str, version: &str, author: Option<(&str, &str)>) -> super::IntentPassRead {
+    super::IntentPassRead {
+        entry: (entry.to_owned(), version.to_owned()),
+        author: author.map(|(id, version)| (id.to_owned(), version.to_owned())),
+    }
+}
+
+/// The selection takes the current character entry of the background work with the lowest number
+/// that has no pass for its version pair. An entry of the author, a deleted entry, an entry of
+/// another type, and a character with only the entry of the author get no pass. A new version of
+/// the entry of the author needs a pass again.
+#[test]
+fn the_next_pass_is_for_the_lowest_entry_with_no_pass_for_its_versions() {
+    let entries = [
+        "a 1 current character author 阿青 1",
+        "b 4 current character - 林舟 1",
+        "c 3 current character - 阿青 2",
+        "d 2 deleted character - 老周 2",
+        "e 5 current place - 渡口 1",
+        "f 6 current character author 小满 1",
+    ]
+    .map(entry);
+    let pick = |passes: &[super::IntentPassRead]| {
+        super::select_intent_pass_entry(&entries, passes).map(|needed| {
+            (
+                needed.entry.memory_entry_id.as_str(),
+                needed.author.map(|a| a.memory_entry_id.as_str()),
+            )
+        })
+    };
+    let c_read = read("c", "2", Some(("a", "1")));
+    let b_read = read("b", "1", None);
+    assert_eq!(
+        [
+            pick(&[]),
+            pick(std::slice::from_ref(&c_read)),
+            pick(&[c_read.clone(), b_read.clone()]),
+            pick(&[read("c", "2", Some(("a", "0"))), b_read]),
+        ],
+        [
+            Some(("c", Some("a"))),
+            Some(("b", None)),
+            None,
+            Some(("c", Some("a")))
+        ]
+    );
+}
+
+/// The result of a valid call is a version only while the entry is a current character entry of
+/// the background work.
+#[test]
+fn a_result_is_kept_only_for_a_current_character_entry_of_the_background_work() {
+    let now = [
+        ("current", "character", "chapter"),
+        ("deleted", "character", "chapter"),
+        ("current", "character", "author_request"),
+        ("current", "place", "chapter"),
+    ]
+    .map(|(state, entry_type, origin)| super::settle_intent_result(state, entry_type, origin));
+    let not_current = Err("entry_not_current");
+    let recorded = Ok(super::IntentPassOutcome::Recorded);
+    assert_eq!(now, [recorded, not_current, not_current, not_current]);
+}

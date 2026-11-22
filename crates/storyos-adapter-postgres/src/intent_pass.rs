@@ -10,7 +10,8 @@ use storyos_application::{
 };
 use storyos_core::{
     AgentRunKind, CaptureRefusal, CaptureRunEnd, CharacterFile, CurrentPassageAssemblyRecord,
-    IntentCallSettlement, IntentPassAssembly, IntentPassOutcome, ToolResultCandidate,
+    IntentCallSettlement, IntentPassAssembly, IntentPassEntryFacts, IntentPassOutcome,
+    IntentPassRead, NeededCharacter, ToolResultCandidate,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -28,76 +29,84 @@ const CHANGES: &str = "SELECT DISTINCT ON (memory_entry_id) *
         AND flag_reason IS NULL AND intent IS NULL
       ORDER BY memory_entry_id, memory_revision DESC";
 
-/// The Character File of one character entry of the background work that needs a pass: the entry
-/// and the version of its last change, and the entry of the author with the same title and the
-/// version of its last change, when the Project has one.
-pub(crate) struct NeededEntry {
-    memory_entry_id: String,
-    version: String,
-    title: String,
-    text: String,
-    author: Option<(String, String, String)>,
+/// The facts of the start rule of an intent pass: each Memory Entry of the Project with its last
+/// version and its last change, and the versions that each pass read.
+pub(crate) struct EntryFacts {
+    entries: Vec<IntentPassEntryFacts>,
+    passes: Vec<IntentPassRead>,
 }
 
-/// The current character entry of the background work with the lowest number that has no pass for
-/// the version of its last change and the version of the last change of the entry of the author.
-/// A character with only the entry of the author needs no pass.
-pub(crate) async fn needed_entry(
+impl EntryFacts {
+    /// The character that Core selects for the next pass.
+    pub(crate) fn needed(&self) -> Option<NeededCharacter<'_>> {
+        storyos_core::select_intent_pass_entry(&self.entries, &self.passes)
+    }
+}
+
+/// Loads the facts of the start rule of an intent pass of the Project of `scope`.
+pub(crate) async fn entry_facts(
     client: &Client,
     scope: &ProjectScope,
-) -> Result<Option<NeededEntry>, tokio_postgres::Error> {
-    let row = client
-        .query_opt(
+) -> Result<EntryFacts, tokio_postgres::Error> {
+    let keys = [scope.owner_user_id.as_ref(), scope.project_id.as_ref()];
+    let entries = client
+        .query(
             &format!(
                 "WITH latest AS (SELECT DISTINCT ON (memory_entry_id) *
                                    FROM storyos.memory_entry_versions
                                   WHERE (owner_user_id, project_id) =
                                         ($1::text::uuid, $2::text::uuid)
                                   ORDER BY memory_entry_id, memory_revision DESC),
-                      changed AS ({CHANGES}),
-                      part AS (SELECT changed.*, changed.origin = 'author_request' AS author
-                                 FROM latest JOIN changed USING (memory_entry_id)
-                                WHERE latest.state = 'current' AND latest.entry_type = 'character')
-                 SELECT background.memory_entry_id::text, background.version::text,
-                        background.title, background.text, author.memory_entry_id::text,
-                        author.version::text, author.text
-                   FROM part AS background
-                   LEFT JOIN part AS author ON author.author AND author.title = background.title
-                  WHERE NOT background.author
-                    AND NOT EXISTS (
-                          SELECT 1 FROM storyos.intent_passes AS pass
-                           WHERE (pass.owner_user_id, pass.project_id, pass.memory_entry_id,
-                                  pass.entry_version) =
-                                 (background.owner_user_id, background.project_id,
-                                  background.memory_entry_id, background.version)
-                             AND pass.author_entry_id IS NOT DISTINCT FROM author.memory_entry_id
-                             AND pass.author_version IS NOT DISTINCT FROM author.version)
-                  ORDER BY background.entry_number
-                  LIMIT 1"
+                      changed AS ({CHANGES})
+                 SELECT changed.memory_entry_id::text, changed.entry_number::text, latest.state,
+                        latest.entry_type, changed.origin = 'author_request', changed.title,
+                        changed.version::text, changed.text
+                   FROM latest JOIN changed USING (memory_entry_id)"
             ),
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+            &[&keys[0], &keys[1]],
         )
         .await?;
-    Ok(row.map(|row| NeededEntry {
-        memory_entry_id: row.get(0),
-        version: row.get(1),
-        title: row.get(2),
-        text: row.get(3),
-        author: match (row.get(4), row.get(5), row.get(6)) {
-            (Some(id), Some(version), Some(text)) => Some((id, version, text)),
-            _ => None,
-        },
-    }))
+    let entries = (entries.iter())
+        .map(|row| IntentPassEntryFacts {
+            memory_entry_id: row.get(0),
+            entry_number: row.get::<_, String>(1).parse().unwrap_or(u64::MAX),
+            state: row.get(2),
+            entry_type: row.get(3),
+            author: row.get(4),
+            title: row.get(5),
+            version: row.get(6),
+            text: row.get(7),
+        })
+        .collect::<Vec<_>>();
+    let passes = client
+        .query(
+            "SELECT memory_entry_id::text, entry_version::text, author_entry_id::text,
+                    author_version::text
+               FROM storyos.intent_passes
+              WHERE (owner_user_id, project_id) = ($1::text::uuid, $2::text::uuid)",
+            &[&keys[0], &keys[1]],
+        )
+        .await?;
+    let passes = (passes.iter())
+        .map(|row| IntentPassRead {
+            entry: (row.get(0), row.get(1)),
+            author: match (row.get(2), row.get(3)) {
+                (Some(id), Some(version)) => Some((id, version)),
+                _ => None,
+            },
+        })
+        .collect::<Vec<_>>();
+    Ok(EntryFacts { entries, passes })
 }
 
 /// Pins the current Model Use Binding, its grant, and its Model Registration for the pass of
-/// `entry`. Then it writes the queued Run, the pass row, and the Context Assembly of its first
+/// `character`. Then it writes the queued Run, the pass row, and the Context Assembly of its first
 /// RunStep. The Chapter of the pass is the last live Chapter in Chapter order that has text. A
 /// refused start writes no row.
 pub(crate) async fn start(
     client: &Client,
     scope: &ProjectScope,
-    entry: &NeededEntry,
+    character: NeededCharacter<'_>,
 ) -> Result<Result<StartedIntentPass, CaptureRefusal>, ProjectReadError> {
     let admission = admitted_assistance(client, scope, |facts| {
         storyos_core::admit_intent_pass(
@@ -133,7 +142,7 @@ pub(crate) async fn start(
         AgentRunKind::IntentPass,
     )
     .await?;
-    let author = entry.author.as_ref();
+    let (entry, author) = (character.entry, character.author);
     client
         .execute(
             "INSERT INTO storyos.intent_passes
@@ -149,8 +158,8 @@ pub(crate) async fn start(
                 &run_id,
                 &entry.memory_entry_id,
                 &entry.version,
-                &author.map(|(id, _, _)| id),
-                &author.map(|(_, version, _)| version),
+                &author.map(|author| &author.memory_entry_id),
+                &author.map(|author| &author.version),
                 &chapter_id,
             ],
         )
@@ -164,7 +173,7 @@ pub(crate) async fn start(
         destination_identity: assistance.processing_destination_identity.clone(),
         file: CharacterFile {
             name: &entry.title,
-            author_text: author.map(|(_, _, text)| text.as_str()),
+            author_text: author.map(|author| author.text.as_str()),
             manuscript_text: &entry.text,
         },
     });
@@ -203,7 +212,8 @@ pub(crate) async fn persist_next_step(
 /// Executes the `record_character_intent` call `row` of a pass in the Tool Gateway transaction that
 /// checked the Run Lease fence. A refused call records nothing, and the Run continues to its next
 /// RunStep. A valid call takes the lock of the Memory head and writes one version of the entry of
-/// the pass with the result. The settled call completes the Run.
+/// the pass with the result, while Core keeps the result for the last version of the entry. Else
+/// the pass fails with the reason of Core. The settled call completes the Run.
 pub(crate) async fn execute(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -225,18 +235,36 @@ pub(crate) async fn execute(
     crate::memory_entries::lock_memory_head(client, scope)
         .await
         .map_err(CompleteAgentRunError::Unavailable)?;
-    let pass_id: String = client
+    // The facts of the last version of the entry of the pass, after the lock of the Memory head.
+    let pass = client
         .query_opt(
-            "SELECT pass_id::text FROM storyos.intent_passes
-              WHERE (owner_user_id, project_id, run_id) =
+            "SELECT pass.pass_id::text, latest.state, latest.entry_type, latest.origin
+               FROM storyos.intent_passes AS pass
+               CROSS JOIN LATERAL (
+                     SELECT version.state, version.entry_type, version.origin
+                       FROM storyos.memory_entry_versions AS version
+                      WHERE (version.owner_user_id, version.project_id, version.memory_entry_id) =
+                            (pass.owner_user_id, pass.project_id, pass.memory_entry_id)
+                      ORDER BY version.memory_revision DESC
+                      LIMIT 1) AS latest
+              WHERE (pass.owner_user_id, pass.project_id, pass.run_id) =
                     ($1::text::uuid, $2::text::uuid, $3::text::uuid)
-                AND outcome IS NULL",
+                AND pass.outcome IS NULL",
             &[&keys[0], &keys[1], &claim.run_id],
         )
         .await
         .map_err(complete_unavailable)?
-        .ok_or_else(|| damaged("The running intent pass of the Run is missing"))?
-        .get(/*idx*/ 0);
+        .ok_or_else(|| damaged("The running intent pass of the Run is missing"))?;
+    let pass_id: String = pass.get(/*idx*/ 0);
+    let state = pass.get(/*idx*/ 1);
+    let (entry_type, origin) = (pass.get(/*idx*/ 2), pass.get(/*idx*/ 3));
+    if let Err(reason) = storyos_core::settle_intent_result(state, entry_type, origin) {
+        settle_pass(client, scope, &claim.run_id, "failed", Some(reason)).await?;
+        resolve(client, claim, row, Resolution::settled(result)).await?;
+        return crate::agent_run_work::complete(client, claim)
+            .await
+            .map(drop);
+    }
     let cause = json!({ "kind": "intent_pass", "run_id": claim.run_id, "pass_id": pass_id });
     client
         .execute(
@@ -325,10 +353,10 @@ async fn settle_pass(
     if settled == 0 {
         return Ok(());
     }
-    let needed = needed_entry(client, scope)
+    let facts = entry_facts(client, scope)
         .await
         .map_err(complete_unavailable)?;
-    if needed.is_some() {
+    if facts.needed().is_some() {
         crate::memory_work_schedule::mark_intent_pass_due(client, scope).await?;
     }
     Ok(())
