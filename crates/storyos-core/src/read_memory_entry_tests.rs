@@ -186,6 +186,37 @@ fn a_read_of_an_entry_with_an_intent_gives_the_line_intent() {
     );
 }
 
+/// An intent with line breaks gives one line `intent`: each sequence of line breaks with the white
+/// space around it is one space. The result keeps one empty line, before the text.
+#[test]
+fn an_intent_with_line_breaks_gives_one_line() {
+    let read = MemoryEntryRead {
+        memory_entry_id: "entry-1".to_owned(),
+        version: 4,
+        entry_type: MemoryEntryType::Character,
+        title: "林舟".to_owned(),
+        description: "船夫。".to_owned(),
+        origin: "conversation".to_owned(),
+        changed_at: "2026-11-17T08:00:00.000Z".to_owned(),
+        text: "林舟是船夫。".to_owned(),
+        flag: None,
+        intent: Some("我明天去渡口。 \n\n  看那条船。\r\n还在不在".to_owned()),
+    };
+    let text = read.result().text;
+    assert_eq!(
+        (
+            text.lines().find(|line| line.starts_with("intent: ")),
+            text.matches("\n\n").count(),
+            text.split_once("\n\n").map(|(_, text)| text),
+        ),
+        (
+            Some("intent: 我明天去渡口。 看那条船。 还在不在"),
+            1,
+            Some("林舟是船夫。"),
+        )
+    );
+}
+
 /// ADR 0094 section 7: the result for an entry with a conflict flag has the reason and the
 /// source after `changed_at`, and the same text. The source is a Chapter with its number and
 /// title, a Project Conversation, or a source that is not available now.

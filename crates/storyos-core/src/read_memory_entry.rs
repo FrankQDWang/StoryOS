@@ -85,6 +85,35 @@ pub struct MemoryEntryRead {
     pub intent: Option<String>,
 }
 
+/// `text` with each sequence of line breaks and the white space around it as one space.
+fn one_line(text: &str) -> String {
+    let breaks = |character: char| {
+        matches!(
+            character,
+            '\n' | '\r' | '\u{0b}' | '\u{0c}' | '\u{85}' | '\u{2028}' | '\u{2029}'
+        )
+    };
+    let mut line = String::new();
+    let mut gap = String::new();
+    for character in text.chars() {
+        if character.is_whitespace() {
+            gap.push(character);
+            continue;
+        }
+        match gap.chars().any(breaks) {
+            true => line.push(' '),
+            false => line.push_str(&gap),
+        }
+        gap.clear();
+        line.push(character);
+    }
+    match gap.chars().any(breaks) {
+        true => line.push(' '),
+        false => line.push_str(&gap),
+    }
+    line
+}
+
 /// The conflict flag of an entry in the result of a read: the reason and the source.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryReadFlag {
@@ -119,11 +148,13 @@ impl MemoryEntryRead {
     /// The result of the settled read: the lines `type`, `title`, `description`, `origin`, and
     /// `changed_at`, an empty line, and then the exact text of the entry. A title and a
     /// description are one line, so each line has one value. An entry with an intent has the
-    /// line `intent` after `changed_at`. An entry with a conflict flag has the lines
+    /// line `intent` after `changed_at`, with the intent on one line: each sequence of line breaks
+    /// with the white space around it is one space. An entry with a conflict flag has the lines
     /// `conflict_flag` with the reason and `conflict_source` after them.
     pub fn result(&self) -> ToolResultText {
-        let intent =
-            (self.intent.as_ref()).map_or(String::new(), |intent| format!("\nintent: {intent}"));
+        let intent = (self.intent.as_ref()).map_or(String::new(), |intent| {
+            format!("\nintent: {}", one_line(intent))
+        });
         let flag = self.flag.as_ref().map_or(String::new(), |flag| {
             format!(
                 "\nconflict_flag: {}\nconflict_source: {}",
