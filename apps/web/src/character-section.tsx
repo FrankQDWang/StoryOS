@@ -30,15 +30,17 @@ function characters(entries: readonly MemoryEntryInspect[]): Map<string, MemoryE
  */
 export function CharacterSection({ scope, memory }: SettingsSectionProps) {
   const [search, setSearch] = useState("");
-  // The selected name. After "确认删除" in its file, also the names around it in the list, the next names first.
+  // The selected name. After "确认删除" in its file, also the other names of all names, the next names first, so that
+  // the search at the end of the delete selects among them.
   const [chosen, setChosen] = useState<{ name: string; following?: readonly string[] }>();
   const { entries } = memory;
   if (entries === undefined) return <CharacterFrame />;
   if (entries === "failed") return <CharacterFrame><ReadFailed memory={memory} /></CharacterFrame>;
   const files = characters(entries);
   if (files.size === 0) return <CharacterFrame><p data-character-empty="">{EMPTY_SENTENCE}</p></CharacterFrame>;
+  const all = [...files.keys()];
   const term = search.trim();
-  const names = [...files.keys()].filter((name) => name.includes(term));
+  const names = all.filter((name) => name.includes(term));
   // When a delete removed the last part of the selected character, the next name of the list is selected.
   const following = chosen === undefined || files.has(chosen.name) ? [] : chosen.following ?? [];
   const selected = [chosen?.name, ...following].find((name) => name !== undefined && names.includes(name))
@@ -46,8 +48,8 @@ export function CharacterSection({ scope, memory }: SettingsSectionProps) {
   const file = selected === undefined ? undefined : files.get(selected);
   const keep = () => {
     if (selected === undefined) return;
-    const at = names.indexOf(selected);
-    setChosen({ name: selected, following: [...names.slice(at + 1), ...names.slice(0, at).reverse()] });
+    const at = all.indexOf(selected);
+    setChosen({ name: selected, following: [...all.slice(at + 1), ...all.slice(0, at).reverse()] });
   };
   return (
     <CharacterFrame>
