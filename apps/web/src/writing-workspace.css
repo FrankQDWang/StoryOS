@@ -584,7 +584,7 @@ li[data-chapter-id] { position: relative; }
 .settings-leave-confirm button { padding: 4px 14px; border: 1px solid #d9d6d0; border-radius: 6px; background: white; cursor: pointer; }
 .character-columns { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 28px; align-items: start; }
 .character-list input { width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); }
-.character-list ul { display: grid; gap: 2px; margin: 8px 0 0; padding: 0; list-style: none; }
+.character-list ul { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 8px 0 0; padding: 0; list-style: none; }
 .settings-section .character-list button { display: block; width: 100%; padding: 6px 10px; overflow: hidden; border: 0; border-radius: 6px; background: transparent; color: var(--ink); text-align: left; white-space: nowrap; text-overflow: ellipsis; }
 .settings-section .character-list button:hover { background: var(--hover); }
 .settings-section .character-list button[aria-current="true"] { background: var(--hover); font-weight: 600; }
