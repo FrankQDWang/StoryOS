@@ -57,13 +57,15 @@ async fn results_of(admin: &Client, run_id: &str, function: &str) -> Vec<Value> 
         .collect()
 }
 
-/// The lines of the result of a read before the text, without the line `changed_at`.
-fn head(result: &Value) -> Vec<String> {
-    (result.as_str().unwrap().lines())
-        .take_while(|line| !line.is_empty())
-        .filter(|line| !line.starts_with("changed_at: "))
-        .map(str::to_owned)
-        .collect()
+/// The complete text of the result of a read, with the time of the line `changed_at` replaced.
+fn timeless(result: &Value) -> String {
+    (result.as_str().unwrap().split('\n'))
+        .map(|line| match line.starts_with("changed_at: ") {
+            true => "changed_at: <time>",
+            false => line,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// For each selected item of each decision RunStep of the Run `run_id`: its source class, and
@@ -111,7 +113,7 @@ fn author_part(action: &str, text: &str) -> String {
 /// The Index of each RunStep of a Run of the author has the field `"intent"` in the line of the
 /// entry of the background work with a current result, and no such field in the line of the entry
 /// of the author. A read of that entry has the line `intent`. The Index and the read of a capture
-/// of the same Project have no intent.
+/// of the same Project have no intent. No complete read result has the question.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_run_of_the_author_gets_the_current_intent_and_a_capture_does_not() {
@@ -161,33 +163,30 @@ async fn a_run_of_the_author_gets_the_current_intent_and_a_capture_does_not() {
              {{\"author_part\":true,\"description\":\"船夫。\",\"id\":2,\"title\":\"林舟\"}}"
         ))
     };
-    let read = |origin: &str, intent: Option<&str>, title: &str| {
-        let mut lines = vec![
-            "type: character".to_owned(),
-            format!("title: {title}"),
-            "description: 船夫。".to_owned(),
-            format!("origin: {origin}"),
-        ];
-        lines.extend(intent.map(|intent| format!("intent: {intent}")));
-        lines
+    let read = |origin: &str, intent: Option<&str>, text: &str| {
+        let intent = intent.map_or(String::new(), |intent| format!("\nintent: {intent}"));
+        format!(
+            "type: character\ntitle: 林舟\ndescription: 船夫。\norigin: {origin}\n\
+             changed_at: <time>{intent}\n\n{text}"
+        )
     };
     let author_reads = results_of(&admin, &author, "read_memory_entry").await;
     let capture_reads = results_of(&admin, &capture.run_id, "read_memory_entry").await;
     assert_eq!(
         (
             indexes(&admin, &author).await,
-            author_reads.iter().map(head).collect::<Vec<_>>(),
+            author_reads.iter().map(timeless).collect::<Vec<_>>(),
             indexes(&admin, &capture.run_id).await[0].clone(),
-            capture_reads.iter().map(head).collect::<Vec<_>>(),
+            capture_reads.iter().map(timeless).collect::<Vec<_>>(),
         ),
         (
             json!(vec![index(Some(INTENT)); 3]),
             vec![
-                read("conversation", Some(INTENT), "林舟"),
-                read("author_request", None, "林舟")
+                read("conversation", Some(INTENT), "林舟是船夫。"),
+                read("author_request", None, "他怕水。")
             ],
             index(None),
-            vec![read("conversation", None, "林舟")],
+            vec![read("conversation", None, "林舟是船夫。")],
         )
     );
 }
