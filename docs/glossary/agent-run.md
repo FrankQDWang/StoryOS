@@ -21,7 +21,7 @@ A durable execution aggregate for one bounded user-, event-, or schedule-trigger
 _Avoid_: Conversation, transcript, live model session, reopened Run
 
 **AgentRun Kind**:
-The kind of one AgentRun: `author` for a Run of the author, or a background kind for the Memory work of ADR 0094 (`memory_capture`, `memory_consolidation`). A Run of the author has its Project Conversation, its Conversation Memory Settings revision, its Chapter, its author message, and the Receipt of `createAgentRun`.
+The kind of one AgentRun: `author` for a Run of the author, or a background kind: the Memory work of ADR 0094 (`memory_capture`, `memory_consolidation`) or the intent pass of ADR 0101 (`intent_pass`). A Run of the author has its Project Conversation, its Conversation Memory Settings revision, its Chapter, its author message, and the Receipt of `createAgentRun`.
 _Avoid_: Run type, Purpose
 
 **Background Run**:

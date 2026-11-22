@@ -741,7 +741,7 @@
         "agent_runs_pkey": "PRIMARY KEY (owner_user_id, project_id, run_id)",
         "agent_runs_predecessor_fk": "FOREIGN KEY (owner_user_id, project_id, predecessor_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id)",
         "agent_runs_project_instruction_revision_fkey": "FOREIGN KEY (owner_user_id, project_id, project_instruction_revision_id) REFERENCES storyos.project_instruction_revisions(owner_user_id, project_id, instruction_revision_id)",
-        "agent_runs_run_kind_check": "CHECK ((run_kind = ANY (ARRAY['author'::text, 'memory_capture'::text, 'memory_consolidation'::text])))"
+        "agent_runs_run_kind_check": "CHECK ((run_kind = ANY (ARRAY['author'::text, 'memory_capture'::text, 'memory_consolidation'::text, 'intent_pass'::text])))"
       },
       "indexes": {
         "agent_runs_binding_idx": "CREATE INDEX agent_runs_binding_idx ON storyos.agent_runs USING btree (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision)",
@@ -3222,6 +3222,105 @@
       },
       "triggers": {}
     },
+    "intent_passes": {
+      "columns": {
+        "author_entry_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "author_version": {
+          "default": null,
+          "nullable": true,
+          "type": "numeric(20,0)"
+        },
+        "chapter_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "entry_version": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "failure_reason": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "memory_entry_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "outcome": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "pass_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "run_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "started_at": {
+          "default": "statement_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        }
+      },
+      "constraints": {
+        "intent_passes_author_fkey": "FOREIGN KEY (owner_user_id, project_id, author_entry_id, author_version) REFERENCES storyos.memory_entry_versions(owner_user_id, project_id, memory_entry_id, version)",
+        "intent_passes_author_shape": "CHECK (((author_entry_id IS NULL) = (author_version IS NULL)))",
+        "intent_passes_chapter_fkey": "FOREIGN KEY (owner_user_id, project_id, chapter_id) REFERENCES storyos.manuscript_objects(owner_user_id, project_id, manuscript_object_id)",
+        "intent_passes_entry_fkey": "FOREIGN KEY (owner_user_id, project_id, memory_entry_id, entry_version) REFERENCES storyos.memory_entry_versions(owner_user_id, project_id, memory_entry_id, version) MATCH FULL",
+        "intent_passes_outcome_check": "CHECK (((((outcome IS NULL) OR (outcome = ANY (ARRAY['recorded'::text, 'not_kept'::text, 'failed'::text]))) AND (COALESCE((outcome = 'failed'::text), false) = (failure_reason IS NOT NULL)) AND ((failure_reason IS NULL) OR ((char_length(failure_reason) >= 1) AND (char_length(failure_reason) <= 64)))) IS TRUE))",
+        "intent_passes_pkey": "PRIMARY KEY (owner_user_id, project_id, pass_id)",
+        "intent_passes_run_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
+        "intent_passes_run_key": "UNIQUE (owner_user_id, project_id, run_id)"
+      },
+      "indexes": {
+        "intent_passes_pkey": "CREATE UNIQUE INDEX intent_passes_pkey ON storyos.intent_passes USING btree (owner_user_id, project_id, pass_id)",
+        "intent_passes_run_key": "CREATE UNIQUE INDEX intent_passes_run_key ON storyos.intent_passes USING btree (owner_user_id, project_id, run_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "intent_passes_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "manuscript_blocks": {
       "columns": {
         "block_kind": {
@@ -3730,6 +3829,31 @@
           "nullable": true,
           "type": "jsonb"
         },
+        "intent": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "intent_author_entry_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "intent_author_version": {
+          "default": null,
+          "nullable": true,
+          "type": "numeric(20,0)"
+        },
+        "intent_chapter_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "intent_questions": {
+          "default": null,
+          "nullable": true,
+          "type": "jsonb"
+        },
         "memory_entry_id": {
           "default": null,
           "nullable": false,
@@ -3789,6 +3913,7 @@
       "constraints": {
         "memory_entry_versions_bounds": "CHECK (((entry_number >= (1)::numeric) AND (entry_number <= '18446744073709551615'::numeric) AND (version >= (1)::numeric) AND (version <= '18446744073709551615'::numeric) AND (memory_revision >= (1)::numeric) AND (memory_revision <= '18446744073709551615'::numeric)))",
         "memory_entry_versions_flag": "CHECK ((((COALESCE((cause ->> 'kind'::text), ''::text) = 'conflict_flag'::text) = (flag_reason IS NOT NULL)) AND ((flag_reason IS NULL) = (flag_source IS NULL)) AND ((flag_reason IS NULL) OR ((char_length(flag_reason) >= 1) AND (state = 'current'::text) AND (jsonb_typeof(flag_source) = 'object'::text)))))",
+        "memory_entry_versions_intent": "CHECK ((((COALESCE((cause ->> 'kind'::text), ''::text) = 'intent_pass'::text) = (intent IS NOT NULL)) AND ((intent IS NULL) = (intent_questions IS NULL)) AND ((intent_author_entry_id IS NULL) = (intent_author_version IS NULL)) AND ((intent IS NOT NULL) OR ((intent_chapter_id IS NULL) AND (intent_author_entry_id IS NULL))) AND ((intent IS NULL) OR ((char_length(intent) >= 1) AND (char_length(intent) <= 150) AND (jsonb_typeof(intent_questions) = 'array'::text) AND (jsonb_array_length(intent_questions) <= 3) AND (state = 'current'::text) AND (entry_type = 'character'::text) AND (origin <> 'author_request'::text)))))",
         "memory_entry_versions_number_key": "UNIQUE (owner_user_id, project_id, entry_number, version)",
         "memory_entry_versions_origin_check": "CHECK ((origin = ANY (ARRAY['author_request'::text, 'conversation'::text, 'chapter'::text])))",
         "memory_entry_versions_pkey": "PRIMARY KEY (owner_user_id, project_id, memory_entry_id, version)",
@@ -3966,7 +4091,7 @@
         "memory_work_schedules_conversation_fkey": "FOREIGN KEY (owner_user_id, project_id, conversation_id) REFERENCES storyos.project_conversations(owner_user_id, project_id, conversation_id)",
         "memory_work_schedules_held_check": "CHECK (((NOT held) OR ((work_kind = 'chapter_capture'::text) AND (due_at IS NULL))))",
         "memory_work_schedules_pkey": "PRIMARY KEY (owner_user_id, project_id, work_kind, source_id)",
-        "memory_work_schedules_source_check": "CHECK (((((work_kind = 'conversation_capture'::text) AND (conversation_id = source_id) AND (chapter_id IS NULL)) OR ((work_kind = 'consolidation'::text) AND (conversation_id IS NULL) AND (chapter_id IS NULL) AND (source_id = project_id)) OR ((work_kind = 'chapter_capture'::text) AND (conversation_id IS NULL) AND (chapter_id = source_id))) IS TRUE))"
+        "memory_work_schedules_source_check": "CHECK (((((work_kind = 'conversation_capture'::text) AND (conversation_id = source_id) AND (chapter_id IS NULL)) OR ((work_kind = 'consolidation'::text) AND (conversation_id IS NULL) AND (chapter_id IS NULL) AND (source_id = project_id)) OR ((work_kind = 'chapter_capture'::text) AND (conversation_id IS NULL) AND (chapter_id = source_id)) OR ((work_kind = 'intent_pass'::text) AND (conversation_id IS NULL) AND (chapter_id IS NULL) AND (source_id = project_id))) IS TRUE))"
       },
       "indexes": {
         "memory_work_schedules_due_idx": "CREATE INDEX memory_work_schedules_due_idx ON storyos.memory_work_schedules USING btree (due_at) WHERE (due_at IS NOT NULL)",

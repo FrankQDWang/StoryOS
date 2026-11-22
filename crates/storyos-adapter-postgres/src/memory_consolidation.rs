@@ -305,6 +305,10 @@ pub(crate) async fn execute(
         .await
         .map_err(complete_unavailable)?;
     crate::memory_work_schedule::mark_consolidation_due(client, scope).await?;
+    // An applied operation can change a character entry (ADR 0101 section 4).
+    if settlement.outcome == storyos_core::ConsolidationOutcome::Applied {
+        crate::memory_work_schedule::mark_intent_pass_due(client, scope).await?;
+    }
     resolve(client, claim, row, Resolution::settled(&settlement.result)).await?;
     crate::agent_run_work::complete(client, claim).await?;
     Ok(())

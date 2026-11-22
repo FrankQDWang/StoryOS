@@ -200,14 +200,15 @@ impl IntentCallSettlement {
     }
 }
 
+/// The result text of a valid call whose result the Host recorded.
+pub(crate) const INTENT_RECORDED: &str = "The Host recorded the intent, and the pass is complete.";
+
 /// Settles one call with the Host limits.
 pub fn settle_intent_call(intent: &str, questions: &[String]) -> IntentCallSettlement {
     match validate_character_intent(intent, questions) {
         Ok(intent) => IntentCallSettlement::Settled {
             intent,
-            result: crate::host_tool_result(
-                "The Host recorded the intent, and the pass is complete.",
-            ),
+            result: crate::host_tool_result(INTENT_RECORDED),
         },
         Err(refusal) => IntentCallSettlement::Refused {
             refusal,
