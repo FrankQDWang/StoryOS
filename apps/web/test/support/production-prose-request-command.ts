@@ -299,8 +299,14 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     await page.reload();
     await page.locator(`[data-proposal-id="${secondProposalId}"]`).waitFor();
     assert.equal(await page.locator("[data-proposal-id]").count(), 2);
-    assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`).evaluate(
-      (element) => element.previousElementSibling?.textContent), secondBlock.text);
+    // A later projection can replace the card element in the same place, so a read of an element that a locator
+    // found before gives a detached element. Each poll finds the current card.
+    await page.waitForFunction(({ proposalId, expected }) => {
+      const candidate = document.querySelector(`[data-proposal-id="${proposalId}"]`);
+      return candidate?.parentElement?.matches(".tiptap") === true
+        && candidate.previousElementSibling?.textContent === expected;
+    },
+    { proposalId: secondProposalId, expected: secondBlock.text }, { polling: 100 });
     const heldReloadRun = new Promise<void>((resolve) => { releaseReloadRun = resolve; });
     const heldReloadProposals = new Promise<void>((resolve) => { releaseReloadProposals = resolve; });
     let reloadProposalReads = 0;

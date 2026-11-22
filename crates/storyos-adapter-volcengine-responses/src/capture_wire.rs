@@ -38,10 +38,13 @@ author.{conversation_rule} The section Chapter text has the text of one Chapter.
 characters, relationships, and major events.
 
 An observation of the type character is for the entry of that character that comes from the \
-manuscript. Write it from the place of the character: what the character did, saw, and heard in \
-this material, what the character wants at its end, and how the character speaks. Give only what \
-the character can know. Do not give a fact that the character did not see and that no person \
-told the character. Do not write that the character does not know a fact, because that sentence \
+manuscript. Its title is the name of the character. Give it with \"entry\": null: the pass finds \
+the entry by its title. Write it from the place of the character: what the character did, saw, \
+and heard in this material, what the character wants at its end, and how the character speaks. \
+Give only what the character can know. Do not give a fact that the character did not see and \
+that no person told the character. The character does not know what another character says in \
+a scene without the character, or what another character thinks, until a person tells the \
+character. Do not write that the character does not know a fact, because that sentence \
 gives the fact. A decision of the author about a character goes into an observation of the type \
 character only when the character knows it. If not, give it the type other or foreshadowing.
 
