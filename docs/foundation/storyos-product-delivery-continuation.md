@@ -328,7 +328,7 @@ texts on the real route.
 | ID | Mandatory evidence |
 | --- | --- |
 | S11-EVD-001 | The tests of the two parts (the write rule, the refusal, the operations of a pass, and the delete marks), the exact instruction texts in the request tests, the new mapping revision and Registration, and one live run of the file on the real route with its evidence tag and its record under `docs/research/`. The record has the length of each file after each Chapter and the check of the limit of knowledge. Record: [character-file-live-run-2026-11-22](../research/character-file-live-run-2026-11-22.md). |
-| S11-EVD-002 | The tests of the intent pass (start, input, result, the rule of one pass for each text, and the result that is not kept), the tests that no capture and no pass gets an intent, the exact request texts, and one live run of the pass and of a continuation with the intents on the real route with its evidence tag and its record. |
+| S11-EVD-002 | The tests of the intent pass (start, input, result, the rule of one pass for each text, and the result that is not kept), the tests that no capture and no pass gets an intent, the exact request texts, and one live run of the pass and of a continuation with the intents on the real route with its evidence tag and its record. Record: [intent-live-run-2026-11-22](../research/intent-live-run-2026-11-22.md). |
 | S11-EVD-003 | The tests of the response of `listMemoryEntries`, the browser tests of the navigation and of the section "人物", and the journey S11-JRN-001 on the exact dist. |
 
 Stage 11 adds no simulation of the story, no list and no notice of the
