@@ -136,8 +136,10 @@ export async function verifyProductionStage7Journey(context: BrowserContext): Pr
     // so it resets the windows of the Project before steps 3, 5, and 6. Each part then asks for at most 5.
     const resetChallenges = () => value(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
       WHERE project_id = '${project}'::uuid`);
+    // The journey examines the section "记忆", so it selects that item of the navigation (ADR 0101 section 6).
     const openSettings = async () => {
       await page.goto(`${workspace}/settings`);
+      await page.locator('[data-settings-item="memory"]').click();
       await page.locator("[data-memory-section] [data-memory-group], [data-memory-empty]").first().waitFor();
     };
 
