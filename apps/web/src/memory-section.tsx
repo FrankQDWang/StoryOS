@@ -22,6 +22,8 @@ const DELETE_FAILED_SENTENCE = "无法删除这条记忆，请稍后再试。";
 // The ticket #1589 gives the words and the sentence of a conflict flag. The author approved them on 2026-11-16.
 const FLAG_WORDS = "可能已过时";
 const FLAG_SENTENCE = "可以在对话中告诉助手哪个是对的，或删除这条记忆。";
+// The ticket #1824 gives the sentence of a Memory with only character entries. The author approved it on 2026-11-22.
+const ONLY_CHARACTERS_SENTENCE = "这里还没有人物以外的记忆。";
 
 type Group = { type: MemoryEntryTypeInspect; entries: MemoryEntryInspect[] };
 
@@ -53,14 +55,14 @@ export function ReadFailed({ memory }: { memory: MemoryEntries }) {
  */
 export function MemorySection({ scope, memory }: SettingsSectionProps) {
   const { entries } = memory;
+  const shown = typeof entries === "object" ? entries.filter((entry) => entry.entry_type !== "character") : [];
   return (
     <section className="settings-section memory-section" aria-labelledby="memory-heading" data-memory-section="">
       <h2 id="memory-heading">记忆</h2>
       {entries === undefined ? null : entries === "failed" ? <ReadFailed memory={memory} />
-        // When each entry is a character, the section shows no entry and no sentence (#1793).
-        : entries.length === 0 ? (
-          <p data-memory-empty="">{EMPTY_SENTENCE}</p>
-        ) : groups(entries.filter((entry) => entry.entry_type !== "character")).map((group) => (
+        : shown.length === 0 ? (
+          <p data-memory-empty="">{entries.length === 0 ? EMPTY_SENTENCE : ONLY_CHARACTERS_SENTENCE}</p>
+        ) : groups(shown).map((group) => (
           <section key={group.type} className="memory-group" data-memory-group={group.type}>
             <h3>{GROUP_NAMES[group.type]}</h3>
             <ul>
