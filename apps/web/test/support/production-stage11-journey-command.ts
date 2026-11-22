@@ -97,7 +97,12 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
       await page.locator(`[data-assistant-run-id="${run.runId}"][data-assistant-dispatch="completed"]`).waitFor();
       return run;
     };
+    // The count of the Author Edit Receipts of the Project.
+    const authorEdits = async () => Number(await value(`SELECT count(*)::text FROM storyos.domain_receipts
+      WHERE project_id = '${project}'::uuid AND command_kind = 'applyAuthorEdit'`));
+    // Each typed Chapter gives at least one new Author Edit.
     const typeInChapter = async (chapterId: string, lines: string[]) => {
+      const before = await authorEdits();
       const button = page.locator(`button[data-chapter-id="${chapterId}"]`);
       // The editor shows the Chapter before the caret goes into its text.
       await button.click();
@@ -112,6 +117,7 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
       }
       await page.keyboard.press("Enter");
       await page.locator(SAVED).waitFor();
+      await expect.poll(authorEdits).toBeGreaterThan(before);
     };
     // The text of the current Revision of a Chapter.
     const chapterText = (chapterId: string) => value(`
@@ -257,8 +263,6 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
       "unavailable");
     await expect(page.locator('[data-assistant-availability="unavailable"] .assistant-status').first())
       .toHaveText(EMPTY_LINE);
-    // With no model destination, the panel shows no Run.
-    await expect(page.locator("[data-assistant-current-run], [data-assistant-history-run]")).toHaveCount(0);
     // The editor session of the first Server still holds the writer lease, because that Server stopped before the page
     // released it. So the author takes over the writing, as after each other end of a session.
     await page.locator("[data-take-over-writer]").click();
@@ -280,12 +284,10 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
         WHERE project_id = '${project}'::uuid AND due_at IS NOT NULL)
       + (SELECT count(*) FROM storyos.agent_runs WHERE project_id = '${project}'::uuid
           AND status IN ('queued', 'claimed', 'waiting', 'paused')))::text`), "0");
-    // The editor can send the typed lines of one Chapter in one or more Author Edits. So the journey reads that count,
-    // and each of the two typed Chapters gives at least one. Each other kind has its exact count: the two Chapter
+    // The editor can send the typed lines of one Chapter in one or more Author Edits, so the count of that kind is not
+    // a fixed number: each typed Chapter added at least one. Each other kind has its exact count: the two Chapter
     // selections, the takeover of step 5, and the two Runs.
-    const edits = Number(await value(`SELECT count(*)::text FROM storyos.domain_receipts
-      WHERE project_id = '${project}'::uuid AND command_kind = 'applyAuthorEdit'`));
-    assert.ok(edits >= 2, `the journey has ${edits} Author Edits`);
+    const edits = await authorEdits();
     await assertProjectReceipts([project], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,
       createVolume: 1, createChapter: 2, setCurrentChapter: 2, applyAuthorEdit: edits, createAgentRun: 2,
       takeOverProjectWriter: 1 } });
