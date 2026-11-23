@@ -449,6 +449,10 @@ export type PlanStepInspect = { text: string, status: PlanStepStatusInspect, };
 
 export type PlanStepStatusInspect = "pending" | "in_progress" | "completed";
 
+export type SubrunEntryInspect = { subrun_id: string, title: string, state: SubrunStateInspect, };
+
+export type SubrunStateInspect = "working" | "completed" | "no_result" | "stopped";
+
 export type ContinuationInputMappingInspect = "none" | "incremental" | "full" | "new_transport";
 
 export type ContinuationAdmissionInspect = { processing_destination_identity: string, evidence_revision: string, model_registration_revision: string, adapter_mapping: string, project_model_use_binding_revision: string, external_compatibility_decision: string, };
@@ -481,7 +485,7 @@ export type CapturedMemorySettingsInspect = { "kind": "available", memory_settin
 
 export type AgentRunSteeringInspect = { steering_input_id: string, input_position: string, author_message: string, input_snapshot_id: string | null, model_attempt_id: string | null, };
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, results?: Array<AgentRunResultInspect>, skill_uses?: Array<SkillUseInspect>, manuscript_uses?: Array<ManuscriptUseInspect>, plan?: Array<PlanStepInspect>, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, compactions?: Array<OptionalActiveCompactionInspect>, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, cache: AttemptCacheInspect, redaction_profile: string, };
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, results?: Array<AgentRunResultInspect>, skill_uses?: Array<SkillUseInspect>, manuscript_uses?: Array<ManuscriptUseInspect>, plan?: Array<PlanStepInspect>, subruns?: Array<SubrunEntryInspect>, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, compactions?: Array<OptionalActiveCompactionInspect>, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, cache: AttemptCacheInspect, redaction_profile: string, };
 
 export type OriginalResultRetrievalDisposition = "kept_unknown" | "evidence_only" | "settled";
 
@@ -490,6 +494,10 @@ export type OptionalOriginalResultRetrievalInspect = { "kind": "absent" } | { "k
 export type UnknownCreateSuccessorDisposition = "fenced" | "dispatched" | "paused" | "prohibited";
 
 export type OptionalUnknownCreateSuccessorInspect = { "kind": "absent" } | { "kind": "present", recovery_id: string, disposition: UnknownCreateSuccessorDisposition, pause_reason?: string | null, lookup_unavailable_reason?: string | null, predecessor_model_attempt_id: string, successor_model_attempt_id?: string | null, model_invocation_id: string, predecessor_fenced: boolean, allowance_consumed: boolean, predecessor_usage_kind: string, predecessor_reservation_released: boolean, successor_settles_predecessor: boolean, supplies_tool_call: boolean, advances_predecessor_continuation: boolean, reuses_changed_context: boolean, };
+
+export type SubrunStepInspect = { "kind": "text", text: string, } | { "kind": "chapter_read", chapter_id: string, title: string, } | { "kind": "keyword_search", query: string, matches: number, } | { "kind": "hybrid_search", question: string, passages: number, } | { "kind": "memory_read", title: string, } | { "kind": "memory_search", query: string, entries: number, };
+
+export type GetSubrunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, subrun_id: string, title: string, brief: string, state: SubrunStateInspect, step_count: number, steps: Array<SubrunStepInspect>, answer?: string, };
 
 export type ProjectConversationCompleteness = "complete" | "truncated";
 
@@ -730,6 +738,7 @@ export declare function undoLatestAuthorAction(options: StoryOSQueryOptions & { 
 export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createAgentRun(options: StoryOSQueryOptions & { projectId: string; request: CreateAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateAgentRunResponse>;
 export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; modelAttemptId?: string | null }): Promise<GetAgentRunResponse>;
+export declare function getSubrun(options: StoryOSQueryOptions & { projectId: string; subrunId: string }): Promise<GetSubrunResponse>;
 export declare function listProjectConversations(options: StoryOSQueryOptions & { projectId: string }): Promise<ListProjectConversationsResponse>;
 export declare function getProjectConversation(options: StoryOSQueryOptions & { projectId: string; conversationId: string }): Promise<GetProjectConversationResponse>;
 export declare function digestSteerAgentRun(request: SteerAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

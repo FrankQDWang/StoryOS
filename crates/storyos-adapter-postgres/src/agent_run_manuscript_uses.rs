@@ -59,6 +59,8 @@ pub(crate) async fn load_plan(
 
 /// One stored ToolCall of a Run, for a read of the Tool uses of the Run.
 pub(crate) struct StoredCall {
+    /// The RunStep of the call.
+    pub(crate) decision_position: u64,
     pub(crate) tool_spec_revision: String,
     pub(crate) state: ToolCallState,
     pub(crate) arguments: serde_json::Value,
@@ -75,7 +77,8 @@ pub(crate) async fn stored_calls(
 ) -> Result<Vec<StoredCall>, CreateAgentRunError> {
     let rows = client
         .query(
-            "SELECT tool_spec_revision, state, arguments::text, result_text
+            "SELECT tool_spec_revision, state, arguments::text, result_text,
+                    decision_position::text
                FROM storyos.tool_calls
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid AND tool_spec_revision = ANY($4::text[])
@@ -97,6 +100,8 @@ pub(crate) async fn stored_calls(
             )))
         })?;
         stored.push(StoredCall {
+            decision_position: (row.get::<_, &str>(/*idx*/ 4).parse())
+                .map_err(agent_run_parse_error)?,
             tool_spec_revision: row.get(/*idx*/ 0),
             state,
             arguments: serde_json::from_str(row.get(/*idx*/ 2)).map_err(agent_run_parse_error)?,

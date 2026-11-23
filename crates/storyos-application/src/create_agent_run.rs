@@ -102,6 +102,9 @@ pub struct AgentRunRecord {
     /// The plan of the Run: the steps of its newest settled `update_plan` call (ADR 0103 section
     /// 2). Only the Run read has it, and a Run with no settled call has none.
     pub plan: Option<Vec<storyos_core::PlanStep>>,
+    /// Each Subrun Request of the Run, in the order of its calls (ADR 0103 section 3A). Only the
+    /// Run read has it, and a Run with no Subrun Request has none.
+    pub subruns: Option<Vec<SubrunEntry>>,
     pub model: Option<AgentRunModelInspect>,
     /// Each compaction record of the Run, in RunStep order (ADR 0093).
     pub compactions: Vec<ActiveCompactionInspect>,
@@ -427,6 +430,12 @@ pub trait AgentRunReadStore: Sync {
         run_id: &str,
         selection: &AgentRunReadSelection,
     ) -> impl Future<Output = Result<Option<AgentRunRecord>, CreateAgentRunError>> + Send;
+
+    fn read_subrun(
+        &self,
+        scope: &ProjectScope,
+        subrun_id: &str,
+    ) -> impl Future<Output = Result<Option<SubrunRecord>, CreateAgentRunError>> + Send;
 }
 
 pub async fn inspect_agent_run(
@@ -436,4 +445,35 @@ pub async fn inspect_agent_run(
     selection: &AgentRunReadSelection,
 ) -> Result<Option<AgentRunRecord>, CreateAgentRunError> {
     store.read_agent_run(scope, run_id, selection).await
+}
+
+/// One Subrun Request of a Run: the Subrun, the title of its call, and its state.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SubrunEntry {
+    pub subrun_id: String,
+    pub title: String,
+    pub state: storyos_core::SubrunState,
+}
+
+/// The record of one Subrun (ADR 0103 section 3A). `step_count` is the count of its RunSteps that
+/// have a Model Attempt with a settled response, and `answer` is its final answer, only for the
+/// state `completed`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SubrunRecord {
+    pub title: String,
+    pub brief: String,
+    pub state: storyos_core::SubrunState,
+    pub step_count: u32,
+    pub steps: Vec<storyos_core::SubrunStep>,
+    pub answer: Option<String>,
+}
+
+/// The record of the Subrun `subrun_id` of a Run of the author of the Project, or `None` for
+/// each other identity.
+pub async fn inspect_subrun(
+    store: &impl AgentRunReadStore,
+    scope: &ProjectScope,
+    subrun_id: &str,
+) -> Result<Option<SubrunRecord>, CreateAgentRunError> {
+    store.read_subrun(scope, subrun_id).await
 }

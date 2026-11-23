@@ -2467,6 +2467,40 @@
         }
       ]
     },
+    "SubrunEntryInspect": {
+      "additionalProperties": false,
+      "description": "One Subrun Request of a Run, in the order of the `start_subrun` calls of the Run.",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/SubrunStateInspect"
+        },
+        "subrun_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "subrun_id",
+        "title",
+        "state"
+      ],
+      "type": "object"
+    },
+    "SubrunStateInspect": {
+      "description": "The state of a Subrun. `working`: the Subrun did not end, also while its parent Run is\npaused. `completed`: the Subrun ended `completed` with a final answer. `no_result`: each other\nend that is not a cancellation. `stopped`: the Subrun is `cancelled`.",
+      "enum": [
+        "working",
+        "completed",
+        "no_result",
+        "stopped"
+      ],
+      "type": "string"
+    },
     "TokenCountingProfileInspect": {
       "additionalProperties": false,
       "properties": {
@@ -2697,6 +2731,17 @@
         "$ref": "#/$defs/AgentRunSteeringInspect"
       },
       "type": "array"
+    },
+    "subruns": {
+      "items": {
+        "$ref": "#/$defs/SubrunEntryInspect"
+      },
+      "maxItems": 4,
+      "minItems": 1,
+      "type": [
+        "array",
+        "null"
+      ]
     },
     "unknown_create_successor": {
       "$ref": "#/$defs/OptionalUnknownCreateSuccessorInspect"

@@ -43,6 +43,7 @@ mod release1_selection_reference;
 mod release1_set_current_chapter;
 mod release1_skill_use;
 mod release1_snapshot;
+mod release1_subrun;
 mod release1_takeover;
 mod release1_undo_latest_author_action;
 mod release1_update_chapter;
@@ -291,6 +292,10 @@ pub use release1_snapshot::{
     ACTIVITY_STREAM_METHOD, ACTIVITY_STREAM_PATH, CanonicalSnapshotMaps, GET_SNAPSHOT_METHOD,
     GET_SNAPSHOT_PATH, GET_SNAPSHOT_RESPONSE_SCHEMA_ID, GetSnapshotResponse, SnapshotDescriptor,
     SnapshotKind,
+};
+pub use release1_subrun::{
+    GET_SUBRUN_METHOD, GET_SUBRUN_PATH, GET_SUBRUN_RESPONSE_SCHEMA_ID, GetSubrunResponse,
+    SubrunEntryInspect, SubrunStateInspect, SubrunStepInspect,
 };
 pub use release1_takeover::{
     TAKE_OVER_PROJECT_WRITER_METHOD, TAKE_OVER_PROJECT_WRITER_PATH,

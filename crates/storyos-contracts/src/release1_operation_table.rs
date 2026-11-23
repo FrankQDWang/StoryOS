@@ -43,6 +43,8 @@ mod run_control_rows;
 mod skill_rows;
 #[path = "release1_operation_rows_stream.rs"]
 mod stream_rows;
+#[path = "release1_operation_rows_subrun.rs"]
+mod subrun_rows;
 #[path = "release1_operation_rows_volume.rs"]
 mod volume_rows;
 
@@ -361,6 +363,7 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &author_edit_rows::UNDO_LATEST_AUTHOR_ACTION_ROW,
     &agent_run_rows::CREATE_AGENT_RUN_ROW,
     &agent_run_rows::GET_AGENT_RUN_ROW,
+    &subrun_rows::GET_SUBRUN_ROW,
     &conversation_rows::LIST_PROJECT_CONVERSATIONS_ROW,
     &conversation_rows::GET_PROJECT_CONVERSATION_ROW,
     &run_control_rows::STEER_AGENT_RUN_ROW,

@@ -62,6 +62,7 @@ mod skill_directory;
 mod skill_selections;
 mod snapshot;
 mod steer_agent_run;
+mod subrun;
 mod takeover;
 mod undo_latest_author_action;
 mod update_chapter;
@@ -124,6 +125,7 @@ use research_source::{get_research_artifact, get_research_source, list_research_
 use set_current_chapter::set_current_chapter;
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
 use steer_agent_run::steer_agent_run;
+use subrun::get_subrun;
 use takeover::take_over_project_writer;
 use undo_latest_author_action::undo_latest_author_action;
 use update_chapter::update_chapter;
@@ -393,6 +395,10 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
                 method_filter(contracts::GET_AGENT_RUN_METHOD),
                 get_agent_run,
             ),
+        )
+        .route(
+            contracts::GET_SUBRUN_PATH,
+            routing::on(method_filter(contracts::GET_SUBRUN_METHOD), get_subrun),
         )
         .route(
             contracts::LIST_PROJECT_CONVERSATIONS_PATH,

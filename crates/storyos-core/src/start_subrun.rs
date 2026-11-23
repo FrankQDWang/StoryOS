@@ -161,14 +161,20 @@ pub fn subrun_result(end: SubrunEnd<'_>) -> Option<ToolResultText> {
     if subrun_works(end.status) {
         return None;
     }
-    let answer = (end.final_answer)
-        .filter(|text| !text.is_empty() && text.len() <= crate::TOOL_RESULT_TEXT_MAX_BYTES);
-    let text = match (end.status, answer) {
-        (AgentRunStatus::Completed, Some(answer)) => answer,
-        (AgentRunStatus::Refused, _) if end.too_long => SUBRUN_TOO_LONG,
-        _ => SUBRUN_NO_RESULT,
+    let text = match subrun_answer(end) {
+        Some(answer) => answer,
+        None if end.status == AgentRunStatus::Refused && end.too_long => SUBRUN_TOO_LONG,
+        None => SUBRUN_NO_RESULT,
     };
     Some(crate::host_tool_result(text))
+}
+
+/// The final answer text of a Subrun at `end` that the call of its parent gets: the text of a
+/// completed Subrun when it is not empty and the ToolCall record can hold it.
+pub fn subrun_answer(end: SubrunEnd<'_>) -> Option<&str> {
+    (end.status == AgentRunStatus::Completed)
+        .then_some(end.final_answer?)
+        .filter(|text| !text.is_empty() && text.len() <= crate::TOOL_RESULT_TEXT_MAX_BYTES)
 }
 
 #[cfg(test)]

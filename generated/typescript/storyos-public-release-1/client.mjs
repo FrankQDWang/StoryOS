@@ -419,6 +419,12 @@ export async function getAgentRun({ projectId, runId, modelAttemptId, ...options
   return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}${query}` });
 }
 
+export async function getSubrun({ projectId, subrunId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getSubrun requires projectId");
+  if (typeof subrunId !== "string" || subrunId.length === 0) throw new TypeError("getSubrun requires subrunId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/subruns/${encodeURIComponent(subrunId)}` });
+}
+
 export async function listProjectConversations({ projectId, ...options } = {}) {
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("listProjectConversations requires projectId");
   return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/conversations` });

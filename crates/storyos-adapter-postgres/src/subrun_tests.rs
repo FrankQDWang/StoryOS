@@ -707,7 +707,7 @@ async fn subrun_states(admin: &Client, run_id: &str) -> Value {
 /// A parent Run of `lead` on the Agent Plan Registration with a scripted model. The model calls
 /// `start_subrun`, serves `subrun` to the Subrun, and then ends the parent with `finish` and its
 /// answer. Gives the scope, the Run, and the request lines that the model served.
-async fn plan_parent(
+pub(super) async fn plan_parent(
     store: &PostgresProjectReader,
     admin: &Client,
     lead: &str,

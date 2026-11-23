@@ -64,6 +64,7 @@ mod search_manuscript;
 mod search_memory;
 mod submit_research;
 mod subrun;
+mod subrun_read;
 mod tool_call;
 mod tool_call_recovery;
 mod tool_dispatch;
@@ -415,7 +416,7 @@ pub use skill_use::{SkillUse, StoredSkillLoad, skill_uses};
 pub use start_subrun::{
     START_SUBRUN_DESCRIPTION, START_SUBRUN_TOOL_SPEC, SUBRUN_BRIEF_MAX_CHARS, SUBRUN_NO_RESULT,
     SUBRUN_REQUESTS_MAX, SUBRUN_TITLE_MAX_CHARS, SUBRUN_TOO_LONG, SubrunEnd, SubrunRefusal,
-    refused_subrun_call, subrun_refusal, subrun_result, subrun_works,
+    refused_subrun_call, subrun_answer, subrun_refusal, subrun_result, subrun_works,
 };
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
@@ -424,6 +425,7 @@ pub use submit_research::{
     RESEARCH_RECORDED_RESULT, SUBMIT_RESEARCH_TOOL_SPEC, SubmitResearchRefusal,
 };
 pub use subrun::{SubrunAssembly, assemble_subrun_context, next_subrun_context};
+pub use subrun_read::{SubrunState, SubrunStep, subrun_state, subrun_steps};
 pub use take_over_project_writer::{
     CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,
     TakeOverProjectWriterResult, take_over_project_writer,

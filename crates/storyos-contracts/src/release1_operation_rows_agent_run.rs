@@ -39,6 +39,7 @@ use crate::release1_selection_reference::{
     SelectionCoordinateProfile, SelectionPoint, SelectionReference, SelectionReferenceInspect,
 };
 use crate::release1_skill_use::SkillUseInspect;
+use crate::release1_subrun::{SubrunEntryInspect, SubrunStateInspect};
 
 pub(super) const CREATE_AGENT_RUN_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::command(
@@ -188,6 +189,8 @@ pub(super) const GET_AGENT_RUN_ROW: OperationRow = OperationRow {
         ManuscriptUseInspect::decl,
         PlanStepInspect::decl,
         PlanStepStatusInspect::decl,
+        SubrunEntryInspect::decl,
+        SubrunStateInspect::decl,
         ContinuationInputMappingInspect::decl,
         ContinuationAdmissionInspect::decl,
         OptionalModelAttemptInspect::decl,
@@ -531,6 +534,17 @@ const GET_AGENT_RUN_RESPONSE: &[Patch] = &[
     ),
     Patch(Edit::MinItems(1), &["/properties/plan"]),
     Patch(Edit::MaxItems(12), &["/properties/plan"]),
+    Patch(Edit::MinItems(1), &["/properties/subruns"]),
+    Patch(Edit::MaxItems(4), &["/properties/subruns"]),
+    Patch(UUID, &["/$defs/SubrunEntryInspect/properties/subrun_id"]),
+    Patch(
+        Edit::MinLength(1),
+        &["/$defs/SubrunEntryInspect/properties/title"],
+    ),
+    Patch(
+        Edit::MaxLength(40),
+        &["/$defs/SubrunEntryInspect/properties/title"],
+    ),
     Patch(
         Edit::MinLength(1),
         &["/$defs/PlanStepInspect/properties/text"],

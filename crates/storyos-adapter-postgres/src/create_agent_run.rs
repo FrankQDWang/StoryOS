@@ -4,7 +4,7 @@ use storyos_application::{
     AgentRunReadStore, AgentRunRecord, ConversationSelection, CreateAgentRunApplied,
     CreateAgentRunCommandError, CreateAgentRunError, CreateAgentRunInput, CreateAgentRunSettlement,
     ProjectAssistanceRecord, ProjectCommandChallengeError, ProjectCommandEnvelope,
-    ProjectCommandError, ProjectScope, RefusableCommandError,
+    ProjectCommandError, ProjectScope, RefusableCommandError, SubrunRecord,
 };
 use storyos_core::{
     AssistanceAdmission, AssistanceAvailability, ChapterAdmission, ConversationAdmission,
@@ -51,6 +51,28 @@ impl AgentRunReadStore for PostgresProjectReader {
         run_id: &str,
         selection: &storyos_application::AgentRunReadSelection,
     ) -> Result<Option<AgentRunRecord>, CreateAgentRunError> {
+        let client = self.begin_agent_run_read(scope).await?;
+        let result = read::load_agent_run(&client, scope, run_id, selection).await;
+        end_agent_run_read(&client, result).await
+    }
+
+    async fn read_subrun(
+        &self,
+        scope: &ProjectScope,
+        subrun_id: &str,
+    ) -> Result<Option<SubrunRecord>, CreateAgentRunError> {
+        let client = self.begin_agent_run_read(scope).await?;
+        let result = crate::subrun_read::read(&client, scope, subrun_id).await;
+        end_agent_run_read(&client, result).await
+    }
+}
+
+impl PostgresProjectReader {
+    /// A connection in a read-only transaction in the scope of the Project.
+    async fn begin_agent_run_read(
+        &self,
+        scope: &ProjectScope,
+    ) -> Result<PooledClient, CreateAgentRunError> {
         let client = self
             .connect_challenge()
             .await
@@ -59,24 +81,30 @@ impl AgentRunReadStore for PostgresProjectReader {
             .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
             .await
             .map_err(agent_run_database_error)?;
-        let result = async {
-            set_challenge_scope_on_client(&client, scope)
-                .await
-                .map_err(agent_run_challenge_error)?;
-            read::load_agent_run(&client, scope, run_id, selection).await
+        if let Err(error) = set_challenge_scope_on_client(&client, scope).await {
+            let _rollback = client.batch_execute("ROLLBACK").await;
+            return Err(agent_run_challenge_error(error));
         }
-        .await;
-        match &result {
-            Ok(_) => client
-                .batch_execute("COMMIT")
-                .await
-                .map_err(agent_run_database_error)?,
-            Err(_) => {
-                let _rollback = client.batch_execute("ROLLBACK").await;
-            }
-        }
-        result
+        Ok(client)
     }
+}
+
+/// Ends the read transaction of `client`: it commits after a read, and it rolls back after an
+/// error.
+async fn end_agent_run_read<T>(
+    client: &PooledClient,
+    result: Result<T, CreateAgentRunError>,
+) -> Result<T, CreateAgentRunError> {
+    match &result {
+        Ok(_) => client
+            .batch_execute("COMMIT")
+            .await
+            .map_err(agent_run_database_error)?,
+        Err(_) => {
+            let _rollback = client.batch_execute("ROLLBACK").await;
+        }
+    }
+    result
 }
 
 impl ProjectCommand for CreateAgentRunInput {
@@ -449,11 +477,11 @@ fn agent_run_challenge_error(error: ProjectCommandChallengeError) -> CreateAgent
     CreateAgentRunError::Unavailable(Box::new(error))
 }
 
-pub(super) fn agent_run_database_error(error: tokio_postgres::Error) -> CreateAgentRunError {
+pub(crate) fn agent_run_database_error(error: tokio_postgres::Error) -> CreateAgentRunError {
     CreateAgentRunError::Unavailable(Box::new(error))
 }
 
-pub(super) fn agent_run_parse_error(
+pub(crate) fn agent_run_parse_error(
     error: impl std::error::Error + Send + Sync + 'static,
 ) -> CreateAgentRunError {
     CreateAgentRunError::Unavailable(Box::new(error))

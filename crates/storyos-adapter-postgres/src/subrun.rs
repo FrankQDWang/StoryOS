@@ -13,6 +13,39 @@ use uuid::Uuid;
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
 use crate::agent_run_work::complete_unavailable;
 
+/// The columns of the end of the Subrun `subrun`, for `subrun_end`: its status, whether its
+/// request was too long, and its final answer text.
+macro_rules! subrun_end_columns {
+    () => {
+        "subrun.status,
+         COALESCE(subrun.status = 'refused'
+           AND subrun.settlement->>'capability' = 'conversation_too_long', false),
+         (SELECT attempt.payload #>> '{decision,text}'
+            FROM storyos.model_attempts AS attempt
+           WHERE (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
+                 (subrun.owner_user_id, subrun.project_id, subrun.run_id)
+             AND attempt.attempt_role IN ('decision', 'successor')
+             AND attempt.decision_position = subrun.active_decision_position
+             AND attempt.payload #>> '{decision,kind}' = 'advisory'
+             AND attempt.payload #> '{decision,selected}' = 'true'::jsonb
+           LIMIT 1)"
+    };
+}
+pub(crate) use subrun_end_columns;
+
+/// The end of a Subrun from the `subrun_end_columns` of `row` from the column `first`, or `None`
+/// when its status is damaged.
+pub(crate) fn subrun_end(
+    row: &tokio_postgres::Row,
+    first: usize,
+) -> Option<storyos_core::SubrunEnd<'_>> {
+    Some(storyos_core::SubrunEnd {
+        status: AgentRunStatus::parse(row.get(first))?,
+        too_long: row.get(first + 1),
+        final_answer: row.get(first + 2),
+    })
+}
+
 /// The work of the pending `start_subrun` call `row` of the Run of `claim`, in the transaction
 /// with the fence of that Run (ADR 0103 section 3A). A call with a Subrun Request continues its
 /// Subrun while the Subrun works, and it settles with the result of the Subrun after the Subrun
@@ -31,25 +64,17 @@ pub(crate) async fn begin(
     let scope = &claim.project_scope;
     let subrun = client
         .query_opt(
-            "SELECT subrun.run_id::text, subrun.status,
-                    COALESCE(subrun.status = 'refused'
-                      AND subrun.settlement->>'capability' = 'conversation_too_long', false),
-                    (SELECT attempt.payload #>> '{decision,text}'
-                       FROM storyos.model_attempts AS attempt
-                      WHERE (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
-                            (subrun.owner_user_id, subrun.project_id, subrun.run_id)
-                        AND attempt.attempt_role IN ('decision', 'successor')
-                        AND attempt.decision_position = subrun.active_decision_position
-                        AND attempt.payload #>> '{decision,kind}' = 'advisory'
-                        AND attempt.payload #> '{decision,selected}' = 'true'::jsonb
-                      LIMIT 1)
-               FROM storyos.subrun_requests AS request
+            concat!(
+                "SELECT subrun.run_id::text, ",
+                subrun_end_columns!(),
+                " FROM storyos.subrun_requests AS request
                JOIN storyos.agent_runs AS subrun
                  ON (subrun.owner_user_id, subrun.project_id, subrun.run_id) =
                     (request.owner_user_id, request.project_id, request.subrun_run_id)
               WHERE request.owner_user_id = $1::text::uuid
                 AND request.project_id = $2::text::uuid
-                AND request.parent_tool_call_id = $3::text::uuid",
+                AND request.parent_tool_call_id = $3::text::uuid"
+            ),
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -59,13 +84,8 @@ pub(crate) async fn begin(
         .await
         .map_err(complete_unavailable)?;
     if let Some(subrun) = subrun {
-        let status = AgentRunStatus::parse(subrun.get(/*idx*/ 1))
-            .ok_or_else(|| damaged("The status of the Subrun is damaged"))?;
-        let end = storyos_core::SubrunEnd {
-            status,
-            final_answer: subrun.get(/*idx*/ 3),
-            too_long: subrun.get(/*idx*/ 2),
-        };
+        let end =
+            subrun_end(&subrun, 1).ok_or_else(|| damaged("The status of the Subrun is damaged"))?;
         let Some(result) = storyos_core::subrun_result(end) else {
             return Ok(Some(SubrunWork {
                 subrun_run_id: subrun.get(/*idx*/ 0),
@@ -303,3 +323,7 @@ mod tests;
 #[cfg(test)]
 #[path = "subrun_control_tests.rs"]
 mod control_tests;
+
+#[cfg(test)]
+#[path = "subrun_read_tests.rs"]
+mod read_tests;

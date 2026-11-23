@@ -1,0 +1,232 @@
+{
+  "$defs": {
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "SubrunStateInspect": {
+      "description": "The state of a Subrun. `working`: the Subrun did not end, also while its parent Run is\npaused. `completed`: the Subrun ended `completed` with a final answer. `no_result`: each other\nend that is not a cancellation. `stopped`: the Subrun is `cancelled`.",
+      "enum": [
+        "working",
+        "completed",
+        "no_result",
+        "stopped"
+      ],
+      "type": "string"
+    },
+    "SubrunStepInspect": {
+      "description": "One entry of the RunSteps of a Subrun. No entry has a Chapter text, a passage text, or a\nMemory Entry text.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "A text that the Subrun wrote in a response beside its function calls.",
+          "properties": {
+            "kind": {
+              "const": "text",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A settled `read_chapter` call. The title is the title at the time of the read.",
+          "properties": {
+            "chapter_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "chapter_read",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "chapter_id",
+            "title"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A settled `search_manuscript` call and the count of the matches of its result.",
+          "properties": {
+            "kind": {
+              "const": "keyword_search",
+              "type": "string"
+            },
+            "matches": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "query",
+            "matches"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A settled `hybrid_search_manuscript` call and the count of the passages of its result.",
+          "properties": {
+            "kind": {
+              "const": "hybrid_search",
+              "type": "string"
+            },
+            "passages": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "question": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "question",
+            "passages"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A settled `read_memory_entry` call. The title is the title at the time of the read.",
+          "properties": {
+            "kind": {
+              "const": "memory_read",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "title"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A settled `search_memory` call and the count of the entries of its result.",
+          "properties": {
+            "entries": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "memory_search",
+              "type": "string"
+            },
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "query",
+            "entries"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$id": "storyos.query.subrun.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The record of one Subrun. `step_count` is the count of its RunSteps that have a Model Attempt\nwith a settled response. `answer` is the final answer, only for the state `completed`.",
+  "properties": {
+    "answer": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "brief": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "schema_id": {
+      "const": "storyos.query.subrun.response.v1",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/SubrunStateInspect"
+    },
+    "step_count": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/SubrunStepInspect"
+      },
+      "type": "array"
+    },
+    "subrun_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 40,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "subrun_id",
+    "title",
+    "brief",
+    "state",
+    "step_count",
+    "steps"
+  ],
+  "title": "StoryOS Subrun Response",
+  "type": "object"
+}

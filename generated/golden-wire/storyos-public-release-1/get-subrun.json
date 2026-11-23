@@ -1,0 +1,25 @@
+{
+  "answer": "第一章有灯。",
+  "brief": "读第一章，说出灯在哪里。",
+  "correlation_id": "018f0000-0000-7001-8000-000000000e01",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "schema_id": "storyos.query.subrun.response.v1",
+  "state": "completed",
+  "step_count": 2,
+  "steps": [
+    {
+      "kind": "text",
+      "text": "先读第一章。"
+    },
+    {
+      "chapter_id": "018f0000-0000-7001-8000-000000000301",
+      "kind": "chapter_read",
+      "title": "渡口"
+    }
+  ],
+  "subrun_id": "018f0000-0000-7001-8000-000000000e02",
+  "title": "读第一章"
+}

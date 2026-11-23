@@ -123,8 +123,8 @@ pub use create_agent_run::{
     CreateAgentRunApplied, CreateAgentRunCommandError, CreateAgentRunError, CreateAgentRunInput,
     CreateAgentRunSettlement, EvidenceAvailability, OriginalResultRetrievalDisposition,
     OriginalResultRetrievalInspect, ReferenceRecoveryDisposition, ReferenceRecoveryInspect,
-    UnknownCreateSuccessorDisposition, UnknownCreateSuccessorInspect, WorkingTargetAvailability,
-    inspect_agent_run, wire_agent_run_status,
+    SubrunEntry, SubrunRecord, UnknownCreateSuccessorDisposition, UnknownCreateSuccessorInspect,
+    WorkingTargetAvailability, inspect_agent_run, inspect_subrun, wire_agent_run_status,
 };
 pub use create_project::{
     CreateProjectCommand, CreateProjectError, CreateProjectSettlement, CreateProjectStore,
