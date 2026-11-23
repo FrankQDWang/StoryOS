@@ -29,27 +29,27 @@ An AgentRun of a background kind. It has no Project Conversation, no author mess
 _Avoid_: Proactive Trigger, hidden Run of the author
 
 **Proactive Trigger**:
-An author-enabled, versioned project rule that maps a schedule or exact project event to a bounded AgentRun grant template and admission policy. It is neither a running Agent nor a source of authority, and disabling it prevents only future occurrences.
+Deferred on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md); no released Stage implements it. An author-enabled, versioned project rule that maps a schedule or exact project event to a bounded AgentRun grant template and admission policy. It is neither a running Agent nor a source of authority, and disabling it prevents only future occurrences.
 _Avoid_: Cron process, background Agent, implicit permission, user-triggered Run
 
 **Trigger Occurrence**:
-An immutable, idempotently identified fact that one exact Proactive Trigger Revision matched one scheduled time or source event. StoryOS may create at most one root AgentRun for an Occurrence, so duplicate delivery or recovery scanning never duplicates execution.
+Deferred on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md); no released Stage implements it. An immutable, idempotently identified fact that one exact Proactive Trigger Revision matched one scheduled time or source event. StoryOS may create at most one root AgentRun for an Occurrence, so duplicate delivery or recovery scanning never duplicates execution.
 _Avoid_: AgentRun, timer process, repeated event delivery
 
 **Trigger Misfire Policy**:
-The versioned rule for handling scheduled Trigger Occurrences that became due while StoryOS could not admit them: Skip, Run Latest Once, or Catch Up Bounded. It never implicitly replays every missed occurrence, and any catch-up bound remains subject to the Trigger's current grant, budget, frequency, and concurrency policy.
+Deferred on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md); no released Stage implements it. The versioned rule for handling scheduled Trigger Occurrences that became due while StoryOS could not admit them: Skip, Run Latest Once, or Catch Up Bounded. It never implicitly replays every missed occurrence, and any catch-up bound remains subject to the Trigger's current grant, budget, frequency, and concurrency policy.
 _Avoid_: Retry policy, event deduplication, unbounded backlog replay
 
 **Trigger Batch**:
-An immutable, provenance-preserving grouping of Trigger Occurrences from one Trigger Revision and semantic coalescing key for admission to at most one AgentRun. Every source Occurrence remains addressable; batching, supersession, and default single-flight execution prevent event storms without erasing what happened.
+Deferred on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md); no released Stage implements it. An immutable, provenance-preserving grouping of Trigger Occurrences from one Trigger Revision and semantic coalescing key for admission to at most one AgentRun. Every source Occurrence remains addressable; batching, supersession, and default single-flight execution prevent event storms without erasing what happened.
 _Avoid_: Debounced event deletion, AgentRun, mutable pending list
 
 **Trigger Admission Decision**:
-A persisted, deterministic decision that evaluates one Trigger Occurrence or Trigger Batch and its exact Trigger Revision against current project policy, enablement, grant-template validity, budget and concurrency capacity, registered contract and credential availability, and project state. The Occurrence remains durable whether admission is admitted, boundedly deferred, coalesced, skipped, or denied; only an admitted decision freezes a Run Grant snapshot and may create at most one root AgentRun. Admission neither calls a model nor requests Approval to expand authority, and changed or insufficient authority fails closed with an inspectable reason.
+Deferred on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md); no released Stage implements it. A persisted, deterministic decision that evaluates one Trigger Occurrence or Trigger Batch and its exact Trigger Revision against current project policy, enablement, grant-template validity, budget and concurrency capacity, registered contract and credential availability, and project state. The Occurrence remains durable whether admission is admitted, boundedly deferred, coalesced, skipped, or denied; only an admitted decision freezes a Run Grant snapshot and may create at most one root AgentRun. Admission neither calls a model nor requests Approval to expand authority, and changed or insufficient authority fails closed with an inspectable reason.
 _Avoid_: Trigger Occurrence, model decision, implicit authorization, Approval request
 
 **Approval Escalation Policy**:
-The versioned policy on a Proactive Trigger that determines whether an admitted AgentRun may interrupt the author with a durable Approval Wait for a precisely named authority-expansion class. The default is No Escalation: the Run must replan within its frozen Grant, finalize a partial or blocked result, or terminate. An opted-in request grants nothing until explicit author Approval, remains bounded by project policy, cannot release a Safety Hold, and may not repeatedly prompt for the same rejected or expired need.
+Deferred on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md); no released Stage implements it. The versioned policy on a Proactive Trigger that determines whether an admitted AgentRun may interrupt the author with a durable Approval Wait for a precisely named authority-expansion class. The default is No Escalation: the Run must replan within its frozen Grant, finalize a partial or blocked result, or terminate. An opted-in request grants nothing until explicit author Approval, remains bounded by project policy, cannot release a Safety Hold, and may not repeatedly prompt for the same rejected or expired need.
 _Avoid_: Trigger Admission, automatic Approval, unbounded approval prompt, Safety Hold recovery
 
 **Run Lifecycle**:
@@ -97,7 +97,7 @@ An immutable, ordered author instruction submitted to a nonterminal AgentRun for
 _Avoid_: Live prompt mutation, Run Pause, generic approval response
 
 **Subrun Interrupt**:
-An idempotent control command targeting the exact current Execution Attempt on one Subrun Run Lane, requesting cooperative interruption without creating a Hold, cancelling the Subrun, changing its lifecycle, or propagating to descendants. The Attempt and any uncertain Tool effects remain durable evidence, and subsequent work requires an explicit Recovery Decision.
+Deferred on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md); no released Stage implements it. An idempotent control command targeting the exact current Execution Attempt on one Subrun Run Lane, requesting cooperative interruption without creating a Hold, cancelling the Subrun, changing its lifecycle, or propagating to descendants. The Attempt and any uncertain Tool effects remain durable evidence, and subsequent work requires an explicit Recovery Decision.
 _Avoid_: Run Pause, Run Cancellation, process kill, Subrun Follow-up
 
 **Run Pause**:
@@ -109,7 +109,7 @@ An irreversible intent to stop an AgentRun that immediately prevents new work an
 _Avoid_: Run Pause, process kill, rollback
 
 **Run Finalization Gate**:
-The automatic, deterministic, idempotent host check that turns a persisted Agent Finalize Intent into one terminal Run Outcome only after all in-flight operations, direct child Subruns, Required Joins, Subrun Result Dispositions, Waits, Holds, reservations, effect uncertainties, final Artifacts, Proposals, provenance, and unfinished-work dispositions are durably settled. It requires no routine author confirmation, cannot be bypassed by a model completion claim, and can resume safely after a crash without duplicating output or terminal events.
+Deferred in part on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md): no Subrun Result Disposition and no Advisory join exist. The automatic, deterministic, idempotent host check that turns a persisted Agent Finalize Intent into one terminal Run Outcome only after all in-flight operations, direct child Subruns, Required Joins, Subrun Result Dispositions, Waits, Holds, reservations, effect uncertainties, final Artifacts, Proposals, provenance, and unfinished-work dispositions are durably settled. It requires no routine author confirmation, cannot be bypassed by a model completion claim, and can resume safely after a crash without duplicating output or terminal events.
 _Avoid_: Author confirmation dialog, Approval, model-declared completion, conversation-turn end
 
 **Run Outcome**:
@@ -133,7 +133,7 @@ A durable atomic scheduler allocation permitting one exact RunStep or Execution 
 _Avoid_: Subrun count, Run Lease, Capability Grant, resident session
 
 **Step Snapshot**:
-The immutable, attributable view of the exact plan revision, Skill Selection Set and SkillPackage Snapshots, context sources, contract versions, capabilities, budget remainder, guardrail counters, and project revisions used for one RunStep. It preserves decision evidence but grants no lasting authority, so effects still require live revalidation before execution.
+Deferred in part on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md): no Step Snapshot binds a plan revision. The immutable, attributable view of the exact plan revision, Skill Selection Set and SkillPackage Snapshots, context sources, contract versions, capabilities, budget remainder, guardrail counters, and project revisions used for one RunStep. It preserves decision evidence but grants no lasting authority, so effects still require live revalidation before execution.
 _Avoid_: Prompt text, checkpoint, authorization token, current project state
 
 **Agent Decision**:
@@ -149,15 +149,15 @@ An immutable, inspectable determination after interruption to resume, retry, rep
 _Avoid_: Automatic replay, checkpoint, hidden recovery heuristic
 
 **RunPlan**:
-The optional first-class Operational Record that organizes the intended work of a nontrivial AgentRun as an immutable chain of RunPlan Revisions. A simple AgentRun may proceed without one, but every RunStep still records its immediate objective and a RunPlan never grants capability, budget, or author authority.
+Deferred in part on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md): the delivered RunPlan of a Run is the chain of its accepted `update_plan` ToolCalls, and it is no record of its own. The optional first-class Operational Record that organizes the intended work of a nontrivial AgentRun as an immutable chain of RunPlan Revisions. A simple AgentRun may proceed without one, but every RunStep still records its immediate objective and a RunPlan never grants capability, budget, or author authority.
 _Avoid_: Mutable checklist, Plan Draft, workflow runtime, authorization
 
 **RunPlan Revision**:
-An immutable snapshot of a RunPlan's goal, PlanSteps, dependencies, and replanning rationale at one point in the AgentRun. Each RunStep binds the exact revision it used, while replanning appends a revision instead of rewriting prior intent.
+Deferred in part on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md): a delivered revision is one accepted `update_plan` call with its list of steps; it has no goal, no dependencies, and no rationale, and no RunStep binds it. An immutable snapshot of a RunPlan's goal, PlanSteps, dependencies, and replanning rationale at one point in the AgentRun. Each RunStep binds the exact revision it used, while replanning appends a revision instead of rewriting prior intent.
 _Avoid_: Current checklist, RunStep, mutable plan state
 
 **PlanStep**:
-A stable semantic work item within RunPlan Revisions, describing an objective and its dependencies rather than an execution attempt. Its identity survives replanning only while that semantic work remains the same; RunSteps and their results record actual execution.
+Deferred on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md); no released Stage implements it. A stable semantic work item within RunPlan Revisions, describing an objective and its dependencies rather than an execution attempt. Its identity survives replanning only while that semantic work remains the same; RunSteps and their results record actual execution.
 _Avoid_: RunStep, ToolCall, checklist row, execution status
 
 **Run Checkpoint**:
