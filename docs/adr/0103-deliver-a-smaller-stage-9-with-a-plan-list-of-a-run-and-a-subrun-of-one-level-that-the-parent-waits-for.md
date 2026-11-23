@@ -49,7 +49,12 @@ The glossary keeps the terms of the Subrun Messages, of the Subrun Mailbox, of t
 - **The end of a Run.** The Host changes no step. When a Run ends with a step that is not `completed`, the panel shows the list as the assistant recorded it.
 - **Not a part of it.** A plan gives no capability, no budget, and no authority (glossary, RunPlan). The limit of 24 RunSteps does not change. Stage 9 delivers no layered timeline, and the Step Snapshot of a RunStep binds no plan revision.
 
-The implementing ticket records the exact texts of the Tool and of the instruction, the mapping revision, and the Registrations.
+[#435](https://github.com/FrankQDWang/StoryOS/issues/435) gives the exact texts and the revisions:
+
+- **The texts of the Tool.** The description is `DESCRIPTION` of `crates/storyos-core/src/update_plan.rs`, and `parameters()` of that file gives the argument. The ToolSpec is `UPDATE_PLAN_TOOL_SPEC` (`storyos.tool.update-plan.v1`).
+- **The results.** An accepted call gets `PLAN_RECORDED`. A refused call gets `PlanRefusal::result_text` of the first rule that applies, in the order of the step count (`plan_step_count`), the step text (`plan_step_text`), and the count of the steps `in_progress` (`plan_in_progress_count`). A call with arguments of another form gets the refusal of the intake that each other Host Tool gets.
+- **The instruction.** The paragraph is `UPDATE_PLAN_INSTRUCTION` of `crates/storyos-adapter-volcengine-responses/src/wire.rs`. A request that declares `update_plan` has it directly after the instructions of the tool loop.
+- **The revisions.** The Host Tool Registration is `018f0000-0000-7001-8000-0000000e0106`. The mapping is `storyos.volcengine-agent-plan.responses.create.v13` (`AGENT_PLAN_RUN_PLAN_MAPPING_REVISION`), and the head Model Registration is `018f0000-0000-7001-8000-00000000fa27` ([ADR 0053](0053-continue-the-agent-plan-conversation-with-the-prior-response.md), amendment of 2026-11-23 for the mapping `v13`).
 
 ### 3. The Subrun
 
