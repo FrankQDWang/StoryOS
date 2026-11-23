@@ -27,13 +27,13 @@ continuation arrive in Stages 3 and 4. Stage 7 adds background Project Memory;
 it does not postpone those earlier foundations or change their identities.
 
 The serial release order is Stage 5 through Stage 7, then Stage 10, then
-Stage 11
+Stage 11, then Stage 9
 ([ADR 0096](../adr/0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md),
-[ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)).
+[ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md),
+[ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md)).
 A stage number is the identity of the stage, and it is not its place in the
-order. Stage 8 and Stage 9 stay on EXECUTION HOLD. ADR 0101 records the order
-that the author agreed for the work after Stage 11, and a later ADR decides
-about Stage 8 and about Stage 9 when that work starts. Each stage starts
+order. Stage 8 stays on EXECUTION HOLD, and a later ADR decides about it
+(ADR 0101 section 1 item 4). Each stage starts
 from the preceding released main. This order is a release gate, not a claim
 that all preceding features are code dependencies. Child tickets name only
 the actual contract, interface, data, or acceptance inputs they need.
@@ -190,28 +190,42 @@ confirm that no Tool effect is repeated and the editor is unchanged.
 | S8-EVD-001 | Production domain views, sandbox and immutable-resource binding, instance lifecycle, negotiation, limits, and revocation evidence. |
 | S8-EVD-002 | Prepared/terminal fallback, safe replay without execution, persisted App action routing, instance-scoped delivery, and editor-regression evidence. |
 
-## 6. Stage 9: Complete Run control and orchestration
+## 6. Stage 9: The plan list of a Run and a Subrun of one level
+
+Stage 9 comes after the release of Stage 11
+(ADR 0101 section 1, [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md)).
+The author decided a smaller Stage 9 on 2026-11-23. It delivers three things:
+the plan list of a Run, a Subrun of one level that its parent Run waits for,
+and the limit of RunSteps that the model knows. ADR 0103 section 1 withdraws
+the other parts of the earlier contract of this stage, and a later ADR is
+necessary for each one. The specification is
+[Deliver Stage 9: The Plan List of a Run and a Subrun of One Level](https://github.com/FrankQDWang/StoryOS/issues/367).
+The Requirements, the author journey, and the evidence rows below replace the
+rows of the earlier contract. Each Requirement keeps its identifier, so that
+the anchors of section 11 stay correct. A withdrawn Requirement delivers
+nothing, and it has no proof obligation.
 
 | ID | Production obligation | Semantic owner |
 | --- | --- | --- |
-| S9-REQ-001 | Support optional RunPlans for nontrivial work, with RunPlan Revisions and PlanSteps as intended work items. Support bounded long work through durable RunSteps, leases, holds, waits, steering, cancellation, and finalization. Keep the layered Run timeline inspectable without displacing normal conversation. | AgentRun owner |
-| S9-REQ-002 | Create hierarchical Subruns with explicit parent, narrowed context/capabilities, budget reservation, independent execution records, and typed results. A Subrun cannot expand its parent's authority or become an orphan runtime. | Subrun and AgentRun owners |
-| S9-REQ-003 | Deliver mailbox messages, follow-up tasks, interrupts, Required or Advisory joins, backpressure, seals, and late results through their exact durable semantics. Recovery preserves parent/child disposition and does not infer success from process exit. | Subrun and retention owners |
-| S9-REQ-004 | Run only explicitly enabled proactive event or schedule work within its recorded scope, grants, budget, and misfire rules. Repeated or late triggers do not create duplicate effects or broaden an author instruction. | AgentRun owner |
-| S9-REQ-005 | Enforce resource and safety holds, budgets, usage classification, and exact settlement across model, Tool, Skill, and Subrun work. Do not replace the accepted guardrail contract with generic retry or escalation. | AgentRun, Tool/MCP, Skill, and Model Gateway owners |
-| S9-REQ-006 | Honor the configured model policy without changing Project Agent identity. Expose supported route or fallback decisions and exact Attempts; an unconfigured destination stays unavailable. No extra Provider purchase, hidden fallback, or credential authority is inferred. | Model Gateway owner |
+| S9-REQ-001 | Give a Run of the author a plan list. The assistant records a list of at most 12 short steps with a Host Tool when it judges that the work needs a plan, and each step has one of three states. A new accepted list replaces the list before it. The Run read gives the newest accepted list, and the panel shows the complete list with the state of each step. A plan waits for no approval and gives no authority. A request with no plan looks as it looked before. RunPlan Revisions, PlanStep records, and the layered Run timeline are withdrawn (ADR 0103 sections 1 and 2). | AgentRun owner |
+| S9-REQ-002 | Let a Run of the author give one reading task to a Subrun of one level and wait for it. The Subrun is an AgentRun of its own kind with its own RunSteps, Model Attempts, ToolCalls, and usage. Its context has its own instruction text, the Project Instruction, the brief, the Chapter list, and, when its parent Run has Memory use, the Memory Index of its parent Run with no Character Intent. It has only reading Tools, it cannot start a Subrun, and its final answer is its only result. It uses the grant of its parent Run. A Run can start at most 4 Subruns, and a Subrun has at most 12 RunSteps. The panel shows one card for each Subrun, and the card opens the record of that Subrun (ADR 0103 sections 3 and 3A). | Subrun and AgentRun owners |
+| S9-REQ-003 | Settle the ToolCall of the parent Run in each case of ADR 0103 section 3A. The final answer of the Subrun is the result. A Subrun that ends with no final answer gives a fixed sentence. A cancellation of the parent Run cancels its Subrun in the same transaction. A pause stops the work of the Subrun. The next claim of the parent Run continues the same Subrun after a pause and after a lost lease. The Host does not infer a result from the end of a process. Mailbox messages, follow-up tasks, the interrupt of one child, Advisory joins, backpressure, seals, and late results are withdrawn (ADR 0103 section 1). | Subrun and retention owners |
+| S9-REQ-004 | Withdrawn by ADR 0103 section 1. Stage 9 delivers no proactive event work and no schedule work. | AgentRun owner |
+| S9-REQ-005 | Tell the model its limits. The instruction text of each decision request gives the limit of RunSteps of its Run, for a Run of the author, a Subrun, and a Memory capture. The decision request of each of the last 4 RunSteps tells how many RunSteps are left. The declaration of a Tool gives the limit of that Tool, and the Host refuses a call above the limit with a sentence that gives the limit. A Subrun has a limit of RunSteps in place of a budget reservation. The budget reservations and the holds of a Subrun are withdrawn (ADR 0103 sections 1 and 5). | AgentRun and Model Gateway owners |
+| S9-REQ-006 | Withdrawn by ADR 0103 section 1 and by the amendment of ADR 0096 section 6. Stage 9 delivers no model policy. | Model Gateway owner |
 
-**Author journey S9-JRN-001.** Start bounded work that requires a Subrun;
-inspect the plan and timeline; send steering; interrupt or cancel a child;
-recover the parent/child result; exercise a budget or safety hold; enable one
-bounded proactive trigger and inspect duplicate/misfire handling; inspect an
-explicit model-policy decision; verify the editor remains independently usable.
+**Author journey S9-JRN-001.** Ask for work with several steps, and see the
+plan list with the state of each step during the work and after it. Ask a
+question that needs the reading of earlier Chapters; see the card of the
+Subrun, open its record with the brief, the steps, and the answer, and get the
+answer of the assistant. Send a simple request, and see no plan list and no
+card. Verify the editor remains independently usable.
 
 | ID | Mandatory evidence |
 | --- | --- |
-| S9-EVD-001 | RunPlan, RunPlan Revision, and PlanStep planning evidence; RunStep, lease, wait/hold, steering, interruption, finalization, and layered-observability evidence. |
-| S9-EVD-002 | Subrun scope, reservation, mailbox, join, seal, late-result, cancellation, and durable recovery evidence. |
-| S9-EVD-003 | Authorized proactive triggers, misfire/deduplication, multidimensional guardrails, explicit model routing, and editor-regression evidence. |
+| S9-EVD-001 | The validation of a plan list, the newest accepted list in the Run read, the list in the panel during the work and after it, and the record of the live check of the plan list. |
+| S9-EVD-002 | The Tools and the context of a Subrun, its own execution records, the settlement of the ToolCall of the parent Run in each case (a final answer, no final answer, a refused call, a cancelled parent, a paused parent, and a lost lease), the two reads, the card and the record in the panel, and the record of the live check of the Subrun. |
+| S9-EVD-003 | The limit of RunSteps and the sentences near the limit in the decision requests of each kind, the refusal sentence of a Tool limit, and editor-regression evidence. |
 
 ## 7. Stage 10: Author voice
 
@@ -388,18 +402,18 @@ proof owner maps these obligations to exact executable evidence.
 | [Give Each Project One Persistent Main Agent](https://github.com/FrankQDWang/StoryOS/issues/5) | Project Agent identity; S3 foundation and S7 continuity. | `S3-REQ-001`; `S7-REQ-001` |
 | [Use Natural Language as the Default Task Entry](https://github.com/FrankQDWang/StoryOS/issues/6) | Discovery-writing entry; S3 onward. | `S3-REQ-002` |
 | [Protect All Authoritative Creative State](https://github.com/FrankQDWang/StoryOS/issues/7) | Authority invariant in all stages; structured truth deferred by ADR 0094. | `REL-002`; `S7-REQ-002` |
-| [Support Controlled Proactive Runs](https://github.com/FrankQDWang/StoryOS/issues/8) | AgentRun; S9. | `S9-REQ-004` |
-| [Expose a Layered Interruptible Run Timeline](https://github.com/FrankQDWang/StoryOS/issues/9) | AgentRun; S3 foundation, S5 activity, S9 complete control. | `S3-REQ-003`; `S5-REQ-005`; `S9-REQ-001` |
-| [Use Adaptive Plan-and-Act Execution](https://github.com/FrankQDWang/StoryOS/issues/10) | AgentRun; S3 foundation and S9 long work. | `S3-REQ-003`; `S9-REQ-001` |
+| [Support Controlled Proactive Runs](https://github.com/FrankQDWang/StoryOS/issues/8) | AgentRun. ADR 0103 section 1 withdrew it from Stage 9; a later ADR is necessary for it. | `S9-REQ-004` |
+| [Expose a Layered Interruptible Run Timeline](https://github.com/FrankQDWang/StoryOS/issues/9) | AgentRun; S3 foundation, S5 activity, and the S9 plan list. ADR 0103 section 1 withdrew the layered timeline. | `S3-REQ-003`; `S5-REQ-005`; `S9-REQ-001` |
+| [Use Adaptive Plan-and-Act Execution](https://github.com/FrankQDWang/StoryOS/issues/10) | AgentRun; S3 foundation and the S9 plan list (ADR 0103 section 2). | `S3-REQ-003`; `S9-REQ-001` |
 | [Enforce Multidimensional Run Guardrails](https://github.com/FrankQDWang/StoryOS/issues/11) | Exact AgentRun guardrails as each execution family enters; S3–S9. | `S3-REQ-003`; `S9-REQ-005` |
 | [Unify Capabilities in a Tool Registry](https://github.com/FrankQDWang/StoryOS/issues/12) | Tool/MCP; S5. Static ToolSpec and dynamic authority remain distinct. | `S5-REQ-001` |
 | [Separate Composable Read Tools from Domain Write Commands](https://github.com/FrankQDWang/StoryOS/issues/13) | Tool/MCP and Core boundaries; S5 onward. | `S5-REQ-001`; `S5-REQ-006` |
-| [Support Hierarchical Ephemeral Subruns](https://github.com/FrankQDWang/StoryOS/issues/14) | Durable Subrun contract; S9. Ephemeral scope is not disposable execution history. | `S9-REQ-002`; `S9-REQ-003` |
+| [Support Hierarchical Ephemeral Subruns](https://github.com/FrankQDWang/StoryOS/issues/14) | Durable Subrun contract; S9 delivers a Subrun of one level that its parent Run waits for (ADR 0103 section 3A). Ephemeral scope is not disposable execution history. | `S9-REQ-002`; `S9-REQ-003` |
 | [Combine Mandatory Context with Dynamic Retrieval](https://github.com/FrankQDWang/StoryOS/issues/15) | Context; S3/S4 foundations and S7 complete retrieval. | `S3-REQ-003`; `S7-REQ-006` |
 | [Forbid Hidden Persistent Agent Memory](https://github.com/FrankQDWang/StoryOS/issues/16) | Memory authority invariant; S7. | `S7-REQ-001`; `S7-REQ-005` |
 | [Standardize Outputs as Typed Artifacts](https://github.com/FrankQDWang/StoryOS/issues/17) | Artifact invariant in every applicable stage. | `REL-002`; `S5-REQ-006`; `S8-REQ-001` |
 | [Persist Every Agent Run by Default](https://github.com/FrankQDWang/StoryOS/issues/18) | AgentRun durability from S3; each later execution family. | `S3-REQ-003`; `S9-REQ-001` |
-| [Decouple Agent Identity from Model Choice](https://github.com/FrankQDWang/StoryOS/issues/19) | Model Gateway; S3/S4 and explicit S9 policy behavior. | `S3-REQ-003`; `S4-REQ-001`; `S9-REQ-006` |
+| [Decouple Agent Identity from Model Choice](https://github.com/FrankQDWang/StoryOS/issues/19) | Model Gateway; S3/S4. ADR 0103 section 1 withdrew the model policy from Stage 9. | `S3-REQ-003`; `S4-REQ-001`; `S9-REQ-006` |
 | [Keep Local Authority and Minimize External Disclosure](https://github.com/FrankQDWang/StoryOS/issues/20) | Scope/Context invariant; S1 authority and every later destination. | `REL-002`; `REL-003`; `S4-REQ-003` |
 | [Package Skills as Versioned Contracts](https://github.com/FrankQDWang/StoryOS/issues/21) | Skill; S6. Standard packages do not require optional extensions. | `S6-REQ-001`; `S6-REQ-004` |
 | [Pin Codex as a Shallow Reference Submodule](https://github.com/FrankQDWang/StoryOS/issues/22) | Historical reference evidence; current AGENTS reference policy governs all stages. | `REL-003`; `REL-007` |
@@ -427,10 +441,10 @@ proof owner maps these obligations to exact executable evidence.
 | [Define the Authoritative-State and Artifact Domain Vocabulary](https://github.com/FrankQDWang/StoryOS/issues/44) | Canonical Artifact/authority owner; all applicable stages. | `REL-002`; `S7-REQ-002` |
 | [Validate Production Proposal Refusal, Conflict, and Recovery UX](https://github.com/FrankQDWang/StoryOS/issues/45) | Retained prototype evidence; S2 workspace and S3 production recovery. | `S2-REQ-009`; `S3-REQ-004`; `S3-REQ-008` |
 | [Specify the Manuscript Revision and Proposal State Machine](https://github.com/FrankQDWang/StoryOS/issues/46) | Canonical Core/Proposal owner; S1–S4 and later creative changes. | `S2-REQ-004`; `S3-REQ-004`; `S3-REQ-008` |
-| [Specify Persistent Agent Run and Orchestration Semantics](https://github.com/FrankQDWang/StoryOS/issues/47) | Canonical AgentRun owner; S3 foundations and S9 complete modes. | `S3-REQ-003`; `S9-REQ-001`; `S9-REQ-005` |
+| [Specify Persistent Agent Run and Orchestration Semantics](https://github.com/FrankQDWang/StoryOS/issues/47) | Canonical AgentRun owner; S3 foundations, and the S9 plan list and limits (ADR 0103). | `S3-REQ-003`; `S9-REQ-001`; `S9-REQ-005` |
 | [Specify ToolSpec, Capability, Approval, and MCP Trust Semantics](https://github.com/FrankQDWang/StoryOS/issues/48) | Canonical Tool/MCP owner, with the Tool Gateway and Tool Approval of ADR 0034 as ADR 0084 narrows it; S5 and later callers. | `S5-REQ-001`; `S5-REQ-002`; `S5-REQ-003`; `S5-REQ-005` |
 | [Specify SkillPackage and Task-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/49) | Canonical Skill owner; S6. | `S6-REQ-001`; `S6-REQ-002`; `S6-REQ-003`; `S6-REQ-004` |
-| [Specify ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50) | Canonical Model Gateway and ADR 0033 owner; S3 fake continuation/compaction, S4 Agent Plan, S5 functions, S9 policy. | `S3-REQ-003`; `S3-REQ-006`; `S4-REQ-001`; `S4-REQ-004`; `S5-REQ-003`; `S9-REQ-006` |
+| [Specify ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50) | Canonical Model Gateway and ADR 0033 owner; S3 fake continuation/compaction, S4 Agent Plan, S5 functions. ADR 0103 section 1 withdrew the model policy from Stage 9. | `S3-REQ-003`; `S3-REQ-006`; `S4-REQ-001`; `S4-REQ-004`; `S5-REQ-003`; `S9-REQ-006` |
 | [Specify Fiction Memory and Research Provenance Semantics](https://github.com/FrankQDWang/StoryOS/issues/51) | Canonical Memory and ADR 0035 owner; S3 conversation defaults, S5 research evidence, S7 background Memory. | `S3-REQ-003`; `S5-REQ-004`; `S7-REQ-002`; `S7-REQ-003`; `S7-REQ-005`; `S7-REQ-006` |
 | [Validate a Transcript-Embedded MCP Apps Host](https://github.com/FrankQDWang/StoryOS/issues/52) | Retained prototype evidence; S8 production Host. | `S8-REQ-002`; `S8-REQ-003`; `S8-REQ-004` |
 | [Specify Transcript and MCP App Lifecycle Semantics](https://github.com/FrankQDWang/StoryOS/issues/53) | Canonical MCP App owner; S8. | `S8-REQ-001`; `S8-REQ-002`; `S8-REQ-003`; `S8-REQ-004` |
@@ -443,7 +457,7 @@ proof owner maps these obligations to exact executable evidence.
 | [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | Proof owner; consume every current release requirement and stage. | `REL-005`; `REL-007`; `HND-006` |
 | [Record the Deferred Eval Observation Boundary](https://github.com/FrankQDWang/StoryOS/issues/61) | Deferred outside MVP; the Eval boundary owner retains only the future observation concept. | None; outside MVP. |
 | [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | Release owner for this complete route and its coverage. | `REL-004`; `REL-007` |
-| [Specify Subrun Control-Plane, Mailbox, and Observability Semantics](https://github.com/FrankQDWang/StoryOS/issues/63) | Canonical Subrun owner; S9. | `S9-REQ-002`; `S9-REQ-003` |
+| [Specify Subrun Control-Plane, Mailbox, and Observability Semantics](https://github.com/FrankQDWang/StoryOS/issues/63) | Canonical Subrun owner; S9 delivers a Subrun of one level (ADR 0103 section 3A). ADR 0103 section 1 withdrew the Mailbox. | `S9-REQ-002`; `S9-REQ-003` |
 | [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | Canonical retention owner; existing invariants and RET-015 through RET-018 cover generated cleanup, active compaction, covered-copy restrictions, and Memory portability in their allocated stages. | `S2-REQ-005`; `S2-REQ-007`; `S3-REQ-006`; `S4-REQ-004`; `S7-REQ-005`; `S7-REQ-007`; `S8-REQ-003`; `S9-REQ-003` |
 | [Research Durable, Inspectable Agent Memory Architecture](https://github.com/FrankQDWang/StoryOS/issues/65) | Retained research evidence; S7 implementation and proof. | `S7-REQ-005`; `S7-REQ-007` |
 | [Research Trustworthy Browser Author-Intent Attestation Boundaries](https://github.com/FrankQDWang/StoryOS/issues/67) | Retained research evidence; Admission/trust invariant from S1. | `REL-002`; `S2-REQ-003`; `S2-REQ-004` |
@@ -483,13 +497,14 @@ unaffected Stage 6/8/9 promises, and audit forward/reverse coverage. Existing
 old bodies do not certify these changes. The current Stage 3 specification
 owns its accepted implementation handoff and pending final release evidence.
 The author released the execution of Stage 4 through Stage 7 and of
-Stage 10, and on 2026-11-22 the execution of Stage 11 (ADR 0101).
-Stage 8 and Stage 9 stay on EXECUTION HOLD until the author
-explicitly releases their execution (ADR 0096). This contract creates no
+Stage 10, on 2026-11-22 the execution of Stage 11 (ADR 0101), and on
+2026-11-23 the execution of the smaller Stage 9 (ADR 0103).
+Stage 8 stays on EXECUTION HOLD until the author
+explicitly releases its execution (ADR 0096). This contract creates no
 implementation ticket or stage release.
 
 The two conversation defaults are recorded in the release baseline. Concrete
 external services, accounts, spending, and destination authorization remain
 explicit prerequisites of the affected real-integration ticket. No Eval
 definition, evaluator, rubric, or API decision blocks MVP planning or delivery.
-Publication and execution for Stage 8 and Stage 9 remain paused.
+Publication and execution for Stage 8 remain paused.
