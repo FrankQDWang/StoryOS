@@ -27,6 +27,7 @@ import { verifyProductionMultiProposal } from "./production-multi-proposal-comma
 import { verifyProductionSelectionReference } from "./production-selection-reference-command.ts";
 import { verifyProductionResearchJourney } from "./production-research-journey-command.ts";
 import { verifyProductionSkillJourney } from "./production-skill-journey-command.ts";
+import { verifyProductionPlanJourney } from "./production-plan-journey-command.ts";
 import { verifyProductionProjectConversations } from "./production-project-conversations-command.ts";
 import { verifyProductionMemorySettings } from "./production-memory-settings-command.ts";
 import { verifyProductionProjectSettings } from "./production-project-settings-command.ts";
@@ -130,6 +131,8 @@ export const storyOSBrowserCommands = {
         await verifyProductionResearchJourney(context.context);
       } else if (request.scenario === "skill_journey") {
         await verifyProductionSkillJourney(context.context);
+      } else if (request.scenario === "plan_journey") {
+        await verifyProductionPlanJourney(context.context);
       } else if (request.scenario === "project_conversations") {
         await verifyProductionProjectConversations(context.context);
       } else if (request.scenario === "project_settings") {
