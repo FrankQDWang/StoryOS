@@ -28,6 +28,7 @@ import { verifyProductionSelectionReference } from "./production-selection-refer
 import { verifyProductionResearchJourney } from "./production-research-journey-command.ts";
 import { verifyProductionSkillJourney } from "./production-skill-journey-command.ts";
 import { verifyProductionPlanJourney } from "./production-plan-journey-command.ts";
+import { verifyProductionSubrunJourney } from "./production-subrun-journey-command.ts";
 import { verifyProductionProjectConversations } from "./production-project-conversations-command.ts";
 import { verifyProductionMemorySettings } from "./production-memory-settings-command.ts";
 import { verifyProductionProjectSettings } from "./production-project-settings-command.ts";
@@ -133,6 +134,8 @@ export const storyOSBrowserCommands = {
         await verifyProductionSkillJourney(context.context);
       } else if (request.scenario === "plan_journey") {
         await verifyProductionPlanJourney(context.context);
+      } else if (request.scenario === "subrun_journey") {
+        await verifyProductionSubrunJourney(context.context);
       } else if (request.scenario === "project_conversations") {
         await verifyProductionProjectConversations(context.context);
       } else if (request.scenario === "project_settings") {
