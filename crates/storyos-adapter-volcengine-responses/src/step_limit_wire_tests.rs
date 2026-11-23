@@ -1,11 +1,12 @@
 use storyos_application::CreateRequest;
 use storyos_core::AgentRunKind;
 
-use crate::skill_wire_tests::{body, closing, first};
+use crate::skill_wire_tests::{body, closing, first, summary};
 use crate::tests::write_memory_paragraph;
 use crate::wire::{
-    READ_TOOL_RESULT_INSTRUCTION, TOOL_LOOP_INSTRUCTIONS, TOOL_LOOP_RULES_INSTRUCTIONS,
-    TOOL_RESULT_STUB_INSTRUCTION, UPDATE_PLAN_INSTRUCTION, WRITING_RULES_INSTRUCTION,
+    READ_TOOL_RESULT_INSTRUCTION, SUMMARY_INSTRUCTIONS, SUMMARY_TOPICS_INSTRUCTION,
+    TOOL_LOOP_INSTRUCTIONS, TOOL_LOOP_RULES_INSTRUCTIONS, TOOL_RESULT_STUB_INSTRUCTION,
+    UPDATE_PLAN_INSTRUCTION, WRITING_RULES_INSTRUCTION,
 };
 
 const CURRENT: &str = storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION;
@@ -165,5 +166,20 @@ async fn the_output_of_an_unexecuted_call_names_the_limit_of_the_kind() {
             "StoryOS did not execute this call, because the Run reached its limit of {limit} \
              RunSteps. No result is available, and this is not an empty result."
         ))
+    );
+}
+
+/// ADR 0103 section 5: a compaction summary request is not a decision request, so it has no
+/// limit sentence and no sentence near the limit, also in the last 4 RunSteps.
+#[tokio::test]
+async fn a_compaction_summary_request_has_no_sentence_of_the_step_limit() {
+    let mut summaries = Vec::new();
+    for position in [0, 20, 23] {
+        summaries.push(instructions(summary(author(position))).await);
+    }
+
+    assert_eq!(
+        summaries,
+        vec![format!("{SUMMARY_INSTRUCTIONS}\n\n{SUMMARY_TOPICS_INSTRUCTION}"); 3]
     );
 }
