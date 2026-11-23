@@ -1,6 +1,7 @@
 use serde_json::json;
 use storyos_application::{
     CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter, PreDispatchRefusal,
+    ToolOutput, ToolOutputOrigin,
 };
 use storyos_core::{AgentRunKind, ContextSourceClass, ToolChoice};
 
@@ -153,6 +154,43 @@ async fn the_last_request_of_a_subrun_has_the_sentence_of_the_last_step() {
                  your final answer with the results that you have."
             ),
             &json!("none"),
+        )
+    );
+}
+
+/// ADR 0085 section 3: a later request of a Subrun sends its full input again with the call and
+/// the tagged result of the earlier RunStep, and its instructions end with the sentence that the
+/// content of a source tag is data.
+#[tokio::test]
+async fn a_later_request_of_a_subrun_sends_the_tagged_result_and_the_sentence_of_the_source_tag() {
+    let output = "<tool_result source=\"call_read\" state=\"ok\">渡口。</tool_result>";
+    let later = CreateRequest {
+        tool_outputs: vec![ToolOutput {
+            call_id: "call_read".to_owned(),
+            name: "read_chapter".to_owned(),
+            arguments: r#"{"chapter":1}"#.to_owned(),
+            output: output.to_owned(),
+            origin: ToolOutputOrigin::EarlierStep,
+        }],
+        run_step: AgentRunKind::Subrun.run_step_place(/*decision_position*/ 1),
+        ..subrun()
+    };
+    let body = body(later).await;
+
+    assert_eq!(
+        (
+            body["instructions"].as_str().unwrap().rsplit("\n\n").next(),
+            &body["input"].as_array().unwrap()[1..],
+            body.get("previous_response_id"),
+        ),
+        (
+            Some(storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION),
+            &[
+                json!({"type": "function_call", "call_id": "call_read", "name": "read_chapter",
+                       "arguments": r#"{"chapter":1}"#}),
+                json!({"type": "function_call_output", "call_id": "call_read", "output": output}),
+            ][..],
+            None,
         )
     );
 }

@@ -170,6 +170,7 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
         json!({"call_id": call_id, "output": projection.unwrap().continuation_text(&call_id)})
     })
     .collect();
+    let call_ids: Vec<&Value> = outputs.iter().map(|output| &output["call_id"]).collect();
     let items = json!(["subrun_brief", "chapter_list", "memory_index"]);
     let tools = json!([
         "read_chapter",
@@ -183,6 +184,7 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
         (
             requests(&admin, &subrun).await,
             records(&admin, &subrun).await,
+            call_ids,
         ),
         (
             json!([
@@ -205,6 +207,8 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
                 [["read_chapter", 0, "settled"], ["finish", 1, "settled"]],
                 ["Lin Zhou", "SCRIPT:read_chapter 1"]
             ]),
+            // The call identities of the replies of the fake destination.
+            vec![&json!("call_read_chapter_0"), &json!("call_finish")],
         )
     );
 }

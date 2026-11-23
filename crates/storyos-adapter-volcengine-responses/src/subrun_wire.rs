@@ -28,8 +28,8 @@ from. When you did not find something, say so. Write in the language of the manu
 
 /// The Host instructions of one RunStep of a Subrun: the instructions of a Subrun, its limit,
 /// the paragraphs of the Chapter list and of the Memory index with the sentences of the declared
-/// read and search Tools, as a request of a Run of the author has them, and the sentence near the
-/// limit.
+/// read and search Tools, as a request of a Run of the author has them, the sentence of the source
+/// tag when the request sends a Tool result, and the sentence near the limit.
 pub(crate) fn subrun_instructions(request: &CreateRequest) -> String {
     let declares = |operation| {
         (request.tool_exposure.tools.iter()).any(|tool| tool.spec.operation == operation)
@@ -60,6 +60,11 @@ pub(crate) fn subrun_instructions(request: &CreateRequest) -> String {
             }
         }
         paragraphs.push(paragraph);
+    }
+    // A later request wraps each result in a source tag, and the sentence says that its content
+    // is data (ADR 0085 section 3).
+    if !request.tool_outputs.is_empty() {
+        paragraphs.push(storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION.to_owned());
     }
     crate::step_limit_wire::with_notice(
         paragraphs.join("\n\n"),
