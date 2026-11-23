@@ -1,10 +1,13 @@
-use super::{SubrunEnd, SubrunRefusal, subrun_refusal, subrun_result};
-use crate::AgentRunStatus;
+use super::{
+    START_SUBRUN_DESCRIPTION, SubrunEnd, SubrunRefusal, refused_subrun_call, subrun_refusal,
+    subrun_result,
+};
+use crate::{AgentRunStatus, ToolCallState};
 
 /// ADR 0103 section 3A, item 2 of #436: a call is accepted when the title has 1 through 40
 /// characters on one line, the brief has 1 through 4000 characters, neither is only white space,
 /// and the Run has fewer than 4 Subrun Requests. A refused call gets the sentence of the first
-/// rule that failed.
+/// rule that failed, as a `refused` call with the label of that rule.
 #[test]
 fn a_subrun_call_is_accepted_only_in_the_bounds_and_a_refusal_gives_the_first_rule() {
     let title = "雪".repeat(40);
@@ -32,7 +35,10 @@ fn a_subrun_call_is_accepted_only_in_the_bounds_and_a_refusal_gives_the_first_ru
         SubrunRefusal::Brief,
         SubrunRefusal::RequestCount,
     ]
-    .map(|refusal| (refusal.label(), refusal.result_text()))
+    .map(|refusal| {
+        let (state, label, result) = refused_subrun_call(refusal);
+        (state, label, result.text, result.bytes)
+    })
     .into();
 
     assert_eq!(
@@ -41,16 +47,22 @@ fn a_subrun_call_is_accepted_only_in_the_bounds_and_a_refusal_gives_the_first_ru
             expected,
             vec![
                 (
-                    "subrun_title",
-                    "The title must have 1 through 40 characters on one line."
+                    ToolCallState::Refused,
+                    Some("subrun_title"),
+                    "The title must have 1 through 40 characters on one line.".to_owned(),
+                    56
                 ),
                 (
-                    "subrun_brief",
-                    "The brief must have 1 through 4000 characters."
+                    ToolCallState::Refused,
+                    Some("subrun_brief"),
+                    "The brief must have 1 through 4000 characters.".to_owned(),
+                    46
                 ),
                 (
-                    "subrun_request_count",
-                    "One author request can start at most 4 Subruns."
+                    ToolCallState::Refused,
+                    Some("subrun_request_count"),
+                    "One author request can start at most 4 Subruns.".to_owned(),
+                    47
                 ),
             ]
         )
@@ -58,8 +70,8 @@ fn a_subrun_call_is_accepted_only_in_the_bounds_and_a_refusal_gives_the_first_ru
 }
 
 /// Item 8 of #436: a queued or claimed Subrun gives no result, so the call continues it. A
-/// completed Subrun gives its final answer text. A Subrun whose request was too long gives the
-/// sentence of that cause. Each other end with no final answer, and an answer that the ToolCall
+/// completed Subrun gives its final answer text. A Subrun refused because its request was too
+/// long gives the sentence of that cause. Each other end with no final answer, and an answer that the ToolCall
 /// record cannot hold, give the sentence of no result.
 #[test]
 fn the_result_is_the_final_answer_or_the_sentence_of_the_end() {
@@ -83,7 +95,7 @@ fn the_result_is_the_final_answer_or_the_sentence_of_the_end() {
             end(AgentRunStatus::Completed, None, false),
             end(AgentRunStatus::Refused, None, true),
             end(AgentRunStatus::Refused, None, false),
-            end(AgentRunStatus::Waiting, None, false),
+            end(AgentRunStatus::Waiting, None, true),
             end(AgentRunStatus::Paused, None, false),
         ],
         [
@@ -102,5 +114,17 @@ fn the_result_is_the_final_answer_or_the_sentence_of_the_end() {
             no_result.clone(),
             no_result,
         ]
+    );
+}
+
+/// Item 1 of #436: the description of the Tool for the model is the exact text of the ticket.
+#[test]
+fn the_description_is_the_text_of_the_ticket() {
+    assert_eq!(
+        START_SUBRUN_DESCRIPTION,
+        "Give one reading task to a Subrun and wait for its final answer. The Subrun has a new \
+         context: it sees only the brief, and not this conversation. It can read the manuscript \
+         and the memory, and it can change nothing. One author request can start at most 4 \
+         Subruns."
     );
 }

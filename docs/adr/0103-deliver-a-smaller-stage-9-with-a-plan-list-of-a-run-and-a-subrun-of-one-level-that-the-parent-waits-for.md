@@ -102,6 +102,7 @@ This section gives the rules that the author decided. It is not a contract that 
 | Case | The ToolCall of the parent | What the assistant gets |
 | --- | --- | --- |
 | The Subrun ends `completed` with a final answer | `settled` | The final answer text |
+| The Subrun ends `completed` with a final answer that is longer than the 262,144 bytes of a ToolCall result | `settled` | The fixed sentence that says that the Subrun ended with no result |
 | The Subrun ends with no final answer: `completed` with no text, `refused`, `waiting` after a Model Attempt with an unknown outcome, or `paused` with the successor reason ([ADR 0088](0088-recover-an-unknown-continuation-attempt-by-retrieval-and-one-bounded-successor.md) section 3) | `settled` | A fixed sentence that says that the Subrun ended with no result. When the cause is a request that was too long, the sentence gives that cause, so that the assistant can give a smaller task |
 | The call is not valid, or the call has no Subrun Request and the Run has 4 Subrun Requests | `refused` | The reason, as a sentence |
 | The author cancels the parent Run | `refused` with `run_cancelled`, as each `pending` ToolCall (ADR 0086) | Nothing: the Run is cancelled |

@@ -46,7 +46,7 @@ async fn cancel_run(
     Ok(fence_generation)
 }
 
-/// Each Subrun of the Run `run_id` that did not end: its status is `queued` or `claimed`.
+/// Each Subrun of the Run `run_id` that works by the rule of Core (`subrun_works`).
 async fn working_subruns(
     client: &Client,
     scope: &ProjectScope,
@@ -54,7 +54,7 @@ async fn working_subruns(
 ) -> Result<Vec<String>, ProjectCommandError> {
     let rows = client
         .query(
-            "SELECT subrun.run_id::text
+            "SELECT subrun.run_id::text, subrun.status
                FROM storyos.subrun_requests AS request
                JOIN storyos.agent_runs AS subrun
                  ON (subrun.owner_user_id, subrun.project_id, subrun.run_id) =
@@ -62,7 +62,6 @@ async fn working_subruns(
               WHERE request.owner_user_id = $1::text::uuid
                 AND request.project_id = $2::text::uuid
                 AND request.parent_run_id = $3::text::uuid
-                AND subrun.status IN ('queued', 'claimed')
               ORDER BY subrun.run_id
                 FOR UPDATE OF subrun",
             &[
@@ -73,7 +72,15 @@ async fn working_subruns(
         )
         .await
         .map_err(unavailable)?;
-    Ok(rows.iter().map(|row| row.get(/*idx*/ 0)).collect())
+    let mut working = Vec::new();
+    for row in rows {
+        let status = storyos_core::AgentRunStatus::parse(row.get(/*idx*/ 1))
+            .ok_or_else(|| unavailable(std::io::Error::other("The Subrun status is damaged")))?;
+        if storyos_core::subrun_works(status) {
+            working.push(row.get(/*idx*/ 0));
+        }
+    }
+    Ok(working)
 }
 
 impl PostgresProjectReader {

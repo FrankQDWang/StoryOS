@@ -11,6 +11,12 @@ pub const SUBRUN_BRIEF_MAX_CHARS: usize = 4000;
 /// The most Subrun Requests of one Run of the author.
 pub const SUBRUN_REQUESTS_MAX: u64 = 4;
 
+/// The description of the Tool for the model (item 1 of #436).
+pub const START_SUBRUN_DESCRIPTION: &str = "Give one reading task to a Subrun and wait for its \
+final answer. The Subrun has a new context: it sees only the brief, and not this conversation. It \
+can read the manuscript and the memory, and it can change nothing. One author request can start \
+at most 4 Subruns.";
+
 /// The result of a call whose Subrun ended with no final answer.
 pub const SUBRUN_NO_RESULT: &str = "The Subrun ended with no result.";
 
@@ -47,10 +53,11 @@ impl SubrunRefusal {
     }
 }
 
-/// The first rule that a call with `title` and `brief` breaks, in the order of the results, for a
-/// Run with `requests` Subrun Requests: a title of 1 through 40 characters on one line that is
-/// not only white space, a brief of 1 through 4000 characters that is not only white space, and
-/// fewer than 4 Subrun Requests. The caller examines a call that has no Subrun Request only.
+/// The first rule that a call with `title` and `brief` breaks, for a Run with `requests` Subrun
+/// Requests. The rules are in the order of the results. The title has 1 through 40 characters on
+/// one line, and it is not only white space. The brief has 1 through 4000 characters, and it is
+/// not only white space. The Run has fewer than 4 Subrun Requests. The caller examines only a
+/// call that has no Subrun Request.
 pub fn subrun_refusal(title: &str, brief: &str, requests: u64) -> Option<SubrunRefusal> {
     let text = |text: &str, max: usize| !text.trim().is_empty() && text.chars().count() <= max;
     if !text(title, SUBRUN_TITLE_MAX_CHARS) || title.chars().any(crate::update_plan::line_break) {
@@ -82,19 +89,26 @@ pub struct SubrunEnd<'a> {
     pub too_long: bool,
 }
 
-/// The result of the call of the parent for its Subrun at `end`, or `None` while the Subrun is
-/// `queued` or `claimed`: then the call continues the same Subrun. No command continues a Subrun,
-/// so each other status is its end. The result is the final answer text of a completed Subrun
-/// when the ToolCall record can hold it, and else a fixed sentence.
+/// Whether a Subrun with `status` works: it is `queued` or `claimed`. No command continues a
+/// Subrun, so each other status is its end. A call continues a Subrun that works, and the
+/// cancellation of the parent cancels it.
+pub fn subrun_works(status: AgentRunStatus) -> bool {
+    matches!(status, AgentRunStatus::Queued | AgentRunStatus::Claimed)
+}
+
+/// The result of the call of the parent for its Subrun at `end`, or `None` while the Subrun
+/// works. The result is the final answer text of a completed Subrun when the ToolCall record can
+/// hold it (ADR 0103 section 3A). A Subrun refused because its request was too long gives
+/// `SUBRUN_TOO_LONG`. Each other end gives `SUBRUN_NO_RESULT`.
 pub fn subrun_result(end: SubrunEnd<'_>) -> Option<ToolResultText> {
-    if matches!(end.status, AgentRunStatus::Queued | AgentRunStatus::Claimed) {
+    if subrun_works(end.status) {
         return None;
     }
     let answer = (end.final_answer)
         .filter(|text| !text.is_empty() && text.len() <= crate::TOOL_RESULT_TEXT_MAX_BYTES);
     let text = match (end.status, answer) {
         (AgentRunStatus::Completed, Some(answer)) => answer,
-        _ if end.too_long => SUBRUN_TOO_LONG,
+        (AgentRunStatus::Refused, _) if end.too_long => SUBRUN_TOO_LONG,
         _ => SUBRUN_NO_RESULT,
     };
     Some(crate::host_tool_result(text))

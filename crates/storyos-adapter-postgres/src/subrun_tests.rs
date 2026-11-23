@@ -4,7 +4,8 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRunError, NoContractFaults, ProjectScope, complete_agent_run,
+    CancelAgentRunInput, ClaimedAgentRun, CompleteAgentRunError, ContractFaultObserver,
+    ContractFaultPoint, NoContractFaults, ProjectScope, complete_agent_run,
 };
 use storyos_core::{ToolCallState, ToolResultProjection};
 use tokio_postgres::Client;
@@ -13,7 +14,7 @@ use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_steering::{cancellation, queued};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::command_sequence_support::{CommandCall, stores};
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::write_versions;
 use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
@@ -215,20 +216,41 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
     );
 }
 
-/// The Contract Fault Point observer that, at the second dispatch claim of the parent Run, starts
-/// a Subrun of its first ToolCall, claims the Subrun, and cancels the parent.
-struct CancelWithSubrun<'a> {
+/// The Contract Fault Point observer that cancels the parent Run of `cancel` at the first
+/// `point` of a Subrun. With no `point`, the observer of the parent cancels it.
+struct CancelAt<'a> {
+    store: &'a PostgresProjectReader,
+    cancel: CommandCall<CancelAgentRunInput>,
+    point: Option<ContractFaultPoint>,
+    done: std::sync::atomic::AtomicBool,
+}
+
+impl ContractFaultObserver for CancelAt<'_> {
+    async fn reached(&self, point: ContractFaultPoint) {
+        if Some(point) != self.point || self.done.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        let (envelope, input) = (&self.cancel.envelope, &self.cancel.input);
+        self.store.cancel_agent_run(envelope, input).await.unwrap();
+    }
+}
+
+/// The Contract Fault Point observer of the parent Run. At its second dispatch claim, it starts a
+/// Subrun of its first ToolCall. With no `point`, it cancels the parent while the Subrun is
+/// queued. With a `point`, it claims and runs the Subrun, which cancels the parent at that point.
+struct ParentWithSubrun<'a> {
     store: &'a PostgresProjectReader,
     admin: &'a Client,
     scope: ProjectScope,
     run_id: String,
+    cancel: std::sync::Mutex<Option<CancelAt<'a>>>,
     subrun: tokio::sync::Mutex<Option<String>>,
     reached: std::sync::Mutex<usize>,
 }
 
-impl storyos_application::ContractFaultObserver for CancelWithSubrun<'_> {
-    async fn reached(&self, point: storyos_application::ContractFaultPoint) {
-        if point != storyos_application::ContractFaultPoint::DispatchClaimed {
+impl ContractFaultObserver for ParentWithSubrun<'_> {
+    async fn reached(&self, point: ContractFaultPoint) {
+        if point != ContractFaultPoint::DispatchClaimed {
             return;
         }
         let count = {
@@ -240,19 +262,80 @@ impl storyos_application::ContractFaultObserver for CancelWithSubrun<'_> {
             return;
         }
         let (store, admin, scope) = (self.store, self.admin, &self.scope);
-        let subrun = start(store, admin, scope, &self.run_id, "读第一章").await;
-        claim_run(admin, scope.clone(), subrun.clone()).await;
-        let cancel = cancellation(store, scope, 0x76f3, &self.run_id).await;
-        (store.cancel_agent_run(&cancel.envelope, &cancel.input))
-            .await
-            .unwrap();
-        *self.subrun.lock().await = Some(subrun);
+        let subrun = start(store, admin, scope, &self.run_id, "SCRIPT:read_chapter 1").await;
+        *self.subrun.lock().await = Some(subrun.clone());
+        let observer = self.cancel.lock().unwrap().take().unwrap();
+        if observer.point.is_none() {
+            let (envelope, input) = (&observer.cancel.envelope, &observer.cancel.input);
+            store.cancel_agent_run(envelope, input).await.unwrap();
+            return;
+        }
+        let claim = claim_run(admin, scope.clone(), subrun).await;
+        // The nested run of the Subrun is a large future, so it goes on the heap.
+        let stopped = complete_agent_run(store, &FakeDestination, &observer, &RuntimeClock, &claim);
+        assert!(matches!(
+            Box::pin(stopped).await,
+            Err(CompleteAgentRunError::StaleFence)
+        ));
     }
 }
 
-/// Item 7 of #436, its first sentence: the cancel transaction of the parent Run also cancels
-/// its Subrun that did not end, with the steps of a cancelled Run. Only a Run with a Model Attempt
-/// in flight gets the wake-up. Test prefix lead `76`.
+/// Admits a parent Run of `next` that reads Chapter 1, starts its Subrun, and cancels the parent
+/// at `point` of the Subrun, as `ParentWithSubrun` gives. Gives the status, the wake-up, and whether the lease is clear of
+/// the parent and of the Subrun, and the state and the refusal of each ToolCall of the Subrun.
+async fn cancelled_with_subrun(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    (scope, chapter_id): (&ProjectScope, &str),
+    (next, suffix): (&str, u16),
+    point: Option<ContractFaultPoint>,
+) -> Value {
+    let run_id = Admission {
+        message: "SCRIPT:read_chapter 1",
+        ..Default::default()
+    }
+    .admit(store, scope, chapter_id, next)
+    .await;
+    let cancel = CancelAt {
+        store,
+        cancel: cancellation(store, scope, suffix, &run_id).await,
+        point,
+        done: std::sync::atomic::AtomicBool::default(),
+    };
+    let observer = ParentWithSubrun {
+        store,
+        admin,
+        scope: scope.clone(),
+        run_id: run_id.clone(),
+        cancel: std::sync::Mutex::new(Some(cancel)),
+        subrun: tokio::sync::Mutex::default(),
+        reached: std::sync::Mutex::default(),
+    };
+    let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
+    let stopped = complete_agent_run(store, &FakeDestination, &observer, &RuntimeClock, &claim);
+    assert!(matches!(
+        Box::pin(stopped).await,
+        Err(CompleteAgentRunError::StaleFence)
+    ));
+    let subrun = observer.subrun.into_inner().unwrap();
+    json_of(
+        admin,
+        "SELECT jsonb_agg(jsonb_build_array(run.status, run.wakeup_pending,
+                  run.lease_expires_at IS NULL,
+                  (SELECT jsonb_agg(jsonb_build_array(call.state, call.refusal))
+                     FROM storyos.tool_calls AS call WHERE call.run_id = run.run_id))
+                  ORDER BY run.run_id = $2::text::uuid)::text
+           FROM storyos.agent_runs AS run WHERE run.run_id IN ($1::text::uuid, $2::text::uuid)",
+        &[&run_id, &subrun],
+    )
+    .await
+}
+
+/// Item 7 of #436, its first sentence: the cancel transaction of the parent Run also cancels its
+/// Subrun that is queued or claimed, with the steps of a cancelled Run. Only a Run with a Model
+/// Attempt in flight gets the wake-up, and each ToolCall that did not end is refused with
+/// `run_cancelled`. In each case, the parent has its second Model Attempt in flight and its
+/// settled `read_chapter` call. Test prefix lead `76`.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_cancellation_of_the_parent_cancels_its_subrun_that_did_not_end() {
@@ -260,45 +343,29 @@ async fn a_cancellation_of_the_parent_cancels_its_subrun_that_did_not_end() {
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued(&store, "76a").await;
     complete(&store, &admin, &scope, &first).await;
-    let run_id = Admission {
-        message: "SCRIPT:read_chapter 1",
-        ..Default::default()
+    let project = (&scope, chapter_id.as_str());
+    let mut ends = Vec::new();
+    for (next, suffix, point) in [
+        ("76b", 0x76f3, None),
+        ("76c", 0x76f4, Some(ContractFaultPoint::DispatchClaimed)),
+        ("76d", 0x76f5, Some(ContractFaultPoint::ToolCallsCommitted)),
+    ] {
+        ends.push(cancelled_with_subrun(&store, &admin, project, (next, suffix), point).await);
     }
-    .admit(&store, &scope, &chapter_id, "76b")
-    .await;
-    let observer = CancelWithSubrun {
-        store: &store,
-        admin: &admin,
-        scope: scope.clone(),
-        run_id: run_id.clone(),
-        subrun: tokio::sync::Mutex::default(),
-        reached: std::sync::Mutex::default(),
-    };
-    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    let stopped = complete_agent_run(&store, &FakeDestination, &observer, &RuntimeClock, &claim);
-    let stopped = matches!(stopped.await, Err(CompleteAgentRunError::StaleFence));
-    let subrun = observer.subrun.into_inner().unwrap();
-    // The status, the wake-up, and whether the lease is clear, of each Run.
-    let state = |run_id: String| {
-        let admin = &admin;
-        async move {
-            json_of(
-                admin,
-                "SELECT jsonb_build_array(status, wakeup_pending, lease_expires_at IS NULL)::text
-                   FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-        }
-    };
+    let parent = json!(["cancelled", true, true, [["settled", null]]]);
 
     assert_eq!(
-        (stopped, state(run_id).await, state(subrun).await),
-        (
-            true,
-            // The parent had its second Model Attempt in flight.
-            json!(["cancelled", true, true]),
-            json!(["cancelled", false, true]),
-        )
+        ends,
+        [
+            // The queued Subrun.
+            json!([parent, ["cancelled", false, true, null]]),
+            // The claimed Subrun with its first Model Attempt in flight.
+            json!([parent, ["cancelled", true, true, null]]),
+            // The claimed Subrun with its `read_chapter` call that did not end.
+            json!([
+                parent,
+                ["cancelled", false, true, [["refused", "run_cancelled"]]]
+            ]),
+        ]
     );
 }
