@@ -264,6 +264,15 @@ pub(super) async fn get_agent_run(
                 })
                 .collect()
         }),
+        subruns: record.subruns.map(|entries| {
+            (entries.into_iter())
+                .map(|entry| contracts::SubrunEntryInspect {
+                    subrun_id: entry.subrun_id,
+                    title: entry.title,
+                    state: super::subrun::subrun_state(entry.state),
+                })
+                .collect()
+        }),
         model_attempt: inspect_model(record.model.as_ref()),
         active_compaction: inspect_active_compaction(record.compactions.last()),
         compactions: (!record.compactions.is_empty()).then(|| {

@@ -24,7 +24,7 @@ use crate::shared_tests::memory_work_schedule::claim_due;
 use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 
 /// The command that the author sends to the parent Run while its Subrun works.
-enum Command {
+pub(super) enum Command {
     Cancel(CommandCall<CancelAgentRunInput>),
     Pause(CommandCall<PauseAgentRunInput>),
 }
@@ -67,7 +67,7 @@ impl ContractFaultObserver for CommandAtSubrun<'_> {
 
 /// Runs the parent Run `run_id` of `scope` with `command` at the first dispatch claim of its
 /// Subrun, and gives whether the claim of the parent stopped with a stale fence.
-async fn commanded(
+pub(super) async fn commanded(
     store: &PostgresProjectReader,
     admin: &Client,
     (scope, run_id): (&ProjectScope, &str),

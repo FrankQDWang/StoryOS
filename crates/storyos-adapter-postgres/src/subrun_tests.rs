@@ -4,8 +4,8 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    CancelAgentRunInput, ClaimedAgentRun, CompleteAgentRunError, ContractFaultObserver,
-    ContractFaultPoint, NoContractFaults, ProjectScope, complete_agent_run,
+    AgentRunReadStore, CancelAgentRunInput, ClaimedAgentRun, CompleteAgentRunError,
+    ContractFaultObserver, ContractFaultPoint, NoContractFaults, ProjectScope, complete_agent_run,
 };
 use storyos_core::{DeploymentDestination, ToolCallState, ToolResultProjection};
 use tokio_postgres::Client;
@@ -707,7 +707,7 @@ async fn subrun_states(admin: &Client, run_id: &str) -> Value {
 /// A parent Run of `lead` on the Agent Plan Registration with a scripted model. The model calls
 /// `start_subrun`, serves `subrun` to the Subrun, and then ends the parent with `finish` and its
 /// answer. Gives the scope, the Run, and the request lines that the model served.
-async fn plan_parent(
+pub(super) async fn plan_parent(
     store: &PostgresProjectReader,
     admin: &Client,
     lead: &str,
@@ -786,12 +786,19 @@ async fn a_subrun_too_long_for_the_window_of_agent_plan_is_refused_before_its_di
             )
             .await,
             served.await.unwrap().len(),
+            // The refused request has no response, so it is not a RunStep of the record (#1836).
+            store
+                .read_subrun(&scope, &subrun)
+                .await
+                .unwrap()
+                .map(|record| record.step_count),
         ),
         (
             json!([["settled", null, sentence]]),
             json!("completed"),
             json!(["refused", "conversation_too_long"]),
             4,
+            Some(1),
         )
     );
 }

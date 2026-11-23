@@ -170,6 +170,7 @@ pub(super) async fn load_agent_run(
         skill_uses: None,
         manuscript_uses: None,
         plan: None,
+        subruns: None,
         model,
         compactions: crate::agent_run_compaction::load_compactions(client, scope, run_id).await?,
         reference_recovery: crate::agent_run_expiry::load_reference_recovery(client, scope, run_id)
@@ -219,6 +220,7 @@ pub(super) async fn load_agent_run(
         record.manuscript_uses =
             Some(crate::agent_run_manuscript_uses::load(client, scope, run_id).await?);
         record.plan = crate::agent_run_manuscript_uses::load_plan(client, scope, run_id).await?;
+        record.subruns = crate::subrun_read::load_entries(client, scope, run_id).await?;
         crate::agent_run_propose_edit::public_decision(client, scope, run_id, &mut record.decision)
             .await?;
     }

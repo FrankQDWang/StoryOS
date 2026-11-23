@@ -64,6 +64,7 @@ mod search_manuscript;
 mod search_memory;
 mod submit_research;
 mod subrun;
+mod subrun_read;
 mod tool_call;
 mod tool_call_recovery;
 mod tool_dispatch;
@@ -424,6 +425,7 @@ pub use submit_research::{
     RESEARCH_RECORDED_RESULT, SUBMIT_RESEARCH_TOOL_SPEC, SubmitResearchRefusal,
 };
 pub use subrun::{SubrunAssembly, assemble_subrun_context, next_subrun_context};
+pub use subrun_read::{SubrunState, SubrunStep, subrun_state, subrun_steps};
 pub use take_over_project_writer::{
     CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,
     TakeOverProjectWriterResult, take_over_project_writer,
