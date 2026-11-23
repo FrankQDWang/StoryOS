@@ -245,6 +245,25 @@ pub(super) async fn get_agent_run(
                     })
                     .collect()
             }),
+        plan: record.plan.map(|steps| {
+            steps
+                .into_iter()
+                .map(|step| contracts::PlanStepInspect {
+                    text: step.text,
+                    status: match step.status {
+                        storyos_core::PlanStepStatus::Pending => {
+                            contracts::PlanStepStatusInspect::Pending
+                        }
+                        storyos_core::PlanStepStatus::InProgress => {
+                            contracts::PlanStepStatusInspect::InProgress
+                        }
+                        storyos_core::PlanStepStatus::Completed => {
+                            contracts::PlanStepStatusInspect::Completed
+                        }
+                    },
+                })
+                .collect()
+        }),
         model_attempt: inspect_model(record.model.as_ref()),
         active_compaction: inspect_active_compaction(record.compactions.last()),
         compactions: (!record.compactions.is_empty()).then(|| {

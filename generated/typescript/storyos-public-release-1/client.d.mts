@@ -445,6 +445,10 @@ export type SkillUseInspect = { "provenance": "author_selected", name: string, }
 
 export type ManuscriptUseInspect = { "kind": "chapter_read", chapter_id: string, title: string, } | { "kind": "keyword_search", query: string, } | { "kind": "hybrid_search", question: string, };
 
+export type PlanStepInspect = { text: string, status: PlanStepStatusInspect, };
+
+export type PlanStepStatusInspect = "pending" | "in_progress" | "completed";
+
 export type ContinuationInputMappingInspect = "none" | "incremental" | "full" | "new_transport";
 
 export type ContinuationAdmissionInspect = { processing_destination_identity: string, evidence_revision: string, model_registration_revision: string, adapter_mapping: string, project_model_use_binding_revision: string, external_compatibility_decision: string, };
@@ -477,7 +481,7 @@ export type CapturedMemorySettingsInspect = { "kind": "available", memory_settin
 
 export type AgentRunSteeringInspect = { steering_input_id: string, input_position: string, author_message: string, input_snapshot_id: string | null, model_attempt_id: string | null, };
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, results?: Array<AgentRunResultInspect>, skill_uses?: Array<SkillUseInspect>, manuscript_uses?: Array<ManuscriptUseInspect>, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, compactions?: Array<OptionalActiveCompactionInspect>, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, cache: AttemptCacheInspect, redaction_profile: string, };
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, results?: Array<AgentRunResultInspect>, skill_uses?: Array<SkillUseInspect>, manuscript_uses?: Array<ManuscriptUseInspect>, plan?: Array<PlanStepInspect>, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, compactions?: Array<OptionalActiveCompactionInspect>, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, cache: AttemptCacheInspect, redaction_profile: string, };
 
 export type OriginalResultRetrievalDisposition = "kept_unknown" | "evidence_only" | "settled";
 

@@ -75,6 +75,18 @@ pub(crate) async fn execute(
         ToolIntake::RecordCharacterIntent { intent, questions } => {
             return crate::intent_pass::execute(client, claim, row, intent, questions).await;
         }
+        // A call that breaks a rule of a plan is refused, and the newest settled call is the plan
+        // of the Run (ADR 0103 section 2).
+        ToolIntake::UpdatePlan { steps } => {
+            let (state, refusal, result) = storyos_core::settle_plan_call(steps);
+            return resolve(
+                client,
+                claim,
+                row,
+                Resolution::host(state, refusal, Some(&result)),
+            )
+            .await;
+        }
         ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } | ToolIntake::Finish => {}
     }
     let refused_beside: bool = client

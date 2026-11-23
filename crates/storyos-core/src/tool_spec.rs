@@ -59,6 +59,9 @@ pub enum ToolOperation {
     /// The Host Tool with which an intent pass gives the intent of its character and ends (ADR
     /// 0101 section 4).
     RecordCharacterIntent,
+    /// The Host Tool with which the Agent of a Run of the author records the plan of its work
+    /// (ADR 0103 section 2).
+    UpdatePlan,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -158,6 +161,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::RECORD_MEMORY_OBSERVATIONS_TOOL_SPEC,
         &crate::APPLY_MEMORY_OPERATIONS_TOOL_SPEC,
         &crate::RECORD_CHARACTER_INTENT_TOOL_SPEC,
+        &crate::UPDATE_PLAN_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -214,6 +218,9 @@ pub enum ToolIntake {
     RecordCharacterIntent {
         intent: String,
         questions: Vec<String>,
+    },
+    UpdatePlan {
+        steps: Vec<crate::PlanStep>,
     },
 }
 
@@ -364,6 +371,7 @@ impl ToolSpec {
             ToolOperation::RecordCharacterIntent => {
                 crate::record_character_intent::intake(arguments)
             }
+            ToolOperation::UpdatePlan => crate::update_plan::intake(arguments),
         }
     }
 }
@@ -430,7 +438,8 @@ impl ServerArguments {
                 | ToolIntake::SearchMemory { .. }
                 | ToolIntake::RecordMemoryObservations(_)
                 | ToolIntake::ApplyMemoryOperations(_)
-                | ToolIntake::RecordCharacterIntent { .. },
+                | ToolIntake::RecordCharacterIntent { .. }
+                | ToolIntake::UpdatePlan { .. },
             )
             | (
                 Self::Fetch { .. },
@@ -449,7 +458,8 @@ impl ServerArguments {
                 | ToolIntake::SearchMemory { .. }
                 | ToolIntake::RecordMemoryObservations(_)
                 | ToolIntake::ApplyMemoryOperations(_)
-                | ToolIntake::RecordCharacterIntent { .. },
+                | ToolIntake::RecordCharacterIntent { .. }
+                | ToolIntake::UpdatePlan { .. },
             ) => {
                 return None;
             }

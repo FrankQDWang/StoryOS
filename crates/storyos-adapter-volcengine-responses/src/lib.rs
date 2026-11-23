@@ -219,7 +219,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
 /// Refuses each request on a mapping that is not the current one: a decision, a summary, a
 /// capture, a pass, a qualification probe, and a Retrieve (ADR 0097).
 fn current_mapping(route: &RequestRoute) -> Result<(), PreDispatchRefusal> {
-    match route.mapping_revision == storyos_core::AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION {
+    match route.mapping_revision == storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION {
         true => Ok(()),
         false => Err(PreDispatchRefusal::UnsupportedRequest),
     }
@@ -413,3 +413,7 @@ mod chapter_list_wire_tests;
 #[cfg(test)]
 #[path = "memory_index_wire_tests.rs"]
 mod memory_index_wire_tests;
+
+#[cfg(test)]
+#[path = "plan_wire_tests.rs"]
+mod plan_wire_tests;

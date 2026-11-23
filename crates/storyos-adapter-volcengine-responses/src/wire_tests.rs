@@ -273,15 +273,17 @@ fn an_exposure_declares_strict_functions_and_an_empty_exposure_declares_no_tool(
             serde_json::json!(crate::tests::tool_loop_instructions()),
             serde_json::json!(declared),
             serde_json::json!("required"),
-            // The exposure declares `write_memory`, so the instructions get its paragraph.
+            // The exposure declares `update_plan` and `write_memory`, so the instructions get
+            // their paragraphs.
             serde_json::json!(format!(
-                "{}\n\n{}",
+                "{}\n\n{}\n\n{}",
                 crate::tests::tool_loop_instructions(),
+                crate::wire::UPDATE_PLAN_INSTRUCTION,
                 crate::tests::write_memory_paragraph()
             )),
         )
     );
-    assert_eq!(declared.len(), 9);
+    assert_eq!(declared.len(), 10);
 }
 
 #[test]

@@ -82,4 +82,4 @@ pub(crate) fn intent_pass_body(
 
 #[cfg(test)]
 #[path = "intent_wire_tests.rs"]
-mod tests;
+pub(crate) mod tests;

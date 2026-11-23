@@ -33,6 +33,7 @@ fn a_run_with_memory_use_declares_read_memory_entry_with_a_strict_schema() {
         "read_chapter",
         "search_manuscript",
         "write_memory",
+        "update_plan",
         "finish",
     ];
     for revision in [
@@ -51,7 +52,12 @@ fn a_run_with_memory_use_declares_read_memory_entry_with_a_strict_schema() {
             (
                 [
                     &before[..6],
-                    &["read_memory_entry", "search_memory", "finish"]
+                    &[
+                        "read_memory_entry",
+                        "search_memory",
+                        "update_plan",
+                        "finish"
+                    ]
                 ]
                 .concat(),
                 before.clone(),

@@ -227,6 +227,18 @@ pub(crate) const SEARCH_MEMORY_INSTRUCTION: &str = "\
 Call search_memory with an exact word when you do not find the entry that you need in the \
 section Memory index.";
 
+/// The paragraph of the current mapping for a request that declares `update_plan`: the decision
+/// request of a Run of the author (ADR 0103 section 2). It follows the paragraphs of the tool loop,
+/// before the paragraphs of the items.
+pub(crate) const UPDATE_PLAN_INSTRUCTION: &str = "\
+You can show the author a plan with update_plan. Judge the work yourself: when it has several \
+separate steps, record the plan before the first step, in the language of the author, and keep it \
+current: one step is in_progress while you do it, and a done step is completed. When \
+you start the next step, call update_plan again in the same response as the first Tool \
+call of that step. Before you \
+finish, record the final state of each step. When the work is simple, record no plan. The plan \
+is for the author to see: it gives you no permission, and it does not wait for an approval.";
+
 /// The label of the earlier author messages that the later request of a compaction sends before
 /// the current input (ADR 0093 section 6).
 pub(crate) const EARLIER_AUTHOR_MESSAGES_LABEL: &str = "\
@@ -300,6 +312,13 @@ pub(crate) fn create_body(
             storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION
         ),
     };
+    let declares = |operation| {
+        (request.tool_exposure.tools.iter()).any(|tool| tool.spec.operation == operation)
+    };
+    let instructions = match declares(storyos_core::ToolOperation::UpdatePlan) {
+        true => format!("{instructions}\n\n{UPDATE_PLAN_INSTRUCTION}"),
+        false => instructions,
+    };
     let skill = request.context.iter().any(|item| {
         matches!(
             item.source_class,
@@ -340,9 +359,6 @@ pub(crate) fn create_body(
     let instructions = match chapter_list {
         true => format!("{instructions}\n\n{CHAPTER_LIST_INSTRUCTION}"),
         false => instructions,
-    };
-    let declares = |operation| {
-        (request.tool_exposure.tools.iter()).any(|tool| tool.spec.operation == operation)
     };
     let read_chapter = chapter_list && declares(storyos_core::ToolOperation::ReadChapter);
     let instructions = match read_chapter {

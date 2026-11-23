@@ -162,3 +162,13 @@ Other facts of the mapping `v11`:
 - No capability of the requirement changes. The request form changes only in a decision request of a Run of the author with a full input and no prior response.
 
 The mapping `v12` is the mapping `v11` with one change of the request form. Such a request sends the earlier turns of the Project Conversation from the Host records, in one section of the user message directly before the section `Author request` (ADR 0102 section 5). A request with no earlier-turn item has the bytes of the mapping `v11`, so a request that continues a prior response does not change. The code keeps only `fa26` and the mapping `v12` (ADR 0097).
+
+## Amendment 2026-11-23: the head Model Registration takes the mapping v13
+
+[ADR 0103](0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md) section 2 ([#435](https://github.com/FrankQDWang/StoryOS/issues/435)) gives the mapping `storyos.volcengine-agent-plan.responses.create.v13` to a new head Model Registration. That Registration is `018f0000-0000-7001-8000-00000000fa27`.
+
+- `fa27` is Registration `fa26` with the mapping `v13`. It keeps the adapter, the API surface, the provider model, and the requirement of `fa26`.
+- It also keeps the capability profile and the request bounds of `fa26`. Thus it needs no new qualification.
+- No capability of the requirement changes. The request form changes only in a request of a Run of the author.
+
+The mapping `v13` is the mapping `v12` with one change of the request form. A request of a Run of the author declares the Host Tool `update_plan` (Host Tool Registration `018f0000-0000-7001-8000-0000000e0106`), and its instructions have the paragraph of the plan directly after the instructions of the tool loop (ADR 0103 section 2). The request of a capture, of a consolidation pass, and of an intent pass, and a summary request, do not declare the Tool and do not have the paragraph. The code keeps only `fa27` and the mapping `v13` (ADR 0097).

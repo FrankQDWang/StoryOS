@@ -99,6 +99,9 @@ pub struct AgentRunRecord {
     pub skill_uses: Option<Vec<storyos_core::SkillUse>>,
     /// Each manuscript Tool use of the Run (ADR 0095 section 1). Only the Run read has it.
     pub manuscript_uses: Option<Vec<storyos_core::ManuscriptUse>>,
+    /// The plan of the Run: the steps of its newest settled `update_plan` call (ADR 0103 section
+    /// 2). Only the Run read has it, and a Run with no settled call has none.
+    pub plan: Option<Vec<storyos_core::PlanStep>>,
     pub model: Option<AgentRunModelInspect>,
     /// Each compaction record of the Run, in RunStep order (ADR 0093).
     pub compactions: Vec<ActiveCompactionInspect>,
