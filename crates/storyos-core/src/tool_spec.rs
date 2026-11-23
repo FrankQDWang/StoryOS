@@ -62,6 +62,9 @@ pub enum ToolOperation {
     /// The Host Tool with which the Agent of a Run of the author records the plan of its work
     /// (ADR 0103 section 2).
     UpdatePlan,
+    /// The Host Tool with which a Run of the author gives one reading task to a Subrun (ADR
+    /// 0103 section 3A).
+    StartSubrun,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -162,6 +165,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::APPLY_MEMORY_OPERATIONS_TOOL_SPEC,
         &crate::RECORD_CHARACTER_INTENT_TOOL_SPEC,
         &crate::UPDATE_PLAN_TOOL_SPEC,
+        &crate::START_SUBRUN_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -221,6 +225,10 @@ pub enum ToolIntake {
     },
     UpdatePlan {
         steps: Vec<crate::PlanStep>,
+    },
+    StartSubrun {
+        title: String,
+        brief: String,
     },
 }
 
@@ -372,6 +380,7 @@ impl ToolSpec {
                 crate::record_character_intent::intake(arguments)
             }
             ToolOperation::UpdatePlan => crate::update_plan::intake(arguments),
+            ToolOperation::StartSubrun => crate::start_subrun::intake(arguments),
         }
     }
 }
@@ -439,7 +448,8 @@ impl ServerArguments {
                 | ToolIntake::RecordMemoryObservations(_)
                 | ToolIntake::ApplyMemoryOperations(_)
                 | ToolIntake::RecordCharacterIntent { .. }
-                | ToolIntake::UpdatePlan { .. },
+                | ToolIntake::UpdatePlan { .. }
+                | ToolIntake::StartSubrun { .. },
             )
             | (
                 Self::Fetch { .. },
@@ -459,7 +469,8 @@ impl ServerArguments {
                 | ToolIntake::RecordMemoryObservations(_)
                 | ToolIntake::ApplyMemoryOperations(_)
                 | ToolIntake::RecordCharacterIntent { .. }
-                | ToolIntake::UpdatePlan { .. },
+                | ToolIntake::UpdatePlan { .. }
+                | ToolIntake::StartSubrun { .. },
             ) => {
                 return None;
             }

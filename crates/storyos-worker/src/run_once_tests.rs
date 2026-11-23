@@ -221,6 +221,14 @@ impl storyos_application::ToolDispatchStore for RaceStore {
         unreachable!("the AgentRun settles without a ToolCall")
     }
 
+    async fn take_subrun(
+        &self,
+        _claim: &ClaimedAgentRun,
+        _work: &storyos_application::SubrunWork,
+    ) -> Result<Option<ClaimedAgentRun>, CompleteAgentRunError> {
+        unreachable!("the AgentRun settles without a ToolCall")
+    }
+
     async fn commit_tool_dispatch_claim(
         &self,
         _claim: &ClaimedAgentRun,

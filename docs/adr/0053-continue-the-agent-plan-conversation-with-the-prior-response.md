@@ -182,3 +182,23 @@ The mapping `v13` is the mapping `v12` with one change of the request form. A re
 - No capability of the requirement changes. The request form changes only in the instructions of a decision request of a Run of the author and of a capture, and in the output of a call that the Host did not execute.
 
 The mapping `v14` is the mapping `v13` with three changes of the request form. Each decision request of a Run of the author has the paragraph of its limit of RunSteps directly after the paragraph of the steps. The decision request of each of the last 4 RunSteps of a Run of the author and of a capture has one sentence near the limit at the end of its instructions; a closing request before the last RunStep has none. The output of a call that the Host did not execute names the limit of the kind of the Run (ADR 0103 section 5). The code keeps only `fa28` and the mapping `v14` (ADR 0097).
+
+## Amendment 2026-11-23: the head Model Registration takes the mapping v15
+
+[ADR 0103](0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md) section 3A ([#436](https://github.com/FrankQDWang/StoryOS/issues/436)) gives the mapping `storyos.volcengine-agent-plan.responses.create.v15` to a new head Model Registration. That Registration is `018f0000-0000-7001-8000-00000000fa29`.
+
+- `fa29` is Registration `fa28` with the mapping `v15`. It keeps the adapter, the API surface, the provider model, and the requirement of `fa28`.
+- It also keeps the capability profile and the request bounds of `fa28`. Thus it needs no new qualification.
+- No capability of the requirement changes. The request form of each request of `v14` does not change, and a request of a Subrun is new.
+
+The mapping `v15` is the mapping `v14` with one new request form. A request of a Subrun has its own instruction text, its limit paragraph, and its full input with no prior response reference, and it declares only the read Tools of its parent Run and `finish` (ADR 0103 section 3A).
+
+## Amendment 2026-11-23: the head Model Registration takes the mapping v16
+
+ADR 0103 section 3A (#436) gives the mapping `storyos.volcengine-agent-plan.responses.create.v16` to a new head Model Registration. That Registration is `018f0000-0000-7001-8000-00000000fa30`.
+
+- `fa30` is Registration `fa29` with the mapping `v16`. It keeps the adapter, the API surface, the provider model, and the requirement of `fa29`.
+- It also keeps the capability profile and the request bounds of `fa29`. Thus it needs no new qualification.
+- No capability of the requirement changes. The request form changes only in a request of a Run of the author.
+
+The mapping `v16` is the mapping `v15` with one change of the request form. A request of a Run of the author declares the Host Tool `start_subrun` (Host Tool Registration `018f0000-0000-7001-8000-0000000e0107`), and its instructions have the paragraph of the Subrun directly after the paragraph of the plan. The request of a Subrun, of a capture, of a consolidation pass, and of an intent pass, and a summary request, do not change. The code keeps only `fa30` and the mapping `v16` (ADR 0097).

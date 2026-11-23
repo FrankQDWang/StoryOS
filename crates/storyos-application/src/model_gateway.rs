@@ -5,12 +5,14 @@ use crate::model_gateway_ports::{
     DestinationRequest, DispatchRecord, GatewayClock, ModelDispatchStore, ModelProviderAdapter,
     ModelUsage, NextDispatchWork, Observation, RequestAttempt,
 };
-use crate::model_lease_renewal::renew_while;
+use crate::model_lease_renewal::{renew_or_drop, renew_while};
 use crate::model_stream_commit::GatewaySink;
 use crate::tool_gateway::{
     Embeddings, NoQuestionEmbeddings, QuestionEmbeddings, dispatch_tool_calls,
 };
-use crate::tool_gateway_ports::{NoToolDestination, ToolDestinationAdapter, ToolDispatchStore};
+use crate::tool_gateway_ports::{
+    NoToolDestination, SubrunWork, ToolDestinationAdapter, ToolDispatchStore,
+};
 use crate::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DiagnosticField, DiagnosticId,
     EmbeddingDispatchStore, EmbeddingProviderAdapter,
@@ -99,13 +101,69 @@ async fn run(
             NextDispatchWork::Request(request) => *request,
             NextDispatchWork::Abort(cancellation) => cancellation.into_abort(),
             NextDispatchWork::ToolCalls => {
-                dispatch_tool_calls(store, tools, embeddings, observer, clock, claim).await?;
+                let subrun =
+                    dispatch_tool_calls(store, tools, embeddings, observer, clock, claim).await?;
+                if let Some(work) = subrun {
+                    let destinations = Destinations {
+                        adapter,
+                        tools,
+                        embeddings,
+                        observer,
+                        clock,
+                    };
+                    run_subrun(store, &destinations, claim, &work).await?;
+                }
                 continue;
             }
         };
         if let Some(cancellation) = gateway.dispatch(request).await? {
             gateway.dispatch(cancellation.into_abort()).await?;
         }
+    }
+}
+
+/// The destinations and the observer of one `run`, which a Subrun uses again.
+struct Destinations<'a, A, T, E, O, C> {
+    adapter: &'a A,
+    tools: &'a T,
+    embeddings: &'a E,
+    observer: &'a O,
+    clock: &'a C,
+}
+
+/// Takes the Subrun of `work` and runs it to its end with the loop of a Run, with the renewal of
+/// the lease of the parent `claim`. The parent sends no model request meanwhile. A lost lease of
+/// the parent stops the Subrun, and the next claim of the parent continues it. The next ToolCall
+/// work of the parent settles the call with the result of the Subrun (ADR 0103 section 3A).
+async fn run_subrun(
+    store: &(impl ModelDispatchStore + ToolDispatchStore),
+    destinations: &Destinations<
+        '_,
+        impl ModelProviderAdapter,
+        impl ToolDestinationAdapter,
+        impl QuestionEmbeddings,
+        impl ContractFaultObserver,
+        impl GatewayClock,
+    >,
+    claim: &ClaimedAgentRun,
+    work: &SubrunWork,
+) -> Result<(), CompleteAgentRunError> {
+    let Some(subrun) = store.take_subrun(claim, work).await? else {
+        return Ok(());
+    };
+    let Destinations {
+        adapter,
+        tools,
+        embeddings,
+        observer,
+        clock,
+    } = *destinations;
+    let subrun_work = Box::pin(run(
+        store, adapter, tools, embeddings, observer, clock, &subrun,
+    ));
+    match renew_or_drop(store, clock, claim, subrun_work).await {
+        Some(result) => result.map(|_settled| ()),
+        None => Err(CompleteAgentRunError::StaleFence),
     }
 }
 

@@ -88,7 +88,8 @@ impl ToolEffectRequest {
             | ToolIntake::RecordMemoryObservations(_)
             | ToolIntake::ApplyMemoryOperations(_)
             | ToolIntake::RecordCharacterIntent { .. }
-            | ToolIntake::UpdatePlan { .. } => Vec::new(),
+            | ToolIntake::UpdatePlan { .. }
+            | ToolIntake::StartSubrun { .. } => Vec::new(),
         };
         Some(Self {
             external_read: envelope.external_read,

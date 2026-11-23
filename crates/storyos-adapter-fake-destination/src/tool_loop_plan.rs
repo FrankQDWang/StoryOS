@@ -23,6 +23,7 @@
 //! - `SCRIPT:read_memory_entry ...` gets the Memory read script of `read_memory_entry_plan`.
 //! - `SCRIPT:search_memory ...` gets the Memory search script of `search_memory_plan`.
 //! - `SCRIPT:update_plan` gets the plan script of `update_plan_plan`.
+//! - `SCRIPT:start_subrun` gets the Subrun script of `subrun_plan`.
 //! - `SCRIPT:partial`, `SCRIPT:incomplete`, `SCRIPT:failed`, `SCRIPT:cancelled`,
 //!   `SCRIPT:unknown`, `SCRIPT:tool_partial`, and `SCRIPT:refusal` get the response outcome of
 //!   `create_plan::response_outcome` in the first request.
@@ -72,6 +73,9 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
         return planned;
     }
     if let Some(planned) = crate::update_plan_plan::plan(request) {
+        return planned;
+    }
+    if let Some(planned) = crate::subrun_plan::plan(request) {
         return planned;
     }
     let message = request.author_message.as_str();

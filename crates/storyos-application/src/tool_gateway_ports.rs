@@ -35,6 +35,15 @@ pub enum ToolWork {
     /// A pending `hybrid_search_manuscript` call that needs the vector of its question (ADR 0095
     /// section 1).
     QuestionSearch(QuestionSearch),
+    /// A pending `start_subrun` call whose Subrun works (ADR 0103 section 3A).
+    Subrun(SubrunWork),
+}
+
+/// The Subrun of one pending `start_subrun` call. The Gateway runs it to its end with the loop of
+/// a Run, inside the claim of the parent Run.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SubrunWork {
+    pub subrun_run_id: String,
 }
 
 /// The embedding request of the question of one pending `hybrid_search_manuscript` call. It has
@@ -83,6 +92,15 @@ pub trait ToolDispatchStore: Sync {
         search: &QuestionSearch,
         result: EmbeddingResult,
     ) -> impl Future<Output = Result<(), CompleteAgentRunError>> + Send;
+
+    /// Checks the Run Lease fence of the parent Run, and takes the Subrun of `work` with a new
+    /// fence and a new lease. `None` means that the Subrun does not work: get the next ToolCall
+    /// again.
+    fn take_subrun(
+        &self,
+        claim: &ClaimedAgentRun,
+        work: &SubrunWork,
+    ) -> impl Future<Output = Result<Option<ClaimedAgentRun>, CompleteAgentRunError>> + Send;
 
     /// Checks the current authority again, then commits the Destination Attempt Admission
     /// Decision, the Wire Payload Projection, the Destination Attempt, and the Outbound
@@ -156,6 +174,14 @@ macro_rules! no_tool_calls {
                 _search: &$crate::QuestionSearch,
                 _result: $crate::EmbeddingResult,
             ) -> Result<(), $crate::CompleteAgentRunError> {
+                unreachable!("the test Run has no ToolCall")
+            }
+
+            async fn take_subrun(
+                &self,
+                _claim: &$crate::ClaimedAgentRun,
+                _work: &$crate::SubrunWork,
+            ) -> Result<Option<$crate::ClaimedAgentRun>, $crate::CompleteAgentRunError> {
                 unreachable!("the test Run has no ToolCall")
             }
 

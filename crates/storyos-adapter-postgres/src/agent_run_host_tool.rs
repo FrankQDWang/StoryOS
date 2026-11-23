@@ -87,6 +87,10 @@ pub(crate) async fn execute(
             )
             .await;
         }
+        // `next_tool_call` resolves a `start_subrun` call with its Subrun (ADR 0103 section 3A).
+        ToolIntake::StartSubrun { .. } => {
+            return Err(damaged("The Host ToolCall is damaged"));
+        }
         ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } | ToolIntake::Finish => {}
     }
     let refused_beside: bool = client

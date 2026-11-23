@@ -150,18 +150,19 @@ impl PlanRefusal {
     }
 }
 
+/// Whether `c` is a Unicode line break: the line feed, the vertical tab, the form feed, the
+/// carriage return, the next line, the line separator, or the paragraph separator.
+pub(crate) fn line_break(c: char) -> bool {
+    matches!(
+        c,
+        '\n' | '\u{b}' | '\u{c}' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}'
+    )
+}
+
 /// The first rule of a plan that `steps` breaks, in the order of the results: 1 through 12 steps,
 /// a text of 1 through 100 characters on one line that is not only white space, and at most one
 /// step `in_progress`.
 pub fn plan_refusal(steps: &[PlanStep]) -> Option<PlanRefusal> {
-    // The Unicode line breaks: the line feed, the vertical tab, the form feed, the carriage
-    // return, the next line, the line separator, and the paragraph separator.
-    let line_break = |c: char| {
-        matches!(
-            c,
-            '\n' | '\u{b}' | '\u{c}' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}'
-        )
-    };
     if steps.is_empty() || steps.len() > PLAN_STEPS_MAX {
         return Some(PlanRefusal::StepCount);
     }

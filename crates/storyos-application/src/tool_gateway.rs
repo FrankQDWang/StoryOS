@@ -10,7 +10,8 @@ use crate::model_gateway_ports::{
 };
 use crate::model_lease_renewal::renew_or_drop;
 use crate::tool_gateway_ports::{
-    QuestionSearch, ToolDestinationAdapter, ToolDispatchRecord, ToolDispatchStore, ToolWork,
+    QuestionSearch, SubrunWork, ToolDestinationAdapter, ToolDispatchRecord, ToolDispatchStore,
+    ToolWork,
 };
 use crate::{
     ClaimedAgentRun, CompleteAgentRunError, EmbeddingDispatchStore, EmbeddingProviderAdapter,
@@ -75,7 +76,9 @@ impl<S: EmbeddingDispatchStore, E: EmbeddingProviderAdapter> QuestionEmbeddings
 /// Lease check. Returns when each ToolCall is resolved. A lost lease drops the exchange locally:
 /// the fence that the cancel or the takeover committed settles the ToolCall (ADR 0086). A
 /// `hybrid_search_manuscript` call sends the embedding request of its question with no open
-/// transaction, and its record step ranks with the result (ADR 0095 section 1).
+/// transaction, and its record step ranks with the result (ADR 0095 section 1). Returns the
+/// Subrun of a `start_subrun` call, which the Gateway runs before the next ToolCall (ADR 0103
+/// section 3A).
 pub(crate) async fn dispatch_tool_calls(
     store: &(impl ModelDispatchStore + ToolDispatchStore),
     tools: &impl ToolDestinationAdapter,
@@ -83,13 +86,14 @@ pub(crate) async fn dispatch_tool_calls(
     observer: &impl ContractFaultObserver,
     clock: &impl GatewayClock,
     claim: &ClaimedAgentRun,
-) -> Result<(), CompleteAgentRunError> {
+) -> Result<Option<SubrunWork>, CompleteAgentRunError> {
     observer
         .reached(ContractFaultPoint::ToolCallsCommitted)
         .await;
     while let Some(work) = store.next_tool_call(claim).await? {
         let request = match work {
             ToolWork::Dispatch(request) => request,
+            ToolWork::Subrun(work) => return Ok(Some(work)),
             ToolWork::QuestionSearch(search) => {
                 // A lost lease drops the request. The Embedding Attempt stays OutcomeUnknown, and
                 // the next claim of the Run sends a new request.
@@ -147,5 +151,5 @@ pub(crate) async fn dispatch_tool_calls(
             )
             .await?;
     }
-    Ok(())
+    Ok(None)
 }

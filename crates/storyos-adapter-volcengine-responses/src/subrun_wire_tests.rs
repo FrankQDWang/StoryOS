@@ -41,7 +41,7 @@ pub(crate) fn subrun() -> CreateRequest {
         tool_choice: ToolChoice::Required,
         run_step: AgentRunKind::Subrun.run_step_place(/*decision_position*/ 0),
         ..first(
-            storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_START_SUBRUN_MAPPING_REVISION,
             registration,
         )
     }

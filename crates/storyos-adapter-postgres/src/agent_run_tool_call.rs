@@ -293,7 +293,8 @@ pub(crate) fn call_inspect(
         | storyos_core::ToolIntake::RecordMemoryObservations(_)
         | storyos_core::ToolIntake::ApplyMemoryOperations(_)
         | storyos_core::ToolIntake::RecordCharacterIntent { .. }
-        | storyos_core::ToolIntake::UpdatePlan { .. } => {
+        | storyos_core::ToolIntake::UpdatePlan { .. }
+        | storyos_core::ToolIntake::StartSubrun { .. } => {
             return Err(damaged());
         }
     })

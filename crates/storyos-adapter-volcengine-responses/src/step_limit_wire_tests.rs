@@ -4,12 +4,12 @@ use storyos_core::AgentRunKind;
 use crate::skill_wire_tests::{body, closing, first, summary};
 use crate::tests::write_memory_paragraph;
 use crate::wire::{
-    READ_TOOL_RESULT_INSTRUCTION, SUMMARY_INSTRUCTIONS, SUMMARY_TOPICS_INSTRUCTION,
-    TOOL_LOOP_INSTRUCTIONS, TOOL_LOOP_RULES_INSTRUCTIONS, TOOL_RESULT_STUB_INSTRUCTION,
-    UPDATE_PLAN_INSTRUCTION, WRITING_RULES_INSTRUCTION,
+    READ_TOOL_RESULT_INSTRUCTION, START_SUBRUN_INSTRUCTION, SUMMARY_INSTRUCTIONS,
+    SUMMARY_TOPICS_INSTRUCTION, TOOL_LOOP_INSTRUCTIONS, TOOL_LOOP_RULES_INSTRUCTIONS,
+    TOOL_RESULT_STUB_INSTRUCTION, UPDATE_PLAN_INSTRUCTION, WRITING_RULES_INSTRUCTION,
 };
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_START_SUBRUN_MAPPING_REVISION;
 
 /// The decision request of a Run of `kind` at `position` from `request`, with the `tool_choice`
 /// of the finish rule for a request that is not a closing request.
@@ -53,7 +53,7 @@ async fn a_request_of_a_run_of_the_author_gives_its_limit_and_the_last_four_give
          step is only for your final answer: StoryOS executes no function call of the last step.\
          \n\n{TOOL_LOOP_RULES_INSTRUCTIONS}\n\n{WRITING_RULES_INSTRUCTION}\n\n\
          {READ_TOOL_RESULT_INSTRUCTION}\n\n{TOOL_RESULT_STUB_INSTRUCTION}\n\n\
-         {UPDATE_PLAN_INSTRUCTION}\n\n{}",
+         {UPDATE_PLAN_INSTRUCTION}\n\n{START_SUBRUN_INSTRUCTION}\n\n{}",
         write_memory_paragraph()
     );
     let last = body(author(23)).await;

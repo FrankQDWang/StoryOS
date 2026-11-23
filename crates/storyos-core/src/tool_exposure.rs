@@ -85,6 +85,7 @@ impl ExposureFacts<'_> {
                     ToolOperation::ApplyMemoryOperations
                     | ToolOperation::RecordCharacterIntent
                     | ToolOperation::UpdatePlan
+                    | ToolOperation::StartSubrun
                     | ToolOperation::ProposeEdit
                     | ToolOperation::SubmitResearch
                     | ToolOperation::ReadToolResult
@@ -120,6 +121,7 @@ impl ExposureFacts<'_> {
                     | ToolOperation::ApplyMemoryOperations
                     | ToolOperation::RecordCharacterIntent
                     | ToolOperation::UpdatePlan
+                    | ToolOperation::StartSubrun
                     | ToolOperation::ProposeEdit
                     | ToolOperation::SubmitResearch
                     | ToolOperation::ReadToolResult
@@ -142,6 +144,9 @@ impl ExposureFacts<'_> {
             | ToolOperation::Finish => true,
             // Only a Run of the author records a plan (ADR 0103 section 2).
             ToolOperation::UpdatePlan => true,
+            // Only a Run of the author starts a Subrun, so a Subrun starts no Subrun (ADR 0103
+            // section 3A).
+            ToolOperation::StartSubrun => true,
             // A request of the author is not a read and not a capture of Memory, so the Tool does
             // not depend on the Conversation Memory Settings (ADR 0094 section 5).
             ToolOperation::WriteMemory => true,
@@ -205,6 +210,7 @@ impl ToolOperation {
             Self::ApplyMemoryOperations => "apply_memory_operations",
             Self::RecordCharacterIntent => "record_character_intent",
             Self::UpdatePlan => "update_plan",
+            Self::StartSubrun => "start_subrun",
         }
     }
 
@@ -238,6 +244,7 @@ impl ToolOperation {
             Self::ApplyMemoryOperations => crate::apply_memory_operations::DESCRIPTION,
             Self::RecordCharacterIntent => crate::record_character_intent::DESCRIPTION,
             Self::UpdatePlan => crate::update_plan::DESCRIPTION,
+            Self::StartSubrun => crate::start_subrun::DESCRIPTION,
         }
     }
 }
@@ -298,6 +305,7 @@ impl ExposedTool {
             ToolOperation::ApplyMemoryOperations => crate::apply_memory_operations::parameters(),
             ToolOperation::RecordCharacterIntent => crate::record_character_intent::parameters(),
             ToolOperation::UpdatePlan => crate::update_plan::parameters(),
+            ToolOperation::StartSubrun => crate::start_subrun::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,

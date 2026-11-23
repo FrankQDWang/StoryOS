@@ -159,7 +159,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
         });
         exposure
     };
-    // The current mapping and the fake tool loop mapping declare `…0e0106`. Each declares
+    // The current mapping and the fake tool loop mapping declare `…0e0107`. Each declares
     // `load_skill` and `read_skill_resource` only for a Run whose pinned catalog has a Skill (ADR
     // 0089 section 3), `read_memory_entry` and `search_memory` only for a Run whose captured
     // settings have use (ADR 0094 section 4), and `hybrid_search_manuscript` only when the search
@@ -189,6 +189,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             "read_memory_entry",
             "search_memory",
             "update_plan",
+            "start_subrun",
             "finish"
         ]
     );
@@ -197,13 +198,13 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             HOST_TOOL_REGISTRATION.revision,
             HOST_TOOL_REGISTRATION.tools.len(),
         ),
-        ("018f0000-0000-7001-8000-0000000e0106", 16)
+        ("018f0000-0000-7001-8000-0000000e0107", 17)
     );
     let declared = host(&HOST_TOOL_REGISTRATION);
     assert_eq!(
         (
             declared.tools[4].declaration().parameters,
-            declared.tools[12].declaration().parameters,
+            declared.tools[13].declaration().parameters,
         ),
         (
             json!({
@@ -434,7 +435,7 @@ fn only_an_ordinary_response_without_a_decision_and_with_a_complete_call_request
 /// A capture exposes its three read-only Tools and its output Tool. A consolidation pass exposes
 /// only its output Tool. This is also true with a research binding, a Skill, and the search by meaning. The
 /// Memory Settings of a Conversation do not control a capture (ADR 0094 sections 4 to 6). Only a
-/// Run of the author declares `update_plan` (ADR 0103 section 2).
+/// Run of the author declares `update_plan` and `start_subrun` (ADR 0103 sections 2 and 3A).
 #[test]
 fn a_background_run_gets_only_the_tools_of_its_kind() {
     let active = [bound(
@@ -474,6 +475,7 @@ fn a_background_run_gets_only_the_tools_of_its_kind() {
         "search_memory",
         "hybrid_search_manuscript",
         "update_plan",
+        "start_subrun",
     ];
     let author = names(crate::AgentRunKind::Author, true);
 
@@ -493,4 +495,25 @@ fn a_background_run_gets_only_the_tools_of_its_kind() {
     assert!(!author.contains(&"record_memory_observations"));
     assert!(!author.contains(&"apply_memory_operations"));
     assert!(!author.contains(&"record_character_intent"));
+    // A Subrun reads only: it has the read Tools that the facts of its parent Run give, and
+    // `finish`, also with a research binding and a Skill (ADR 0103 section 3A).
+    assert_eq!(
+        [true, false].map(|memory_use| names(crate::AgentRunKind::Subrun, memory_use)),
+        [
+            vec![
+                "read_chapter",
+                "search_manuscript",
+                "hybrid_search_manuscript",
+                "read_memory_entry",
+                "search_memory",
+                "finish"
+            ],
+            vec![
+                "read_chapter",
+                "search_manuscript",
+                "hybrid_search_manuscript",
+                "finish"
+            ]
+        ]
+    );
 }

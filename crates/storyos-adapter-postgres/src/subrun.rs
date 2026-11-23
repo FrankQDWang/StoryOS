@@ -3,22 +3,152 @@
 //! Registration revision, and the Project Instruction revision of its parent Run, and it uses the
 //! Memory pin of its parent Run.
 
-use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-#[cfg(test)]
-use storyos_core::AgentRunKind;
-use storyos_core::{CurrentPassageAssemblyRecord, ToolResultCandidate};
+use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, SubrunWork};
+use storyos_core::{
+    AgentRunKind, AgentRunStatus, CurrentPassageAssemblyRecord, ToolIntake, ToolResultCandidate,
+};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
-#[cfg(test)]
-use crate::agent_run_tool_authority::damaged;
-#[cfg(test)]
+use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
 use crate::agent_run_work::complete_unavailable;
+
+/// The work of the pending `start_subrun` call `row` of the Run of `claim`, in the transaction
+/// with the fence of that Run (ADR 0103 section 3A). A call with a Subrun Request continues its
+/// Subrun while the Subrun works, and it settles with the result of the Subrun after the Subrun
+/// ended. A call with no Subrun Request is refused when it breaks a rule, and otherwise it starts
+/// its Subrun. `None` means that the call is resolved.
+pub(crate) async fn begin(
+    client: &Client,
+    claim: &ClaimedAgentRun,
+    row: &ToolCallRow,
+) -> Result<Option<SubrunWork>, CompleteAgentRunError> {
+    let Ok(ToolIntake::StartSubrun { title, brief }) =
+        storyos_core::START_SUBRUN_TOOL_SPEC.intake(&row.arguments)
+    else {
+        return Err(damaged("The start_subrun ToolCall is damaged"));
+    };
+    let scope = &claim.project_scope;
+    let subrun = client
+        .query_opt(
+            "SELECT subrun.run_id::text, subrun.status,
+                    COALESCE(subrun.status = 'refused'
+                      AND subrun.settlement->>'capability' = 'conversation_too_long', false),
+                    (SELECT attempt.payload #>> '{decision,text}'
+                       FROM storyos.model_attempts AS attempt
+                      WHERE (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
+                            (subrun.owner_user_id, subrun.project_id, subrun.run_id)
+                        AND attempt.attempt_role IN ('decision', 'successor')
+                        AND attempt.decision_position = subrun.active_decision_position
+                        AND attempt.payload #>> '{decision,kind}' = 'advisory'
+                        AND attempt.payload #> '{decision,selected}' = 'true'::jsonb
+                      LIMIT 1)
+               FROM storyos.subrun_requests AS request
+               JOIN storyos.agent_runs AS subrun
+                 ON (subrun.owner_user_id, subrun.project_id, subrun.run_id) =
+                    (request.owner_user_id, request.project_id, request.subrun_run_id)
+              WHERE request.owner_user_id = $1::text::uuid
+                AND request.project_id = $2::text::uuid
+                AND request.parent_tool_call_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &row.tool_call_id,
+            ],
+        )
+        .await
+        .map_err(complete_unavailable)?;
+    if let Some(subrun) = subrun {
+        let status = AgentRunStatus::parse(subrun.get(/*idx*/ 1))
+            .ok_or_else(|| damaged("The status of the Subrun is damaged"))?;
+        // A Subrun works while it is queued or claimed. No command continues a Subrun, so each
+        // other status is its end.
+        if matches!(status, AgentRunStatus::Queued | AgentRunStatus::Claimed) {
+            return Ok(Some(SubrunWork {
+                subrun_run_id: subrun.get(/*idx*/ 0),
+            }));
+        }
+        let result = storyos_core::subrun_result(storyos_core::SubrunEnd {
+            status,
+            final_answer: subrun.get(/*idx*/ 3),
+            too_long: subrun.get(/*idx*/ 2),
+        });
+        resolve(client, claim, row, Resolution::settled(&result)).await?;
+        return Ok(None);
+    }
+    let requests: i64 = client
+        .query_one(
+            "SELECT count(*) FROM storyos.subrun_requests
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND parent_run_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(complete_unavailable)?
+        .get(/*idx*/ 0);
+    let requests = u64::try_from(requests).unwrap_or(u64::MAX);
+    if let Some(refusal) = storyos_core::subrun_refusal(&title, &brief, requests) {
+        let (state, label, result) = storyos_core::refused_subrun_call(refusal);
+        resolve(
+            client,
+            claim,
+            row,
+            Resolution::host(state, label, Some(&result)),
+        )
+        .await?;
+        return Ok(None);
+    }
+    let subrun_run_id = start(client, claim, &row.tool_call_id, &title, &brief).await?;
+    Ok(Some(SubrunWork { subrun_run_id }))
+}
+
+/// Takes the Subrun of `work` with a new fence and a new lease, in the transaction with the
+/// fence of its parent Run. `None` means that the Subrun does not work: the next ToolCall work of
+/// the parent settles its call.
+pub(crate) async fn take(
+    client: &Client,
+    parent: &ClaimedAgentRun,
+    work: &SubrunWork,
+    lease_seconds: i64,
+) -> Result<Option<ClaimedAgentRun>, CompleteAgentRunError> {
+    let scope = &parent.project_scope;
+    let fence_token = client
+        .query_opt(
+            "UPDATE storyos.agent_runs AS run
+                SET claim_generation = run.claim_generation + 1,
+                    fence_token = run.claim_generation + 1,
+                    lease_expires_at = clock_timestamp() + ($5::bigint * interval '1 second'),
+                    status = 'claimed'
+               FROM storyos.subrun_requests AS request
+              WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
+                AND run.run_id = $4::text::uuid AND run.status IN ('queued', 'claimed')
+                AND (request.owner_user_id, request.project_id, request.subrun_run_id,
+                     request.parent_run_id) =
+                    (run.owner_user_id, run.project_id, run.run_id, $3::text::uuid)
+          RETURNING run.fence_token",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &parent.run_id,
+                &work.subrun_run_id,
+                &lease_seconds,
+            ],
+        )
+        .await
+        .map_err(complete_unavailable)?;
+    Ok(fence_token.map(|row| ClaimedAgentRun {
+        project_scope: scope.clone(),
+        run_id: work.subrun_run_id.clone(),
+        fence_token: row.get(/*idx*/ 0),
+    }))
+}
 
 /// Writes the queued Subrun of the call `parent_tool_call_id` of the Run of `parent`, its Subrun
 /// Request, and its first RunStep, and gives the identity of the Subrun.
-// Part B of #436 calls it from the Host Tool `start_subrun`. Until then only the tests call it.
-#[cfg(test)]
 pub(crate) async fn start(
     client: &Client,
     parent: &ClaimedAgentRun,
@@ -110,7 +240,6 @@ pub(crate) async fn start(
 
 /// The Context Assembly of the first RunStep of the Run of `parent`. It holds the Memory pin and
 /// the Processing Destination Identity of the Run.
-#[cfg(test)]
 async fn parent_first_record(
     client: &Client,
     parent: &ClaimedAgentRun,
@@ -170,3 +299,7 @@ pub(crate) async fn persist_next_step(
 #[cfg(test)]
 #[path = "subrun_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "subrun_control_tests.rs"]
+mod control_tests;

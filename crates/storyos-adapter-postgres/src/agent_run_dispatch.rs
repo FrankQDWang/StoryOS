@@ -515,7 +515,7 @@ impl ModelDispatchStore for PostgresProjectReader {
 }
 
 impl PostgresProjectReader {
-    fn agent_run_lease_seconds(&self) -> Result<i64, CompleteAgentRunError> {
+    pub(crate) fn agent_run_lease_seconds(&self) -> Result<i64, CompleteAgentRunError> {
         i64::try_from(self.readable_export_lease_ttl.as_secs())
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))
     }

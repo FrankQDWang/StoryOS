@@ -132,6 +132,9 @@ impl ValidatedToolCall {
                 json!({ "intent": intent, "questions": questions })
             }
             ToolIntake::UpdatePlan { steps } => crate::update_plan::arguments(steps),
+            ToolIntake::StartSubrun { title, brief } => {
+                json!({ "title": title, "brief": brief })
+            }
         }
     }
 

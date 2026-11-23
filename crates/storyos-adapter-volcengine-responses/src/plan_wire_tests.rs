@@ -24,7 +24,7 @@ async fn only_a_request_of_a_run_of_the_author_declares_update_plan_with_its_par
     let decision = CreateRequest {
         tool_choice: ToolChoice::Required,
         ..first(
-            storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_START_SUBRUN_MAPPING_REVISION,
             storyos_core::AGENT_PLAN_REGISTRATION.revision,
         )
     };
@@ -36,13 +36,17 @@ async fn only_a_request_of_a_run_of_the_author_declares_update_plan_with_its_par
 
     assert_eq!(
         (
-            &names[names.len() - 2..],
-            &declared["tools"][names.len() - 2],
+            &names[names.len() - 3..],
+            &declared["tools"][names.len() - 3],
             plan_facts(&declared).1,
             plan_facts(&body(closing(decision.clone())).await).1,
         ),
         (
-            &["update_plan".to_owned(), "finish".to_owned()][..],
+            &[
+                "update_plan".to_owned(),
+                "start_subrun".to_owned(),
+                "finish".to_owned()
+            ][..],
             &json!({
                 "type": "function",
                 "name": "update_plan",
@@ -91,12 +95,107 @@ async fn only_a_request_of_a_run_of_the_author_declares_update_plan_with_its_par
             without_plan(plan_facts(
                 &body(crate::intent_wire::tests::intent_pass(
                     &crate::intent_wire::tests::FILE,
-                    storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION,
+                    storyos_core::AGENT_PLAN_START_SUBRUN_MAPPING_REVISION,
                 ))
                 .await
             )),
             without_plan(plan_facts(&body(summary(decision)).await)),
         ],
         [(false, 0); 4]
+    );
+}
+
+/// Item 9 of #436: a decision request and a closing request of a Run of the author declare
+/// `start_subrun` after `update_plan` and before `finish`, with the exact description and a
+/// strict schema, and have the paragraph of `start_subrun` one time, directly after the
+/// paragraph of `update_plan`. The request of a background Run, a summary request, and a request
+/// of a Subrun have no such Tool and no such paragraph.
+#[tokio::test]
+async fn only_a_request_of_a_run_of_the_author_declares_start_subrun_with_its_paragraph() {
+    let decision = CreateRequest {
+        tool_choice: ToolChoice::Required,
+        ..first(
+            storyos_core::AGENT_PLAN_START_SUBRUN_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_REGISTRATION.revision,
+        )
+    };
+    let paragraph = crate::wire::START_SUBRUN_INSTRUCTION;
+    let facts = |body: serde_json::Value| {
+        let names = plan_facts(&body).0;
+        let instructions = body["instructions"].as_str().unwrap().to_owned();
+        (
+            names.iter().any(|name| name == "start_subrun"),
+            instructions.matches(paragraph).count(),
+        )
+    };
+    let declared = body(decision.clone()).await;
+    let names = plan_facts(&declared).0;
+    let instructions = declared["instructions"].as_str().unwrap();
+
+    assert_eq!(
+        (
+            &names[names.len() - 2],
+            &declared["tools"][names.len() - 2],
+            paragraph,
+            instructions
+                .matches(&format!("{UPDATE_PLAN_INSTRUCTION}\n\n{paragraph}"))
+                .count(),
+            facts(body(closing(decision.clone())).await).1,
+        ),
+        (
+            &"start_subrun".to_owned(),
+            &json!({
+                "type": "function",
+                "name": "start_subrun",
+                "description": "Give one reading task to a Subrun and wait for its final answer. \
+                                The Subrun has a new context: it sees only the brief, and not \
+                                this conversation. It can read the manuscript and the memory, \
+                                and it can change nothing. One author request can start at most \
+                                4 Subruns.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "A short title of the task on one line, at most 40 \
+                                            characters."
+                        },
+                        "brief": {
+                            "type": "string",
+                            "description": "The complete task, at most 4000 characters."
+                        }
+                    },
+                    "required": ["title", "brief"],
+                    "additionalProperties": false
+                },
+                "strict": true
+            }),
+            "You can give one reading task to a Subrun with start_subrun. A Subrun is a helper \
+             with a new context: it sees only the brief that you write, and not this \
+             conversation. It can read the manuscript and the memory, and it can change nothing. \
+             Use it when a question needs the reading of several Chapters and you need only the \
+             answer, so that the Chapter texts do not fill your context. Write a brief that is \
+             complete by itself: the question, the Chapters to read, and the form of the answer. \
+             You get the final answer of the Subrun as the result of the call. When the work is \
+             small, do it yourself.",
+            1,
+            1,
+        )
+    );
+    assert_eq!(
+        [
+            facts(body(crate::capture_wire::tests::conversation()).await),
+            facts(body(crate::pass_wire::tests::full()).await),
+            facts(
+                body(crate::intent_wire::tests::intent_pass(
+                    &crate::intent_wire::tests::FILE,
+                    storyos_core::AGENT_PLAN_START_SUBRUN_MAPPING_REVISION,
+                ))
+                .await
+            ),
+            facts(body(summary(decision)).await),
+            facts(body(crate::subrun_wire::tests::subrun()).await),
+        ],
+        [(false, 0); 5]
     );
 }

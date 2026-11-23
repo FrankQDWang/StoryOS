@@ -47,6 +47,7 @@ fn each_current_mapping_declares_the_tool_only_when_the_search_by_meaning_is_pos
                     "hybrid_search_manuscript",
                     "write_memory",
                     "update_plan",
+                    "start_subrun",
                     "finish"
                 ],
                 vec![
@@ -57,6 +58,7 @@ fn each_current_mapping_declares_the_tool_only_when_the_search_by_meaning_is_pos
                     "search_manuscript",
                     "write_memory",
                     "update_plan",
+                    "start_subrun",
                     "finish"
                 ],
                 "hybrid_search_manuscript",

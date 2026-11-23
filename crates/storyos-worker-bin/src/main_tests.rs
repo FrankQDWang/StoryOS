@@ -110,6 +110,14 @@ impl ToolDispatchStore for RecordingStore {
         unreachable!("the store has no AgentRun")
     }
 
+    async fn take_subrun(
+        &self,
+        _claim: &ClaimedAgentRun,
+        _work: &storyos_application::SubrunWork,
+    ) -> Result<Option<ClaimedAgentRun>, CompleteAgentRunError> {
+        unreachable!("the store has no AgentRun")
+    }
+
     async fn commit_tool_dispatch_claim(
         &self,
         _claim: &ClaimedAgentRun,

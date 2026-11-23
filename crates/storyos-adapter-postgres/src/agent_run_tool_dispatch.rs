@@ -8,8 +8,8 @@
 use serde_json::{Value, json};
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CredentialReference, EmbeddingResult,
-    PreDispatchRefusal, QuestionSearch, ToolCallRequest, ToolDispatchClaim, ToolDispatchRecord,
-    ToolDispatchStore, ToolWork, WirePayloadProjection,
+    PreDispatchRefusal, QuestionSearch, SubrunWork, ToolCallRequest, ToolDispatchClaim,
+    ToolDispatchRecord, ToolDispatchStore, ToolWork, WirePayloadProjection,
 };
 use storyos_core::{ToolCallState, ToolObservation};
 use uuid::Uuid;
@@ -60,6 +60,13 @@ impl ToolDispatchStore for PostgresProjectReader {
                 if let Some(spec) =
                     storyos_core::host_tool(&row.registration_revision, &row.spec_revision)
                 {
+                    // A `start_subrun` call settles only after its Subrun ended.
+                    if spec.operation == storyos_core::ToolOperation::StartSubrun {
+                        match crate::subrun::begin(client, claim, &row).await? {
+                            Some(work) => return Ok(Some(ToolWork::Subrun(work))),
+                            None => continue,
+                        }
+                    }
                     // A `hybrid_search_manuscript` call needs the vector of its question.
                     if let Some(search) = crate::agent_run_hybrid_search::question_search(
                         client,
@@ -131,6 +138,21 @@ impl ToolDispatchStore for PostgresProjectReader {
                 return Ok(());
             }
             crate::agent_run_hybrid_search::record(client, claim, search, result).await
+        })
+        .await
+    }
+
+    async fn take_subrun(
+        &self,
+        claim: &ClaimedAgentRun,
+        work: &SubrunWork,
+    ) -> Result<Option<ClaimedAgentRun>, CompleteAgentRunError> {
+        let lease_seconds = self.agent_run_lease_seconds()?;
+        self.in_tool_transaction(claim, async |client| {
+            if load_run_phase(client, claim).await?.settled() {
+                return Ok(None);
+            }
+            crate::subrun::take(client, claim, work, lease_seconds).await
         })
         .await
     }
