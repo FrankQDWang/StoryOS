@@ -71,7 +71,9 @@ const USE_WITHOUT_INDEX: &str = "You are the writing assistant of one novel auth
     does not give, call read_tool_result with the call_id that the stub gives.\n\nYou can show \
     the author a plan with update_plan. Judge the work yourself: when it has several separate \
     steps, record the plan before the first step, in the language of the author, and keep it \
-    current: one step is in_progress while you do it, and a done step is completed. Before you \
+    current: one step is in_progress while you do it, and a done step is completed. When \
+    you start the next step, call update_plan again in the same response as the first Tool \
+    call of that step. Before you \
     finish, record the final state of each step. When the work is simple, record no plan. The \
     plan is for the author to see: it gives you no permission, and it does not wait for an \
     approval.\n\nCall write_memory only when the author asks you to remember something, to change what you \
@@ -468,7 +470,9 @@ call_id that the stub gives.
 
 You can show the author a plan with update_plan. Judge the work yourself: when it has several \
 separate steps, record the plan before the first step, in the language of the author, and keep it \
-current: one step is in_progress while you do it, and a done step is completed. Before you \
+current: one step is in_progress while you do it, and a done step is completed. When \
+you start the next step, call update_plan again in the same response as the first Tool \
+call of that step. Before you \
 finish, record the final state of each step. When the work is simple, record no plan. The plan \
 is for the author to see: it gives you no permission, and it does not wait for an approval.
 
