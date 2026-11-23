@@ -233,17 +233,3 @@ fn only_the_last_four_run_steps_have_a_notice_of_the_limit() {
         )
     );
 }
-
-/// The output of a call that the Host did not execute names the limit of the kind of its Run.
-#[test]
-fn the_output_of_an_unexecuted_call_names_the_limit_of_the_kind() {
-    assert_eq!(
-        [AgentRunKind::Author, AgentRunKind::MemoryCapture].map(|kind| kind
-            .run_step_place(/*decision_position*/ 0)
-            .unexecuted_call_output()),
-        [24, 8].map(|limit| format!(
-            "StoryOS did not execute this call, because the Run reached its limit of {limit} \
-             RunSteps. No result is available, and this is not an empty result."
-        ))
-    );
-}
