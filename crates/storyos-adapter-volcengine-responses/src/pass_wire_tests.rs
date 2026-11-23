@@ -8,7 +8,7 @@ use crate::AgentPlanResponses;
 use crate::skill_wire_tests::{body, first, item};
 use crate::tests::CanaryResolver;
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION;
 const ENTRY_1: &str = "{\"changed_at\":\"2026-11-17T10:00:00Z\",\"description\":\"渡口的船夫。\",\
                        \"id\":1,\"origin\":\"author_request\",\"text\":\"林舟撑船。\",\
                        \"title\":\"林舟\",\"type\":\"character\"}";
@@ -41,6 +41,8 @@ fn pass(
             run_kind: storyos_core::AgentRunKind::MemoryConsolidation,
         }),
         tool_choice: ToolChoice::Required,
+        run_step: storyos_core::AgentRunKind::MemoryConsolidation
+            .run_step_place(/*decision_position*/ 0),
         ..first(mapping, registration)
     }
 }

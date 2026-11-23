@@ -4,7 +4,7 @@ use storyos_core::ContextSourceClass;
 
 use crate::skill_wire_tests::{body, closing, first, item, summary};
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION;
 
 /// The complete instructions of a decision request of a Run of the author with Memory use and no
 /// Memory index item.
@@ -13,7 +13,9 @@ const USE_WITHOUT_INDEX: &str = "You are the writing assistant of one novel auth
     supplied text. Write in the language of the manuscript.\n\nYou work in steps. In each step, \
     call one or more of the supplied functions. StoryOS executes each call and gives you its \
     result in the next step. When StoryOS refuses a call, the result gives the reason, and you \
-    can correct the call.\n\nWhen your work on the author request is complete, call finish. \
+    can correct the call.\n\nYou have at most 24 steps for one author request. The last step is \
+    only for your final answer: StoryOS executes no function call of the last step.\n\nWhen your \
+    work on the author request is complete, call finish. \
     After the result of finish, write the final answer to the author as text, and call no \
     function. A question that you must ask the author is also a final answer. When you call a \
     function after the result of finish, your work continues, and you must call finish again \
@@ -396,6 +398,9 @@ Write in the language of the manuscript.
 You work in steps. In each step, call one or more of the supplied functions. StoryOS executes \
 each call and gives you its result in the next step. When StoryOS refuses a call, the result \
 gives the reason, and you can correct the call.
+
+You have at most 24 steps for one author request. The last step is only for your final answer: \
+StoryOS executes no function call of the last step.
 
 When your work on the author request is complete, call finish. After the result of finish, write \
 the final answer to the author as text, and call no function. A question that you must ask the \

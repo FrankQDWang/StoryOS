@@ -12,7 +12,7 @@ use crate::tests::{CanaryResolver, create, route};
 /// The input that `prepare` commits for the request with `earlier` on the current mapping.
 async fn input(earlier: Option<EarlierTurns>) -> serde_json::Value {
     let route = RequestRoute {
-        mapping_revision: storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION.to_owned(),
+        mapping_revision: storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION.to_owned(),
         ..route("http://127.0.0.1:9")
     };
     let DestinationRequest::Create(request) = create(route, RequestAttempt::New) else {

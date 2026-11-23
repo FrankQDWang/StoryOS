@@ -155,6 +155,7 @@ pub(crate) async fn summary_request(
         prior_input: storyos_application::PriorInput::Current,
         tool_exposure: storyos_core::ToolExposure::empty(),
         tool_choice: storyos_core::ToolChoice::None,
+        run_step: crate::agent_run_finish_rule::run_step_place(run)?,
         successor_of: None,
         tool_outputs,
         unexecuted_call_ids,

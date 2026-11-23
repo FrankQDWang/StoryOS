@@ -215,8 +215,8 @@ pub use embedding_request::{
     MANUSCRIPT_EMBEDDING_PURPOSE, admit_embedding, embedding_binding_to_make,
 };
 pub use finish_rule::{
-    FinishRuleOutcome, MAX_RUN_STEPS, PriorStepCall, RunStepLimit, ToolChoice,
-    UNEXECUTED_CALL_OUTPUT, apply_finish_rule, step_tool_choice,
+    FinishRuleOutcome, MAX_RUN_STEPS, PriorStepCall, RunStepLimit, RunStepPlace, StepLimitNotice,
+    ToolChoice, apply_finish_rule, step_tool_choice,
 };
 pub use function_calling::{
     PROBE_FIXTURE_CAPABILITY_PROFILE, PROBE_FIXTURE_REGISTRATION, ToolProbe, tool_probe,
@@ -438,7 +438,7 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_RUN_PLAN_MAPPING_REVISION,
+    AGENT_PLAN_REGISTRATION, AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };

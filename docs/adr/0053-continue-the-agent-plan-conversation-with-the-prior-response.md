@@ -172,3 +172,13 @@ The mapping `v12` is the mapping `v11` with one change of the request form. Such
 - No capability of the requirement changes. The request form changes only in a request of a Run of the author.
 
 The mapping `v13` is the mapping `v12` with one change of the request form. A request of a Run of the author declares the Host Tool `update_plan` (Host Tool Registration `018f0000-0000-7001-8000-0000000e0106`), and its instructions have the paragraph of the plan directly after the instructions of the tool loop (ADR 0103 section 2). The request of a capture, of a consolidation pass, and of an intent pass, and a summary request, do not declare the Tool and do not have the paragraph. The code keeps only `fa27` and the mapping `v13` (ADR 0097).
+
+## Amendment 2026-11-23: the head Model Registration takes the mapping v14
+
+[ADR 0103](0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md) section 5 ([#1835](https://github.com/FrankQDWang/StoryOS/issues/1835)) gives the mapping `storyos.volcengine-agent-plan.responses.create.v14` to a new head Model Registration. That Registration is `018f0000-0000-7001-8000-00000000fa28`.
+
+- `fa28` is Registration `fa27` with the mapping `v14`. It keeps the adapter, the API surface, the provider model, and the requirement of `fa27`.
+- It also keeps the capability profile and the request bounds of `fa27`. Thus it needs no new qualification.
+- No capability of the requirement changes. The request form changes only in the instructions of a decision request of a Run of the author and of a capture, and in the output of a call that the Host did not execute.
+
+The mapping `v14` is the mapping `v13` with three changes of the request form. Each decision request of a Run of the author has the paragraph of its limit of RunSteps directly after the paragraph of the steps. The decision request of each of the last 4 RunSteps of a Run of the author and of a capture has one sentence near the limit at the end of its instructions; a closing request before the last RunStep has none. The output of a call that the Host did not execute names the limit of the kind of the Run (ADR 0103 section 5). The code keeps only `fa28` and the mapping `v14` (ADR 0097).

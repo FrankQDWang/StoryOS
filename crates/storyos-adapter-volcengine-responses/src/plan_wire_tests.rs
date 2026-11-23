@@ -24,7 +24,7 @@ async fn only_a_request_of_a_run_of_the_author_declares_update_plan_with_its_par
     let decision = CreateRequest {
         tool_choice: ToolChoice::Required,
         ..first(
-            storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION,
             storyos_core::AGENT_PLAN_REGISTRATION.revision,
         )
     };
@@ -91,7 +91,7 @@ async fn only_a_request_of_a_run_of_the_author_declares_update_plan_with_its_par
             without_plan(plan_facts(
                 &body(crate::intent_wire::tests::intent_pass(
                     &crate::intent_wire::tests::FILE,
-                    storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION,
+                    storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION,
                 ))
                 .await
             )),

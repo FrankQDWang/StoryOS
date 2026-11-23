@@ -170,6 +170,8 @@ pub struct CreateRequest {
     pub tool_exposure: ToolExposure,
     /// The `tool_choice` of the finish rule (ADR 0091).
     pub tool_choice: storyos_core::ToolChoice,
+    /// The place of the RunStep of this request against the limit of its Run (ADR 0103 section 5).
+    pub run_step: storyos_core::RunStepPlace,
     /// The unknown predecessor Model Attempt that this one bounded successor replaces.
     pub successor_of: Option<String>,
     /// The function outputs of a continuation RunStep, in item order: one for each resolved
@@ -177,7 +179,7 @@ pub struct CreateRequest {
     pub tool_outputs: Vec<ToolOutput>,
     /// The call identifiers of the prior response that have no ToolCall, because the Host
     /// executed no call of the last RunStep. The request gives each of them the output
-    /// `UNEXECUTED_CALL_OUTPUT` (ADR 0091 section 5).
+    /// `RunStepPlace::unexecuted_call_output` (ADR 0091 section 5).
     pub unexecuted_call_ids: Vec<String>,
 }
 

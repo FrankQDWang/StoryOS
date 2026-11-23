@@ -29,10 +29,56 @@ impl ToolChoice {
 /// The most RunSteps of one Run (ADR 0091 section 5).
 pub const MAX_RUN_STEPS: u64 = 24;
 
-/// The output of each function call of a response of the last RunStep. The request that names
-/// that response sends it, because each function call needs an output (ADR 0091 section 5).
-pub const UNEXECUTED_CALL_OUTPUT: &str = "StoryOS did not execute this call, because the Run \
-     reached its limit of 24 RunSteps. No result is available, and this is not an empty result.";
+/// The count of the last RunSteps of a Run whose decision request has a sentence near the limit
+/// (ADR 0103 section 5).
+const NOTICE_RUN_STEPS: u64 = 4;
+
+/// The place of the RunStep of one request against the limit of RunSteps of its Run (ADR 0103
+/// section 5). `AgentRunKind::run_step_place` gives it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RunStepPlace {
+    pub max_run_steps: u64,
+    pub decision_position: u64,
+    /// The one operation that the Host executes in the last RunStep: the output Tool of a
+    /// background Run. `None` when the Host executes no call of the last RunStep.
+    pub last_step_operation: Option<ToolOperation>,
+}
+
+/// What the sentence near the limit of one decision request says (ADR 0103 section 5).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StepLimitNotice {
+    /// A RunStep before the last: the count of the RunSteps after it.
+    StepsLeft(u64),
+    LastStep,
+}
+
+impl RunStepPlace {
+    /// The sentence near the limit of the decision request with `tool_choice` at this place. Only
+    /// the last 4 RunSteps of a Run with more than 2 RunSteps have one. A closing request before
+    /// the last RunStep has none.
+    pub fn notice(self, tool_choice: ToolChoice) -> Option<StepLimitNotice> {
+        if self.max_run_steps <= 2 {
+            return None;
+        }
+        if RunStepLimit::within(self.max_run_steps, self.decision_position) == RunStepLimit::Last {
+            return Some(StepLimitNotice::LastStep);
+        }
+        let left = self.max_run_steps - 1 - self.decision_position;
+        (left < NOTICE_RUN_STEPS && tool_choice == ToolChoice::Required)
+            .then_some(StepLimitNotice::StepsLeft(left))
+    }
+
+    /// The output of each function call of a response of the last RunStep. The request that
+    /// names that response sends it, because each function call needs an output (ADR 0091
+    /// section 5).
+    pub fn unexecuted_call_output(self) -> String {
+        format!(
+            "StoryOS did not execute this call, because the Run reached its limit of {} \
+             RunSteps. No result is available, and this is not an empty result.",
+            self.max_run_steps
+        )
+    }
+}
 
 /// The place of the active RunStep against `MAX_RUN_STEPS`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -131,7 +177,7 @@ pub fn apply_finish_rule(
     let tool_item = items.iter().any(|item| item.role == StreamItemRole::Tool);
     match (tool_choice, limit) {
         // The Host executes no call of the last RunStep. A later request gives each call of a
-        // valid batch the output `UNEXECUTED_CALL_OUTPUT`. A batch with a structural fault has a
+        // valid batch the output `RunStepPlace::unexecuted_call_output`. A batch with a structural fault has a
         // call that no output can name, so its response does not advance the continuation.
         (ToolChoice::None, RunStepLimit::Last) => {
             let answer: Vec<_> = items
