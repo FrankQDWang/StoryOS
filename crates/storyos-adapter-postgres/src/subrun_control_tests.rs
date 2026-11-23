@@ -13,7 +13,7 @@ use tokio_postgres::Client;
 
 use super::tests::{parent, records, scripted, start, stopped_end, subrun_calls, subruns};
 use crate::PostgresProjectReader;
-use crate::shared_tests::agent_run_finish_rule::{complete, conversation_of};
+use crate::shared_tests::agent_run_finish_rule::conversation_of;
 use crate::shared_tests::agent_run_steering::{cancellation, steering};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
@@ -83,7 +83,21 @@ async fn commanded(
     matches!(stopped.await, Err(CompleteAgentRunError::StaleFence))
 }
 
-/// The status and the wake-up of the Run, and the role and the dispatch state of each of its
+/// Completes the Run `run_id` of `scope` with the claim of the Worker, which must select it.
+async fn by_worker(store: &PostgresProjectReader, scope: &ProjectScope, run_id: &str) {
+    let claim = claim_in_project(store, scope).await.unwrap();
+    assert_eq!(claim.run_id, run_id);
+    let end = complete_agent_run(
+        store,
+        &FakeDestination,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    );
+    Box::pin(end).await.unwrap();
+}
+
+/// The status and the Run Wakeup of the Run, and the role and the dispatch state of each of its
 /// Model Attempts of each role, in the order of their creation. A recorded response makes the
 /// dispatch state `settled`. An `abort` Attempt gives whether it names the first Attempt.
 async fn run_state(admin: &Client, run_id: &str) -> Value {
@@ -183,7 +197,7 @@ async fn a_pause_of_the_parent_continues_the_same_subrun_after_the_steering_inpu
     (store.steer_agent_run(&steer.envelope, &steer.input))
         .await
         .unwrap();
-    complete(&store, &admin, &scope, &run_id).await;
+    by_worker(&store, &scope, &run_id).await;
     // The fake destination answers the brief of the Subrun with its advice text.
     let answer = storyos_core::ADVISORY_TEXT;
 
@@ -283,7 +297,7 @@ async fn no_worker_claim_no_run_read_and_no_earlier_turn_gives_a_subrun() {
     (store.steer_agent_run(&steer.envelope, &steer.input))
         .await
         .unwrap();
-    complete(&store, &admin, &scope, &parent_run_id).await;
+    by_worker(&store, &scope, &parent_run_id).await;
     let read = |run_id: String| {
         let (store, scope) = (&store, &scope);
         async move {
@@ -302,13 +316,18 @@ async fn no_worker_claim_no_run_read_and_no_earlier_turn_gives_a_subrun() {
         .await
         .unwrap();
     let (chapter_id, conversation): (String, String) = (parent.get(0), parent.get(1));
-    // The capture of the Conversation of the parent starts, and it reads the Runs of the author
-    // from the first Run to the last Run of its input.
+    // The capture of the Conversation of the parent starts. Each message of its saved input
+    // names its Run: the distinct Runs of those messages.
     claim_due(&store, &admin, &scope, &conversation).await;
     let capture = json_of(
         &admin,
-        "SELECT jsonb_agg(jsonb_build_array(first_run_id::text, last_run_id::text))::text
-           FROM storyos.memory_captures WHERE conversation_id = $1::text::uuid",
+        r#"SELECT jsonb_agg(DISTINCT found[1])::text
+             FROM storyos.memory_captures AS capture
+             JOIN storyos.context_assembly_manifests AS manifest ON manifest.run_id = capture.run_id,
+                  jsonb_array_elements(manifest.payload->'selected') AS item,
+                  regexp_matches(item->>'content', '"run_id":"([0-9a-f-]+)"', 'g') AS found
+            WHERE capture.conversation_id = $1::text::uuid
+              AND item->>'source_class' = 'memory_capture_input'"#,
         &[&conversation],
     )
     .await;
@@ -344,7 +363,7 @@ async fn no_worker_claim_no_run_read_and_no_earlier_turn_gives_a_subrun() {
             true,
             vec![parent_run_id.clone()],
             // The input of the capture has only the parent: the Subrun is not in it.
-            json!([[parent_run_id, parent_run_id]]),
+            json!([parent_run_id]),
         )
     );
 }

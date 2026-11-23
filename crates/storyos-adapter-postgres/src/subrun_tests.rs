@@ -801,7 +801,7 @@ async fn a_subrun_too_long_for_the_window_of_agent_plan_is_refused_before_its_di
 /// no result (criterion 3). The parent then continues to its end. For `paused`, the stream of the
 /// Subrun commits a function call item and breaks, so its successor has an unresolved effect. For
 /// `waiting`, the stream of the successor also breaks, so the allowance is spent with an unknown
-/// outcome. Test prefix lead `6f`.
+/// outcome. Test prefix lead `8e`.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_subrun_that_the_recovery_stops_settles_the_call_with_no_result() {
@@ -811,21 +811,21 @@ async fn a_subrun_that_the_recovery_stops_settles_the_call_with_no_result() {
         "call_id": "call_read", "name": "read_chapter", "arguments": r#"{"chapter":1,"first_block":null,"last_block":null}"#});
     let committed_call = sse(&[
         json!({"type": "response.created",
-               "response": {"id": "resp_6f0_subrun", "status": "in_progress", "output": []}}),
+               "response": {"id": "resp_8e1_subrun", "status": "in_progress", "output": []}}),
         json!({"type": "response.output_item.done", "output_index": 0, "item": call}),
     ]);
     let cases = [
         (
-            "6f0",
-            vec![committed_call, stored("resp_6f0_subrun", "in_progress")],
+            "8e1",
+            vec![committed_call, stored("resp_8e1_subrun", "in_progress")],
         ),
         (
-            "6f1",
+            "8e2",
             vec![
-                broken_stream("resp_6f1_subrun"),
-                stored("resp_6f1_subrun", "in_progress"),
-                broken_stream("resp_6f1_successor"),
-                stored("resp_6f1_subrun", "in_progress"),
+                broken_stream("resp_8e2_subrun"),
+                stored("resp_8e2_subrun", "in_progress"),
+                broken_stream("resp_8e2_successor"),
+                stored("resp_8e2_subrun", "in_progress"),
             ],
         ),
     ];
