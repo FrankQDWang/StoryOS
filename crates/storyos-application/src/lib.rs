@@ -252,8 +252,8 @@ pub use set_current_chapter::{
     CurrentChapterSelected, SetCurrentChapterInput, SetCurrentChapterSettlement,
 };
 pub use tool_gateway_ports::{
-    NoToolDestination, QuestionSearch, ToolCallRequest, ToolDestinationAdapter, ToolDispatchClaim,
-    ToolDispatchRecord, ToolDispatchStore, ToolWork,
+    NoToolDestination, QuestionSearch, SubrunWork, ToolCallRequest, ToolDestinationAdapter,
+    ToolDispatchClaim, ToolDispatchRecord, ToolDispatchStore, ToolWork,
 };
 pub use undo_latest_author_action::{
     AuthorUndoFrontierPosition, UndoApplied, UndoLatestAuthorActionInput,

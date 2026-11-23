@@ -16,6 +16,7 @@ mod research_plan;
 mod search_manuscript_plan;
 mod search_memory_plan;
 mod skill_resource_plan;
+mod subrun_plan;
 mod tool_loop_plan;
 mod update_plan_plan;
 mod write_memory_plan;
@@ -25,6 +26,7 @@ pub use embedding::{
     EMBEDDING_UNKNOWN_MARKER, FakeEmbeddingExchange, FakeEmbeddings, fake_vector,
 };
 pub use load_plan::LOAD_REASON;
+pub use subrun_plan::{START_SUBRUN_SCRIPT, SUBRUN_ANSWER_PREFIX, SUBRUN_SCRIPT_TITLE};
 pub use tool_loop_plan::LIMIT_ANSWER;
 pub use update_plan_plan::{UPDATE_PLAN_SCRIPT, UPDATE_PLAN_STEPS};
 

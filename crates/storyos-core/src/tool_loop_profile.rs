@@ -17,10 +17,11 @@ pub const HOST_FAKE_TOOL_LOOP_MAPPING_REVISION: &str = "storyos.host-fake.mappin
 /// tool-loop request (ADR 0100 section 2), the instructions of the two parts of a character file
 /// (ADR 0101 section 3), the section of the earlier turns of the Conversation (ADR 0102), and the
 /// Host Tool `update_plan` with its paragraph of the Host instructions (ADR 0103 section 2), the
-/// sentences of the limit of RunSteps (ADR 0103 section 5), and the request of a Subrun (ADR 0103
-/// section 3A).
-pub const AGENT_PLAN_SUBRUN_MAPPING_REVISION: &str =
-    "storyos.volcengine-agent-plan.responses.create.v15";
+/// sentences of the limit of RunSteps (ADR 0103 section 5), the request of a Subrun (ADR 0103
+/// section 3A), and the Host Tool `start_subrun` with its paragraph of the Host instructions (ADR
+/// 0103 section 3A).
+pub const AGENT_PLAN_START_SUBRUN_MAPPING_REVISION: &str =
+    "storyos.volcengine-agent-plan.responses.create.v16";
 
 const STAGE_3_PROOF: CapabilityEvidence = CapabilityEvidence::Qualified {
     evidence: "Stage 3 contract proof of the Contract-Faithful Fake Destination",
@@ -71,15 +72,15 @@ pub const HOST_FAKE_TOOL_LOOP_REGISTRATION: ModelRegistration = ModelRegistratio
 };
 
 /// The current Agent Plan Registration: the qualified dated version `doubao-seed-2-1-pro-260915`
-/// with qualified function calling and the mapping `v15`. Nothing is pending, so the link
+/// with qualified function calling and the mapping `v16`. Nothing is pending, so the link
 /// authorizes no probe. A later provider version is a new Registration that the author approves
 /// (ADR 0059).
 pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
-    revision: "018f0000-0000-7001-8000-00000000fa29",
+    revision: "018f0000-0000-7001-8000-00000000fa30",
     adapter: ModelAdapter::VolcengineAgentPlanResponses,
     api_surface: "volcengine.agent-plan.responses./api/plan/v3",
     provider_model_id: "doubao-seed-2-1-pro-260915",
-    mapping_revision: AGENT_PLAN_SUBRUN_MAPPING_REVISION,
+    mapping_revision: AGENT_PLAN_START_SUBRUN_MAPPING_REVISION,
     requirement: RECOVERY_REQUIREMENT,
     capability_profile: &crate::AGENT_PLAN_CAPABILITY_PROFILE,
 };

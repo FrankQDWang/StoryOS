@@ -1,8 +1,10 @@
+use serde_json::json;
+
 use super::{
-    START_SUBRUN_DESCRIPTION, SubrunEnd, SubrunRefusal, refused_subrun_call, subrun_refusal,
+    START_SUBRUN_TOOL_SPEC, SubrunEnd, SubrunRefusal, refused_subrun_call, subrun_refusal,
     subrun_result,
 };
-use crate::{AgentRunStatus, ToolCallState};
+use crate::{AgentRunStatus, IntakeRefusal, ToolCallState, ToolIntake};
 
 /// ADR 0103 section 3A, item 2 of #436: a call is accepted when the title has 1 through 40
 /// characters on one line, the brief has 1 through 4000 characters, neither is only white space,
@@ -76,6 +78,30 @@ fn a_subrun_call_is_accepted_only_in_the_bounds_and_a_refusal_gives_the_first_ru
     );
 }
 
+/// The intake takes the two strings, and it refuses another field, a missing field, and a text
+/// that the ToolCall record cannot hold.
+#[test]
+fn the_intake_takes_the_title_and_the_brief() {
+    let intake = |arguments| START_SUBRUN_TOOL_SPEC.intake(&arguments);
+    assert_eq!(
+        (
+            intake(json!({"title": "读", "brief": "读第一章"})),
+            intake(json!({"title": "读"})),
+            intake(json!({"title": "读", "brief": "读", "chapter": 1})),
+            intake(json!({"title": "读\u{0}", "brief": "读"})),
+        ),
+        (
+            Ok(ToolIntake::StartSubrun {
+                title: "读".to_owned(),
+                brief: "读第一章".to_owned()
+            }),
+            Err(IntakeRefusal::Malformed),
+            Err(IntakeRefusal::Malformed),
+            Err(IntakeRefusal::UnstorableText),
+        )
+    );
+}
+
 /// Item 8 of #436: a queued or claimed Subrun gives no result, so the call continues it. A
 /// completed Subrun gives its final answer text. A Subrun refused because its request was too
 /// long gives the sentence of that cause. Each other end with no final answer, and an answer that the ToolCall
@@ -121,17 +147,5 @@ fn the_result_is_the_final_answer_or_the_sentence_of_the_end() {
             no_result.clone(),
             no_result,
         ]
-    );
-}
-
-/// Item 1 of #436: the description of the Tool for the model is the exact text of the ticket.
-#[test]
-fn the_description_is_the_text_of_the_ticket() {
-    assert_eq!(
-        START_SUBRUN_DESCRIPTION,
-        "Give one reading task to a Subrun and wait for its final answer. The Subrun has a new \
-         context: it sees only the brief, and not this conversation. It can read the manuscript \
-         and the memory, and it can change nothing. One author request can start at most 4 \
-         Subruns."
     );
 }

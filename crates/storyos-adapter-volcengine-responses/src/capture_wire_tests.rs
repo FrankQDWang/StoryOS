@@ -9,7 +9,7 @@ use crate::AgentPlanResponses;
 use crate::skill_wire_tests::{body, first, item};
 use crate::tests::CanaryResolver;
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_START_SUBRUN_MAPPING_REVISION;
 const INDEX: &str =
     "{\"type\":\"character\"}\n{\"description\":\"渡口的船夫。\",\"id\":1,\"title\":\"林舟\"}";
 const LIST: &str = "{\"volume\":\"第一卷\"}\n[1,32,\"渡口\"]";

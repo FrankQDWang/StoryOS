@@ -74,11 +74,12 @@ fn a_run_with_memory_use_declares_search_memory_with_a_strict_schema() {
                         "read_memory_entry",
                         "search_memory",
                         "update_plan",
+                        "start_subrun",
                         "finish"
                     ]
                 ]
                 .concat(),
-                [&before[..], &["update_plan", "finish"]].concat(),
+                [&before[..], &["update_plan", "start_subrun", "finish"]].concat(),
                 "search_memory",
                 "Finds the entries of the Memory of this Project that hold an exact word or \
                  phrase in the title, the description, or the text. The result lists each entry \

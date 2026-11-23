@@ -112,7 +112,7 @@ fn only_a_qualified_profile_or_an_authorized_qualification_of_its_requirement_re
 #[test]
 fn only_the_current_registrations_resolve_and_the_head_pins_a_dated_version() {
     // Each input revision with the Registration that it resolves to.
-    let resolved: Vec<_> = (1..=29)
+    let resolved: Vec<_> = (1..=30)
         .map(|number| format!("018f0000-0000-7001-8000-00000000fa{number:02}"))
         .filter_map(|revision| {
             model_registration(&revision).map(|registration| (revision, registration))
@@ -131,10 +131,10 @@ fn only_the_current_registrations_resolve_and_the_head_pins_a_dated_version() {
             vec![
                 (revision("fa16"), &PROBE_FIXTURE_REGISTRATION),
                 (revision("fa18"), &HOST_FAKE_TOOL_LOOP_REGISTRATION),
-                (revision("fa29"), &AGENT_PLAN_REGISTRATION),
+                (revision("fa30"), &AGENT_PLAN_REGISTRATION),
             ],
             "doubao-seed-2-1-pro-260915",
-            "storyos.volcengine-agent-plan.responses.create.v15",
+            "storyos.volcengine-agent-plan.responses.create.v16",
             "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v4",
         )
     );

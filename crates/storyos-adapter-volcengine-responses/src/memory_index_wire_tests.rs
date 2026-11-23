@@ -4,7 +4,7 @@ use storyos_core::ContextSourceClass;
 
 use crate::skill_wire_tests::{body, closing, first, item, summary};
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_START_SUBRUN_MAPPING_REVISION;
 
 /// The complete instructions of a decision request of a Run of the author with Memory use and no
 /// Memory index item.
@@ -78,7 +78,13 @@ const USE_WITHOUT_INDEX: &str = "You are the writing assistant of one novel auth
     call of that step. Before you \
     finish, record the final state of each step. When the work is simple, record no plan. The \
     plan is for the author to see: it gives you no permission, and it does not wait for an \
-    approval.\n\nCall write_memory only when the author asks you to remember something, to change what you \
+    approval.\n\nYou can give one reading task to a Subrun with start_subrun. A Subrun is a \
+    helper with a new context: it sees only the brief that you write, and not this \
+    conversation. It can read the manuscript and the memory, and it can change nothing. Use it \
+    when a question needs the reading of several Chapters and you need only the answer, so that \
+    the Chapter texts do not fill your context. Write a brief that is complete by itself: the \
+    question, the Chapters to read, and the form of the answer. You get the final answer of the \
+    Subrun as the result of the call. When the work is small, do it yourself.\n\nCall write_memory only when the author asks you to remember something, to change what you \
     remember, or to forget something, and never on your own decision. An entry is a short \
     synthesis or an intent, not a copy of a passage. For a pair of characters that the section \
     Memory index lists, change that entry and do not create a second one. A character can have \
@@ -480,6 +486,14 @@ you start the next step, call update_plan again in the same response as the firs
 call of that step. Before you \
 finish, record the final state of each step. When the work is simple, record no plan. The plan \
 is for the author to see: it gives you no permission, and it does not wait for an approval.
+
+You can give one reading task to a Subrun with start_subrun. A Subrun is a helper with a new \
+context: it sees only the brief that you write, and not this conversation. It can read the \
+manuscript and the memory, and it can change nothing. Use it when a question needs the reading of \
+several Chapters and you need only the answer, so that the Chapter texts do not fill your \
+context. Write a brief that is complete by itself: the question, the Chapters to read, and the \
+form of the answer. You get the final answer of the Subrun as the result of the call. When the \
+work is small, do it yourself.
 
 Call write_memory only when the author asks you to remember something, to change what you \
 remember, or to forget something, and never on your own decision. An entry is a short synthesis \

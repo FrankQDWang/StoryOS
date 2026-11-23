@@ -34,6 +34,7 @@ fn a_run_with_memory_use_declares_read_memory_entry_with_a_strict_schema() {
         "search_manuscript",
         "write_memory",
         "update_plan",
+        "start_subrun",
         "finish",
     ];
     for revision in [
@@ -56,6 +57,7 @@ fn a_run_with_memory_use_declares_read_memory_entry_with_a_strict_schema() {
                         "read_memory_entry",
                         "search_memory",
                         "update_plan",
+                        "start_subrun",
                         "finish"
                     ]
                 ]

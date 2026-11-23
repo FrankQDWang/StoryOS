@@ -26,7 +26,7 @@ use super::*;
 #[path = "create_agent_run_context.rs"]
 pub(crate) mod context;
 #[path = "agent_run_earlier_turns.rs"]
-mod earlier_turns;
+pub(crate) mod earlier_turns;
 #[path = "create_agent_run_read.rs"]
 mod read;
 #[path = "create_agent_run_write.rs"]

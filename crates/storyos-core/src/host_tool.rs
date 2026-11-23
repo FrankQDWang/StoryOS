@@ -27,11 +27,12 @@ pub struct HostToolRegistration {
 /// `read_memory_entry`, and `search_memory`, the output Tool `record_memory_observations` of a
 /// capture, the output Tool `apply_memory_operations` of a consolidation pass (ADR 0094, ADR
 /// 0095), the output Tool `record_character_intent` of an intent pass (ADR 0101), and
-/// `update_plan` (ADR 0103 section 2). The Tools are before `finish`.
+/// `update_plan` (ADR 0103 section 2), and `start_subrun` (ADR 0103 section 3A). The Tools are
+/// before `finish`.
 /// `ExposureFacts::has_host_tool` decides which of them a RunStep declares.
 pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     id: "host_tools",
-    revision: "018f0000-0000-7001-8000-0000000e0106",
+    revision: "018f0000-0000-7001-8000-0000000e0107",
     kind: ToolRegistrationKind::Host,
     adapter_revision: "storyos.host-tool.v1",
     tools: &[
@@ -50,6 +51,7 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
         &crate::APPLY_MEMORY_OPERATIONS_TOOL_SPEC,
         &crate::RECORD_CHARACTER_INTENT_TOOL_SPEC,
         &crate::UPDATE_PLAN_TOOL_SPEC,
+        &crate::START_SUBRUN_TOOL_SPEC,
         &FINISH_TOOL_SPEC,
     ],
 };
@@ -77,7 +79,8 @@ pub fn host_tool_result_class(spec: &ToolSpec) -> ContextSourceClass {
         | ToolOperation::RecordMemoryObservations
         | ToolOperation::ApplyMemoryOperations
         | ToolOperation::RecordCharacterIntent
-        | ToolOperation::UpdatePlan => ContextSourceClass::ToolResult,
+        | ToolOperation::UpdatePlan
+        | ToolOperation::StartSubrun => ContextSourceClass::ToolResult,
     }
 }
 
@@ -124,7 +127,8 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         // Memory Entries, `record_memory_observations`, because it writes the observations, and
         // `apply_memory_operations`, because it writes the Memory Entries, and
         // `record_character_intent`, because the store keeps its result with the character entry,
-        // and `update_plan`, because the store settles a call that breaks a rule as refused.
+        // `update_plan`, because the store settles a call that breaks a rule as refused, and
+        // `start_subrun`, because the store records the Subrun and the Gateway runs it.
         ToolIntake::WebSearch { .. }
         | ToolIntake::WebFetch { .. }
         | ToolIntake::ProposeEdit(_)
@@ -141,7 +145,8 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         | ToolIntake::RecordMemoryObservations(_)
         | ToolIntake::ApplyMemoryOperations(_)
         | ToolIntake::RecordCharacterIntent { .. }
-        | ToolIntake::UpdatePlan { .. } => None,
+        | ToolIntake::UpdatePlan { .. }
+        | ToolIntake::StartSubrun { .. } => None,
     }
 }
 

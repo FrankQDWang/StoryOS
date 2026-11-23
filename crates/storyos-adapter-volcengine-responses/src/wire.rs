@@ -243,6 +243,17 @@ call of that step. Before you \
 finish, record the final state of each step. When the work is simple, record no plan. The plan \
 is for the author to see: it gives you no permission, and it does not wait for an approval.";
 
+/// The paragraph of the current mapping for a request that declares `start_subrun`: each request
+/// of a Run of the author (ADR 0103 section 3A). It follows the paragraph of `update_plan`.
+pub(crate) const START_SUBRUN_INSTRUCTION: &str = "\
+You can give one reading task to a Subrun with start_subrun. A Subrun is a helper with a new \
+context: it sees only the brief that you write, and not this conversation. It can read the \
+manuscript and the memory, and it can change nothing. Use it when a question needs the reading of \
+several Chapters and you need only the answer, so that the Chapter texts do not fill your \
+context. Write a brief that is complete by itself: the question, the Chapters to read, and the \
+form of the answer. You get the final answer of the Subrun as the result of the call. When the \
+work is small, do it yourself.";
+
 /// The label of the earlier author messages that the later request of a compaction sends before
 /// the current input (ADR 0093 section 6).
 pub(crate) const EARLIER_AUTHOR_MESSAGES_LABEL: &str = "\
@@ -323,6 +334,10 @@ pub(crate) fn create_body(
     };
     let instructions = match declares(storyos_core::ToolOperation::UpdatePlan) {
         true => format!("{instructions}\n\n{UPDATE_PLAN_INSTRUCTION}"),
+        false => instructions,
+    };
+    let instructions = match declares(storyos_core::ToolOperation::StartSubrun) {
+        true => format!("{instructions}\n\n{START_SUBRUN_INSTRUCTION}"),
         false => instructions,
     };
     let skill = request.context.iter().any(|item| {

@@ -413,9 +413,9 @@ pub use skill_package::{
 };
 pub use skill_use::{SkillUse, StoredSkillLoad, skill_uses};
 pub use start_subrun::{
-    START_SUBRUN_DESCRIPTION, SUBRUN_BRIEF_MAX_CHARS, SUBRUN_NO_RESULT, SUBRUN_REQUESTS_MAX,
-    SUBRUN_TITLE_MAX_CHARS, SUBRUN_TOO_LONG, SubrunEnd, SubrunRefusal, refused_subrun_call,
-    subrun_refusal, subrun_result, subrun_works,
+    START_SUBRUN_DESCRIPTION, START_SUBRUN_TOOL_SPEC, SUBRUN_BRIEF_MAX_CHARS, SUBRUN_NO_RESULT,
+    SUBRUN_REQUESTS_MAX, SUBRUN_TITLE_MAX_CHARS, SUBRUN_TOO_LONG, SubrunEnd, SubrunRefusal,
+    refused_subrun_call, subrun_refusal, subrun_result, subrun_works,
 };
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
@@ -448,7 +448,7 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_SUBRUN_MAPPING_REVISION,
+    AGENT_PLAN_REGISTRATION, AGENT_PLAN_START_SUBRUN_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };
