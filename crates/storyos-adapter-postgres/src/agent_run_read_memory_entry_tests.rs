@@ -427,6 +427,7 @@ async fn a_run_with_no_memory_use_declares_no_read() {
                 "read_chapter",
                 "search_manuscript",
                 "write_memory",
+                "update_plan",
                 "finish"
             ]),
             vec![

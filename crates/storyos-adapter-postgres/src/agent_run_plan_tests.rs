@@ -1,5 +1,5 @@
 //! The plan of a Run at the dispatch seam and in the Run read (ADR 0103 section 2). Test prefix
-//! lead `6d`, and the challenge suffix `0x6dc0`.
+//! lead `b1`, and the challenge suffix `0xb1c0`.
 
 use std::sync::Mutex;
 
@@ -104,12 +104,12 @@ impl ModelProviderAdapter for PlanReads<'_> {
 async fn each_run_step_records_the_plan_and_the_run_read_gives_the_newest_one() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id) = assisted_chapter(&store, "6d1").await;
+    let (scope, chapter_id) = assisted_chapter(&store, "b11").await;
     let run_id = Admission {
         message: UPDATE_PLAN_SCRIPT,
         ..Default::default()
     }
-    .admit(&store, &scope, &chapter_id, "6d2")
+    .admit(&store, &scope, &chapter_id, "b12")
     .await;
     let reads = PlanReads {
         store: &store,
@@ -174,8 +174,8 @@ async fn a_run_with_no_accepted_call_has_no_plan_and_a_cancelled_run_keeps_its_p
     let (store, admin) = stores().await;
     let mut ended = Vec::new();
     for (prefixes, message) in [
-        (["6d3", "6d4"], "Help with this passage."),
-        (["6d5", "6d6"], r#"SCRIPT:refuse update_plan {"steps":[]}"#),
+        (["b13", "b14"], "Help with this passage."),
+        (["b15", "b16"], r#"SCRIPT:refuse update_plan {"steps":[]}"#),
     ] {
         let (scope, chapter_id) = assisted_chapter(&store, prefixes[0]).await;
         let run_id = Admission {
@@ -190,14 +190,14 @@ async fn a_run_with_no_accepted_call_has_no_plan_and_a_cancelled_run_keeps_its_p
             calls(&admin, &run_id).await,
         ));
     }
-    let (scope, chapter_id) = assisted_chapter(&store, "6d7").await;
+    let (scope, chapter_id) = assisted_chapter(&store, "b17").await;
     let run_id = Admission {
         message: UPDATE_PLAN_SCRIPT,
         ..Default::default()
     }
-    .admit(&store, &scope, &chapter_id, "6d8")
+    .admit(&store, &scope, &chapter_id, "b18")
     .await;
-    let cancel = cancellation(&store, &scope, 0x6dc0, &run_id).await;
+    let cancel = cancellation(&store, &scope, 0xb1c0, &run_id).await;
     let author = AuthorAt::new(
         &store,
         Moment::DuringRequest(2),
