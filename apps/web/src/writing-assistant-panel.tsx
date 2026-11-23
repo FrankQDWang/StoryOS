@@ -295,6 +295,8 @@ export function WritingAssistantPanel({
   const [refused, setRefused] = useState(false);
   const [resultUnavailable, setResultUnavailable] = useState(false);
   const inspectSequence = useRef(0);
+  // The number of the last Run read that started, and of the last one that set the Run state.
+  const runReads = useRef({ started: 0, applied: 0 });
   const [failedReads, setFailedReads] = useState(0);
   const [skills, setSkills] = useState<SkillCatalogEntry[]>();
   // A refused selection reads the Skills of the deployment again.
@@ -365,6 +367,7 @@ export function WritingAssistantPanel({
       saveReference(current);
       setReference(current);
     }
+    const read = ++runReads.current.started;
     const result = await getAgentRun({
       baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
       projectId: current.scope.project_id, runId,
@@ -378,7 +381,11 @@ export function WritingAssistantPanel({
     current = { ...(readReference(current.scope) ?? current), conversationId: result.conversation_id };
     saveReference(current);
     setReference(current);
-    setRun(result);
+    // A read that ends after a later read keeps the later Run state: the panel shows the newest Run read.
+    if (read > runReads.current.applied) {
+      runReads.current.applied = read;
+      setRun(result);
+    }
     // The Run exists, so its references go from the composer also after a lost acknowledgement.
     clearDraftReferences(current.scope, current.referenceKeys ?? []);
     if (!await showProposals(current, result)) return;

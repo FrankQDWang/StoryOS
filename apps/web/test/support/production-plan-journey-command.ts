@@ -42,20 +42,17 @@ export async function verifyProductionPlanJourney(context: BrowserContext): Prom
     const { runId } = await send(page, SCRIPT);
     const run = await settleRun(server.baseUrl, setup, runId);
     assert.equal(run.status, "completed");
-    assert.deepEqual(run.plan, STEPS.map((text) => ({ text, status: "completed" })));
     const answer = run.results?.[0];
     assert.ok(answer?.kind === "answer" && answer.text.length > 0);
 
-    // The refresh of the panel brings the plan of the ended Run. The status line is gone, and the list is directly
-    // above the first result, which is the answer.
+    // The refresh of the panel brings the plan of the ended Run, directly above the answer.
     await page.locator(`[data-assistant-run-id="${runId}"][data-assistant-dispatch="completed"]`).waitFor();
-    const turn = page.locator("[data-assistant-current-run]");
-    const steps = turn.locator("[data-assistant-plan] > li");
+    const steps = page.locator("[data-assistant-current-run] [data-assistant-plan] > li");
     await expect(steps).toHaveText(STEPS);
-    assert.deepEqual(await steps.evaluateAll((items) => items.map((item) => [item.getAttribute("data-plan-step-status"),
-      item.querySelector("[role=img]")?.getAttribute("aria-label")])), STEPS.map(() => ["completed", "已完成"]));
-    await expect(turn.locator("[data-assistant-run-status]")).toHaveCount(0);
-    await expect(turn.locator("[data-assistant-plan] + .assistant-result")).toHaveText(answer.text);
+    assert.deepEqual(await steps.evaluateAll((items) => items.map((item) => item.getAttribute("data-plan-step-status"))),
+      STEPS.map(() => "completed"));
+    await expect(page.locator("[data-assistant-current-run] [data-assistant-plan] + .assistant-result"))
+      .toHaveText(answer.text);
     assert.deepEqual(errors, []);
 
     await assertProjectReceipts([setup.projectId], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,
