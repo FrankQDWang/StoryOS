@@ -1,0 +1,152 @@
+[
+  {
+    "model_attempt_id": "01a20664-c247-7911-a0f5-bdd5ff2c1660",
+    "run_id": "01a20664-c212-7163-8b61-b96ef14017f0",
+    "run_kind": "author",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa26",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v12",
+    "response_reference": "resp_02179540359661972ea91cebe75e8e291705b4c0b59095ef7e30d",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 11849,
+      "output_tokens": 120
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_h3jize9wst98hq8qqbqqb0ea"
+      ],
+      "selected": true,
+      "decision_id": "01a20664-d8dd-7202-a7fb-363956ee699b",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a20664-d922-7150-bcf6-66f5fc4adc23",
+    "run_id": "01a20664-c212-7163-8b61-b96ef14017f0",
+    "run_kind": "author",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa26",
+    "decision_position": 1,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v12",
+    "response_reference": "resp_021795403602452295492bf4fae3051b4480808ec74710f80934a",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 12037,
+      "output_tokens": 32
+    },
+    "decision": {
+      "kind": "advisory",
+      "text": "因为爷爷去世了，父亲打电话通知她，她从上海赶回青溪镇参加葬礼，并处理爷爷留下的后事。",
+      "selected": true,
+      "decision_id": "01a20664-e9af-7851-91fd-097ff91f531f",
+      "authoritative": false,
+      "advances_continuation": true
+    }
+  },
+  {
+    "model_attempt_id": "01a20664-f362-7c53-88d5-8bd854425b21",
+    "run_id": "01a20664-f318-7531-8b94-5e2c55d712f1",
+    "run_kind": "author",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa26",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v12",
+    "response_reference": "resp_021795403609171b869c66ddd8a6a297966635e3152d682261579",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 11951,
+      "output_tokens": 218
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_u7gqy1k0ys7u7s2ddym240uy"
+      ],
+      "selected": true,
+      "decision_id": "01a20665-0a12-7190-8ab1-5bad3749d512",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a20665-0a43-72b1-ac92-759f6e900edb",
+    "run_id": "01a20664-f318-7531-8b94-5e2c55d712f1",
+    "run_kind": "author",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa26",
+    "decision_position": 1,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v12",
+    "response_reference": "resp_021795403615029dc6263e9e52ba05a43f20bd75063a4f89598c0",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 12040,
+      "output_tokens": 147
+    },
+    "decision": {
+      "kind": "advisory",
+      "text": "因为爷爷去世了，父亲打电话通知她，她从上海赶回青溪镇参加葬礼，并处理爷爷留下的后事。",
+      "selected": true,
+      "decision_id": "01a20665-217d-7662-8b1e-f651f89dd9d9",
+      "authoritative": false,
+      "advances_continuation": true
+    }
+  },
+  {
+    "model_attempt_id": "01a20665-2423-7841-9cf5-ca595a2398f9",
+    "run_id": "01a20665-23ea-7070-a0d5-bb2041e77700",
+    "run_kind": "author",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa26",
+    "decision_position": 0,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v12",
+    "response_reference": "resp_021795403621651816811b617e2b5631e8927bae226874cf8f4e2",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 19723,
+      "output_tokens": 68
+    },
+    "decision": {
+      "kind": "tool_request",
+      "call_ids": [
+        "call_tkp5vvt6iieca9j5rre61mk3"
+      ],
+      "selected": true,
+      "decision_id": "01a20665-36cd-7a70-98b7-805a7aa58827",
+      "authoritative": false,
+      "advances_continuation": false
+    }
+  },
+  {
+    "model_attempt_id": "01a20665-370e-71b1-af51-fb8ac14dc39f",
+    "run_id": "01a20665-23ea-7070-a0d5-bb2041e77700",
+    "run_kind": "author",
+    "model_registration_revision": "018f0000-0000-7001-8000-00000000fa26",
+    "decision_position": 1,
+    "attempt_role": "decision",
+    "dispatch_state": "settled",
+    "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v12",
+    "response_reference": "resp_021795403626504dfda270f226adba1bf628b57be6483cf6f4ce2",
+    "usage": {
+      "kind": "reported",
+      "input_tokens": 19860,
+      "output_tokens": 26
+    },
+    "decision": {
+      "kind": "advisory",
+      "text": "她到青溪站那天正下着大雨，雨水顺着屋檐挂成一道帘子。",
+      "selected": true,
+      "decision_id": "01a20665-432c-7282-ae3d-175ed7fc377d",
+      "authoritative": false,
+      "advances_continuation": true
+    }
+  }
+]

@@ -1,0 +1,140 @@
+{
+  "conversation_id": "01a20664-c212-7163-8b61-b9581f8ec204",
+  "runs": [
+    {
+      "run_id": "01a20664-c212-7163-8b61-b96ef14017f0",
+      "status": "completed",
+      "model_registration_revision": "018f0000-0000-7001-8000-00000000fa26",
+      "author_message": "第一章里，沈知遥为什么回到青溪镇？用一两句话回答。",
+      "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v12",
+      "requests": 2,
+      "input_tokens": 23886,
+      "output_tokens": 152,
+      "started_at": "2026-11-23T03:13:22.166507+00:00"
+    },
+    {
+      "run_id": "01a20664-f318-7531-8b94-5e2c55d712f1",
+      "status": "completed",
+      "model_registration_revision": "018f0000-0000-7001-8000-00000000fa26",
+      "author_message": "Submit the complete current request. 请一字不差地重复你上一个回答的第一句话，只输出那一句。",
+      "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v12",
+      "requests": 2,
+      "input_tokens": 23991,
+      "output_tokens": 365,
+      "started_at": "2026-11-23T03:13:34.75622+00:00"
+    },
+    {
+      "run_id": "01a20665-23ea-7070-a0d5-bb2041e77700",
+      "status": "completed",
+      "model_registration_revision": "018f0000-0000-7001-8000-00000000fa26",
+      "author_message": "她回到青溪站那天的天气怎么样？用一句话回答。",
+      "mapping_revision": "storyos.volcengine-agent-plan.responses.create.v12",
+      "requests": 2,
+      "input_tokens": 39583,
+      "output_tokens": 94,
+      "started_at": "2026-11-23T03:13:46.211953+00:00"
+    }
+  ],
+  "requests": [
+    {
+      "run_id": "01a20664-c212-7163-8b61-b96ef14017f0",
+      "model_attempt_id": "01a20664-c247-7911-a0f5-bdd5ff2c1660",
+      "decision_position": 0,
+      "attempt_role": "decision",
+      "dispatch_state": "settled",
+      "input_tokens": 11849,
+      "output_tokens": 120,
+      "decision": "tool_request"
+    },
+    {
+      "run_id": "01a20664-c212-7163-8b61-b96ef14017f0",
+      "model_attempt_id": "01a20664-d922-7150-bcf6-66f5fc4adc23",
+      "decision_position": 1,
+      "attempt_role": "decision",
+      "dispatch_state": "settled",
+      "input_tokens": 12037,
+      "output_tokens": 32,
+      "decision": "advisory"
+    },
+    {
+      "run_id": "01a20664-f318-7531-8b94-5e2c55d712f1",
+      "model_attempt_id": "01a20664-f362-7c53-88d5-8bd854425b21",
+      "decision_position": 0,
+      "attempt_role": "decision",
+      "dispatch_state": "settled",
+      "input_tokens": 11951,
+      "output_tokens": 218,
+      "decision": "tool_request"
+    },
+    {
+      "run_id": "01a20664-f318-7531-8b94-5e2c55d712f1",
+      "model_attempt_id": "01a20665-0a43-72b1-ac92-759f6e900edb",
+      "decision_position": 1,
+      "attempt_role": "decision",
+      "dispatch_state": "settled",
+      "input_tokens": 12040,
+      "output_tokens": 147,
+      "decision": "advisory"
+    },
+    {
+      "run_id": "01a20665-23ea-7070-a0d5-bb2041e77700",
+      "model_attempt_id": "01a20665-2423-7841-9cf5-ca595a2398f9",
+      "decision_position": 0,
+      "attempt_role": "decision",
+      "dispatch_state": "settled",
+      "input_tokens": 19723,
+      "output_tokens": 68,
+      "decision": "tool_request"
+    },
+    {
+      "run_id": "01a20665-23ea-7070-a0d5-bb2041e77700",
+      "model_attempt_id": "01a20665-370e-71b1-af51-fb8ac14dc39f",
+      "decision_position": 1,
+      "attempt_role": "decision",
+      "dispatch_state": "settled",
+      "input_tokens": 19860,
+      "output_tokens": 26,
+      "decision": "advisory"
+    }
+  ],
+  "first_requests": [
+    {
+      "run_id": "01a20664-c212-7163-8b61-b96ef14017f0",
+      "model_attempt_id": "01a20664-c247-7911-a0f5-bdd5ff2c1660",
+      "previous_response_id": false,
+      "section": false,
+      "section_text": null
+    },
+    {
+      "run_id": "01a20664-f318-7531-8b94-5e2c55d712f1",
+      "model_attempt_id": "01a20664-f362-7c53-88d5-8bd854425b21",
+      "previous_response_id": false,
+      "section": true,
+      "section_text": "Earlier turns of this conversation, oldest first. Each turn has the exact words of the author and your final answer. The Tool calls and the Tool results of those turns are not here:\n[turn 1]\nAuthor:\n第一章里，沈知遥为什么回到青溪镇？用一两句话回答。\n\nAssistant:\n因为爷爷去世了，父亲打电话通知她，她从上海赶回青溪镇参加葬礼，并处理爷爷留下的后事。\n\n"
+    },
+    {
+      "run_id": "01a20665-23ea-7070-a0d5-bb2041e77700",
+      "model_attempt_id": "01a20665-2423-7841-9cf5-ca595a2398f9",
+      "previous_response_id": true,
+      "section": false,
+      "section_text": null
+    }
+  ],
+  "answers": [
+    {
+      "run_id": "01a20664-c212-7163-8b61-b96ef14017f0",
+      "decision_position": 1,
+      "answer": "因为爷爷去世了，父亲打电话通知她，她从上海赶回青溪镇参加葬礼，并处理爷爷留下的后事。"
+    },
+    {
+      "run_id": "01a20664-f318-7531-8b94-5e2c55d712f1",
+      "decision_position": 1,
+      "answer": "因为爷爷去世了，父亲打电话通知她，她从上海赶回青溪镇参加葬礼，并处理爷爷留下的后事。"
+    },
+    {
+      "run_id": "01a20665-23ea-7070-a0d5-bb2041e77700",
+      "decision_position": 1,
+      "answer": "她到青溪站那天正下着大雨，雨水顺着屋檐挂成一道帘子。"
+    }
+  ]
+}
