@@ -115,3 +115,7 @@ This change lands before the Skill tickets of Stage 6. Its first ticket is a rec
 ## Amendment 2026-11-14: a fourth Host Tool
 
 [ADR 0093](0093-compact-a-run-more-than-one-time-keep-tool-results-as-stubs-and-keep-the-recent-author-messages.md) ([#1509](https://github.com/FrankQDWang/StoryOS/issues/1509)) adds the Host Tool `read_tool_result` to section 2 on the mapping `v6`. It reads a stored research result of the Run again. An AgentRun on a mapping before `v6` keeps the three Host Tools of section 2.
+
+## Amendment 2026-11-23: the model knows the limit of RunSteps
+
+[ADR 0103](0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md) section 5 amends section 5 of this ADR. For each kind with more than 2 RunSteps, the instruction text of a Run gives its limit of RunSteps, and the decision request of each of the last 4 RunSteps has one sentence with the number of RunSteps that are left. The limits of the table do not change.
