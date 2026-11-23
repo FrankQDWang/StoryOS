@@ -34,6 +34,7 @@ use crate::release1_route_catalog::{
     ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
     Owner, Settlement,
 };
+use crate::release1_run_plan::{PlanStepInspect, PlanStepStatusInspect};
 use crate::release1_selection_reference::{
     SelectionCoordinateProfile, SelectionPoint, SelectionReference, SelectionReferenceInspect,
 };
@@ -185,6 +186,8 @@ pub(super) const GET_AGENT_RUN_ROW: OperationRow = OperationRow {
         MemoryWriteActionInspect::decl,
         SkillUseInspect::decl,
         ManuscriptUseInspect::decl,
+        PlanStepInspect::decl,
+        PlanStepStatusInspect::decl,
         ContinuationInputMappingInspect::decl,
         ContinuationAdmissionInspect::decl,
         OptionalModelAttemptInspect::decl,
@@ -525,6 +528,16 @@ const GET_AGENT_RUN_RESPONSE: &[Patch] = &[
     Patch(
         Edit::MaxLength(512),
         &["/$defs/ManuscriptUseInspect/oneOf/2/properties/question"],
+    ),
+    Patch(Edit::MinItems(1), &["/properties/plan"]),
+    Patch(Edit::MaxItems(12), &["/properties/plan"]),
+    Patch(
+        Edit::MinLength(1),
+        &["/$defs/PlanStepInspect/properties/text"],
+    ),
+    Patch(
+        Edit::MaxLength(100),
+        &["/$defs/PlanStepInspect/properties/text"],
     ),
     Patch(
         Edit::MinLength(1),

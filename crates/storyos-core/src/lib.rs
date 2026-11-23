@@ -102,6 +102,7 @@ mod take_over_project_writer;
 mod transition_outcome;
 mod undo_latest_author_action;
 mod update_chapter;
+mod update_plan;
 mod update_project;
 mod update_project_assistance;
 mod update_project_instruction;
@@ -437,7 +438,7 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION, AGENT_PLAN_REGISTRATION,
+    AGENT_PLAN_REGISTRATION, AGENT_PLAN_RUN_PLAN_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };
@@ -474,6 +475,10 @@ pub use unknown_create_successor::{
 pub use update_chapter::{
     ChapterJoin, UpdateChapter, UpdateChapterApplied, UpdateChapterConflict, UpdateChapterNoEffect,
     UpdateChapterRefusal, UpdateChapterResult, update_chapter,
+};
+pub use update_plan::{
+    PLAN_RECORDED, PlanRefusal, PlanStep, PlanStepStatus, StoredPlanCall, UPDATE_PLAN_TOOL_SPEC,
+    run_plan, settle_plan_call,
 };
 pub use update_project::{
     UpdateProject, UpdateProjectApplied, UpdateProjectConflict, UpdateProjectNoEffect,

@@ -131,6 +131,7 @@ impl ValidatedToolCall {
             ToolIntake::RecordCharacterIntent { intent, questions } => {
                 json!({ "intent": intent, "questions": questions })
             }
+            ToolIntake::UpdatePlan { steps } => crate::update_plan::arguments(steps),
         }
     }
 

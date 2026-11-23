@@ -151,4 +151,4 @@ fn pass_text(request: &CreateRequest) -> String {
 
 #[cfg(test)]
 #[path = "pass_wire_tests.rs"]
-mod tests;
+pub(crate) mod tests;

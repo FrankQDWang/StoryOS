@@ -137,6 +137,7 @@ fn tools(hybrid: bool) -> Value {
         "write_memory",
         "read_memory_entry",
         "search_memory",
+        "update_plan",
         "finish",
     ];
     (names.into_iter())

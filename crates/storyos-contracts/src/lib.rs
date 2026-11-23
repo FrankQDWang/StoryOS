@@ -38,6 +38,7 @@ mod release1_reject_proposal_operations;
 mod release1_research_artifact;
 mod release1_research_source;
 mod release1_route_catalog;
+mod release1_run_plan;
 mod release1_selection_reference;
 mod release1_set_current_chapter;
 mod release1_skill_use;
@@ -278,6 +279,7 @@ pub use release1_research_source::{
     LIST_RESEARCH_SOURCES_RESPONSE_SCHEMA_ID, ListResearchSourcesResponse, SourceGapInspect,
     SourceGapReason, SourceSnapshotInspect, SourceSnapshotKind, UnknownResearchCallInspect,
 };
+pub use release1_run_plan::{PlanStepInspect, PlanStepStatusInspect};
 pub use release1_set_current_chapter::{
     SET_CURRENT_CHAPTER_DIGEST_PROFILE, SET_CURRENT_CHAPTER_METHOD, SET_CURRENT_CHAPTER_PATH,
     SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID, SET_CURRENT_CHAPTER_RESPONSE_SCHEMA_ID,

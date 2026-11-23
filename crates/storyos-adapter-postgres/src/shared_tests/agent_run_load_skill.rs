@@ -72,7 +72,7 @@ pub(crate) async fn record(admin: &Client, run_id: &str, role: &str, position: i
     .await
 }
 
-pub(crate) const TOOLS: [&str; 11] = [
+pub(crate) const TOOLS: [&str; 12] = [
     "propose_edit",
     "submit_research",
     "read_tool_result",
@@ -83,5 +83,6 @@ pub(crate) const TOOLS: [&str; 11] = [
     "write_memory",
     "read_memory_entry",
     "search_memory",
+    "update_plan",
     "finish",
 ];

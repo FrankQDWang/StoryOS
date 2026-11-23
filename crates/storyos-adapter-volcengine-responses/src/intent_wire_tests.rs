@@ -9,11 +9,11 @@ use crate::AgentPlanResponses;
 use crate::skill_wire_tests::{body, first, item};
 use crate::tests::CanaryResolver;
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION;
 
 /// The request of the first RunStep of an intent pass on `mapping` for `file`, with the one output
 /// Tool of an intent pass.
-fn intent_pass(file: &CharacterFile<'_>, mapping: &str) -> CreateRequest {
+pub(crate) fn intent_pass(file: &CharacterFile<'_>, mapping: &str) -> CreateRequest {
     let registration = storyos_core::AGENT_PLAN_REGISTRATION.revision;
     CreateRequest {
         purpose: CreatePurpose::IntentPass,
@@ -34,7 +34,7 @@ fn intent_pass(file: &CharacterFile<'_>, mapping: &str) -> CreateRequest {
     }
 }
 
-const FILE: CharacterFile<'static> = CharacterFile {
+pub(crate) const FILE: CharacterFile<'static> = CharacterFile {
     name: "林舟",
     author_text: Some("林舟怕水，这件事只有他自己知道。"),
     manuscript_text: "林舟是渡口的船夫。他昨夜看见河上有灯。",

@@ -8,7 +8,7 @@ use storyos_core::{ContextSourceClass, ExposureFacts, ToolChoice, ToolExposure};
 use crate::AgentPlanResponses;
 use crate::tests::{CanaryResolver, create, route};
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION;
 
 /// The body that `prepare` commits for `request`.
 pub(crate) async fn body(request: CreateRequest) -> serde_json::Value {
@@ -147,12 +147,13 @@ async fn a_skill_item_adds_the_skill_paragraph_and_a_catalog_adds_the_load_and_r
         instructions(body(summary(base)).await),
     );
 
-    // The Skill paragraphs come after the paragraphs of the tool loop and before the paragraph of
-    // `write_memory`, which the current mapping declares for an author Run.
+    // The Skill paragraphs come after the paragraphs of the tool loop and of `update_plan`, and
+    // before the paragraph of `write_memory`, which the current mapping declares for an author Run.
+    let plan = crate::wire::UPDATE_PLAN_INSTRUCTION;
     let (decision, close) = (
-        crate::tests::tool_loop_instructions(),
+        format!("{}\n\n{plan}", crate::tests::tool_loop_instructions()),
         format!(
-            "{} {}",
+            "{} {}\n\n{plan}",
             crate::tests::tool_loop_instructions(),
             storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION
         ),
@@ -216,6 +217,7 @@ async fn a_request_with_a_catalog_declares_the_skill_tools_with_strict_schemas()
             "read_chapter",
             "search_manuscript",
             "write_memory",
+            "update_plan",
             "finish"
         ]
     );

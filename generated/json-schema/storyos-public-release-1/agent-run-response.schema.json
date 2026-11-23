@@ -1972,6 +1972,34 @@
       ],
       "type": "object"
     },
+    "PlanStepInspect": {
+      "additionalProperties": false,
+      "description": "One step of the plan of a Run (ADR 0103 section 2), in the order of the list.",
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/PlanStepStatusInspect"
+        },
+        "text": {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "status"
+      ],
+      "type": "object"
+    },
+    "PlanStepStatusInspect": {
+      "description": "The state of one step of a plan.",
+      "enum": [
+        "pending",
+        "in_progress",
+        "completed"
+      ],
+      "type": "string"
+    },
     "ProjectScope": {
       "additionalProperties": false,
       "properties": {
@@ -2609,6 +2637,17 @@
     },
     "original_result_retrieval": {
       "$ref": "#/$defs/OptionalOriginalResultRetrievalInspect"
+    },
+    "plan": {
+      "items": {
+        "$ref": "#/$defs/PlanStepInspect"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "type": [
+        "array",
+        "null"
+      ]
     },
     "project_agent_id": {
       "format": "uuid",

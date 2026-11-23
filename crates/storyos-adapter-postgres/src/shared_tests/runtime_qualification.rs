@@ -50,8 +50,7 @@ impl ModelProviderAdapter for ScriptedAgentPlan {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
         // As the real adapter does, only the current mapping prepares a request (ADR 0097).
-        if create.route.mapping_revision != storyos_core::AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION
-        {
+        if create.route.mapping_revision != storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
         self.seen.lock().unwrap().push(create.clone());

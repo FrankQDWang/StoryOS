@@ -145,7 +145,8 @@ pub fn capture_research_sources(
         | ToolIntake::SearchMemory { .. }
         | ToolIntake::RecordMemoryObservations(_)
         | ToolIntake::ApplyMemoryOperations(_)
-        | ToolIntake::RecordCharacterIntent { .. } => &[],
+        | ToolIntake::RecordCharacterIntent { .. }
+        | ToolIntake::UpdatePlan { .. } => &[],
     };
     match (settlement.state, &settlement.result) {
         (ToolCallState::Settled, Some(result)) => match format {

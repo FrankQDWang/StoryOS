@@ -57,6 +57,7 @@ fn each_current_mapping_declares_search_manuscript_with_a_strict_schema() {
                     "read_chapter",
                     "search_manuscript",
                     "write_memory",
+                    "update_plan",
                     "finish"
                 ],
                 "Finds each place where an exact word or phrase occurs in the manuscript, for \

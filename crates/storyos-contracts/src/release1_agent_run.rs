@@ -897,6 +897,12 @@ pub struct GetAgentRunResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub manuscript_uses: Option<Vec<crate::ManuscriptUseInspect>>,
+    // Only the Run read has it: the steps of the newest accepted `update_plan` call of the Run, in
+    // their order, while the Run works and after it ends. No field when the Run has no accepted
+    // call (ADR 0103 section 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub plan: Option<Vec<crate::PlanStepInspect>>,
     pub model_attempt: OptionalModelAttemptInspect,
     // The last compaction record of the Run.
     pub active_compaction: OptionalActiveCompactionInspect,
