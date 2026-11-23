@@ -292,7 +292,7 @@ async fn a_text_among_the_calls_of_a_subrun_is_an_entry_at_its_place() {
         read_call("call_read"),
         text("msg_02", "再看结果。"),
     ];
-    let mut subrun = vec![response("resp_910_read", true, &output)];
+    let mut subrun = vec![response("resp_910_read", Reference::Kept, &output)];
     subrun.extend(finish_then_advisory("resp_910_subrun"));
     let (scope, run_id, served) = plan_parent(&store, &admin, "910", subrun).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
@@ -345,7 +345,11 @@ async fn the_answer_beside_a_call_of_the_last_run_step_is_not_an_entry() {
         .map(|step| {
             response(
                 &format!("resp_911_{step}"),
-                step > 0,
+                if step > 0 {
+                    Reference::Kept
+                } else {
+                    Reference::Absent
+                },
                 &[read_call(&format!("call_{step}"))],
             )
         })
@@ -354,7 +358,7 @@ async fn the_answer_beside_a_call_of_the_last_run_step_is_not_an_entry() {
         "status": "completed", "content": [{"type": "output_text", "text": "灯在渡口。"}]});
     subrun.push(response(
         "resp_911_last",
-        true,
+        Reference::Kept,
         &[answer, read_call("call_last")],
     ));
     let (scope, run_id, served) = plan_parent(&store, &admin, "911", subrun).await;
@@ -387,6 +391,36 @@ async fn the_answer_beside_a_call_of_the_last_run_step_is_not_an_entry() {
     );
 }
 
+/// Item 2 of #1836: a text beside a function call batch that makes no Decision is not a final
+/// answer, so it is an entry. The first response of the Subrun has a text and a call with no name,
+/// so its batch is not valid.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_text_beside_an_invalid_batch_is_an_entry() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let text = json!({"id": "msg_01", "type": "message", "role": "assistant",
+        "status": "completed", "content": [{"type": "output_text", "text": "先读第一章。"}]});
+    let mut call = read_call("call_read");
+    call["name"] = json!("");
+    let subrun = vec![response("resp_912_read", Reference::Kept, &[text, call])];
+    let (scope, run_id, served) = plan_parent(&store, &admin, "912", subrun).await;
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    (complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim))
+        .await
+        .unwrap();
+    let subrun = subruns(&admin, &run_id).await.remove(0);
+    let record = record(&store, &scope, &subrun).await.unwrap();
+    let text = SubrunStep::Text {
+        text: "先读第一章。".to_owned(),
+    };
+
+    assert_eq!(
+        (record.state, record.steps, served.await.unwrap().len()),
+        (SubrunState::NoResult, vec![text], 4)
+    );
+}
+
 /// A `read_chapter` call of Chapter 1 with the call identifier `call_id`.
 fn read_call(call_id: &str) -> serde_json::Value {
     json!({"id": format!("fc_{call_id}"), "type": "function_call", "status": "completed",
@@ -394,18 +428,23 @@ fn read_call(call_id: &str) -> serde_json::Value {
            "arguments": r#"{"chapter":1,"first_block":null,"last_block":null}"#})
 }
 
-/// One completed response `id` with the output items `output`. With no `reference`, the terminal
-/// response has no identity.
-fn response(id: &str, reference: bool, output: &[serde_json::Value]) -> String {
+/// Whether a scripted response has its identity, and thus a response reference.
+#[derive(Clone, Copy, PartialEq)]
+enum Reference {
+    Kept,
+    Absent,
+}
+
+/// One completed response `id` with the output items `output`.
+fn response(id: &str, reference: Reference, output: &[serde_json::Value]) -> String {
+    let id = (reference == Reference::Kept).then_some(id);
     let mut events = vec![json!({"type": "response.created",
-        "response": {"id": reference.then_some(id), "status": "in_progress", "output": []}})];
+        "response": {"id": id, "status": "in_progress", "output": []}})];
     events.extend((output.iter().enumerate()).map(|(index, item)| {
         json!({"type": "response.output_item.done", "output_index": index, "item": item})
     }));
-    events.push(
-        json!({"type": "response.completed", "response": {"id": reference.then_some(id),
+    events.push(json!({"type": "response.completed", "response": {"id": id,
         "status": "completed", "output": output,
-        "usage": {"input_tokens": 40, "output_tokens": 12}}}),
-    );
+        "usage": {"input_tokens": 40, "output_tokens": 12}}}));
     sse(&events)
 }

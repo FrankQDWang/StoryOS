@@ -116,95 +116,35 @@ fn the_entries_give_the_counts_of_the_stored_results_and_no_read_text() {
     .result()
     .text;
     let searched = crate::search_memory(&entries, "渡口", "call-5").text;
-    let arguments = [
-        json!({"chapter": 1, "first_block": null, "last_block": null}),
-        json!({"query": "林舟"}),
-        json!({"question": "谁在等船？", "terms": ["林雪"]}),
-        json!({"entry": 1}),
-        json!({"query": "渡口"}),
-        json!({}),
+    // The tool and the arguments of each stored call.
+    let tools = [
+        (
+            READ_CHAPTER_TOOL_SPEC.revision,
+            json!({"chapter": 1, "first_block": null, "last_block": null}),
+        ),
+        (
+            SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
+            json!({"query": "林舟"}),
+        ),
+        (
+            HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
+            json!({"question": "谁在等船？", "terms": ["林雪"]}),
+        ),
+        (READ_MEMORY_ENTRY_TOOL_SPEC.revision, json!({"entry": 1})),
+        (SEARCH_MEMORY_TOOL_SPEC.revision, json!({"query": "渡口"})),
+        (crate::FINISH_TOOL_SPEC.revision, json!({})),
     ];
-    let settled = ToolCallState::Settled;
+    let (settled, unknown) = (ToolCallState::Settled, ToolCallState::Unknown);
     // A `finish` call settles with an empty result.
     let finished = String::new();
     let calls = [
-        (
-            0,
-            0,
-            call(
-                &arguments,
-                0,
-                READ_CHAPTER_TOOL_SPEC.revision,
-                settled,
-                Some(&read),
-            ),
-        ),
-        (
-            0,
-            1,
-            call(
-                &arguments,
-                1,
-                SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
-                ToolCallState::Unknown,
-                None,
-            ),
-        ),
-        (
-            1,
-            0,
-            call(
-                &arguments,
-                1,
-                SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
-                settled,
-                Some(&keyword),
-            ),
-        ),
-        (
-            1,
-            1,
-            call(
-                &arguments,
-                2,
-                HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
-                settled,
-                Some(&hybrid),
-            ),
-        ),
-        (
-            2,
-            0,
-            call(
-                &arguments,
-                3,
-                READ_MEMORY_ENTRY_TOOL_SPEC.revision,
-                settled,
-                Some(&memory),
-            ),
-        ),
-        (
-            2,
-            1,
-            call(
-                &arguments,
-                4,
-                SEARCH_MEMORY_TOOL_SPEC.revision,
-                settled,
-                Some(&searched),
-            ),
-        ),
-        (
-            3,
-            0,
-            call(
-                &arguments,
-                5,
-                crate::FINISH_TOOL_SPEC.revision,
-                settled,
-                Some(&finished),
-            ),
-        ),
+        (0, 0, call(&tools[0], settled, Some(&read))),
+        (0, 1, call(&tools[1], unknown, None)),
+        (1, 0, call(&tools[1], settled, Some(&keyword))),
+        (1, 1, call(&tools[2], settled, Some(&hybrid))),
+        (2, 0, call(&tools[3], settled, Some(&memory))),
+        (2, 1, call(&tools[4], settled, Some(&searched))),
+        (3, 0, call(&tools[5], settled, Some(&finished))),
     ];
     // The first text follows one call of its response, and the second text comes before each call.
     let texts = [
@@ -275,18 +215,16 @@ fn first_line(result: &str) -> Value {
         .unwrap()
 }
 
-/// One stored call with the arguments `arguments[index]`.
+/// One stored call of the tool and the arguments `tool`.
 fn call<'a>(
-    arguments: &'a [Value],
-    index: usize,
-    revision: &'a str,
+    tool: &'a (&'a str, Value),
     state: ToolCallState,
     result: Option<&'a String>,
 ) -> StoredManuscriptCall<'a> {
     StoredManuscriptCall {
-        tool_spec_revision: revision,
+        tool_spec_revision: tool.0,
         state,
-        arguments: &arguments[index],
+        arguments: &tool.1,
         result_text: result.map(String::as_str),
     }
 }

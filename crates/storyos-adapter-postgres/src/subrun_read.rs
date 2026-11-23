@@ -98,7 +98,9 @@ pub(crate) async fn read(
     let end = subrun_end(&row, 2).ok_or_else(damaged)?;
     // A text of a response with function calls, with the call position of the first ToolCall
     // after it. The final answer is the text of an `advisory` Decision, also when its response
-    // has a function call of the last RunStep.
+    // has a function call of the last RunStep. The place of a text comes from the stored items,
+    // which keep the order in which the stream gave each item for the first time. The read proves
+    // no order for a stream that gives its items in an order different from the terminal response.
     let texts = client
         .query(
             "SELECT attempt.decision_position::text, item->>'text',
