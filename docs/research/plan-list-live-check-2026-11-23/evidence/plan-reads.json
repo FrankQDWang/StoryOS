@@ -1,0 +1,87 @@
+{
+  "A": [
+    {
+      "at": "2026-11-23T07:53:46.577Z",
+      "status": "claimed",
+      "plan": null
+    },
+    {
+      "at": "2026-11-23T07:53:56.129Z",
+      "status": "claimed",
+      "plan": [
+        {
+          "text": "通读第一至第五章，摘录年龄与时间线索",
+          "status": "in_progress"
+        },
+        {
+          "text": "核对沈知遥年龄及事件间隔，整理矛盾清单",
+          "status": "pending"
+        },
+        {
+          "text": "润色第三章第一段并提交修改建议",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-23T08:04:56.240Z",
+      "status": "claimed",
+      "plan": [
+        {
+          "text": "通读第一至第五章，摘录年龄与时间线索",
+          "status": "completed"
+        },
+        {
+          "text": "核对沈知遥年龄及事件间隔，整理矛盾清单",
+          "status": "completed"
+        },
+        {
+          "text": "润色第三章第一段并提交修改建议",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-23T08:05:24.955Z",
+      "status": "completed",
+      "plan": [
+        {
+          "text": "通读第一至第五章，摘录年龄与时间线索",
+          "status": "completed"
+        },
+        {
+          "text": "核对沈知遥年龄及事件间隔，整理矛盾清单",
+          "status": "completed"
+        },
+        {
+          "text": "润色第三章第一段并提交修改建议",
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "B": [
+    {
+      "at": "2026-11-23T08:05:25.305Z",
+      "status": "claimed",
+      "plan": null
+    },
+    {
+      "at": "2026-11-23T08:05:34.897Z",
+      "status": "completed",
+      "plan": null
+    }
+  ],
+  "C": [
+    {
+      "at": "2026-11-23T08:05:35.256Z",
+      "status": "claimed",
+      "plan": null
+    },
+    {
+      "at": "2026-11-23T08:05:54.421Z",
+      "status": "completed",
+      "plan": null
+    }
+  ]
+}
