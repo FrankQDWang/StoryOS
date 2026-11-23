@@ -17,7 +17,7 @@ const SCRIPT = "SCRIPT:start_subrun";
 /**
  * ADR 0103 section 3A: the author sends the Subrun script, and the Run starts one Subrun that reads the Current
  * Chapter. After the Run ends, the turn shows one card with `已通读前文`, and its drawer shows the brief, one `读取`
- * line, and the answer of the Subrun.
+ * line, and the answer of the Subrun. The component tests prove the close and the focus rules.
  */
 export async function verifyProductionSubrunJourney(context: BrowserContext): Promise<void> {
   const started: (() => Promise<unknown>)[] = [];
@@ -40,7 +40,6 @@ export async function verifyProductionSubrunJourney(context: BrowserContext): Pr
     await page.locator('[data-assistant-availability="available"]').waitFor();
 
     const { runId } = await send(page, SCRIPT);
-    // The Worker settles the parent, then the Subrun, then the parent again.
     const run = await settleRun(server.baseUrl, setup, runId);
     assert.equal(run.status, "completed");
     assert.equal(run.subruns?.length, 1);
@@ -59,9 +58,6 @@ export async function verifyProductionSubrunJourney(context: BrowserContext): Pr
     const drawer = page.getByRole("dialog", { name: "子任务记录" });
     await expect(drawer.locator("section")).toHaveText([
       `指令${subrun.brief}`, "过程读取 Chapter A", `结论${subrun.answer}`]);
-    await page.keyboard.press("Escape");
-    await expect(drawer).toHaveCount(0);
-    await expect(card).toBeFocused();
     assert.deepEqual(errors, []);
 
     await assertProjectReceipts([setup.projectId], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,

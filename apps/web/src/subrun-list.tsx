@@ -88,7 +88,8 @@ function SubrunDrawer({ context, subrunId, cardWorking, scheduleRefresh, onClose
         setRecord(response);
         if (response.state === "working") cancel = scheduleRefresh(read);
       }, () => {
-        if (active && working.current) cancel = scheduleRefresh(read);
+        // The card can change before the refresh, so the refresh checks it again.
+        if (active && working.current) cancel = scheduleRefresh(() => { if (working.current) read(); });
       });
     };
     read();
@@ -141,6 +142,10 @@ export function SubrunList({ run, context, scheduleRefresh }: {
   const [opened, setOpened] = useState<{ subrunId: string; card: HTMLButtonElement }>();
   const subruns = run.subruns ?? [];
   const openedEntry = subruns.find((subrun) => subrun.subrun_id === opened?.subrunId);
+  // A Run that no longer has the opened Subrun, for example after a change of the Conversation, closes the drawer.
+  useEffect(() => {
+    if (opened !== undefined && openedEntry === undefined) setOpened(undefined);
+  }, [opened, openedEntry]);
   const closeDrawer = useCallback(() => {
     opened?.card.focus();
     setOpened(undefined);
@@ -154,8 +159,8 @@ export function SubrunList({ run, context, scheduleRefresh }: {
       <span className="assistant-subrun-state">{CARD_LINES[subrun.state]}</span>
       <span className="assistant-subrun-title">{subrun.title}</span>
     </button>)}
-    {opened === undefined || context === undefined ? null
-      : <SubrunDrawer context={context} subrunId={opened.subrunId} cardWorking={openedEntry?.state === "working"}
+    {opened === undefined || openedEntry === undefined || context === undefined ? null
+      : <SubrunDrawer context={context} subrunId={opened.subrunId} cardWorking={openedEntry.state === "working"}
         scheduleRefresh={scheduleRefresh}
         onClose={closeDrawer} />}
   </div>;
