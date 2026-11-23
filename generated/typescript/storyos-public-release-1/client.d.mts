@@ -385,7 +385,7 @@ export type AgentRunStatus = "queued" | "claimed" | "waiting" | "paused" | "comp
 
 export type ContextPurpose = "current_passage_assistance";
 
-export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result" | "skill_catalog" | "skill_instruction" | "skill_resource" | "chapter_list" | "manuscript_read_result" | "manuscript_search_result" | "memory_index" | "memory_read_result" | "memory_search_result" | "memory_capture_input" | "memory_delete_marks" | "memory_entries" | "memory_observations" | "character_file";
+export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result" | "skill_catalog" | "skill_instruction" | "skill_resource" | "chapter_list" | "manuscript_read_result" | "manuscript_search_result" | "memory_index" | "memory_read_result" | "memory_search_result" | "memory_capture_input" | "memory_delete_marks" | "memory_entries" | "memory_observations" | "character_file" | "earlier_answer";
 
 export type ProjectionMode = "exact_required" | "derived_summary" | "deterministic_excerpt" | "tool_result_stub";
 
@@ -495,7 +495,7 @@ export type ListProjectConversationsResponse = { schema_id: string, correlation_
 
 export type ProjectConversationRun = { run_id: string, author_message: string, chapter_id: string, status: AgentRunStatus, created_at: string, };
 
-export type GetProjectConversationResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, conversation_id: string, completeness: ProjectConversationCompleteness, earlier_turns_expired: boolean, runs: Array<ProjectConversationRun>, };
+export type GetProjectConversationResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, conversation_id: string, completeness: ProjectConversationCompleteness, runs: Array<ProjectConversationRun>, };
 
 export type SteerAgentRunInput = { conversation_id: string, author_message: AuthorMessage, selection_references?: Array<SelectionReference>, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 

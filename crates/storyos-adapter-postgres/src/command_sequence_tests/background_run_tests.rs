@@ -353,11 +353,7 @@ async fn a_background_run_is_not_a_run_that_the_author_can_see_or_control() {
         .await
         .unwrap()
         .unwrap();
-    let conversation_runs: Vec<String> = read
-        .newest_first
-        .into_iter()
-        .map(|run| run.run_id)
-        .collect();
+    let conversation_runs: Vec<String> = read.into_iter().map(|run| run.run_id).collect();
     // A read in the Scope of another Project gets no background Run of this Project.
     let other = seed_project(&store, "771e").await;
     let other_read = store
@@ -496,10 +492,7 @@ async fn a_background_run_changes_nothing_for_a_project_conversation() {
             prior_response(&admin, &second, &first).await,
             prior_response(&admin, &third, &second).await,
             earlier_messages(&admin, &fourth).await,
-            read.newest_first
-                .into_iter()
-                .map(|run| run.run_id)
-                .collect::<Vec<_>>(),
+            read.into_iter().map(|run| run.run_id).collect::<Vec<_>>(),
         ),
         (
             [first_binding.clone(), first_binding],

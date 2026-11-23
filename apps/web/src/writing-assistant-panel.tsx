@@ -38,7 +38,6 @@ import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 
 const CONVERSATION_NOT_FOUND_SENTENCE = "找不到这段对话。";
 const CONVERSATION_OPEN_FAILED_SENTENCE = "无法打开这段对话，请稍后再试。";
-const EARLIER_TURNS_EXPIRED_SENTENCE = "这段对话已超过 72 小时，助手可能不记得之前的内容。";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type TranscriptExchange = {
@@ -129,8 +128,8 @@ function readReference(scope: ProjectScope): RequestReference | undefined {
       || (ref.snapshotId === undefined ? ref.runId === undefined : !UUID.test(ref.snapshotId))
       || (ref.runId !== undefined && !UUID.test(ref.runId))
       || (ref.opened !== undefined && (ref.opened === null || typeof ref.opened !== "object"
-        || ![ref.opened.conversationId, ref.opened.firstRunId, ref.opened.newestRunId].every((value) => UUID.test(value))
-        || typeof ref.opened.truncated !== "boolean" || typeof ref.opened.expired !== "boolean"))
+        || ![ref.opened.conversationId, ref.opened.firstRunId].every((value) => UUID.test(value))
+        || typeof ref.opened.truncated !== "boolean"))
       || (ref.conversationId !== undefined && !UUID.test(ref.conversationId))
       || (ref.conversationChoice !== undefined && ref.conversationChoice !== "new")
       || (ref.history !== undefined && (!Array.isArray(ref.history)
@@ -681,9 +680,6 @@ export function WritingAssistantPanel({
   const earlierHidden = (runId: string | undefined) => reference?.opened?.truncated
     && runId === reference.opened.firstRunId
     ? <p className="assistant-status" data-assistant-earlier-hidden="">更早的消息没有显示。</p> : null;
-  const earlierExpired = (runId: string | undefined) => reference?.opened?.expired
-    && runId === reference.opened.newestRunId
-    ? <p className="assistant-status" data-assistant-earlier-expired="">{EARLIER_TURNS_EXPIRED_SENTENCE}</p> : null;
 
   const useResearch = <button type="button" data-assistant-use-research="" disabled={sending || unresolved}
     onClick={() => submit(USE_RESEARCH_MESSAGE, () => {}, { references: [], labels: [], keys: [] })}>用到故事里</button>;
@@ -742,7 +738,6 @@ export function WritingAssistantPanel({
                     : <ProposalLocationLinks locations={exchange.run.decision.locations ?? []} tree={context?.tree}
                       sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} />}
                 </>}
-              {earlierExpired(exchange.runId)}
             </section>
           ))}
           {reference === undefined ? null : (
@@ -767,7 +762,6 @@ export function WritingAssistantPanel({
                 void inspectResult();
               }}>检查结果</button> : null}
               {resultUnavailable ? <p role="status">请求结果暂不可读取，请稍后检查。</p> : null}
-              {earlierExpired(reference.runId)}
             </section>
           )}
           {reference?.conversationChoice === "new"

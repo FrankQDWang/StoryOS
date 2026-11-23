@@ -227,13 +227,15 @@ impl CompactionTrigger {
 /// each declared target text. A later RunStep sends the outputs of the calls of its prior
 /// response, and the current input again only when the prior response did not read it (ADR 0085).
 /// The request continues a prior response, so it does not send the `SKILL.md` of a Skill of the
-/// Conversation (ADR 0089 section 5).
+/// Conversation (ADR 0089 section 5) or the earlier turns of the Conversation (ADR 0102).
 fn sent_input_tokens(
     record: &crate::CurrentPassageAssemblyRecord,
     facts: &CompactionRequestFacts<'_>,
 ) -> u64 {
     let current = record.selected.iter().filter(|item| {
-        !crate::is_function_output(record, item) && !crate::is_conversation_skill(record, item)
+        !crate::is_function_output(record, item)
+            && !crate::is_conversation_skill(record, item)
+            && !crate::is_earlier_turn(record, item)
     });
     let tool_results = crate::function_outputs(record);
     let outputs: u64 = tool_results
@@ -541,7 +543,8 @@ pub fn summary_fits_item(decision: &crate::CurrentPassageAssemblyRecord, summary
 /// The Context Assembly of the later request: the decision Context Assembly with the summary of
 /// the same Conversation as the first selected item. The summary is a Derived Summary, so the
 /// sufficiency of the Exact Required input does not change. Each Tool result whose candidate in
-/// `candidates` has the stub form is a stub (ADR 0093 section 5).
+/// `candidates` has the stub form is a stub (ADR 0093 section 5). The summary replaces the
+/// earlier turns of the Conversation (ADR 0102).
 pub fn later_request_record(
     decision: &crate::CurrentPassageAssemblyRecord,
     compaction_id: &str,
@@ -549,6 +552,7 @@ pub fn later_request_record(
     candidates: &[crate::ToolResultCandidate<'_>],
 ) -> crate::CurrentPassageAssemblyRecord {
     let mut record = decision.clone();
+    crate::remove_earlier_turns(&mut record);
     crate::tool_result_context::stub_selected_results(&mut record, candidates);
     let token_count = crate::assemble_context::count_context_item_tokens(summary);
     record.considered.insert(

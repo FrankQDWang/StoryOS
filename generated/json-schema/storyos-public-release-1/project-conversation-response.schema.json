@@ -76,7 +76,7 @@
   "$id": "storyos.query.project-conversation.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "The Runs of one Project Conversation. `earlier_turns_expired` is true when the newest Run is\nin a terminal state and the newest Run event of the Conversation is older than the Provider\nretention at the time of the read.",
+  "description": "The Runs of one Project Conversation.",
   "properties": {
     "completeness": {
       "$ref": "#/$defs/ProjectConversationCompleteness"
@@ -88,9 +88,6 @@
     "correlation_id": {
       "format": "uuid",
       "type": "string"
-    },
-    "earlier_turns_expired": {
-      "type": "boolean"
     },
     "project_scope": {
       "$ref": "#/$defs/ProjectScope"
@@ -113,7 +110,6 @@
     "project_scope",
     "conversation_id",
     "completeness",
-    "earlier_turns_expired",
     "runs"
   ],
   "title": "StoryOS Project Conversation Response",

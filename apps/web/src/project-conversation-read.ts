@@ -8,10 +8,7 @@ export type OpenedConversation = {
   conversationId: string;
   /** The oldest Run that the read gave. The line of a truncated read goes above it. */
   firstRunId: string;
-  /** The newest Run at the time of the read. The notice line of an expired Conversation goes below it. */
-  newestRunId: string;
   truncated: boolean;
-  expired: boolean;
 };
 
 /** One Run of an opened Conversation: the row of the Conversation read and the Run read. */
@@ -45,9 +42,7 @@ export async function readOpenedConversation(options: {
     opened: {
       conversationId,
       firstRunId: runs[0]!.row.run_id,
-      newestRunId: runs.at(-1)!.row.run_id,
       truncated: conversation.completeness === "truncated",
-      expired: conversation.earlier_turns_expired,
     },
   };
 }

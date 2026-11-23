@@ -33,15 +33,6 @@ async function rowCounts(projectId: string): Promise<string> {
 }
 
 /** Moves each Run event time of each Run of the Conversation back by 73 hours. */
-async function moveBack(projectId: string, conversationId: string): Promise<void> {
-  await queryPostgres(`
-    UPDATE storyos.agent_run_events AS event SET recorded_at = event.recorded_at - interval '73 hours'
-      FROM storyos.agent_runs AS run
-     WHERE run.project_id = '${projectId}'::uuid AND run.conversation_id = '${conversationId}'::uuid
-       AND (event.owner_user_id, event.project_id, event.run_id) = (run.owner_user_id, run.project_id, run.run_id);
-  `);
-}
-
 function unavailable(error: unknown, ...hidden: string[]): boolean {
   const protocol = requireStoryOSProtocolError(error);
   const body = String(protocol.responseBody);
@@ -92,7 +83,6 @@ test("listProjectConversations and getProjectConversation give the Conversations
     project_scope: { owner_user_id: USER_A, project_id: prepared.projectId },
     conversation_id: first.conversation_id,
     completeness: "complete",
-    earlier_turns_expired: false,
     runs: [
       { run_id: first.effect.run_id, author_message: FIRST, chapter_id: prepared.chapterId, status: "completed",
         created_at: firstRun.created_at },
@@ -102,13 +92,8 @@ test("listProjectConversations and getProjectConversation give the Conversations
   });
   assert.deepEqual(otherRuns.map((run) => run.run_id), [other.effect.run_id]);
 
-  // The newest Run event of the Conversation is more than 72 hours old at the time of the read.
-  await moveBack(prepared.projectId, first.conversation_id);
-  const moved = await rowCounts(prepared.projectId);
-  assert.equal((await read(first.conversation_id)).earlier_turns_expired, true);
-  assert.equal((await read(other.conversation_id)).earlier_turns_expired, false);
-  assert.equal(await rowCounts(prepared.projectId), moved);
-  assert.equal(moved, before);
+  // The reads write no row.
+  assert.equal(await rowCounts(prepared.projectId), before);
 
   // Another User, a Conversation of another Project, and an unknown Conversation are unavailable.
   const stranger = browserFetch(started.baseUrl, "session-b");

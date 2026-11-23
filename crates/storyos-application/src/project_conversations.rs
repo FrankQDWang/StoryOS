@@ -1,14 +1,13 @@
 //! The two queries of the Project Conversations of a Project (ADR 0094 section 10). The Host
-//! bounds and the label rule are here; the expiry fact of the earlier turns is a Core rule.
+//! bounds and the label rule are here.
 
 use std::future::Future;
-use std::time::SystemTime;
 
 use storyos_contracts::{
     PROJECT_CONVERSATION_LABEL_MAX_CHARACTERS, PROJECT_CONVERSATION_LIST_MAX_ENTRIES,
     PROJECT_CONVERSATION_RUNS_MAX_ENTRIES, ProjectConversationCompleteness,
 };
-use storyos_core::{AgentRunStatus, earlier_turns_expired};
+use storyos_core::AgentRunStatus;
 
 use crate::{ProjectReadError, ProjectScope};
 
@@ -20,16 +19,6 @@ pub struct ProjectConversationRunItem {
     pub chapter_id: String,
     pub status: AgentRunStatus,
     pub created_at: String,
-}
-
-/// The newest Runs of one Project Conversation, the newest first, and the clock facts of the read.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StoredProjectConversationRuns {
-    pub newest_first: Vec<ProjectConversationRunItem>,
-    /// The recorded time of the newest Run event of the Conversation, over all its Runs. `None`
-    /// when the Conversation has no Run event.
-    pub newest_event_at: Option<SystemTime>,
-    pub read_time: SystemTime,
 }
 
 /// Reads the Project Conversations under an already authenticated exact Project Scope. Each read
@@ -50,7 +39,7 @@ pub trait ProjectConversationReader: Sync {
         scope: &ProjectScope,
         conversation_id: &str,
         limit: usize,
-    ) -> impl Future<Output = Result<Option<StoredProjectConversationRuns>, ProjectReadError>> + Send;
+    ) -> impl Future<Output = Result<Option<Vec<ProjectConversationRunItem>>, ProjectReadError>> + Send;
 }
 
 /// One entry of the Conversation list. The first Run and the newest Run are the first and the last
@@ -76,7 +65,6 @@ pub struct ProjectConversationList {
 pub struct ProjectConversationRead {
     pub runs: Vec<ProjectConversationRunItem>,
     pub completeness: ProjectConversationCompleteness,
-    pub earlier_turns_expired: bool,
 }
 
 /// The label of a Conversation: the start of its first author message, at most
@@ -124,7 +112,7 @@ pub async fn read_project_conversation(
     scope: &ProjectScope,
     conversation_id: &str,
 ) -> Result<Option<ProjectConversationRead>, ProjectReadError> {
-    let Some(stored) = reader
+    let Some(newest_first) = reader
         .read_project_conversation(
             scope,
             conversation_id,
@@ -134,17 +122,9 @@ pub async fn read_project_conversation(
     else {
         return Ok(None);
     };
-    let expired = stored.newest_first.first().is_some_and(|newest| {
-        earlier_turns_expired(newest.status, stored.newest_event_at, stored.read_time)
-    });
-    let (mut runs, completeness) =
-        bounded(stored.newest_first, PROJECT_CONVERSATION_RUNS_MAX_ENTRIES);
+    let (mut runs, completeness) = bounded(newest_first, PROJECT_CONVERSATION_RUNS_MAX_ENTRIES);
     runs.reverse();
-    Ok(Some(ProjectConversationRead {
-        runs,
-        completeness,
-        earlier_turns_expired: expired,
-    }))
+    Ok(Some(ProjectConversationRead { runs, completeness }))
 }
 
 #[cfg(test)]

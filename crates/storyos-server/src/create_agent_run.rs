@@ -976,6 +976,9 @@ fn inspect_source_class(class: storyos_core::ContextSourceClass) -> contracts::C
         storyos_core::ContextSourceClass::CharacterFile => {
             contracts::ContextSourceClass::CharacterFile
         }
+        storyos_core::ContextSourceClass::EarlierAnswer => {
+            contracts::ContextSourceClass::EarlierAnswer
+        }
     }
 }
 

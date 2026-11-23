@@ -104,9 +104,7 @@ pub struct ProjectConversationRun {
     pub created_at: String,
 }
 
-/// The Runs of one Project Conversation. `earlier_turns_expired` is true when the newest Run is
-/// in a terminal state and the newest Run event of the Conversation is older than the Provider
-/// retention at the time of the read.
+/// The Runs of one Project Conversation.
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct GetProjectConversationResponse {
@@ -116,6 +114,5 @@ pub struct GetProjectConversationResponse {
     pub project_scope: ProjectScope,
     pub conversation_id: String,
     pub completeness: ProjectConversationCompleteness,
-    pub earlier_turns_expired: bool,
     pub runs: Vec<ProjectConversationRun>,
 }

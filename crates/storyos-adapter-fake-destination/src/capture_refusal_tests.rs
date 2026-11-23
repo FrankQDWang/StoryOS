@@ -31,6 +31,7 @@ pub(crate) fn capture(
         passage_input: None,
         context,
         earlier_author_messages: Vec::new(),
+        earlier_turns: None,
         declared_targets: Vec::new(),
         selection_references: Vec::new(),
         previous_response_reference: None,

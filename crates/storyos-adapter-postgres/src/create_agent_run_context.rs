@@ -170,6 +170,8 @@ pub(crate) async fn persist_current_passage_assembly(
         None => Vec::new(),
     };
     storyos_core::assemble_memory_index(&mut record, command.memory_revision, &memory);
+    let earlier = super::earlier_turns::load(client, command.project_scope, command.run_id).await?;
+    storyos_core::assemble_earlier_turns(&mut record, &storyos_core::select_earlier_turns(earlier));
     if let Some(candidates) = command.tool_results {
         storyos_core::assemble_tool_result_continuation(&mut record, candidates);
     }

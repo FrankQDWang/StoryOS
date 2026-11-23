@@ -19,7 +19,6 @@ import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 const scope = { owner_user_id: OWNER, project_id: PROJECT };
 const id = (suffix: string) => `018f0000-0000-7001-8000-000000000${suffix}`;
 const [A, B, C] = [id("f01"), id("f02"), id("f03")];
-const EXPIRED = "这段对话已超过 72 小时，助手可能不记得之前的内容。";
 const NOT_FOUND = "找不到这段对话。";
 const SKILL: SkillUseInspect = { provenance: "author_selected", name: "dialogue-style-guide" };
 
@@ -30,7 +29,6 @@ type Setup = {
   stored?: StoredRun;
   list?: ProjectConversationEntry[] | "failed" | "other_scope";
   truncated?: boolean;
-  expired?: boolean;
   /** A change of each Conversation read or Run read, as a response of another Scope. */
   conversationOverride?: Record<string, unknown>;
   runOverride?: Record<string, unknown>;
@@ -87,7 +85,7 @@ async function openPanel(setup: Setup) {
       const rows = runs.filter((run) => run.conversationId === conversationId);
       if (rows.length === 0) return jsonResponse({ code: "not_found" }, 404);
       return jsonResponse({ ...conversationFixture, project_scope: scope, conversation_id: conversationId,
-        completeness: setup.truncated === true ? "truncated" : "complete", earlier_turns_expired: setup.expired === true,
+        completeness: setup.truncated === true ? "truncated" : "complete",
         runs: rows.map((run) => ({ run_id: run.runId, author_message: run.message, chapter_id: CHAPTER,
           status: run.status, created_at: "2026-11-16T09:30:00.000Z" })), ...setup.conversationOverride });
     }
@@ -163,8 +161,8 @@ async function openPanel(setup: Setup) {
     /** Each exchange as its author message, its result, its labels, and its notice lines. */
     exchanges: () => [...host.querySelectorAll("[data-assistant-history-run], [data-assistant-current-run]")]
       .map((section) => [...section.querySelectorAll(".assistant-author-message, .assistant-result, "
-        + "[data-sent-reference-label], [data-sent-skill-label], [data-assistant-earlier-hidden], "
-        + "[data-assistant-earlier-expired]")].map((line) => line.textContent)),
+        + "[data-sent-reference-label], [data-sent-skill-label], [data-assistant-earlier-hidden]")]
+        .map((line) => line.textContent)),
     status: () => host.querySelector("[role=status]")?.textContent ?? null,
     runStatus: () => host.querySelector("[data-assistant-run-status]")?.textContent ?? null,
   };
@@ -212,25 +210,24 @@ it("lists the Project Conversations each time the list opens, and the list has n
   });
 });
 
-it.each([true, false])("opens an earlier Conversation with only its exchanges, the oldest first (expired %s)",
-  async (expired) => {
+it("opens an earlier Conversation with only its exchanges, the oldest first",
+  async () => {
     const panel = await openPanel({ runs: earlier, stored: current, list: [entry(A, "A first", "2026-11-16T09:45:00.000Z")],
-      truncated: true, expired });
+      truncated: true });
     panel.requests.length = 0;
     await panel.open(A);
     const opened = panel.exchanges();
     const requests = [...panel.requests];
     await panel.reload();
 
-    const notice = expired ? [EXPIRED] : [];
     expect({ opened, requests, reloaded: panel.exchanges(), reloadRequests: panel.requests.slice(requests.length) })
       .toEqual({
         opened: [["更早的消息没有显示。", "A first", "$dialogue-style-guide", "Answer to A first"],
-          ["A second", "Answer to A second", ...notice]],
+          ["A second", "Answer to A second"]],
         requests: ["GET /conversations", `GET /conversations/${A}`, `GET /agent-runs/${id("f11")}`,
           `GET /agent-runs/${id("f12")}`],
         reloaded: [["更早的消息没有显示。", "A first", "$dialogue-style-guide", "Answer to A first"],
-          ["A second", "Answer to A second", ...notice]],
+          ["A second", "Answer to A second"]],
         // A reload reads the newest Run of the recorded Conversation, and not the Conversation again.
         reloadRequests: [`GET /agent-runs/${id("f12")}`],
       });
@@ -254,8 +251,7 @@ it("opens an earlier Conversation when the browser storage is full, and only the
 });
 
 it("continues the opened Conversation, and `新对话` then starts a new Conversation", async () => {
-  const panel = await openPanel({ runs: earlier, stored: current, list: [entry(A, "A first", "2026-11-16T09:45:00.000Z")],
-    expired: true });
+  const panel = await openPanel({ runs: earlier, stored: current, list: [entry(A, "A first", "2026-11-16T09:45:00.000Z")] });
   await panel.open(A);
   await panel.send("A third");
   const continued = panel.exchanges();
@@ -265,7 +261,7 @@ it("continues the opened Conversation, and `新对话` then starts a new Convers
   expect({ conversations: panel.creates.map((request) => request.create_agent_run_input.conversation),
     continued, last: panel.exchanges().at(-1) }).toEqual({
     conversations: [{ kind: "existing", conversation_id: A }, { kind: "new" }],
-    continued: [["A first", "$dialogue-style-guide", "Answer to A first"], ["A second", "Answer to A second", EXPIRED],
+    continued: [["A first", "$dialogue-style-guide", "Answer to A first"], ["A second", "Answer to A second"],
       ["A third", "Answer to A third"]],
     last: ["C first", "Answer to C first"],
   });
