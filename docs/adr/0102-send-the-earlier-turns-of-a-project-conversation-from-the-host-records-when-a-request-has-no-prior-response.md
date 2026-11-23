@@ -44,7 +44,7 @@ The Agent Plan route keeps the prior response as its normal path. ADR 0053 refus
 
 ### 4. The limit
 
-The earlier turns of one request have at most 100,000 counted tokens (the count of ADR 0052). The Host takes whole turns from the newest. The first turn that does not fit ends the selection, and the request says that older turns are left out. The coordinator set the number on 2026-11-23: it is about one tenth of the context window of the pinned model, and a turn has no Tool result, so the limit holds many turns.
+The earlier turns of one request have at most 100,000 counted tokens (the count of ADR 0052). The Host takes whole turns from the newest. The first turn that does not fit ends the selection, and the request says that older turns are left out. A turn with a message above the Context item limit of ADR 0052 does not fit. The coordinator set the number on 2026-11-23: it is about one tenth of the context window of the pinned model, and a turn has no Tool result, so the limit holds many turns.
 
 ### 5. The request form
 

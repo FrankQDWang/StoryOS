@@ -2,20 +2,25 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     AgentRunReadSelection, AgentRunReadStore, DestinationRequest, ModelProviderAdapter,
-    ModelStreamSink, Observation, PreDispatchRefusal, PreparedRequest, ProjectScope,
+    ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
+    ProjectScope, complete_agent_run,
 };
-use storyos_core::{ADVISORY_TEXT, AgentRunStatus, ContextSourceClass, RESEARCH_TOOL_OFFER};
+use storyos_core::{
+    ADVISORY_TEXT, AgentRunStatus, ContextSourceClass, DeploymentDestination, RESEARCH_TOOL_OFFER,
+};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::{complete, conversation_of};
+use crate::shared_tests::agent_run_retrieval::{adapter, destination};
 use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, cancellation, queued, settle, steering,
 };
+use crate::shared_tests::agent_run_tool_exposure::finish_then_advisory;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
-use crate::shared_tests::model_gateway::Admission;
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run};
 
 const FULL: &str = "Submit the complete current request. Repeat the first sentence.";
 
@@ -53,6 +58,20 @@ async fn recorded(admin: &Client, run_id: &str) -> Value {
         &[&run_id],
     )
     .await
+}
+
+/// The current input digest of the decision request of RunStep 0 of the Run.
+async fn input_digest(admin: &Client, run_id: &str) -> String {
+    let row = admin
+        .query_one(
+            "SELECT payload #>> '{wire,current_input_digest}' FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
+                AND decision_position = 0",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+    row.get(0)
 }
 
 /// The earlier turns of the fake wire: each turn as its messages of kind and text.
@@ -132,6 +151,14 @@ async fn a_full_input_with_no_prior_response_sends_the_earlier_turn_in_exact_wor
         .await
         .unwrap();
     let second = next_run(&store, &admin, (&scope, &chapter_id), "481", FULL, "482").await;
+    // The same message in a new Conversation has the same current input and no earlier turn.
+    let alone = Admission {
+        message: FULL,
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "48a")
+    .await;
+    complete(&store, &admin, &scope, &alone).await;
     let read = store
         .read_agent_run(&scope, &second, &AgentRunReadSelection::Current)
         .await
@@ -148,7 +175,13 @@ async fn a_full_input_with_no_prior_response_sends_the_earlier_turn_in_exact_wor
         .collect::<Vec<_>>();
 
     assert_eq!(
-        (read.status, answer, sent(&admin, &second).await),
+        (
+            read.status,
+            answer,
+            sent(&admin, &second).await,
+            sent(&admin, &alone).await[0][3].clone(),
+            input_digest(&admin, &second).await == input_digest(&admin, &alone).await,
+        ),
         (
             AgentRunStatus::Completed,
             vec![ADVISORY_TEXT.to_owned()],
@@ -158,6 +191,9 @@ async fn a_full_input_with_no_prior_response_sends_the_earlier_turn_in_exact_wor
                 ["decision", 0, false, &earlier],
                 ["decision", 1, false, &earlier]
             ]),
+            Value::Null,
+            // The current input digest does not count the earlier turns (ADR 0085).
+            true,
         )
     );
 }
@@ -300,5 +336,71 @@ async fn a_new_transport_and_a_rebuilt_full_input_send_the_earlier_turns() {
                 ["decision", 1, true, null]
             ]),
         )
+    );
+}
+
+/// ADR 0056 and ADR 0102 section 3: the expected input of a full input with no prior response
+/// counts the earlier turns. Above the window, the Run refuses before the dispatch.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_full_input_with_the_earlier_turns_above_the_window_refuses_before_the_dispatch() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let (base, served) = destination(finish_then_advisory("resp_e1").to_vec()).await;
+    let plan = DeploymentDestination::VolcengineAgentPlan {
+        qualification_authorization: None,
+    };
+    let (scope, chapter_id, first) = queued_run(&store, "48e", plan.clone()).await;
+    admin
+        .execute(
+            "UPDATE storyos.processing_destination_identity_evidence_revisions
+                SET endpoint = $2
+              WHERE project_id = $1::text::uuid AND evidence_kind = 'volcengine_agent_plan_boundary'",
+            &[&scope.project_id.as_ref(), &base],
+        )
+        .await
+        .unwrap();
+    let claim = claim_run(&admin, scope.clone(), first.clone()).await;
+    complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+    let second = Admission {
+        destination: plan,
+        message: FULL,
+        conversation: conversation_of("48e"),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "48f")
+    .await;
+    // The count stands for a long final answer of the first Run, the last selected item. The
+    // window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens.
+    admin
+        .execute(
+            "UPDATE storyos.context_assembly_manifests
+                SET payload = jsonb_set(payload, '{selected,-1,token_count}', '1015808')
+              WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
+            &[&second],
+        )
+        .await
+        .unwrap();
+    let claim = claim_run(&admin, scope.clone(), second.clone()).await;
+    complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (
+            json_of(
+                &admin,
+                "SELECT jsonb_build_array(status, settlement->>'capability',
+                        (SELECT count(*) FROM storyos.model_attempts AS attempt
+                          WHERE attempt.run_id = run.run_id))::text
+                   FROM storyos.agent_runs AS run WHERE run_id = $1::text::uuid",
+                &[&second],
+            )
+            .await,
+            served.await.unwrap().len(),
+        ),
+        (json!(["refused", "conversation_too_long", 0]), 2)
     );
 }

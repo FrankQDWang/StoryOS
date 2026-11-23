@@ -190,7 +190,7 @@ pub use model_gateway_ports::{
     ReferenceRetrieval, ReportedBinding, RequestAttempt, RequestBounds, RequestContextItem,
     RequestRoute, ResolvedCredential, ResponseReference, RetrievePurpose, RetrieveRequest,
     StreamControl, StreamStop, ToolOutput, ToolOutputOrigin, ToolProbeRequest,
-    WirePayloadProjection,
+    WirePayloadProjection, sent_earlier_turns,
 };
 pub use open_proposal_list::{
     OpenProposalList, OpenProposalListItem, OpenProposalListReader, list_open_proposals,

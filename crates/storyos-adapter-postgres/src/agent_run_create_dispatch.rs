@@ -239,12 +239,11 @@ pub(crate) async fn create_request(
     };
     let input = record_input(record, assembly, &run.author_message);
     let context = RequestContextItem::sent(input.context, previous_response_reference.as_deref());
-    // The Provider conversation of a prior response holds the earlier turns, and a probe sends
-    // its own body (ADR 0102).
-    let earlier_turns = match (&probe, &previous_response_reference) {
-        (None, None) => input.earlier_turns,
-        (Some(_), _) | (_, Some(_)) => None,
-    };
+    let earlier_turns = storyos_application::sent_earlier_turns(
+        input.earlier_turns,
+        previous_response_reference.as_deref(),
+        probe.is_some(),
+    );
     let purpose = match (probe, run.kind) {
         (Some(probe), _) => CreatePurpose::ToolQualification(probe.request),
         (None, storyos_core::AgentRunKind::MemoryCapture) => {

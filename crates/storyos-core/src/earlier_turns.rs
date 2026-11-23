@@ -3,7 +3,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::assemble_context::{ConsideredSource, SelectedProjection, count_context_item_tokens};
+use crate::assemble_context::{
+    CONTEXT_ITEM_TOKEN_LIMIT, ConsideredSource, SelectedProjection, count_context_item_tokens,
+};
 use crate::{ContextSourceClass, CurrentPassageAssemblyRecord, ProjectionMode};
 
 /// The limit of the earlier turns of one request, in counted tokens (ADR 0052).
@@ -61,15 +63,19 @@ pub struct EarlierTurns {
 }
 
 /// Selects the newest of `turns` (oldest first) that fit the limit together. The Host takes whole
-/// turns from the newest, and the first turn that does not fit ends the selection.
+/// turns from the newest, and the first turn that does not fit ends the selection. A turn with a
+/// message above the Context item limit does not fit (ADR 0052).
 pub fn select_earlier_turns(mut turns: Vec<EarlierTurn>) -> EarlierTurns {
     let mut total = 0;
     let mut first_kept = turns.len();
     for (index, turn) in turns.iter().enumerate().rev() {
-        total += (turn.messages.iter())
+        let counts: Vec<u64> = (turn.messages.iter())
             .map(|message| count_context_item_tokens(&message.text))
-            .sum::<u64>();
-        if total > EARLIER_TURNS_TOKEN_LIMIT {
+            .collect();
+        total += counts.iter().sum::<u64>();
+        if total > EARLIER_TURNS_TOKEN_LIMIT
+            || counts.iter().any(|count| *count > CONTEXT_ITEM_TOKEN_LIMIT)
+        {
             break;
         }
         first_kept = index;

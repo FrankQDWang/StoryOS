@@ -232,6 +232,17 @@ impl RequestContextItem {
     }
 }
 
+/// The earlier turns that a Create request sends (ADR 0102 section 3). Only a request with a full
+/// input and no prior response sends them: the Provider conversation of a prior response holds
+/// them, and a qualification probe sends its own body.
+pub fn sent_earlier_turns(
+    earlier: Option<storyos_core::EarlierTurns>,
+    previous_response_reference: Option<&str>,
+    probe: bool,
+) -> Option<storyos_core::EarlierTurns> {
+    earlier.filter(|_| previous_response_reference.is_none() && !probe)
+}
+
 /// One admitted Proposal target that the request declares to the destination.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeclaredTarget {

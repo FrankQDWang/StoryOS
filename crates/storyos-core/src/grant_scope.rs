@@ -24,8 +24,8 @@ pub enum GrantScope {
     /// The fifth scope, the source class `character_file`, and the Purpose `intent_pass` (ADR
     /// 0101 section 4).
     ProjectWritingAssistanceV6,
-    /// The sixth scope and the source class `earlier_answer`: the final answers of the earlier
-    /// turns of the Conversation (ADR 0102).
+    /// The sixth scope `project_writing_assistance_v6` and the source class `earlier_answer`: the
+    /// final answers of the earlier turns of the Conversation (ADR 0102).
     ProjectWritingAssistanceV7,
     /// The research destination that `createAgentRun` binds (ADR 0090): the Purpose `research`,
     /// the source classes `agent_query` and `agent_url_selection`, no length bound, no Ambient

@@ -63,7 +63,12 @@ fn the_host_keeps_each_earlier_turn_when_all_fit() {
 fn the_first_turn_that_does_not_fit_ends_the_selection_and_the_result_says_so() {
     let newest = turn(
         "run-4",
-        &[author(&"d".repeat(60_000)), answer(&"e".repeat(40_000))],
+        &[
+            author(&"d".repeat(25_000)),
+            author(&"d".repeat(25_000)),
+            author(&"d".repeat(25_000)),
+            answer(&"e".repeat(25_000)),
+        ],
     );
     let turns = vec![
         turn("run-1", &[author("a")]),
@@ -86,6 +91,32 @@ fn the_first_turn_that_does_not_fit_ends_the_selection_and_the_result_says_so() 
             },
             EARLIER_TURNS_TOKEN_LIMIT
         )
+    );
+}
+
+/// ADR 0052 and ADR 0102 section 4: a turn with a message above the Context item limit does not
+/// fit, so it ends the selection although the total fits.
+#[test]
+fn a_turn_with_a_message_above_the_item_limit_ends_the_selection() {
+    let newest = turn("run-3", &[author("Make it shorter."), answer("Done.")]);
+    let turns = vec![
+        turn("run-1", &[author("a")]),
+        turn(
+            "run-2",
+            &[
+                author("Write the chapter."),
+                answer(&"c".repeat(crate::CONTEXT_ITEM_TOKEN_LIMIT as usize + 1)),
+            ],
+        ),
+        newest.clone(),
+    ];
+
+    assert_eq!(
+        select_earlier_turns(turns),
+        EarlierTurns {
+            turns: vec![newest],
+            older_turns_left_out: true,
+        }
     );
 }
 
@@ -160,17 +191,22 @@ fn the_expected_input_counts_the_earlier_turns_only_in_a_full_input() {
         let mut full = record.clone();
         let others: u64 = plain.selected.iter().map(|item| item.token_count).sum();
         full.selected[1].token_count += 1_015_808 - others - 1;
-        crate::later_request_too_long(
-            crate::AGENT_PLAN_REGISTRATION.revision,
-            crate::BudgetBounds::AgentPlanRequestV2.as_str(),
-            &full,
-            &[],
-        )
+        [false, true].map(|prior_response| {
+            crate::full_decision_request_too_long(
+                prior_response,
+                crate::AGENT_PLAN_REGISTRATION.revision,
+                crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+                &full,
+                &[],
+            )
+        })
     };
 
+    // Only the full input with the earlier turns is too long. The check of a request that
+    // continues a prior response is the compaction trigger, which does not count them.
     assert_eq!(
-        (sent(&with_turns), [too_long(&plain), too_long(&with_turns)],),
-        (sent(&plain), [false, true])
+        (sent(&with_turns), [too_long(&plain), too_long(&with_turns)]),
+        (sent(&plain), [[false, false], [true, false]])
     );
 }
 

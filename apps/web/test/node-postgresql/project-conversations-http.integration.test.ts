@@ -32,7 +32,6 @@ async function rowCounts(projectId: string): Promise<string> {
   `);
 }
 
-/** Moves each Run event time of each Run of the Conversation back by 73 hours. */
 function unavailable(error: unknown, ...hidden: string[]): boolean {
   const protocol = requireStoryOSProtocolError(error);
   const body = String(protocol.responseBody);

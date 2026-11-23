@@ -294,6 +294,26 @@ pub fn later_request_too_long(
     })
 }
 
+/// Whether a decision request of a Run of the author is too long when it has no prior response.
+/// Such a request sends its full input with the earlier turns of the Conversation and each Tool
+/// result of the Run, so each text counts (ADR 0056, ADR 0102). The compaction trigger checks a
+/// request that continues a prior response (ADR 0093).
+pub fn full_decision_request_too_long(
+    prior_response: bool,
+    model_registration_revision: &str,
+    budget_bounds: &str,
+    decision: &crate::CurrentPassageAssemblyRecord,
+    declared_target_texts: &[String],
+) -> bool {
+    !prior_response
+        && later_request_too_long(
+            model_registration_revision,
+            budget_bounds,
+            decision,
+            declared_target_texts,
+        )
+}
+
 /// Whether the decision request of a RunStep compacts first. The expected input can reach the
 /// threshold at each RunStep, or the author message can ask the Host fake to compact (ADR 0093).
 pub fn compaction_requested(facts: &CompactionRequestFacts<'_>) -> bool {

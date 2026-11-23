@@ -4,13 +4,6 @@ This record is the live check of [Send the Earlier Turns of a Project Conversati
 
 Raw evidence is on the local tag `evidence/1826-earlier-turns-live-2026-11-23` (commit `63dc42994cfc87514486c64d2fc0f39694772e0e`). The tag holds the plan, the run script `earlier-live.ts`, `run.sh`, `rehearse.sh`, the request guard, the wire payload of each request (`wire/M1.json` to `wire/M6.json`), the Model Attempts, the ToolCalls, the Run rows, the earlier turns of each Operation Requirement, the guard log, `loader.log`, `measures.json`, and the Server and Worker logs. The tag has no database dump and no Project Export Archive. Before the tag, each of its 20 files (282,158 bytes) was examined for a key, an e-mail address, and a home path, and none was found. The coordinator examines the tag again and pushes it.
 
-## Result
-
-- **Run 2 sends the earlier turn.** Its first request (M3) has no `previous_response_id`, and it has the section of the earlier turns directly before `Author request`, with the exact author message and the exact final answer of Run 1.
-- **Run 3 continues the prior response.** Its first request (M5) has `previous_response_id` and no section.
-- **Run 2 repeats the sentence.** The answer of Run 2 is the first sentence of the answer of Run 1, character for character. The answer of Run 1 is one sentence.
-- Each request is in the plan. No stop occurred, and no Run repeated.
-
 ## Plan
 
 The plan was posted on the ticket before the first request ([plan comment](https://github.com/FrankQDWang/StoryOS/issues/1826#issuecomment-7090561266)).
@@ -18,9 +11,9 @@ The plan was posted on the ticket before the first request ([plan comment](https
 Inputs:
 
 - Product code and release package: branch `claude/1826-earlier-turns-39b962` at `9d3e82ea6b128e4e0a527a50c3dee0afc3bd6424` (tree `4442314fa3bf2f15b639d24958fe80db83f993db`), `python3 scripts/package-release.py` on the clean tree (manifest `sha256:7df2bfce7892971066ca094699bb6fb4cbf48ae61679fc71ff4cd70f74173b3c`). Registration `018f0000-0000-7001-8000-00000000fa26`, mapping `storyos.volcengine-agent-plan.responses.create.v12`.
-- Topology: the topology of #1792 and #1818. `storyos-server` with `STORYOS_WORKER=0` and one continuous `storyos-worker`, both from the release package of this worktree and with `STORYOS_MODEL_DESTINATION=volcengine_agent_plan`, on a new `scripts/dev-postgres.sh with` database. No embedding destination, no Exa key, and no Skill directory. The Worker resolved the key by its typed settings (ADR 0050), which find the settings file of the main checkout from a worktree. The run never read an env file or a key.
-- Sample: Chapter 1 of `fixtures/memory-calibration/` (`第一章 归`), in a new Project with one Volume. The script wrote the Chapter through `applyAuthorEdit`.
-- Script: `earlier-live.ts`, started by `rehearse.sh` (the request guard, then `run.sh`). The only SQL write was the guard schema.
+- Topology: the topology of #1792 and #1818. `storyos-server` with `STORYOS_WORKER=0` and one continuous `storyos-worker`, both from the release package of this worktree and with `STORYOS_MODEL_DESTINATION=volcengine_agent_plan`, on a new `scripts/dev-postgres.sh with` database. No embedding destination, no Exa key, and no Skill directory. The Worker resolves the key by its typed settings (ADR 0050), which find the settings file of the main checkout from a worktree. The run never reads an env file or a key.
+- Sample: Chapter 1 of `fixtures/memory-calibration/` (`第一章 归`), in a new Project with one Volume. The script writes the Chapter through `applyAuthorEdit`.
+- Script: `earlier-live.ts`, started by `rehearse.sh` (the request guard, then `run.sh`). The only SQL write is the guard schema.
 - A rehearsal of all steps on `host_fake` with the same package and a separate database passed: 3 Runs, 6 requests, each `completed`.
 
 Steps, all in one Project Conversation on Chapter 1:
@@ -30,16 +23,32 @@ Steps, all in one Project Conversation on Chapter 1:
 3. Run 3: "她回到青溪站那天的天气怎么样？用一句话回答。"
 4. Stop the Worker, then write the measures and the raw evidence.
 
-The quiet time of a Conversation capture is 30 minutes and of a Chapter capture 1 hour, and the script stopped the Worker after Run 3. Thus no Memory work started, and no request of the Memory work was planned.
+The quiet time of a Conversation capture is 30 minutes and of a Chapter capture 1 hour, and the script stops the Worker after Run 3. Thus no request of the Memory work was planned.
 
-| Item | Expected | Stop at | Actual |
-| --- | --- | --- | --- |
-| AgentRuns | 3 of the author | 3 (script), 5 (guard) | 3 |
-| Model requests of one Run | 2 or 3 | 6 | 2, 2, 2 |
-| Model requests in all, with the Memory work (0) | about 7 | 20 | 6 |
-| Reported input in all | about 80,000 | — | 87,460 |
-| Reported input of one request | 10,000 to 25,000 | 60,000 | 11,849 to 19,860 |
-| Exa and embedding requests | 0 | 1 | 0 |
+| Item | Expected | Stop at |
+| --- | --- | --- |
+| AgentRuns | 3 of the author | 3 (script), 5 (guard) |
+| Model requests of one Run | 2 or 3 | 6 |
+| Model requests in all, with the Memory work (0) | about 7 | 20 |
+| Reported input in all | about 80,000 | — |
+| Reported input of one request | 10,000 to 25,000 | 60,000 |
+| Exa and embedding requests | 0 | 1 |
+
+## Result
+
+- **Run 2 sends the earlier turn.** Its first request (M3) has no `previous_response_id`, and it has the section of the earlier turns directly before `Author request`, with the exact author message and the exact final answer of Run 1.
+- **Run 3 continues the prior response.** Its first request (M5) has `previous_response_id` and no section.
+- **Run 2 repeats the sentence.** The answer of Run 2 is the first sentence of the answer of Run 1, character for character. The answer of Run 1 is one sentence.
+- Each request is in the plan. No stop occurred, and no Run repeated.
+
+| Item | Actual |
+| --- | --- |
+| AgentRuns | 3 |
+| Model requests of one Run | 2, 2, 2 |
+| Model requests in all, with the Memory work (0) | 6 |
+| Reported input in all | 87,460 |
+| Reported input of one request | 11,849 to 19,860 |
+| Exa and embedding requests | 0 |
 
 ## Runs
 

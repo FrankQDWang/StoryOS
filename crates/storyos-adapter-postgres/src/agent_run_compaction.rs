@@ -73,6 +73,19 @@ pub(crate) async fn advance_active_compaction(
         _ => None,
     };
     let target_texts = declared_target_texts(client, claim, run, chain.as_ref()).await?;
+    if record == CompactionRecordState::Absent
+        && run.disclosure_request.as_ref().is_some_and(|decision| {
+            storyos_core::full_decision_request_too_long(
+                chain.is_some(),
+                &run.model_registration_revision,
+                &run.budget_bounds,
+                decision,
+                &target_texts,
+            )
+        })
+    {
+        return Ok(CompactionAdvance::TooLong);
+    }
     let earlier = match chain {
         Some(_) => compacted_earlier(client, claim, run).await?,
         None => false,
