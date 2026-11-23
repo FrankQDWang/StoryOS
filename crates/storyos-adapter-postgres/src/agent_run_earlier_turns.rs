@@ -90,3 +90,7 @@ pub(crate) async fn load(
     }
     Ok(turns)
 }
+
+#[cfg(test)]
+#[path = "agent_run_earlier_turns_tests.rs"]
+mod tests;
