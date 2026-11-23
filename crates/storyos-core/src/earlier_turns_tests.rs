@@ -186,8 +186,9 @@ fn the_expected_input_counts_the_earlier_turns_only_in_a_full_input() {
         .sent_input_tokens
     };
     // The window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens. The working
-    // text fills it to one token below the limit without the earlier turns.
-    let too_long = |record: &crate::CurrentPassageAssemblyRecord| {
+    // text fills it to one token below the limit without the earlier turns and the declared
+    // target texts.
+    let too_long = |record: &crate::CurrentPassageAssemblyRecord, target_texts: &[String]| {
         let mut full = record.clone();
         let others: u64 = plain.selected.iter().map(|item| item.token_count).sum();
         full.selected[1].token_count += 1_015_808 - others - 1;
@@ -197,16 +198,25 @@ fn the_expected_input_counts_the_earlier_turns_only_in_a_full_input() {
                 crate::AGENT_PLAN_REGISTRATION.revision,
                 crate::BudgetBounds::AgentPlanRequestV2.as_str(),
                 &full,
-                &[],
+                target_texts,
             )
         })
     };
+    let target = ["The target block.".to_owned()];
 
-    // Only the full input with the earlier turns is too long. The check of a request that
-    // continues a prior response is the compaction trigger, which does not count them.
+    // Only a full input with the earlier turns or a declared target text is too long. The check
+    // of a request that continues a prior response is the compaction trigger, which does not
+    // count the earlier turns.
     assert_eq!(
-        (sent(&with_turns), [too_long(&plain), too_long(&with_turns)]),
-        (sent(&plain), [[false, false], [true, false]])
+        (
+            sent(&with_turns),
+            [
+                too_long(&plain, &[]),
+                too_long(&with_turns, &[]),
+                too_long(&plain, &target),
+            ]
+        ),
+        (sent(&plain), [[false, false], [true, false], [true, false]])
     );
 }
 

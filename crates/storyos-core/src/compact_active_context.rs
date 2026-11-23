@@ -336,11 +336,13 @@ pub enum DecisionRequestKind {
 
 /// Decides the decision request after the compaction phase. A compaction that started and did
 /// not install leaves the full chain. When the expected input then reaches the window after the
-/// output bound, the request cannot fit.
+/// output bound, the request cannot fit. With no `facts`, no prior response is usable, so the
+/// request sends the full input, and `full_input_too_long` says if it fits (ADR 0102).
 pub fn decision_request_kind(
     installed: bool,
     compaction_started: bool,
     facts: Option<&CompactionRequestFacts<'_>>,
+    full_input_too_long: bool,
 ) -> DecisionRequestKind {
     if installed {
         return DecisionRequestKind::Later;
@@ -352,6 +354,7 @@ pub fn decision_request_kind(
         {
             DecisionRequestKind::TooLong
         }
+        None if compaction_started && full_input_too_long => DecisionRequestKind::TooLong,
         _ => DecisionRequestKind::Ordinary,
     }
 }
