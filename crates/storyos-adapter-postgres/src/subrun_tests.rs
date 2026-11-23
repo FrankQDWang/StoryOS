@@ -16,6 +16,7 @@ use crate::shared_tests::agent_run_retrieval::{AfterExchange, destination};
 use crate::shared_tests::agent_run_steering::{cancellation, queued};
 use crate::shared_tests::agent_run_tool_exposure::{finish_stream, finish_then_advisory, sse};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::command_sequence_background_run::claim_in_project;
 use crate::shared_tests::command_sequence_support::{CommandCall, stores};
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::write_versions;
@@ -596,13 +597,14 @@ async fn a_subrun_with_no_final_answer_settles_the_call_with_no_result() {
     );
 }
 
-/// The Contract Fault Point observer that runs `statement` with the identity of the parent Run at
-/// the `nth` dispatch claim.
+/// The Contract Fault Point observer that, at the `nth` dispatch claim, makes the lease of the
+/// parent Run expire, and lets the Worker take the parent over with a new claim.
 struct AtDispatch<'a> {
+    store: &'a PostgresProjectReader,
     admin: &'a Client,
+    scope: ProjectScope,
     run_id: String,
     nth: usize,
-    statement: &'a str,
     reached: std::sync::Mutex<usize>,
 }
 
@@ -616,32 +618,37 @@ impl storyos_application::ContractFaultObserver for AtDispatch<'_> {
             *reached += 1;
             *reached
         };
-        if count == self.nth {
-            let run_id = &self.run_id;
-            self.admin.execute(self.statement, &[run_id]).await.unwrap();
+        if count != self.nth {
+            return;
         }
+        let expire = "UPDATE storyos.agent_runs
+                         SET lease_expires_at = clock_timestamp() - interval '1 second'
+                       WHERE run_id = $1::text::uuid";
+        self.admin.execute(expire, &[&self.run_id]).await.unwrap();
+        let takeover = claim_in_project(self.store, &self.scope).await.unwrap();
+        assert_eq!(takeover.run_id, self.run_id);
     }
 }
 
-/// Runs a parent Run of `prefixes` with the author message `script` while the observer runs
-/// `statement` at the `nth` dispatch claim, then completes the parent when its claim stopped.
-/// Gives whether the first claim of the parent stopped with a stale fence, the status and the
-/// count of the decision Model Attempts of each Subrun in the order of the calls at that stop,
-/// whether the completion kept the same Subruns, the `start_subrun` calls, and the status of the
-/// parent.
+/// Runs a parent Run of `prefixes` with the author message `script` while the Worker takes the
+/// parent over at the `nth` dispatch claim, then completes the parent when its claim stopped.
+/// Gives whether the first claim of the parent stopped with a stale fence. Then it gives the
+/// status and the decision Model Attempt count of each Subrun at that stop, in the call order.
+/// Last, it gives whether the completion kept the same Subruns, the calls, and the parent status.
 pub(super) async fn stopped_end(
     store: &PostgresProjectReader,
     admin: &Client,
     prefixes: [&str; 2],
     script: &str,
-    (nth, statement): (usize, &str),
+    nth: usize,
 ) -> Value {
     let (scope, run_id) = scripted(store, admin, prefixes[0], prefixes[1], script).await;
     let observer = AtDispatch {
+        store,
         admin,
+        scope: scope.clone(),
         run_id: run_id.clone(),
         nth,
-        statement,
         reached: std::sync::Mutex::default(),
     };
     let claim = claim_run(admin, scope.clone(), run_id.clone()).await;

@@ -91,8 +91,9 @@ async fn a_cancellation_of_the_parent_cancels_its_subrun() {
     );
 }
 
-/// Items 2 and 7 of #436: after a lost lease of the parent while its fourth Subrun works, the
-/// next claim of the parent continues the same fourth Subrun. The limit of 4 Subrun Requests
+/// Items 2 and 7 of #436: when another Worker takes the parent over after a lost lease while its
+/// fourth Subrun works, the work of the earlier claim stops, and the next claim of the parent
+/// continues the same fourth Subrun. The limit of 4 Subrun Requests
 /// does not refuse the call that has its Subrun Request, and the call settles with the answer.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -100,12 +101,8 @@ async fn a_lost_lease_of_the_parent_continues_the_same_fourth_subrun() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The parent claims its first request, and each of the first three Subruns claims three.
-    let lose = "UPDATE storyos.agent_runs
-                   SET fence_token = fence_token + 1,
-                       lease_expires_at = clock_timestamp() - interval '1 second'
-                 WHERE run_id = $1::text::uuid";
     let script = "SCRIPT:start_subrun 4";
-    let end = stopped_end(&store, &admin, ["764", "765"], script, (11, lose)).await;
+    let end = stopped_end(&store, &admin, ["764", "765"], script, 11).await;
     // The fake destination answers the brief of each Subrun with its advice text.
     let answer = storyos_core::ADVISORY_TEXT;
 

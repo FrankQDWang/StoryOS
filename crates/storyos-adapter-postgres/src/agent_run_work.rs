@@ -32,9 +32,44 @@ impl AgentRunWorkStore for PostgresProjectReader {
             .map(|adapter| adapter.kind())
             .collect::<Vec<_>>();
         let claimed = claim_agent_run_row(&transaction, lease_seconds, &model_kinds).await?;
+        if let Some(claim) = &claimed {
+            end_subrun_claims(&transaction, claim).await?;
+        }
         transaction.commit().await.map_err(read_error)?;
         Ok(claimed)
     }
+}
+
+/// A new claim of a parent Run moves the fence of each of its claimed Subruns in its Project scope.
+/// Thus the Subrun work of an earlier claim of the parent stops (ADR 0103 section 3A).
+async fn end_subrun_claims(
+    transaction: &tokio_postgres::Transaction<'_>,
+    claim: &ClaimedAgentRun,
+) -> Result<(), ProjectReadError> {
+    let scope = &claim.project_scope;
+    transaction
+        .execute(
+            "SELECT set_config('storyos.scope_mode', '', true),
+                    set_config('storyos.user_id', $1, true),
+                    set_config('storyos.owner_user_id', $1, true),
+                    set_config('storyos.project_id', $2, true)",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .map_err(read_error)?;
+    transaction
+        .execute(
+            "UPDATE storyos.agent_runs AS subrun
+                SET claim_generation = subrun.claim_generation + 1,
+                    fence_token = subrun.claim_generation + 1
+               FROM storyos.subrun_requests AS request
+              WHERE request.parent_run_id = $1::text::uuid
+                AND subrun.run_id = request.subrun_run_id AND subrun.status = 'claimed'",
+            &[&claim.run_id],
+        )
+        .await
+        .map(|_| ())
+        .map_err(read_error)
 }
 
 pub(crate) enum WorkPhase {
@@ -178,10 +213,10 @@ impl RunPhaseRow {
 
 /// Locks the fenced AgentRun row with its active decision Context Assembly and Model Attempt.
 /// When a compaction committed the Context Assembly of the later request, that one is active.
-/// The claim of a Subrun is valid only while the claim of its parent Run has its lease, so a
-/// pause, a cancellation, or a lost lease of the parent stops the work of the Subrun, and the
-/// stopped work records no response. A cancelled Subrun keeps its claim for the duties of a
-/// cancelled Run (ADR 0103 section 3A).
+/// The claim of a Subrun is valid only while the claim of its parent Run has its lease. Thus a
+/// pause, a cancellation, or a lost lease of the parent stops the Subrun work, and the stopped
+/// work records no response. A cancelled Subrun keeps its claim for the duties of a cancelled Run
+/// (ADR 0103 section 3A).
 pub(crate) async fn load_run_phase(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
