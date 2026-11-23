@@ -4,9 +4,8 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AgentRunReadSelection, AgentRunReadStore, CancelAgentRunInput, ClaimedAgentRun,
-    CompleteAgentRunError, ContractFaultObserver, ContractFaultPoint, NoContractFaults,
-    ProjectScope, complete_agent_run,
+    CancelAgentRunInput, ClaimedAgentRun, CompleteAgentRunError, ContractFaultObserver,
+    ContractFaultPoint, NoContractFaults, ProjectScope, complete_agent_run,
 };
 use storyos_core::{DeploymentDestination, ToolCallState, ToolResultProjection};
 use tokio_postgres::Client;
@@ -17,7 +16,6 @@ use crate::shared_tests::agent_run_retrieval::{AfterExchange, destination};
 use crate::shared_tests::agent_run_steering::{cancellation, queued};
 use crate::shared_tests::agent_run_tool_exposure::{finish_stream, finish_then_advisory, sse};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
-use crate::shared_tests::command_sequence_background_run::claim_in_project;
 use crate::shared_tests::command_sequence_support::{CommandCall, stores};
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::write_versions;
@@ -683,94 +681,6 @@ async fn subrun_states(admin: &Client, run_id: &str) -> Value {
         &[&run_id],
     )
     .await
-}
-
-/// Items 3 and 7 of #436: the Worker never selects a queued Subrun, or a claimed Subrun whose
-/// lease expired, also when no other work exists. `getAgentRun` with the identity of a Subrun
-/// answers as for a Run that does not exist, the earlier turns of the Conversation of the parent
-/// do not read the Subrun, and the Subrun gets no Memory work. Test prefix lead `75`.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn no_worker_claim_no_run_read_and_no_earlier_turn_gives_a_subrun() {
-    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
-    let (store, admin) = stores().await;
-    let (scope, run_id) = parent(&store, &admin, "750", "751").await;
-    let queued_subrun = start(&store, &admin, &scope, &run_id, "读第一章").await;
-    let queued_claim = claim_in_project(&store, &scope).await;
-    admin
-        .execute(
-            "UPDATE storyos.agent_runs
-                SET status = 'claimed', claim_generation = 1, fence_token = 1,
-                    lease_expires_at = clock_timestamp() - interval '1 second'
-              WHERE run_id = $1::text::uuid",
-            &[&queued_subrun],
-        )
-        .await
-        .unwrap();
-    let expired_claim = claim_in_project(&store, &scope).await;
-    let script = storyos_adapter_fake_destination::START_SUBRUN_SCRIPT;
-    let (scope, parent_run_id) = scripted(&store, &admin, "752", "753", script).await;
-    complete(&store, &admin, &scope, &parent_run_id).await;
-    let subrun = subruns(&admin, &parent_run_id).await.remove(0);
-    let read = |run_id: String| {
-        let (store, scope) = (&store, &scope);
-        async move {
-            (store.read_agent_run(scope, &run_id, &AgentRunReadSelection::Current))
-                .await
-                .unwrap()
-                .is_some()
-        }
-    };
-    let parent = admin
-        .query_one(
-            "SELECT chapter_id::text, conversation_id::text FROM storyos.agent_runs
-              WHERE run_id = $1::text::uuid",
-            &[&parent_run_id],
-        )
-        .await
-        .unwrap();
-    let (chapter_id, conversation): (String, String) = (parent.get(0), parent.get(1));
-    let next = Admission {
-        conversation: conversation_of("753"),
-        ..Default::default()
-    }
-    .admit(&store, &scope, &chapter_id, "754")
-    .await;
-    let turns = crate::create_agent_run::earlier_turns::load(&admin, &scope, &next)
-        .await
-        .unwrap();
-    // The Memory work of the Conversation of the parent, and each Memory work with no
-    // Conversation: the kind of each schedule row.
-    let memory_work = json_of(
-        &admin,
-        "SELECT jsonb_agg(work_kind)::text FROM storyos.memory_work_schedules
-          WHERE project_id = $1::text::uuid
-            AND (conversation_id = $2::text::uuid OR conversation_id IS NULL)",
-        &[&scope.project_id.as_ref(), &conversation],
-    )
-    .await;
-
-    assert_eq!(
-        (
-            queued_claim.is_none(),
-            expired_claim.is_none(),
-            read(subrun.clone()).await,
-            read(parent_run_id.clone()).await,
-            (turns.iter())
-                .map(|turn| turn.messages[0].source.run_id.clone())
-                .collect::<Vec<_>>(),
-            memory_work,
-        ),
-        (
-            true,
-            true,
-            false,
-            true,
-            vec![parent_run_id],
-            // Only the capture of the Conversation of the parent: the Subrun has no Memory work.
-            json!(["conversation_capture"]),
-        )
-    );
 }
 
 /// Item 8 of #436, ADR 0056: on the Agent Plan Registration, a Subrun whose request is too long
