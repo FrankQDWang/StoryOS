@@ -73,7 +73,8 @@ pub(crate) async fn tool_exposure(
         .map_err(complete_unavailable)?
         .get(/*idx*/ 0);
     // The captured Conversation Memory Settings of the Run decide the Memory read (ADR 0094
-    // section 4). A background Run has no settings.
+    // section 4). A background Run has no settings, and a Subrun uses the settings of its parent
+    // Run (ADR 0103 section 3A).
     let memory_use: bool = client
         .query_one(
             "SELECT EXISTS (SELECT 1 FROM storyos.agent_runs AS run
@@ -83,7 +84,14 @@ pub(crate) async fn tool_exposure(
                                    (run.owner_user_id, run.project_id, run.conversation_id,
                                     run.memory_settings_revision)
                              WHERE run.owner_user_id = $1::text::uuid
-                               AND run.project_id = $2::text::uuid AND run.run_id = $3::text::uuid
+                               AND run.project_id = $2::text::uuid
+                               AND run.run_id = COALESCE(
+                                     (SELECT request.parent_run_id
+                                        FROM storyos.subrun_requests AS request
+                                       WHERE request.owner_user_id = $1::text::uuid
+                                         AND request.project_id = $2::text::uuid
+                                         AND request.subrun_run_id = $3::text::uuid),
+                                     $3::text::uuid)
                                AND settings.use_enabled)",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),

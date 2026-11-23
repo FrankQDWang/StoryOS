@@ -840,7 +840,7 @@ Scope.
 
 Each grant records its standing scope, and a request outside it refuses
 before the dispatch claim with `disclosure_outside_grant`. A new grant of the
-model destination records the current scope `project_writing_assistance_v7`.
+model destination records the current scope `project_writing_assistance_v8`.
 
 Each writing assistance scope names each Purpose and each source class of the
 scope before it, and it adds the items of this table:
@@ -854,6 +854,7 @@ scope before it, and it adds the items of this table:
 | `project_writing_assistance_v5` | The manuscript source classes `chapter_list`, `manuscript_read_result`, and `manuscript_search_result`, the Agent Memory source classes `memory_index`, `memory_read_result`, `memory_search_result`, `memory_capture_input`, `memory_delete_marks`, `memory_entries`, and `memory_observations`, and the Purposes `memory_capture` and `memory_consolidation` | [ADR 0095](../adr/0095-give-the-agent-the-whole-manuscript-through-host-tools-and-add-a-hybrid-search-with-pgvector-and-a-volcengine-embedding-model.md) section 6, [ADR 0094](../adr/0094-deliver-stage-7-with-one-project-instruction-and-agent-memory-as-typed-entries.md), [ADR 0051](../adr/0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md) amendment of 2026-11-16 |
 | `project_writing_assistance_v6` | The Purpose `intent_pass` and the source class `character_file` | [ADR 0101](../adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md) section 4, [ADR 0051](../adr/0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md) amendment of 2026-11-22 |
 | `project_writing_assistance_v7` | The source class `earlier_answer` | [ADR 0102](../adr/0102-send-the-earlier-turns-of-a-project-conversation-from-the-host-records-when-a-request-has-no-prior-response.md) section 5, [ADR 0051](../adr/0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md) amendment of 2026-11-23 |
+| `project_writing_assistance_v8` | The Purpose `subrun` and the source class `subrun_brief` | [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md) section 3A, [ADR 0051](../adr/0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md) amendment of 2026-11-23 for `project_writing_assistance_v8` |
 
 Each scope before the current scope is a stored value. A stored grant keeps
 the exact meaning of its scope, and a request with a Purpose or a source class

@@ -258,7 +258,7 @@ const STAGE_7_CLASSES: [ContextSourceClass; 10] = [
 /// ADR 0075: this test is the one owner of the refusal of a Stage 7 item or Purpose under an
 /// earlier scope.
 #[test]
-fn the_fifth_scope_covers_the_stage_7_items_the_sixth_the_intent_pass_and_the_seventh_an_answer() {
+fn each_scope_from_the_fifth_names_the_classes_and_the_purposes_of_its_stage() {
     let request = assemble_current_passage_context(&passage("ch-1", "The tide turned."));
     let scopes = [
         "project_writing_assistance_v1",
@@ -268,6 +268,7 @@ fn the_fifth_scope_covers_the_stage_7_items_the_sixth_the_intent_pass_and_the_se
         "project_writing_assistance_v5",
         "project_writing_assistance_v6",
         "project_writing_assistance_v7",
+        "project_writing_assistance_v8",
         "research_tool_v1",
     ];
     let admitted = |request: &CurrentPassageAssemblyRecord| {
@@ -295,7 +296,7 @@ fn the_fifth_scope_covers_the_stage_7_items_the_sixth_the_intent_pass_and_the_se
 
     assert_eq!(
         STAGE_7_CLASSES.map(|class| admitted(&with_item(request.clone(), class))),
-        [[false, false, false, false, true, true, true, false]; 10]
+        [[false, false, false, false, true, true, true, true, false]; 10]
     );
     assert_eq!(
         [
@@ -303,7 +304,7 @@ fn the_fifth_scope_covers_the_stage_7_items_the_sixth_the_intent_pass_and_the_se
             crate::assemble_context::ContextPurpose::MemoryConsolidation,
         ]
         .map(|purpose| admitted(&with_purpose(purpose))),
-        [[false, false, false, false, true, true, true, false]; 2]
+        [[false, false, false, false, true, true, true, true, false]; 2]
     );
     // The sixth scope names the Stage 11 class and Purpose first (ADR 0101 section 4).
     assert_eq!(
@@ -316,31 +317,41 @@ fn the_fifth_scope_covers_the_stage_7_items_the_sixth_the_intent_pass_and_the_se
                 crate::assemble_context::ContextPurpose::IntentPass
             )),
         ],
-        [[false, false, false, false, false, true, true, false]; 2]
+        [[false, false, false, false, false, true, true, true, false]; 2]
     );
     assert_eq!(
         [admitted(&fourth_scope), admitted(&summary)],
         [
-            [false, false, false, true, true, true, true, false],
-            [false, true, true, true, true, true, true, false]
+            [false, false, false, true, true, true, true, true, false],
+            [false, true, true, true, true, true, true, true, false]
         ]
     );
-    // Only the seventh scope names the final answer of an earlier turn (ADR 0102).
+    // The seventh scope names the final answer of an earlier turn first (ADR 0102).
     assert_eq!(
         admitted(&with_item(
             request.clone(),
             ContextSourceClass::EarlierAnswer
         )),
-        [false, false, false, false, false, false, true, false]
+        [false, false, false, false, false, false, true, true, false]
+    );
+    // Only the eighth scope names the brief and the Purpose of a Subrun (ADR 0103 section 3A).
+    assert_eq!(
+        [
+            admitted(&with_item(request.clone(), ContextSourceClass::SubrunBrief)),
+            admitted(&with_purpose(
+                crate::assemble_context::ContextPurpose::Subrun
+            )),
+        ],
+        [[false, false, false, false, false, false, false, true, false]; 2]
     );
     assert_eq!(
         (
             GrantScope::CURRENT,
-            GrantScope::parse("project_writing_assistance_v7").map(GrantScope::as_str),
+            GrantScope::parse("project_writing_assistance_v8").map(GrantScope::as_str),
         ),
         (
-            GrantScope::ProjectWritingAssistanceV7,
-            Some("project_writing_assistance_v7"),
+            GrantScope::ProjectWritingAssistanceV8,
+            Some("project_writing_assistance_v8"),
         )
     );
 }

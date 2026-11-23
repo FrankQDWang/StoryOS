@@ -223,7 +223,7 @@ async fn the_current_mapping_declares_read_tool_result_and_says_what_a_stub_is()
     };
     let current = adapter
         .prepare(&DestinationRequest::Create(request(
-            storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION,
             storyos_core::AGENT_PLAN_REGISTRATION.revision,
         )))
         .await
@@ -241,7 +241,7 @@ async fn the_current_mapping_declares_read_tool_result_and_says_what_a_stub_is()
             &current_body["tools"][2],
         ),
         (
-            "storyos.volcengine-agent-plan.responses.create.v14",
+            "storyos.volcengine-agent-plan.responses.create.v15",
             &json!(format!(
                 "{TOOL_LOOP_INSTRUCTIONS}\n\n{}\n\n{TOOL_LOOP_RULES_INSTRUCTIONS}\n\nDefault rules for prose. Use these rules when you \
                  write or change prose of the novel. They are defaults for the style of the prose. When the author request, the \
@@ -398,7 +398,7 @@ fn request_of(mapping: &str) -> CreateRequest {
 /// input.
 #[tokio::test]
 async fn the_later_request_sends_the_earlier_author_messages_before_the_current_input() {
-    let request = request_of(storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION);
+    let request = request_of(storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION);
     let summary = RequestContextItem {
         source_class: ContextSourceClass::ConversationSummary,
         content: "The author keeps the rain.".to_owned(),
@@ -434,7 +434,7 @@ async fn the_summary_instruction_names_three_more_topics() {
     let summary = CreateRequest {
         purpose: CreatePurpose::CompactionSummary,
         previous_response_reference: Some("resp_24".to_owned()),
-        ..request_of(storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION)
+        ..request_of(storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION)
     };
     let current = body(summary).await;
 
@@ -460,7 +460,7 @@ async fn the_writing_rules_are_one_block_before_the_paragraphs_of_the_items() {
         SKILL_INSTRUCTION, WRITE_MEMORY_INSTRUCTION, WRITING_RULES_INSTRUCTION,
     };
     let base = first(
-        storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION,
+        storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION,
         storyos_core::AGENT_PLAN_REGISTRATION.revision,
     );
     let request = CreateRequest {

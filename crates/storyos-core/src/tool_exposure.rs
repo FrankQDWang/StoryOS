@@ -107,6 +107,29 @@ impl ExposureFacts<'_> {
             AgentRunKind::IntentPass => {
                 return operation == ToolOperation::RecordCharacterIntent;
             }
+            // A Subrun only reads: it has each read Tool that the facts of its parent Run give
+            // the parent, and `finish` (ADR 0103 section 3A).
+            AgentRunKind::Subrun => {
+                return match operation {
+                    ToolOperation::ReadChapter
+                    | ToolOperation::SearchManuscript
+                    | ToolOperation::Finish => true,
+                    ToolOperation::ReadMemoryEntry | ToolOperation::SearchMemory => self.memory_use,
+                    ToolOperation::HybridSearchManuscript => self.hybrid_search,
+                    ToolOperation::RecordMemoryObservations
+                    | ToolOperation::ApplyMemoryOperations
+                    | ToolOperation::RecordCharacterIntent
+                    | ToolOperation::UpdatePlan
+                    | ToolOperation::ProposeEdit
+                    | ToolOperation::SubmitResearch
+                    | ToolOperation::ReadToolResult
+                    | ToolOperation::LoadSkill
+                    | ToolOperation::ReadSkillResource
+                    | ToolOperation::WriteMemory
+                    | ToolOperation::WebSearch
+                    | ToolOperation::WebFetch => false,
+                };
+            }
             AgentRunKind::Author => {}
         }
         match operation {
@@ -328,12 +351,13 @@ impl ToolExposure {
             return Self::empty();
         };
         let mut tools: Vec<ExposedTool> = Vec::new();
-        // A background Run gets no research Tool.
+        // A background Run and a Subrun get no research Tool.
         let bound = match facts.run_kind {
             AgentRunKind::Author => facts.bound,
             AgentRunKind::MemoryCapture
             | AgentRunKind::MemoryConsolidation
-            | AgentRunKind::IntentPass => &[],
+            | AgentRunKind::IntentPass
+            | AgentRunKind::Subrun => &[],
         };
         for bound in bound {
             if bound.lifecycle != ToolRegistrationLifecycle::Active

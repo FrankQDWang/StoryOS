@@ -98,6 +98,9 @@ pub enum CreatePurpose {
     /// One RunStep of an intent pass (ADR 0101 section 4). The request sends the Character File
     /// and the Tool outputs of the Run, and it has no author message and no Chapter.
     IntentPass,
+    /// One RunStep of a Subrun (ADR 0103 section 3A). The request sends the brief, the reference
+    /// items, and the Tool outputs of the Subrun, and it has no author message and no Chapter.
+    Subrun,
 }
 
 impl CreatePurpose {
@@ -112,6 +115,7 @@ impl CreatePurpose {
             storyos_core::AgentRunKind::MemoryCapture => capture_input.map(Self::MemoryCapture),
             storyos_core::AgentRunKind::MemoryConsolidation => Some(Self::MemoryConsolidation),
             storyos_core::AgentRunKind::IntentPass => Some(Self::IntentPass),
+            storyos_core::AgentRunKind::Subrun => Some(Self::Subrun),
         }
     }
 }
@@ -323,6 +327,19 @@ impl CreateRequest {
             && output
             && self.tool_choice == storyos_core::ToolChoice::Required
             && self.previous_response_reference.is_none()
+    }
+
+    /// Whether a Subrun request has the form of each Subrun mapping (ADR 0103 section 3A):
+    /// exactly one brief item, the Tool `finish`, and no prior response reference. A Subrun has
+    /// no prior binding, so each RunStep sends the full input with the Tool outputs of the
+    /// Subrun. An adapter refuses a Subrun request without this form before dispatch.
+    pub fn subrun_complete(&self) -> bool {
+        let briefs = (self.context.iter())
+            .filter(|item| item.source_class == ContextSourceClass::SubrunBrief)
+            .count();
+        let finish = (self.tool_exposure.tools.iter())
+            .any(|tool| tool.spec.operation == storyos_core::ToolOperation::Finish);
+        briefs == 1 && finish && self.previous_response_reference.is_none()
     }
 }
 

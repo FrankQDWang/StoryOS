@@ -209,7 +209,7 @@ pub(crate) async fn persist_current_passage_assembly(
 
 /// The Project Instruction Revision that the Run `run_id` bound at its admission, with its exact
 /// text, or `None` for "none configured". A later save does not change it (ADR 0094 section 2).
-async fn bound_instruction(
+pub(crate) async fn bound_instruction(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     run_id: &str,

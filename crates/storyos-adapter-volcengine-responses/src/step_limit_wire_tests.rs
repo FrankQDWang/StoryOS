@@ -9,7 +9,7 @@ use crate::wire::{
     UPDATE_PLAN_INSTRUCTION, WRITING_RULES_INSTRUCTION,
 };
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION;
 
 /// The decision request of a Run of `kind` at `position` from `request`, with the `tool_choice`
 /// of the finish rule for a request that is not a closing request.

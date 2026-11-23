@@ -404,6 +404,7 @@ fn encode_purpose(purpose: ContextPurpose) -> &'static str {
         ContextPurpose::MemoryCapture => "memory_capture",
         ContextPurpose::MemoryConsolidation => "memory_consolidation",
         ContextPurpose::IntentPass => "intent_pass",
+        ContextPurpose::Subrun => "subrun",
     }
 }
 
@@ -414,6 +415,7 @@ fn decode_purpose(value: &str) -> Option<ContextPurpose> {
         "memory_capture" => Some(ContextPurpose::MemoryCapture),
         "memory_consolidation" => Some(ContextPurpose::MemoryConsolidation),
         "intent_pass" => Some(ContextPurpose::IntentPass),
+        "subrun" => Some(ContextPurpose::Subrun),
         _ => None,
     }
 }
@@ -448,6 +450,7 @@ fn encode_source_class(class: ContextSourceClass) -> &'static str {
         ContextSourceClass::MemoryObservations => "memory_observations",
         ContextSourceClass::CharacterFile => "character_file",
         ContextSourceClass::EarlierAnswer => "earlier_answer",
+        ContextSourceClass::SubrunBrief => "subrun_brief",
     }
 }
 
@@ -474,6 +477,7 @@ fn decode_source_class(value: &str) -> Option<ContextSourceClass> {
         "memory_observations" => Some(ContextSourceClass::MemoryObservations),
         "character_file" => Some(ContextSourceClass::CharacterFile),
         "earlier_answer" => Some(ContextSourceClass::EarlierAnswer),
+        "subrun_brief" => Some(ContextSourceClass::SubrunBrief),
         _ => None,
     }
 }

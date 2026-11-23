@@ -585,7 +585,8 @@ fn request_text(request: &CreateRequest) -> String {
             | ContextSourceClass::MemoryEntries
             | ContextSourceClass::MemoryObservations
             | ContextSourceClass::CharacterFile
-            | ContextSourceClass::EarlierAnswer => return None,
+            | ContextSourceClass::EarlierAnswer
+            | ContextSourceClass::SubrunBrief => return None,
         };
         Some(format!("{heading}:\n{}", item.content))
     }));
@@ -627,7 +628,8 @@ fn request_text(request: &CreateRequest) -> String {
             | ContextSourceClass::MemoryDeleteMarks
             | ContextSourceClass::MemoryEntries
             | ContextSourceClass::MemoryObservations
-            | ContextSourceClass::CharacterFile => continue,
+            | ContextSourceClass::CharacterFile
+            | ContextSourceClass::SubrunBrief => continue,
             // The earlier turns go in their own section before the author request.
             ContextSourceClass::EarlierAnswer => continue,
             ContextSourceClass::AuthorInstruction => "Author request",
