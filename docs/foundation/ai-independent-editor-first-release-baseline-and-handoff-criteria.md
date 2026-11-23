@@ -126,8 +126,10 @@ The stage names below are contract identifiers, not separate workflow runtimes:
    Research evidence, active compaction, and Provider continuation stay distinct.
 8. **Transcript MCP Apps.** Deliver the accepted dynamic domain views,
    mediated actions, replay, and safe fallback inside the Agent transcript.
-9. **Complete Run control and orchestration.** Deliver bounded long work,
-   Subruns, controlled proactive execution, and explicit model-policy behavior.
+9. **The plan list of a Run and a Subrun of one level.** Show the plan of the
+   assistant for work with several steps, let a Run give one reading task to
+   a Subrun that it waits for, and tell the model its limit of RunSteps
+   ([ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md)).
 10. **Author voice.** Work on generated prose that reads as machine-written:
     default writing rules in the Host instructions, SkillPackages of the
     StoryOS distribution, and marks on the new words of a Proposal candidate
@@ -141,10 +143,9 @@ The stage names below are contract identifiers, not separate workflow runtimes:
 
 The continuation contract defines `S5-*` through `S11-*`. The release order
 after Stage 7 is
-Stage 10, then Stage 11: the number of a stage is its identity, and
-it is not its place in the order. Stage 8 and Stage 9 stay on EXECUTION HOLD.
-ADR 0101 records the order that the author agreed for the work after Stage 11,
-and a later ADR decides about Stage 8 and about Stage 9 when that work starts.
+Stage 10, then Stage 11, then Stage 9: the number of a stage is its identity,
+and it is not its place in the order. Stage 8 stays on EXECUTION HOLD, and a
+later ADR decides about it (ADR 0101 section 1 item 4).
 The last stage that the author keeps completes the current local MVP route.
 [Eval](eval-evidence-foundation.md) is outside
 MVP and has no current design, implementation, or release gate. Stage order is the
@@ -723,9 +724,10 @@ Reuse current owners and stable Requirement IDs. No old child body can stand in
 for that alignment. The current [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361)
 owns its accepted implementation handoff and pending final release evidence.
 The author released the execution of Stage 4 through Stage 7 and of
-Stage 10, and on 2026-11-22 the execution of Stage 11 (ADR 0101).
-Stage 8 and Stage 9 stay on EXECUTION HOLD until the author
-explicitly releases their execution (ADR 0096).
+Stage 10, on 2026-11-22 the execution of Stage 11 (ADR 0101), and on
+2026-11-23 the execution of the smaller Stage 9 (ADR 0103).
+Stage 8 stays on EXECUTION HOLD until the author
+explicitly releases its execution (ADR 0096).
 
 ## 10. Explicit non-scope of this contract
 
