@@ -105,7 +105,8 @@ pub(crate) async fn begin(
 }
 
 /// Takes the Subrun of `work` with a new fence and a new lease, in the transaction with the
-/// fence of its parent Run. `None` means that the Subrun does not work: the next ToolCall work of
+/// fence of its parent Run. The claim clears the Run Wakeup of the Subrun, as a claim of the
+/// Worker does. `None` means that the Subrun does not work: the next ToolCall work of
 /// the parent settles its call.
 pub(crate) async fn take(
     client: &Client,
@@ -120,6 +121,7 @@ pub(crate) async fn take(
                 SET claim_generation = run.claim_generation + 1,
                     fence_token = run.claim_generation + 1,
                     lease_expires_at = clock_timestamp() + ($5::bigint * interval '1 second'),
+                    wakeup_pending = false,
                     status = 'claimed'
                FROM storyos.subrun_requests AS request
               WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
