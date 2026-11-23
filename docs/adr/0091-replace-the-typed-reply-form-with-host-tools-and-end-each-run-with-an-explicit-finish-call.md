@@ -118,4 +118,4 @@ This change lands before the Skill tickets of Stage 6. Its first ticket is a rec
 
 ## Amendment 2026-11-23: the model knows the limit of RunSteps
 
-[ADR 0103](0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md) section 5 amends section 5 of this ADR. The instruction text of a Run gives its limit of RunSteps, and each of the last 4 requests of a Run has one sentence with the number of RunSteps that are left. The limits of the table do not change.
+[ADR 0103](0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md) section 5 amends section 5 of this ADR. For each kind with more than 2 RunSteps, the instruction text of a Run gives its limit of RunSteps, and the decision request of each of the last 4 RunSteps has one sentence with the number of RunSteps that are left. The limits of the table do not change.
