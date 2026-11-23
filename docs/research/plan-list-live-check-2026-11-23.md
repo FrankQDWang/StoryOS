@@ -90,7 +90,7 @@ The answers:
 
 - **Run A** lists four places that do not agree in Chapters 1 to 5 (the years, the count, and the sum of the money in Chapter 3; the direction of the pages of the account book in Chapter 3; the repair time of the cane chair in Chapters 4 and 5; the order of the stop of the rain in Chapter 1), three places that it is not sure about, and the time line that agrees. It names the Proposal for the first paragraph of Chapter 3. This record does not judge the places.
 - **Run B** gives the first sentence of Chapter 1: "沈知遥下高铁的时候，雨正下得紧。"
-- **Run C** gives one sentence in its closing request (M14), and that sentence refers to "以上三句话" (the three sentences above). The Host keeps no text beside the `finish` call of M13, so no record of this run has the three sentences. #435 does not change how the Host keeps the text of a response. Observation O1: the author sees only the sentence that refers to the summary.
+- **Run C** gives one sentence in its closing request (M14), and that sentence refers to "以上三句话" (the three sentences above). The answer of M14, from `model-attempts.json`, exactly: `以上三句话分别对应本章的三条线索：葬礼与卖茶馆的冲突、"同心"木箱的出现与钥匙之谜，以及知遥决定留下而顾青禾的异常反应，为后续翻账本和查箱子埋下伏笔。` The Host keeps no text beside the `finish` call of M13, so no record of this run has the three sentences. #435 does not change how the Host keeps the text of a response. Observation O1: the author sees only the sentence that refers to the summary.
 
 ## Second run of Run A
 

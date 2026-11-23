@@ -112,8 +112,8 @@ fn a_plan_call_is_accepted_only_in_the_bounds_and_a_refusal_gives_the_first_rule
 }
 
 /// Arguments of another form are refused as each other Host Tool refuses them: a missing or an
-/// unknown field, a status that is not one of the three, and a text of another type. The
-/// ToolCall record cannot hold U+0000.
+/// unknown field, a status that is not one of the three, a text of another type, a step as an
+/// array, and steps as an object. The ToolCall record cannot hold U+0000.
 #[test]
 fn the_intake_takes_only_a_list_of_texts_with_a_status() {
     let intake = |arguments: Value| UPDATE_PLAN_TOOL_SPEC.intake(&arguments);
@@ -127,6 +127,8 @@ fn the_intake_takes_only_a_list_of_texts_with_a_status() {
             intake(json!({"steps": [{"text": 7, "status": "pending"}]})),
             intake(json!({"steps": [{"text": "读", "status": "pending", "id": 1}]})),
             intake(json!({"plan": []})),
+            intake(json!({"steps": [["读第一章", "pending"]]})),
+            intake(json!({"steps": {"text": "读第一章", "status": "pending"}})),
             intake(json!({"steps": [{"text": "读\u{0}", "status": "pending"}]})),
         ],
         [
@@ -134,6 +136,8 @@ fn the_intake_takes_only_a_list_of_texts_with_a_status() {
                 steps: vec![step("读第一章", PlanStepStatus::InProgress)]
             }),
             Ok(ToolIntake::UpdatePlan { steps: Vec::new() }),
+            Err(IntakeRefusal::Malformed),
+            Err(IntakeRefusal::Malformed),
             Err(IntakeRefusal::Malformed),
             Err(IntakeRefusal::Malformed),
             Err(IntakeRefusal::Malformed),

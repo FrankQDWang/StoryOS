@@ -99,6 +99,13 @@ struct Arguments {
 /// rules of a plan are not part of the intake: the Host refuses a call that breaks one of them
 /// with `plan_refusal`.
 pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
+    // serde also reads a struct from a JSON array, and the schema gives each step only as an
+    // object.
+    let objects = (arguments.get("steps").and_then(Value::as_array))
+        .is_some_and(|steps| steps.iter().all(Value::is_object));
+    if !objects {
+        return Err(IntakeRefusal::Malformed);
+    }
     let Arguments { steps } =
         Arguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
     match steps.iter().any(|step| step.text.contains('\0')) {
