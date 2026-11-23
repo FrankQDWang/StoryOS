@@ -3,13 +3,15 @@
 
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
-use storyos_application::{ClaimedAgentRun, NoContractFaults, ProjectScope, complete_agent_run};
+use storyos_application::{
+    ClaimedAgentRun, CompleteAgentRunError, NoContractFaults, ProjectScope, complete_agent_run,
+};
 use storyos_core::{ToolCallState, ToolResultProjection};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
-use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::agent_run_steering::{cancellation, queued};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
@@ -209,6 +211,94 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
             ]),
             // The call identities of the replies of the fake destination.
             vec![&json!("call_read_chapter_0"), &json!("call_finish")],
+        )
+    );
+}
+
+/// The Contract Fault Point observer that, at the second dispatch claim of the parent Run, starts
+/// a Subrun of its first ToolCall, claims the Subrun, and cancels the parent.
+struct CancelWithSubrun<'a> {
+    store: &'a PostgresProjectReader,
+    admin: &'a Client,
+    scope: ProjectScope,
+    run_id: String,
+    subrun: tokio::sync::Mutex<Option<String>>,
+    reached: std::sync::Mutex<usize>,
+}
+
+impl storyos_application::ContractFaultObserver for CancelWithSubrun<'_> {
+    async fn reached(&self, point: storyos_application::ContractFaultPoint) {
+        if point != storyos_application::ContractFaultPoint::DispatchClaimed {
+            return;
+        }
+        let count = {
+            let mut reached = self.reached.lock().unwrap();
+            *reached += 1;
+            *reached
+        };
+        if count != 2 {
+            return;
+        }
+        let (store, admin, scope) = (self.store, self.admin, &self.scope);
+        let subrun = start(store, admin, scope, &self.run_id, "读第一章").await;
+        claim_run(admin, scope.clone(), subrun.clone()).await;
+        let cancel = cancellation(store, scope, 0x76f3, &self.run_id).await;
+        (store.cancel_agent_run(&cancel.envelope, &cancel.input))
+            .await
+            .unwrap();
+        *self.subrun.lock().await = Some(subrun);
+    }
+}
+
+/// Item 7 of #436, its first sentence: the cancel transaction of the parent Run also cancels
+/// its Subrun that did not end, with the steps of a cancelled Run. Only a Run with a Model Attempt
+/// in flight gets the wake-up. Test prefix lead `76`.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_cancellation_of_the_parent_cancels_its_subrun_that_did_not_end() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, first) = queued(&store, "76a").await;
+    complete(&store, &admin, &scope, &first).await;
+    let run_id = Admission {
+        message: "SCRIPT:read_chapter 1",
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "76b")
+    .await;
+    let observer = CancelWithSubrun {
+        store: &store,
+        admin: &admin,
+        scope: scope.clone(),
+        run_id: run_id.clone(),
+        subrun: tokio::sync::Mutex::default(),
+        reached: std::sync::Mutex::default(),
+    };
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    let stopped = complete_agent_run(&store, &FakeDestination, &observer, &RuntimeClock, &claim);
+    let stopped = matches!(stopped.await, Err(CompleteAgentRunError::StaleFence));
+    let subrun = observer.subrun.into_inner().unwrap();
+    // The status, the wake-up, and whether the lease is clear, of each Run.
+    let state = |run_id: String| {
+        let admin = &admin;
+        async move {
+            json_of(
+                admin,
+                "SELECT jsonb_build_array(status, wakeup_pending, lease_expires_at IS NULL)::text
+                   FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+                &[&run_id],
+            )
+            .await
+        }
+    };
+
+    assert_eq!(
+        (stopped, state(run_id).await, state(subrun).await),
+        (
+            true,
+            // The parent had its second Model Attempt in flight.
+            json!(["cancelled", true, true]),
+            json!(["cancelled", false, true]),
         )
     );
 }
