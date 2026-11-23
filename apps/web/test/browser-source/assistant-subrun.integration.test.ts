@@ -277,8 +277,9 @@ it("gives the state text of each state, with the RunStep in work of a working Su
   expect(shownStates).toEqual(cases.map(([, , text]) => [text, 2]));
 });
 
-// The open drawer of a working Subrun reads again at each refresh and shows the new step. A close cancels the
-// scheduled read. A refresh that gives `completed` changes the open drawer, and the next refresh reads no record.
+// The open drawer of a working Subrun reads again at each refresh and shows the new step while it stays open. A close
+// cancels the scheduled read. A refresh that gives `completed` changes the open drawer, and the next refresh reads no
+// record.
 it("reads the record again while the Subrun works, and stops after the end and after the close", async () => {
   const subrun = id(0x28);
   const run = RUNS[4]!;
@@ -287,7 +288,7 @@ it("reads the record again while the Subrun works, and stops after the end and a
   const third = [...second, { kind: "memory_read", title: "林舟" }];
   const shown = await renderPanel(run, [read("claimed", { subruns: [entry(0x28, "working")] })],
     { records: { [subrun]: [record(subrun, "working", 0, first), record(subrun, "working", 1, second),
-      record(subrun, "completed", 2, third, "灯在渡口。")] } });
+      record(subrun, "working", 2, third), record(subrun, "completed", 3, third, "灯在渡口。")] } });
   try {
     const shownRecord = () => shownDrawer(shown.drawer()).slice(1, 4);
     // The requests that `step` sends, in the order of their paths: the order of two refreshes is not a contract.
@@ -299,6 +300,8 @@ it("reads the record again while the Subrun works, and stops after the end and a
     const closeDrawer = () => shown.click(shown.drawer()?.querySelector("button"));
     const perStep = [await sent(shown.tick), await sent(() => shown.click(shown.cards()[0]))];
     const records = [shownRecord()];
+    perStep.push(await sent(shown.tick));
+    records.push(shownRecord());
     // The working drawer has a scheduled read when it closes.
     perStep.push(await sent(closeDrawer), await sent(shown.tick), await sent(() => shown.click(shown.cards()[0])));
     records.push(shownRecord());
@@ -309,10 +312,11 @@ it("reads the record again while the Subrun works, and stops after the end and a
     const readSubrun = `GET ${project}/subruns/${subrun}`;
 
     expect([perStep, records, shown.unexpected]).toEqual([
-      [[readRun], [readSubrun], [], [readRun], [readSubrun], [readRun, readSubrun], [readRun]],
+      [[readRun], [readSubrun], [readRun, readSubrun], [], [readRun], [readSubrun], [readRun, readSubrun], [readRun]],
       [["进行中 · 第 1 步", ["指令", BRIEF], ["过程", "先读第一章。"]],
         ["进行中 · 第 2 步", ["指令", BRIEF], ["过程", "先读第一章。", "读取 渡口"]],
-        ["已完成 · 2 步", ["指令", BRIEF], ["过程", "先读第一章。", "读取 渡口", "查看记忆 林舟"]]],
+        ["进行中 · 第 3 步", ["指令", BRIEF], ["过程", "先读第一章。", "读取 渡口", "查看记忆 林舟"]],
+        ["已完成 · 3 步", ["指令", BRIEF], ["过程", "先读第一章。", "读取 渡口", "查看记忆 林舟"]]],
       []]);
   } finally {
     await shown.panel.close();
