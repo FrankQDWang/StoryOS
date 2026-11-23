@@ -244,7 +244,7 @@ impl ToolOperation {
             Self::ApplyMemoryOperations => crate::apply_memory_operations::DESCRIPTION,
             Self::RecordCharacterIntent => crate::record_character_intent::DESCRIPTION,
             Self::UpdatePlan => crate::update_plan::DESCRIPTION,
-            Self::StartSubrun => crate::start_subrun::DESCRIPTION,
+            Self::StartSubrun => crate::START_SUBRUN_DESCRIPTION,
         }
     }
 }
