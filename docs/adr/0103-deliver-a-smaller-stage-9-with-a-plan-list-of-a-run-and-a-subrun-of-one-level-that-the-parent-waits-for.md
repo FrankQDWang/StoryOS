@@ -4,7 +4,7 @@ status: accepted
 
 # Deliver a Smaller Stage 9 With a Plan List of a Run and a Subrun of One Level That the Parent Waits For
 
-The author decided this on 2026-11-23 in conversation. [ADR 0101](0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md) section 1 gives the order of the work after Stage 11, and its item 3 is a smaller Stage 9: the list of the plan first, then the Subruns, and the triggers last or not at all. Item 2 of that order has its first part on `main` ([ADR 0102](0102-send-the-earlier-turns-of-a-project-conversation-from-the-host-records-when-a-request-has-no-prior-response.md)), and its second part waits for the decision of the author on the first new Model Provider. The author started item 3 on 2026-11-23. This ADR decides that item. It releases the plan list of Stage 9 from the EXECUTION HOLD. The Subrun of Stage 9 stays on that hold until the amendment of section 3.
+The author decided this on 2026-11-23 in conversation. [ADR 0101](0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md) section 1 gives the order of the work after Stage 11, and its item 3 is a smaller Stage 9: the list of the plan first, then the Subruns, and the triggers last or not at all. Item 2 of that order has its first part on `main` ([ADR 0102](0102-send-the-earlier-turns-of-a-project-conversation-from-the-host-records-when-a-request-has-no-prior-response.md)), and its second part waits for the decision of the author on the first new Model Provider. The author started item 3 on 2026-11-23. This ADR decides that item. It releases the plan list of Stage 9 from the EXECUTION HOLD. The Subrun of Stage 9 stays on that hold until the amendment of section 3. That amendment is section 3A, of 2026-11-23.
 
 ## Context
 
@@ -68,9 +68,72 @@ This section gives the rules that the author decided. It is not a contract that 
   - the settlement of the ToolCall of the parent in each case: a final answer, no final answer, a Subrun that the Host refuses, a cancelled parent Run, a paused parent Run, and a lost lease. The amendment gives it with the rules of ADR 0091 for a Host Tool and of [ADR 0086](0086-fence-an-interrupted-tool-call-and-classify-it-from-retained-records.md) for an interrupted ToolCall, it says if the ToolCall of the parent can become `unknown` and what the assistant gets after that, and it says what occurs to a ToolCall and to a Model Attempt of the Subrun that are in work then;
   - the exact list of the Tools of a Subrun, the two limits, the exact sentences, the request form, the source class of the brief, the mapping revision, and the Registrations.
 
+  > Amended on 2026-11-23: section 3A records the two answers, the record, the settlement in each case, the list of the Tools, and the two limits. As for the plan list, the implementing tickets record the exact sentences, the request form, the name of the source class, the mapping revision, and the Registrations.
+
+### 3A. The records of a Subrun (amendment of 2026-11-23)
+
+> This section amends section 3. It replaces the "Open" list of section 3, and it ends the EXECUTION HOLD of the Subrun. The author gave the two answers on 2026-11-23, and the coordinator made a survey of the code at `main` `5cecb944`.
+
+**The first use.** A Subrun reads the earlier Chapters and answers one question about the manuscript, for example the earlier history of a character. Its result is the answer with the Chapters that it comes from. The assistant decides by itself when to start a Subrun, and the Host has no rule.
+
+**The Tool.** A Run of the author has the Host Tool `start_subrun`. Its arguments are a `title` (one line, 1 through 40 characters; the panel shows it) and a `brief` (1 through 4,000 characters; the complete task). A Run of the author can have at most 4 accepted calls. A refused call gives its reason as its result. A background Run and a Subrun do not have the Tool.
+
+**The record.**
+
+- A Subrun is one row of `agent_runs` with the new kind `subrun`. It has its own RunSteps, Model Attempts, ToolCalls, and usage, as each Run has them. As each kind that is not `author`, it has no Conversation, no Chapter, and no author message. It binds the Project Instruction revision of its parent Run.
+- A new table has one row for each accepted call: the Subrun, its parent Run, the ToolCall of the parent, the title, and the brief. This row is the Subrun Request, and the ToolCall of the parent is its key: a second execution of the same call continues the same Subrun.
+- The Subrun Result has no record of its own. It is the end status and the final answer of the Subrun. The Host copies the text to the result of the ToolCall of the parent in the transaction that settles that ToolCall.
+
+**The execution.** The Worker does not select a Subrun as it selects a Run. The work of the ToolCall of the parent starts the Subrun and runs it to its end inside the claim of the parent Run, and the lease of the parent is renewed during that time. Thus the parent Run sends no model request while the Subrun works, a Subrun does not give way to another Run, and a Subrun does work only while the claim of its parent Run is valid. The one exception: the Worker selects a cancelled Subrun for the duties that a cancelled Run has for a Model Attempt in flight.
+
+**The context.** A request of a Subrun has an instruction text of its own, the Project Instruction, the brief as one Context item of a new source class, and the Tool results of the Subrun. The grant scope gets a new version for that source class. A Subrun does not compact, as a background Run: a request that is too long ends the Subrun.
+
+**The Tools and the end.** A Subrun has `read_chapter`, `search_manuscript`, `read_memory_entry`, `search_memory`, and `hybrid_search_manuscript`, each one only when its parent Run has it, and `finish`. The finish rule of ADR 0091 section 4 applies: each request requires a call until a `finish` call counts, and the text of the closing response is the final answer. A Subrun has at most 12 RunSteps, and the request of the last RunStep has `tool_choice: "none"`. A Subrun knows this limit (section 5).
+
+**The settlement of the ToolCall of the parent.** A Host ToolCall has no Destination Attempt, so its states are `pending`, `settled`, and `refused` (ADR 0091). It cannot become `dispatched` or `unknown`.
+
+| Case | The ToolCall of the parent | What the assistant gets |
+| --- | --- | --- |
+| The Subrun ends `completed` with a final answer | `settled` | The final answer text |
+| The Subrun ends with no final answer: `completed` with no text, `refused`, or `waiting` after a Model Attempt with an unknown outcome | `settled` | A fixed sentence that says that the Subrun ended with no result. When the cause is a request that was too long, the sentence gives that cause, so that the assistant can give a smaller task |
+| The call is not valid, or the Run has 4 accepted calls | `refused` | The reason, as a sentence |
+| The author cancels the parent Run | `refused` with `run_cancelled`, as each `pending` ToolCall (ADR 0086) | Nothing: the Run is cancelled |
+| The author pauses the parent Run | Stays `pending` | The result, after the Run continues |
+| The claim of the parent Run loses its lease | Stays `pending` | The result, after the next claim |
+
+- **Cancellation.** The cancel transaction of the parent Run also cancels each Subrun of the Run that did not end. The work of the Subrun in flight ends by the rules of a cancelled Run: a `pending` ToolCall of the Subrun becomes `refused` (ADR 0086), and a Model Attempt in flight gets the duties of a cancelled Run.
+- **Pause.** The pause changes no record of the Subrun. The Subrun does no work, because only the claim of the parent Run runs it. When the Run continues, the next claim of the parent continues the same Subrun.
+- **Lost lease.** The next claim of the parent Run finds the `pending` ToolCall and its Subrun Request, takes the Subrun with a new fence, and continues it. A Model Attempt of the Subrun that was in flight is recovered by the rules of a Run.
+
+**The reads.**
+
+- `getAgentRun` gives the Subruns of the Run in the order of their calls, when the Run has one: the identity, the title, and one state of `working`, `completed`, `no_result`, and `stopped`.
+- A new read gives the record of one Subrun: the title, the brief, the state, its steps in order, and its final answer. A step is a text that the Subrun wrote or one ToolCall with the name of the Tool, its target (the Chapter, or the search text), and the count of its results. The read gives no Chapter text and no Tool result text.
+- No command for a Subrun exists.
+
+**The panel.** The author chose this form on 2026-11-23. The turn of the Run shows one card for each Subrun, below the status line and below the plan list. The first line of the card is the state, and the second line is the title. The card opens a drawer from the right side, also while the Subrun works. The drawer shows the brief, the steps, and the final answer, and it has only a close control.
+
+**Not chosen.**
+
+- *The Model Attempts of the Subrun under the Run of the parent.* The records have one Model Attempt, one manifest, and one requirement for each position of a Run, and the finish rule, the limit of RunSteps, and each read select by the Run. A Subrun with its own row uses all of them with no change.
+- *The parent Run gives its claim back, and the Worker selects the Subrun.* No status of a Run fits: the Worker never claims a `waiting` Run again, and it claims a `queued` Run at once. A new status changes the selection, the commands, and the panel.
+
+The implementing tickets record the exact texts of the Tool and of the two instruction texts, the exact sentences of a refused call, the request form, the name of the source class, the mapping revision, and the Registrations.
+
 ### 4. The release of the stage
 
-The [delivery continuation](../foundation/storyos-product-delivery-continuation.md), the [release baseline](../foundation/ai-independent-editor-first-release-baseline-and-handoff-criteria.md), the [proof selection](../foundation/product-delivery-proof-selection.md), and the [verification gates](../foundation/deterministic-verification-and-failure-recovery-gates.md) still say that Stage 9 is on EXECUTION HOLD, and the delivery continuation and the proof selection have the Requirements, the journey `S9-JRN-001`, and the evidence rows of the earlier contract. A second documents change gives the four documents the scope of this ADR and binds the proof documents again. It merges before the journey ticket of the stage starts. Until then, this ADR is correct where it and one of the four documents are different. The EXECUTION HOLD ends for the plan list with this ADR, and it ends for the Subrun with the amendment of section 3. Stage 8 keeps its hold, and a later ADR decides it (ADR 0101 section 1 item 4).
+The [delivery continuation](../foundation/storyos-product-delivery-continuation.md), the [release baseline](../foundation/ai-independent-editor-first-release-baseline-and-handoff-criteria.md), the [proof selection](../foundation/product-delivery-proof-selection.md), and the [verification gates](../foundation/deterministic-verification-and-failure-recovery-gates.md) still say that Stage 9 is on EXECUTION HOLD, and the delivery continuation and the proof selection have the Requirements, the journey `S9-JRN-001`, and the evidence rows of the earlier contract. A second documents change gives the four documents the scope of this ADR and binds the proof documents again. It merges before the journey ticket of the stage starts. Until then, this ADR is correct where it and one of the four documents are different. The EXECUTION HOLD ends for the plan list with this ADR, and it ends for the Subrun with the amendment of section 3 (section 3A). Stage 8 keeps its hold, and a later ADR decides it (ADR 0101 section 1 item 4).
+
+### 5. The model knows its limit of RunSteps
+
+The author decided this on 2026-11-23: a limit must not stop the work of the model with no notice. The model must know its limit, and it must know when its work comes near to the limit. At `main` `5cecb944`, no instruction text gives the limit of 24 RunSteps of a Run of the author, and the request of the last RunStep has `tool_choice: "none"` with no sentence that gives the cause.
+
+- **The limit.** The instruction text of a Run gives its limit of RunSteps, for each kind that has more than 2 RunSteps: a Run of the author (24), a Subrun (12), and a Memory capture (8).
+- **Near the limit.** Each of the last 4 requests of such a Run has one more sentence at the end of its instruction text. The sentence gives the number of RunSteps that are left. In the last RunStep, it says which calls the Host executes: none for a Run of the author and for a Subrun, whose response must be the final answer, and only the output call for a Memory capture.
+- **Not in each request.** A sentence that changes in each request would change the instruction text of each request. The record of 2026-10-13 shows a request with a different instruction text that got no cached input on this route ([record](../research/agent-plan-compaction-threshold-qualification-2026-10-13.md)). Thus only the last 4 requests of a Run have the sentence.
+- **Other limits.** The description of a Tool gives the limit of that Tool, and a call above the limit is refused with a sentence that gives the limit: the 12 steps of a plan (section 2), and the 4 Subruns of a Run (section 3A). A Subrun that ends because its request is too long gives the assistant a sentence with that cause (section 3A).
+
+The implementing ticket records the exact sentences and the mapping revision. This section amends [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) section 5.
 
 ## Considered options
 
