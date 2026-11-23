@@ -133,7 +133,7 @@ A durable atomic scheduler allocation permitting one exact RunStep or Execution 
 _Avoid_: Subrun count, Run Lease, Capability Grant, resident session
 
 **Step Snapshot**:
-The immutable, attributable view of the exact plan revision, Skill Selection Set and SkillPackage Snapshots, context sources, contract versions, capabilities, budget remainder, guardrail counters, and project revisions used for one RunStep. It preserves decision evidence but grants no lasting authority, so effects still require live revalidation before execution.
+Deferred in part on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md): no Step Snapshot binds a plan revision. The immutable, attributable view of the exact plan revision, Skill Selection Set and SkillPackage Snapshots, context sources, contract versions, capabilities, budget remainder, guardrail counters, and project revisions used for one RunStep. It preserves decision evidence but grants no lasting authority, so effects still require live revalidation before execution.
 _Avoid_: Prompt text, checkpoint, authorization token, current project state
 
 **Agent Decision**:
