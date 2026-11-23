@@ -1,5 +1,6 @@
 import { act, createElement } from "react";
 import { beforeAll, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import sourcesFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-research-sources.json";
@@ -14,7 +15,7 @@ const scope = { owner_user_id: OWNER, project_id: PROJECT };
 const project = `/api/v1/projects/${PROJECT}`;
 const id = (suffix: number) => `018f0000-0000-7001-8000-0000000010${suffix.toString(16).padStart(2, "0")}`;
 // Each render has its own Run, because the panel reads the research sources of a Run one time only.
-const RUNS = [0, 1, 2, 3, 4, 5, 6, 7].map(index => id(index));
+const RUNS = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(index => id(index));
 const EARLIER = id(0x10);
 const ANSWER = "第三章第一段已改好。";
 const answer = { kind: "answer", decision_id: id(0x11), text: ANSWER };
@@ -277,39 +278,66 @@ it("gives the state text of each state, with the RunStep in work of a working Su
 });
 
 // The open drawer of a working Subrun reads again at each refresh and shows the new step. A close cancels the
-// scheduled read, and after the state `completed` the drawer reads no more.
+// scheduled read. A refresh that gives `completed` changes the open drawer, and the next refresh reads no record.
 it("reads the record again while the Subrun works, and stops after the end and after the close", async () => {
   const subrun = id(0x28);
   const run = RUNS[4]!;
   const first = [{ kind: "text", text: "先读第一章。" }];
   const second = [...first, { kind: "chapter_read", chapter_id: id(0x33), title: "渡口" }];
+  const third = [...second, { kind: "memory_read", title: "林舟" }];
   const shown = await renderPanel(run, [read("claimed", { subruns: [entry(0x28, "working")] })],
     { records: { [subrun]: [record(subrun, "working", 0, first), record(subrun, "working", 1, second),
-      record(subrun, "completed", 2, second, "灯在渡口。")] } });
+      record(subrun, "completed", 2, third, "灯在渡口。")] } });
   try {
-    const lines = () => shownDrawer(shown.drawer())[3];
+    const shownRecord = () => shownDrawer(shown.drawer()).slice(1, 4);
     // The requests that `step` sends, in the order of their paths: the order of two refreshes is not a contract.
     const sent = async (step: () => Promise<void>) => {
       const before = shown.requests.length;
       await step();
       return shown.requests.slice(before).sort();
     };
+    const closeDrawer = () => shown.click(shown.drawer()?.querySelector("button"));
     const perStep = [await sent(shown.tick), await sent(() => shown.click(shown.cards()[0]))];
-    const shownLines: unknown[] = [lines()];
-    perStep.push(await sent(shown.tick));
-    shownLines.push(lines());
+    const records = [shownRecord()];
     // The working drawer has a scheduled read when it closes.
-    perStep.push(await sent(() => shown.click(shown.drawer()?.querySelector("button"))), await sent(shown.tick),
-      await sent(() => shown.click(shown.cards()[0])));
-    shownLines.push(shownDrawer(shown.drawer()).slice(1, 2), lines());
-    perStep.push(await sent(shown.tick), await sent(shown.tick));
+    perStep.push(await sent(closeDrawer), await sent(shown.tick), await sent(() => shown.click(shown.cards()[0])));
+    records.push(shownRecord());
+    perStep.push(await sent(shown.tick));
+    records.push(shownRecord());
+    perStep.push(await sent(shown.tick));
     const readRun = `GET ${project}/agent-runs/${run}`;
     const readSubrun = `GET ${project}/subruns/${subrun}`;
 
-    expect([perStep, shownLines, shown.unexpected]).toEqual([
-      [[readRun], [readSubrun], [readRun, readSubrun], [], [readRun], [readSubrun], [readRun], [readRun]],
-      [["过程", "先读第一章。"], ["过程", "先读第一章。", "读取 渡口"], ["已完成 · 2 步"], ["过程", "先读第一章。", "读取 渡口"]],
+    expect([perStep, records, shown.unexpected]).toEqual([
+      [[readRun], [readSubrun], [], [readRun], [readSubrun], [readRun, readSubrun], [readRun]],
+      [["进行中 · 第 1 步", ["指令", BRIEF], ["过程", "先读第一章。"]],
+        ["进行中 · 第 2 步", ["指令", BRIEF], ["过程", "先读第一章。", "读取 渡口"]],
+        ["已完成 · 2 步", ["指令", BRIEF], ["过程", "先读第一章。", "读取 渡口", "查看记忆 林舟"]]],
       []]);
+  } finally {
+    await shown.panel.close();
+  }
+});
+
+// The close button is the only control of the drawer: after a click on the text of the drawer, Tab and Shift+Tab
+// keep the focus on it, so no card behind the dim layer gets the focus.
+it("keeps the focus in the drawer after a click on its text", async () => {
+  const subrun = id(0x2e);
+  const shown = await renderPanel(RUNS[8]!, [read("completed", { subruns: [entry(0x2e, "completed"),
+    entry(0x2f, "completed")] })], { records: { [subrun]: [record(subrun, "completed", 1, [], "灯在渡口。")] } });
+  try {
+    await shown.click(shown.cards()[0]);
+    const close = shown.drawer()?.querySelector("button");
+    const focused: unknown[] = [];
+    await userEvent.click(shown.drawer()!.querySelector("section p")!);
+    focused.push(shown.drawer()?.contains(document.activeElement));
+    await userEvent.tab();
+    focused.push(document.activeElement === close);
+    await userEvent.tab({ shift: true });
+    focused.push(document.activeElement === close);
+
+    expect([focused, document.querySelectorAll("[data-subrun-drawer]").length, shown.unexpected])
+      .toEqual([[true, true, true], 1, []]);
   } finally {
     await shown.panel.close();
   }
@@ -366,12 +394,16 @@ it("keeps the last record after a failed read, and reads again only while the ca
  */
 async function renderList(subrunId: string, records: readonly (object | null)[]) {
   const requests: string[] = [];
+  const unexpected: string[] = [];
   const scheduled: Array<() => void> = [];
   let reads = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     const request = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
     requests.push(request);
-    if (request !== `GET ${project}/subruns/${subrunId}`) throw new Error(`unexpected request: ${request}`);
+    if (request !== `GET ${project}/subruns/${subrunId}`) {
+      unexpected.push(request);
+      throw new Error(`unexpected request: ${request}`);
+    }
     reads += 1;
     const body = records[Math.min(reads, records.length) - 1];
     return body === null ? jsonResponse({}, 503) : jsonResponse(body);
@@ -396,7 +428,7 @@ async function renderList(subrunId: string, records: readonly (object | null)[])
     await settle();
   };
   return {
-    panel, requests, show, scheduled,
+    panel, requests, unexpected, show, scheduled,
     drawer: () => document.querySelector("[data-subrun-drawer]"),
     async open() {
       await act(async () => { panel.host.querySelector<HTMLElement>("[data-assistant-subrun]")!.click(); });
@@ -423,7 +455,8 @@ it("sends no read again after a failed read when the card changed before the ref
     await shown.show([entry(0x2b, "completed")]);
     await shown.tick();
 
-    expect([retry, shown.requests.length, shownDrawer(shown.drawer())[1]]).toEqual([1, 2, "进行中 · 第 1 步"]);
+    expect([retry, shown.requests, shownDrawer(shown.drawer())[1], shown.unexpected])
+      .toEqual([1, Array(2).fill(`GET ${project}/subruns/${subrun}`), "进行中 · 第 1 步", []]);
   } finally {
     await shown.panel.close();
   }
@@ -440,7 +473,7 @@ it("closes the drawer when the Run no longer has the opened Subrun", async () =>
     await shown.show([entry(0x2d, "working")]);
 
     expect([scheduled, shown.drawer(), document.querySelector("[data-subrun-drawer-layer]"), shown.scheduled.length,
-      shown.requests.length]).toEqual([1, null, null, 0, 1]);
+      shown.requests, shown.unexpected]).toEqual([1, null, null, 0, [`GET ${project}/subruns/${subrun}`], []]);
   } finally {
     await shown.panel.close();
   }

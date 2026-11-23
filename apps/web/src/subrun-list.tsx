@@ -74,7 +74,14 @@ function SubrunDrawer({ context, subrunId, cardWorking, scheduleRefresh, onClose
   working.current = cardWorking;
   useEffect(() => { close.current?.focus(); }, []);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    // The close button is the only control, so Tab and Shift+Tab keep the focus on it, also after a click on the text
+    // of the drawer. The dim layer takes each pointer event outside the drawer.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key !== "Tab") return;
+      event.preventDefault();
+      close.current?.focus();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
@@ -102,9 +109,9 @@ function SubrunDrawer({ context, subrunId, cardWorking, scheduleRefresh, onClose
   // The drawer is outside the live region of the conversation, so a new step is not announced as a message.
   return createPortal(<>
     <div className="subrun-drawer-layer" data-subrun-drawer-layer="" onClick={onClose} />
-    {/* The close button is the only control, so Tab keeps the focus on it. */}
+    {/* A click on the text of the drawer keeps the focus in the drawer. */}
     <div className="subrun-drawer" role="dialog" aria-modal="true" aria-label="子任务记录" data-subrun-drawer=""
-      onKeyDown={(event) => { if (event.key === "Tab") event.preventDefault(); }}>
+      tabIndex={-1}>
       <header>
         <h2>子任务：通读前文</h2>
         {/* The place of the state text. A failed read with no record shows no text here. */}
