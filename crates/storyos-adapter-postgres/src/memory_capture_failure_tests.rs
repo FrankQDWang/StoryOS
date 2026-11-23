@@ -38,7 +38,7 @@ async fn a_refused_request_fails_the_capture_with_the_reason_of_its_run() {
         (
             "UPDATE storyos.project_destination_grants SET grant_scope = 'project_writing_assistance_v4'
               WHERE project_id = $1::text::uuid",
-            "UPDATE storyos.project_destination_grants SET grant_scope = 'project_writing_assistance_v6'
+            "UPDATE storyos.project_destination_grants SET grant_scope = 'project_writing_assistance_v7'
               WHERE project_id = $1::text::uuid",
         ),
         (

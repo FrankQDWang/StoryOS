@@ -16,14 +16,14 @@ use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::Admission;
 
 /// For each decision request of the Run in RunStep order: its position, the earlier author
-/// messages and the author message that it sent, and whether it sent the current input again
-/// with the replaced input label.
+/// messages, the author message, and the earlier turns that it sent, and whether it sent the
+/// current input again with the replaced input label.
 async fn sent(admin: &Client, run_id: &str) -> Value {
     json_of(
         admin,
         "SELECT jsonb_agg(jsonb_build_array(decision_position,
                       wire->'earlier_author_messages', wire->>'author_message',
-                      wire->'replaces_earlier_input') ORDER BY decision_position)::text
+                      wire->'earlier_turns', wire->'replaces_earlier_input') ORDER BY decision_position)::text
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
@@ -156,9 +156,10 @@ async fn the_later_request_sends_the_earlier_author_messages_of_the_conversation
                 ],
                 ["decision", 1, [author(&current)], null],
             ]),
-            // The RunStep after the later request continues its response with an unchanged
-            // input, so it sends no current input and no earlier message.
-            json!([[0, earlier, current, null], [1, null, null, null]]),
+            // The later request sends no earlier turn (ADR 0102). The RunStep after the later
+            // request continues its response with an unchanged input, so it sends no current
+            // input and no earlier message.
+            json!([[0, earlier, current, null, null], [1, null, null, null, null]]),
         )
     );
 }
@@ -197,7 +198,7 @@ async fn a_compaction_in_the_first_run_of_a_conversation_sends_no_earlier_author
         ),
         (
             vec![Vec::<String>::new()],
-            json!([[0, null, current, null], [1, null, current, null]]),
+            json!([[0, null, current, null, null], [1, null, current, null, null]]),
         )
     );
 }

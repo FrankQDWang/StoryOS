@@ -103,7 +103,7 @@ async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_sco
 
     assert_eq!(
         grant_scope.as_deref(),
-        Some("project_writing_assistance_v6")
+        Some("project_writing_assistance_v7")
     );
     // The `finish` RunStep and the closing RunStep.
     assert_eq!(
@@ -112,7 +112,7 @@ async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_sco
     );
     let admitted = serde_json::json!({
         "grant_id": grant_id,
-        "grant_scope": "project_writing_assistance_v6"
+        "grant_scope": "project_writing_assistance_v7"
     });
     assert_eq!(
         grant_evidence(&admin, &run_id).await,
@@ -153,10 +153,10 @@ async fn a_grant_without_a_scope_refuses_before_dispatch_and_the_next_run_rebind
         }
     );
     assert_ne!(new_grant, old_grant);
-    assert_eq!(new_scope.as_deref(), Some("project_writing_assistance_v6"));
+    assert_eq!(new_scope.as_deref(), Some("project_writing_assistance_v7"));
     let admitted = serde_json::json!({
         "grant_id": new_grant,
-        "grant_scope": "project_writing_assistance_v6"
+        "grant_scope": "project_writing_assistance_v7"
     });
     assert_eq!(
         grant_evidence(&admin, &rebound_run).await,
@@ -191,12 +191,12 @@ async fn binding_rows(
     .await
 }
 
-/// ADR 0094, ADR 0095, ADR 0101, and ADR 0051: a grant with the fourth scope gets new binding
-/// records with the current sixth scope at the next `createAgentRun`, with no action of the
-/// author. The grant of another Project does not change.
+/// ADR 0094, ADR 0095, ADR 0101, ADR 0102, and ADR 0051: a grant with the sixth scope gets new
+/// binding records with the current seventh scope at the next `createAgentRun`, with no action of
+/// the author. The grant of another Project does not change.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_grant_with_the_fourth_scope_gets_new_records_with_the_sixth_scope_at_the_next_run() {
+async fn a_grant_with_the_sixth_scope_gets_new_records_with_the_seventh_scope_at_the_next_run() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, pinned_run) =
@@ -212,7 +212,7 @@ async fn a_grant_with_the_fourth_scope_gets_new_records_with_the_sixth_scope_at_
         admin
             .execute(
                 "UPDATE storyos.project_destination_grants
-                    SET grant_scope = 'project_writing_assistance_v4'
+                    SET grant_scope = 'project_writing_assistance_v6'
                   WHERE grant_id = $1::text::uuid",
                 &[&earlier.grant_id],
             )
@@ -258,7 +258,7 @@ async fn a_grant_with_the_fourth_scope_gets_new_records_with_the_sixth_scope_at_
             (other_current, binding_rows(&admin, &other).await),
         ),
         (
-            Some("project_writing_assistance_v6".to_owned()),
+            Some("project_writing_assistance_v7".to_owned()),
             (
                 current.grant_id.clone(),
                 current.project_model_use_binding_revision.clone()
@@ -284,7 +284,7 @@ async fn a_grant_with_the_fourth_scope_gets_new_records_with_the_sixth_scope_at_
     );
     let admitted = serde_json::json!({
         "grant_id": current.grant_id,
-        "grant_scope": "project_writing_assistance_v6"
+        "grant_scope": "project_writing_assistance_v7"
     });
     assert_eq!(
         grant_evidence(&admin, &rebound_run).await,
