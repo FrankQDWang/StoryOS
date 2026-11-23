@@ -111,13 +111,6 @@ pub(crate) async fn start(
 
 /// The Context Assembly of the first RunStep of the Run of `parent`. It holds the Memory pin and
 /// the Processing Destination Identity of the Run.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the Host Tool start_subrun of #436 part B calls it"
-    )
-)]
 async fn parent_first_record(
     client: &Client,
     parent: &ClaimedAgentRun,
