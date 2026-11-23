@@ -292,7 +292,7 @@ async fn a_text_among_the_calls_of_a_subrun_is_an_entry_at_its_place() {
         read_call("call_read"),
         text("msg_02", "再看结果。"),
     ];
-    let mut subrun = vec![response("resp_910_read", &output)];
+    let mut subrun = vec![response("resp_910_read", true, &output)];
     subrun.extend(finish_then_advisory("resp_910_subrun"));
     let (scope, run_id, served) = plan_parent(&store, &admin, "910", subrun).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
@@ -333,7 +333,8 @@ async fn a_text_among_the_calls_of_a_subrun_is_an_entry_at_its_place() {
 /// Item 2 of #1836: the text of a response of the last RunStep is the final answer, also beside a
 /// function call that StoryOS does not execute, so it is not an entry. The Subrun reads Chapter A
 /// in each of its first 11 RunSteps, and its response of RunStep 12 has a text and a
-/// `read_chapter` call.
+/// `read_chapter` call. The terminal response of RunStep 1 has no identity, so it has no response
+/// reference, and its RunStep still counts.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_answer_beside_a_call_of_the_last_run_step_is_not_an_entry() {
@@ -344,13 +345,18 @@ async fn the_answer_beside_a_call_of_the_last_run_step_is_not_an_entry() {
         .map(|step| {
             response(
                 &format!("resp_911_{step}"),
+                step > 0,
                 &[read_call(&format!("call_{step}"))],
             )
         })
         .collect();
     let answer = json!({"id": "msg_01", "type": "message", "role": "assistant",
         "status": "completed", "content": [{"type": "output_text", "text": "灯在渡口。"}]});
-    subrun.push(response("resp_911_last", &[answer, read_call("call_last")]));
+    subrun.push(response(
+        "resp_911_last",
+        true,
+        &[answer, read_call("call_last")],
+    ));
     let (scope, run_id, served) = plan_parent(&store, &admin, "911", subrun).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
     (complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim))
@@ -388,15 +394,18 @@ fn read_call(call_id: &str) -> serde_json::Value {
            "arguments": r#"{"chapter":1,"first_block":null,"last_block":null}"#})
 }
 
-/// One completed response `id` with the output items `output`.
-fn response(id: &str, output: &[serde_json::Value]) -> String {
+/// One completed response `id` with the output items `output`. With no `reference`, the terminal
+/// response has no identity.
+fn response(id: &str, reference: bool, output: &[serde_json::Value]) -> String {
     let mut events = vec![json!({"type": "response.created",
-        "response": {"id": id, "status": "in_progress", "output": []}})];
+        "response": {"id": reference.then_some(id), "status": "in_progress", "output": []}})];
     events.extend((output.iter().enumerate()).map(|(index, item)| {
         json!({"type": "response.output_item.done", "output_index": index, "item": item})
     }));
-    events.push(json!({"type": "response.completed", "response": {"id": id,
+    events.push(
+        json!({"type": "response.completed", "response": {"id": reference.then_some(id),
         "status": "completed", "output": output,
-        "usage": {"input_tokens": 40, "output_tokens": 12}}}));
+        "usage": {"input_tokens": 40, "output_tokens": 12}}}),
+    );
     sse(&events)
 }

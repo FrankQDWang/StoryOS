@@ -54,14 +54,14 @@ pub enum SubrunStep {
 
 /// The entries of the RunSteps of a Subrun, in RunStep order and in the order of the output
 /// items. `texts` are the texts of its responses beside function calls, each with its RunStep and
-/// the count of the function calls before it in its response. `calls` are its stored ToolCalls,
+/// the call position of the first ToolCall after it in its response. `calls` are its ToolCalls,
 /// each with its RunStep and its call position. Only a settled call of a read Tool gives an
 /// entry, so a `finish` call gives none.
 pub fn subrun_steps(
     texts: &[(u64, u64, String)],
     calls: &[(u64, u64, StoredManuscriptCall<'_>)],
 ) -> Vec<SubrunStep> {
-    // A text with `n` calls before it comes before the call at position `n`.
+    // A text comes before the call at its position.
     let texts = (texts.iter())
         .map(|(step, before, text)| ((*step, *before, 0), SubrunStep::Text { text: text.clone() }));
     let calls = (calls.iter())

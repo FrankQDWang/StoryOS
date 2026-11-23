@@ -78,7 +78,8 @@ pub(crate) async fn read(
                           (subrun.owner_user_id, subrun.project_id, subrun.run_id)
                       AND attempt.attempt_role IN ('decision', 'successor')
                       AND attempt.dispatch_state = 'settled'
-                      AND attempt.payload->>'response_reference' IS NOT NULL)
+                      -- A request that was not submitted or that was rejected has no response.
+                      AND NOT attempt.payload ?| array['submission', 'rejection'])
                   FROM storyos.subrun_requests AS request
                   JOIN storyos.agent_runs AS subrun
                     ON (subrun.owner_user_id, subrun.project_id, subrun.run_id) =
@@ -95,23 +96,28 @@ pub(crate) async fn read(
         return Ok(None);
     };
     let end = subrun_end(&row, 2).ok_or_else(damaged)?;
-    // A text of a response with function calls that StoryOS executes, with the count of the
-    // function calls before it. The final answer is the text of an `advisory` Decision, also when
-    // its response has a function call of the last RunStep.
+    // A text of a response with function calls, with the call position of the first ToolCall
+    // after it. The final answer is the text of an `advisory` Decision, also when its response
+    // has a function call of the last RunStep.
     let texts = client
         .query(
             "SELECT attempt.decision_position::text, item->>'text',
-                    (SELECT count(*) FROM jsonb_array_elements(attempt.payload->'items')
-                       WITH ORDINALITY AS earlier(other, place)
-                      WHERE earlier.place < entry.place
-                        AND earlier.other->>'native_type' = 'function_call')::text
+                    (SELECT COALESCE(min(call.call_position), 2147483647)
+                       FROM jsonb_array_elements(attempt.payload->'items')
+                            WITH ORDINALITY AS later(other, place)
+                       JOIN storyos.tool_calls AS call
+                         ON (call.owner_user_id, call.project_id, call.model_attempt_id, call.call_id)
+                          = (attempt.owner_user_id, attempt.project_id, attempt.model_attempt_id,
+                             later.other->>'call_id')
+                      WHERE later.place > entry.place)::text
                FROM storyos.model_attempts AS attempt,
                     jsonb_array_elements(attempt.payload->'items') WITH ORDINALITY AS entry(item, place)
               WHERE attempt.owner_user_id = $1::text::uuid AND attempt.project_id = $2::text::uuid
                 AND attempt.run_id = $3::text::uuid
                 AND attempt.attempt_role IN ('decision', 'successor')
                 AND attempt.dispatch_state = 'settled'
-                AND attempt.payload #>> '{decision,kind}' = 'tool_request'
+                AND attempt.payload->'items' @> '[{\"native_type\": \"function_call\"}]'
+                AND attempt.payload #>> '{decision,kind}' IS DISTINCT FROM 'advisory'
                 AND item->>'role' = 'assistant' AND item->>'text' <> ''
               ORDER BY attempt.decision_position, attempt.model_attempt_id, entry.place",
             &ids,
