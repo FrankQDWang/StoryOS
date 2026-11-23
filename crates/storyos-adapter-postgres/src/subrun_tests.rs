@@ -281,8 +281,9 @@ impl ContractFaultObserver for ParentWithSubrun<'_> {
 }
 
 /// Admits a parent Run of `next` that reads Chapter 1, starts its Subrun, and cancels the parent
-/// at `point` of the Subrun, as `ParentWithSubrun` gives. Gives the status, the wake-up, and whether the lease is clear of
-/// the parent and of the Subrun, and the state and the refusal of each ToolCall of the Subrun.
+/// at `point` of the Subrun, as `ParentWithSubrun` gives. Gives one row for the parent and one
+/// row for the Subrun. Each row has the status, the wake-up, and whether the lease is clear. It
+/// also has the state and the refusal of each ToolCall of the Run.
 async fn cancelled_with_subrun(
     store: &PostgresProjectReader,
     admin: &Client,
