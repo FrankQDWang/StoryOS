@@ -85,8 +85,8 @@ pub(crate) enum WorkPhase {
 }
 
 /// Claims the next AgentRun whose Model Registration binds one of `model_kinds`. The Worker claims
-/// only a Run of a dispatched kind, and a Run of the author before background work, so ordinary
-/// writing does not wait for a capture (ADR 0094 section 5).
+/// only a Run of a dispatched kind or a cancelled Run with a wake-up, and a Run of the author
+/// before background work, so ordinary writing does not wait for a capture (ADR 0094 section 5).
 async fn claim_agent_run_row(
     transaction: &tokio_postgres::Transaction<'_>,
     lease_seconds: i64,
@@ -101,7 +101,9 @@ async fn claim_agent_run_row(
                  JOIN storyos.model_registration_revisions AS registration
                    ON registration.model_registration_revision = run.model_registration_revision
                 WHERE registration.model_kind = ANY($2::text[])
-                  AND run.run_kind = ANY($3::text[])
+                  -- The Worker selects a cancelled Subrun only for the duties of a cancelled
+                  -- Run (ADR 0103 section 3A).
+                  AND (run.run_kind = ANY($3::text[]) OR run.status = 'cancelled')
                   AND (run.status = 'queued'
                    OR (
                      run.status = 'claimed'

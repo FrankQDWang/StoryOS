@@ -12,7 +12,9 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::{complete, conversation_of};
-use crate::shared_tests::agent_run_retrieval::{AfterExchange, destination};
+use crate::shared_tests::agent_run_retrieval::{
+    AfterExchange, adapter, broken_stream, destination, stored,
+};
 use crate::shared_tests::agent_run_steering::{cancellation, queued};
 use crate::shared_tests::agent_run_tool_exposure::{finish_stream, finish_then_advisory, sse};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
@@ -77,7 +79,7 @@ pub(super) async fn scripted(
 }
 
 /// A complete Run of the author of `prefix` that reads Chapter 1, so it has a ToolCall.
-async fn parent(
+pub(super) async fn parent(
     store: &PostgresProjectReader,
     admin: &Client,
     prefix: &str,
@@ -91,7 +93,7 @@ async fn parent(
 /// Starts a Subrun of the first ToolCall of the Run `parent_run_id` with `brief`, as the work of
 /// that call does in the transaction of the parent. The parent then has a claim with its lease,
 /// so the claim of the Subrun is valid.
-async fn start(
+pub(super) async fn start(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
@@ -690,6 +692,46 @@ async fn subrun_states(admin: &Client, run_id: &str) -> Value {
     .await
 }
 
+/// A parent Run of `lead` on the Agent Plan Registration with a scripted model. The model calls
+/// `start_subrun`, serves `subrun` to the Subrun, and then ends the parent with `finish` and its
+/// answer. Gives the scope, the Run, and the request lines that the model served.
+async fn plan_parent(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    lead: &str,
+    subrun: Vec<String>,
+) -> (ProjectScope, String, tokio::task::JoinHandle<Vec<String>>) {
+    let call = json!({"id": "fc_01", "type": "function_call", "status": "completed",
+        "call_id": "call_start_subrun", "name": "start_subrun",
+        "arguments": r#"{"title":"读","brief":"读第一章。"}"#});
+    let parent_call = sse(&[
+        json!({"type": "response.created",
+               "response": {"id": format!("resp_{lead}"), "status": "in_progress", "output": []}}),
+        json!({"type": "response.output_item.done", "output_index": 0, "item": call}),
+        json!({"type": "response.completed", "response": {"id": format!("resp_{lead}"),
+               "status": "completed", "output": [call],
+               "usage": {"input_tokens": 40, "output_tokens": 9}}}),
+    ]);
+    let mut replies = vec![parent_call];
+    replies.extend(subrun);
+    replies.extend(finish_then_advisory(&format!("resp_{lead}_end")));
+    let (base, served) = destination(replies).await;
+    let plan = DeploymentDestination::VolcengineAgentPlan {
+        qualification_authorization: None,
+    };
+    let (scope, _, run_id) = queued_run(store, lead, plan).await;
+    admin
+        .execute(
+            "UPDATE storyos.processing_destination_identity_evidence_revisions SET endpoint = $2
+              WHERE project_id = $1::text::uuid
+                AND evidence_kind = 'volcengine_agent_plan_boundary'",
+            &[&scope.project_id.as_ref(), &base],
+        )
+        .await
+        .unwrap();
+    (scope, run_id, served)
+}
+
 /// Item 8 of #436, ADR 0056: on the Agent Plan Registration, a Subrun whose request is too long
 /// for the window is refused by the check before its dispatch, and the call of the parent
 /// settles with the sentence of that cause. After the first exchange of the Subrun, the adapter
@@ -701,38 +743,8 @@ async fn subrun_states(admin: &Client, run_id: &str) -> Value {
 async fn a_subrun_too_long_for_the_window_of_agent_plan_is_refused_before_its_dispatch() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let call = json!({"id": "fc_01", "type": "function_call", "status": "completed",
-        "call_id": "call_start_subrun", "name": "start_subrun",
-        "arguments": r#"{"title":"读","brief":"读第一章。"}"#});
-    let parent_call = sse(&[
-        json!({"type": "response.created",
-               "response": {"id": "resp_769", "status": "in_progress", "output": []}}),
-        json!({"type": "response.output_item.done", "output_index": 0, "item": call}),
-        json!({"type": "response.completed", "response": {"id": "resp_769",
-               "status": "completed", "output": [call],
-               "usage": {"input_tokens": 40, "output_tokens": 9}}}),
-    ]);
-    let [finish, closing] = finish_then_advisory("resp_769_end");
-    let replies = vec![
-        parent_call,
-        finish_stream("resp_769_subrun"),
-        finish,
-        closing,
-    ];
-    let (base, served) = destination(replies).await;
-    let plan = DeploymentDestination::VolcengineAgentPlan {
-        qualification_authorization: None,
-    };
-    let (scope, _, run_id) = queued_run(&store, "769", plan).await;
-    admin
-        .execute(
-            "UPDATE storyos.processing_destination_identity_evidence_revisions SET endpoint = $2
-              WHERE project_id = $1::text::uuid
-                AND evidence_kind = 'volcengine_agent_plan_boundary'",
-            &[&scope.project_id.as_ref(), &base],
-        )
-        .await
-        .unwrap();
+    let subrun = vec![finish_stream("resp_769_subrun")];
+    let (scope, run_id, served) = plan_parent(&store, &admin, "769", subrun).await;
     let fill = AfterExchange {
         admin: &admin,
         statement: format!(
@@ -769,6 +781,73 @@ async fn a_subrun_too_long_for_the_window_of_agent_plan_is_refused_before_its_di
             json!(["refused", "conversation_too_long"]),
             4,
         )
+    );
+}
+
+/// Item 7 of #436, ADR 0088 section 3: the recovery of the first Model Attempt of a Subrun stops
+/// the Subrun as `paused` or as `waiting`, and the call of the parent settles with the sentence of
+/// no result (criterion 3). The parent then continues to its end. For `paused`, the stream of the
+/// Subrun commits a function call item and breaks, so its successor has an unresolved effect. For
+/// `waiting`, the stream of the successor also breaks, so the allowance is spent with an unknown
+/// outcome. Test prefix lead `6f`.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_subrun_that_the_recovery_stops_settles_the_call_with_no_result() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let call = json!({"id": "fc_read", "type": "function_call", "status": "completed",
+        "call_id": "call_read", "name": "read_chapter", "arguments": r#"{"chapter":1}"#});
+    let committed_call = sse(&[
+        json!({"type": "response.created",
+               "response": {"id": "resp_6f0_subrun", "status": "in_progress", "output": []}}),
+        json!({"type": "response.output_item.done", "output_index": 0, "item": call}),
+    ]);
+    let cases = [
+        (
+            "6f0",
+            vec![committed_call, stored("resp_6f0_subrun", "in_progress")],
+        ),
+        (
+            "6f1",
+            vec![
+                broken_stream("resp_6f1_subrun"),
+                stored("resp_6f1_subrun", "in_progress"),
+                broken_stream("resp_6f1_successor"),
+                stored("resp_6f1_subrun", "in_progress"),
+            ],
+        ),
+    ];
+    let mut ends = Vec::new();
+    for (lead, subrun) in cases {
+        let (scope, run_id, served) = plan_parent(&store, &admin, lead, subrun).await;
+        let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+        (complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim))
+            .await
+            .unwrap();
+        let subrun = subruns(&admin, &run_id).await.remove(0);
+        let reason = json_of(
+            &admin,
+            "SELECT to_jsonb(settlement->>'reason')::text FROM storyos.agent_runs
+              WHERE run_id = $1::text::uuid",
+            &[&subrun],
+        )
+        .await;
+        ends.push(json!([
+            records(&admin, &subrun).await[1],
+            reason,
+            subrun_calls(&admin, &run_id).await,
+            records(&admin, &run_id).await[1],
+            served.await.unwrap().len(),
+        ]));
+    }
+    let no_result = json!([["settled", null, "The Subrun ended with no result."]]);
+
+    assert_eq!(
+        ends,
+        [
+            json!(["paused", "unresolved_effect", no_result, "completed", 5]),
+            json!(["waiting", "unknown_result", no_result, "completed", 7]),
+        ]
     );
 }
 
