@@ -194,24 +194,25 @@ confirm that no Tool effect is repeated and the editor is unchanged.
 
 Stage 9 comes after the release of Stage 11
 (ADR 0101 section 1, [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md)).
-The author decided a smaller Stage 9 on 2026-11-23. It delivers three things:
-the plan list of a Run, a Subrun of one level that its parent Run waits for,
-and the limit of RunSteps that the model knows. ADR 0103 section 1 withdraws
+The author decided a smaller Stage 9 on 2026-11-23. It delivers the plan list
+of a Run and a Subrun of one level that its parent Run waits for (ADR 0103
+section 1), and it tells the model its limit of RunSteps (ADR 0103 section 5).
+ADR 0103 section 1 withdraws
 the other parts of the earlier contract of this stage, and a later ADR is
 necessary for each one. The specification is
 [Deliver Stage 9: The Plan List of a Run and a Subrun of One Level](https://github.com/FrankQDWang/StoryOS/issues/367).
 The Requirements, the author journey, and the evidence rows below replace the
 rows of the earlier contract. Each Requirement keeps its identifier, so that
 the anchors of section 11 stay correct. A withdrawn Requirement delivers
-nothing, and it has no proof obligation.
+nothing.
 
 | ID | Production obligation | Semantic owner |
 | --- | --- | --- |
-| S9-REQ-001 | Give a Run of the author a plan list. The assistant records a list of at most 12 short steps with a Host Tool when it judges that the work needs a plan, and each step has one of three states. A new accepted list replaces the list before it. The Run read gives the newest accepted list, and the panel shows the complete list with the state of each step. A plan waits for no approval and gives no authority. A request with no plan looks as it looked before. RunPlan Revisions, PlanStep records, and the layered Run timeline are withdrawn (ADR 0103 sections 1 and 2). | AgentRun owner |
-| S9-REQ-002 | Let a Run of the author give one reading task to a Subrun of one level and wait for it. The Subrun is an AgentRun of its own kind with its own RunSteps, Model Attempts, ToolCalls, and usage. Its context has its own instruction text, the Project Instruction, the brief, the Chapter list, and, when its parent Run has Memory use, the Memory Index of its parent Run with no Character Intent. It has only reading Tools, it cannot start a Subrun, and its final answer is its only result. It uses the grant of its parent Run. A Run can start at most 4 Subruns, and a Subrun has at most 12 RunSteps. The panel shows one card for each Subrun, and the card opens the record of that Subrun (ADR 0103 sections 3 and 3A). | Subrun and AgentRun owners |
+| S9-REQ-001 | Give a Run of the author a plan list. The assistant records a list of at most 12 short steps with a Host Tool when it judges that the work needs a plan, and each step has one of three states. A new accepted list replaces the list before it. The Run read gives the newest accepted list, and the panel shows the complete list with the state of each step. A plan waits for no approval and gives no authority. A request with no plan looks as it looked before. A RunPlan Revision is one accepted call, and it is no record of its own. Stage 9 delivers no PlanStep and no layered Run timeline (ADR 0103 section 2). | AgentRun owner |
+| S9-REQ-002 | Let a Run of the author give one reading task to a Subrun of one level and wait for it. The Subrun is an AgentRun of its own kind with its own RunSteps, Model Attempts, ToolCalls, and usage. Its context has its own instruction text, the Project Instruction, the brief, the Chapter list, and, when its parent Run has Memory use, the Memory Index of its parent Run with no Character Intent. It has only reading Tools and `finish`, it cannot start a Subrun, and its final answer is its only result. It uses the grant of its parent Run. A Run can start at most 4 Subruns, and a Subrun has at most 12 RunSteps. The panel shows one card for each Subrun, and the card opens the record of that Subrun (ADR 0103 sections 3 and 3A). | Subrun and AgentRun owners |
 | S9-REQ-003 | Settle the ToolCall of the parent Run in each case of ADR 0103 section 3A. The final answer of the Subrun is the result. A Subrun that ends with no final answer gives a fixed sentence. A cancellation of the parent Run cancels its Subrun in the same transaction. A pause stops the work of the Subrun. The next claim of the parent Run continues the same Subrun after a pause and after a lost lease. The Host does not infer a result from the end of a process. Mailbox messages, follow-up tasks, the interrupt of one child, Advisory joins, backpressure, seals, and late results are withdrawn (ADR 0103 section 1). | Subrun and retention owners |
 | S9-REQ-004 | Withdrawn by ADR 0103 section 1. Stage 9 delivers no proactive event work and no schedule work. | AgentRun owner |
-| S9-REQ-005 | Tell the model its limits. The instruction text of each decision request gives the limit of RunSteps of its Run, for a Run of the author, a Subrun, and a Memory capture. The decision request of each of the last 4 RunSteps tells how many RunSteps are left. The declaration of a Tool gives the limit of that Tool, and the Host refuses a call above the limit with a sentence that gives the limit. A Subrun has a limit of RunSteps in place of a budget reservation. The budget reservations and the holds of a Subrun are withdrawn (ADR 0103 sections 1 and 5). | AgentRun and Model Gateway owners |
+| S9-REQ-005 | Tell the model its limits. The instruction text of each decision request gives the limit of RunSteps of its Run, for a Run of the author, a Subrun, and a Memory capture. The decision request of each of the last 4 RunSteps tells how many RunSteps are left. The declaration of a Tool gives the limit of that Tool, and the Host refuses a call above the limit with a sentence that gives the limit. A Subrun has a limit of RunSteps in place of a budget reservation. The budget reservations, the Resource Hold, and the Safety Hold of the earlier contract are withdrawn (ADR 0103 sections 1 and 5). | AgentRun and Model Gateway owners |
 | S9-REQ-006 | Withdrawn by ADR 0103 section 1 and by the amendment of ADR 0096 section 6. Stage 9 delivers no model policy. | Model Gateway owner |
 
 **Author journey S9-JRN-001.** Ask for work with several steps, and see the
@@ -403,9 +404,9 @@ proof owner maps these obligations to exact executable evidence.
 | [Use Natural Language as the Default Task Entry](https://github.com/FrankQDWang/StoryOS/issues/6) | Discovery-writing entry; S3 onward. | `S3-REQ-002` |
 | [Protect All Authoritative Creative State](https://github.com/FrankQDWang/StoryOS/issues/7) | Authority invariant in all stages; structured truth deferred by ADR 0094. | `REL-002`; `S7-REQ-002` |
 | [Support Controlled Proactive Runs](https://github.com/FrankQDWang/StoryOS/issues/8) | AgentRun. ADR 0103 section 1 withdrew it from Stage 9; a later ADR is necessary for it. | `S9-REQ-004` |
-| [Expose a Layered Interruptible Run Timeline](https://github.com/FrankQDWang/StoryOS/issues/9) | AgentRun; S3 foundation, S5 activity, and the S9 plan list. ADR 0103 section 1 withdrew the layered timeline. | `S3-REQ-003`; `S5-REQ-005`; `S9-REQ-001` |
+| [Expose a Layered Interruptible Run Timeline](https://github.com/FrankQDWang/StoryOS/issues/9) | AgentRun; S3 foundation, S5 activity, and the S9 plan list. Stage 9 delivers no layered timeline (ADR 0103 section 2). | `S3-REQ-003`; `S5-REQ-005`; `S9-REQ-001` |
 | [Use Adaptive Plan-and-Act Execution](https://github.com/FrankQDWang/StoryOS/issues/10) | AgentRun; S3 foundation and the S9 plan list (ADR 0103 section 2). | `S3-REQ-003`; `S9-REQ-001` |
-| [Enforce Multidimensional Run Guardrails](https://github.com/FrankQDWang/StoryOS/issues/11) | Exact AgentRun guardrails as each execution family enters; S3–S9. | `S3-REQ-003`; `S9-REQ-005` |
+| [Enforce Multidimensional Run Guardrails](https://github.com/FrankQDWang/StoryOS/issues/11) | Exact AgentRun guardrails as each execution family enters; S3–S9. The guardrail of Stage 9 is the limit of RunSteps that the model knows; ADR 0103 section 1 withdrew the budget reservations and the holds of the earlier contract. | `S3-REQ-003`; `S9-REQ-005` |
 | [Unify Capabilities in a Tool Registry](https://github.com/FrankQDWang/StoryOS/issues/12) | Tool/MCP; S5. Static ToolSpec and dynamic authority remain distinct. | `S5-REQ-001` |
 | [Separate Composable Read Tools from Domain Write Commands](https://github.com/FrankQDWang/StoryOS/issues/13) | Tool/MCP and Core boundaries; S5 onward. | `S5-REQ-001`; `S5-REQ-006` |
 | [Support Hierarchical Ephemeral Subruns](https://github.com/FrankQDWang/StoryOS/issues/14) | Durable Subrun contract; S9 delivers a Subrun of one level that its parent Run waits for (ADR 0103 section 3A). Ephemeral scope is not disposable execution history. | `S9-REQ-002`; `S9-REQ-003` |
