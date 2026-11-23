@@ -270,8 +270,6 @@ impl ModelProviderAdapter for FakeDestination {
     }
 }
 
-/// The author message after the compaction prefix of the Host fake and the sentence that names
-/// its RunStep positions, if any.
 /// `create` with the brief of the Subrun as its author message.
 fn with_brief(create: &CreateRequest) -> CreateRequest {
     let brief = (create.context.iter())
@@ -283,6 +281,8 @@ fn with_brief(create: &CreateRequest) -> CreateRequest {
     }
 }
 
+/// The author message after the compaction prefix of the Host fake and the sentence that names
+/// its RunStep positions, if any.
 fn script_message(message: &str) -> &str {
     let Some(rest) = message.strip_prefix(storyos_core::ACTIVE_COMPACTION_REQUEST_PREFIX) else {
         return message;
