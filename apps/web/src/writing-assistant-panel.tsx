@@ -27,6 +27,7 @@ import { ProjectConversationList } from "./project-conversation-list.tsx";
 import { readOpenedConversation, type OpenedConversation, type OpenedRun } from "./project-conversation-read.ts";
 import { ResearchTurn, researchDecision } from "./research-turn.tsx";
 import { ManuscriptUseList } from "./manuscript-use-list.tsx";
+import { RunPlanList } from "./run-plan-list.tsx";
 import { RunResultList } from "./run-result-list.tsx";
 import { SkillUseList } from "./skill-use-list.tsx";
 import type { ProposalDestination } from "./proposal-navigation.ts";
@@ -294,6 +295,8 @@ export function WritingAssistantPanel({
   const [refused, setRefused] = useState(false);
   const [resultUnavailable, setResultUnavailable] = useState(false);
   const inspectSequence = useRef(0);
+  // The number of the last Run read that started, and of the last one that set the Run state.
+  const runReads = useRef({ started: 0, applied: 0 });
   const [failedReads, setFailedReads] = useState(0);
   const [skills, setSkills] = useState<SkillCatalogEntry[]>();
   // A refused selection reads the Skills of the deployment again.
@@ -364,6 +367,7 @@ export function WritingAssistantPanel({
       saveReference(current);
       setReference(current);
     }
+    const read = ++runReads.current.started;
     const result = await getAgentRun({
       baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
       projectId: current.scope.project_id, runId,
@@ -377,7 +381,10 @@ export function WritingAssistantPanel({
     current = { ...(readReference(current.scope) ?? current), conversationId: result.conversation_id };
     saveReference(current);
     setReference(current);
-    setRun(result);
+    if (read > runReads.current.applied) {
+      runReads.current.applied = read;
+      setRun(result);
+    }
     // The Run exists, so its references go from the composer also after a lost acknowledgement.
     clearDraftReferences(current.scope, current.referenceKeys ?? []);
     if (!await showProposals(current, result)) return;
@@ -723,6 +730,7 @@ export function WritingAssistantPanel({
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
               <AuthorMessages message={exchange.message} labels={exchange.referenceLabels}
                 skills={exchange.skillNames} run={exchange.run} guidance={exchange.guidance} />
+              {exchange.run === undefined ? null : <RunPlanList run={exchange.run} />}
               {/* The button "用到故事里" stays with the current Run, because it sends in the current Conversation. */}
               {exchange.run !== undefined && runResults(exchange.run) !== undefined
                 ? <RunResultList run={exchange.run} results={runResults(exchange.run)!} context={context} history
@@ -749,6 +757,8 @@ export function WritingAssistantPanel({
               <AuthorMessages message={reference.message} labels={reference.referenceLabels}
                 skills={reference.skillNames} run={run} guidance={reference.guidance} />
               {!terminal ? <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p> : null}
+              {/* Below the status line while the Run works, and above the first result after it ends (ADR 0103). */}
+              {run === undefined ? null : <RunPlanList run={run} />}
               {run === undefined ? null : runResults(run) !== undefined
                 ? <RunResultList run={run} results={runResults(run)!} context={context} history={false} tree={context?.tree}
                   sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal}>{useResearch}</RunResultList>
