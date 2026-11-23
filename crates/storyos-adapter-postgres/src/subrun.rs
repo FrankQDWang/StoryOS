@@ -105,7 +105,8 @@ pub(crate) async fn begin(
 }
 
 /// Takes the Subrun of `work` with a new fence and a new lease, in the transaction with the
-/// fence of its parent Run. As a claim of the Worker, the claim clears the wake-up. `None` means that the Subrun does not work: the next ToolCall work of
+/// fence of its parent Run. The claim clears the Run Wakeup of the Subrun, as a claim of the
+/// Worker does. `None` means that the Subrun does not work: the next ToolCall work of
 /// the parent settles its call.
 pub(crate) async fn take(
     client: &Client,

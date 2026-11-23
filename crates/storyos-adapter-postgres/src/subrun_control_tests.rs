@@ -20,6 +20,7 @@ use crate::shared_tests::command_sequence_agent_run::PAUSE_AGENT_RUN;
 use crate::shared_tests::command_sequence_background_run::claim_in_project;
 use crate::shared_tests::command_sequence_support::{CommandCall, issued, stores};
 use crate::shared_tests::json_row::json_of;
+use crate::shared_tests::memory_work_schedule::claim_due;
 use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
 
 /// The command that the author sends to the parent Run while its Subrun works.
@@ -82,13 +83,21 @@ async fn commanded(
     matches!(stopped.await, Err(CompleteAgentRunError::StaleFence))
 }
 
-/// The status, the wake-up, and the count of the decision Model Attempts of the Run.
+/// The status and the wake-up of the Run, and the role and the dispatch state of each of its
+/// Model Attempts of each role, in the order of their creation. A recorded response makes the
+/// dispatch state `settled`. An `abort` Attempt gives whether it names the first Attempt.
 async fn run_state(admin: &Client, run_id: &str) -> Value {
     json_of(
         admin,
         "SELECT jsonb_build_array(run.status, run.wakeup_pending,
-                  (SELECT count(*) FROM storyos.model_attempts AS attempt
-                    WHERE attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'))::text
+                  (SELECT jsonb_agg(jsonb_build_array(attempt.attempt_role, attempt.dispatch_state)
+                            || CASE WHEN attempt.attempt_role = 'abort' THEN jsonb_build_array(
+                                 attempt.payload->>'original_model_attempt_id' =
+                                 (SELECT min(first.model_attempt_id::text)
+                                    FROM storyos.model_attempts AS first
+                                   WHERE first.run_id = run.run_id)) ELSE '[]' END
+                            ORDER BY attempt.model_attempt_id)
+                     FROM storyos.model_attempts AS attempt WHERE attempt.run_id = run.run_id))::text
            FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
         &[&run_id],
     )
@@ -98,8 +107,9 @@ async fn run_state(admin: &Client, run_id: &str) -> Value {
 /// Items 7 and 8 of #436: a cancellation of the parent while its Subrun works refuses the call of
 /// the parent with `run_cancelled` and cancels the Subrun in the same transaction. The Model
 /// Attempt of the Subrun in flight gets the wake-up. The Worker then selects the cancelled
-/// Subrun, does the duties of a cancelled Run, and clears the wake-up, and no Model Attempt of
-/// the Subrun starts after the cancellation (criterion 5).
+/// Subrun and does the duties of a cancelled Run: one `abort` Attempt for the Attempt in flight,
+/// and the wake-up is clear. No decision or successor Attempt of the Subrun starts after the
+/// cancellation (criterion 5).
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_cancellation_of_the_parent_cancels_its_subrun() {
@@ -139,9 +149,13 @@ async fn a_cancellation_of_the_parent_cancels_its_subrun() {
             true,
             json!([["refused", "run_cancelled", null]]),
             json!("cancelled"),
-            json!(["cancelled", true, 1]),
+            json!(["cancelled", true, [["decision", "uncertain"]]]),
             Some(true),
-            json!(["cancelled", false, 1]),
+            json!([
+                "cancelled",
+                false,
+                [["decision", "uncertain"], ["abort", "settled", true]]
+            ]),
         )
     );
 }
@@ -160,10 +174,10 @@ async fn a_pause_of_the_parent_continues_the_same_subrun_after_the_steering_inpu
     };
     let pause = Command::Pause(issued(&store, &scope, 0x76f1, &PAUSE_AGENT_RUN, input).await);
     let stopped = commanded(&store, &admin, (&scope, &run_id), pause).await;
-    let subrun = subruns(&admin, &run_id).await;
+    let subrun = subruns(&admin, &run_id).await.remove(0);
     let paused = (
         run_state(&admin, &run_id).await,
-        run_state(&admin, &subrun[0]).await,
+        run_state(&admin, &subrun).await,
     );
     let steer = steering(&store, &scope, 0x76f2, &run_id, "继续。", None).await;
     (store.steer_agent_run(&steer.envelope, &steer.input))
@@ -183,8 +197,12 @@ async fn a_pause_of_the_parent_continues_the_same_subrun_after_the_steering_inpu
         ),
         (
             true,
-            (json!(["paused", false, 1]), json!(["claimed", false, 1])),
-            subrun,
+            // The stopped work of the Subrun recorded no response.
+            (
+                json!(["paused", false, [["decision", "settled"]]]),
+                json!(["claimed", false, [["decision", "uncertain"]]])
+            ),
+            vec![subrun],
             json!([["settled", null, answer]]),
             json!("completed"),
         )
@@ -233,7 +251,7 @@ async fn a_lost_lease_of_the_parent_continues_the_same_fourth_subrun() {
 /// Items 3 and 7 of #436: the Worker never selects a queued Subrun, or a claimed Subrun whose
 /// lease expired, also when no other work exists (criterion 8). `getAgentRun` with the identity
 /// of a Subrun answers as for a Run that does not exist, the earlier turns of the Conversation of
-/// the parent do not read the Subrun, and the Subrun gets no Memory work (criterion 11). Test
+/// the parent and the input of its capture do not read the Subrun (criterion 11). Test
 /// prefix lead `75`.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -284,6 +302,16 @@ async fn no_worker_claim_no_run_read_and_no_earlier_turn_gives_a_subrun() {
         .await
         .unwrap();
     let (chapter_id, conversation): (String, String) = (parent.get(0), parent.get(1));
+    // The capture of the Conversation of the parent starts, and it reads the Runs of the author
+    // from the first Run to the last Run of its input.
+    claim_due(&store, &admin, &scope, &conversation).await;
+    let capture = json_of(
+        &admin,
+        "SELECT jsonb_agg(jsonb_build_array(first_run_id::text, last_run_id::text))::text
+           FROM storyos.memory_captures WHERE conversation_id = $1::text::uuid",
+        &[&conversation],
+    )
+    .await;
     let next = Admission {
         conversation: conversation_of("753"),
         ..Default::default()
@@ -293,16 +321,6 @@ async fn no_worker_claim_no_run_read_and_no_earlier_turn_gives_a_subrun() {
     let turns = crate::create_agent_run::earlier_turns::load(&admin, &scope, &next)
         .await
         .unwrap();
-    // The Memory work of the Conversation of the parent, and each Memory work with no
-    // Conversation: the kind of each schedule row.
-    let memory_work = json_of(
-        &admin,
-        "SELECT jsonb_agg(work_kind)::text FROM storyos.memory_work_schedules
-          WHERE project_id = $1::text::uuid
-            AND (conversation_id = $2::text::uuid OR conversation_id IS NULL)",
-        &[&scope.project_id.as_ref(), &conversation],
-    )
-    .await;
 
     assert_eq!(
         (
@@ -313,16 +331,20 @@ async fn no_worker_claim_no_run_read_and_no_earlier_turn_gives_a_subrun() {
             (turns.iter())
                 .map(|turn| turn.messages[0].source.run_id.clone())
                 .collect::<Vec<_>>(),
-            memory_work,
+            capture,
         ),
         (
             true,
-            (json!(["claimed", false, 1]), json!(true), true),
+            (
+                json!(["claimed", false, [["decision", "uncertain"]]]),
+                json!(true),
+                true
+            ),
             false,
             true,
-            vec![parent_run_id],
-            // Only the capture of the Conversation of the parent: the Subrun has no Memory work.
-            json!(["conversation_capture"]),
+            vec![parent_run_id.clone()],
+            // The input of the capture has only the parent: the Subrun is not in it.
+            json!([[parent_run_id, parent_run_id]]),
         )
     );
 }

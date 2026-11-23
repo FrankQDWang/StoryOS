@@ -608,6 +608,7 @@ struct AtDispatch<'a> {
     run_id: String,
     nth: usize,
     reached: std::sync::Mutex<usize>,
+    takeover: std::sync::Mutex<Option<ClaimedAgentRun>>,
 }
 
 impl storyos_application::ContractFaultObserver for AtDispatch<'_> {
@@ -629,11 +630,13 @@ impl storyos_application::ContractFaultObserver for AtDispatch<'_> {
         self.admin.execute(expire, &[&self.run_id]).await.unwrap();
         let takeover = claim_in_project(self.store, &self.scope).await.unwrap();
         assert_eq!(takeover.run_id, self.run_id);
+        *self.takeover.lock().unwrap() = Some(takeover);
     }
 }
 
 /// Runs a parent Run of `prefixes` with the author message `script` while the Worker takes the
-/// parent over at the `nth` dispatch claim, then completes the parent when its claim stopped.
+/// parent over at the `nth` dispatch claim, then completes the parent with the claim of that
+/// takeover.
 /// Gives whether the first claim of the parent stopped with a stale fence. Then it gives the
 /// status and the decision Model Attempt count of each Subrun at that stop, in the call order.
 /// Last, it gives whether the completion kept the same Subruns, the calls, and the parent status.
@@ -652,6 +655,7 @@ pub(super) async fn stopped_end(
         run_id: run_id.clone(),
         nth,
         reached: std::sync::Mutex::default(),
+        takeover: std::sync::Mutex::default(),
     };
     let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
     let stopped = matches!(
@@ -662,8 +666,16 @@ pub(super) async fn stopped_end(
         subruns(admin, &run_id).await,
         subrun_states(admin, &run_id).await,
     );
-    if stopped {
-        complete(store, admin, &scope, &run_id).await;
+    let takeover = observer.takeover.into_inner().unwrap();
+    if let Some(takeover) = &takeover {
+        let end = complete_agent_run(
+            store,
+            &FakeDestination,
+            &NoContractFaults,
+            &RuntimeClock,
+            takeover,
+        );
+        Box::pin(end).await.unwrap();
     }
     json!([
         stopped,
@@ -796,7 +808,7 @@ async fn a_subrun_that_the_recovery_stops_settles_the_call_with_no_result() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let call = json!({"id": "fc_read", "type": "function_call", "status": "completed",
-        "call_id": "call_read", "name": "read_chapter", "arguments": r#"{"chapter":1}"#});
+        "call_id": "call_read", "name": "read_chapter", "arguments": r#"{"chapter":1,"first_block":null,"last_block":null}"#});
     let committed_call = sse(&[
         json!({"type": "response.created",
                "response": {"id": "resp_6f0_subrun", "status": "in_progress", "output": []}}),
