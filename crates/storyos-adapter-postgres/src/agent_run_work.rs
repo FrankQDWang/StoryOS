@@ -185,9 +185,11 @@ pub(crate) async fn load_run_phase(
     let Some(row) = client
         .query_opt(
             // The current author message is the one `author_instruction` item that is not an
-            // earlier author message of a later request (ADR 0093 section 6).
+            // earlier author message of a later request (ADR 0093 section 6) and not a message of
+            // an earlier turn (ADR 0102).
             "SELECT run.status, COALESCE((SELECT item->>'content' FROM jsonb_array_elements(assembly.payload->'selected') AS item WHERE item->>'source_class'='author_instruction'
-                      AND NOT COALESCE(assembly.payload #> '{operation_requirement,earlier_author_messages}', '[]') @> jsonb_build_array(jsonb_build_object('message_id', item->'source_version'))),run.author_message,'') AS author_message,
+                      AND NOT COALESCE(assembly.payload #> '{operation_requirement,earlier_author_messages}', '[]') @> jsonb_build_array(jsonb_build_object('message_id', item->'source_version'))
+                      AND NOT COALESCE(assembly.payload #> '{operation_requirement,earlier_turns,sources}', '[]') @> jsonb_build_array(jsonb_build_object('message_id', item->'source_version'))),run.author_message,'') AS author_message,
                     run.run_kind,
                     run.chapter_id::text AS chapter_id, run.conversation_id::text AS conversation_id,
                     assembly.sufficiency, assembly.context_assembly_manifest_id::text AS assembly_manifest_id,

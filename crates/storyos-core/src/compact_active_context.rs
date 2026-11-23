@@ -227,13 +227,15 @@ impl CompactionTrigger {
 /// each declared target text. A later RunStep sends the outputs of the calls of its prior
 /// response, and the current input again only when the prior response did not read it (ADR 0085).
 /// The request continues a prior response, so it does not send the `SKILL.md` of a Skill of the
-/// Conversation (ADR 0089 section 5).
+/// Conversation (ADR 0089 section 5) or the earlier turns of the Conversation (ADR 0102).
 fn sent_input_tokens(
     record: &crate::CurrentPassageAssemblyRecord,
     facts: &CompactionRequestFacts<'_>,
 ) -> u64 {
     let current = record.selected.iter().filter(|item| {
-        !crate::is_function_output(record, item) && !crate::is_conversation_skill(record, item)
+        !crate::is_function_output(record, item)
+            && !crate::is_conversation_skill(record, item)
+            && !crate::is_earlier_turn(record, item)
     });
     let tool_results = crate::function_outputs(record);
     let outputs: u64 = tool_results
@@ -292,6 +294,26 @@ pub fn later_request_too_long(
     })
 }
 
+/// Whether a decision request of a Run of the author is too long when it has no prior response.
+/// Such a request sends its full input with the earlier turns of the Conversation and each Tool
+/// result of the Run, so each text counts (ADR 0056, ADR 0102). The compaction trigger checks a
+/// request that continues a prior response (ADR 0093).
+pub fn full_decision_request_too_long(
+    prior_response: bool,
+    model_registration_revision: &str,
+    budget_bounds: &str,
+    decision: &crate::CurrentPassageAssemblyRecord,
+    declared_target_texts: &[String],
+) -> bool {
+    !prior_response
+        && later_request_too_long(
+            model_registration_revision,
+            budget_bounds,
+            decision,
+            declared_target_texts,
+        )
+}
+
 /// Whether the decision request of a RunStep compacts first. The expected input can reach the
 /// threshold at each RunStep, or the author message can ask the Host fake to compact (ADR 0093).
 pub fn compaction_requested(facts: &CompactionRequestFacts<'_>) -> bool {
@@ -314,11 +336,13 @@ pub enum DecisionRequestKind {
 
 /// Decides the decision request after the compaction phase. A compaction that started and did
 /// not install leaves the full chain. When the expected input then reaches the window after the
-/// output bound, the request cannot fit.
+/// output bound, the request cannot fit. When no prior response reference is usable, the request
+/// sends the full input, and `full_input_too_long` says if it does not fit (ADR 0102).
 pub fn decision_request_kind(
     installed: bool,
     compaction_started: bool,
     facts: Option<&CompactionRequestFacts<'_>>,
+    full_input_too_long: bool,
 ) -> DecisionRequestKind {
     if installed {
         return DecisionRequestKind::Later;
@@ -330,6 +354,7 @@ pub fn decision_request_kind(
         {
             DecisionRequestKind::TooLong
         }
+        _ if compaction_started && full_input_too_long => DecisionRequestKind::TooLong,
         _ => DecisionRequestKind::Ordinary,
     }
 }
@@ -541,7 +566,8 @@ pub fn summary_fits_item(decision: &crate::CurrentPassageAssemblyRecord, summary
 /// The Context Assembly of the later request: the decision Context Assembly with the summary of
 /// the same Conversation as the first selected item. The summary is a Derived Summary, so the
 /// sufficiency of the Exact Required input does not change. Each Tool result whose candidate in
-/// `candidates` has the stub form is a stub (ADR 0093 section 5).
+/// `candidates` has the stub form is a stub (ADR 0093 section 5). The summary replaces the
+/// earlier turns of the Conversation (ADR 0102).
 pub fn later_request_record(
     decision: &crate::CurrentPassageAssemblyRecord,
     compaction_id: &str,
@@ -549,6 +575,7 @@ pub fn later_request_record(
     candidates: &[crate::ToolResultCandidate<'_>],
 ) -> crate::CurrentPassageAssemblyRecord {
     let mut record = decision.clone();
+    crate::remove_earlier_turns(&mut record);
     crate::tool_result_context::stub_selected_results(&mut record, candidates);
     let token_count = crate::assemble_context::count_context_item_tokens(summary);
     record.considered.insert(

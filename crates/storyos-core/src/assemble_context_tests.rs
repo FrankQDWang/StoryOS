@@ -30,6 +30,7 @@ fn requirement(input: &CurrentPassageAssembly) -> OperationRequirementRecord {
         ordinary_resolution: None,
         tool_results: None,
         earlier_author_messages: None,
+        earlier_turns: None,
         skill_requirements: None,
         skill_catalog: None,
         memory_revision: None,

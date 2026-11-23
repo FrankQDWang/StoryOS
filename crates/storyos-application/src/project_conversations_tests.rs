@@ -1,37 +1,22 @@
-use std::time::{Duration, SystemTime};
-
 use storyos_contracts::{
     PROJECT_CONVERSATION_LABEL_MAX_CHARACTERS as LABEL, PROJECT_CONVERSATION_LIST_MAX_ENTRIES,
     PROJECT_CONVERSATION_RUNS_MAX_ENTRIES, ProjectConversationCompleteness as Completeness,
 };
-use storyos_core::{AGENT_PLAN_STORED_RESPONSE_RETENTION as RETENTION, AgentRunStatus};
+use storyos_core::AgentRunStatus;
 
 use super::{
     ProjectConversationListItem, ProjectConversationReader, ProjectConversationRunItem,
-    StoredProjectConversationRuns, list_project_conversations, project_conversation_label,
-    read_project_conversation,
+    list_project_conversations, project_conversation_label, read_project_conversation,
 };
 use crate::{ProjectId, ProjectReadError, ProjectScope, UserId};
 
-/// Gives the first `limit` of `count` stored items, as the store does. The newest Run has
-/// `status`, and the newest Run event is `elapsed` before the read.
+/// Gives the first `limit` of `count` stored items, as the store does.
 struct FixtureReader {
     count: usize,
-    status: AgentRunStatus,
-    elapsed: Duration,
 }
 
 fn reader(count: usize) -> FixtureReader {
-    let (status, elapsed) = (AgentRunStatus::Completed, Duration::ZERO);
-    FixtureReader {
-        count,
-        status,
-        elapsed,
-    }
-}
-
-fn end() -> SystemTime {
-    SystemTime::UNIX_EPOCH + Duration::from_secs(/*secs*/ 1_800_000_000)
+    FixtureReader { count }
 }
 
 impl ProjectConversationReader for FixtureReader {
@@ -56,20 +41,16 @@ impl ProjectConversationReader for FixtureReader {
         _scope: &ProjectScope,
         _conversation_id: &str,
         limit: usize,
-    ) -> Result<Option<StoredProjectConversationRuns>, ProjectReadError> {
+    ) -> Result<Option<Vec<ProjectConversationRunItem>>, ProjectReadError> {
         assert_eq!(limit, PROJECT_CONVERSATION_RUNS_MAX_ENTRIES + 1);
         let run = |index| ProjectConversationRunItem {
             run_id: format!("run-{}", self.count - index),
             author_message: format!("message {index}"),
             chapter_id: "chapter-a".to_owned(),
-            status: [self.status, AgentRunStatus::Completed][usize::from(index > 0)],
+            status: AgentRunStatus::Completed,
             created_at: "2026-11-16T10:15:00.000Z".to_owned(),
         };
-        Ok(Some(StoredProjectConversationRuns {
-            newest_first: (0..self.count.min(limit)).map(run).collect(),
-            newest_event_at: Some(end()),
-            read_time: end() + self.elapsed,
-        }))
+        Ok(Some((0..self.count.min(limit)).map(run).collect()))
     }
 }
 
@@ -119,27 +100,6 @@ async fn the_read_keeps_the_newest_runs_at_its_bound_with_the_oldest_of_them_fir
             (64, ids(2, 65), Completeness::Truncated),
         ]
     );
-}
-
-#[tokio::test]
-async fn the_read_gives_the_core_expiry_fact_of_the_newest_run() {
-    let longer = RETENTION + Duration::from_millis(/*millis*/ 1);
-    let mut results = Vec::new();
-    for (status, elapsed) in [
-        (AgentRunStatus::Completed, RETENTION),
-        (AgentRunStatus::Completed, longer),
-        (AgentRunStatus::Paused, longer),
-    ] {
-        let fixture = FixtureReader {
-            count: 2,
-            status,
-            elapsed,
-        };
-        let read = read_project_conversation(&fixture, &scope(), "conversation-a").await;
-        results.push(read.unwrap().unwrap().earlier_turns_expired);
-    }
-
-    assert_eq!(results, [false, true, false]);
 }
 
 #[test]

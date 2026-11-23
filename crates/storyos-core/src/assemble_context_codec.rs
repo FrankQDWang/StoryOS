@@ -61,6 +61,9 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
     if let Some(sources) = &record.operation_requirement.earlier_author_messages {
         payload["operation_requirement"]["earlier_author_messages"] = serde_json::json!(sources);
     }
+    if let Some(earlier) = &record.operation_requirement.earlier_turns {
+        payload["operation_requirement"]["earlier_turns"] = serde_json::json!(earlier);
+    }
     if let Some(requirements) = &record.operation_requirement.skill_requirements {
         payload["operation_requirement"]["skill_requirements"] = serde_json::json!(requirements);
     }
@@ -162,6 +165,11 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 .ok()?,
             earlier_author_messages: requirement
                 .get("earlier_author_messages")
+                .map(|value| serde_json::from_value(value.clone()))
+                .transpose()
+                .ok()?,
+            earlier_turns: requirement
+                .get("earlier_turns")
                 .map(|value| serde_json::from_value(value.clone()))
                 .transpose()
                 .ok()?,
@@ -439,6 +447,7 @@ fn encode_source_class(class: ContextSourceClass) -> &'static str {
         ContextSourceClass::MemoryEntries => "memory_entries",
         ContextSourceClass::MemoryObservations => "memory_observations",
         ContextSourceClass::CharacterFile => "character_file",
+        ContextSourceClass::EarlierAnswer => "earlier_answer",
     }
 }
 
@@ -464,6 +473,7 @@ fn decode_source_class(value: &str) -> Option<ContextSourceClass> {
         "memory_entries" => Some(ContextSourceClass::MemoryEntries),
         "memory_observations" => Some(ContextSourceClass::MemoryObservations),
         "character_file" => Some(ContextSourceClass::CharacterFile),
+        "earlier_answer" => Some(ContextSourceClass::EarlierAnswer),
         _ => None,
     }
 }

@@ -68,3 +68,24 @@ fn each_dispatched_run_kind_has_the_purpose_of_its_requests() {
         )
     );
 }
+
+/// ADR 0102 section 3: only a request with a full input and no prior response sends the earlier
+/// turns. A request that continues a prior response and a qualification probe do not.
+#[test]
+fn only_a_request_with_no_prior_response_and_no_probe_sends_the_earlier_turns() {
+    let earlier = || {
+        Some(storyos_core::EarlierTurns {
+            turns: Vec::new(),
+            older_turns_left_out: true,
+        })
+    };
+
+    assert_eq!(
+        [
+            super::sent_earlier_turns(earlier(), None, /*probe*/ false),
+            super::sent_earlier_turns(earlier(), Some("resp_1"), /*probe*/ false),
+            super::sent_earlier_turns(earlier(), None, /*probe*/ true),
+        ],
+        [earlier(), None, None]
+    );
+}

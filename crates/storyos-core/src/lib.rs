@@ -12,7 +12,6 @@ mod chapter_capture_schedule;
 mod chapter_list;
 mod compact_active_context;
 mod continuation_input;
-mod conversation_retention;
 mod create_admission;
 mod create_agent_run;
 mod create_chapter;
@@ -24,6 +23,7 @@ mod delete_memory_entry;
 mod delete_volume;
 mod deployment_destination;
 mod earlier_author_messages;
+mod earlier_turns;
 mod embedding_request;
 mod finish_rule;
 mod function_calling;
@@ -152,14 +152,14 @@ pub use compact_active_context::{
     HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER, StagedCompaction,
     SummaryObservation, active_context_input_digest, compaction_assembly_record, compaction_due,
     compaction_requested, compaction_threshold, conversation_too_long, decide_compaction_install,
-    decision_request_kind, later_request_record, later_request_too_long, next_compaction_step,
-    stage_compaction, summary_fits_item, summary_text,
+    decision_request_kind, full_decision_request_too_long, later_request_record,
+    later_request_too_long, next_compaction_step, stage_compaction, summary_fits_item,
+    summary_text,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput, PriorInput,
     continuation_boundary_matches, continuation_mapping_can_represent, map_continuation_input,
 };
-pub use conversation_retention::earlier_turns_expired;
 pub use create_admission::{
     CreateAdmission, CreateAdmissionFacts, RouteFacts, admit_create, admit_route,
 };
@@ -194,12 +194,17 @@ pub use delete_volume::{
 };
 pub use deployment_destination::{
     AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_CREDENTIAL_REFERENCE, AGENT_PLAN_ELIGIBILITY_EVIDENCE,
-    AGENT_PLAN_ENDPOINT, AGENT_PLAN_STORED_RESPONSE_RETENTION, BudgetBounds, DeploymentDestination,
-    DestinationKind, RequestBounds, RuntimeQualification,
+    AGENT_PLAN_ENDPOINT, BudgetBounds, DeploymentDestination, DestinationKind, RequestBounds,
+    RuntimeQualification,
 };
 pub use earlier_author_messages::{
     EARLIER_AUTHOR_MESSAGES_TOKEN_LIMIT, EarlierAuthorMessage, EarlierAuthorMessageSource,
     is_earlier_author_message, keep_earlier_author_messages,
+};
+pub use earlier_turns::{
+    EARLIER_TURNS_TOKEN_LIMIT, EarlierMessageKind, EarlierTurn, EarlierTurnMessage,
+    EarlierTurnSource, EarlierTurns, EarlierTurnsRecord, assemble_earlier_turns, earlier_turns_of,
+    is_earlier_turn, remove_earlier_turns, select_earlier_turns,
 };
 pub use embedding_request::{
     AGENT_PLAN_EMBEDDING_REGISTRATION, EMBEDDING_DIMENSIONS, EMBEDDING_REQUEST_BOUNDS,
@@ -432,7 +437,7 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_CHARACTER_FILE_MAPPING_REVISION, AGENT_PLAN_REGISTRATION,
+    AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION, AGENT_PLAN_REGISTRATION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };

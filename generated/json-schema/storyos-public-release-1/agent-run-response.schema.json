@@ -826,7 +826,8 @@
         "memory_delete_marks",
         "memory_entries",
         "memory_observations",
-        "character_file"
+        "character_file",
+        "earlier_answer"
       ],
       "type": "string"
     },

@@ -239,6 +239,11 @@ pub(crate) async fn create_request(
     };
     let input = record_input(record, assembly, &run.author_message);
     let context = RequestContextItem::sent(input.context, previous_response_reference.as_deref());
+    let earlier_turns = storyos_application::sent_earlier_turns(
+        input.earlier_turns,
+        previous_response_reference.as_deref(),
+        probe.is_some(),
+    );
     let purpose = match (probe, run.kind) {
         (Some(probe), _) => CreatePurpose::ToolQualification(probe.request),
         (None, storyos_core::AgentRunKind::MemoryCapture) => {
@@ -257,6 +262,7 @@ pub(crate) async fn create_request(
         passage_input: input.passage_input,
         context,
         earlier_author_messages: input.earlier_author_messages,
+        earlier_turns,
         declared_targets,
         selection_references: input.selection_references,
         previous_response_reference,
@@ -275,6 +281,7 @@ pub(crate) struct RecordInput {
     pub passage_input: Option<serde_json::Value>,
     pub context: Vec<RequestContextItem>,
     pub earlier_author_messages: Vec<String>,
+    pub earlier_turns: Option<storyos_core::EarlierTurns>,
     pub selection_references: Vec<storyos_core::AdmittedSelection>,
 }
 
@@ -287,7 +294,10 @@ pub(crate) fn record_input(
     let (earlier, current): (Vec<_>, Vec<_>) = assembly
         .selected
         .iter()
-        .filter(|item| !storyos_core::is_function_output(&assembly, item))
+        .filter(|item| {
+            !storyos_core::is_function_output(&assembly, item)
+                && !storyos_core::is_earlier_turn(&assembly, item)
+        })
         .partition(|item| storyos_core::is_earlier_author_message(&assembly, item));
     RecordInput {
         passage_resolution: assembly.operation_requirement.ordinary_resolution,
@@ -304,6 +314,7 @@ pub(crate) fn record_input(
             .into_iter()
             .map(|item| item.content.clone())
             .collect(),
+        earlier_turns: storyos_core::earlier_turns_of(&assembly),
         selection_references: assembly
             .operation_requirement
             .selection_references

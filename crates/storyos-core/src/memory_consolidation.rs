@@ -170,6 +170,7 @@ pub fn assemble_memory_consolidation_context(
             ordinary_resolution: None,
             tool_results: None,
             earlier_author_messages: None,
+            earlier_turns: None,
             skill_requirements: None,
             skill_catalog: None,
             memory_revision: Some(input.memory_revision),

@@ -70,7 +70,7 @@ Each idea must pass two questions: does it need setup before writing (then it is
 
 ## 6. Parked items from the Stage 7 work
 
-- **A Conversation that is older than the retention of the Provider.** The model does not get the earlier turns when the author continues such a Conversation. The panel shows one notice. No ticket sends the earlier author messages again.
+- **A Conversation that is older than the retention of the Provider.** Done by [#1826](https://github.com/FrankQDWang/StoryOS/issues/1826): a request with a full input and no prior response sends the earlier turns from the Host records, and the panel has no notice ([ADR 0102](docs/adr/0102-send-the-earlier-turns-of-a-project-conversation-from-the-host-records-when-a-request-has-no-prior-response.md)).
 - **No vector index.** The hybrid search reads the vectors with an exact scan in the Project Scope, because an HNSW index below the Project Isolation returned no row in the probe. The measured time was 61 to 72 ms at 20,000 rows. Look at this again when a Project is much larger. Record: [the probe](docs/research/embedding-and-pgvector-probe-2026-11-16.md).
 - **The hosted database.** The probe found that the hosted service offers PostgreSQL 15 and 17, and the repository uses PostgreSQL 16. This is an item of the deployment preparation of ADR 0022.
 - **One more request before `finish`.** In one live run of Stage 7, the model wrote text before it called `finish`, and the Run sent one more request. The release evaluation of Stage 7 looks at this.

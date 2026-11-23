@@ -55,6 +55,8 @@ The later tickets of #1507 change the request forms of `v6` again: the stub outp
   1. A necessary compaction does not install, and the expected input reaches the window after the output bound (ADR 0056). The summary request refused, no complete summary came, or the install check refused.
   2. The install check passes, but the full input of the later request reaches the window after the output bound. The full input counts each selected item of the later request (the summary, the current input, and each Tool result), each selection reference text, and each declared target text. Then the record stays `staged`, and the later request does not go out.
 
+  > Amended by [ADR 0102](0102-send-the-earlier-turns-of-a-project-conversation-from-the-host-records-when-a-request-has-no-prior-response.md) section 3 on 2026-11-23: a decision request with a full input and no prior response that does not fit is a third case.
+
   The rejection of the destination for an over-long input (`input_too_long`) stays as the last guard (ADR 0056).
 - **The install check.** The check of ADR 0055 applies to each compaction: a restricted source, missing Exact Required input, a changed input, and a summary over the item limit refuse the install.
 - **Records and the public read.** The table `active_context_compactions` has the column `decision_position`. Its unique rule goes from one record for each Run to one record for each Run and position, in the release baseline. `getAgentRun` has the optional field `compactions`: each record of the Run in RunStep order, in the form of `active_compaction`. The field is absent when the Run has no record. The field `active_compaction` stays and holds the last record. No field goes. No author view shows a summary or a compaction fact (ADR 0040).

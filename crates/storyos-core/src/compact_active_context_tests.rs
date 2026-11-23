@@ -334,15 +334,18 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
             ]
             .map(|facts| super::compaction_requested(&facts)),
             [
-                super::decision_request_kind(true, true, Some(&near_window)),
-                super::decision_request_kind(false, true, Some(&near_window)),
-                super::decision_request_kind(false, false, Some(&near_window)),
+                super::decision_request_kind(true, true, Some(&near_window), false),
+                super::decision_request_kind(false, true, Some(&near_window), false),
+                super::decision_request_kind(false, false, Some(&near_window), false),
                 super::decision_request_kind(
                     false,
                     true,
-                    Some(&facts(agent_plan, "Help again.", Some(1_015_807)))
+                    Some(&facts(agent_plan, "Help again.", Some(1_015_807))),
+                    false
                 ),
-                super::decision_request_kind(false, true, None),
+                super::decision_request_kind(false, true, None, false),
+                // A compaction that did not install left no usable prior response (ADR 0102).
+                super::decision_request_kind(false, true, None, true),
             ],
         ),
         (
@@ -353,6 +356,7 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
                 super::DecisionRequestKind::Ordinary,
                 super::DecisionRequestKind::Ordinary,
                 super::DecisionRequestKind::Ordinary,
+                super::DecisionRequestKind::TooLong,
             ],
         )
     );

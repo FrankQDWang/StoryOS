@@ -45,7 +45,7 @@ At `main` `1fc55a1b`, the Agent Plan profile v2 qualifies only transport, native
 ## Considered options
 
 - Continuation with a pending profile and no new Registration was rejected. A Registration binds an exact mapping, and a changed mapping needs a new Registration.
-- A Host-held transcript that each request sends in full was rejected for this route. The destination chain is the normal path of ADR 0033, and the Host keeps the full record.
+- A Host-held transcript that each request sends in full was rejected for this route. The destination chain is the normal path of ADR 0033, and the Host keeps the full record. A request with a full input and no prior response sends the earlier turns of the Conversation from the Host records ([ADR 0102](0102-send-the-earlier-turns-of-a-project-conversation-from-the-host-records-when-a-request-has-no-prior-response.md)).
 - An incremental input that omits an unchanged Working Target was rejected. The current target must stay correct with a cache miss or an expired chain, and the Host does not know what the destination keeps.
 - Explicit cache was deferred. It conflicts with the instructions that each request sends.
 
@@ -152,3 +152,13 @@ Other facts of the mapping `v11`:
 - The code keeps only `fa25` and the mapping `v11` (ADR 0097).
 - The Stage 11 tickets change the mapping `v11` in place until the aggregate pull request of [#1786](https://github.com/FrankQDWang/StoryOS/issues/1786) merges into `main`. The reasons are those of the amendment of 2026-11-14 above (ADR 0093 section 3).
 - [S11-12](https://github.com/FrankQDWang/StoryOS/issues/1818) changes the mapping `v11` in place by the rule of the previous item, after the live run of [#1792](https://github.com/FrankQDWang/StoryOS/issues/1792). The paragraph of `write_memory` says that a fact that the character knows goes into the entry of the author also when the author says that a later Chapter uses it, and that it is not foreshadowing. The sentences that end that paragraph say that an entry has no label, no explanation, and no title of another entry. The Host instructions of a capture and of a consolidation pass say that a detail of the narration is not what a character said. The Registration `fa25` and the Host Tool Registration keep their revisions.
+
+## Amendment 2026-11-23: the head Model Registration takes the mapping v12
+
+[ADR 0102](0102-send-the-earlier-turns-of-a-project-conversation-from-the-host-records-when-a-request-has-no-prior-response.md) section 5 ([#1826](https://github.com/FrankQDWang/StoryOS/issues/1826)) gives the mapping `storyos.volcengine-agent-plan.responses.create.v12` to a new head Model Registration. That Registration is `018f0000-0000-7001-8000-00000000fa26`.
+
+- `fa26` is Registration `fa25` with the mapping `v12`. It keeps the adapter, the API surface, the provider model, and the requirement of `fa25`.
+- It also keeps the capability profile and the request bounds of `fa25`. Thus it needs no new qualification.
+- No capability of the requirement changes. The request form changes only in a decision request of a Run of the author with a full input and no prior response.
+
+The mapping `v12` is the mapping `v11` with one change of the request form. Such a request sends the earlier turns of the Project Conversation from the Host records, in one section of the user message directly before the section `Author request` (ADR 0102 section 5). A request with no earlier-turn item has the bytes of the mapping `v11`, so a request that continues a prior response does not change. The code keeps only `fa26` and the mapping `v12` (ADR 0097).

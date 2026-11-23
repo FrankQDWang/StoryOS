@@ -1,11 +1,9 @@
 //! The reads of the Project Conversations of a Project (ADR 0094 section 10). Each read writes no
 //! row.
 
-use std::time::{Duration, SystemTime};
-
 use storyos_application::{
     ProjectConversationListItem, ProjectConversationReader, ProjectConversationRunItem,
-    ProjectReadError, ProjectScope, StoredProjectConversationRuns,
+    ProjectReadError, ProjectScope,
 };
 use storyos_core::AgentRunStatus;
 
@@ -15,11 +13,6 @@ fn status(token: &str) -> Result<AgentRunStatus, ProjectReadError> {
     AgentRunStatus::parse(token).ok_or_else(|| {
         ProjectReadError::unavailable(std::io::Error::other("the AgentRun status is invalid"))
     })
-}
-
-fn clock(micros: i64) -> Result<SystemTime, ProjectReadError> {
-    let micros = u64::try_from(micros).map_err(ProjectReadError::unavailable)?;
-    Ok(SystemTime::UNIX_EPOCH + Duration::from_micros(micros))
 }
 
 impl ProjectConversationReader for PostgresProjectReader {
@@ -95,7 +88,7 @@ impl ProjectConversationReader for PostgresProjectReader {
         scope: &ProjectScope,
         conversation_id: &str,
         limit: usize,
-    ) -> Result<Option<StoredProjectConversationRuns>, ProjectReadError> {
+    ) -> Result<Option<Vec<ProjectConversationRunItem>>, ProjectReadError> {
         let limit = i64::try_from(limit).map_err(ProjectReadError::unavailable)?;
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
@@ -117,23 +110,12 @@ impl ProjectConversationReader for PostgresProjectReader {
             transaction.commit().await.map_err(read_error)?;
             return Ok(None);
         }
-        // The newest Run event of the Conversation, over all its Runs, decides. The read time is
-        // the clock of the same database.
         let rows = transaction
             .query(
                 "SELECT run.run_id::text AS run_id, run.author_message,
                         run.chapter_id::text AS chapter_id, run.status::text AS status,
                         to_char(receipt.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS created_at,
-                        (SELECT floor(extract(epoch FROM max(event.recorded_at)) * 1000000)::bigint
-                           FROM storyos.agent_run_events AS event
-                           JOIN storyos.agent_runs AS earlier
-                             ON (earlier.owner_user_id, earlier.project_id, earlier.run_id) =
-                                (event.owner_user_id, event.project_id, event.run_id)
-                          WHERE (earlier.owner_user_id, earlier.project_id, earlier.conversation_id) =
-                                (run.owner_user_id, run.project_id, run.conversation_id))
-                          AS newest_event_at,
-                        floor(extract(epoch FROM statement_timestamp()) * 1000000)::bigint AS read_time
+                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS created_at
                    FROM storyos.agent_runs AS run
                    JOIN storyos.domain_receipts AS receipt
                      ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
@@ -152,11 +134,11 @@ impl ProjectConversationReader for PostgresProjectReader {
             .await
             .map_err(read_error)?;
         transaction.commit().await.map_err(read_error)?;
-        let Some(newest) = rows.first() else {
+        if rows.is_empty() {
             return Err(ProjectReadError::unavailable(std::io::Error::other(
                 "the Project Conversation has no Run",
             )));
-        };
+        }
         let runs = rows.iter().map(|row| {
             Ok(ProjectConversationRunItem {
                 run_id: row.get("run_id"),
@@ -166,14 +148,7 @@ impl ProjectConversationReader for PostgresProjectReader {
                 created_at: row.get("created_at"),
             })
         });
-        Ok(Some(StoredProjectConversationRuns {
-            newest_first: runs.collect::<Result<_, ProjectReadError>>()?,
-            newest_event_at: newest
-                .get::<_, Option<i64>>("newest_event_at")
-                .map(clock)
-                .transpose()?,
-            read_time: clock(newest.get("read_time"))?,
-        }))
+        Ok(Some(runs.collect::<Result<_, ProjectReadError>>()?))
     }
 }
 

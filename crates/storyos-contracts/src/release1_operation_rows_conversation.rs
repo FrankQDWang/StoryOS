@@ -85,7 +85,6 @@ pub(super) const GET_PROJECT_CONVERSATION_ROW: OperationRow = OperationRow {
       "completeness": "complete",
       "conversation_id": "018f0000-0000-7001-8000-000000000d02",
       "correlation_id": "018f0000-0000-7001-8000-000000000d11",
-      "earlier_turns_expired": false,
       "project_scope": {
         "owner_user_id": "018f0000-0000-7001-8000-000000000001",
         "project_id": "018f0000-0000-7001-8000-000000000201"

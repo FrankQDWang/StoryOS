@@ -341,6 +341,16 @@ fn current_input(create: &CreateRequest) -> serde_json::Value {
     if !create.earlier_author_messages.is_empty() {
         wire["earlier_author_messages"] = serde_json::json!(create.earlier_author_messages);
     }
+    if let Some(earlier) = &create.earlier_turns {
+        wire["earlier_turns"] = serde_json::json!({
+            "older_turns_left_out": earlier.older_turns_left_out,
+            "turns": earlier.turns.iter().map(|turn| {
+                (turn.messages.iter())
+                    .map(|message| serde_json::json!([message.source.message_kind, message.text]))
+                    .collect::<Vec<_>>()
+            }).collect::<Vec<_>>(),
+        });
+    }
     wire["declared_targets"] = create
         .declared_targets
         .iter()

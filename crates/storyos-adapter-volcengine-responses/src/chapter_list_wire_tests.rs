@@ -4,7 +4,7 @@ use storyos_core::ContextSourceClass;
 
 use crate::skill_wire_tests::{body, closing, first, item, summary};
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_CHARACTER_FILE_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION;
 
 /// The paragraph of `read_chapter` (ADR 0095 section 1).
 const READ_CHAPTER: &str = "Call read_chapter when the author request needs the text of a \

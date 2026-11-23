@@ -157,6 +157,7 @@ fn capture_text(request: &CreateRequest, kind: CaptureInputKind) -> String {
                 | ContextSourceClass::MemoryReadResult
                 | ContextSourceClass::MemorySearchResult
                 | ContextSourceClass::MemoryEntries
+                | ContextSourceClass::EarlierAnswer
                 | ContextSourceClass::MemoryObservations
                 | ContextSourceClass::CharacterFile => return None,
             };

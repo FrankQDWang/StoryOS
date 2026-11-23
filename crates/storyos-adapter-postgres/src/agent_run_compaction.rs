@@ -72,7 +72,16 @@ pub(crate) async fn advance_active_compaction(
         CompactionRecordState::Absent => summary::prior_chain(client, claim, run).await?,
         _ => None,
     };
-    let target_texts = declared_target_texts(client, claim, run, chain.as_ref()).await?;
+    // The compaction facts and the check of a full input with no prior response need the texts.
+    let target_texts = match record {
+        CompactionRecordState::Absent => declared_target_texts(client, claim, run).await?,
+        _ => Vec::new(),
+    };
+    if record == CompactionRecordState::Absent
+        && full_input_too_long(run, continues(chain.as_ref()), &target_texts)
+    {
+        return Ok(CompactionAdvance::TooLong);
+    }
     let earlier = match chain {
         Some(_) => compacted_earlier(client, claim, run).await?,
         None => false,
@@ -153,12 +162,17 @@ pub(crate) async fn advance_active_compaction(
         return Ok(advance);
     };
     let started = requested || record != CompactionRecordState::Absent;
-    let chain = if later_request || !started {
-        None
+    let (chain, target_texts) = if later_request || !started {
+        (None, Vec::new())
     } else {
-        summary::prior_chain(client, claim, run).await?
+        (
+            summary::prior_chain(client, claim, run).await?,
+            declared_target_texts(client, claim, run).await?,
+        )
     };
-    let target_texts = declared_target_texts(client, claim, run, chain.as_ref()).await?;
+    // A compaction that did not install can leave no usable prior response. Then the ordinary
+    // request sends the full input.
+    let full_too_long = full_input_too_long(run, continues(chain.as_ref()), &target_texts);
     Ok(
         match decision_request_kind(
             later_request,
@@ -167,6 +181,7 @@ pub(crate) async fn advance_active_compaction(
                 .as_ref()
                 .map(|chain| request_facts(run, chain, &target_texts, earlier))
                 .as_ref(),
+            full_too_long,
         ) {
             DecisionRequestKind::Later => CompactionAdvance::Decide {
                 later_request: true,
@@ -179,17 +194,32 @@ pub(crate) async fn advance_active_compaction(
     )
 }
 
-/// The text of each declared target that the decision request of `run` sends. With no `chain`,
-/// no compaction facts are necessary, so nothing loads.
+/// Whether the decision request sends a prior response reference. A prior binding with no
+/// reference sends the full input.
+fn continues(chain: Option<&summary::PriorChain>) -> bool {
+    chain.is_some_and(|chain| chain.reference.is_some())
+}
+
+/// Whether the decision request of `run` sends a full input that does not fit, when it has no
+/// prior response (ADR 0056, ADR 0102).
+fn full_input_too_long(run: &RunPhaseRow, prior_response: bool, target_texts: &[String]) -> bool {
+    run.disclosure_request.as_ref().is_some_and(|decision| {
+        storyos_core::full_decision_request_too_long(
+            prior_response,
+            &run.model_registration_revision,
+            &run.budget_bounds,
+            decision,
+            target_texts,
+        )
+    })
+}
+
+/// The text of each declared target that the decision request of `run` sends.
 async fn declared_target_texts(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
-    chain: Option<&summary::PriorChain>,
 ) -> Result<Vec<String>, CompleteAgentRunError> {
-    if chain.is_none() {
-        return Ok(Vec::new());
-    }
     Ok(
         crate::agent_run_create_dispatch::declared_targets(client, claim, run.chapter()?)
             .await?

@@ -67,7 +67,6 @@ pub(super) async fn get_project_conversation(
         project_scope: contract_scope(&scope),
         conversation_id,
         completeness: read.completeness,
-        earlier_turns_expired: read.earlier_turns_expired,
         runs: read
             .runs
             .into_iter()

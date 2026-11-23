@@ -101,6 +101,9 @@ pub enum ContextSourceClass {
     MemoryObservations,
     /// The Character File that an intent pass gets (ADR 0101 section 4).
     CharacterFile,
+    /// The final answer of an earlier turn of the Conversation (ADR 0102). It is model output, so
+    /// it is Data-only Context.
+    EarlierAnswer,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -169,6 +172,9 @@ pub struct OperationRequirementRecord {
     /// The earlier author messages that the later request of a compaction sends, oldest first
     /// (ADR 0093 section 6).
     pub earlier_author_messages: Option<Vec<super::EarlierAuthorMessageSource>>,
+    /// The earlier turns of the Conversation that a request with a full input and no prior
+    /// response sends (ADR 0102).
+    pub earlier_turns: Option<super::EarlierTurnsRecord>,
     /// The Skill requirements of the Run, in the order of the Skill names. Each RunStep of the
     /// Run copies them (ADR 0089 section 5).
     pub skill_requirements: Option<Vec<super::SkillRequirement>>,
@@ -336,6 +342,7 @@ pub fn assemble_current_passage_context(
             ordinary_resolution: None,
             tool_results: None,
             earlier_author_messages: None,
+            earlier_turns: None,
             skill_requirements: None,
             skill_catalog: None,
             memory_revision: None,

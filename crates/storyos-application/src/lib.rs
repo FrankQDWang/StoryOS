@@ -190,7 +190,7 @@ pub use model_gateway_ports::{
     ReferenceRetrieval, ReportedBinding, RequestAttempt, RequestBounds, RequestContextItem,
     RequestRoute, ResolvedCredential, ResponseReference, RetrievePurpose, RetrieveRequest,
     StreamControl, StreamStop, ToolOutput, ToolOutputOrigin, ToolProbeRequest,
-    WirePayloadProjection,
+    WirePayloadProjection, sent_earlier_turns,
 };
 pub use open_proposal_list::{
     OpenProposalList, OpenProposalListItem, OpenProposalListReader, list_open_proposals,
@@ -215,8 +215,8 @@ pub use project_command::{
 };
 pub use project_conversations::{
     ProjectConversationList, ProjectConversationListItem, ProjectConversationRead,
-    ProjectConversationReader, ProjectConversationRunItem, StoredProjectConversationRuns,
-    list_project_conversations, read_project_conversation,
+    ProjectConversationReader, ProjectConversationRunItem, list_project_conversations,
+    read_project_conversation,
 };
 pub use project_export::{
     ArchiveExportOperation, ArchiveExportRefusal, ExportOperationPage, ExportOperationProgress,

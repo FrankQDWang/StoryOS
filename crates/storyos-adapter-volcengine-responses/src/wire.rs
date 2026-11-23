@@ -232,6 +232,39 @@ section Memory index.";
 pub(crate) const EARLIER_AUTHOR_MESSAGES_LABEL: &str = "\
 Earlier author messages, in the exact words of the author, from before the summary, oldest first";
 
+/// The heading of the section of the earlier turns of the Conversation (ADR 0102).
+pub(crate) const EARLIER_TURNS_LABEL: &str = "\
+Earlier turns of this conversation, oldest first. Each turn has the exact words of the author and \
+your final answer. The Tool calls and the Tool results of those turns are not here";
+
+/// The line of the section of the earlier turns when the limit left out older turns (ADR 0102).
+pub(crate) const OLDER_TURNS_LEFT_OUT_LINE: &str = "Older turns are left out.";
+
+/// The section of the earlier turns: each turn with its number, oldest first, and each message
+/// with the line of its speaker (ADR 0102).
+fn earlier_turns_section(earlier: &storyos_core::EarlierTurns) -> String {
+    let turns = (earlier.turns.iter().enumerate())
+        .map(|(index, turn)| {
+            let messages = (turn.messages.iter())
+                .map(|message| {
+                    let speaker = match message.source.message_kind {
+                        storyos_core::EarlierMessageKind::Author => "Author",
+                        storyos_core::EarlierMessageKind::Answer => "Assistant",
+                    };
+                    format!("{speaker}:\n{}", message.text)
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            format!("[turn {}]\n{messages}", index + 1)
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    match earlier.older_turns_left_out {
+        true => format!("{EARLIER_TURNS_LABEL}:\n{OLDER_TURNS_LEFT_OUT_LINE}\n\n{turns}"),
+        false => format!("{EARLIER_TURNS_LABEL}:\n{turns}"),
+    }
+}
+
 /// The first paragraph of a current input that an incremental continuation sends again, so that
 /// the model reads the current input in place of the input of its earlier steps (ADR 0085).
 pub(crate) const REPLACED_INPUT_LABEL: &str = "\
@@ -525,11 +558,17 @@ fn request_text(request: &CreateRequest) -> String {
             | ContextSourceClass::MemoryDeleteMarks
             | ContextSourceClass::MemoryEntries
             | ContextSourceClass::MemoryObservations
-            | ContextSourceClass::CharacterFile => return None,
+            | ContextSourceClass::CharacterFile
+            | ContextSourceClass::EarlierAnswer => return None,
         };
         Some(format!("{heading}:\n{}", item.content))
     }));
     for item in &request.context {
+        if let Some(earlier) = &request.earlier_turns
+            && item.source_class == ContextSourceClass::AuthorInstruction
+        {
+            sections.push(earlier_turns_section(earlier));
+        }
         if item.source_class == ContextSourceClass::AuthorInstruction
             && !request.earlier_author_messages.is_empty()
         {
@@ -563,6 +602,8 @@ fn request_text(request: &CreateRequest) -> String {
             | ContextSourceClass::MemoryEntries
             | ContextSourceClass::MemoryObservations
             | ContextSourceClass::CharacterFile => continue,
+            // The earlier turns go in their own section before the author request.
+            ContextSourceClass::EarlierAnswer => continue,
             ContextSourceClass::AuthorInstruction => "Author request",
             ContextSourceClass::WorkingTarget => {
                 sections.extend(skills.take().into_iter().flatten());
