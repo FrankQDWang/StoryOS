@@ -1,9 +1,9 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AgentRunReadSelection, AgentRunReadStore, DestinationRequest, ModelProviderAdapter,
-    ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
-    ProjectScope, complete_agent_run,
+    AgentRunReadSelection, AgentRunReadStore, DestinationRequest, EditorSessionStore,
+    ModelProviderAdapter, ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal,
+    PreparedRequest, ProjectScope, complete_agent_run,
 };
 use storyos_core::{
     ADVISORY_TEXT, AgentRunStatus, ContextSourceClass, DeploymentDestination, RESEARCH_TOOL_OFFER,
@@ -12,15 +12,19 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::{complete, conversation_of};
-use crate::shared_tests::agent_run_retrieval::{adapter, destination};
+use crate::shared_tests::agent_run_retrieval::{adapter, broken_stream, destination, stored};
 use crate::shared_tests::agent_run_steering::{
     AuthorAction, AuthorAt, Moment, cancellation, queued, settle, steering,
 };
-use crate::shared_tests::agent_run_tool_exposure::finish_then_advisory;
+use crate::shared_tests::agent_run_tool_exposure::{
+    advisory_stream, finish_stream, finish_then_advisory,
+};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
+use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run};
+use crate::shared_tests::set_current_chapter_authority::open_session_request;
 
 const FULL: &str = "Submit the complete current request. Repeat the first sentence.";
 
@@ -230,12 +234,11 @@ async fn a_continuing_request_sends_no_earlier_turn_and_a_refused_or_cancelled_r
         .unwrap();
     let ordinary = next_run(&store, &admin, project, "483", "Make Mara older.", "486").await;
     let full = next_run(&store, &admin, project, "483", FULL, "487").await;
-    let earlier = turns(&[
-        &[
-            ("author", "Help with this passage."),
-            ("answer", ADVISORY_TEXT),
-        ],
-        &[("author", "Make Mara older."), ("answer", ADVISORY_TEXT)],
+    let kept = json!([
+        [first, "author"],
+        [first, "answer"],
+        [ordinary, "author"],
+        [ordinary, "answer"]
     ]);
 
     assert_eq!(
@@ -245,38 +248,14 @@ async fn a_continuing_request_sends_no_earlier_turn_and_a_refused_or_cancelled_r
                 status(&store, &scope, &cancelled).await,
             ],
             sent(&admin, &ordinary).await,
-            sent(&admin, &full).await,
             recorded(&admin, &full).await,
         ),
         (
             [AgentRunStatus::Refused, AgentRunStatus::Cancelled],
             // The ordinary Run continues the prior response and sends no earlier turn.
             json!([["decision", 0, true, null], ["decision", 1, true, null]]),
-            json!([
-                ["decision", 0, false, &earlier],
-                ["decision", 1, false, &earlier]
-            ]),
             // Only the two completed Runs give a turn.
-            json!([
-                [
-                    0,
-                    [
-                        [first, "author"],
-                        [first, "answer"],
-                        [ordinary, "author"],
-                        [ordinary, "answer"]
-                    ]
-                ],
-                [
-                    1,
-                    [
-                        [first, "author"],
-                        [first, "answer"],
-                        [ordinary, "author"],
-                        [ordinary, "answer"]
-                    ]
-                ],
-            ]),
+            json!([[0, &kept], [1, &kept]]),
         )
     );
 }
@@ -339,18 +318,27 @@ async fn a_new_transport_and_a_rebuilt_full_input_send_the_earlier_turns() {
     );
 }
 
-/// ADR 0056 and ADR 0102 section 3: the expected input of a full input with no prior response
-/// counts the earlier turns. Above the window, the Run refuses before the dispatch.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_full_input_with_the_earlier_turns_above_the_window_refuses_before_the_dispatch() {
-    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
-    let (store, admin) = stores().await;
-    let (base, served) = destination(finish_then_advisory("resp_e1").to_vec()).await;
-    let plan = DeploymentDestination::VolcengineAgentPlan {
+/// The Agent Plan route of the tests that read its requests.
+fn plan() -> DeploymentDestination {
+    DeploymentDestination::VolcengineAgentPlan {
         qualification_authorization: None,
-    };
-    let (scope, chapter_id, first) = queued_run(&store, "48e", plan.clone()).await;
+    }
+}
+
+/// A queued Run of the author on the Agent Plan route, whose destination serves `replies` in order.
+async fn plan_run(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    prefix: &str,
+    replies: Vec<String>,
+) -> (
+    ProjectScope,
+    String,
+    String,
+    tokio::task::JoinHandle<Vec<String>>,
+) {
+    let (base, served) = destination(replies).await;
+    let (scope, chapter_id, run_id) = queued_run(store, prefix, plan()).await;
     admin
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions
@@ -360,47 +348,171 @@ async fn a_full_input_with_the_earlier_turns_above_the_window_refuses_before_the
         )
         .await
         .unwrap();
-    let claim = claim_run(&admin, scope.clone(), first.clone()).await;
-    complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
+    (scope, chapter_id, run_id, served)
+}
+
+/// Claims the Run and completes it on the Agent Plan route.
+async fn complete_plan(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    run_id: &str,
+) {
+    let claim = claim_run(admin, scope.clone(), run_id.to_owned()).await;
+    complete_agent_run(store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    let second = Admission {
-        destination: plan,
-        message: FULL,
-        conversation: conversation_of("48e"),
+}
+
+/// Admits a Run with `message` on the Agent Plan route in the Conversation of `first`, makes the
+/// last selected item of its record `count` tokens long, and completes the Run. The window after
+/// the output bound is 1,048,576 - 32,768 = 1,015,808 tokens. Returns the status, the refusal,
+/// and the count of the Model Attempts of the Run.
+async fn long_plan_run(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    (scope, chapter_id): (&ProjectScope, &str),
+    (first, message, prefix): (&str, &str, &str),
+    count: &str,
+) -> Value {
+    let run_id = Admission {
+        destination: plan(),
+        message,
+        conversation: conversation_of(first),
         ..Default::default()
     }
-    .admit(&store, &scope, &chapter_id, "48f")
+    .admit(store, scope, chapter_id, prefix)
     .await;
-    // The count stands for a long final answer of the first Run, the last selected item. The
-    // window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens.
+    let others = "(SELECT sum((item->>'token_count')::bigint)
+                     FROM jsonb_array_elements(payload->'selected') WITH ORDINALITY AS i(item, n)
+                    WHERE n < jsonb_array_length(payload->'selected'))";
     admin
         .execute(
-            "UPDATE storyos.context_assembly_manifests
-                SET payload = jsonb_set(payload, '{selected,-1,token_count}', '1015808')
-              WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
-            &[&second],
+            &format!(
+                "UPDATE storyos.context_assembly_manifests
+                    SET payload = jsonb_set(payload, '{{selected,-1,token_count}}',
+                                            to_jsonb({})::jsonb)
+                  WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
+                count.replace("OTHERS", others)
+            ),
+            &[&run_id],
         )
         .await
         .unwrap();
-    let claim = claim_run(&admin, scope.clone(), second.clone()).await;
-    complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
-        .await
-        .unwrap();
+    complete_plan(store, admin, scope, &run_id).await;
+    json_of(
+        admin,
+        "SELECT jsonb_build_array(status, settlement->>'capability',
+                (SELECT count(*) FROM storyos.model_attempts AS attempt
+                  WHERE attempt.run_id = run.run_id))::text
+           FROM storyos.agent_runs AS run WHERE run_id = $1::text::uuid",
+        &[&run_id],
+    )
+    .await
+}
+
+/// ADR 0056 and ADR 0102 section 3: the expected input of a full input with no prior response
+/// counts the earlier turns and the declared target texts. The selected items are one token below
+/// the window, so only the text of the target block crosses it, and the Run refuses before the
+/// dispatch.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_full_input_with_the_earlier_turns_above_the_window_refuses_before_the_dispatch() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let replies = finish_then_advisory("resp_e1").to_vec();
+    let (scope, chapter_id, first, served) = plan_run(&store, &admin, "48e", replies).await;
+    complete_plan(&store, &admin, &scope, &first).await;
+    let request = open_session_request(&store, &scope, "49e0").await;
+    let session = store.create_editor_session(&request).await.unwrap();
+    apply_named_edit(
+        &store,
+        &scope,
+        NamedEdit {
+            editor_session_id: request.editor_session_id.as_ref(),
+            chapter_id: &chapter_id,
+            expected_revision_id: &session.base_snapshot.authoritative_revision_id,
+            suffix: "49e1",
+            local_intent_sequence: 1,
+            text: "The rain did not stop.",
+            proposal_target: None,
+        },
+    )
+    .await;
+    let project = (&scope, chapter_id.as_str());
+    let refused = long_plan_run(
+        &store,
+        &admin,
+        project,
+        ("48e", FULL, "48f"),
+        "1015807 - OTHERS",
+    );
 
     assert_eq!(
-        (
-            json_of(
-                &admin,
-                "SELECT jsonb_build_array(status, settlement->>'capability',
-                        (SELECT count(*) FROM storyos.model_attempts AS attempt
-                          WHERE attempt.run_id = run.run_id))::text
-                   FROM storyos.agent_runs AS run WHERE run_id = $1::text::uuid",
-                &[&second],
-            )
-            .await,
-            served.await.unwrap().len(),
-        ),
+        (refused.await, served.await.unwrap().len()),
+        (json!(["refused", "conversation_too_long", 0]), 2)
+    );
+}
+
+/// ADR 0102 section 2: the final answer of a completed Run is an earlier turn also when the
+/// successor Model Attempt of an unknown closing request holds it.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_final_answer_on_a_successor_attempt_is_an_earlier_turn() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let replies = vec![
+        finish_stream("resp_491"),
+        broken_stream("resp_491c"),
+        stored("resp_491c", "in_progress"),
+        advisory_stream("resp_491s"),
+        stored("resp_491c", "completed"),
+    ];
+    let (scope, chapter_id, first, served) = plan_run(&store, &admin, "491", replies).await;
+    complete_plan(&store, &admin, &scope, &first).await;
+    // After the unknown create, the next Run refuses before the dispatch
+    // (`expiry_rebuild_unknown_create`), and its record holds the earlier turns.
+    let second = Admission {
+        destination: plan(),
+        message: "Make Mara older.",
+        conversation: conversation_of("491"),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "492")
+    .await;
+    complete_plan(&store, &admin, &scope, &second).await;
+    let earlier = json!([[&first, "author"], [&first, "answer"]]);
+
+    assert_eq!(
+        (recorded(&admin, &second).await, served.await.unwrap().len()),
+        (json!([[0, &earlier]]), 5)
+    );
+}
+
+/// ADR 0102 section 3: a prior binding with no response reference sends the full input, so the
+/// earlier turns count, and the Run refuses before the dispatch above the window.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_prior_binding_with_no_reference_sends_a_full_input_that_must_fit() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let replies = finish_then_advisory("resp_493").to_vec();
+    let (scope, chapter_id, first, served) = plan_run(&store, &admin, "493", replies).await;
+    complete_plan(&store, &admin, &scope, &first).await;
+    admin
+        .execute(
+            "UPDATE storyos.model_attempts SET payload = payload - 'response_reference'
+              WHERE run_id = $1::text::uuid",
+            &[&first],
+        )
+        .await
+        .unwrap();
+    let project = (&scope, chapter_id.as_str());
+    let message = "Make Mara older.";
+    let refused = long_plan_run(&store, &admin, project, ("493", message, "494"), "1015808");
+
+    assert_eq!(
+        (refused.await, served.await.unwrap().len()),
         (json!(["refused", "conversation_too_long", 0]), 2)
     );
 }

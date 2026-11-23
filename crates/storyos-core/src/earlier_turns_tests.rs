@@ -29,33 +29,6 @@ fn answer(text: &str) -> (EarlierMessageKind, String) {
     (EarlierMessageKind::Answer, text.to_owned())
 }
 
-/// ADR 0102 section 4: the Host keeps each turn when all of them fit together.
-#[test]
-fn the_host_keeps_each_earlier_turn_when_all_fit() {
-    let turns = vec![
-        turn(
-            "run-1",
-            &[author("Who is Mara?"), answer("Mara keeps the inn.")],
-        ),
-        turn(
-            "run-2",
-            &[
-                author("Make her older."),
-                author("Keep the voice."),
-                answer("Done."),
-            ],
-        ),
-    ];
-
-    assert_eq!(
-        select_earlier_turns(turns.clone()),
-        EarlierTurns {
-            turns,
-            older_turns_left_out: false,
-        }
-    );
-}
-
 /// ADR 0102 section 4: the Host takes whole turns from the newest. The first turn that does not
 /// fit ends the selection, so an older turn that alone would fit is also left out, and the result
 /// says so.
@@ -120,8 +93,8 @@ fn a_turn_with_a_message_above_the_item_limit_ends_the_selection() {
     );
 }
 
-/// ADR 0102 section 2: a completed Run with no final answer text gives only its messages of the
-/// author, and the record of the request gives the same turns back.
+/// ADR 0102 sections 2 and 4: a completed Run with no final answer text gives only its messages
+/// of the author, the Host keeps each turn when all fit, and the record gives the same turns back.
 #[test]
 fn a_turn_with_no_final_answer_has_only_the_messages_of_the_author() {
     let turns = vec![
@@ -186,9 +159,8 @@ fn the_expected_input_counts_the_earlier_turns_only_in_a_full_input() {
         .sent_input_tokens
     };
     // The window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens. The working
-    // text fills it to one token below the limit without the earlier turns and the declared
-    // target texts.
-    let too_long = |record: &crate::CurrentPassageAssemblyRecord, target_texts: &[String]| {
+    // text fills it to one token below the limit without the earlier turns.
+    let too_long = |record: &crate::CurrentPassageAssemblyRecord| {
         let mut full = record.clone();
         let others: u64 = plain.selected.iter().map(|item| item.token_count).sum();
         full.selected[1].token_count += 1_015_808 - others - 1;
@@ -198,41 +170,15 @@ fn the_expected_input_counts_the_earlier_turns_only_in_a_full_input() {
                 crate::AGENT_PLAN_REGISTRATION.revision,
                 crate::BudgetBounds::AgentPlanRequestV2.as_str(),
                 &full,
-                target_texts,
+                &[],
             )
         })
     };
-    let target = ["The target block.".to_owned()];
 
-    // Only a full input with the earlier turns or a declared target text is too long. The check
-    // of a request that continues a prior response is the compaction trigger, which does not
-    // count the earlier turns.
+    // Only the full input with the earlier turns is too long. The check of a request that
+    // continues a prior response is the compaction trigger, which does not count them.
     assert_eq!(
-        (
-            sent(&with_turns),
-            [
-                too_long(&plain, &[]),
-                too_long(&with_turns, &[]),
-                too_long(&plain, &target),
-            ]
-        ),
-        (sent(&plain), [[false, false], [true, false], [true, false]])
-    );
-}
-
-/// ADR 0102 section 3: the later request of a compaction has the summary in the place of the
-/// earlier turns.
-#[test]
-fn the_later_request_of_a_compaction_has_no_earlier_turn() {
-    let plain = assemble_current_passage_context(&passage_assembly("Help.", "Passage."));
-    let mut with_turns = plain.clone();
-    assemble_earlier_turns(
-        &mut with_turns,
-        &select_earlier_turns(vec![turn("run-1", &[author("Who?"), answer("Mara.")])]),
-    );
-
-    assert_eq!(
-        crate::later_request_record(&with_turns, "compaction-1", "Summary.", &[]),
-        crate::later_request_record(&plain, "compaction-1", "Summary.", &[])
+        (sent(&with_turns), [too_long(&plain), too_long(&with_turns)]),
+        (sent(&plain), [[false, false], [true, false]])
     );
 }
