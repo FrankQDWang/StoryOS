@@ -143,7 +143,7 @@ fn target() -> DeclaredTarget {
 }
 
 /// A mapping that no current Registration binds. The adapter refuses its request (ADR 0097).
-pub(crate) const EARLIER_MAPPING: &str = "storyos.volcengine-agent-plan.responses.create.v12";
+pub(crate) const EARLIER_MAPPING: &str = "storyos.volcengine-agent-plan.responses.create.v10";
 
 /// The Host instructions of the first request of the current mapping with no Skill, Chapter,
 /// or Memory item and no Tool output.
