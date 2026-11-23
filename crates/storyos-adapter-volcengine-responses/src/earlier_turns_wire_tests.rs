@@ -1,6 +1,7 @@
 use serde_json::json;
 use storyos_application::{
-    CreateRequest, DestinationRequest, ModelProviderAdapter, RequestAttempt, RequestRoute,
+    CreateRequest, DestinationRequest, ModelProviderAdapter, PreDispatchRefusal, RequestAttempt,
+    RequestRoute,
 };
 use storyos_core::{
     EarlierMessageKind, EarlierTurn, EarlierTurnMessage, EarlierTurnSource, EarlierTurns,
@@ -95,4 +96,35 @@ async fn the_request_sends_the_earlier_turns_directly_before_the_author_request(
         ],
         [text(""), text("Older turns are left out.\n\n")]
     );
+}
+
+/// ADR 0097: the adapter refuses a decision request of another mapping before the dispatch, also
+/// with earlier turns.
+#[tokio::test]
+async fn the_adapter_refuses_a_decision_request_of_another_mapping() {
+    let route = RequestRoute {
+        mapping_revision: storyos_core::HOST_FAKE_TOOL_LOOP_MAPPING_REVISION.to_owned(),
+        ..route("http://127.0.0.1:9")
+    };
+    let DestinationRequest::Create(request) = create(route, RequestAttempt::New) else {
+        unreachable!("create() makes a Create request")
+    };
+    let adapter = AgentPlanResponses {
+        resolver: CanaryResolver::default(),
+    };
+    let refused = adapter
+        .prepare(&DestinationRequest::Create(CreateRequest {
+            earlier_turns: Some(EarlierTurns {
+                turns: vec![turn(
+                    "run-1",
+                    &[(EarlierMessageKind::Author, "Who is Mara?")],
+                )],
+                older_turns_left_out: false,
+            }),
+            ..request
+        }))
+        .await
+        .err();
+
+    assert_eq!(refused, Some(PreDispatchRefusal::UnsupportedRequest));
 }
