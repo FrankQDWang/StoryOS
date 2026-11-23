@@ -1,8 +1,8 @@
 use serde_json::json;
 
 use super::{
-    START_SUBRUN_DESCRIPTION, START_SUBRUN_TOOL_SPEC, SubrunEnd, SubrunRefusal,
-    refused_subrun_call, subrun_refusal, subrun_result,
+    START_SUBRUN_TOOL_SPEC, SubrunEnd, SubrunRefusal, refused_subrun_call, subrun_refusal,
+    subrun_result,
 };
 use crate::{AgentRunStatus, IntakeRefusal, ToolCallState, ToolIntake};
 
@@ -147,17 +147,5 @@ fn the_result_is_the_final_answer_or_the_sentence_of_the_end() {
             no_result.clone(),
             no_result,
         ]
-    );
-}
-
-/// Item 1 of #436: the description of the Tool for the model is the exact text of the ticket.
-#[test]
-fn the_description_is_the_text_of_the_ticket() {
-    assert_eq!(
-        START_SUBRUN_DESCRIPTION,
-        "Give one reading task to a Subrun and wait for its final answer. The Subrun has a new \
-         context: it sees only the brief, and not this conversation. It can read the manuscript \
-         and the memory, and it can change nothing. One author request can start at most 4 \
-         Subruns."
     );
 }

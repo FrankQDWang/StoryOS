@@ -109,9 +109,18 @@ async fn a_lost_lease_of_the_parent_continues_the_same_fourth_subrun() {
     // The fake destination answers the brief of each Subrun with its advice text.
     let answer = storyos_core::ADVISORY_TEXT;
 
+    // The work of the fourth Subrun stopped after its first claim, and the next claim of the
+    // parent continued the same Subrun.
     assert_eq!(
         end,
         json!([
+            true,
+            [
+                ["completed", 3],
+                ["completed", 3],
+                ["completed", 3],
+                ["claimed", 1]
+            ],
             true,
             [
                 ["settled", null, answer],
@@ -119,8 +128,7 @@ async fn a_lost_lease_of_the_parent_continues_the_same_fourth_subrun() {
                 ["settled", null, answer],
                 ["settled", null, answer]
             ],
-            "completed",
-            4
+            "completed"
         ])
     );
 }

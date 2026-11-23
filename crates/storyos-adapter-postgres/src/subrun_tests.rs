@@ -90,7 +90,8 @@ async fn parent(
 }
 
 /// Starts a Subrun of the first ToolCall of the Run `parent_run_id` with `brief`, as the work of
-/// that call does in the transaction of the parent.
+/// that call does in the transaction of the parent. The parent then has a claim with its lease,
+/// so the claim of the Subrun is valid.
 async fn start(
     store: &PostgresProjectReader,
     admin: &Client,
@@ -126,6 +127,15 @@ async fn start(
     .await
     .unwrap();
     transaction.commit().await.unwrap();
+    admin
+        .execute(
+            "UPDATE storyos.agent_runs
+                SET status = 'claimed', lease_expires_at = clock_timestamp() + interval '1 hour'
+              WHERE run_id = $1::text::uuid",
+            &[&parent_run_id],
+        )
+        .await
+        .unwrap();
     subrun
 }
 
@@ -169,16 +179,16 @@ pub(super) async fn records(admin: &Client, run_id: &str) -> Value {
     .await
 }
 
-/// Whether the Memory Index of the first RunStep of the Run has `text`.
-async fn index_has(admin: &Client, run_id: &str, text: &str) -> Value {
+/// Whether the item of the source class `class` of the first RunStep of the Run has `text`.
+async fn item_has(admin: &Client, run_id: &str, class: &str, text: &str) -> Value {
     json_of(
         admin,
         "SELECT to_jsonb(strpos(item ->> 'content', $2) > 0)::text
            FROM storyos.context_assembly_manifests AS manifest,
                 jsonb_array_elements(manifest.payload -> 'selected') AS item
           WHERE manifest.run_id = $1::text::uuid AND manifest.manifest_role = 'decision'
-            AND manifest.decision_position = 0 AND item ->> 'source_class' = 'memory_index'",
-        &[&run_id, &text],
+            AND manifest.decision_position = 0 AND item ->> 'source_class' = $3",
+        &[&run_id, &text, &class],
     )
     .await
 }
@@ -197,6 +207,14 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, parent_run_id) = parent(&store, &admin, "670", "671").await;
+    // A later Memory revision and a later Project Instruction do not change the Subrun.
+    write_versions(
+        &admin,
+        &scope,
+        &[(1, 2, 3, "current", "character", "林舟", "年老的船夫。")],
+    )
+    .await;
+    applied(&save(&store, &scope, 0x67e0, "用第一人称。", 1).await);
     let subrun = start(
         &store,
         &admin,
@@ -246,10 +264,13 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
         "finish"
     ]);
 
-    // A parent with no Memory use: its Conversation gets settings with `use_enabled = false`.
+    // A parent with no Memory use: its Conversation, which has no working Run, gets settings
+    // with `use_enabled = false`.
     admin
         .batch_execute(&format!(
-            "UPDATE storyos.conversation_memory_settings SET is_current = FALSE
+            "UPDATE storyos.agent_runs SET status = 'completed'
+              WHERE run_id = '{parent_run_id}'::uuid;
+             UPDATE storyos.conversation_memory_settings SET is_current = FALSE
               WHERE project_id = '{project}'::uuid;
              INSERT INTO storyos.conversation_memory_settings
              SELECT (jsonb_populate_record(NULL::storyos.conversation_memory_settings,
@@ -290,14 +311,18 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
 
     assert_eq!(
         (
-            index_has(&admin, &parent_run_id, INTENT).await,
-            index_has(&admin, &subrun, INTENT).await,
-            index_has(&admin, &subrun, "沈月").await,
+            item_has(&admin, &parent_run_id, "memory_index", INTENT).await,
+            item_has(&admin, &subrun, "memory_index", INTENT).await,
+            item_has(&admin, &subrun, "memory_index", "沈月").await,
+            item_has(&admin, &subrun, "memory_index", "沉默的船夫。").await,
+            item_has(&admin, &subrun, "instruction_binding", "用第三人称。").await,
             requests(&admin, &no_memory).await[0].clone(),
         ),
         (
             json!(true),
             json!(false),
+            json!(true),
+            json!(true),
             json!(true),
             json!([
                 0,
@@ -602,8 +627,10 @@ impl storyos_application::ContractFaultObserver for AtDispatch<'_> {
 
 /// Runs a parent Run of `prefixes` with the author message `script` while the observer runs
 /// `statement` at the `nth` dispatch claim, then completes the parent when its claim stopped.
-/// Gives whether the first claim of the parent stopped with a stale fence, the `start_subrun`
-/// calls, the status of the parent, and the count of its Subruns.
+/// Gives whether the first claim of the parent stopped with a stale fence, the status and the
+/// count of the decision Model Attempts of each Subrun in the order of the calls at that stop,
+/// whether the completion kept the same Subruns, the `start_subrun` calls, and the status of the
+/// parent.
 pub(super) async fn stopped_end(
     store: &PostgresProjectReader,
     admin: &Client,
@@ -624,15 +651,38 @@ pub(super) async fn stopped_end(
         complete_agent_run(store, &FakeDestination, &observer, &RuntimeClock, &claim).await,
         Err(storyos_application::CompleteAgentRunError::StaleFence)
     );
+    let (before, states) = (
+        subruns(admin, &run_id).await,
+        subrun_states(admin, &run_id).await,
+    );
     if stopped {
         complete(store, admin, &scope, &run_id).await;
     }
     json!([
         stopped,
+        states,
+        subruns(admin, &run_id).await == before,
         subrun_calls(admin, &run_id).await,
         records(admin, &run_id).await[1],
-        subruns(admin, &run_id).await.len(),
     ])
+}
+
+/// The status and the count of the decision Model Attempts of each Subrun of the Run, in the
+/// order of the calls.
+async fn subrun_states(admin: &Client, run_id: &str) -> Value {
+    json_of(
+        admin,
+        "SELECT COALESCE(jsonb_agg(jsonb_build_array(run.status,
+                  (SELECT count(*) FROM storyos.model_attempts AS attempt
+                    WHERE attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'))
+                  ORDER BY call.decision_position, call.call_position), '[]')::text
+           FROM storyos.subrun_requests AS request
+           JOIN storyos.tool_calls AS call ON call.tool_call_id = request.parent_tool_call_id
+           JOIN storyos.agent_runs AS run ON run.run_id = request.subrun_run_id
+          WHERE request.parent_run_id = $1::text::uuid",
+        &[&run_id],
+    )
+    .await
 }
 
 /// Items 3 and 7 of #436: the Worker never selects a queued Subrun, or a claimed Subrun whose

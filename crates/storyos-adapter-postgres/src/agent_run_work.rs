@@ -178,6 +178,10 @@ impl RunPhaseRow {
 
 /// Locks the fenced AgentRun row with its active decision Context Assembly and Model Attempt.
 /// When a compaction committed the Context Assembly of the later request, that one is active.
+/// The claim of a Subrun is valid only while the claim of its parent Run has its lease, so a
+/// pause, a cancellation, or a lost lease of the parent stops the work of the Subrun, and the
+/// stopped work records no response. A cancelled Subrun keeps its claim for the duties of a
+/// cancelled Run (ADR 0103 section 3A).
 pub(crate) async fn load_run_phase(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -249,6 +253,15 @@ pub(crate) async fn load_run_phase(
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid
                 AND run.fence_token = $4
+                AND (run.run_kind <> 'subrun' OR run.status = 'cancelled' OR EXISTS (
+                  SELECT 1 FROM storyos.subrun_requests AS request
+                    JOIN storyos.agent_runs AS parent
+                      ON (parent.owner_user_id, parent.project_id, parent.run_id) =
+                         (request.owner_user_id, request.project_id, request.parent_run_id)
+                   WHERE (request.owner_user_id, request.project_id, request.subrun_run_id) =
+                         (run.owner_user_id, run.project_id, run.run_id)
+                     AND parent.status = 'claimed'
+                     AND parent.lease_expires_at > clock_timestamp()))
               FOR UPDATE OF run",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
