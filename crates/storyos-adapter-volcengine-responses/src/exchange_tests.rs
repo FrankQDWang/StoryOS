@@ -143,7 +143,7 @@ fn target() -> DeclaredTarget {
 }
 
 /// A mapping that no current Registration binds. The adapter refuses its request (ADR 0097).
-pub(crate) const EARLIER_MAPPING: &str = "storyos.volcengine-agent-plan.responses.create.v10";
+pub(crate) const EARLIER_MAPPING: &str = "storyos.volcengine-agent-plan.responses.create.v12";
 
 /// The Host instructions of the first request of the current mapping with no Skill, Chapter,
 /// or Memory item and no Tool output.
@@ -171,7 +171,7 @@ pub(crate) fn route(endpoint: &str) -> RequestRoute {
     RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
         provider_model_id: "doubao-seed-2.1-pro".to_owned(),
-        mapping_revision: storyos_core::AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION.to_owned(),
+        mapping_revision: storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION.to_owned(),
         endpoint: Some(endpoint.to_owned()),
         credential_reference: Some(CredentialReference(
             storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned(),
@@ -387,7 +387,7 @@ async fn a_continuation_sends_the_prior_reference_with_the_current_instructions_
         ),
         (
             Some(PreDispatchRefusal::UnsupportedRequest),
-            storyos_core::AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION.to_owned(),
+            storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION.to_owned(),
             Some(CacheSetting::DestinationDefault),
             json!("resp_01"),
             true,
@@ -465,7 +465,7 @@ async fn a_summary_request_sends_only_the_summary_instruction_and_the_prior_refe
             ..request
         })
     };
-    let compaction = storyos_core::AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION;
+    let compaction = storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION;
     let refused = [
         adapter
             .prepare(&summary(compaction, /*reference*/ None))

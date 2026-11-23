@@ -8,7 +8,7 @@ use crate::AgentPlanResponses;
 use crate::skill_wire_tests::{body, first, item};
 use crate::tests::CanaryResolver;
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION;
 const ENTRY_1: &str = "{\"changed_at\":\"2026-11-17T10:00:00Z\",\"description\":\"渡口的船夫。\",\
                        \"id\":1,\"origin\":\"author_request\",\"text\":\"林舟撑船。\",\
                        \"title\":\"林舟\",\"type\":\"character\"}";
@@ -46,7 +46,7 @@ fn pass(
 }
 
 /// A pass of the head Registration with the entries in two items, an observation, and the marks.
-fn full() -> CreateRequest {
+pub(crate) fn full() -> CreateRequest {
     pass(
         vec![
             item(ContextSourceClass::MemoryEntries, ENTRY_1),

@@ -17,6 +17,7 @@ mod search_manuscript_plan;
 mod search_memory_plan;
 mod skill_resource_plan;
 mod tool_loop_plan;
+mod update_plan_plan;
 mod write_memory_plan;
 
 pub use embedding::{
@@ -25,6 +26,7 @@ pub use embedding::{
 };
 pub use load_plan::LOAD_REASON;
 pub use tool_loop_plan::LIMIT_ANSWER;
+pub use update_plan_plan::{UPDATE_PLAN_SCRIPT, UPDATE_PLAN_STEPS};
 
 use storyos_application::{
     CacheUse, CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter,

@@ -366,8 +366,9 @@ fn the_snapshot_record_decodes_to_the_pinned_exposure() {
             ExposureSnapshot::decode(Some(&damaged)),
         ),
         (
-            // Two research Tools and seven Host Tools (ADR 0095 section 1, ADR 0094 section 5).
-            9,
+            // Two research Tools and eight Host Tools (ADR 0095 section 1, ADR 0094 section 5, ADR
+            // 0103 section 2).
+            10,
             Some(ExposureSnapshot::empty()),
             Some(ExposureSnapshot::empty()),
             None

@@ -1,6 +1,7 @@
 //! The manuscript Tool uses of a Run, for the Run read (ADR 0095 section 1). This module reads
 //! the stored `read_chapter`, `search_manuscript`, and `hybrid_search_manuscript` calls of the
-//! Run, and the Core rule `manuscript_uses` decides the entries.
+//! Run, and the Core rule `manuscript_uses` decides the entries. It also reads the stored
+//! `update_plan` calls, and the Core rule `run_plan` decides the plan (ADR 0103 section 2).
 
 use storyos_application::{CreateAgentRunError, ProjectScope};
 use storyos_core::{
@@ -37,6 +38,23 @@ pub(crate) async fn load(
         })
         .collect();
     Ok(storyos_core::manuscript_uses(&calls))
+}
+
+/// The plan of the Run `run_id` from its stored `update_plan` calls (ADR 0103 section 2).
+pub(crate) async fn load_plan(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    run_id: &str,
+) -> Result<Option<Vec<storyos_core::PlanStep>>, CreateAgentRunError> {
+    let revisions = [storyos_core::UPDATE_PLAN_TOOL_SPEC.revision];
+    let stored = stored_calls(client, scope, run_id, &revisions).await?;
+    let calls: Vec<storyos_core::StoredPlanCall<'_>> = (stored.iter())
+        .map(|call| storyos_core::StoredPlanCall {
+            state: call.state,
+            arguments: &call.arguments,
+        })
+        .collect();
+    Ok(storyos_core::run_plan(&calls))
 }
 
 /// One stored ToolCall of a Run, for a read of the Tool uses of the Run.
@@ -91,3 +109,7 @@ pub(crate) async fn stored_calls(
 #[cfg(test)]
 #[path = "agent_run_manuscript_uses_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "agent_run_plan_tests.rs"]
+mod plan_tests;

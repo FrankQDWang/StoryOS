@@ -4,7 +4,7 @@ use storyos_core::ContextSourceClass;
 
 use crate::skill_wire_tests::{body, closing, first, item, summary};
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION;
 
 /// The paragraph of `read_chapter` (ADR 0095 section 1).
 const READ_CHAPTER: &str = "Call read_chapter when the author request needs the text of a \
@@ -141,7 +141,7 @@ async fn the_read_chapter_and_search_paragraphs_follow_the_chapter_list_paragrap
         (
             instructions(&declared),
             no_search.clone(),
-            names[names.len() - 4..].to_vec(),
+            names[names.len() - 5..].to_vec(),
         ),
         (
             format!("{no_read}\n\n{READ_CHAPTER}\n\n{SEARCH_MANUSCRIPT}"),
@@ -150,6 +150,7 @@ async fn the_read_chapter_and_search_paragraphs_follow_the_chapter_list_paragrap
                 "read_chapter",
                 "search_manuscript",
                 "write_memory",
+                "update_plan",
                 "finish"
             ],
         )
@@ -191,8 +192,8 @@ async fn the_current_mapping_declares_the_hybrid_search_after_the_keyword_search
     assert_eq!(
         (
             &declared["instructions"],
-            names[names.len() - 4..].to_vec(),
-            &declared["tools"][names.len() - 3],
+            names[names.len() - 5..].to_vec(),
+            &declared["tools"][names.len() - 4],
         ),
         (
             &plain["instructions"],
@@ -200,6 +201,7 @@ async fn the_current_mapping_declares_the_hybrid_search_after_the_keyword_search
                 "search_manuscript",
                 "hybrid_search_manuscript",
                 "write_memory",
+                "update_plan",
                 "finish"
             ],
             &json!({

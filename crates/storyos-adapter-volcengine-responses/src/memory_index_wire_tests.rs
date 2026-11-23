@@ -4,7 +4,7 @@ use storyos_core::ContextSourceClass;
 
 use crate::skill_wire_tests::{body, closing, first, item, summary};
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_EARLIER_TURNS_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION;
 
 /// The complete instructions of a decision request of a Run of the author with Memory use and no
 /// Memory index item.
@@ -68,8 +68,13 @@ const USE_WITHOUT_INDEX: &str = "You are the writing assistant of one novel auth
     tool_result tag with form=\"stub\". A stub gives the function, its arguments, and the \
     sources of the result, but not the text of the result. You can cite a source in the \
     tool_sources tag of a stub. When you need the text of the result, or a source that the stub \
-    does not give, call read_tool_result with the call_id that the stub gives.\n\nCall \
-    write_memory only when the author asks you to remember something, to change what you \
+    does not give, call read_tool_result with the call_id that the stub gives.\n\nYou can show \
+    the author a plan with update_plan. Judge the work yourself: when it has several separate \
+    steps, record the plan before the first step, in the language of the author, and keep it \
+    current: one step is in_progress while you do it, and a done step is completed. Before you \
+    finish, record the final state of each step. When the work is simple, record no plan. The \
+    plan is for the author to see: it gives you no permission, and it does not wait for an \
+    approval.\n\nCall write_memory only when the author asks you to remember something, to change what you \
     remember, or to forget something, and never on your own decision. An entry is a short \
     synthesis or an intent, not a copy of a passage. For a pair of characters that the section \
     Memory index lists, change that entry and do not create a second one. A character can have \
@@ -375,7 +380,8 @@ async fn a_request_with_the_memory_index_has_the_conflict_paragraph_of_adr_0094_
 /// that declares `write_memory`, with no Skill, Chapter, or Memory item. The paragraph of
 /// `write_memory` gives the two entries of a character. It has the two sentences of the amendment
 /// S11-12 of ADR 0053: a fact that the character knows is not foreshadowing, and an entry has no
-/// label, no explanation, and no title of another entry.
+/// label, no explanation, and no title of another entry. The paragraph of `update_plan` (ADR 0103
+/// section 2) is before the paragraph of `write_memory`.
 #[tokio::test]
 async fn the_first_request_of_a_run_of_the_author_has_the_complete_host_instructions() {
     assert_eq!(
@@ -459,6 +465,12 @@ form=\"stub\". A stub gives the function, its arguments, and the sources of the 
 the text of the result. You can cite a source in the tool_sources tag of a stub. When you need \
 the text of the result, or a source that the stub does not give, call read_tool_result with the \
 call_id that the stub gives.
+
+You can show the author a plan with update_plan. Judge the work yourself: when it has several \
+separate steps, record the plan before the first step, in the language of the author, and keep it \
+current: one step is in_progress while you do it, and a done step is completed. Before you \
+finish, record the final state of each step. When the work is simple, record no plan. The plan \
+is for the author to see: it gives you no permission, and it does not wait for an approval.
 
 Call write_memory only when the author asks you to remember something, to change what you \
 remember, or to forget something, and never on your own decision. An entry is a short synthesis \

@@ -169,4 +169,4 @@ fn capture_text(request: &CreateRequest, kind: CaptureInputKind) -> String {
 
 #[cfg(test)]
 #[path = "capture_wire_tests.rs"]
-mod tests;
+pub(crate) mod tests;

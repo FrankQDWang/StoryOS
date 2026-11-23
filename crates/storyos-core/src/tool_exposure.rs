@@ -84,6 +84,7 @@ impl ExposureFacts<'_> {
                     | ToolOperation::RecordMemoryObservations => true,
                     ToolOperation::ApplyMemoryOperations
                     | ToolOperation::RecordCharacterIntent
+                    | ToolOperation::UpdatePlan
                     | ToolOperation::ProposeEdit
                     | ToolOperation::SubmitResearch
                     | ToolOperation::ReadToolResult
@@ -116,6 +117,8 @@ impl ExposureFacts<'_> {
             | ToolOperation::ReadChapter
             | ToolOperation::SearchManuscript
             | ToolOperation::Finish => true,
+            // Only a Run of the author records a plan (ADR 0103 section 2).
+            ToolOperation::UpdatePlan => true,
             // A request of the author is not a read and not a capture of Memory, so the Tool does
             // not depend on the Conversation Memory Settings (ADR 0094 section 5).
             ToolOperation::WriteMemory => true,
@@ -178,6 +181,7 @@ impl ToolOperation {
             Self::RecordMemoryObservations => "record_memory_observations",
             Self::ApplyMemoryOperations => "apply_memory_operations",
             Self::RecordCharacterIntent => "record_character_intent",
+            Self::UpdatePlan => "update_plan",
         }
     }
 
@@ -210,6 +214,7 @@ impl ToolOperation {
             Self::RecordMemoryObservations => crate::record_memory_observations::DESCRIPTION,
             Self::ApplyMemoryOperations => crate::apply_memory_operations::DESCRIPTION,
             Self::RecordCharacterIntent => crate::record_character_intent::DESCRIPTION,
+            Self::UpdatePlan => crate::update_plan::DESCRIPTION,
         }
     }
 }
@@ -269,6 +274,7 @@ impl ExposedTool {
             }
             ToolOperation::ApplyMemoryOperations => crate::apply_memory_operations::parameters(),
             ToolOperation::RecordCharacterIntent => crate::record_character_intent::parameters(),
+            ToolOperation::UpdatePlan => crate::update_plan::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,

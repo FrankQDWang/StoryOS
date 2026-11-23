@@ -250,6 +250,7 @@ async fn each_refused_load_gives_its_reason_and_a_run_with_no_skill_declares_no_
             "write_memory",
             "read_memory_entry",
             "search_memory",
+            "update_plan",
             "finish"
         ])
     );
