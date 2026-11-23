@@ -131,11 +131,23 @@ async fn the_later_request_sends_the_earlier_author_messages_of_the_conversation
                 runs[1].clone(),
                 runs[2].clone(),
             ]],
-            // The later request selects the earlier messages after the summary and before the
-            // current input. The current input stays one item, and the RunStep after the later
+            // The record of RunStep 0 selects the earlier turns (ADR 0102). The later request
+            // selects the earlier messages after the summary and before the current input in
+            // their place. The current input stays one item, and the RunStep after the later
             // request reads exactly the current message.
             json!([
-                ["decision", 0, [author(&current)], null],
+                [
+                    "decision",
+                    0,
+                    [
+                        author(&current),
+                        author(earlier[0]),
+                        author(earlier[1]),
+                        author(earlier[2]),
+                        author(earlier[3])
+                    ],
+                    null
+                ],
                 [
                     "later_request",
                     0,
@@ -159,7 +171,10 @@ async fn the_later_request_sends_the_earlier_author_messages_of_the_conversation
             // The later request sends no earlier turn (ADR 0102). The RunStep after the later
             // request continues its response with an unchanged input, so it sends no current
             // input and no earlier message.
-            json!([[0, earlier, current, null, null], [1, null, null, null, null]]),
+            json!([
+                [0, earlier, current, null, null],
+                [1, null, null, null, null]
+            ]),
         )
     );
 }
@@ -198,7 +213,10 @@ async fn a_compaction_in_the_first_run_of_a_conversation_sends_no_earlier_author
         ),
         (
             vec![Vec::<String>::new()],
-            json!([[0, null, current, null, null], [1, null, current, null, null]]),
+            json!([
+                [0, null, current, null, null],
+                [1, null, current, null, null]
+            ]),
         )
     );
 }

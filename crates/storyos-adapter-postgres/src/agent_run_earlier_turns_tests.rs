@@ -1,5 +1,9 @@
 use serde_json::{Value, json};
-use storyos_application::{AgentRunReadSelection, AgentRunReadStore, ProjectScope};
+use storyos_adapter_fake_destination::FakeDestination;
+use storyos_application::{
+    AgentRunReadSelection, AgentRunReadStore, DestinationRequest, ModelProviderAdapter,
+    ModelStreamSink, Observation, PreDispatchRefusal, PreparedRequest, ProjectScope,
+};
 use storyos_core::{ADVISORY_TEXT, AgentRunStatus, ContextSourceClass, RESEARCH_TOOL_OFFER};
 use tokio_postgres::Client;
 
@@ -15,17 +19,18 @@ use crate::shared_tests::model_gateway::Admission;
 
 const FULL: &str = "Submit the complete current request. Repeat the first sentence.";
 
-/// For each decision request of the Run in RunStep order: its position, whether it sent a prior
-/// response reference, and the earlier turns that it sent.
+/// For each decision request and each rejected create of the Run in the order of its creation: its
+/// role, its position, whether it sent a prior response reference, and the earlier turns that it
+/// sent.
 async fn sent(admin: &Client, run_id: &str) -> Value {
     json_of(
         admin,
-        "SELECT jsonb_agg(jsonb_build_array(decision_position,
+        "SELECT jsonb_agg(jsonb_build_array(attempt_role, decision_position,
                       wire ? 'previous_response_reference', wire->'earlier_turns')
-                      ORDER BY decision_position, model_attempt_id)::text
+                      ORDER BY model_attempt_id)::text
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
-              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+              WHERE run_id = $1::text::uuid AND attempt_role IN ('decision', 'rejected_create')",
         &[&run_id],
     )
     .await
@@ -75,6 +80,29 @@ async fn next_run(
     run_id
 }
 
+/// A destination that refuses each request before the dispatch, so the Run refuses.
+struct Refusing;
+
+impl ModelProviderAdapter for Refusing {
+    const ADAPTERS: &'static [storyos_core::ModelAdapter] = FakeDestination::ADAPTERS;
+    type Prepared = <FakeDestination as ModelProviderAdapter>::Prepared;
+
+    async fn prepare(
+        &self,
+        _request: &DestinationRequest,
+    ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
+        Err(PreDispatchRefusal::UnsupportedRequest)
+    }
+
+    async fn exchange(
+        &self,
+        prepared: Self::Prepared,
+        sink: &mut impl ModelStreamSink,
+    ) -> Observation {
+        FakeDestination.exchange(prepared, sink).await
+    }
+}
+
 async fn status(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
@@ -109,6 +137,11 @@ async fn a_full_input_with_no_prior_response_sends_the_earlier_turn_in_exact_wor
         .await
         .unwrap()
         .unwrap();
+    let earlier = turns(&[&[
+        ("author", "Help with this passage."),
+        ("author", "Keep the voice."),
+        ("answer", ADVISORY_TEXT),
+    ]]);
     let answer = (read.context.record.selected.iter())
         .filter(|item| item.source_class == ContextSourceClass::EarlierAnswer)
         .map(|item| item.content.clone())
@@ -119,19 +152,11 @@ async fn a_full_input_with_no_prior_response_sends_the_earlier_turn_in_exact_wor
         (
             AgentRunStatus::Completed,
             vec![ADVISORY_TEXT.to_owned()],
-            // The first request sends no prior response reference and the earlier turn. The
-            // RunStep after the `finish` call continues its response with no earlier turn.
+            // The mapping `Full` sends the full input with no prior response reference at each
+            // RunStep, so each request sends the earlier turn.
             json!([
-                [
-                    0,
-                    false,
-                    turns(&[&[
-                        ("author", "Help with this passage."),
-                        ("author", "Keep the voice."),
-                        ("answer", ADVISORY_TEXT),
-                    ]])
-                ],
-                [1, true, null],
+                ["decision", 0, false, &earlier],
+                ["decision", 1, false, &earlier]
             ]),
         )
     );
@@ -145,9 +170,18 @@ async fn a_continuing_request_sends_no_earlier_turn_and_a_refused_or_cancelled_r
     let (scope, chapter_id, first) = queued(&store, "3e3").await;
     complete(&store, &admin, &scope, &first).await;
     let project = (&scope, chapter_id.as_str());
-    let refused = next_run(&store, &admin, project, "3e3", "SCRIPT:refusal", "3e4").await;
-    let cancelled = Admission {
+    let refused = Admission {
         message: "Name the inn.",
+        conversation: conversation_of("3e3"),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "3e4")
+    .await;
+    settle(&store, &admin, &scope, &refused, &Refusing)
+        .await
+        .unwrap();
+    let cancelled = Admission {
+        message: "Name the gull.",
         conversation: conversation_of("3e3"),
         ..Default::default()
     }
@@ -160,6 +194,13 @@ async fn a_continuing_request_sends_no_earlier_turn_and_a_refused_or_cancelled_r
         .unwrap();
     let ordinary = next_run(&store, &admin, project, "3e3", "Make Mara older.", "3e6").await;
     let full = next_run(&store, &admin, project, "3e3", FULL, "3e7").await;
+    let earlier = turns(&[
+        &[
+            ("author", "Help with this passage."),
+            ("answer", ADVISORY_TEXT),
+        ],
+        &[("author", "Make Mara older."), ("answer", ADVISORY_TEXT)],
+    ]);
 
     assert_eq!(
         (
@@ -173,20 +214,11 @@ async fn a_continuing_request_sends_no_earlier_turn_and_a_refused_or_cancelled_r
         ),
         (
             [AgentRunStatus::Refused, AgentRunStatus::Cancelled],
-            json!([[0, true, null], [1, true, null]]),
+            // The ordinary Run continues the prior response and sends no earlier turn.
+            json!([["decision", 0, true, null], ["decision", 1, true, null]]),
             json!([
-                [
-                    0,
-                    false,
-                    turns(&[
-                        &[
-                            ("author", "Help with this passage."),
-                            ("answer", ADVISORY_TEXT)
-                        ],
-                        &[("author", "Make Mara older."), ("answer", ADVISORY_TEXT)],
-                    ])
-                ],
-                [1, true, null],
+                ["decision", 0, false, &earlier],
+                ["decision", 1, false, &earlier]
             ]),
             // Only the two completed Runs give a turn.
             json!([
@@ -256,9 +288,17 @@ async fn a_new_transport_and_a_rebuilt_full_input_send_the_earlier_turns() {
         (
             // The incremental request is rejected with `continuation_unusable`, and the full
             // input that follows it sends the earlier turns.
-            json!([[0, true, null], [0, false, earlier(2)], [1, true, null]]),
-            // The changed Tool Exposure sends a new transport with the earlier turns.
-            json!([[0, false, earlier(3)], [1, true, null]]),
+            json!([
+                ["rejected_create", 0, true, null],
+                ["decision", 0, false, earlier(2)],
+                ["decision", 1, true, null]
+            ]),
+            // The changed Tool Exposure sends a new transport with the earlier turns. The RunStep
+            // after the `finish` call continues its response with no earlier turn.
+            json!([
+                ["decision", 0, false, earlier(3)],
+                ["decision", 1, true, null]
+            ]),
         )
     );
 }
