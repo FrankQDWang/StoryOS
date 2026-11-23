@@ -1,5 +1,5 @@
 //! The records and the requests of a Subrun at the dispatch seam with the fake destination (ADR
-//! 0103 section 3A). Test prefix lead `67`, and `766` and `767`.
+//! 0103 section 3A). Test prefix lead `67`, and `766` through `769`.
 
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
@@ -7,18 +7,20 @@ use storyos_application::{
     AgentRunReadSelection, AgentRunReadStore, ClaimedAgentRun, NoContractFaults, ProjectScope,
     complete_agent_run,
 };
-use storyos_core::{ToolCallState, ToolResultProjection};
+use storyos_core::{DeploymentDestination, ToolCallState, ToolResultProjection};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::{complete, conversation_of};
+use crate::shared_tests::agent_run_retrieval::{AfterExchange, destination};
 use crate::shared_tests::agent_run_steering::queued;
+use crate::shared_tests::agent_run_tool_exposure::{finish_stream, finish_then_advisory, sse};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_background_run::claim_in_project;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::write_versions;
-use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
+use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run};
 use crate::shared_tests::project_instruction::{applied, save};
 
 /// The Character Intent of the entry 2 of the Project of `scripted`.
@@ -632,33 +634,6 @@ pub(super) async fn stopped_end(
     ])
 }
 
-/// Item 8 of #436: a Subrun refused because its request was too long settles the call of the
-/// parent with the sentence of that cause. The parent stops with its claim, and its next claim
-/// settles the call and continues to its end. The Host fake has no context window, so the
-/// observer writes the refusal at the first dispatch claim of the Subrun, as the check of ADR
-/// 0056 does for a model with a window.
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_subrun_refused_as_too_long_settles_the_call_with_the_sentence_of_that_cause() {
-    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
-    let (store, admin) = stores().await;
-    let script = storyos_adapter_fake_destination::START_SUBRUN_SCRIPT;
-    let refuse = "UPDATE storyos.agent_runs
-                     SET fence_token = fence_token + 1, status = 'refused',
-                         settlement = '{\"kind\": \"execution_refused\",
-                                        \"capability\": \"conversation_too_long\"}'
-                   WHERE run_id = (SELECT subrun_run_id FROM storyos.subrun_requests
-                                    WHERE parent_run_id = $1::text::uuid)";
-    let end = stopped_end(&store, &admin, ["67e", "67f"], script, (2, refuse)).await;
-    let sentence = "The Subrun ended with no result, because its reading was too long for one \
-                    Subrun. Give a smaller task.";
-
-    assert_eq!(
-        end,
-        json!([true, [["settled", null, sentence]], "completed", 1])
-    );
-}
-
 /// Items 3 and 7 of #436: the Worker never selects a queued Subrun, or a claimed Subrun whose
 /// lease expired, also when no other work exists. `getAgentRun` with the identity of a Subrun
 /// answers as for a Run that does not exist, the earlier turns of the Conversation of the parent
@@ -743,6 +718,88 @@ async fn no_worker_claim_no_run_read_and_no_earlier_turn_gives_a_subrun() {
             vec![parent_run_id],
             // Only the capture of the Conversation of the parent: the Subrun has no Memory work.
             json!(["conversation_capture"]),
+        )
+    );
+}
+
+/// Item 8 of #436, ADR 0056: on the Agent Plan Registration, a Subrun whose request is too long
+/// for the window is refused by the check before its dispatch, and the call of the parent
+/// settles with the sentence of that cause. After the first exchange of the Subrun, the adapter
+/// makes the first item of the Subrun fill the window after the output bound (1,015,808 tokens),
+/// so the check refuses its closing request. The model serves four responses: the call of the
+/// parent, the `finish` call of the Subrun, and the end of the parent.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_subrun_too_long_for_the_window_of_agent_plan_is_refused_before_its_dispatch() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let call = json!({"id": "fc_01", "type": "function_call", "status": "completed",
+        "call_id": "call_start_subrun", "name": "start_subrun",
+        "arguments": r#"{"title":"读","brief":"读第一章。"}"#});
+    let parent_call = sse(&[
+        json!({"type": "response.created",
+               "response": {"id": "resp_769", "status": "in_progress", "output": []}}),
+        json!({"type": "response.output_item.done", "output_index": 0, "item": call}),
+        json!({"type": "response.completed", "response": {"id": "resp_769",
+               "status": "completed", "output": [call],
+               "usage": {"input_tokens": 40, "output_tokens": 9}}}),
+    ]);
+    let [finish, closing] = finish_then_advisory("resp_769_end");
+    let replies = vec![
+        parent_call,
+        finish_stream("resp_769_subrun"),
+        finish,
+        closing,
+    ];
+    let (base, served) = destination(replies).await;
+    let plan = DeploymentDestination::VolcengineAgentPlan {
+        qualification_authorization: None,
+    };
+    let (scope, _, run_id) = queued_run(&store, "769", plan).await;
+    admin
+        .execute(
+            "UPDATE storyos.processing_destination_identity_evidence_revisions SET endpoint = $2
+              WHERE project_id = $1::text::uuid
+                AND evidence_kind = 'volcengine_agent_plan_boundary'",
+            &[&scope.project_id.as_ref(), &base],
+        )
+        .await
+        .unwrap();
+    let fill = AfterExchange {
+        admin: &admin,
+        statement: format!(
+            "UPDATE storyos.context_assembly_manifests
+                SET payload = jsonb_set(payload, '{{selected,0,token_count}}', '1015808')
+              WHERE run_id IN (SELECT subrun_run_id FROM storyos.subrun_requests
+                                WHERE parent_run_id = '{run_id}')"
+        ),
+    };
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    complete_agent_run(&store, &fill, &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+    let subrun = subruns(&admin, &run_id).await.remove(0);
+    let sentence = "The Subrun ended with no result, because its reading was too long for one \
+                    Subrun. Give a smaller task.";
+
+    assert_eq!(
+        (
+            subrun_calls(&admin, &run_id).await,
+            records(&admin, &run_id).await[1].clone(),
+            json_of(
+                &admin,
+                "SELECT jsonb_build_array(status, settlement->>'capability')::text
+                   FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+                &[&subrun],
+            )
+            .await,
+            served.await.unwrap().len(),
+        ),
+        (
+            json!([["settled", null, sentence]]),
+            json!("completed"),
+            json!(["refused", "conversation_too_long"]),
+            4,
         )
     );
 }
