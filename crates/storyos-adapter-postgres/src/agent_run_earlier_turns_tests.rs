@@ -121,8 +121,8 @@ async fn a_full_input_with_no_prior_response_sends_the_earlier_turn_in_exact_wor
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     // The first Run reads a steering input at RunStep 1 and completes with a final answer.
-    let (scope, chapter_id, first) = queued(&store, "3e1").await;
-    let input = steering(&store, &scope, 0x3ec0, &first, "Keep the voice.", None).await;
+    let (scope, chapter_id, first) = queued(&store, "481").await;
+    let input = steering(&store, &scope, 0x48c0, &first, "Keep the voice.", None).await;
     let author = AuthorAt::new(
         &store,
         Moment::DuringRequest(1),
@@ -131,7 +131,7 @@ async fn a_full_input_with_no_prior_response_sends_the_earlier_turn_in_exact_wor
     settle(&store, &admin, &scope, &first, &author)
         .await
         .unwrap();
-    let second = next_run(&store, &admin, (&scope, &chapter_id), "3e1", FULL, "3e2").await;
+    let second = next_run(&store, &admin, (&scope, &chapter_id), "481", FULL, "482").await;
     let read = store
         .read_agent_run(&scope, &second, &AgentRunReadSelection::Current)
         .await
@@ -167,33 +167,33 @@ async fn a_full_input_with_no_prior_response_sends_the_earlier_turn_in_exact_wor
 async fn a_continuing_request_sends_no_earlier_turn_and_a_refused_or_cancelled_run_gives_none() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, first) = queued(&store, "3e3").await;
+    let (scope, chapter_id, first) = queued(&store, "483").await;
     complete(&store, &admin, &scope, &first).await;
     let project = (&scope, chapter_id.as_str());
     let refused = Admission {
         message: "Name the inn.",
-        conversation: conversation_of("3e3"),
+        conversation: conversation_of("483"),
         ..Default::default()
     }
-    .admit(&store, &scope, &chapter_id, "3e4")
+    .admit(&store, &scope, &chapter_id, "484")
     .await;
     settle(&store, &admin, &scope, &refused, &Refusing)
         .await
         .unwrap();
     let cancelled = Admission {
         message: "Name the gull.",
-        conversation: conversation_of("3e3"),
+        conversation: conversation_of("483"),
         ..Default::default()
     }
-    .admit(&store, &scope, &chapter_id, "3e5")
+    .admit(&store, &scope, &chapter_id, "485")
     .await;
-    let cancel = cancellation(&store, &scope, 0x3ed0, &cancelled).await;
+    let cancel = cancellation(&store, &scope, 0x48d0, &cancelled).await;
     store
         .cancel_agent_run(&cancel.envelope, &cancel.input)
         .await
         .unwrap();
-    let ordinary = next_run(&store, &admin, project, "3e3", "Make Mara older.", "3e6").await;
-    let full = next_run(&store, &admin, project, "3e3", FULL, "3e7").await;
+    let ordinary = next_run(&store, &admin, project, "483", "Make Mara older.", "486").await;
+    let full = next_run(&store, &admin, project, "483", FULL, "487").await;
     let earlier = turns(&[
         &[
             ("author", "Help with this passage."),
@@ -253,19 +253,19 @@ async fn a_new_transport_and_a_rebuilt_full_input_send_the_earlier_turns() {
     // The destination loses the responses of the first Run, so the next Run rebuilds a full
     // input after the rejection of its incremental request.
     let lost = "Help with this passage. SCRIPT:reference-unusable";
-    let (scope, chapter_id, first) = queued(&store, "3e8").await;
+    let (scope, chapter_id, first) = queued(&store, "488").await;
     complete(&store, &admin, &scope, &first).await;
     let project = (&scope, chapter_id.as_str());
-    next_run(&store, &admin, project, "3e8", lost, "3e9").await;
-    let after_loss = next_run(&store, &admin, project, "3e8", "Make Mara older.", "3eb").await;
+    next_run(&store, &admin, project, "488", lost, "489").await;
+    let after_loss = next_run(&store, &admin, project, "488", "Make Mara older.", "48b").await;
     // The deployment starts to offer the research destination, so the Tool Exposure changes.
     let exposed = Admission {
         message: "Check the tide tables of 1890.",
-        conversation: conversation_of("3e8"),
+        conversation: conversation_of("488"),
         research: Some(&RESEARCH_TOOL_OFFER),
         ..Default::default()
     }
-    .admit(&store, &scope, &chapter_id, "3ec")
+    .admit(&store, &scope, &chapter_id, "48c")
     .await;
     complete(&store, &admin, &scope, &exposed).await;
     let earlier = |count: usize| {
