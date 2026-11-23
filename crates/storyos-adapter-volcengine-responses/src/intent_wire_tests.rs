@@ -9,7 +9,7 @@ use crate::AgentPlanResponses;
 use crate::skill_wire_tests::{body, first, item};
 use crate::tests::CanaryResolver;
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION;
 
 /// The request of the first RunStep of an intent pass on `mapping` for `file`, with the one output
 /// Tool of an intent pass.

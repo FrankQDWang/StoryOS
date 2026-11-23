@@ -107,6 +107,10 @@ pub(crate) async fn open_next_step(
                 )
                 .await?;
             }
+            AgentRunKind::Subrun => {
+                crate::subrun::persist_next_step(client, claim, retained, position, &candidates)
+                    .await?;
+            }
             AgentRunKind::MemoryCapture
             | AgentRunKind::MemoryConsolidation
             | AgentRunKind::Author => {

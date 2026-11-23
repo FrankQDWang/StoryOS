@@ -166,6 +166,7 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "canonical/memory_consolidation_passes.json",
     ),
     ("intent_passes", "canonical/intent_passes.json"),
+    ("subrun_requests", "canonical/subrun_requests.json"),
     (
         "memory_work_schedules",
         "canonical/memory_work_schedules.json",

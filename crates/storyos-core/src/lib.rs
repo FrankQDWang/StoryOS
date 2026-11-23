@@ -63,6 +63,7 @@ mod run_result;
 mod search_manuscript;
 mod search_memory;
 mod submit_research;
+mod subrun;
 mod tool_call;
 mod tool_call_recovery;
 mod tool_dispatch;
@@ -121,7 +122,9 @@ pub use agent_run_control::{
     PauseAgentRunNoEffect, SteerAgentRunConflict, SteerAgentRunNoEffect, SteeringReader,
     classify_cancel_agent_run, classify_pause_agent_run, classify_steer_agent_run,
 };
-pub use agent_run_kind::{AgentRunKind, MEMORY_CAPTURE_MAX_RUN_STEPS, yields_to_author};
+pub use agent_run_kind::{
+    AgentRunKind, MEMORY_CAPTURE_MAX_RUN_STEPS, SUBRUN_MAX_RUN_STEPS, yields_to_author,
+};
 pub use append_proposal_generation_batch::{
     AppendProposalGenerationBatch, AppendProposalGenerationBatchConflict,
     AppendProposalGenerationBatchRefusal, AppendProposalGenerationBatchResult,
@@ -414,6 +417,7 @@ pub use statistics_profile::{
 pub use submit_research::{
     RESEARCH_RECORDED_RESULT, SUBMIT_RESEARCH_TOOL_SPEC, SubmitResearchRefusal,
 };
+pub use subrun::{SubrunAssembly, assemble_subrun_context, next_subrun_context};
 pub use take_over_project_writer::{
     CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,
     TakeOverProjectWriterResult, take_over_project_writer,
@@ -438,7 +442,7 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION,
+    AGENT_PLAN_REGISTRATION, AGENT_PLAN_SUBRUN_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };

@@ -6,6 +6,9 @@ use crate::{RunStepLimit, RunStepPlace, ToolChoice, ToolOperation};
 /// the author keeps `MAX_RUN_STEPS` (ADR 0091 section 5).
 pub const MEMORY_CAPTURE_MAX_RUN_STEPS: u64 = 8;
 
+/// The most RunSteps of one Subrun (ADR 0103 section 3A).
+pub const SUBRUN_MAX_RUN_STEPS: u64 = 12;
+
 /// The kind of one AgentRun. A Run of the author has its Project Conversation, its Conversation
 /// Memory Settings revision, its Chapter, its author message, and the Receipt of `createAgentRun`.
 /// A background Run has none of them, and no read or command of the author gets it.
@@ -18,19 +21,29 @@ pub enum AgentRunKind {
     MemoryConsolidation,
     /// One intent pass of a character (ADR 0101 section 4).
     IntentPass,
+    /// One reading task that a Run of the author gives with `start_subrun`. Only the claim of
+    /// its parent Run runs it (ADR 0103 section 3A).
+    Subrun,
 }
 
 impl AgentRunKind {
     /// Each kind, in the order of the closed list of `agent_runs.run_kind`.
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
+        Self::Author,
+        Self::MemoryCapture,
+        Self::MemoryConsolidation,
+        Self::IntentPass,
+        Self::Subrun,
+    ];
+
+    /// The kinds that the Worker claims and dispatches. A queued Run of another kind stays queued.
+    /// The work of the ToolCall of its parent runs a Subrun.
+    pub const DISPATCHED: [Self; 4] = [
         Self::Author,
         Self::MemoryCapture,
         Self::MemoryConsolidation,
         Self::IntentPass,
     ];
-
-    /// The kinds that the Worker claims and dispatches. A queued Run of another kind stays queued.
-    pub const DISPATCHED: [Self; 4] = Self::ALL;
 
     /// The persisted name of the kind.
     pub fn name(self) -> &'static str {
@@ -39,6 +52,7 @@ impl AgentRunKind {
             Self::MemoryCapture => "memory_capture",
             Self::MemoryConsolidation => "memory_consolidation",
             Self::IntentPass => "intent_pass",
+            Self::Subrun => "subrun",
         }
     }
 
@@ -52,7 +66,9 @@ impl AgentRunKind {
     fn has_conversation(self) -> bool {
         match self {
             Self::Author => true,
-            Self::MemoryCapture | Self::MemoryConsolidation | Self::IntentPass => false,
+            Self::MemoryCapture | Self::MemoryConsolidation | Self::IntentPass | Self::Subrun => {
+                false
+            }
         }
     }
 
@@ -100,10 +116,10 @@ impl AgentRunKind {
     /// The `tool_choice` of each request of a Run of the kind, when the kind decides it. A
     /// background Run has no `finish` call and no closing request, so each request requires a
     /// call, and its output call ends it. The finish rule decides the `tool_choice` of a Run of
-    /// the author (ADR 0091 section 4).
+    /// the author and of a Subrun (ADR 0091 section 4).
     pub fn fixed_tool_choice(self) -> Option<ToolChoice> {
         match self {
-            Self::Author => None,
+            Self::Author | Self::Subrun => None,
             Self::MemoryCapture | Self::MemoryConsolidation | Self::IntentPass => {
                 Some(ToolChoice::Required)
             }
@@ -118,6 +134,7 @@ impl AgentRunKind {
             Self::MemoryCapture => MEMORY_CAPTURE_MAX_RUN_STEPS,
             Self::MemoryConsolidation => crate::MEMORY_CONSOLIDATION_MAX_RUN_STEPS,
             Self::IntentPass => crate::INTENT_PASS_MAX_RUN_STEPS,
+            Self::Subrun => SUBRUN_MAX_RUN_STEPS,
         }
     }
 
@@ -143,7 +160,7 @@ impl AgentRunKind {
             Self::MemoryCapture => Some(ToolOperation::RecordMemoryObservations),
             Self::MemoryConsolidation => Some(ToolOperation::ApplyMemoryOperations),
             Self::IntentPass => Some(ToolOperation::RecordCharacterIntent),
-            Self::Author => None,
+            Self::Author | Self::Subrun => None,
         }
     }
 
@@ -159,13 +176,14 @@ impl AgentRunKind {
     }
 
     /// Whether a Run of the kind gives its claim back between two RunSteps when a Run of the
-    /// author is queued. Only background work gives way (ADR 0094 section 5).
+    /// author is queued. Only background work gives way (ADR 0094 section 5). A Subrun works
+    /// inside the claim of its parent Run, so it does not give way.
     pub fn gives_way_to_author(self) -> bool {
-        !self.has_conversation()
+        !self.has_conversation() && self != Self::Subrun
     }
 
     /// Whether the decision request with `record` is too long for a Run of the kind. A
-    /// background Run does not compact. Each of its requests sends its full input and the Tool
+    /// background Run and a Subrun do not compact. Each of its requests sends its full input and the Tool
     /// results of the Run. Thus the check of ADR 0056 counts each text of the request. The
     /// compaction phase checks a request of a Run of the author (ADR 0093).
     pub fn full_request_too_long(

@@ -102,6 +102,16 @@ impl ModelProviderAdapter for FakeDestination {
         if create.purpose == CreatePurpose::CompactionSummary {
             return Ok(summary(create));
         }
+        // A Subrun has no author message, so the script of the fake is in its brief (ADR 0103
+        // section 3A).
+        let subrun;
+        let create = match create.purpose {
+            CreatePurpose::Subrun => {
+                subrun = with_brief(create);
+                &subrun
+            }
+            _ => create,
+        };
         // A decision request of the earlier mapping held the reply form (ADR 0091).
         if create.route.mapping_revision != HOST_FAKE_TOOL_LOOP_MAPPING_REVISION {
             return Err(PreDispatchRefusal::UnsupportedRequest);
@@ -118,6 +128,11 @@ impl ModelProviderAdapter for FakeDestination {
         // The real route refuses an intent pass request with no file item, no output Tool, or a
         // prior response reference.
         if create.purpose == CreatePurpose::IntentPass && !create.intent_pass_complete() {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        }
+        // The real route refuses a Subrun request with no brief item, no `finish`, or a prior
+        // response reference.
+        if create.purpose == CreatePurpose::Subrun && !create.subrun_complete() {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
         let mapping_revision = HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
@@ -140,6 +155,9 @@ impl ModelProviderAdapter for FakeDestination {
             }
             CreatePurpose::IntentPass => {
                 wire["purpose"] = serde_json::json!("intent_pass");
+            }
+            CreatePurpose::Subrun => {
+                wire["purpose"] = serde_json::json!("subrun");
             }
             CreatePurpose::Decision => {}
             CreatePurpose::CompactionSummary => {}
@@ -203,7 +221,7 @@ impl ModelProviderAdapter for FakeDestination {
                     CreatePurpose::MemoryCapture(_) => capture_plan::plan(create),
                     CreatePurpose::MemoryConsolidation => consolidation_plan::plan(create),
                     CreatePurpose::IntentPass => intent_plan::plan(create),
-                    CreatePurpose::Decision => tool_loop_plan::plan(create),
+                    CreatePurpose::Decision | CreatePurpose::Subrun => tool_loop_plan::plan(create),
                     CreatePurpose::CompactionSummary => tool_loop_plan::plan(create),
                     CreatePurpose::ToolQualification(_) => tool_loop_plan::plan(create),
                 };
@@ -254,6 +272,17 @@ impl ModelProviderAdapter for FakeDestination {
 
 /// The author message after the compaction prefix of the Host fake and the sentence that names
 /// its RunStep positions, if any.
+/// `create` with the brief of the Subrun as its author message.
+fn with_brief(create: &CreateRequest) -> CreateRequest {
+    let brief = (create.context.iter())
+        .find(|item| item.source_class == ContextSourceClass::SubrunBrief)
+        .map(|item| item.content.clone());
+    CreateRequest {
+        author_message: brief.unwrap_or_default(),
+        ..create.clone()
+    }
+}
+
 fn script_message(message: &str) -> &str {
     let Some(rest) = message.strip_prefix(storyos_core::ACTIVE_COMPACTION_REQUEST_PREFIX) else {
         return message;

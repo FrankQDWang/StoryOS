@@ -248,6 +248,7 @@ pub enum ContextSourceClass {
     MemoryObservations,
     CharacterFile,
     EarlierAnswer,
+    SubrunBrief,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

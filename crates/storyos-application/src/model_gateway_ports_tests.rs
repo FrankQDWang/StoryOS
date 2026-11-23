@@ -62,7 +62,8 @@ fn each_dispatched_run_kind_has_the_purpose_of_its_requests() {
                 Some(CreatePurpose::Decision),
                 Some(CreatePurpose::MemoryCapture(CaptureInputKind::Chapter)),
                 Some(CreatePurpose::MemoryConsolidation),
-                Some(CreatePurpose::IntentPass)
+                Some(CreatePurpose::IntentPass),
+                Some(CreatePurpose::Subrun)
             ],
             None
         )

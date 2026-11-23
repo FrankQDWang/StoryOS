@@ -68,7 +68,8 @@ pub(crate) async fn persist_uncertain_attempt(
         | CreatePurpose::CompactionSummary
         | CreatePurpose::MemoryCapture(_)
         | CreatePurpose::MemoryConsolidation
-        | CreatePurpose::IntentPass => None,
+        | CreatePurpose::IntentPass
+        | CreatePurpose::Subrun => None,
     };
     let decided_reference = match &continuation.prior_binding_id {
         Some(binding) => {

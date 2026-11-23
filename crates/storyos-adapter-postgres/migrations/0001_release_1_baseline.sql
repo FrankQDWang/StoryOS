@@ -3648,7 +3648,7 @@ CREATE TABLE storyos.project_destination_grants (
     processing_destination_identity uuid NOT NULL,
     grant_kind text NOT NULL,
     grant_scope text,
-    CONSTRAINT project_destination_grants_grant_scope_check CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'project_writing_assistance_v6'::text, 'project_writing_assistance_v7'::text, 'research_tool_v1'::text, 'manuscript_embedding_v1'::text]))),
+    CONSTRAINT project_destination_grants_grant_scope_check CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'project_writing_assistance_v6'::text, 'project_writing_assistance_v7'::text, 'project_writing_assistance_v8'::text, 'research_tool_v1'::text, 'manuscript_embedding_v1'::text]))),
     CONSTRAINT project_destination_grants_kind_check CHECK ((grant_kind = ANY (ARRAY['host_fake_use'::text, 'volcengine_agent_plan_use'::text, 'research_tool_use'::text, 'manuscript_embedding_use'::text]))),
     CONSTRAINT project_destination_grants_research_scope CHECK (((grant_kind = 'research_tool_use'::text) = (grant_scope IS NOT DISTINCT FROM 'research_tool_v1'::text))),
     CONSTRAINT project_destination_grants_embedding_scope CHECK (((grant_kind = 'manuscript_embedding_use'::text) = (grant_scope IS NOT DISTINCT FROM 'manuscript_embedding_v1'::text))),
@@ -3918,7 +3918,8 @@ GRANT SELECT,INSERT ON TABLE storyos.conversation_memory_settings TO storyos_run
 
 -- The kind of an AgentRun (ADR 0094 section 5). A Run of the author has its Project Conversation, its
 -- Conversation Memory Settings revision, its Chapter, its author message, and the Receipt of
--- `createAgentRun`. A background Run (`memory_capture`, `memory_consolidation`, `intent_pass`) has none of them, so
+-- `createAgentRun`. A background Run (`memory_capture`, `memory_consolidation`, `intent_pass`) and a Subrun
+-- (`subrun`, ADR 0103 section 3A) have none of them, so
 -- the two foreign keys of these columns use `MATCH SIMPLE`, as the current Chapter of a Project does,
 -- and `agent_runs_kind_shape` refuses each other form. For the same reason, the Conversation of
 -- `model_attempts` and the Receipt of `operation_requirements` and of `context_assembly_manifests`
@@ -3952,7 +3953,7 @@ CREATE TABLE storyos.agent_runs (
     CONSTRAINT agent_runs_claim_generation_check CHECK ((claim_generation >= 0)),
     CONSTRAINT agent_runs_fence_token_check CHECK ((fence_token >= 0)),
     CONSTRAINT agent_runs_kind_shape CHECK (((((run_kind = 'author'::text) AND (conversation_id IS NOT NULL) AND (memory_settings_revision IS NOT NULL) AND (chapter_id IS NOT NULL) AND (author_message IS NOT NULL) AND (receipt_id IS NOT NULL)) OR ((run_kind <> 'author'::text) AND (conversation_id IS NULL) AND (memory_settings_revision IS NULL) AND (chapter_id IS NULL) AND (author_message IS NULL) AND (receipt_id IS NULL))) IS TRUE)),
-    CONSTRAINT agent_runs_run_kind_check CHECK ((run_kind = ANY (ARRAY['author'::text, 'memory_capture'::text, 'memory_consolidation'::text, 'intent_pass'::text]))),
+    CONSTRAINT agent_runs_run_kind_check CHECK ((run_kind = ANY (ARRAY['author'::text, 'memory_capture'::text, 'memory_consolidation'::text, 'intent_pass'::text, 'subrun'::text]))),
     CONSTRAINT agent_runs_pkey PRIMARY KEY (owner_user_id, project_id, run_id),
     CONSTRAINT agent_runs_binding_registration_fkey FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision) MATCH FULL,
     CONSTRAINT agent_runs_owner_user_id_project_id_conversation_id_memory_fkey FOREIGN KEY (owner_user_id, project_id, conversation_id, memory_settings_revision) REFERENCES storyos.conversation_memory_settings(owner_user_id, project_id, conversation_id, memory_settings_revision),
@@ -4035,7 +4036,7 @@ CREATE TABLE storyos.context_assembly_manifests (
     disclosure_grant_scope text,
     CONSTRAINT context_assembly_manifests_decision_position_check CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT context_assembly_manifests_destination_pair CHECK (((((destination_context_manifest_id IS NULL) AND (outbound_disclosure_manifest_id IS NULL)) OR ((destination_context_manifest_id IS NOT NULL) AND (outbound_disclosure_manifest_id IS NOT NULL))) IS TRUE)),
-    CONSTRAINT context_assembly_manifests_disclosure_grant_scope_check CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'project_writing_assistance_v6'::text, 'project_writing_assistance_v7'::text, 'research_tool_v1'::text, 'manuscript_embedding_v1'::text]))),
+    CONSTRAINT context_assembly_manifests_disclosure_grant_scope_check CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'project_writing_assistance_v5'::text, 'project_writing_assistance_v6'::text, 'project_writing_assistance_v7'::text, 'project_writing_assistance_v8'::text, 'research_tool_v1'::text, 'manuscript_embedding_v1'::text]))),
     CONSTRAINT context_assembly_manifests_disclosure_grant_shape CHECK (((disclosure_grant_id IS NULL) = (disclosure_grant_scope IS NULL))),
     CONSTRAINT context_assembly_manifests_manifest_role_check CHECK ((manifest_role = ANY (ARRAY['decision'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text]))),
     CONSTRAINT context_assembly_manifests_sufficiency_check CHECK ((sufficiency = ANY (ARRAY['complete'::text, 'blocked'::text]))),
@@ -4493,6 +4494,38 @@ CREATE POLICY intent_passes_exact_scope ON storyos.intent_passes USING (((owner_
 GRANT SELECT,INSERT ON TABLE storyos.intent_passes TO storyos_runtime;
 
 GRANT UPDATE(outcome, failure_reason) ON TABLE storyos.intent_passes TO storyos_runtime;
+
+-- Subrun Requests (ADR 0103 section 3A). One row for each accepted `start_subrun` call of a Run of the
+-- author: the Subrun (an AgentRun of the kind `subrun`), the parent Run, the ToolCall of the parent, the
+-- title, and the brief. The ToolCall of the parent is unique, so a second execution of the same call finds
+-- the same Subrun, and the Subrun is unique. The runtime role can read and insert a row, and it cannot
+-- change or delete a row.
+
+CREATE TABLE storyos.subrun_requests (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    subrun_run_id uuid NOT NULL,
+    parent_run_id uuid NOT NULL,
+    parent_tool_call_id uuid NOT NULL,
+    title text NOT NULL,
+    brief text NOT NULL,
+    CONSTRAINT subrun_requests_pkey PRIMARY KEY (owner_user_id, project_id, subrun_run_id),
+    CONSTRAINT subrun_requests_tool_call_key UNIQUE (owner_user_id, project_id, parent_tool_call_id),
+    CONSTRAINT subrun_requests_bounds CHECK (((char_length(title) >= 1) AND (char_length(title) <= 40) AND (char_length(brief) >= 1) AND (char_length(brief) <= 4000))),
+    CONSTRAINT subrun_requests_subrun_fkey FOREIGN KEY (owner_user_id, project_id, subrun_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT subrun_requests_parent_fkey FOREIGN KEY (owner_user_id, project_id, parent_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT subrun_requests_tool_call_fkey FOREIGN KEY (owner_user_id, project_id, parent_tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL
+);
+
+CREATE INDEX subrun_requests_parent_idx ON storyos.subrun_requests USING btree (owner_user_id, project_id, parent_run_id);
+
+ALTER TABLE storyos.subrun_requests ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.subrun_requests FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY subrun_requests_exact_scope ON storyos.subrun_requests USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.subrun_requests TO storyos_runtime;
 
 -- Source Snapshots and Source Gaps. The settlement of a research ToolCall writes them in its own
 -- transaction: one immutable Snapshot for each captured search entry or page, and one Gap for each

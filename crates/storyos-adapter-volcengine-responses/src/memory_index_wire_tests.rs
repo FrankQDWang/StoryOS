@@ -4,7 +4,7 @@ use storyos_core::ContextSourceClass;
 
 use crate::skill_wire_tests::{body, closing, first, item, summary};
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_SUBRUN_MAPPING_REVISION;
 
 /// The complete instructions of a decision request of a Run of the author with Memory use and no
 /// Memory index item.

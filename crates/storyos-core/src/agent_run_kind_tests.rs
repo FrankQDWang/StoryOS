@@ -1,4 +1,4 @@
-use super::{AgentRunKind, MEMORY_CAPTURE_MAX_RUN_STEPS, yields_to_author};
+use super::{AgentRunKind, MEMORY_CAPTURE_MAX_RUN_STEPS, SUBRUN_MAX_RUN_STEPS, yields_to_author};
 use crate::{
     AGENT_PLAN_REGISTRATION, BudgetBounds, HOST_FAKE_TOOL_LOOP_REGISTRATION, MAX_RUN_STEPS,
     MemoryCaptureAssembly, ModelCapability, ProjectionMode, RunStepLimit, StepLimitNotice,
@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[test]
-fn each_kind_has_its_persisted_name_and_the_worker_dispatches_each_kind() {
+fn each_kind_has_its_persisted_name_and_the_worker_dispatches_each_kind_but_a_subrun() {
     assert_eq!(
         (
             AgentRunKind::ALL.map(AgentRunKind::name),
@@ -18,7 +18,8 @@ fn each_kind_has_its_persisted_name_and_the_worker_dispatches_each_kind() {
                 "author",
                 "memory_capture",
                 "memory_consolidation",
-                "intent_pass"
+                "intent_pass",
+                "subrun"
             ],
             [
                 "author",
@@ -52,17 +53,18 @@ fn only_a_run_of_the_author_compacts_with_a_registration_that_compacts() {
             AgentRunKind::ALL.map(|kind| kind.compacts_on(Some(STREAMED_CONTINUATION))),
         ],
         [
-            [true, false, false, false],
-            [true, false, false, false],
-            [false; 4],
-            [false; 4]
+            [true, false, false, false, false],
+            [true, false, false, false, false],
+            [false; 5],
+            [false; 5]
         ]
     );
 }
 
 /// The branch of an expired Run and the branches of the create request and of the next RunStep:
 /// a background Run rebuilds no prior response, reads no Chapter work and no steering input, and
-/// requires a call in each request.
+/// requires a call in each request. A Subrun has the same branches, but the finish rule decides
+/// its `tool_choice`.
 #[test]
 fn a_background_run_has_no_chapter_work_and_requires_a_call_in_each_request() {
     assert_eq!(
@@ -77,13 +79,15 @@ fn a_background_run_has_no_chapter_work_and_requires_a_call_in_each_request() {
             (false, false, false, Some(ToolChoice::Required)),
             (false, false, false, Some(ToolChoice::Required)),
             (false, false, false, Some(ToolChoice::Required)),
+            (false, false, false, None),
         ]
     );
 }
 
 /// A background Run has its own RunStep limit, and in its last RunStep the Host executes only its
 /// output call. A consolidation pass has one RunStep, and an intent pass has two. A Run of the
-/// author keeps 24 RunSteps and executes no call of its last RunStep.
+/// author keeps 24 RunSteps, a Subrun has 12, and each of the two executes no call of its last
+/// RunStep.
 #[test]
 fn each_kind_has_its_run_step_limit_and_its_last_run_step_rule() {
     let last = |kind: AgentRunKind| kind.max_run_steps() - 1;
@@ -130,12 +134,19 @@ fn each_kind_has_its_run_step_limit_and_its_last_run_step_rule() {
                 [true; 4],
                 true
             ),
+            (
+                SUBRUN_MAX_RUN_STEPS,
+                [RunStepLimit::Open, RunStepLimit::Last],
+                [false; 4],
+                [true; 4],
+                false
+            ),
         ]
     );
 }
 
 /// Only background work gives its claim back, only between two RunSteps, and only when a Run of
-/// the author is queued.
+/// the author is queued. A Subrun works inside the claim of its parent, so it does not give way.
 #[test]
 fn a_background_run_gives_way_to_a_queued_run_of_the_author_between_two_run_steps() {
     assert_eq!(
@@ -144,12 +155,13 @@ fn a_background_run_gives_way_to_a_queued_run_of_the_author_between_two_run_step
             [(0, true), (1, true), (1, false)]
                 .map(|(position, queued)| yields_to_author(position, queued)),
         ),
-        ([false, true, true, true], [false, true, false])
+        ([false, true, true, true, false], [false, true, false])
     );
 }
 
 /// A capture does not compact, so the Host checks the full input of each of its requests against
-/// the window after the output bound (ADR 0056). The compaction phase checks a Run of the author.
+/// the window after the output bound (ADR 0056). A Subrun does not compact, so the same check
+/// applies to it. The compaction phase checks a Run of the author.
 #[test]
 fn the_full_request_of_a_background_run_is_refused_at_the_window() {
     let mut record = assemble_memory_capture_context(&MemoryCaptureAssembly {
@@ -176,8 +188,14 @@ fn the_full_request_of_a_background_run_is_refused_at_the_window() {
     assert_eq!(
         [too_long(1_015_808), too_long(1_015_807)],
         [
-            [[false, false], [true, false], [true, false], [true, false]],
-            [[false, false]; 4]
+            [
+                [false, false],
+                [true, false],
+                [true, false],
+                [true, false],
+                [true, false]
+            ],
+            [[false, false]; 5]
         ]
     );
 }
@@ -187,11 +205,11 @@ fn the_full_request_of_a_background_run_is_refused_at_the_window() {
 fn only_a_run_of_the_author_reads_the_intents() {
     assert_eq!(
         AgentRunKind::ALL.map(AgentRunKind::reads_intents),
-        [true, false, false, false]
+        [true, false, false, false, false]
     );
 }
 
-/// Only the last 4 RunSteps of a Run of the author and of a capture have a sentence near the limit
+/// Only the last 4 RunSteps of a Run of the author, of a capture, and of a Subrun have a sentence near the limit
 /// (ADR 0103 section 5). A closing request before the last RunStep has none.
 #[test]
 fn only_the_last_four_run_steps_have_a_notice_of_the_limit() {
@@ -223,6 +241,7 @@ fn only_the_last_four_run_steps_have_a_notice_of_the_limit() {
             [5, 21, 23].map(closing),
             notices(AgentRunKind::MemoryConsolidation),
             notices(AgentRunKind::IntentPass),
+            notices(AgentRunKind::Subrun),
         ),
         (
             expected(20),
@@ -230,6 +249,7 @@ fn only_the_last_four_run_steps_have_a_notice_of_the_limit() {
             [None, None, Some(StepLimitNotice::LastStep)],
             vec![None],
             vec![None, None],
+            expected(8),
         )
     );
 }

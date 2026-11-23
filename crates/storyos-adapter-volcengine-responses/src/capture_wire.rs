@@ -163,7 +163,8 @@ fn capture_text(request: &CreateRequest, kind: CaptureInputKind) -> String {
                 | ContextSourceClass::MemoryEntries
                 | ContextSourceClass::EarlierAnswer
                 | ContextSourceClass::MemoryObservations
-                | ContextSourceClass::CharacterFile => return None,
+                | ContextSourceClass::CharacterFile
+                | ContextSourceClass::SubrunBrief => return None,
             };
             Some(format!("{heading}:\n{}", item.content))
         })

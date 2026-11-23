@@ -48,6 +48,8 @@ pub enum ContextPurpose {
     MemoryConsolidation,
     /// The intent pass of one character (ADR 0101 section 4).
     IntentPass,
+    /// One RunStep of a Subrun (ADR 0103 section 3A).
+    Subrun,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -104,6 +106,9 @@ pub enum ContextSourceClass {
     /// The final answer of an earlier turn of the Conversation (ADR 0102). It is model output, so
     /// it is Data-only Context.
     EarlierAnswer,
+    /// The brief of the `start_subrun` call that started the Subrun (ADR 0103 section 3A). The
+    /// assistant wrote it, so it is Data-only Context.
+    SubrunBrief,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

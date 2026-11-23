@@ -10,6 +10,10 @@ pub(crate) const AUTHOR_LIMIT_SENTENCE: &str = "You have at most {limit} steps f
 request. The last step is only for your final answer: StoryOS executes no function call of the \
 last step.";
 
+/// The paragraph of a Subrun with its limit of RunSteps. It follows the instructions of a Subrun.
+pub(crate) const SUBRUN_LIMIT_SENTENCE: &str = "You have at most {limit} steps for this task. The \
+last step is only for your final answer: StoryOS executes no function call of the last step.";
+
 /// The sentence near the limit before the last RunStep of a Run whose Host executes no call of
 /// the last RunStep.
 pub(crate) const STEPS_LEFT_SENTENCE: &str = "Step limit: after this step, {left}. Complete the \
@@ -30,6 +34,11 @@ pub(crate) const LAST_STEP_OUTPUT_SENTENCE: &str =
 /// `AUTHOR_LIMIT_SENTENCE` with the limit `max_run_steps`.
 pub(crate) fn author_limit_paragraph(max_run_steps: u64) -> String {
     AUTHOR_LIMIT_SENTENCE.replace("{limit}", &max_run_steps.to_string())
+}
+
+/// `SUBRUN_LIMIT_SENTENCE` with the limit `max_run_steps`.
+pub(crate) fn subrun_limit_paragraph(max_run_steps: u64) -> String {
+    SUBRUN_LIMIT_SENTENCE.replace("{limit}", &max_run_steps.to_string())
 }
 
 /// The sentence near the limit at the end of the instructions of the decision request at `place`
