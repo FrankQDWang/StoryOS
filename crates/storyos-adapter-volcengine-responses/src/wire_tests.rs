@@ -331,6 +331,7 @@ fn a_continuation_sends_each_output_with_its_call_id_after_the_original_calls() 
         "resp-1",
         &full.tool_outputs,
         &[],
+        &full.run_step.unexecuted_call_output(),
         "model-1",
         bounds,
     ))

@@ -9,7 +9,7 @@ use crate::AgentPlanResponses;
 use crate::skill_wire_tests::{body, first, item};
 use crate::tests::CanaryResolver;
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION;
 
 /// The request of the first RunStep of an intent pass on `mapping` for `file`, with the one output
 /// Tool of an intent pass.
@@ -30,6 +30,8 @@ pub(crate) fn intent_pass(file: &CharacterFile<'_>, mapping: &str) -> CreateRequ
             run_kind: storyos_core::AgentRunKind::IntentPass,
         }),
         tool_choice: ToolChoice::Required,
+        run_step: storyos_core::AgentRunKind::IntentPass
+            .run_step_place(/*decision_position*/ 0),
         ..first(mapping, registration)
     }
 }

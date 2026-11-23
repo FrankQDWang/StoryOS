@@ -62,9 +62,16 @@ pub(crate) async fn tool_choice(
 pub(crate) fn run_step_limit(
     run: &RunPhaseRow,
 ) -> Result<storyos_core::RunStepLimit, CompleteAgentRunError> {
+    run_step_place(run).map(|place| run.kind.run_step_limit(place.decision_position))
+}
+
+/// The place of the active RunStep of `run` against the limit of its kind (ADR 0103 section 5).
+pub(crate) fn run_step_place(
+    run: &RunPhaseRow,
+) -> Result<storyos_core::RunStepPlace, CompleteAgentRunError> {
     run.decision_position
         .parse::<u64>()
-        .map(|position| run.kind.run_step_limit(position))
+        .map(|position| run.kind.run_step_place(position))
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))
 }
 

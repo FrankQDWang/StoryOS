@@ -1,8 +1,8 @@
 use super::{AgentRunKind, MEMORY_CAPTURE_MAX_RUN_STEPS, yields_to_author};
 use crate::{
     AGENT_PLAN_REGISTRATION, BudgetBounds, HOST_FAKE_TOOL_LOOP_REGISTRATION, MAX_RUN_STEPS,
-    MemoryCaptureAssembly, ModelCapability, ProjectionMode, RunStepLimit, ToolChoice,
-    ToolOperation, assemble_memory_capture_context,
+    MemoryCaptureAssembly, ModelCapability, ProjectionMode, RunStepLimit, StepLimitNotice,
+    ToolChoice, ToolOperation, assemble_memory_capture_context, step_tool_choice,
 };
 
 #[test]
@@ -188,5 +188,48 @@ fn only_a_run_of_the_author_reads_the_intents() {
     assert_eq!(
         AgentRunKind::ALL.map(AgentRunKind::reads_intents),
         [true, false, false, false]
+    );
+}
+
+/// Only the last 4 RunSteps of a Run of the author and of a capture have a sentence near the limit
+/// (ADR 0103 section 5). A closing request before the last RunStep has none.
+#[test]
+fn only_the_last_four_run_steps_have_a_notice_of_the_limit() {
+    let notices = |kind: AgentRunKind| {
+        (0..kind.max_run_steps())
+            .map(|position| {
+                let tool_choice = (kind.fixed_tool_choice())
+                    .unwrap_or_else(|| step_tool_choice(kind.run_step_limit(position), &[]));
+                kind.run_step_place(position).notice(tool_choice)
+            })
+            .collect::<Vec<_>>()
+    };
+    let expected = |open: usize| {
+        let mut notices = vec![None; open];
+        notices.extend([
+            Some(StepLimitNotice::StepsLeft(3)),
+            Some(StepLimitNotice::StepsLeft(2)),
+            Some(StepLimitNotice::StepsLeft(1)),
+            Some(StepLimitNotice::LastStep),
+        ]);
+        notices
+    };
+    let closing =
+        |position| (AgentRunKind::Author.run_step_place(position)).notice(ToolChoice::None);
+    assert_eq!(
+        (
+            notices(AgentRunKind::Author),
+            notices(AgentRunKind::MemoryCapture),
+            [5, 21, 23].map(closing),
+            notices(AgentRunKind::MemoryConsolidation),
+            notices(AgentRunKind::IntentPass),
+        ),
+        (
+            expected(20),
+            expected(4),
+            [None, None, Some(StepLimitNotice::LastStep)],
+            vec![None],
+            vec![None, None],
+        )
     );
 }

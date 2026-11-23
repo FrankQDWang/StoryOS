@@ -9,7 +9,7 @@ use crate::AgentPlanResponses;
 use crate::skill_wire_tests::{body, first, item};
 use crate::tests::CanaryResolver;
 
-const CURRENT: &str = storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION;
+const CURRENT: &str = storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION;
 const INDEX: &str =
     "{\"type\":\"character\"}\n{\"description\":\"渡口的船夫。\",\"id\":1,\"title\":\"林舟\"}";
 const LIST: &str = "{\"volume\":\"第一卷\"}\n[1,32,\"渡口\"]";
@@ -43,6 +43,8 @@ fn capture(
             run_kind: storyos_core::AgentRunKind::MemoryCapture,
         }),
         tool_choice: ToolChoice::Required,
+        run_step: storyos_core::AgentRunKind::MemoryCapture
+            .run_step_place(/*decision_position*/ 0),
         ..first(mapping, registration)
     }
 }

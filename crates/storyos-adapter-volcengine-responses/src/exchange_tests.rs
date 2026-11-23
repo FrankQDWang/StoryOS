@@ -149,8 +149,10 @@ pub(crate) const EARLIER_MAPPING: &str = "storyos.volcengine-agent-plan.response
 /// or Memory item and no Tool output.
 pub(crate) fn tool_loop_instructions() -> String {
     format!(
-        "{}\n\n{}\n\n{}\n\n{}",
+        "{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
         crate::wire::TOOL_LOOP_INSTRUCTIONS,
+        crate::step_limit_wire::author_limit_paragraph(storyos_core::MAX_RUN_STEPS),
+        crate::wire::TOOL_LOOP_RULES_INSTRUCTIONS,
         crate::wire::WRITING_RULES_INSTRUCTION,
         crate::wire::READ_TOOL_RESULT_INSTRUCTION,
         crate::wire::TOOL_RESULT_STUB_INSTRUCTION
@@ -171,7 +173,7 @@ pub(crate) fn route(endpoint: &str) -> RequestRoute {
     RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
         provider_model_id: "doubao-seed-2.1-pro".to_owned(),
-        mapping_revision: storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION.to_owned(),
+        mapping_revision: storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION.to_owned(),
         endpoint: Some(endpoint.to_owned()),
         credential_reference: Some(CredentialReference(
             storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned(),
@@ -214,6 +216,7 @@ pub(crate) fn create(route: RequestRoute, attempt: RequestAttempt) -> Destinatio
         tool_choice: storyos_core::ToolChoice::Required,
         successor_of: None,
         tool_outputs: Vec::new(),
+        run_step: storyos_core::AgentRunKind::Author.run_step_place(/*decision_position*/ 0),
         unexecuted_call_ids: Vec::new(),
     })
 }
@@ -387,7 +390,7 @@ async fn a_continuation_sends_the_prior_reference_with_the_current_instructions_
         ),
         (
             Some(PreDispatchRefusal::UnsupportedRequest),
-            storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION.to_owned(),
+            storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION.to_owned(),
             Some(CacheSetting::DestinationDefault),
             json!("resp_01"),
             true,
@@ -465,7 +468,7 @@ async fn a_summary_request_sends_only_the_summary_instruction_and_the_prior_refe
             ..request
         })
     };
-    let compaction = storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION;
+    let compaction = storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION;
     let refused = [
         adapter
             .prepare(&summary(compaction, /*reference*/ None))

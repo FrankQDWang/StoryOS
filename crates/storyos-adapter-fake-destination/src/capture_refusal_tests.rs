@@ -40,6 +40,8 @@ pub(crate) fn capture(
         tool_choice: ToolChoice::Required,
         successor_of: None,
         tool_outputs: Vec::new(),
+        run_step: storyos_core::AgentRunKind::MemoryCapture
+            .run_step_place(/*decision_position*/ 0),
         unexecuted_call_ids: Vec::new(),
     })
 }

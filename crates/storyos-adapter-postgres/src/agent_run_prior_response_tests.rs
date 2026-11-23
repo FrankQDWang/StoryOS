@@ -12,9 +12,7 @@ use storyos_application::{
     Observation, PreDispatchRefusal, PreparedRequest, RequestAttempt, RequestRoute,
     complete_agent_run,
 };
-use storyos_core::{
-    ACTIVE_COMPACTION_REQUEST_PREFIX, AgentRunStatus, RequestBounds, UNEXECUTED_CALL_OUTPUT,
-};
+use storyos_core::{ACTIVE_COMPACTION_REQUEST_PREFIX, AgentRunStatus, RequestBounds};
 
 use crate::shared_tests::agent_run_finish_rule::tool_loop_run;
 use crate::shared_tests::agent_run_steering::{
@@ -62,7 +60,8 @@ impl<A: ModelProviderAdapter + Sync> ModelProviderAdapter for RealWire<A> {
                     model_attempt_id: "018f0000-0000-7001-8000-000000057f00".to_owned(),
                 }),
                 route: RequestRoute {
-                    mapping_revision: storyos_core::AGENT_PLAN_RUN_PLAN_MAPPING_REVISION.to_owned(),
+                    mapping_revision: storyos_core::AGENT_PLAN_STEP_LIMIT_MAPPING_REVISION
+                        .to_owned(),
                     endpoint: Some("http://127.0.0.1:9".to_owned()),
                     bounds: Some(RequestBounds {
                         max_output_tokens: 1024,
@@ -79,12 +78,13 @@ impl<A: ModelProviderAdapter + Sync> ModelProviderAdapter for RealWire<A> {
                 .unwrap();
             let body: Value =
                 serde_json::from_str(&prepared.projection.serialized_payload.unwrap()).unwrap();
+            let unexecuted = create.run_step.unexecuted_call_output();
             let items: Vec<Value> = body["input"]
                 .as_array()
                 .unwrap()
                 .iter()
                 .map(|item| match item["type"].as_str() {
-                    Some("function_call_output") if item["output"] == UNEXECUTED_CALL_OUTPUT => {
+                    Some("function_call_output") if item["output"] == unexecuted.as_str() => {
                         json!(["unexecuted", item["call_id"]])
                     }
                     Some("function_call_output") => json!(["output", item["call_id"]]),

@@ -1,6 +1,6 @@
 //! The kind of an AgentRun (ADR 0094 section 5).
 
-use crate::{RunStepLimit, ToolChoice, ToolOperation};
+use crate::{RunStepLimit, RunStepPlace, ToolChoice, ToolOperation};
 
 /// The most RunSteps of one capture. It is an initial value, and S7-D7 can change it. A Run of
 /// the author keeps `MAX_RUN_STEPS` (ADR 0091 section 5).
@@ -124,6 +124,15 @@ impl AgentRunKind {
     /// The limit of the RunStep at `decision_position` of a Run of the kind.
     pub fn run_step_limit(self, decision_position: u64) -> RunStepLimit {
         RunStepLimit::within(self.max_run_steps(), decision_position)
+    }
+
+    /// The place of the RunStep at `decision_position` of a Run of the kind against its limit.
+    pub fn run_step_place(self, decision_position: u64) -> RunStepPlace {
+        RunStepPlace {
+            max_run_steps: self.max_run_steps(),
+            decision_position,
+            last_step_operation: self.last_step_operation(),
+        }
     }
 
     /// The one operation that the Host executes in the last RunStep of a Run of the kind: the

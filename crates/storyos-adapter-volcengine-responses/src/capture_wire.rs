@@ -99,7 +99,11 @@ pub(crate) fn capture_body(
 ) -> String {
     let mut body = serde_json::json!({
         "model": provider_model_id,
-        "instructions": capture_instructions(),
+        "instructions": crate::step_limit_wire::with_notice(
+            capture_instructions(),
+            request.run_step,
+            request.tool_choice,
+        ),
         "input": crate::wire::input(request, &capture_text(request, kind)),
         "max_output_tokens": bounds.max_output_tokens,
         "stream": true,

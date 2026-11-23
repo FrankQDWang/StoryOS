@@ -52,6 +52,7 @@ fn later_request(tool_outputs: Vec<ToolOutput>) -> DestinationRequest {
         tool_choice: ToolChoice::Required,
         successor_of: None,
         tool_outputs,
+        run_step: storyos_core::AgentRunKind::Author.run_step_place(/*decision_position*/ 0),
         unexecuted_call_ids: Vec::new(),
     })
 }

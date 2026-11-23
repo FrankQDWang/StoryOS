@@ -269,6 +269,7 @@ pub(crate) async fn create_request(
         prior_input,
         tool_exposure,
         tool_choice,
+        run_step: crate::agent_run_finish_rule::run_step_place(run)?,
         successor_of: None,
         tool_outputs,
         unexecuted_call_ids,

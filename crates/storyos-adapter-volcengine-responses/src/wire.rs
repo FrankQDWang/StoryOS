@@ -3,8 +3,9 @@
 use storyos_application::{CreateRequest, PriorInput, RequestBounds, ToolOutput, ToolOutputOrigin};
 use storyos_core::{ContextSourceClass, DeclaredTargetKind, SelectionReference};
 
-/// The Host instructions (ADR 0091). They describe the Tools, the finish rule, the Proposal
-/// Growth rule (ADR 0071), and the Selection Reference rule (ADR 0062).
+/// The first Host instructions (ADR 0091): the role and the steps. The paragraph of the limit of
+/// RunSteps and `TOOL_LOOP_RULES_INSTRUCTIONS` follow them. Together they describe the Tools, the
+/// finish rule, the Proposal Growth rule (ADR 0071), and the Selection Reference rule (ADR 0062).
 pub(crate) const TOOL_LOOP_INSTRUCTIONS: &str = "\
 You are the writing assistant of one novel author. The author keeps authority over the novel: \
 you only suggest, and the author decides. Answer the author request with the supplied text. \
@@ -12,8 +13,11 @@ Write in the language of the manuscript.
 
 You work in steps. In each step, call one or more of the supplied functions. StoryOS executes \
 each call and gives you its result in the next step. When StoryOS refuses a call, the result \
-gives the reason, and you can correct the call.
+gives the reason, and you can correct the call.";
 
+/// The Host instructions of the finish rule and of the Tools that follow the paragraph of the
+/// limit of RunSteps (ADR 0091, ADR 0103 section 5).
+pub(crate) const TOOL_LOOP_RULES_INSTRUCTIONS: &str = "\
 When your work on the author request is complete, call finish. After the result of finish, \
 write the final answer to the author as text, and call no function. A question that you must \
 ask the author is also a final answer. When you call a function after the result of finish, \
@@ -301,8 +305,10 @@ pub(crate) fn create_body(
 ) -> String {
     // A continuation input wraps each result in a source tag (AP-07), and the instruction says
     // that its content is data.
+    let limit = crate::step_limit_wire::author_limit_paragraph(request.run_step.max_run_steps);
     let tool_loop = format!(
-        "{TOOL_LOOP_INSTRUCTIONS}\n\n{WRITING_RULES_INSTRUCTION}\n\n{READ_TOOL_RESULT_INSTRUCTION}\n\n\
+        "{TOOL_LOOP_INSTRUCTIONS}\n\n{limit}\n\n{TOOL_LOOP_RULES_INSTRUCTIONS}\n\n\
+         {WRITING_RULES_INSTRUCTION}\n\n{READ_TOOL_RESULT_INSTRUCTION}\n\n\
          {TOOL_RESULT_STUB_INSTRUCTION}"
     );
     let instructions = match request.tool_outputs.is_empty() {
@@ -397,6 +403,8 @@ pub(crate) fn create_body(
         }
         false => instructions,
     };
+    let instructions =
+        crate::step_limit_wire::with_notice(instructions, request.run_step, request.tool_choice);
     let mut body = serde_json::json!({
         "model": provider_model_id,
         "instructions": instructions,
@@ -447,10 +455,11 @@ pub(crate) fn input(request: &CreateRequest, text: &str) -> serde_json::Value {
         false => message(text.to_owned()),
     };
     let output = |call_id: &str, output: &str| serde_json::json!({"type": "function_call_output", "call_id": call_id, "output": output});
+    let unexecuted_output = request.run_step.unexecuted_call_output();
     let unexecuted = request
         .unexecuted_call_ids
         .iter()
-        .map(|call_id| output(call_id, storyos_core::UNEXECUTED_CALL_OUTPUT));
+        .map(|call_id| output(call_id, &unexecuted_output));
     if request.tool_outputs.is_empty() {
         return std::iter::once(current()).chain(unexecuted).collect();
     }
@@ -501,11 +510,12 @@ sources.";
 /// The body of a compaction summary request: the summary instruction and the prior reference.
 /// The outputs of the calls of the prior response go before the instruction message, and then
 /// the Host instruction says that their content is data (ADR 0085). A call that the Host did not
-/// execute gets the output `UNEXECUTED_CALL_OUTPUT` (ADR 0091 section 5).
+/// execute gets the output `unexecuted_output` (ADR 0091 section 5).
 pub(crate) fn summary_body(
     reference: &str,
     tool_outputs: &[ToolOutput],
     unexecuted_call_ids: &[String],
+    unexecuted_output: &str,
     provider_model_id: &str,
     bounds: RequestBounds,
 ) -> String {
@@ -524,7 +534,7 @@ pub(crate) fn summary_body(
         .chain(
             unexecuted_call_ids
                 .iter()
-                .map(|call_id| output(call_id, storyos_core::UNEXECUTED_CALL_OUTPUT)),
+                .map(|call_id| output(call_id, unexecuted_output)),
         )
         .chain([message])
         .collect();
