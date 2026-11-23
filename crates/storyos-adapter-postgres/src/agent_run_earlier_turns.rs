@@ -43,7 +43,7 @@ pub(crate) async fn load(
                    FROM storyos.model_attempts AS attempt
                   WHERE (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                         (earlier.owner_user_id, earlier.project_id, earlier.run_id)
-                    AND attempt.attempt_role = 'decision'
+                    AND attempt.attempt_role IN ('decision', 'successor')
                     AND attempt.decision_position = earlier.active_decision_position
                     AND attempt.payload #>> '{decision,kind}' = 'advisory'
                     AND attempt.payload #> '{decision,selected}' = 'true'::jsonb

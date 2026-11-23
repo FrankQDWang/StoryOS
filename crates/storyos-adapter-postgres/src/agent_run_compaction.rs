@@ -78,7 +78,7 @@ pub(crate) async fn advance_active_compaction(
         _ => Vec::new(),
     };
     if record == CompactionRecordState::Absent
-        && full_input_too_long(run, chain.is_some(), &target_texts)
+        && full_input_too_long(run, continues(chain.as_ref()), &target_texts)
     {
         return Ok(CompactionAdvance::TooLong);
     }
@@ -172,7 +172,7 @@ pub(crate) async fn advance_active_compaction(
     };
     // A compaction that did not install can leave no usable prior response. Then the ordinary
     // request sends the full input.
-    let full_too_long = full_input_too_long(run, chain.is_some(), &target_texts);
+    let full_too_long = full_input_too_long(run, continues(chain.as_ref()), &target_texts);
     Ok(
         match decision_request_kind(
             later_request,
@@ -192,6 +192,12 @@ pub(crate) async fn advance_active_compaction(
             DecisionRequestKind::TooLong => CompactionAdvance::TooLong,
         },
     )
+}
+
+/// Whether the decision request sends a prior response reference. A prior binding with no
+/// reference sends the full input.
+fn continues(chain: Option<&summary::PriorChain>) -> bool {
+    chain.is_some_and(|chain| chain.reference.is_some())
 }
 
 /// Whether the decision request of `run` sends a full input that does not fit, when it has no
