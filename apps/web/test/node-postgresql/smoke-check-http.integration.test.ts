@@ -72,10 +72,10 @@ async function admittedRun(title: string) {
   return { story, runId: run.response.effect.run_id, conversationId: run.response.conversation_id };
 }
 
-function agentRun(story: TestStory): CommandInput<"createAgentRun"> {
+function agentRun(story: TestStory, text = "Revise this passage."): CommandInput<"createAgentRun"> {
   return { request: {
     command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: { conversation: { kind: "new" }, author_message: { text: "Revise this passage." },
+    create_agent_run_input: { conversation: { kind: "new" }, author_message: { text },
       working_target: { kind: "current_chapter", chapter_id: story.chapterIds[0] ?? "" },
       instruction: { kind: "absent" }, cause: { kind: "author_request" }, ...story.binding() },
   } };
@@ -98,7 +98,8 @@ async function authorEdit(story: TestStory,
   } };
 }
 
-/** One Project with a record for each query: a Proposal, an AgentRun, an Author Edit, and two ready exports. */
+/** One Project with a record for each query: a Proposal, an AgentRun with a Subrun (the Subrun script of the fake model),
+ * an Author Edit, and two ready exports. */
 async function buildReadFixture() {
   await drainLeftoverWork();
   const story = await createStory(server, { title: "Smoke Read Novel", assistance: true });
@@ -108,15 +109,20 @@ async function buildReadFixture() {
   const proposal = (await openProposal(story)).proposal;
   const archive = await story.send("exportProjectArchive", archiveExport(story));
   const readable = await story.send("exportHumanReadableManuscript", readableExport(story));
-  if (archive.response.effect.kind !== "admitted" || readable.response.effect.kind !== "admitted") {
-    throw new Error("expected admitted exports");
+  const parent = await story.send("createAgentRun", agentRun(story, "SCRIPT:start_subrun"));
+  if (archive.response.effect.kind !== "admitted" || readable.response.effect.kind !== "admitted"
+    || parent.response.effect.kind !== "admitted") {
+    throw new Error("expected admitted exports and an admitted AgentRun");
   }
   await settleOnce();
+  await drainLeftoverWork();
+  const subrunId = await queryStoryOSPostgres(`SELECT subrun_run_id::text FROM storyos.subrun_requests
+    WHERE parent_run_id = '${parent.response.effect.run_id}'::uuid`);
   const tree = await client.getManuscriptTree({ baseUrl: story.baseUrl, projectId: story.projectId,
     fetchImpl: story.fetchImpl });
   const { conversation_id: conversationId } = await client.getAgentRun({ baseUrl: story.baseUrl,
     projectId: story.projectId, runId: proposal.source.run_id, fetchImpl: story.fetchImpl });
-  return { story, proposal, edit, session, snapshotId: tree.snapshot.snapshot_id, conversationId,
+  return { story, proposal, edit, session, snapshotId: tree.snapshot.snapshot_id, conversationId, subrunId,
     archiveId: archive.response.effect.export_id, readableId: readable.response.effect.export_id,
     ...await researchSource(proposal.source.run_id) };
 }
@@ -525,6 +531,9 @@ const READS: Record<string, ReadRow> = {
   getAgentRun: {
     call: ({ story, proposal }, fetchImpl) => client.getAgentRun({ ...scope(story), fetchImpl,
       runId: proposal.source.run_id }),
+  },
+  getSubrun: {
+    call: ({ story, subrunId }, fetchImpl) => client.getSubrun({ ...scope(story), fetchImpl, subrunId }),
   },
   listProjectConversations: {
     call: ({ story }, fetchImpl) => client.listProjectConversations({ ...scope(story), fetchImpl }),

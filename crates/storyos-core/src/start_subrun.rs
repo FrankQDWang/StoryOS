@@ -171,7 +171,7 @@ pub fn subrun_result(end: SubrunEnd<'_>) -> Option<ToolResultText> {
 
 /// The final answer text of a Subrun at `end` that the call of its parent gets: the text of a
 /// completed Subrun when it is not empty and the ToolCall record can hold it.
-pub fn subrun_answer(end: SubrunEnd<'_>) -> Option<&str> {
+fn subrun_answer(end: SubrunEnd<'_>) -> Option<&str> {
     (end.status == AgentRunStatus::Completed)
         .then_some(end.final_answer?)
         .filter(|text| !text.is_empty() && text.len() <= crate::TOOL_RESULT_TEXT_MAX_BYTES)

@@ -10,8 +10,8 @@ use crate::{
 };
 
 /// Item 1 of #1836: a Subrun that did not end is `working`, a cancelled Subrun is `stopped`, a
-/// completed Subrun whose call got its final answer is `completed`, and each other end is
-/// `no_result`.
+/// completed Subrun with a final answer is `completed`, also when the answer is longer than a
+/// ToolCall result can hold, and each other end is `no_result`.
 #[test]
 fn the_state_of_a_subrun_follows_its_status_and_its_final_answer() {
     let state = |status, final_answer| {
@@ -39,7 +39,7 @@ fn the_state_of_a_subrun_follows_its_status_and_its_final_answer() {
             SubrunState::Working,
             SubrunState::Completed,
             SubrunState::NoResult,
-            SubrunState::NoResult,
+            SubrunState::Completed,
             SubrunState::NoResult,
             SubrunState::NoResult,
             SubrunState::NoResult,
@@ -51,8 +51,8 @@ fn the_state_of_a_subrun_follows_its_status_and_its_final_answer() {
 /// Item 2 of #1836: each count comes from a stored result that the Tool of the call made. The
 /// manuscript has the name 林舟 three times in two Blocks, and the name 林雪 in one passage. Of
 /// three Memory entries, two have the term 渡口. No entry has a Chapter text, a passage text, or
-/// a Memory Entry text. The texts of a RunStep come before its calls, and a call that did not
-/// settle and a `finish` call give no entry.
+/// a Memory Entry text. A text keeps its place among the calls of its RunStep, and a call that did
+/// not settle and a `finish` call give no entry.
 #[test]
 fn the_entries_give_the_counts_of_the_stored_results_and_no_read_text() {
     let chapter = ReadableChapter {
@@ -130,6 +130,7 @@ fn the_entries_give_the_counts_of_the_stored_results_and_no_read_text() {
     let calls = [
         (
             0,
+            0,
             call(
                 &arguments,
                 0,
@@ -140,6 +141,7 @@ fn the_entries_give_the_counts_of_the_stored_results_and_no_read_text() {
         ),
         (
             0,
+            1,
             call(
                 &arguments,
                 1,
@@ -150,6 +152,7 @@ fn the_entries_give_the_counts_of_the_stored_results_and_no_read_text() {
         ),
         (
             1,
+            0,
             call(
                 &arguments,
                 1,
@@ -159,6 +162,7 @@ fn the_entries_give_the_counts_of_the_stored_results_and_no_read_text() {
             ),
         ),
         (
+            1,
             1,
             call(
                 &arguments,
@@ -170,6 +174,7 @@ fn the_entries_give_the_counts_of_the_stored_results_and_no_read_text() {
         ),
         (
             2,
+            0,
             call(
                 &arguments,
                 3,
@@ -180,6 +185,7 @@ fn the_entries_give_the_counts_of_the_stored_results_and_no_read_text() {
         ),
         (
             2,
+            1,
             call(
                 &arguments,
                 4,
@@ -190,6 +196,7 @@ fn the_entries_give_the_counts_of_the_stored_results_and_no_read_text() {
         ),
         (
             3,
+            0,
             call(
                 &arguments,
                 5,
@@ -199,7 +206,11 @@ fn the_entries_give_the_counts_of_the_stored_results_and_no_read_text() {
             ),
         ),
     ];
-    let texts = [(1, "先找名字。".to_owned()), (2, "再查记忆。".to_owned())];
+    // The first text follows one call of its response, and the second text comes before each call.
+    let texts = [
+        (1, 1, "先找名字。".to_owned()),
+        (2, 0, "再查记忆。".to_owned()),
+    ];
     let steps = subrun_steps(&texts, &calls);
     let shown = format!("{steps:?}");
     let read_texts = [
@@ -224,12 +235,12 @@ fn the_entries_give_the_counts_of_the_stored_results_and_no_read_text() {
                     chapter_id: "chapter-1".to_owned(),
                     title: "渡口".to_owned()
                 },
-                SubrunStep::Text {
-                    text: "先找名字。".to_owned()
-                },
                 SubrunStep::KeywordSearch {
                     query: "林舟".to_owned(),
                     matches: 3
+                },
+                SubrunStep::Text {
+                    text: "先找名字。".to_owned()
                 },
                 SubrunStep::HybridSearch {
                     question: "谁在等船？".to_owned(),

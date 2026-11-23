@@ -8,7 +8,7 @@ use storyos_application::{
     NoContractFaults, PauseAgentRunInput, ProjectScope, SubrunEntry, SubrunRecord,
     complete_agent_run,
 };
-use storyos_core::{SubrunState, SubrunStep};
+use storyos_core::{SUBRUN_MAX_RUN_STEPS, SubrunState, SubrunStep};
 use tokio_postgres::Client;
 
 use super::control_tests::{Command, commanded};
@@ -273,31 +273,26 @@ async fn the_record_of_a_subrun_answers_only_for_a_subrun_of_the_project() {
     );
 }
 
-/// Item 2 of #1836: on the Agent Plan Registration, the text that the Subrun writes beside its
-/// function call is a `text` entry before the entry of the call. The final answer is not an
-/// entry. The model serves the call of the parent, one response of the Subrun with a text and a
-/// `read_chapter` call, the `finish` call and the answer of the Subrun, and the end of the
-/// parent.
+/// Item 2 of #1836: on the Agent Plan Registration, a text that the Subrun writes among its
+/// function calls is a `text` entry at its place among the entries of the calls. The final
+/// answer is not an entry. The model serves the call of the parent, one response of the Subrun
+/// with a text, a `read_chapter` call, and a second text, the `finish` call and the answer of the
+/// Subrun, and the end of the parent.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_text_beside_the_calls_of_a_subrun_is_an_entry_before_them() {
+async fn a_text_among_the_calls_of_a_subrun_is_an_entry_at_its_place() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let text = json!({"id": "msg_01", "type": "message", "role": "assistant",
-        "status": "completed", "content": [{"type": "output_text", "text": "先读第一章。"}]});
-    let call = json!({"id": "fc_read", "type": "function_call", "status": "completed",
-        "call_id": "call_read", "name": "read_chapter",
-        "arguments": r#"{"chapter":1,"first_block":null,"last_block":null}"#});
-    let read = sse(&[
-        json!({"type": "response.created",
-               "response": {"id": "resp_910_read", "status": "in_progress", "output": []}}),
-        json!({"type": "response.output_item.done", "output_index": 0, "item": text}),
-        json!({"type": "response.output_item.done", "output_index": 1, "item": call}),
-        json!({"type": "response.completed", "response": {"id": "resp_910_read",
-               "status": "completed", "output": [text, call],
-               "usage": {"input_tokens": 40, "output_tokens": 12}}}),
-    ]);
-    let mut subrun = vec![read];
+    let text = |id: &str, text: &str| {
+        json!({"id": id, "type": "message", "role": "assistant", "status": "completed",
+               "content": [{"type": "output_text", "text": text}]})
+    };
+    let output = [
+        text("msg_01", "先读第一章。"),
+        read_call("call_read"),
+        text("msg_02", "再看结果。"),
+    ];
+    let mut subrun = vec![response("resp_910_read", &output)];
     subrun.extend(finish_then_advisory("resp_910_subrun"));
     let (scope, run_id, served) = plan_parent(&store, &admin, "910", subrun).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
@@ -305,6 +300,9 @@ async fn a_text_beside_the_calls_of_a_subrun_is_an_entry_before_them() {
         .await
         .unwrap();
     let subrun = subruns(&admin, &run_id).await.remove(0);
+    let text = |text: &str| SubrunStep::Text {
+        text: text.to_owned(),
+    };
 
     assert_eq!(
         (
@@ -318,17 +316,87 @@ async fn a_text_beside_the_calls_of_a_subrun_is_an_entry_before_them() {
                 state: SubrunState::Completed,
                 step_count: 3,
                 steps: vec![
-                    SubrunStep::Text {
-                        text: "先读第一章。".to_owned()
-                    },
+                    text("先读第一章。"),
                     SubrunStep::ChapterRead {
                         chapter_id: chapter_of(&admin, &run_id).await,
                         title: "Chapter A".to_owned(),
                     },
+                    text("再看结果。"),
                 ],
                 answer: Some(ADVISORY.to_owned()),
             }),
             6,
         )
     );
+}
+
+/// Item 2 of #1836: the text of a response of the last RunStep is the final answer, also beside a
+/// function call that StoryOS does not execute, so it is not an entry. The Subrun reads Chapter A
+/// in each of its first 11 RunSteps, and its response of RunStep 12 has a text and a
+/// `read_chapter` call.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_answer_beside_a_call_of_the_last_run_step_is_not_an_entry() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let reads = SUBRUN_MAX_RUN_STEPS - 1;
+    let mut subrun: Vec<String> = (0..reads)
+        .map(|step| {
+            response(
+                &format!("resp_911_{step}"),
+                &[read_call(&format!("call_{step}"))],
+            )
+        })
+        .collect();
+    let answer = json!({"id": "msg_01", "type": "message", "role": "assistant",
+        "status": "completed", "content": [{"type": "output_text", "text": "灯在渡口。"}]});
+    subrun.push(response("resp_911_last", &[answer, read_call("call_last")]));
+    let (scope, run_id, served) = plan_parent(&store, &admin, "911", subrun).await;
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    (complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim))
+        .await
+        .unwrap();
+    let subrun = subruns(&admin, &run_id).await.remove(0);
+    let record = record(&store, &scope, &subrun).await.unwrap();
+    let read = SubrunStep::ChapterRead {
+        chapter_id: chapter_of(&admin, &run_id).await,
+        title: "Chapter A".to_owned(),
+    };
+
+    assert_eq!(
+        (
+            record.state,
+            record.step_count,
+            record.steps,
+            record.answer,
+            served.await.unwrap().len(),
+        ),
+        (
+            SubrunState::Completed,
+            12,
+            vec![read; 11],
+            Some("灯在渡口。".to_owned()),
+            15,
+        )
+    );
+}
+
+/// A `read_chapter` call of Chapter 1 with the call identifier `call_id`.
+fn read_call(call_id: &str) -> serde_json::Value {
+    json!({"id": format!("fc_{call_id}"), "type": "function_call", "status": "completed",
+           "call_id": call_id, "name": "read_chapter",
+           "arguments": r#"{"chapter":1,"first_block":null,"last_block":null}"#})
+}
+
+/// One completed response `id` with the output items `output`.
+fn response(id: &str, output: &[serde_json::Value]) -> String {
+    let mut events = vec![json!({"type": "response.created",
+        "response": {"id": id, "status": "in_progress", "output": []}})];
+    events.extend((output.iter().enumerate()).map(|(index, item)| {
+        json!({"type": "response.output_item.done", "output_index": index, "item": item})
+    }));
+    events.push(json!({"type": "response.completed", "response": {"id": id,
+        "status": "completed", "output": output,
+        "usage": {"input_tokens": 40, "output_tokens": 12}}}));
+    sse(&events)
 }

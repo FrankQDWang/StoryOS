@@ -14,7 +14,7 @@ use crate::{
 pub enum SubrunState {
     /// The Subrun did not end. The Subrun of a paused parent Run is in this state.
     Working,
-    /// The Subrun ended `completed`, and the call of its parent got its final answer.
+    /// The Subrun ended `completed` with a final answer.
     Completed,
     /// Each other end that is not a cancellation.
     NoResult,
@@ -27,10 +27,10 @@ pub fn subrun_state(end: SubrunEnd<'_>) -> SubrunState {
     if crate::subrun_works(end.status) {
         return SubrunState::Working;
     }
-    match (end.status, crate::subrun_answer(end)) {
+    match (end.status, end.final_answer) {
         (AgentRunStatus::Cancelled, _) => SubrunState::Stopped,
-        (_, Some(_)) => SubrunState::Completed,
-        (_, None) => SubrunState::NoResult,
+        (AgentRunStatus::Completed, Some(answer)) if !answer.is_empty() => SubrunState::Completed,
+        _ => SubrunState::NoResult,
     }
 }
 
@@ -52,21 +52,24 @@ pub enum SubrunStep {
     MemorySearch { query: String, entries: u32 },
 }
 
-/// The entries of the RunSteps of a Subrun, in RunStep order. `texts` are the texts of its
-/// responses beside function calls, and `calls` its stored ToolCalls, each with its RunStep and in
-/// their order. In one RunStep, the texts come before the calls. Only a settled call of a read
-/// Tool gives an entry, so a `finish` call gives none.
+/// The entries of the RunSteps of a Subrun, in RunStep order and in the order of the output
+/// items. `texts` are the texts of its responses beside function calls, each with its RunStep and
+/// the count of the function calls before it in its response. `calls` are its stored ToolCalls,
+/// each with its RunStep and its call position. Only a settled call of a read Tool gives an
+/// entry, so a `finish` call gives none.
 pub fn subrun_steps(
-    texts: &[(u64, String)],
-    calls: &[(u64, StoredManuscriptCall<'_>)],
+    texts: &[(u64, u64, String)],
+    calls: &[(u64, u64, StoredManuscriptCall<'_>)],
 ) -> Vec<SubrunStep> {
-    let texts =
-        (texts.iter()).map(|(step, text)| (*step, 0, SubrunStep::Text { text: text.clone() }));
-    let calls = (calls.iter()).filter_map(|(step, call)| Some((*step, 1, call_step(call)?)));
+    // A text with `n` calls before it comes before the call at position `n`.
+    let texts = (texts.iter())
+        .map(|(step, before, text)| ((*step, *before, 0), SubrunStep::Text { text: text.clone() }));
+    let calls = (calls.iter())
+        .filter_map(|(step, position, call)| Some(((*step, *position, 1), call_step(call)?)));
     let mut steps: Vec<_> = texts.chain(calls).collect();
-    // The sort is stable, so the entries of one RunStep and one kind keep their order.
-    steps.sort_by_key(|(step, kind, _)| (*step, *kind));
-    steps.into_iter().map(|(_, _, step)| step).collect()
+    // The sort is stable, so two texts with the same place keep their order.
+    steps.sort_by_key(|(place, _)| *place);
+    steps.into_iter().map(|(_, step)| step).collect()
 }
 
 /// The entry of one stored call, or `None` for a call that did not settle and a call of another

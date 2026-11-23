@@ -77,7 +77,8 @@ pub(crate) async fn read(
                     WHERE (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                           (subrun.owner_user_id, subrun.project_id, subrun.run_id)
                       AND attempt.attempt_role IN ('decision', 'successor')
-                      AND attempt.dispatch_state = 'settled')
+                      AND attempt.dispatch_state = 'settled'
+                      AND attempt.payload->>'response_reference' IS NOT NULL)
                   FROM storyos.subrun_requests AS request
                   JOIN storyos.agent_runs AS subrun
                     ON (subrun.owner_user_id, subrun.project_id, subrun.run_id) =
@@ -94,18 +95,23 @@ pub(crate) async fn read(
         return Ok(None);
     };
     let end = subrun_end(&row, 2).ok_or_else(damaged)?;
-    // A text of a response beside its function calls. A response with no function call has the
-    // final answer, or no text.
+    // A text of a response with function calls that StoryOS executes, with the count of the
+    // function calls before it. The final answer is the text of an `advisory` Decision, also when
+    // its response has a function call of the last RunStep.
     let texts = client
         .query(
-            "SELECT attempt.decision_position::text, item->>'text'
+            "SELECT attempt.decision_position::text, item->>'text',
+                    (SELECT count(*) FROM jsonb_array_elements(attempt.payload->'items')
+                       WITH ORDINALITY AS earlier(other, place)
+                      WHERE earlier.place < entry.place
+                        AND earlier.other->>'native_type' = 'function_call')::text
                FROM storyos.model_attempts AS attempt,
                     jsonb_array_elements(attempt.payload->'items') WITH ORDINALITY AS entry(item, place)
               WHERE attempt.owner_user_id = $1::text::uuid AND attempt.project_id = $2::text::uuid
                 AND attempt.run_id = $3::text::uuid
                 AND attempt.attempt_role IN ('decision', 'successor')
                 AND attempt.dispatch_state = 'settled'
-                AND attempt.payload->'items' @> '[{\"native_type\": \"function_call\"}]'
+                AND attempt.payload #>> '{decision,kind}' = 'tool_request'
                 AND item->>'role' = 'assistant' AND item->>'text' <> ''
               ORDER BY attempt.decision_position, attempt.model_attempt_id, entry.place",
             &ids,
@@ -113,8 +119,11 @@ pub(crate) async fn read(
         .await
         .map_err(agent_run_database_error)?;
     let texts = (texts.iter())
-        .map(|row| Ok((position(row.get(/*idx*/ 0))?, row.get(/*idx*/ 1))))
-        .collect::<Result<Vec<(u64, String)>, CreateAgentRunError>>()?;
+        .map(|row| {
+            let before = position(row.get(/*idx*/ 2))?;
+            Ok((position(row.get(/*idx*/ 0))?, before, row.get(/*idx*/ 1)))
+        })
+        .collect::<Result<Vec<(u64, u64, String)>, CreateAgentRunError>>()?;
     let revisions = [
         READ_CHAPTER_TOOL_SPEC.revision,
         SEARCH_MANUSCRIPT_TOOL_SPEC.revision,
@@ -125,7 +134,7 @@ pub(crate) async fn read(
     let stored =
         crate::agent_run_manuscript_uses::stored_calls(client, scope, subrun_id, &revisions)
             .await?;
-    let calls: Vec<(u64, StoredManuscriptCall<'_>)> = (stored.iter())
+    let calls: Vec<(u64, u64, StoredManuscriptCall<'_>)> = (stored.iter())
         .map(|call| {
             let stored = StoredManuscriptCall {
                 tool_spec_revision: &call.tool_spec_revision,
@@ -133,17 +142,20 @@ pub(crate) async fn read(
                 arguments: &call.arguments,
                 result_text: call.result_text.as_deref(),
             };
-            (call.decision_position, stored)
+            (call.decision_position, call.call_position, stored)
         })
         .collect();
+    let state = storyos_core::subrun_state(end);
     Ok(Some(SubrunRecord {
         title: row.get(/*idx*/ 0),
         brief: row.get(/*idx*/ 1),
-        state: storyos_core::subrun_state(end),
+        state,
         step_count: u32::try_from(row.get::<_, i64>(/*idx*/ 5)).map_err(agent_run_parse_error)?,
         steps: storyos_core::subrun_steps(&texts, &calls),
-        // Only a `completed` Subrun has the final answer that its call got.
-        answer: storyos_core::subrun_answer(end).map(str::to_owned),
+        // Only a `completed` Subrun has its final answer.
+        answer: (state == storyos_core::SubrunState::Completed)
+            .then(|| end.final_answer.map(str::to_owned))
+            .flatten(),
     }))
 }
 
