@@ -109,7 +109,7 @@ An irreversible intent to stop an AgentRun that immediately prevents new work an
 _Avoid_: Run Pause, process kill, rollback
 
 **Run Finalization Gate**:
-The automatic, deterministic, idempotent host check that turns a persisted Agent Finalize Intent into one terminal Run Outcome only after all in-flight operations, direct child Subruns, Required Joins, Subrun Result Dispositions, Waits, Holds, reservations, effect uncertainties, final Artifacts, Proposals, provenance, and unfinished-work dispositions are durably settled. It requires no routine author confirmation, cannot be bypassed by a model completion claim, and can resume safely after a crash without duplicating output or terminal events.
+Deferred in part on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md): no Subrun Result Disposition and no Advisory join exist. The automatic, deterministic, idempotent host check that turns a persisted Agent Finalize Intent into one terminal Run Outcome only after all in-flight operations, direct child Subruns, Required Joins, Subrun Result Dispositions, Waits, Holds, reservations, effect uncertainties, final Artifacts, Proposals, provenance, and unfinished-work dispositions are durably settled. It requires no routine author confirmation, cannot be bypassed by a model completion claim, and can resume safely after a crash without duplicating output or terminal events.
 _Avoid_: Author confirmation dialog, Approval, model-declared completion, conversation-turn end
 
 **Run Outcome**:
@@ -149,7 +149,7 @@ An immutable, inspectable determination after interruption to resume, retry, rep
 _Avoid_: Automatic replay, checkpoint, hidden recovery heuristic
 
 **RunPlan**:
-The optional first-class Operational Record that organizes the intended work of a nontrivial AgentRun as an immutable chain of RunPlan Revisions. A simple AgentRun may proceed without one, but every RunStep still records its immediate objective and a RunPlan never grants capability, budget, or author authority.
+Deferred in part on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md): the delivered RunPlan of a Run is the chain of its accepted `update_plan` ToolCalls, and it is no record of its own. The optional first-class Operational Record that organizes the intended work of a nontrivial AgentRun as an immutable chain of RunPlan Revisions. A simple AgentRun may proceed without one, but every RunStep still records its immediate objective and a RunPlan never grants capability, budget, or author authority.
 _Avoid_: Mutable checklist, Plan Draft, workflow runtime, authorization
 
 **RunPlan Revision**:

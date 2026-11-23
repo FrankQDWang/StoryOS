@@ -4,13 +4,13 @@ status: accepted
 
 # Deliver a Smaller Stage 9 With a Plan List of a Run and a Subrun of One Level That the Parent Waits For
 
-The author decided this on 2026-11-23 in conversation. [ADR 0101](0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md) section 1 gives the order of the work after Stage 11, and its item 3 is a smaller Stage 9: the list of the plan first, then the Subruns, and the triggers last or not at all. This ADR decides that item. It releases Stage 9 from its EXECUTION HOLD with the scope of this ADR.
+The author decided this on 2026-11-23 in conversation. [ADR 0101](0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md) section 1 gives the order of the work after Stage 11, and its item 3 is a smaller Stage 9: the list of the plan first, then the Subruns, and the triggers last or not at all. Item 2 of that order has its first part on `main` ([ADR 0102](0102-send-the-earlier-turns-of-a-project-conversation-from-the-host-records-when-a-request-has-no-prior-response.md)), and its second part waits for the decision of the author on the first new Model Provider. The author started item 3 on 2026-11-23. This ADR decides that item. It releases Stage 9 from its EXECUTION HOLD with the scope of this ADR.
 
 ## Context
 
 The Stage 9 of the [delivery continuation](../foundation/storyos-product-delivery-continuation.md) has six requirements and nine tickets ([#367](https://github.com/FrankQDWang/StoryOS/issues/367)): plans, Subruns with nested children, Advisory joins, a mailbox, follow-up tasks, the interrupt of a child, proactive triggers with a schedule, and a model policy. [ADR 0096](0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md) says that these are abilities of a general agent.
 
-At `main` `5e043ab7`, the code has no plan record, no Subrun (only the refused capability name `subrun` of the fake profile), no trigger, and no model policy. A Run of the author has at most 24 RunSteps (ADR 0091). The author can send a Steering Input, pause the Run, and cancel it. The Worker is one loop: it holds one claim at a time, and the Tool Gateway dispatches the ToolCalls of one Agent Decision in their order.
+At `main` `5e043ab7`, the code has no plan record, no Subrun (only the refused capability name `subrun` of the fake profile), no Proactive Trigger, and no model policy. A Run of the author has at most 24 RunSteps (ADR 0091). The author can send a Steering Input, pause the Run, and cancel it. The Worker is one loop that works on one Run at a time, and the Tool Gateway dispatches the ToolCalls of one Agent Decision in their order.
 
 The coordinator made a survey of three coding agents on 2026-11-23 ([record](../research/subagent-design-survey-2026-11-23.md)):
 
@@ -33,9 +33,10 @@ Stage 9 does not deliver these parts of its earlier contract, and their tickets 
 - Subrun Messages, a Subrun Follow-up, the Subrun Mailbox, its Backpressure, and its Seal ([S9-04](https://github.com/FrankQDWang/StoryOS/issues/438));
 - the Subrun Interrupt ([S9-05](https://github.com/FrankQDWang/StoryOS/issues/439));
 - the Proactive Trigger and its schedule ([S9-06](https://github.com/FrankQDWang/StoryOS/issues/440), [S9-07](https://github.com/FrankQDWang/StoryOS/issues/441));
-- the model policy ([S9-08](https://github.com/FrankQDWang/StoryOS/issues/442)). It waits for the decision on the first new Model Provider ([ADR 0102](0102-send-the-earlier-turns-of-a-project-conversation-from-the-host-records-when-a-request-has-no-prior-response.md) section 7).
+- the model policy ([S9-08](https://github.com/FrankQDWang/StoryOS/issues/442)). The ADR that selects the first new Model Provider decides a model policy. This amends [ADR 0096](0096-record-the-product-position-and-put-the-author-voice-before-stage-8-and-stage-9.md) section 6, which says that the ADR of the vendor fits the destination to the model policy of Stage 9;
+- the budget reservation of a Subrun, the Resource Hold, and the Safety Hold of the earlier contract. The limits of a Run that exist apply, and section 3 gives the limits of a Subrun.
 
-The glossary keeps the terms of the Subrun Messages, of the Subrun Mailbox, of the Subrun Interrupt, of the Proactive Trigger, the Model Routing Policy, and the Model Route Override, and each one gets the line that this ADR defers it. A term that this stage delivers in part gets a line with the delivered part.
+The glossary keeps the terms of the Subrun Messages, of the Subrun Mailbox, of the Subrun Interrupt, and of the Proactive Trigger, the Model Routing Policy, and the Model Route Override, and each one gets the line that this ADR defers it. A term that this stage delivers in part gets a line with the delivered part.
 
 ### 2. The plan list
 
@@ -52,19 +53,24 @@ The implementing ticket records the exact texts of the Tool and of the instructi
 
 ### 3. The Subrun
 
+This section gives the rules that the author decided. It does not give the records of a Subrun. An amendment of this ADR gives them before the Subrun ticket is published (see "Open" below), and no Subrun ticket is ready for an agent before that amendment.
+
 - **One level.** A Run of the author can start a Subrun with a Host Tool. A Subrun cannot start a Subrun.
-- **The parent waits.** The ToolCall of the parent settles with the result of the Subrun. The parent sends no request while the Subrun works. The Tool surface must stay the same when a later ADR adds an asynchronous form.
+- **The parent waits.** The ToolCall of the parent gets its result when the Subrun ends. The parent Run sends no model request while the Subrun works. The Tool surface must stay the same when a later ADR adds an asynchronous form.
 - **A new context.** A Subrun gets a short instruction text of its own, the Project Instruction of the author, and the brief that the assistant writes in the call. It gets no message and no ToolCall of the Project Conversation. This is the Subrun Context Bundle of the glossary: the context of the parent does not go into it implicitly.
-- **Fewer Tools.** A Subrun has a fixed set of Tools that read: the manuscript, Agent Memory, and the research Tools when the Run of the author has them. The set is a subset of the Tools of the parent Run, and no Grant Revision record is new. A Subrun cannot open a Proposal, write Agent Memory, record a plan, or ask the author.
-- **The request and the record.** The ToolCall of the parent is the Subrun Request. A Subrun has its own RunSteps, Model Attempts, and ToolCalls, and it records its direct parent Run and that ToolCall.
-- **The end of a Subrun.** A Subrun ends as a Run ends (ADR 0091), with one Subrun Outcome: Succeeded when it ends with a final answer, Failed when it ends with no final answer, and Cancelled. PartiallySucceeded is not delivered. The Subrun Result of this stage is the Outcome with the final answer text. No Mailbox exists: the Host records the Result and settles the ToolCall of the parent in one transaction.
-- **What the assistant gets.** The result of the ToolCall is the final answer text of a Subrun that Succeeded. For a Subrun that Failed, the result is a fixed sentence that says that the Subrun gave no result, with the cause. The parent Run continues in the two cases, and its next Agent Decision uses the result or does not use it. A Subrun is Cancelled only when its parent Run is cancelled, and then no result goes to the assistant. The assistant gets no ToolCall of the Subrun. No Subrun Result Disposition is recorded.
-- **Control.** A cancelled or paused parent cancels or holds its Subrun. The author gets no control for a Subrun alone.
-- **Open, and the author decides each one before the Subrun ticket starts:** the first use of a Subrun, and how the panel shows a Subrun. An amendment of this ADR records the two answers, the limits (the number of Subruns of one Run and the RunSteps of a Subrun), and the exact sentences of a Subrun that gave no result.
+- **Fewer Tools.** A Subrun has a fixed set of Tools: Tools that read the manuscript, Agent Memory, and a stored Tool result, `web_search` and `web_fetch` when the Run of the author has them, and `finish`. No Tool of the set changes a record that the author sees: a Subrun cannot open a Proposal, record a Research Artifact, write Agent Memory, or record a plan. A Subrun cannot ask the author. The set is a subset of the Tools of the parent Run, and no Grant Revision record is new.
+- **The end and the result.** A Subrun ends by the finish rule of a Run ([ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)) or at its own limit of RunSteps. The assistant gets the final answer text of the Subrun as the result of its ToolCall, and it gets no ToolCall of the Subrun. When the Subrun ends with no final answer, the assistant gets a fixed sentence that says so, and the parent Run continues. The outcome PartiallySucceeded of the glossary is not delivered. No Mailbox delivers the result, and no Subrun Result Disposition is recorded: the next Agent Decision of the parent uses the result or does not use it.
+- **Limits and usage.** A Subrun has its own limit of RunSteps, and a Run of the author has a limit of Subruns. The usage of a Subrun is recorded with the Subrun.
+- **Control.** The pause and the cancellation of the parent Run apply to its Subrun: a Subrun starts no work while its parent Run is paused, and it does no work after its parent Run was cancelled or ended. The author gets no control for a Subrun alone.
+- **Open.** An amendment of this ADR records these points before the Subrun ticket is published:
+  - the two answers of the author: the first use of a Subrun, and how the panel shows a Subrun;
+  - the record of a Subrun and of its Subrun Result;
+  - the settlement of the ToolCall of the parent in each case: a final answer, no final answer, a cancelled parent Run, a paused parent Run, and a lost lease. The amendment gives it with the rules of ADR 0091 for a Host Tool and of [ADR 0086](0086-fence-an-interrupted-tool-call-and-classify-it-from-retained-records.md) for an interrupted ToolCall, and it says what occurs to a ToolCall and to a Model Attempt of the Subrun that are in work then;
+  - the exact list of the Tools of a Subrun, the two limits, the exact sentences, the request form, the source class of the brief, the mapping revision, and the Registrations.
 
 ### 4. The release of the stage
 
-A second documents change gives the Requirements, the journey `S9-JRN-001`, and the evidence rows of Stage 9 the scope of this ADR in the delivery continuation, and it binds the proof documents to them. It merges before the journey ticket of the stage starts. Until then, this ADR is correct where it and the delivery continuation are different. Stage 8 keeps its hold, and a later ADR decides it (ADR 0101 section 1 item 4).
+The [delivery continuation](../foundation/storyos-product-delivery-continuation.md), the [release baseline](../foundation/ai-independent-editor-first-release-baseline-and-handoff-criteria.md), the [proof selection](../foundation/product-delivery-proof-selection.md), and the [verification gates](../foundation/deterministic-verification-and-failure-recovery-gates.md) still say that Stage 9 is on EXECUTION HOLD, and they have the Requirements, the journey `S9-JRN-001`, and the evidence rows of the earlier contract. A second documents change gives the four documents the scope of this ADR and binds the proof documents again. It merges before the journey ticket of the stage starts. Until then, this ADR is correct where it and one of the four documents are different. Stage 8 keeps its hold, and a later ADR decides it (ADR 0101 section 1 item 4).
 
 ## Considered options
 
