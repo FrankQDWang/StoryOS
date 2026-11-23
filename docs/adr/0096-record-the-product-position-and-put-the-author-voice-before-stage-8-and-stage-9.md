@@ -55,6 +55,8 @@ A new function is first when it works on problem 1 or problem 2 and uses one of 
 
 The Volcengine Agent Plan route ([ADR 0033](0033-use-volcengine-responses-for-the-first-real-model-path.md), [ADR 0048](0048-use-the-deployment-model-destination-by-default.md)) stays the route of development: it is cheap, it has the Responses form, and it lets the full loop work. ADR 0048 already says that this route is a personal test route. The author will use another model for production, and rates the Claude series and the Gemini series as the best for Chinese prose, and the GPT series below them. This ADR selects no vendor. A later ADR selects the vendor, the account, and the cost, and a new Model Registration follows ([ADR 0059](0059-pin-a-dated-provider-model-version-in-each-model-registration.md)). That ADR also says how the new destination fits the explicit model policy of Stage 9 (`S9-REQ-006`).
 
+> Amended by [ADR 0103](0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md) section 1 on 2026-11-23: Stage 9 delivers no model policy, and the ADR that selects the vendor decides a model policy.
+
 ## Considered options
 
 - **Keep the order Stage 8, then Stage 9.** Refused: these stages add abilities of an agent, and the first problem of the author stays open for two more stages. The author would continue to write with a general agent.

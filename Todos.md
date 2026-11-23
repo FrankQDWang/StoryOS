@@ -66,7 +66,8 @@ Each idea must pass two questions: does it need setup before writing (then it is
 
 - **The scope of the author-voice stage.** Decided: [ADR 0100](docs/adr/0100-deliver-stage-10-with-writing-rules-distribution-skillpackages-and-marks-on-the-new-words-of-a-candidate.md).
 - **The production model.** Which vendor, which account, and which cost. See section 4.1.
-- **Stage 8 and Stage 9.** The author agreed to an order for the work after Stage 11: the base for more than one Provider, then a smaller Stage 9, and the withdrawal of Stage 8 in its present form ([ADR 0101](docs/adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md)). A later ADR decides each item when its work starts.
+- **Stage 9.** Decided: [ADR 0103](docs/adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md) sets a smaller scope: the plan list of a Run, and a Subrun of one level that the parent waits for.
+- **Stage 8.** The author intends to withdraw Stage 8 in its present form ([ADR 0101](docs/adr/0101-deliver-stage-11-with-a-character-file-in-agent-memory-character-intents-as-context-and-a-character-section-of-the-settings-page.md) section 1). A later ADR decides it when that work starts.
 
 ## 6. Parked items from the Stage 7 work
 

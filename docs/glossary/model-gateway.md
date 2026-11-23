@@ -41,7 +41,7 @@ An immutable, attributable, exact Project Scope-bound point-in-time observation 
 _Avoid_: Model Capability Profile, Model Registration, durable model identity
 
 **Model Routing Policy**:
-The immutable, versioned Host rule set that deterministically filters exact Project Model Use Binding and Model Registration pairs only through their separate admitting External Contract Compatibility Decisions and hard Model Route Request requirements, then ranks eligible pairs by declared soft preferences with a stable tie-breaker. Models and providers cannot author it; benchmark or learned evidence must be explicit and versioned, while random or experimental routing requires a separately authorized policy rather than hidden selection.
+Deferred on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md); no released Stage implements it. The immutable, versioned Host rule set that deterministically filters exact Project Model Use Binding and Model Registration pairs only through their separate admitting External Contract Compatibility Decisions and hard Model Route Request requirements, then ranks eligible pairs by declared soft preferences with a stable tie-breaker. Models and providers cannot author it; benchmark or learned evidence must be explicit and versioned, while random or experimental routing requires a separately authorized policy rather than hidden selection.
 _Avoid_: Model recommendation, provider router, mutable score, implicit experiment
 
 **Model Route Request**:
@@ -53,7 +53,7 @@ The immutable exact Project Scope-bound Host result that either selects one exac
 _Avoid_: Model suggestion, mutable route, provider fallback, load-balancer choice
 
 **Model Route Override**:
-An immutable root-AgentRun-scoped author setting captured as Automatic, Prefer an exact Model Registration revision, or Require that revision, and applied prospectively to every Model Route Request in the whole execution tree; descendant Subruns may only add narrower requirements. It never creates or selects a Project Model Use Binding and never bypasses capability, disclosure, compatibility, grant, budget, credential, or policy eligibility; Prefer may allow another Route Decision, while Require records no eligible route instead of falling back.
+Deferred on 2026-11-23 by [ADR 0103](../adr/0103-deliver-a-smaller-stage-9-with-a-plan-list-of-a-run-and-a-subrun-of-one-level-that-the-parent-waits-for.md); no released Stage implements it. An immutable root-AgentRun-scoped author setting captured as Automatic, Prefer an exact Model Registration revision, or Require that revision, and applied prospectively to every Model Route Request in the whole execution tree; descendant Subruns may only add narrower requirements. It never creates or selects a Project Model Use Binding and never bypasses capability, disclosure, compatibility, grant, budget, credential, or policy eligibility; Prefer may allow another Route Decision, while Require records no eligible route instead of falling back.
 _Avoid_: Optional model ID, mutable active model, Capability Grant, provider fallback
 
 **Model Fallback**:
