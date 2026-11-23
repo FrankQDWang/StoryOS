@@ -381,7 +381,6 @@ export function WritingAssistantPanel({
     current = { ...(readReference(current.scope) ?? current), conversationId: result.conversation_id };
     saveReference(current);
     setReference(current);
-    // A read that ends after a later read keeps the later Run state: the panel shows the newest Run read.
     if (read > runReads.current.applied) {
       runReads.current.applied = read;
       setRun(result);

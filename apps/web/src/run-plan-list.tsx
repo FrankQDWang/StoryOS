@@ -17,8 +17,9 @@ const MARK_NAMES: Record<PlanStepStatusInspect, string> = {
  */
 export function RunPlanList({ run }: { run: GetAgentRunResponse }) {
   const steps = run.plan ?? [];
+  // The style sheet removes the list markers, so Safari needs the list role to keep the list for VoiceOver.
   return steps.length === 0 ? null
-    : <ol className="assistant-plan" data-assistant-plan="">
+    : <ol className="assistant-plan" role="list" data-assistant-plan="">
       {steps.map((step, index) => <li key={index} data-plan-step-status={step.status}>
         <span className="assistant-plan-mark" role="img" aria-label={MARK_NAMES[step.status]} />
         <span>{step.text}</span>
