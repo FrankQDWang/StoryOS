@@ -5,11 +5,12 @@
 //! Chapter, then calls `finish`, and then gives its final answer. The parent then calls `finish`,
 //! and its final answer is `SUBRUN_ANSWER_PREFIX` and the result of each `start_subrun` call, one
 //! for each line. `SCRIPT:start_subrun <count>` gets `<count>` such calls in one response, with
-//! the call identifiers `call_start_subrun_0`, `call_start_subrun_1`, and so on. The script can
-//! follow the compaction prefix of the Host fake (ADR 0093).
+//! the call identifiers `call_start_subrun_0`, `call_start_subrun_1`, and so on. The count is at
+//! most `SUBRUN_SCRIPT_CALLS_MAX`. The script can follow the compaction prefix of the Host fake
+//! (ADR 0093).
 
 use storyos_application::CreateRequest;
-use storyos_core::{ContextSourceClass, ToolChoice, ToolOperation};
+use storyos_core::{ContextSourceClass, SUBRUN_REQUESTS_MAX, ToolChoice, ToolOperation};
 
 use crate::create_plan::FakeCreate;
 use crate::research_plan::function_call;
@@ -23,13 +24,13 @@ pub const SUBRUN_SCRIPT_TITLE: &str = "读当前章";
 /// The start of the final answer of the parent Run of the script.
 pub const SUBRUN_ANSWER_PREFIX: &str = "The Subrun answered:";
 
+/// The most `start_subrun` calls of one scripted response: one more than the Subrun Requests of
+/// one Run, so that a test can see the refusal of the count.
+const SUBRUN_SCRIPT_CALLS_MAX: usize = SUBRUN_REQUESTS_MAX as usize + 1;
+
 /// The scripted response of `request`, or `None` when the usual script applies.
 pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
-    let script = crate::script_message(&request.author_message);
-    let count = match script.strip_prefix(START_SUBRUN_SCRIPT)? {
-        "" => None,
-        count => Some(count.strip_prefix(' ')?.parse::<usize>().ok()?),
-    };
+    let count = call_count(crate::script_message(&request.author_message))?;
     let answers: Vec<&str> = (request.tool_outputs.iter())
         .filter(|output| output.name == ToolOperation::StartSubrun.function_name())
         .map(|output| output.output.as_str())
@@ -53,6 +54,18 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
     }
 }
 
+/// The count of `start_subrun` calls of `script`: `Some(None)` for one call with no index,
+/// `Some(Some(count))` for `count` indexed calls, and `None` when the Subrun script does not apply.
+fn call_count(script: &str) -> Option<Option<usize>> {
+    match script.strip_prefix(START_SUBRUN_SCRIPT)? {
+        "" => Some(None),
+        count => {
+            let count = count.strip_prefix(' ')?.parse::<usize>().ok()?;
+            Some(Some((count <= SUBRUN_SCRIPT_CALLS_MAX).then_some(count)?))
+        }
+    }
+}
+
 /// The number of the Current Chapter in the `chapter_list` item of `request`: the first element
 /// of the line whose fourth element is `"current"`. A request with no such line gets 1.
 fn current_chapter(request: &CreateRequest) -> u64 {
@@ -64,3 +77,7 @@ fn current_chapter(request: &CreateRequest) -> u64 {
         .and_then(|line| line.get(0).and_then(serde_json::Value::as_u64))
         .unwrap_or(1)
 }
+
+#[cfg(test)]
+#[path = "subrun_plan_tests.rs"]
+mod tests;

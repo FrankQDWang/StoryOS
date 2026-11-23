@@ -1,5 +1,5 @@
 //! The records and the requests of a Subrun at the dispatch seam with the fake destination (ADR
-//! 0103 section 3A). Test prefix lead `67`.
+//! 0103 section 3A). Test prefix lead `67`, and `766` and `767`.
 
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
@@ -19,9 +19,15 @@ use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_entries::write_versions;
 use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run};
+use crate::shared_tests::project_instruction::{applied, save};
 
-/// A queued Run of the author of `prefix` whose author message is `message`, in a Project with
-/// one current Memory entry at the Memory revision 1. `next` gives the identity of the Run.
+/// The Character Intent of the entry 2 of the Project of `scripted`.
+const INTENT: &str = "我明天一早去渡口。";
+
+/// A queued Run of the author of `prefix` whose author message is `message`, in a Project with a
+/// Project Instruction, one current Memory entry of the author, and one character entry of the
+/// background work with a current Character Intent at the Memory revision 2. `next` gives the
+/// identity of the Run.
 pub(super) async fn scripted(
     store: &PostgresProjectReader,
     admin: &Client,
@@ -37,6 +43,28 @@ pub(super) async fn scripted(
         &[(1, 1, 1, "current", "character", "林舟", "沉默的船夫。")],
     )
     .await;
+    let project = scope.project_id.as_ref();
+    admin
+        .batch_execute(&format!(
+            "INSERT INTO storyos.memory_entry_versions
+                 (owner_user_id, project_id, memory_entry_id, entry_number, version,
+                  memory_revision, state, entry_type, origin, title, description, text, cause,
+                  source_references, intent, intent_questions)
+             SELECT owner_user_id, project_id, md5('{project}:2')::uuid, 2, version, version,
+                    'current', 'character', 'chapter', '沈月', '渡口的人。', '渡口的人。',
+                    cause::jsonb, '[]', intent, questions::jsonb
+               FROM storyos.project_memory_heads,
+                    (VALUES (1, '{{}}', NULL, NULL),
+                            (2, '{{\"kind\": \"intent_pass\"}}', '{INTENT}', '[]'))
+                      AS row(version, cause, intent, questions)
+              WHERE project_id = '{project}'::uuid;
+             UPDATE storyos.project_memory_heads SET memory_revision = 2, next_entry_number = 3
+              WHERE project_id = '{project}'::uuid"
+        ))
+        .await
+        .unwrap();
+    let suffix = u16::from_str_radix(&format!("{prefix}f"), 16).unwrap();
+    applied(&save(store, &scope, suffix, "用第三人称。", 0).await);
     let run_id = Admission {
         message,
         ..Default::default()
@@ -138,13 +166,28 @@ pub(super) async fn records(admin: &Client, run_id: &str) -> Value {
     .await
 }
 
-/// ADR 0103 section 3A: a Subrun is one Run of the kind `subrun` with its own RunSteps and
-/// ToolCalls. Each of its requests has the purpose of a Subrun, the brief only as its Context
-/// item, the Chapter list, and the Memory Index of the pin of its parent Run, declares only the
-/// read Tools and `finish`, and follows the finish rule: its closing request has
-/// `tool_choice: "none"`. Each later request sends its full input with no prior response
-/// reference, and the projection of each stored Tool result under the call identity of its
-/// stored ToolCall.
+/// Whether the Memory Index of the first RunStep of the Run has `text`.
+async fn index_has(admin: &Client, run_id: &str, text: &str) -> Value {
+    json_of(
+        admin,
+        "SELECT to_jsonb(strpos(item ->> 'content', $2) > 0)::text
+           FROM storyos.context_assembly_manifests AS manifest,
+                jsonb_array_elements(manifest.payload -> 'selected') AS item
+          WHERE manifest.run_id = $1::text::uuid AND manifest.manifest_role = 'decision'
+            AND manifest.decision_position = 0 AND item ->> 'source_class' = 'memory_index'",
+        &[&run_id, &text],
+    )
+    .await
+}
+
+/// ADR 0103 section 3A, item 5 of #436: a Subrun is one Run of the kind `subrun` with its own
+/// RunSteps and ToolCalls. Each of its requests has the purpose of a Subrun, the Project
+/// Instruction of its parent Run, the brief, the Chapter list, and the Memory Index of the pin of
+/// its parent Run with no Character Intent, declares only the read Tools and `finish`, and
+/// follows the finish rule: its closing request has `tool_choice: "none"`. Each later request
+/// sends its full input with no prior response reference, and the projection of each stored Tool
+/// result under the call identity of its stored ToolCall. A Subrun whose parent has no Memory use
+/// has no Memory Index and no Memory Tool.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
@@ -186,7 +229,12 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
     })
     .collect();
     let call_ids: Vec<&Value> = outputs.iter().map(|output| &output["call_id"]).collect();
-    let items = json!(["subrun_brief", "chapter_list", "memory_index"]);
+    let items = json!([
+        "instruction_binding",
+        "subrun_brief",
+        "chapter_list",
+        "memory_index"
+    ]);
     let tools = json!([
         "read_chapter",
         "search_manuscript",
@@ -195,6 +243,71 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
         "finish"
     ]);
 
+    // A parent with no Memory use: its Conversation gets settings with `use_enabled = false`.
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.conversation_memory_settings SET is_current = FALSE
+              WHERE project_id = '{project}'::uuid;
+             INSERT INTO storyos.conversation_memory_settings
+             SELECT (jsonb_populate_record(NULL::storyos.conversation_memory_settings,
+               (to_jsonb(settings) - 'is_current') || jsonb_build_object(
+                 'memory_settings_revision', gen_random_uuid(), 'use_enabled', false))).*
+               FROM storyos.conversation_memory_settings AS settings
+              WHERE project_id = '{project}'::uuid",
+            project = scope.project_id.as_ref()
+        ))
+        .await
+        .unwrap();
+    let chapter_id: String = (admin.query_one(
+        "SELECT chapter_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+        &[&parent_run_id],
+    ))
+    .await
+    .unwrap()
+    .get(0);
+    let no_memory = Admission {
+        message: "SCRIPT:read_chapter 1",
+        conversation: conversation_of("671"),
+        ..Default::default()
+    }
+    .admit(&store, &scope, &chapter_id, "768")
+    .await;
+    complete(&store, &admin, &scope, &no_memory).await;
+    let no_memory = start(&store, &admin, &scope, &no_memory, "读第一章").await;
+    let claim = claim_run(&admin, scope.clone(), no_memory.clone()).await;
+    (complete_agent_run(
+        &store,
+        &FakeDestination,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    ))
+    .await
+    .unwrap();
+
+    assert_eq!(
+        (
+            index_has(&admin, &parent_run_id, INTENT).await,
+            index_has(&admin, &subrun, INTENT).await,
+            index_has(&admin, &subrun, "沈月").await,
+            requests(&admin, &no_memory).await[0].clone(),
+        ),
+        (
+            json!(true),
+            json!(false),
+            json!(true),
+            json!([
+                0,
+                "subrun",
+                "",
+                ["instruction_binding", "subrun_brief", "chapter_list"],
+                ["read_chapter", "search_manuscript", "finish"],
+                "required",
+                null,
+                []
+            ]),
+        )
+    );
     assert_eq!(
         (
             requests(&admin, &subrun).await,
@@ -375,8 +488,8 @@ async fn the_scripted_message_runs_a_subrun_and_settles_the_call_with_its_answer
     );
 }
 
-/// Item 2 of #436: a call that breaks a rule is refused with the sentence of the first rule, and
-/// it has no Subrun and no Subrun Request. Of five calls in one response, four start a Subrun
+/// Item 2 of #436: a call with a bad title or a bad brief is refused with the sentence of
+/// that rule, and it has no Subrun and no Subrun Request. Of five calls in one response, four start a Subrun
 /// each, and the fifth is refused by the limit.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -386,6 +499,9 @@ async fn a_call_that_breaks_a_rule_is_refused_with_no_subrun() {
     let title = r#"SCRIPT:refuse start_subrun {"title":" ","brief":"读第一章"}"#;
     let (scope, titled) = scripted(&store, &admin, "674", "675", title).await;
     complete(&store, &admin, &scope, &titled).await;
+    let brief = r#"SCRIPT:refuse start_subrun {"title":"读","brief":" "}"#;
+    let (scope, briefed) = scripted(&store, &admin, "766", "767", brief).await;
+    complete(&store, &admin, &scope, &briefed).await;
     let (scope, five) = scripted(&store, &admin, "676", "677", "SCRIPT:start_subrun 5").await;
     complete(&store, &admin, &scope, &five).await;
     let subrun = subruns(&admin, &five).await;
@@ -397,6 +513,8 @@ async fn a_call_that_breaks_a_rule_is_refused_with_no_subrun() {
         (
             subrun_calls(&admin, &titled).await,
             subruns(&admin, &titled).await.len(),
+            subrun_calls(&admin, &briefed).await,
+            subruns(&admin, &briefed).await.len(),
             subrun_calls(&admin, &five).await,
             subrun.len(),
         ),
@@ -405,6 +523,12 @@ async fn a_call_that_breaks_a_rule_is_refused_with_no_subrun() {
                 "refused",
                 "subrun_title",
                 "The title must have 1 through 40 characters on one line."
+            ]]),
+            0,
+            json!([[
+                "refused",
+                "subrun_brief",
+                "The brief must have 1 through 4000 characters."
             ]]),
             0,
             json!([
@@ -446,17 +570,17 @@ async fn a_subrun_with_no_final_answer_settles_the_call_with_no_result() {
     );
 }
 
-/// The Contract Fault Point observer that, at the first dispatch claim of the Subrun, stops the
-/// Subrun as the recovery of a Model Attempt does: a new fence, the status `status`, and the
-/// settlement `settlement`.
-struct StopSubrun<'a> {
+/// The Contract Fault Point observer that runs `statement` with the identity of the parent Run at
+/// the `nth` dispatch claim.
+struct AtDispatch<'a> {
     admin: &'a Client,
-    status: &'static str,
-    settlement: Option<Value>,
+    run_id: String,
+    nth: usize,
+    statement: &'a str,
     reached: std::sync::Mutex<usize>,
 }
 
-impl storyos_application::ContractFaultObserver for StopSubrun<'_> {
+impl storyos_application::ContractFaultObserver for AtDispatch<'_> {
     async fn reached(&self, point: storyos_application::ContractFaultPoint) {
         if point != storyos_application::ContractFaultPoint::DispatchClaimed {
             return;
@@ -466,51 +590,42 @@ impl storyos_application::ContractFaultObserver for StopSubrun<'_> {
             *reached += 1;
             *reached
         };
-        if count != 2 {
-            return;
+        if count == self.nth {
+            let run_id = &self.run_id;
+            self.admin.execute(self.statement, &[run_id]).await.unwrap();
         }
-        let settlement = self.settlement.as_ref().map(ToString::to_string);
-        self.admin
-            .execute(
-                "UPDATE storyos.agent_runs
-                    SET fence_token = fence_token + 1, status = $1::text,
-                        settlement = $2::text::jsonb
-                  WHERE run_kind = 'subrun' AND status = 'claimed'",
-                &[&self.status, &settlement],
-            )
-            .await
-            .unwrap();
     }
 }
 
-/// Runs a parent Run of `prefixes` with the scripted message while the observer stops its Subrun
-/// with `status` and `settlement`, then completes the parent. Gives whether the first claim of the
-/// parent stopped with a stale fence, the `start_subrun` calls, the status of the parent, and the
-/// count of its Subruns.
+/// Runs a parent Run of `prefixes` with the author message `script` while the observer runs
+/// `statement` at the `nth` dispatch claim, then completes the parent when its claim stopped.
+/// Gives whether the first claim of the parent stopped with a stale fence, the `start_subrun`
+/// calls, the status of the parent, and the count of its Subruns.
 pub(super) async fn stopped_end(
     store: &PostgresProjectReader,
     admin: &Client,
     prefixes: [&str; 2],
-    status: &'static str,
-    settlement: Option<Value>,
+    script: &str,
+    (nth, statement): (usize, &str),
 ) -> Value {
-    let script = storyos_adapter_fake_destination::START_SUBRUN_SCRIPT;
     let (scope, run_id) = scripted(store, admin, prefixes[0], prefixes[1], script).await;
-    let observer = StopSubrun {
+    let observer = AtDispatch {
         admin,
-        status,
-        settlement,
+        run_id: run_id.clone(),
+        nth,
+        statement,
         reached: std::sync::Mutex::default(),
     };
     let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
-    let stopped =
-        complete_agent_run(store, &FakeDestination, &observer, &RuntimeClock, &claim).await;
-    complete(store, admin, &scope, &run_id).await;
+    let stopped = matches!(
+        complete_agent_run(store, &FakeDestination, &observer, &RuntimeClock, &claim).await,
+        Err(storyos_application::CompleteAgentRunError::StaleFence)
+    );
+    if stopped {
+        complete(store, admin, &scope, &run_id).await;
+    }
     json!([
-        matches!(
-            stopped,
-            Err(storyos_application::CompleteAgentRunError::StaleFence)
-        ),
+        stopped,
         subrun_calls(admin, &run_id).await,
         records(admin, &run_id).await[1],
         subruns(admin, &run_id).await.len(),
@@ -519,14 +634,22 @@ pub(super) async fn stopped_end(
 
 /// Item 8 of #436: a Subrun refused because its request was too long settles the call of the
 /// parent with the sentence of that cause. The parent stops with its claim, and its next claim
-/// settles the call and continues to its end.
+/// settles the call and continues to its end. The Host fake has no context window, so the
+/// observer writes the refusal at the first dispatch claim of the Subrun, as the check of ADR
+/// 0056 does for a model with a window.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_subrun_refused_as_too_long_settles_the_call_with_the_sentence_of_that_cause() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let too_long = json!({"kind": "execution_refused", "capability": "conversation_too_long"});
-    let end = stopped_end(&store, &admin, ["67e", "67f"], "refused", Some(too_long)).await;
+    let script = storyos_adapter_fake_destination::START_SUBRUN_SCRIPT;
+    let refuse = "UPDATE storyos.agent_runs
+                     SET fence_token = fence_token + 1, status = 'refused',
+                         settlement = '{\"kind\": \"execution_refused\",
+                                        \"capability\": \"conversation_too_long\"}'
+                   WHERE run_id = (SELECT subrun_run_id FROM storyos.subrun_requests
+                                    WHERE parent_run_id = $1::text::uuid)";
+    let end = stopped_end(&store, &admin, ["67e", "67f"], script, (2, refuse)).await;
     let sentence = "The Subrun ended with no result, because its reading was too long for one \
                     Subrun. Give a smaller task.";
 

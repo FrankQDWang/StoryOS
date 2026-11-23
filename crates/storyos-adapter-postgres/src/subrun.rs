@@ -61,18 +61,16 @@ pub(crate) async fn begin(
     if let Some(subrun) = subrun {
         let status = AgentRunStatus::parse(subrun.get(/*idx*/ 1))
             .ok_or_else(|| damaged("The status of the Subrun is damaged"))?;
-        // A Subrun works while it is queued or claimed. No command continues a Subrun, so each
-        // other status is its end.
-        if matches!(status, AgentRunStatus::Queued | AgentRunStatus::Claimed) {
-            return Ok(Some(SubrunWork {
-                subrun_run_id: subrun.get(/*idx*/ 0),
-            }));
-        }
-        let result = storyos_core::subrun_result(storyos_core::SubrunEnd {
+        let end = storyos_core::SubrunEnd {
             status,
             final_answer: subrun.get(/*idx*/ 3),
             too_long: subrun.get(/*idx*/ 2),
-        });
+        };
+        let Some(result) = storyos_core::subrun_result(end) else {
+            return Ok(Some(SubrunWork {
+                subrun_run_id: subrun.get(/*idx*/ 0),
+            }));
+        };
         resolve(client, claim, row, Resolution::settled(&result)).await?;
         return Ok(None);
     }

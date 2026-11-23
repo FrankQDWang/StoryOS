@@ -105,11 +105,11 @@ async fn only_a_request_of_a_run_of_the_author_declares_update_plan_with_its_par
     );
 }
 
-/// Item 9 of #436: a decision request and a closing request of a Run of the author declare
-/// `start_subrun` after `update_plan` and before `finish`, with the exact description and a
-/// strict schema, and have the paragraph of `start_subrun` one time, directly after the
-/// paragraph of `update_plan`. The request of a background Run, a summary request, and a request
-/// of a Subrun have no such Tool and no such paragraph.
+/// ADR 0103 section 3A, item 9 of #436: a decision request and a closing request of a Run of the
+/// author declare `start_subrun` after `update_plan` and before `finish`, with the exact
+/// description and a strict schema, and have the paragraph of `start_subrun` only one time,
+/// directly after the paragraph of `update_plan`. The request of a background Run, a summary
+/// request, and a request of a Subrun have no such Tool and no such paragraph.
 #[tokio::test]
 async fn only_a_request_of_a_run_of_the_author_declares_start_subrun_with_its_paragraph() {
     let decision = CreateRequest {
@@ -140,6 +140,7 @@ async fn only_a_request_of_a_run_of_the_author_declares_start_subrun_with_its_pa
             instructions
                 .matches(&format!("{UPDATE_PLAN_INSTRUCTION}\n\n{paragraph}"))
                 .count(),
+            instructions.matches(paragraph).count(),
             facts(body(closing(decision.clone())).await).1,
         ),
         (
@@ -178,6 +179,7 @@ async fn only_a_request_of_a_run_of_the_author_declares_start_subrun_with_its_pa
              complete by itself: the question, the Chapters to read, and the form of the answer. \
              You get the final answer of the Subrun as the result of the call. When the work is \
              small, do it yourself.",
+            1,
             1,
             1,
         )

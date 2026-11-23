@@ -80,7 +80,8 @@ pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
     }
 }
 
-/// Why the Host refused one `start_subrun` call. A refused call has no Subrun.
+/// Why the Host refused one `start_subrun` call by its rules. A call that a rule refuses has no
+/// Subrun.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SubrunRefusal {
     Title,
@@ -143,16 +144,22 @@ pub struct SubrunEnd<'a> {
     pub too_long: bool,
 }
 
-/// The result of the call of the parent after its Subrun ended at `end`: the final answer text
-/// of a completed Subrun, or a fixed sentence when the Subrun ended with no final answer.
-pub fn subrun_result(end: SubrunEnd<'_>) -> ToolResultText {
-    let answer = end.final_answer.filter(|text| !text.is_empty());
+/// The result of the call of the parent for its Subrun at `end`, or `None` while the Subrun is
+/// `queued` or `claimed`: then the call continues the same Subrun. No command continues a Subrun,
+/// so each other status is its end. The result is the final answer text of a completed Subrun
+/// when the ToolCall record can hold it, and else a fixed sentence.
+pub fn subrun_result(end: SubrunEnd<'_>) -> Option<ToolResultText> {
+    if matches!(end.status, AgentRunStatus::Queued | AgentRunStatus::Claimed) {
+        return None;
+    }
+    let answer = (end.final_answer)
+        .filter(|text| !text.is_empty() && text.len() <= crate::TOOL_RESULT_TEXT_MAX_BYTES);
     let text = match (end.status, answer) {
         (AgentRunStatus::Completed, Some(answer)) => answer,
         _ if end.too_long => SUBRUN_TOO_LONG,
         _ => SUBRUN_NO_RESULT,
     };
-    crate::host_tool_result(text)
+    Some(crate::host_tool_result(text))
 }
 
 #[cfg(test)]

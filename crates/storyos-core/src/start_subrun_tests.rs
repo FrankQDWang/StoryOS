@@ -83,9 +83,10 @@ fn the_intake_takes_the_title_and_the_brief() {
     );
 }
 
-/// Item 8 of #436: a completed Subrun gives its final answer text. A Subrun whose request was too
-/// long gives the sentence of that cause. Each other end with no final answer gives the sentence
-/// of no result.
+/// Item 8 of #436: a queued or claimed Subrun gives no result, so the call continues it. A
+/// completed Subrun gives its final answer text. A Subrun whose request was too long gives the
+/// sentence of that cause. Each other end with no final answer, and an answer that the ToolCall
+/// record cannot hold, give the sentence of no result.
 #[test]
 fn the_result_is_the_final_answer_or_the_sentence_of_the_end() {
     let end = |status, final_answer, too_long| {
@@ -94,12 +95,16 @@ fn the_result_is_the_final_answer_or_the_sentence_of_the_end() {
             final_answer,
             too_long,
         })
-        .text
+        .map(|result| result.text)
     };
-    let no_result = "The Subrun ended with no result.";
+    let no_result = Some("The Subrun ended with no result.".to_owned());
+    let long = "雪".repeat(crate::TOOL_RESULT_TEXT_MAX_BYTES / 3 + 1);
     assert_eq!(
         [
+            end(AgentRunStatus::Queued, None, false),
+            end(AgentRunStatus::Claimed, None, false),
             end(AgentRunStatus::Completed, Some("第一章有灯。"), false),
+            end(AgentRunStatus::Completed, Some(&long), false),
             end(AgentRunStatus::Completed, Some(""), false),
             end(AgentRunStatus::Completed, None, false),
             end(AgentRunStatus::Refused, None, true),
@@ -108,13 +113,19 @@ fn the_result_is_the_final_answer_or_the_sentence_of_the_end() {
             end(AgentRunStatus::Paused, None, false),
         ],
         [
-            "第一章有灯。",
-            no_result,
-            no_result,
-            "The Subrun ended with no result, because its reading was too long for one Subrun. \
-             Give a smaller task.",
-            no_result,
-            no_result,
+            None,
+            None,
+            Some("第一章有灯。".to_owned()),
+            no_result.clone(),
+            no_result.clone(),
+            no_result.clone(),
+            Some(
+                "The Subrun ended with no result, because its reading was too long for one \
+                 Subrun. Give a smaller task."
+                    .to_owned()
+            ),
+            no_result.clone(),
+            no_result.clone(),
             no_result,
         ]
     );

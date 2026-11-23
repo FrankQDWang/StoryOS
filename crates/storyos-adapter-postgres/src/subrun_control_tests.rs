@@ -1,5 +1,5 @@
-//! The cancellation of the parent Run while its Subrun works, at the dispatch seam with the fake
-//! destination (ADR 0103 section 3A). Test prefix lead `76`.
+//! The cancellation and the lost lease of the parent Run while its Subrun works, at the dispatch
+//! seam with the fake destination (ADR 0103 section 3A). Test prefix lead `76`.
 
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::{FakeDestination, START_SUBRUN_SCRIPT};
@@ -9,7 +9,7 @@ use storyos_application::{
 };
 use tokio_postgres::Client;
 
-use super::tests::{records, scripted, subrun_calls, subruns};
+use super::tests::{records, scripted, stopped_end, subrun_calls, subruns};
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_steering::cancellation;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
@@ -88,5 +88,39 @@ async fn a_cancellation_of_the_parent_cancels_its_subrun() {
             json!("cancelled"),
             json!(["cancelled", true, 1]),
         )
+    );
+}
+
+/// Items 2 and 7 of #436: after a lost lease of the parent while its fourth Subrun works, the
+/// next claim of the parent continues the same fourth Subrun. The limit of 4 Subrun Requests
+/// does not refuse the call that has its Subrun Request, and the call settles with the answer.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_lost_lease_of_the_parent_continues_the_same_fourth_subrun() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    // The parent claims its first request, and each of the first three Subruns claims three.
+    let lose = "UPDATE storyos.agent_runs
+                   SET fence_token = fence_token + 1,
+                       lease_expires_at = clock_timestamp() - interval '1 second'
+                 WHERE run_id = $1::text::uuid";
+    let script = "SCRIPT:start_subrun 4";
+    let end = stopped_end(&store, &admin, ["764", "765"], script, (11, lose)).await;
+    // The fake destination answers the brief of each Subrun with its advice text.
+    let answer = storyos_core::ADVISORY_TEXT;
+
+    assert_eq!(
+        end,
+        json!([
+            true,
+            [
+                ["settled", null, answer],
+                ["settled", null, answer],
+                ["settled", null, answer],
+                ["settled", null, answer]
+            ],
+            "completed",
+            4
+        ])
     );
 }
