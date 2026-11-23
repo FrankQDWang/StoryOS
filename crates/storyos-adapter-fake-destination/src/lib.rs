@@ -102,15 +102,16 @@ impl ModelProviderAdapter for FakeDestination {
         if create.purpose == CreatePurpose::CompactionSummary {
             return Ok(summary(create));
         }
-        // A Subrun has no author message, so the script of the fake is in its brief (ADR 0103
-        // section 3A).
+        // A Subrun has no author message, so the fake reads the script of its reply from its
+        // brief. The recorded request keeps the brief only as its Context item (ADR 0103 section
+        // 3A).
+        let recorded = create;
         let subrun;
-        let create = match create.purpose {
-            CreatePurpose::Subrun => {
-                subrun = with_brief(create);
-                &subrun
-            }
-            _ => create,
+        let create = if create.purpose == CreatePurpose::Subrun {
+            subrun = with_brief(create);
+            &subrun
+        } else {
+            create
         };
         // A decision request of the earlier mapping held the reply form (ADR 0091).
         if create.route.mapping_revision != HOST_FAKE_TOOL_LOOP_MAPPING_REVISION {
@@ -136,7 +137,7 @@ impl ModelProviderAdapter for FakeDestination {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
         let mapping_revision = HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
-        let mut wire = current_input(create);
+        let mut wire = current_input(recorded);
         wire["mapping_revision"] = serde_json::json!(mapping_revision);
         if let Some(reference) = &create.previous_response_reference {
             wire["previous_response_reference"] = serde_json::json!(reference);

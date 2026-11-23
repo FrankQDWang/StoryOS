@@ -83,14 +83,17 @@ async fn start(
 }
 
 /// For each Model Attempt of the Run in the order of its creation: its RunStep, the purpose of
-/// the request, the source class of each item that the fake destination received, the declared
-/// Tools, and the `tool_choice`.
+/// the request, the author message and the source class of each item that the fake destination
+/// received, the declared Tools, the `tool_choice`, the prior response reference, and the call
+/// identity of each Tool result.
 async fn requests(admin: &Client, run_id: &str) -> Value {
     json_of(
         admin,
         "SELECT jsonb_agg(jsonb_build_array(decision_position, wire->'purpose',
+                      wire->'author_message',
                       jsonb_path_query_array(wire, '$.context[*].source_class'), wire->'tools',
-                      wire->'tool_choice')
+                      wire->'tool_choice', wire->'previous_response_reference',
+                      jsonb_path_query_array(wire, '$.tool_outputs[*].call_id'))
                       ORDER BY model_attempt_id)::text
                FROM storyos.model_attempts,
                     LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
@@ -120,9 +123,11 @@ async fn records(admin: &Client, run_id: &str) -> Value {
 }
 
 /// ADR 0103 section 3A: a Subrun is one Run of the kind `subrun` with its own RunSteps and
-/// ToolCalls. Each of its requests has the purpose of a Subrun, the brief, the Chapter list, and
-/// the Memory Index of the pin of its parent Run, declares only the read Tools and `finish`, and
-/// follows the finish rule: its closing request has `tool_choice: "none"`.
+/// ToolCalls. Each of its requests has the purpose of a Subrun, the brief only as its Context
+/// item, the Chapter list, and the Memory Index of the pin of its parent Run, declares only the
+/// read Tools and `finish`, and follows the finish rule: its closing request has
+/// `tool_choice: "none"`. Each later request sends its full input with no prior response
+/// reference, and the stored Tool results under the call identities of the stored ToolCalls.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
@@ -147,6 +152,13 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
     )
     .await
     .unwrap();
+    let calls = json_of(
+        &admin,
+        "SELECT jsonb_agg(call_id ORDER BY decision_position, call_position)::text
+           FROM storyos.tool_calls WHERE run_id = $1::text::uuid",
+        &[&subrun],
+    )
+    .await;
     let items = json!(["subrun_brief", "chapter_list", "memory_index"]);
     let tools = json!([
         "read_chapter",
@@ -159,13 +171,32 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
     assert_eq!(
         (
             requests(&admin, &subrun).await,
-            records(&admin, &subrun).await
+            records(&admin, &subrun).await,
+            calls,
         ),
         (
             json!([
-                [0, "subrun", items, tools, "required"],
-                [1, "subrun", items, tools, "required"],
-                [2, "subrun", items, tools, "none"],
+                [0, "subrun", "", items, tools, "required", null, []],
+                [
+                    1,
+                    "subrun",
+                    "",
+                    items,
+                    tools,
+                    "required",
+                    null,
+                    ["call_read_chapter_0"]
+                ],
+                [
+                    2,
+                    "subrun",
+                    "",
+                    items,
+                    tools,
+                    "none",
+                    null,
+                    ["call_read_chapter_0", "call_finish"]
+                ],
             ]),
             json!([
                 "subrun",
@@ -173,6 +204,7 @@ async fn a_subrun_runs_to_its_end_with_its_own_context_tools_and_records() {
                 [["read_chapter", 0, "settled"], ["finish", 1, "settled"]],
                 ["Lin Zhou", "SCRIPT:read_chapter 1"]
             ]),
+            json!(["call_read_chapter_0", "call_finish"]),
         )
     );
 }

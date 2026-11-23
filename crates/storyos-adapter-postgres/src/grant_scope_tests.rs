@@ -191,12 +191,12 @@ async fn binding_rows(
     .await
 }
 
-/// ADR 0094, ADR 0095, ADR 0101, ADR 0102, and ADR 0051: a grant with the sixth scope gets new
-/// binding records with the current seventh scope at the next `createAgentRun`, with no action of
-/// the author. The grant of another Project does not change.
+/// ADR 0094, ADR 0095, ADR 0101, ADR 0102, ADR 0103, and ADR 0051: a grant with the sixth scope
+/// gets new binding records with the current eighth scope at the next `createAgentRun`, with no
+/// action of the author. The grant of another Project does not change.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_grant_with_the_sixth_scope_gets_new_records_with_the_seventh_scope_at_the_next_run() {
+async fn a_grant_with_the_sixth_scope_gets_new_records_with_the_current_scope_at_the_next_run() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, pinned_run) =

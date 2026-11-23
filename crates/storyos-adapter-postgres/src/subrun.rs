@@ -4,22 +4,21 @@
 //! Memory pin of its parent Run.
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::{AgentRunKind, CurrentPassageAssemblyRecord, ToolResultCandidate};
+#[cfg(test)]
+use storyos_core::AgentRunKind;
+use storyos_core::{CurrentPassageAssemblyRecord, ToolResultCandidate};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
+#[cfg(test)]
 use crate::agent_run_tool_authority::damaged;
+#[cfg(test)]
 use crate::agent_run_work::complete_unavailable;
 
 /// Writes the queued Subrun of the call `parent_tool_call_id` of the Run of `parent`, its Subrun
 /// Request, and its first RunStep, and gives the identity of the Subrun.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the Host Tool start_subrun of #436 part B calls it"
-    )
-)]
+// Part B of #436 calls it from the Host Tool `start_subrun`. Until then only the tests call it.
+#[cfg(test)]
 pub(crate) async fn start(
     client: &Client,
     parent: &ClaimedAgentRun,
@@ -111,6 +110,7 @@ pub(crate) async fn start(
 
 /// The Context Assembly of the first RunStep of the Run of `parent`. It holds the Memory pin and
 /// the Processing Destination Identity of the Run.
+#[cfg(test)]
 async fn parent_first_record(
     client: &Client,
     parent: &ClaimedAgentRun,

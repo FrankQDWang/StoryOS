@@ -49,7 +49,7 @@ fn only_a_full_input_sends_a_skill_of_the_conversation_and_no_digest_counts_it()
 /// The purpose of a decision request of each Run kind. A capture with no kind of its input has
 /// no purpose.
 #[test]
-fn each_dispatched_run_kind_has_the_purpose_of_its_requests() {
+fn each_run_kind_has_the_purpose_of_its_requests() {
     use storyos_core::{AgentRunKind, CaptureInputKind};
     let chapter = Some(CaptureInputKind::Chapter);
     assert_eq!(
