@@ -1,4 +1,8 @@
 use std::collections::BTreeMap;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
 
 use storyos_application::{ProjectId, ProjectScope, UserId};
@@ -134,42 +138,94 @@ async fn statement_texts_built_from_data_keep_no_more_statements_than_the_capaci
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn the_storage_activation_proof_read_on_a_warm_connection_is_one_statement() {
+async fn the_storage_activation_proof_read_on_a_warm_connection_is_one_round_trip() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
-    let store = runtime_store();
+    let (proxy_url, round_trips) = round_trip_proxy(
+        &std::env::var("STORYOS_TEST_DATABASE_URL")
+            .expect("run through scripts/verify-project-scope.sh"),
+    );
+    let store = PostgresProjectReader::new(proxy_url);
     store
         .require_release1_storage_activation_proof()
         .await
         .unwrap();
-    let before = kept_statements(&store.connect().await.unwrap()).await;
+    let before = round_trips.load(Ordering::SeqCst);
 
     store
         .require_release1_storage_activation_proof()
         .await
         .unwrap();
 
-    let after = kept_statements(&store.connect().await.unwrap()).await;
-    let changed = after
-        .iter()
-        .filter(|(text, runs)| before.get(*text) != Some(*runs))
-        .map(|(text, runs)| {
-            (
-                text.clone(),
-                runs - before.get(text).copied().unwrap_or_default(),
-            )
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(
-        after.len(),
-        before.len(),
-        "the warm read prepares nothing: {after:?}"
-    );
-    assert_eq!(changed.len(), 1, "{changed:?}");
-    assert!(
-        changed[0].0.contains("storyos.storage_activation_proofs"),
-        "{changed:?}"
-    );
-    assert_eq!(changed[0].1, 1, "{changed:?}");
+    assert_eq!(round_trips.load(Ordering::SeqCst) - before, 1);
+}
+
+const SSL_REQUEST: [u8; 4] = 80_877_103_u32.to_be_bytes();
+
+/// A TCP proxy in front of the database that counts each client message that waits for an answer:
+/// each Sync and each simple Query. The Sync after the Close of a dropped statement waits for
+/// nothing, so it does not count.
+fn round_trip_proxy(database_url: &str) -> (String, Arc<AtomicUsize>) {
+    let config = database_url.parse::<tokio_postgres::Config>().unwrap();
+    let port = config.get_ports()[0];
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = listener.local_addr().unwrap().port();
+    let round_trips = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&round_trips);
+    std::thread::spawn(move || {
+        for client in listener.incoming() {
+            let (Ok(client), Ok(server)) = (client, TcpStream::connect(("127.0.0.1", port))) else {
+                return;
+            };
+            let (client_read, server_write) =
+                (client.try_clone().unwrap(), server.try_clone().unwrap());
+            let counted = Arc::clone(&counted);
+            std::thread::spawn(move || count_and_forward(client_read, server_write, &counted));
+            std::thread::spawn(move || {
+                let (mut server, mut client) = (server, client);
+                let _copied = std::io::copy(&mut server, &mut client);
+            });
+        }
+    });
+    let proxy_url = database_url.replacen(&format!(":{port}/"), &format!(":{proxy_port}/"), 1);
+    (proxy_url, round_trips)
+}
+
+// The count goes up before the message goes on, so a client that has its answer sees the count.
+fn count_and_forward(mut client: TcpStream, mut server: TcpStream, round_trips: &AtomicUsize) {
+    let read_message = |from: &mut TcpStream, header: &mut [u8]| {
+        from.read_exact(header).ok()?;
+        let length = u32::from_be_bytes(header[header.len() - 4..].try_into().ok()?);
+        let mut body = vec![0; usize::try_from(length).ok()? - 4];
+        from.read_exact(&mut body).ok()?;
+        Some(body)
+    };
+    // An SSLRequest can come before the startup message; neither has a type byte.
+    loop {
+        let mut header = [0; 4];
+        let Some(body) = read_message(&mut client, &mut header) else {
+            return;
+        };
+        if server.write_all(&[&header[..], &body].concat()).is_err() {
+            return;
+        }
+        if body.get(..4) != Some(&SSL_REQUEST[..]) {
+            break;
+        }
+    }
+    let mut previous = 0;
+    loop {
+        let mut header = [0; 5];
+        let Some(body) = read_message(&mut client, &mut header) else {
+            return;
+        };
+        if header[0] == b'Q' || (header[0] == b'S' && previous != b'C') {
+            round_trips.fetch_add(1, Ordering::SeqCst);
+        }
+        previous = header[0];
+        if server.write_all(&[&header[..], &body].concat()).is_err() {
+            return;
+        }
+    }
 }
 
 #[tokio::test]

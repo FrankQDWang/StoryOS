@@ -10,8 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = ROOT / "crates/storyos-adapter-postgres/src"
 # `connection_pool::open` is the one connect path of production code (ADR 0104 section 5).
 CONNECT_OWNER = "connection_pool.rs"
-# The statement cache wraps the driver client, so each other file uses the cached types.
+# The statement cache wraps the driver client, so each other file uses the cached types. The owner
+# may name the driver types and forward `batch_execute`; each other rule applies to it.
 STATEMENT_CACHE_OWNER = "statement_cache.rs"
+BATCH_EXECUTE_FORWARD = "self.connection.batch_execute(text)"
 DRIVER_CLIENT = re.compile(
     r"\btokio_postgres::(?:\{[^}]*\b(Client|Transaction|GenericClient)\b|(Client|Transaction|GenericClient)\b)"
 )
@@ -104,9 +106,9 @@ def check(source_dir: Path) -> tuple[list[str], int]:
         if path.name.endswith("_tests.rs") or any(part.endswith("_tests") for part in relative.parts[:-1]):
             continue
         text = path.read_text(encoding="utf-8")
-        if path.name in (CONNECT_OWNER, STATEMENT_CACHE_OWNER):
+        if path.name == CONNECT_OWNER:
             continue
-        for match in DRIVER_CLIENT.finditer(text):
+        for match in [] if path.name == STATEMENT_CACHE_OWNER else DRIVER_CLIENT.finditer(text):
             line = text[: match.start()].count("\n") + 1
             name = match.group(1) or match.group(2)
             violations.append(
@@ -130,7 +132,8 @@ def check(source_dir: Path) -> tuple[list[str], int]:
             )
         if path.name == MAINTENANCE_OWNER:
             continue
-        for match in OPAQUE_STATEMENT_CALL.finditer(text):
+        statements = text.replace(BATCH_EXECUTE_FORWARD, "") if path.name == STATEMENT_CACHE_OWNER else text
+        for match in OPAQUE_STATEMENT_CALL.finditer(statements):
             line = text[: match.start()].count("\n") + 1
             violations.append(
                 f"{relative}:{line}: `{match.group(1)}` argument is not a string literal; "
@@ -255,6 +258,22 @@ async fn read(transaction: &tokio_postgres::Transaction<'_>) -> Vec<Row> {
     Vec::new()
 }
 """,
+    "statement_cache.rs": """
+pub(crate) struct Client {
+    connection: tokio_postgres::Client,
+}
+
+impl Client {
+    pub(crate) async fn batch_execute(&self, text: &str) -> Result<(), Error> {
+        self.connection.batch_execute(text).await
+    }
+
+    pub(crate) async fn open(&self, statement: &str) -> Result<(), Error> {
+        self.connection.batch_execute(statement).await?;
+        self.connection.batch_execute("BEGIN").await
+    }
+}
+""",
     "fail_opaque.rs": """
 async fn apply(client: &PooledClient, statement: &str) -> Result<(), tokio_postgres::Error> {
     client.batch_execute(statement).await
@@ -287,7 +306,7 @@ def self_test() -> None:
             (source_dir / name).parent.mkdir(parents=True, exist_ok=True)
             (source_dir / name).write_text(body, encoding="utf-8")
         violations, checked = check(source_dir)
-    assert checked == 7, checked
+    assert checked == 8, checked
     expected = [
         "fail_config_connect.rs:3: `NoTls` outside the pool; use `connect()`",
         "fail_config_connect.rs:3: `connect` with an argument outside the pool; use `connect()`",
@@ -307,6 +326,8 @@ def self_test() -> None:
         "fail_parameter.rs:7: `BEGIN` on parameter `client: &crate::statement_cache::Client` is not a "
         "`PooledClient`",
         "postgres_tls.rs:4: `connect` with an argument outside the pool; use `connect()`",
+        "statement_cache.rs:11: `batch_execute` argument is not a string literal; the check cannot read it",
+        "statement_cache.rs:13: `BEGIN` on self field `self.connection` is not a `PooledClient`",
     ]
     assert violations == expected, violations
     print("verify-transaction-control-receivers self-test passed")
