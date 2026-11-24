@@ -31,13 +31,17 @@ ALTER ROLE postgres PASSWORD '$admin_password';
 EOF
   # --init reaps each stopped service, so that the fake systemctl sees that it ended. The inner part has a time
   # limit. At the limit, timeout sends TERM, then KILL after 10 s, and the container ends with the inner part.
+  # timeout prints each signal that it sends.
   limit=1200
   status=0
   docker run --rm --init --name "$check" --platform linux/amd64 --network "container:$check-db" \
     --volume "$work:/check:ro" ${STORYOS_CHECK_RUN:+--label "storyos.check-run=$STORYOS_CHECK_RUN"} \
     ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b \
-    timeout --kill-after=10 "$limit" sh /check/verify-personal-instance.sh --inside || status=$?
-  case $status in 124 | 137) echo "FAIL: the inner part of the check did not end in $limit s" >&2 ;; esac
+    timeout --verbose --kill-after=10 "$limit" sh /check/verify-personal-instance.sh --inside || status=$?
+  case $status in
+    124) echo "FAIL: the inner part of the check did not end in $limit s" >&2 ;;
+    137) echo "FAIL: the inner part of the check ended with SIGKILL" >&2 ;;
+  esac
   exit "$status"
 fi
 
@@ -198,8 +202,7 @@ grep -q '^STORYOS_STORAGE_UPGRADE=from 2 files to 3 files$' /tmp/last || fail "u
 [ "$(readlink -f /opt/storyos/current)" = /opt/storyos/releases/upgraded ] || fail "the upgrade did not change the link"
 curl -fsS -o /dev/null http://127.0.0.1:3000/api/v1/protocol || fail "the upgraded package does not answer"
 
-# The fake of a commit with a lost result: the first run fails, and the second run answers Active as a second run of
-# a committed upgrade does.
+# A second run of a committed upgrade answers Active, so this fake fails only on its first run.
 step "upgrade.sh continues when the second run of storyos-storage answers Active"
 storage_package lost '[ -f /tmp/lost/ran ] || { : > /tmp/lost/ran; echo "the connection ended"; exit 1; }
 echo STORYOS_STORAGE_ACTIVATION=Active'
