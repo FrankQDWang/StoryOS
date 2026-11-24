@@ -53,15 +53,16 @@ if ! id "$service_user" >/dev/null 2>&1; then
 fi
 install -d -m 755 "$opt" "$opt/releases" "$opt/deploy"
 install -d -m 700 "$backup_dir"
+# A run that stops after a change and before its reloads leaves this marker, so that the next run does them.
+pending=/run/storyos-install-pending
 restart=0
+[ ! -f "$pending" ] || restart=1
+: > "$pending"
 
 if [ "$#" = 2 ]; then
   openssl x509 -in "$2" -noout 2>/dev/null || fail "$2 is not a certificate in the PEM form"
   write_file /usr/local/share/ca-certificates/storyos-database.crt root 644 "$(cat "$2")"
-  if [ "$changed" = 1 ]; then
-    update-ca-certificates >/dev/null
-    restart=1
-  fi
+  restart=$((restart + changed))
 fi
 
 release=$(install_release "$1")
@@ -80,7 +81,7 @@ for unit in storyos-server.service storyos-worker.service storyos-backup.service
 done
 if [ "$units" -gt 0 ]; then
   systemctl daemon-reload
-  restart=1
+  restart=$((restart + 1))
 fi
 systemctl enable storyos-server.service storyos-worker.service >/dev/null 2>&1
 systemctl enable --now storyos-backup.timer >/dev/null 2>&1
@@ -128,11 +129,14 @@ caddy validate --adapter caddyfile --config "$candidate" >/dev/null 2>&1 || {
 }
 rm -f "$candidate"
 write_file /etc/caddy/Caddyfile root 644 "$caddyfile"
-if [ "$changed" = 1 ] || ! systemctl is-active --quiet caddy; then
-  systemctl reload-or-restart caddy
-fi
+restart=$((restart + changed))
 
 if [ "$restart" -gt 0 ]; then
+  update-ca-certificates >/dev/null
+  systemctl daemon-reload
+  systemctl reload-or-restart caddy
   systemctl try-restart storyos-server.service storyos-worker.service
 fi
+systemctl is-active --quiet caddy || systemctl start caddy
+rm -f "$pending"
 echo "The instance is installed. For a new database, run activate.sh"

@@ -87,6 +87,12 @@ dump=$(cd "$work/backups" && ls storyos-*.dump)
 echo "backup.sh wrote $dump"
 
 start_postgres "$drill-b" "$storyos_provider_postgres_image"
+# A load that fails leaves the roles. The second attempt into the same database uses them.
+printf 'not a dump' > "$work/backups/broken.dump"
+if run_script "$drill-b" /deploy/restore.sh /backups/broken.dump; then
+  echo "restore.sh loaded a broken dump" >&2
+  exit 1
+fi
 run_script "$drill-b" /deploy/restore.sh "/backups/$dump"
 start_server "$drill-b"
 read_text=$(node "$repository_root/scripts/personal-instance-chapter.mjs" read "$server_url" drill-session $ids)
