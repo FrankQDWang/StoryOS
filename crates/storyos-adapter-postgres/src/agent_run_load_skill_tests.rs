@@ -2,6 +2,7 @@
 //! settled load, the request after it, the refused loads, and the summary request of a
 //! compaction that waits for the output of a load.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore};
 use storyos_core::{
@@ -9,7 +10,6 @@ use storyos_core::{
     FINISH_DOES_NOT_COUNT_RESULT, IntakeRefusal, LoadSkillRefusal, SKILL_MD_PATH, SkillFileInput,
     SkillPackage, count_stored_text,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_load_skill::{TOOLS, calls, loaded_run, record, skill_md};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;

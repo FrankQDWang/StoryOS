@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -8,7 +9,6 @@ use storyos_application::{
 use storyos_core::{
     ADVISORY_TEXT, AgentRunStatus, ContextSourceClass, DeploymentDestination, RESEARCH_TOOL_OFFER,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::{complete, conversation_of};

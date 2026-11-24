@@ -14,7 +14,7 @@ use crate::agent_run_work::{complete_unavailable, load_run_phase};
 /// Validates the pending `submit_research` call `row`, records its Research Artifact, and
 /// settles it. A refused call gets the reason as its result and writes no Artifact.
 pub(crate) async fn execute(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     summary: &str,

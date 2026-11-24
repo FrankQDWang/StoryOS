@@ -5,7 +5,9 @@ use storyos_core::{
     CONTEXT_ITEM_TOKEN_LIMIT, TransitionOutcome, UpdateProjectInstructionConflict,
     UpdateProjectInstructionNoEffect, UpdateProjectInstructionRefusal,
 };
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::{seed_owned_project, seed_project, stores};
@@ -152,7 +154,8 @@ async fn the_runtime_role_cannot_change_or_delete_a_revision() {
     let saved = applied(&save(&store, &scope, 0xee41, "Kept text.", 0).await);
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
-    let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let (runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let mut runtime = crate::statement_cache::Client::new(runtime);
     tokio::spawn(connection);
     let mut refused = Vec::new();
     for statement in [

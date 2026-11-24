@@ -2,9 +2,9 @@
 //! `AuthoritativeRevision` profile and reopens or derives the Proposal. Otherwise it requires a
 //! Reversal Proposal or reports the source unavailable.
 
+use crate::statement_cache::Client;
 use storyos_application::{ManuscriptBlock, ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::author_edit::{
@@ -163,7 +163,7 @@ struct AcceptanceFacts {
 }
 
 async fn enrich(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     mut loaded: LoadedAcceptance,
 ) -> Result<LoadedAcceptance, ProjectCommandError> {
@@ -274,7 +274,7 @@ async fn enrich(
 }
 
 async fn link_after_compensation(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     loaded: &LoadedAcceptance,
     authoritative_commit_id: &str,
@@ -444,7 +444,7 @@ struct ChildReceipt<'a> {
 }
 
 async fn insert_child(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     facts: &AcceptanceFacts,
     child: ChildReceipt<'_>,

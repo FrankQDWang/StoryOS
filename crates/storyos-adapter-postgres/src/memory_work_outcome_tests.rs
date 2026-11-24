@@ -4,13 +4,13 @@
 //! The tests move the stored due time with the test administrator connection, and each test
 //! completes or parks each Run that it queued.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ConversationSelection, MemoryCaptureSource, MemoryWorkOutcome, MemoryWorkScheduleStore,
     NoContractFaults, ProjectScope, StartedMemoryCapture, complete_agent_run,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;

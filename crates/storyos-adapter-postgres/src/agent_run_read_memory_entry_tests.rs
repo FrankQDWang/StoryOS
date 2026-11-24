@@ -3,6 +3,7 @@
 //! the Project Scope, the time of the last read, the grants and the archive of the read rows, a
 //! Run that lost its Lease, a compaction, and a Run with no Memory use.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{
     CompleteAgentRunError, ContractFaultPoint, ConversationSelection, ProjectScope,
@@ -11,7 +12,6 @@ use storyos_application::{
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, RESEARCH_TOOL_OFFER,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_load_skill::calls;

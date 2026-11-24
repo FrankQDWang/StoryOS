@@ -1,9 +1,9 @@
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandEnvelope, ProjectScope};
 use storyos_core::{
     AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_ELIGIBILITY_EVIDENCE, AGENT_PLAN_ENDPOINT,
     DeploymentDestination, DestinationKind, GrantScope,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 /// The kind and evidence columns of the binding records of one destination.

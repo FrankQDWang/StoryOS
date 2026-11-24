@@ -24,6 +24,7 @@ async fn an_empty_combined_export_claim_uses_one_session_and_one_transaction() {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         let _ = connection.await;
     });
@@ -58,6 +59,7 @@ async fn a_combined_export_claim_takes_readable_work_before_archive_work() {
     let store = PostgresProjectReader::new(&runtime_url);
     let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         let _ = connection.await;
     });
@@ -107,6 +109,7 @@ async fn a_readable_export_status_read_keeps_one_snapshot_across_worker_settleme
     let store = PostgresProjectReader::new(&runtime_url);
     let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         let _ = connection.await;
     });
@@ -182,6 +185,7 @@ async fn a_ready_readable_export_reads_its_output_without_an_operation_row() {
     let store = PostgresProjectReader::new(&runtime_url);
     let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         let _ = connection.await;
     });
@@ -258,6 +262,7 @@ async fn a_readable_export_settles_failed_when_its_pinned_snapshot_expired_befor
     let store = PostgresProjectReader::new(&runtime_url);
     let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         let _ = connection.await;
     });
@@ -373,6 +378,7 @@ async fn a_project_export_status_read_keeps_one_snapshot_across_worker_settlemen
     let store = PostgresProjectReader::new(&runtime_url);
     let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         let _ = connection.await;
     });
@@ -423,7 +429,7 @@ async fn a_project_export_status_read_keeps_one_snapshot_across_worker_settlemen
 }
 
 async fn begin_settlement_under_lock(
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     scope: &ProjectScope,
     operations_table: &str,
 ) {
@@ -444,7 +450,10 @@ async fn begin_settlement_under_lock(
         .unwrap();
 }
 
-async fn activity_position(admin: &tokio_postgres::Client, scope: &ProjectScope) -> Option<String> {
+async fn activity_position(
+    admin: &crate::statement_cache::Client,
+    scope: &ProjectScope,
+) -> Option<String> {
     admin
         .query_opt(
             "SELECT project_activity_position::text FROM storyos.scope_counters
@@ -457,7 +466,7 @@ async fn activity_position(admin: &tokio_postgres::Client, scope: &ProjectScope)
 }
 
 async fn remove_export_settlement_rows(
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     scope: &ProjectScope,
     admission_id: &str,
     activity_position_before: Option<&str>,
@@ -496,7 +505,7 @@ async fn remove_export_settlement_rows(
         .unwrap();
 }
 
-async fn wait_for_blocked_read(admin: &tokio_postgres::Client, operations_table: &str) {
+async fn wait_for_blocked_read(admin: &crate::statement_cache::Client, operations_table: &str) {
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
             let waiting: i64 = admin

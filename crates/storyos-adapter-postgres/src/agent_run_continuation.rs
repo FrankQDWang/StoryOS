@@ -19,7 +19,7 @@ pub(crate) struct ContinuationWire {
 }
 
 pub(crate) async fn decide_continuation(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     conversation_id: Option<&str>,
     author_message: &str,
@@ -131,7 +131,7 @@ pub(crate) fn encode_produced_binding(
 /// admission of `wire_payload` names the binding: a successor Attempt sends the request of its
 /// predecessor, so it uses the wire admission of the predecessor (ADR 0088).
 pub(crate) async fn bind_produced_continuation(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     attempt_id: &str,
     payload: &serde_json::Value,
@@ -236,7 +236,7 @@ struct LoadedPrior {
 }
 
 async fn load_prior_binding(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     conversation_id: &str,
 ) -> Result<Option<LoadedPrior>, CompleteAgentRunError> {

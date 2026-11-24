@@ -26,7 +26,7 @@ pub(crate) struct SummaryAttempt {
 
 /// The summary Attempt of the RunStep at `decision_position` of the claimed AgentRun.
 pub(crate) async fn load_summary_attempt(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     decision_position: &str,
 ) -> Result<Option<SummaryAttempt>, CompleteAgentRunError> {
@@ -70,7 +70,7 @@ pub(crate) struct PriorChain {
 /// The prior binding that the current continuation decision selects, or `None` when the decision
 /// request continues no prior response. Then nothing is to be compacted.
 pub(crate) async fn prior_chain(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<Option<PriorChain>, CompleteAgentRunError> {
@@ -126,7 +126,7 @@ pub(crate) async fn prior_chain(
 /// outputs of the calls of the prior response go first, because each native function call needs
 /// its output (ADR 0085, ADR 0091 section 5).
 pub(crate) async fn summary_request(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     attempt: RequestAttempt,
@@ -165,7 +165,7 @@ pub(crate) async fn summary_request(
 /// The outputs of the calls of the response of the prior Model Attempt `prior`, which wait for
 /// the next request, and the calls of that response that the Host did not execute.
 async fn waiting_outputs(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     decision: Option<&storyos_core::CurrentPassageAssemblyRecord>,
     prior: Option<&str>,
@@ -193,7 +193,7 @@ async fn waiting_outputs(
 
 /// The outputs that the summary request of the current prior chain sends.
 async fn chain_outputs(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     decision: &storyos_core::CurrentPassageAssemblyRecord,
@@ -222,7 +222,7 @@ fn summary_record(
 /// Attempt. `None` means that the work changed: the current admission refuses the request, or the
 /// prior chain is not the chain of the prepared request.
 pub(crate) async fn commit_claim(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     request: &CreateRequest,
@@ -342,7 +342,7 @@ pub(crate) async fn commit_claim(
 /// content. This occurs before the store returns the request (ADR 0005 gate six, ADR 0039). The
 /// dispatch claim adds the destination and disclosure manifests later.
 pub(crate) async fn commit_assembly(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<(), CompleteAgentRunError> {
@@ -409,7 +409,7 @@ fn admit(
 /// Whether the current admission admits the summary request before its dispatch claim. A
 /// refused summary request leaves the decision request with the ordinary continuation.
 pub(crate) async fn admitted(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<bool, CompleteAgentRunError> {
@@ -434,7 +434,7 @@ pub(crate) async fn admitted(
 /// Settles the summary Attempt with its observation, and stages its result: the summary, or a
 /// refusal when the request supplied no complete summary.
 pub(crate) async fn record(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     dispatch: &DispatchClaim,

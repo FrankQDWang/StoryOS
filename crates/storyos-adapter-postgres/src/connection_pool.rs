@@ -13,12 +13,13 @@ use tokio_postgres::NoTls;
 use tokio_postgres::config::{Config, SslMode};
 
 use crate::postgres_tls::VerifiedTls;
+use crate::statement_cache::Client;
 
 const IDLE_CAPACITY: usize = 8;
 
 pub(crate) struct ConnectionPool {
     database_url: String,
-    idle: Mutex<Vec<tokio_postgres::Client>>,
+    idle: Mutex<Vec<Client>>,
 }
 
 impl ConnectionPool {
@@ -58,9 +59,7 @@ impl fmt::Debug for ConnectionPool {
 
 /// The one connect path of the production connections: verified TLS with `sslmode=require`, and
 /// a plain connection as before with each other mode (ADR 0104 section 5).
-pub(crate) async fn open(
-    database_url: &str,
-) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+pub(crate) async fn open(database_url: &str) -> Result<Client, tokio_postgres::Error> {
     let mut config = database_url.parse::<Config>()?;
     if config.get_ssl_mode() == SslMode::Require {
         // With only `hostaddr`, the driver gives the TLS connector no name; the address is the name.
@@ -74,18 +73,19 @@ pub(crate) async fn open(
         tokio::spawn(async move {
             let _connection_result = connection.await;
         });
-        return Ok(client);
+        return Ok(Client::new(client));
     }
     let (client, connection) = Box::pin(config.connect(NoTls)).await?;
     tokio::spawn(async move {
         let _connection_result = connection.await;
     });
-    Ok(client)
+    Ok(Client::new(client))
 }
 
-/// One checked-out connection; drop returns it to the pool only outside a transaction.
+/// One checked-out connection; drop returns it and its prepared statements to the pool only
+/// outside a transaction.
 pub(crate) struct PooledClient {
-    client: Option<tokio_postgres::Client>,
+    client: Option<Client>,
     pool: Arc<ConnectionPool>,
     // Atomic only so a future that holds `&PooledClient` stays `Send`.
     in_transaction: AtomicBool,
@@ -129,7 +129,7 @@ fn transaction_control(statement: &str) -> Option<TransactionControl> {
 }
 
 impl Deref for PooledClient {
-    type Target = tokio_postgres::Client;
+    type Target = Client;
 
     fn deref(&self) -> &Self::Target {
         self.client

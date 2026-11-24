@@ -6,7 +6,7 @@ use storyos_application::{
 use super::*;
 
 pub(crate) async fn persist_canonical_snapshot(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     snapshot_id: &str,
     project_activity_position: u64,
@@ -54,7 +54,7 @@ pub(crate) async fn persist_canonical_snapshot(
 }
 
 pub(crate) async fn load_latest_canonical_snapshot(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
 ) -> Result<Option<CanonicalSnapshot>, ProjectReadError> {
     let row = client
@@ -93,7 +93,7 @@ pub(crate) async fn load_latest_canonical_snapshot(
 }
 
 pub(crate) async fn load_canonical_snapshot_by_id(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
     snapshot_id: &str,
 ) -> Result<Option<CanonicalSnapshot>, ProjectReadError> {
@@ -140,7 +140,7 @@ pub(crate) enum PinnedSnapshot {
 }
 
 pub(crate) async fn load_pinned_snapshot(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
     snapshot_id: &str,
 ) -> Result<PinnedSnapshot, ProjectReadError> {
@@ -219,7 +219,7 @@ pub(super) enum CanonicalSnapshotQuery {
 }
 
 pub(super) async fn load_latest_canonical_snapshot_query(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
 ) -> Result<CanonicalSnapshotQuery, ProjectReadError> {
     let row = client

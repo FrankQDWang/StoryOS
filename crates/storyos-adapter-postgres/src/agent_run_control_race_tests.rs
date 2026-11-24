@@ -13,7 +13,9 @@ use storyos_application::{
 };
 use storyos_core::TransitionOutcome;
 use tokio::sync::Notify;
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_steering::Creates;
@@ -234,6 +236,7 @@ async fn a_control_command_that_loses_a_race_with_the_worker_answers_the_committ
             ),
         };
         let (holder, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+        let holder = crate::statement_cache::Client::new(holder);
         let connection = tokio::spawn(connection);
         let (start, answered) = (Notify::new(), Notify::new());
         let adapter = RaceAt {

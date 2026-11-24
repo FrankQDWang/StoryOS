@@ -11,7 +11,7 @@ use crate::agent_run_work::complete_unavailable;
 
 /// Loads the Skill `skill` for the pending call `row`, and settles or refuses `row`.
 pub(crate) async fn execute(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     skill: &str,
@@ -69,7 +69,7 @@ pub(crate) enum CountedLoads<'a> {
 /// so the load and read rules do not count it (ADR 0089 section 5). The Tool Gateway settles the calls of one response in call order in
 /// one transaction, so each settled call counts for the calls after it.
 pub(crate) async fn held_skills(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     counted: CountedLoads<'_>,
 ) -> Result<(Vec<String>, Vec<String>), CompleteAgentRunError> {

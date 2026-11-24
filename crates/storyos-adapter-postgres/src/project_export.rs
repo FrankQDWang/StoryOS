@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     ArchiveExportOperation, ArchiveExportRefusal, CanonicalSnapshot, ExportOperationPage,
     ExportOperationProgress, ExportOperationReader, ExportProjectArchiveAdmission,
@@ -11,7 +12,6 @@ use storyos_core::{
     ExportProjectArchive as CoreExport, ExportProjectArchiveResult, ProjectPresence,
     export_project_archive as classify_export,
 };
-use tokio_postgres::Client;
 
 use super::*;
 use crate::command_replay::{CommandReplay, EffectRecord, ReplayFault};

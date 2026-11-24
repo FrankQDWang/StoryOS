@@ -5,9 +5,9 @@ use crate::shared_tests::command_sequence_agent_run::seed_run;
 use crate::shared_tests::command_sequence_support::{
     CommandCall, Route, SequenceError, issued, seed_project,
 };
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandError, SteerAgentRunInput, SteerAgentRunSettlement};
 use storyos_contracts::CommandKind;
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 pub(crate) const STEER_AGENT_RUN: Route = Route {

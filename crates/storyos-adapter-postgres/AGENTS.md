@@ -6,6 +6,7 @@ This file adds the subtree rules for the `storyos_runtime` store. The root `AGEN
 
 `PostgresProjectReader` owns one `ConnectionPool` (`connection_pool.rs`). Every request and Worker claim checks out a `PooledClient`, and a settled client returns to the pool on drop. ADR 0031 records the decision.
 
+- Each connection is a `statement_cache::Client` with its prepared statements. A second run of one statement text on one connection sends no prepare step, and the statements end with their connection. Name `statement_cache::Client`, `Transaction`, and `GenericClient`, and not the `tokio_postgres` types, so that each statement uses the cache. The cache keeps at most `STATEMENT_CAPACITY` statements for each connection and closes the statement of the oldest use first, so a statement text that the code builds from data cannot grow it.
 - Get a runtime connection only through `connect()` or `connect_challenge()`. `connection_pool::open` is the one connect path of production code. It connects with verified TLS when the URL says `sslmode=require` ([ADR 0104](../../docs/adr/0104-run-the-personal-instance-of-the-author-on-the-hosted-topology-with-a-proxy-password-the-model-key-on-the-server-and-a-frozen-baseline.md) section 5). Do not connect with `tokio_postgres::connect`, `Config::connect`, `NoTls`, or `VerifiedTls` outside `connection_pool.rs`. The startup gate in `storage_activation_proof.rs` and the Storage Activation in `storage_activation.rs` also call `connection_pool::open`. They run before a pool exists or outside it.
 - Run `BEGIN`, `START TRANSACTION`, `COMMIT`, `END`, `ROLLBACK`, and `ABORT` only through `batch_execute` on a `PooledClient`. That method records the transaction state; a `BEGIN` through `execute`, `query`, or `simple_query` is not recorded, so the pool can hand an open transaction to the next request.
 - `Client::transaction()` stays valid on a `PooledClient`, because its guard rolls back on drop before the pooled client returns ([ADR 0031](../../docs/adr/0031-reuse-runtime-connections-with-statement-tracked-transaction-state.md)).
@@ -13,7 +14,7 @@ This file adds the subtree rules for the `storyos_runtime` store. The root `AGEN
 - Pass `&*client` when a `PooledClient` goes to a helper that takes `impl GenericClient`.
 - Set scope only with transaction-local `set_config(..., true)`. Session-level state would survive a settled transaction and reach the next checkout.
 - `storage_activation.rs` is the maintenance owner. It runs on its own admin connection that never enters the pool, so these rules do not apply to it.
-- `python3 scripts/verify-transaction-control-receivers.py` checks these rules from the source text. It does not read `execute` or `query` calls with a non-literal statement. `make check-fast` runs the check.
+- `python3 scripts/verify-transaction-control-receivers.py` checks these rules from the source text, also the names of the driver types. It does not read `execute` or `query` calls with a non-literal statement. `make check-fast` runs the check.
 
 ## Decisions
 

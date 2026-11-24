@@ -141,7 +141,7 @@ impl PostgresProjectReader {
 
     pub(super) async fn persist_requires_reconfirmation_in_tx(
         &self,
-        client: &tokio_postgres::Client,
+        client: &crate::statement_cache::Client,
         query: &ResolveApplyAuthorEditOutcome,
         admission: &OpenAdmission,
         reason: ApplyAuthorEditReconfirmationReason,
@@ -352,7 +352,7 @@ fn string_array(value: &serde_json::Value) -> Option<Vec<String>> {
 }
 
 pub(super) async fn load_requires_reconfirmation(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     query: &ResolveApplyAuthorEditOutcome,
     command_id: &str,
     author_command_admission_id: &str,

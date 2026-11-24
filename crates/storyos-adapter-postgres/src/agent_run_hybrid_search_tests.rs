@@ -5,6 +5,7 @@
 //! question vector that is not finite. Test prefix leads `54`, `b5`, `bb`, and `ba`, and the
 //! prefixes `a2c`, `a2d`, `a2e`, `a31`, `c7a`, `c7b`, `c7c`, and `c8b`.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::{
     EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER, EMBEDDING_UNKNOWN_MARKER,
@@ -21,7 +22,6 @@ use storyos_core::{
     FINISH_DOES_NOT_COUNT_RESULT, HybridSearchRefusal, IntakeRefusal, NO_SEARCH_BY_MEANING,
     PassageTerms,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;

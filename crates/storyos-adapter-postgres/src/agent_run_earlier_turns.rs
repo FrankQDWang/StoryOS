@@ -11,7 +11,7 @@ use super::agent_run_database_error;
 /// answer text. A Run that is refused, cancelled, or in progress gives no turn. After a compaction
 /// of the Run is installed, the summary is in the place of the earlier turns, so there is none.
 pub(crate) async fn load(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Vec<EarlierTurn>, CreateAgentRunError> {

@@ -13,7 +13,7 @@ use crate::agent_run_work::complete_unavailable;
 /// revision of each candidate that is still pending. A candidate that is no longer pending stays
 /// at its revision, so the Context Assembly finds it unavailable as before.
 pub(crate) async fn follow(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     retained: &mut CurrentPassageAssemblyRecord,
 ) -> Result<(), CompleteAgentRunError> {
@@ -51,7 +51,7 @@ pub(crate) async fn follow(
 /// when that candidate is still pending. A moved reference covers all of the current text when
 /// the candidate text changed after the revision of the reference.
 pub(crate) async fn follow_added(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     added: &mut [SelectionReference],
 ) -> Result<(), CompleteAgentRunError> {
@@ -99,7 +99,7 @@ pub(crate) async fn follow_added(
 /// the Operation that it changed. Another revision with the same Proposal block text can have
 /// changed another Operation, so it counts as a change.
 async fn unchanged_since(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     target: &ProposalCandidateTarget,
 ) -> Result<bool, CompleteAgentRunError> {
@@ -168,7 +168,7 @@ fn current_candidates(rows: &[tokio_postgres::Row]) -> Vec<CurrentCandidate<'_>>
 
 /// The head revision and the candidate text of each of `targets` that is still pending.
 async fn current_rows(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     targets: Vec<ProposalCandidateTarget>,
 ) -> Result<Vec<tokio_postgres::Row>, CompleteAgentRunError> {

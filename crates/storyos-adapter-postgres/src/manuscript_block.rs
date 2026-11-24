@@ -1,7 +1,7 @@
+use crate::statement_cache::GenericClient;
 use storyos_core::{
     ManuscriptBlock, ManuscriptBlockKind, chapter_display_body, upgrade_legacy_manuscript,
 };
-use tokio_postgres::GenericClient;
 use uuid::Uuid;
 
 const VERSIONED_PAYLOAD_FORMAT: &str = "storyos.manuscript-payload.v1";

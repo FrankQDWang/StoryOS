@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     DispatchClaim, ModelDispatchStore, ReferenceRetrieval, ReportedBinding, ResponseReference,
 };
@@ -5,7 +6,6 @@ use storyos_core::{
     AGENT_PLAN_REGISTRATION, DeploymentDestination, NativeStreamItem, RetrievalBounds,
     StreamItemRole, StreamItemState,
 };
-use tokio_postgres::Client;
 
 use crate::agent_run_observation::encode_items;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;

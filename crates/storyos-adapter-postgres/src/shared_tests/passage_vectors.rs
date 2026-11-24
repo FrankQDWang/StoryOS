@@ -7,6 +7,7 @@ use crate::shared_tests::create_volume_authority::{NamedEdit, adjusted_edit_comm
 use crate::shared_tests::passage_index_work::{deploy, park_other_work, wake};
 use crate::shared_tests::project_embedding_binding::{FAKE, embedding_project};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
+use crate::statement_cache::Client;
 use storyos_adapter_fake_destination::FakeEmbeddings;
 use storyos_application::{
     ApplyAuthorEditCommand, ChallengeRateClass, EditorSessionStore, PassageIndexStep, ProjectScope,
@@ -16,7 +17,6 @@ use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, EmbeddingRegistration, HOST_FAKE_EMBEDDING_REGISTRATION,
     PassageBlock, SelectionSnapshot, UTF16_COORDINATE_PROFILE, cut_passages,
 };
-use tokio_postgres::Client;
 
 pub(crate) const FAKE_ONLY: &[&EmbeddingRegistration] = &[&HOST_FAKE_EMBEDDING_REGISTRATION];
 

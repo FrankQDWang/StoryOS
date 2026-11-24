@@ -1,11 +1,11 @@
 //! The `Structural` settlement profile: the Structural Authority Settlement of one Manuscript
 //! Structure Transition (ADR 0029, ADR 0041).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProjectScope, StructureApplied,
     StructureAuthority, StructureAuthorityEvidence,
 };
-use tokio_postgres::Client;
 
 use super::structural_records::{
     StructuralInput, StructuralRecords, StructureCommit, WriterBaseRebind,

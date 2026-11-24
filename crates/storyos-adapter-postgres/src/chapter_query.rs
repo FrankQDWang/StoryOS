@@ -37,7 +37,7 @@ impl ChapterQueryReader for PostgresProjectReader {
 }
 
 async fn read_scoped_chapter(
-    transaction: &tokio_postgres::Transaction<'_>,
+    transaction: &crate::statement_cache::Transaction<'_>,
     scope: &ProjectScope,
     chapter_id: &ChapterId,
 ) -> Result<Option<Chapter>, ProjectReadError> {

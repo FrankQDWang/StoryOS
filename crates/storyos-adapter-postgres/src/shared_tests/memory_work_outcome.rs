@@ -1,6 +1,6 @@
 //! The shared test support from `memory_work_outcome_tests.rs`.
 
-use tokio_postgres::Client;
+use crate::statement_cache::Client;
 
 /// Runs `claim` while a lock holds the start of a capture after the claim of a row, and ends the
 /// session of the claim at that point. This is the stop of the Worker. Returns the result of

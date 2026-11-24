@@ -1,8 +1,8 @@
+use crate::statement_cache::GenericClient;
 use storyos_application::{
     CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterId, ManuscriptTreeReader,
     ProjectReadError, ProjectScope, VolumeFact, VolumeId,
 };
-use tokio_postgres::GenericClient;
 
 use super::{PostgresProjectReader, read_error, set_scope};
 use crate::snapshot::CanonicalSnapshotQuery;

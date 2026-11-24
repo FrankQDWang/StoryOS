@@ -26,6 +26,7 @@ async fn each_project_export_table_is_a_live_table() {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let (client, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let client = crate::statement_cache::Client::new(client);
     tokio::spawn(async move {
         let _ = connection.await;
     });
@@ -146,7 +147,8 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
         .apply_author_edit_with_fault(&command, AuthorEditFault::AfterAdmissionBeforeCore)
         .await
         .expect_err("the reconfirmation cut must stop before Core");
-    let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let mut admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         let _ = connection.await;
     });

@@ -5,12 +5,12 @@ use crate::accept_proposal::AcceptProposal;
 use crate::shared_tests::command_sequence_support::{
     CommandCall, Route, SequenceError, issued, run_without_foreign_keys, two_chapter_writer,
 };
+use crate::statement_cache::Client;
 use storyos_application::{
     AcceptProposalInput, AcceptProposalSettlement, EditorSessionId, ManuscriptBlock,
     ManuscriptBlockKind, ProjectCommandError, ProjectScope,
 };
 use storyos_contracts::CommandKind;
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 pub(crate) const ACCEPT_PROPOSAL: Route = Route {

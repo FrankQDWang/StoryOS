@@ -132,7 +132,7 @@ pub(crate) fn prepare_subject(
 }
 
 pub(crate) async fn advance(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     assistance: Option<&ProjectAssistanceRecord>,
@@ -205,7 +205,7 @@ pub(crate) async fn advance(
 /// Pauses the successor recovery and the Run. A pause after the fence keeps the spent allowance
 /// and never resets it.
 pub(crate) async fn pause(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &mut DecisionRow,
     mut marker: serde_json::Value,
@@ -236,7 +236,7 @@ pub(crate) async fn pause(
 }
 
 pub(crate) async fn prohibit_automatic_successor(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<(), CompleteAgentRunError> {
@@ -288,7 +288,7 @@ pub(crate) async fn prohibit_automatic_successor(
 }
 
 pub(crate) async fn load_unknown_create_successor(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Option<UnknownCreateSuccessorInspect>, storyos_application::CreateAgentRunError> {
@@ -344,7 +344,7 @@ pub(crate) async fn load_unknown_create_successor(
 
 /// The selected Decision of the successor at `decision_position`, the shown position.
 pub(crate) async fn load_successor_selection(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
     decision_position: &str,
@@ -423,7 +423,7 @@ pub(crate) fn apply_late(
 }
 
 pub(crate) async fn load_decision(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<DecisionRow, CompleteAgentRunError> {
     let row = client
@@ -457,7 +457,7 @@ pub(crate) async fn load_decision(
 }
 
 async fn decision_payload(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Option<serde_json::Value>, storyos_application::CreateAgentRunError> {
@@ -487,7 +487,7 @@ async fn decision_payload(
 }
 
 pub(crate) async fn write_decision_payload(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     attempt_id: &str,
     payload: &serde_json::Value,

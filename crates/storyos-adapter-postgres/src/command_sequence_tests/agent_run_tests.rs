@@ -1,8 +1,8 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     AgentRunControlRefusal, CancelAgentRunInput, PauseAgentRunInput, RefusableCommandError,
 };
 use storyos_core::{CreateAgentRunRefusal, ReceiptResult};
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

@@ -2,12 +2,12 @@
 //! records come from the Subrun Requests, the Subrun rows, their Model Attempts, and their stored
 //! ToolCalls. The Core rules `subrun_state` and `subrun_steps` decide the state and the entries.
 
+use crate::statement_cache::Client;
 use storyos_application::{CreateAgentRunError, ProjectScope, SubrunEntry, SubrunRecord};
 use storyos_core::{
     HYBRID_SEARCH_MANUSCRIPT_TOOL_SPEC, READ_CHAPTER_TOOL_SPEC, READ_MEMORY_ENTRY_TOOL_SPEC,
     SEARCH_MANUSCRIPT_TOOL_SPEC, SEARCH_MEMORY_TOOL_SPEC, StoredManuscriptCall,
 };
-use tokio_postgres::Client;
 
 use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
 use crate::subrun::{subrun_end, subrun_end_columns};

@@ -13,7 +13,9 @@ use crate::shared_tests::command_sequence_support::CommandCall;
 use crate::shared_tests::create_agent_run::{
     CHAPTER, USER_A, admitted, connect_admin, issue_run, prepare_project, refused, run_command,
 };
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 
 #[path = "create_agent_run_skill_tests.rs"]
 pub(crate) mod skill_tests;

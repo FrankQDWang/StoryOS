@@ -3,11 +3,11 @@
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_steering::queued;
+use crate::statement_cache::Client;
 use storyos_application::{
     MemoryCaptureSource, MemoryCaptureStartRefusal, ProjectScope, StartedMemoryCapture,
 };
 use storyos_core::ProjectionMode;
-use tokio_postgres::Client;
 
 /// A capture gives way to each queued Run of the author, and earlier tests leave queued Runs in
 /// the shared database. Park them, so that only the Runs of this test are queued.

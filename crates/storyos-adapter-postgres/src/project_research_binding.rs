@@ -5,9 +5,9 @@
 //! exchange; the Worker checks the pinned digests before each dispatch. The current research
 //! Decision of a Project is its latest `tool_registration_compatible` Decision.
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectScope};
 use storyos_core::{GrantScope, ResearchToolOffer, ToolRegistrationLifecycle};
-use tokio_postgres::Client;
 
 use crate::command_sequence::unavailable;
 use crate::project_destination_binding::{

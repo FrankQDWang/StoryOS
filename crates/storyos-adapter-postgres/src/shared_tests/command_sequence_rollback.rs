@@ -10,12 +10,12 @@ use crate::command_sequence::{
     unavailable,
 };
 use crate::shared_tests::command_sequence_support::{CommandCall, SequenceError, settlement_rows};
+use crate::statement_cache::Client;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use storyos_contracts::CommandKind;
 use storyos_core::ReceiptResult;
-use tokio_postgres::Client;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum FailurePoint {

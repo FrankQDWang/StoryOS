@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     DeleteVolumeInput, DeleteVolumeSettlement, ProjectCommandEnvelope, ProjectCommandError,
     VolumeDeleted,
@@ -7,7 +8,6 @@ use storyos_core::{
     DeleteVolume as CoreDeleteVolume, DeleteVolumeApplied, VolumeChildPolicy, VolumeJoin,
     VolumeRemovalLifecycle, delete_volume as classify_delete_volume,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

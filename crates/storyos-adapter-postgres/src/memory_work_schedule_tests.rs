@@ -3,6 +3,7 @@
 //! test for each row of the decision table. The tests move the stored due time with the test
 //! administrator connection, and each test completes or parks each Run that it queued.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -10,7 +11,6 @@ use storyos_application::{
     MemoryWorkScheduleStore, NoContractFaults, complete_agent_run,
 };
 use storyos_core::ConversationCaptureSkip;
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_retrieval::{adapter, destination, real_run};

@@ -3,7 +3,7 @@ use storyos_application::CreateAgentRunError;
 use storyos_core::{HumanChapterReference, HumanPassageReference, PassageContextTarget};
 
 pub(crate) async fn resolve(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &PassageContextInput<'_>,
     references: &[HumanPassageReference],
 ) -> Result<Option<Vec<PassageContextTarget>>, CreateAgentRunError> {

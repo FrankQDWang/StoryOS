@@ -160,7 +160,7 @@ fn source_condition(
 }
 
 async fn read_operations(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
     proposal_id: &str,
 ) -> Result<Vec<ProposalOperationRecord>, ProjectReadError> {
@@ -194,7 +194,7 @@ async fn read_operations(
 }
 
 async fn load_exact_base_block(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
     chapter_id: &str,
     base_revision_id: &str,

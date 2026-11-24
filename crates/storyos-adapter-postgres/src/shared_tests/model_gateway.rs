@@ -6,6 +6,7 @@ use crate::shared_tests::command_sequence_project_session::UPDATE_PROJECT_ASSIST
 use crate::shared_tests::command_sequence_structure::{titled_chapter, titled_volume};
 use crate::shared_tests::command_sequence_support::{command_issue, seed_project};
 use crate::shared_tests::json_row::json_of;
+use crate::statement_cache::Client;
 use serde_json::Value;
 use storyos_application::{
     ClaimedAgentRun, ConversationSelection, CreateAgentRunInput, GatewayClock, ProjectScope,
@@ -16,7 +17,6 @@ use storyos_core::{
     AssistanceAvailability, DeploymentDestination, ResearchToolOffer, SelectionReference,
     SkillPackageReference, SkillSet,
 };
-use tokio_postgres::Client;
 
 pub(crate) const AVAILABLE_BYTES: &[u8] = br#"{"availability":"available"}"#;
 

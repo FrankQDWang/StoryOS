@@ -13,6 +13,7 @@ pub(crate) async fn claim_in_project(
 ) -> Option<storyos_application::ClaimedAgentRun> {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL").unwrap();
     let (others, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let others = crate::statement_cache::Client::new(others);
     tokio::spawn(connection);
     others.batch_execute("BEGIN").await.unwrap();
     others

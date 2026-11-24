@@ -1,8 +1,8 @@
 //! The Author Command Admission row of the sequence, for project, AgentRun, and editor commands.
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use storyos_contracts::CommandKind;
-use tokio_postgres::Client;
 
 use super::{
     Admission, DirectEditorAdmission, EditorAdmission, ProjectActionClass, TakeoverAdmission,

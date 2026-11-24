@@ -2,9 +2,9 @@
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::command_sequence_support::CommandCall;
+use crate::statement_cache::Client;
 use std::sync::Mutex;
 use storyos_application::{CancelAgentRunInput, ContractFaultObserver, ContractFaultPoint};
-use tokio_postgres::Client;
 
 pub(crate) enum Fault<'a> {
     /// The author cancels the Run.

@@ -2,13 +2,13 @@
 //! Memory Index, the current version of each entry, the source and its availability, the Project
 //! Scope, the Conversation Memory Settings, and the Host limits.
 
+use crate::statement_cache::Client;
 use storyos_application::{
     MemoryEntrySourceItem, ProjectId, ProjectScope, UserId, list_memory_entries,
 };
 use storyos_core::{
     MEMORY_CHARACTER_TEXT_MAX_CHARS, MEMORY_DESCRIPTION_MAX_CHARS, MEMORY_TITLE_MAX_CHARS,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;

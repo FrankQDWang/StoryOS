@@ -5,12 +5,12 @@
 
 use std::collections::BTreeSet;
 
+use crate::statement_cache::GenericClient;
 use storyos_application::{PassageRankingFacts, ProjectReadError, ProjectScope, QuestionVector};
 use storyos_core::{
     NearestPassage, PASSAGE_CUT_REVISION, PASSAGE_LIST_LIMIT, RankingBlock, RankingChapter,
     current_passages,
 };
-use tokio_postgres::GenericClient;
 
 use crate::manuscript_search::{LiveChapterReadExtent, read_live_chapter_blocks};
 use crate::passage_vectors::vector_text;

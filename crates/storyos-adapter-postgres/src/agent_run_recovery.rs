@@ -18,7 +18,7 @@ use crate::update_project_assistance::read_assistance_record;
 
 /// Advances the retrieval subject and then the successor marker of the active decision.
 pub(crate) async fn advance(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     payload: &serde_json::Value,
@@ -69,7 +69,7 @@ pub(crate) async fn advance(
 /// A new claim of a cancelled Run does its cancellation duties: it re-observes an in-flight
 /// Create once, reconciles a retrievable reference as evidence, and sends one Abort.
 pub(crate) async fn settle_cancelled(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
@@ -149,7 +149,7 @@ pub(crate) async fn settle_cancelled(
 /// each Decision position (ADR 0088). A probe has no recovery: its Attempt stays uncertain, and
 /// the executor sends the probe again at most one time (ADR 0049).
 pub(crate) async fn record_unknown_create(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     dispatch: &DispatchClaim,
@@ -178,7 +178,7 @@ pub(crate) async fn record_unknown_create(
 /// The re-observation of a cancelled Create supplies no Agent Decision. An unknown outcome keeps
 /// its recovery facts as evidence for the fenced retrieval.
 pub(crate) async fn record_cancelled_create(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     dispatch: &DispatchClaim,
@@ -236,7 +236,7 @@ pub(crate) async fn record_cancelled_create(
 }
 
 async fn write_subject(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     dispatch: &DispatchClaim,
@@ -392,7 +392,7 @@ fn decode_retained_reference(payload: &serde_json::Value) -> Option<ResponseRefe
 /// Whether a decision or successor Attempt of the Run is in flight: dispatched with an unknown
 /// outcome.
 pub(crate) async fn in_flight_attempt(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<bool, CompleteAgentRunError> {
@@ -423,7 +423,7 @@ pub(crate) async fn in_flight_attempt(
 /// The cancel command sends no destination request. It leaves the cancellation duties of an
 /// in-flight decision Attempt to a new Worker claim of the cancelled Run.
 pub(crate) async fn mark_cancellation_duties(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<(), CompleteAgentRunError> {
@@ -446,7 +446,7 @@ pub(crate) async fn mark_cancellation_duties(
 /// A pre-dispatch refusal of a cancellation duty ends the duties of this cancelled Run, so the
 /// Worker does not send the same refused request again.
 pub(crate) async fn refuse_cancellation_duties(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     capability: &str,

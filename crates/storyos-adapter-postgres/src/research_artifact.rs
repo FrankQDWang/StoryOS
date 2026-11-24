@@ -23,7 +23,7 @@ use crate::research_source::{GAP_COLUMNS, SNAPSHOT_COLUMNS, gap, snapshot};
 /// Each Source Snapshot and Source Gap of the claimed Run with its ToolCall identity: by ToolCall
 /// in item order, then the Snapshots in result order, then the Gaps in request order.
 pub(crate) async fn run_sources(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<Vec<(String, CitableSource)>, CompleteAgentRunError> {
     let rows = client
@@ -79,7 +79,7 @@ pub(crate) async fn run_sources(
 
 /// Writes the one Research Artifact of the selected synthesis Decision `decision_id`.
 pub(crate) async fn record(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     attempt_id: &str,
@@ -132,7 +132,7 @@ pub(crate) async fn record(
 /// successor of an unknown create, or else the decision attempt. A request with a full input reads
 /// no earlier response, and its Proposal names no Artifact.
 pub(crate) async fn proposal_lineage(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<Option<String>, tokio_postgres::Error> {
     client

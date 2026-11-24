@@ -5,7 +5,9 @@ use storyos_application::{
 use storyos_core::ModelAdapter;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::oneshot;
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_lease::SteppedClock;
@@ -92,6 +94,7 @@ async fn expire(admin: &Client, run_id: &str) {
 async fn claim_of_another_worker(store: &PostgresProjectReader, run_id: &str) -> Option<String> {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL").unwrap();
     let (others, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let others = crate::statement_cache::Client::new(others);
     tokio::spawn(connection);
     others.batch_execute("BEGIN").await.unwrap();
     others

@@ -1,7 +1,7 @@
 //! The shared test support from `memory_capture_tools_tests.rs`.
 
+use crate::statement_cache::Client;
 use storyos_application::{MemoryCaptureSource, ProjectScope};
-use tokio_postgres::Client;
 
 /// The Conversation of the first Run of the author of the Project, as the source of a capture.
 pub(crate) async fn conversation_source(

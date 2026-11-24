@@ -11,7 +11,7 @@ use storyos_core::{
 /// Assemble the current Chapter, every Chapter block and candidate that a reference covers, and
 /// the exact selected text of each reference.
 pub(crate) async fn assemble(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &PassageContextInput<'_>,
     source: &CurrentPassageAssembly,
     references: &[SelectionReference],
@@ -115,7 +115,7 @@ pub(crate) async fn assemble(
 
 /// The current availability of each reference: its Chapter head or its candidate revision.
 pub(crate) async fn availability(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     references: &[AdmittedSelection],
 ) -> Result<Vec<WorkingTargetAvailability>, CreateAgentRunError> {
@@ -208,7 +208,7 @@ struct HeadBlock {
 
 /// The head revision of a Chapter and its blocks in order, with their reservation state.
 async fn head_blocks(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     chapter_id: &str,
 ) -> Result<Option<(String, Vec<HeadBlock>)>, CreateAgentRunError> {

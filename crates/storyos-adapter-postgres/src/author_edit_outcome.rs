@@ -249,7 +249,7 @@ impl ApplyAuthorEditOutcomeResolver for PostgresProjectReader {
 }
 
 async fn load_outcome_relation(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     query: &ResolveApplyAuthorEditOutcome,
 ) -> Result<tokio_postgres::Row, ApplyAuthorEditOutcomeResolveError> {
     client

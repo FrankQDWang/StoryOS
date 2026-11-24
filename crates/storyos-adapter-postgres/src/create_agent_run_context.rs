@@ -28,7 +28,7 @@ pub(crate) struct PassageContextInput<'a> {
 }
 
 pub(crate) async fn persist_current_passage_assembly(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &PassageContextInput<'_>,
     destination_identity: &str,
 ) -> Result<AgentRunContext, CreateAgentRunError> {
@@ -210,7 +210,7 @@ pub(crate) async fn persist_current_passage_assembly(
 /// The Project Instruction Revision that the Run `run_id` bound at its admission, with its exact
 /// text, or `None` for "none configured". A later save does not change it (ADR 0094 section 2).
 pub(crate) async fn bound_instruction(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Option<storyos_core::BoundInstruction>, CreateAgentRunError> {
@@ -239,7 +239,7 @@ pub(crate) async fn bound_instruction(
 }
 
 pub(super) async fn load_assembled_context(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
     decision_position: &str,
@@ -321,7 +321,7 @@ pub(super) async fn load_assembled_context(
 }
 
 pub(crate) async fn load_working_target(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     chapter_id: &str,
 ) -> Result<(Option<String>, String), CreateAgentRunError> {
@@ -346,7 +346,7 @@ pub(crate) async fn load_working_target(
 }
 
 pub(crate) async fn current_chapter_payload(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     chapter_id: &str,
 ) -> Result<Option<(String, String)>, CreateAgentRunError> {
@@ -389,7 +389,7 @@ pub(crate) async fn current_chapter_payload(
 /// Writes the Operation Requirement and the Context Assembly Manifest of one RunStep, and gives
 /// the manifest identifier. A background Run has no Receipt (ADR 0094 section 5).
 pub(crate) async fn insert_assembly(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
     receipt_id: Option<&str>,
@@ -454,7 +454,7 @@ pub(crate) async fn insert_assembly(
 /// The entries of the Chapter list of the Project: each live Chapter in manuscript order with the
 /// character count of its authoritative head text.
 pub(crate) async fn chapter_list_entries(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
 ) -> Result<Vec<storyos_core::ChapterListEntry>, storyos_application::ProjectReadError> {
     let chapters = crate::manuscript_search::read_live_chapter_blocks(

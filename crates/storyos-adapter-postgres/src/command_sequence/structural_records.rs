@@ -1,7 +1,7 @@
 //! The record writes that the `Structural` and `ChapterSelection` profiles share (ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
-use tokio_postgres::Client;
 
 use super::records::insert_applied_activity;
 use super::{ActionDisposition, PersistFacts, PersistInput, insert_author_action, unavailable};

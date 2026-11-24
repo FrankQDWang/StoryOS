@@ -2,10 +2,10 @@
 //! pass rows give each fact: the observations of the input of a pass and the result of each of its
 //! operations. An observation returns at most one time.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::ProjectScope;
 use storyos_core::{PassOperationResult, observation_return_refusal, observation_returns};
-use tokio_postgres::Client;
 
 use crate::memory_consolidation_versions::PassItem;
 

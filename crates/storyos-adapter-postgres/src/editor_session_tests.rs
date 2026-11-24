@@ -72,6 +72,7 @@ async fn an_exact_retry_separates_a_pre_capture_fence_from_a_damaged_acknowledge
     )
     .await
     .unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(connection);
     let (scope, ..) = seed_two_chapters(&store, OWNER, "e130", "e131", "e132", "e133").await;
     let request = open_session_request(&store, &scope, "e134").await;

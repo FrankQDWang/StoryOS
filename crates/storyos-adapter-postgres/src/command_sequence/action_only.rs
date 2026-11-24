@@ -1,10 +1,10 @@
 //! The `ActionOnly` settlement profile: one Forward Author Action and no Project Activity
 //! record, Authoritative Commit, or Snapshot (ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ActionApplied, ProjectCommandEnvelope, ProjectCommandError, ProjectScope,
 };
-use tokio_postgres::Client;
 
 use super::{AppliedVariant, SettlementProfile, SingleRecordSet, unavailable};
 use crate::command_replay::{CommandReplay, ReplayFault};

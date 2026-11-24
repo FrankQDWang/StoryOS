@@ -1,7 +1,7 @@
 //! An applied replay of a retained Proposal decision refuses an unknown preserved Proposal
 //! State Axis value in its effect row.
 
-use tokio_postgres::Client;
+use crate::statement_cache::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};

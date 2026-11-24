@@ -11,7 +11,7 @@ use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_unavailable};
 /// The `tool_choice` of the request of the active RunStep of `run`. A capture has no `finish`
 /// call, so its kind decides: each of its requests requires a call (ADR 0094 section 5).
 pub(crate) async fn tool_choice(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<ToolChoice, CompleteAgentRunError> {
@@ -81,7 +81,7 @@ pub(crate) fn run_step_place(
 /// continuation keeps its calls as evidence, because the request that names it answers each of
 /// them (ADR 0091 section 5). The calls of another response leave the items.
 pub(crate) async fn recovered_outcome(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     response: &mut storyos_application::ModelResponse,
@@ -116,7 +116,7 @@ pub(crate) async fn recovered_outcome(
 /// Binds the settled response of a text with no function call as the prior response of the next
 /// RunStep, and opens that RunStep. The model reads its own text when it continues.
 pub(crate) async fn open_after_text(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     attempt_id: &str,

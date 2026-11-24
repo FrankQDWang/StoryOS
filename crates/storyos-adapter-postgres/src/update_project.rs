@@ -1,5 +1,6 @@
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, UpdateProjectInput, UpdateProjectSettlement,
 };
@@ -7,7 +8,6 @@ use storyos_core::{
     TransitionOutcome, UpdateProject as CoreUpdateProject, UpdateProjectApplied,
     UpdateProjectRefusal, update_project as classify_update_project,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};

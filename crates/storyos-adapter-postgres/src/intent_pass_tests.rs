@@ -3,12 +3,12 @@
 //! with no settled call, the order of two entries, the entries of the author, a new text after a
 //! result, the archive, and a refused start. Each test completes each Run that it queued.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{
     MemoryCaptureSource, MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource, ProjectScope,
 };
 use storyos_core::{AgentRunKind, IntentPassSkip};
-use tokio_postgres::Client;
 
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{NoContractFaults, complete_agent_run};

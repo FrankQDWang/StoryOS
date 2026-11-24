@@ -3,9 +3,9 @@
 use crate::PostgresProjectReader;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_consolidation::{capture, run_pass, scripted};
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{MemoryCaptureSource, ProjectScope, StartedMemoryConsolidation};
-use tokio_postgres::Client;
 
 /// One entry for `seed`: the number, the type, the origin, and the title.
 pub(crate) type Seed<'a> = (u64, &'a str, &'a str, &'a str);
