@@ -1898,6 +1898,8 @@ dependencies = [
 name = "storyos-adapter-postgres"
 version = "0.1.0"
 dependencies = [
+ "rustls",
+ "rustls-native-certs",
  "serde_json",
  "sha2",
  "storyos-adapter-fake-destination",
@@ -1909,6 +1911,7 @@ dependencies = [
  "storyos-worker",
  "tokio",
  "tokio-postgres",
+ "tokio-rustls",
  "tracing",
  "uuid",
 ]

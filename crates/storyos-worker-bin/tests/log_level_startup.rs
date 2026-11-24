@@ -130,3 +130,30 @@ fn the_real_embedding_route_without_the_key_names_the_key_and_no_value() {
         "{stderr}"
     );
 }
+
+#[test]
+fn a_database_url_whose_host_is_not_loopback_refuses_without_sslmode_require() {
+    let host = "storyos-canary-host.example.invalid";
+    let password = "storyos-canary-database-password";
+    let output = Command::new(env!("CARGO_BIN_EXE_storyos-worker"))
+        .arg("--once")
+        .env(
+            "STORYOS_DATABASE_URL",
+            format!("postgres://storyos_runtime:{password}@{host}:6543/postgres?sslmode=disable"),
+        )
+        .env_remove("STORYOS_ENV_FILE")
+        .env_remove("STORYOS_MODEL_DESTINATION")
+        .output()
+        .expect("packaged storyos-worker should execute");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(!output.status.success(), "{stderr}");
+    assert!(stderr.contains("STORYOS_DATABASE_URL"), "{stderr}");
+    assert!(
+        stderr.contains("a URL whose host is not a loopback address must say sslmode=require"),
+        "{stderr}"
+    );
+    for part in [host, password, "6543", "postgres://"] {
+        assert!(!stderr.contains(part), "{part} in {stderr}");
+    }
+}

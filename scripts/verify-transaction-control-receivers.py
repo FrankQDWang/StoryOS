@@ -8,8 +8,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = ROOT / "crates/storyos-adapter-postgres/src"
-CONNECT_OWNERS = {"connection_pool.rs", "storage_activation.rs"}
-STARTUP_GATE = "storage_activation_proof.rs"
+# `connection_pool::open` is the one connect path of production code (ADR 0104 section 5).
+CONNECT_OWNER = "connection_pool.rs"
+# The Storage Activation runs on its own admin connection, so the transaction-control rules do not apply to it.
+MAINTENANCE_OWNER = "storage_activation.rs"
+OPEN_CALLERS = {"storage_activation_proof.rs", MAINTENANCE_OWNER}
 POOLED_SOURCES = re.compile(r"\.(connect|connect_challenge|checkout)\s*\(")
 # `ROLLBACK TO` keeps the transaction open.
 TRANSACTION_CONTROL = re.compile(
@@ -89,18 +92,20 @@ def check(source_dir: Path) -> tuple[list[str], int]:
         if path.name.endswith("_tests.rs") or any(part.endswith("_tests") for part in relative.parts[:-1]):
             continue
         text = path.read_text(encoding="utf-8")
-        if path.name in CONNECT_OWNERS:
+        if path.name == CONNECT_OWNER:
             continue
         if "tokio_postgres::connect" in text:
             line = text[: text.index("tokio_postgres::connect")].count("\n") + 1
             violations.append(
                 f"{relative}:{line}: `tokio_postgres::connect` outside the pool; use `connect()`"
             )
-        if path.name != STARTUP_GATE and "connection_pool::open" in text:
+        if path.name not in OPEN_CALLERS and "connection_pool::open" in text:
             line = text[: text.index("connection_pool::open")].count("\n") + 1
             violations.append(
                 f"{relative}:{line}: `connection_pool::open` outside the startup gate; use `connect()`"
             )
+        if path.name == MAINTENANCE_OWNER:
+            continue
         for match in OPAQUE_STATEMENT_CALL.finditer(text):
             line = text[: match.start()].count("\n") + 1
             violations.append(

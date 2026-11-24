@@ -3,7 +3,8 @@
 use std::fmt;
 
 use sha2::{Digest, Sha256};
-use tokio_postgres::NoTls;
+
+use crate::database_url::{DatabaseUrlRefusal, check_database_url};
 
 include!(concat!(env!("OUT_DIR"), "/embedded_bootstrap.rs"));
 
@@ -68,6 +69,7 @@ impl StorageActivationRefusal {
 #[derive(Debug)]
 pub enum StorageActivationError {
     AdminUrlMissing,
+    AdminUrlInvalid(DatabaseUrlRefusal),
     Refused { reason: StorageActivationRefusal },
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -79,15 +81,29 @@ impl fmt::Display for StorageActivationError {
                 formatter,
                 "STORYOS_STORAGE_ACTIVATION=Refused\nSTORYOS_STORAGE_ACTIVATION_REASON=admin_url_missing"
             ),
+            Self::AdminUrlInvalid(refusal) => write!(
+                formatter,
+                "STORYOS_STORAGE_ACTIVATION=Refused\nSTORYOS_STORAGE_ACTIVATION_REASON=admin_url_invalid\nSTORYOS_STORAGE_ADMIN_URL: {}",
+                refusal.rule()
+            ),
             Self::Refused { reason } => write!(
                 formatter,
                 "STORYOS_STORAGE_ACTIVATION=Refused\nSTORYOS_STORAGE_ACTIVATION_REASON={}",
                 reason.as_str()
             ),
-            Self::Unavailable(source) => write!(
-                formatter,
-                "STORYOS_STORAGE_ACTIVATION=Refused\nSTORYOS_STORAGE_ACTIVATION_REASON=unavailable\n{source}"
-            ),
+            Self::Unavailable(source) => {
+                write!(
+                    formatter,
+                    "STORYOS_STORAGE_ACTIVATION=Refused\nSTORYOS_STORAGE_ACTIVATION_REASON=unavailable\n{source}"
+                )?;
+                // A hosted run has no container log, so the line gives each cause of the chain.
+                let mut cause = source.source();
+                while let Some(next) = cause {
+                    write!(formatter, ": {next}")?;
+                    cause = next.source();
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -96,7 +112,7 @@ impl std::error::Error for StorageActivationError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::AdminUrlMissing | Self::Refused { .. } => None,
+            Self::AdminUrlMissing | Self::AdminUrlInvalid(_) | Self::Refused { .. } => None,
         }
     }
 }
@@ -120,13 +136,11 @@ pub async fn activate_release1_storage(
     if admin_url.is_empty() {
         return Err(StorageActivationError::AdminUrlMissing);
     }
+    check_database_url(admin_url).map_err(StorageActivationError::AdminUrlInvalid)?;
     let identity = packaged_identity();
-    let (client, connection) = tokio_postgres::connect(admin_url, NoTls)
+    let client = crate::connection_pool::open(admin_url)
         .await
         .map_err(unavailable)?;
-    tokio::spawn(async move {
-        let _connection_result = connection.await;
-    });
     client
         .execute(
             "SELECT pg_advisory_lock($1, $2)",
