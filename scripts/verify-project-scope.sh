@@ -546,6 +546,18 @@ run_provider_activation_checks() {
     echo "The admin login of the provider image is a superuser" >&2
     exit 1
   fi
+  # The image differs from a new hosted project: there, storage and realtime have relations of the provider, the
+  # admin login owns the views of pg_stat_statements, and each statement of the admin login ends after 120 s.
+  provider_superuser_psql -c "CREATE TABLE storage.provider_objects (id integer);
+    ALTER TABLE storage.provider_objects OWNER TO supabase_storage_admin;
+    CREATE ROLE supabase_realtime_admin NOLOGIN;
+    CREATE TABLE realtime.provider_messages (id bigserial, at date NOT NULL) PARTITION BY RANGE (at);
+    CREATE TABLE realtime.provider_messages_now PARTITION OF realtime.provider_messages DEFAULT;
+    ALTER TABLE realtime.provider_messages OWNER TO supabase_realtime_admin;
+    ALTER TABLE realtime.provider_messages_now OWNER TO supabase_realtime_admin;
+    ALTER VIEW extensions.pg_stat_statements OWNER TO postgres;
+    ALTER VIEW extensions.pg_stat_statements_info OWNER TO postgres;
+    ALTER ROLE postgres SET statement_timeout = '120s'" >/dev/null
   echo "Refusing a relation of the admin login or of an application role, also in a provider schema"
   provider_superuser_psql -c "CREATE ROLE application_owner NOLOGIN" >/dev/null
   for relation_owner in public.t:postgres extensions.t:postgres storage.t:application_owner; do
@@ -567,9 +579,6 @@ STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
     provider_superuser_psql -c "DROP TABLE $relation" >/dev/null
   done
   provider_superuser_psql -c "DROP ROLE application_owner" >/dev/null
-  # The image has no relation in the schema storage. A hosted project has them, with an owner of the provider.
-  provider_superuser_psql -c "CREATE TABLE storage.provider_objects (id integer);
-    ALTER TABLE storage.provider_objects OWNER TO supabase_storage_admin" >/dev/null
   echo "Activating the provider database with its admin login"
   for run in first second; do
     run_provider_storage
