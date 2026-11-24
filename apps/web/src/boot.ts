@@ -253,7 +253,10 @@ export async function openProjectSettings(options: {
   }
 }
 
-/** The Project and its revision in the list when its read has the Scope of the path and the Project list of the session has it. */
+/**
+ * The Project and its revision in the list when its read has the Scope of the path and the Project list of the session
+ * has it. The title and the revision come from the same list item, so one revision always has one title (#1888).
+ */
 async function readSessionProject(
   queryOptions: StoryOSQueryOptions,
   projectId: string,
@@ -274,7 +277,8 @@ async function readSessionProject(
     ? await Promise.all([projectRead, listProjects(queryOptions)])
     : [await projectRead, await listProjects(queryOptions)];
   const item = listed.projects.find((entry) => entry.project_scope.project_id === projectId);
-  return item === undefined ? undefined : { project, revision: item.revision };
+  return item === undefined ? undefined
+    : { project: { ...project, project: { ...project.project, title: item.title } }, revision: item.revision };
 }
 
 function projectUnavailable(error?: unknown): ProjectBlockedState {

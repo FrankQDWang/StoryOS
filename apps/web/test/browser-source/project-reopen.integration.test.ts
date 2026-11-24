@@ -899,14 +899,19 @@ it("keeps the tree of a rename that the author makes while a takeover opens the 
 
 const projectHeading = (root: HTMLElement) => root.querySelector(".project-heading h1")?.textContent;
 
-/** Renames the Project in the workspace heading and waits for the new title. */
-async function renameProject(root: HTMLElement, title: string) {
+/** Sends a rename of the Project from the workspace heading. */
+async function submitProjectRename(root: HTMLElement, title: string) {
   await beginTreeAction(root, "div[data-project-id]", "[data-begin-rename-project]");
   root.querySelector<HTMLButtonElement>("[data-begin-rename-project]")!.click();
   await expect.poll(() => root.querySelector("form[data-rename] input")).not.toBeNull();
   const input = root.querySelector<HTMLInputElement>("form[data-rename] input")!;
   input.value = title;
   input.form!.requestSubmit();
+}
+
+/** Renames the Project in the workspace heading and waits for the new title. */
+async function renameProject(root: HTMLElement, title: string) {
+  await submitProjectRename(root, title);
   await expect.poll(() => projectHeading(root)).toBe(title);
 }
 
@@ -976,6 +981,31 @@ it("takes the title and the revision of a reopen after a Project rename in anoth
   expect({ shown, revisions: server.projectRenames, unexpected: server.log.unexpected })
     .toEqual({ shown: "Project A, other tab", revisions: ["2"], unexpected: [] });
 });
+
+it("keeps the later title and revision of a reopen when a rename response of an earlier revision arrives late",
+  async () => {
+    const server = fakeServer({ reads: [...OPEN_READS, chapterRead(CHAPTER_B), openProposalsRead(CHAPTER_B),
+      SESSION_READ], commands: [SESSION_CREATE, SWITCH, PROJECT_RENAME] });
+    const workspace = await openWorkspace(server);
+    await expect.poll(() => workspace.root.querySelector(`button[data-chapter-id="${CHAPTER_B}"]`)).not.toBeNull();
+    // The rename applies at revision 2, and its response waits. Then another tab renames the Project to revision 3.
+    server.answerBeforeHold();
+    server.hold([PROJECT_RENAME]);
+    await submitProjectRename(workspace.root, "Project A, renamed");
+    await expect.poll(server.held).toBe(1);
+    server.renameElsewhere("Project A, other tab");
+    workspace.root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`)!.click();
+    // The reopen of the switch has revision 3. The rename form stays open until the rename response.
+    await expect.poll(() => workspace.shown().title).toBe("Chapter B");
+
+    server.release();
+    await expect.poll(() => workspace.root.querySelector("form[data-rename]")).toBeNull();
+    const shown = projectHeading(workspace.root);
+    await renameProject(workspace.root, "Project A, renamed again");
+
+    expect({ shown, revisions: server.projectRenames, unexpected: server.log.unexpected })
+      .toEqual({ shown: "Project A, other tab", revisions: ["1", "3"], unexpected: [] });
+  });
 
 it("reads the statistics one time for the new view of a Chapter switch with no change of the tree revision",
   async () => {

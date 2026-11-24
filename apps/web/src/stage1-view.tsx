@@ -80,7 +80,8 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   onProposalOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onReopened: (state: ControlledProjectState) => void;
   onLocalRecoveryContinued: (state: ControlledProjectState) => void;
-  onRenamed: (title: string, revision: string) => void;
+  /** Holds a settled rename. It is false when the workspace holds a later revision, and the view keeps its values. */
+  onRenamed: (projectId: string, title: string, revision: string) => boolean;
 }
 
 /** The commands of the editor part that the contents list and the assistant panel start. */
@@ -210,9 +211,9 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
                 fetchImpl={fetchImpl}
                 cryptoImpl={cryptoImpl}
                 onRenamed={(nextTitle, nextRevision) => {
+                  if (!onRenamed(projectId, nextTitle, nextRevision)) return;
                   setTitle(nextTitle);
                   setRevision(nextRevision);
-                  onRenamed(nextTitle, nextRevision);
                 }}
               />
           <ManuscriptSearchPanel
@@ -785,7 +786,7 @@ function EmptyProjectReadyView({
   cryptoImpl: Crypto;
   onVolumeCreated: () => void;
   onChapterCreated: () => void;
-  onRenamed: (title: string, revision: string) => void;
+  onRenamed: (projectId: string, title: string, revision: string) => boolean;
 }) {
   const [title, setTitle] = useState(project.project.title);
   const [revision, setRevision] = useState(openedRevision);
@@ -813,9 +814,9 @@ function EmptyProjectReadyView({
               fetchImpl={fetchImpl}
               cryptoImpl={cryptoImpl}
               onRenamed={(nextTitle, nextRevision) => {
+                if (!onRenamed(project.project.project_id, nextTitle, nextRevision)) return;
                 setTitle(nextTitle);
                 setRevision(nextRevision);
-                onRenamed(nextTitle, nextRevision);
               }}
             />
           <ManuscriptSearchPanel projectId={project.project.project_id} baseUrl={baseUrl}
@@ -1038,8 +1039,12 @@ function Stage1View({
     held.current = projectName(next);
     setCurrent(next);
   };
-  const renamed = (title: string, revision: string) => {
-    if (held.current !== undefined) held.current = { ...held.current, title, revision };
+  // A late rename response of an earlier revision, or of another Project, changes nothing.
+  const renamed = (projectId: string, title: string, revision: string) => {
+    const name = held.current;
+    if (name === undefined || name.projectId !== projectId || BigInt(revision) < BigInt(name.revision)) return false;
+    held.current = { projectId, title, revision };
+    return true;
   };
   const [editorGeneration, setEditorGeneration] = useState(0);
   const [proposalFocus, setProposalFocus] = useState<ProposalFocus>();

@@ -34,6 +34,9 @@ test("the protected Web client opens the authoritative current Chapter", async (
   const project = fixture<GetProjectResponse>("get-project.json");
   const listed = fixture<ListProjectsResponse>("list-projects.json");
   const chapter = fixture<GetChapterResponse>("get-chapter.json");
+  // The list item of the Project has the title of the Project read, as one revision has one title.
+  listed.projects = listed.projects.map((entry) => entry.project_scope.project_id === project.project.project_id
+    ? { ...entry, title: project.project.title } : entry);
   const requests: Array<{ path: string; options: RequestInit | undefined }> = [];
   const responses: unknown[] = [profile, project, listed, chapter];
   const fetchImpl: typeof fetch = async (url, options) => {
@@ -324,6 +327,33 @@ test("a reopen opens the Current Chapter of the Project read with the revision o
     later: [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`],
     unexpected: [],
   });
+});
+
+test("a reopen takes the title and the revision of the list item when the Project read is earlier", async () => {
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const project = fixture<GetProjectResponse>("get-project.json");
+  const listed = fixture<ListProjectsResponse>("list-projects.json");
+  const chapter = fixture<GetChapterResponse>("get-chapter.json");
+  const projectId = project.project.project_id;
+  const chapterId = project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "";
+  // A rename settled between the Project read and the list read.
+  listed.projects = listed.projects.map((entry) => entry.project_scope.project_id === projectId
+    ? { ...entry, title: "Renamed", revision: "7" } : entry);
+  const fake = exactFake(new Map([
+    [`GET /api/v1/projects/${projectId}`, { body: { ...project, project: { ...project.project, title: "Earlier" } } }],
+    ["GET /api/v1/projects", { body: listed }],
+    [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`, { body: chapter }],
+  ]));
+
+  const state = await reopenControlledProject({ baseUrl: "http://storyos.test", opened: { profile, project },
+    fetchImpl: fake.fetchImpl });
+
+  assert.deepEqual({
+    kind: state.kind,
+    title: state.kind === "project-ready" ? state.project.project.title : "",
+    revision: state.kind === "project-ready" ? state.revision : "",
+    unexpected: fake.unexpected,
+  }, { kind: "project-ready", title: "Renamed", revision: "7", unexpected: [] });
 });
 
 test("a reopen fails closed when the list read fails", async () => {
