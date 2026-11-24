@@ -2,6 +2,7 @@
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run_offering};
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::{FakeDestination, FakeEmbeddings};
 use storyos_application::{
@@ -11,7 +12,6 @@ use storyos_application::{
 use storyos_core::{
     DeploymentDestination, NativeStreamItem, ResearchToolOffer, StreamItemRole, StreamItemState,
 };
-use tokio_postgres::Client;
 
 /// Claims and completes the queued Run `run_id` in a process with no Tool adapter and with the
 /// fake embedding destination.

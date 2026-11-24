@@ -14,7 +14,7 @@ use crate::memory_entries::{
 
 /// Decides and writes the Memory change of the pending call `row`, and settles or refuses `row`.
 pub(crate) async fn execute(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     write: &MemoryWrite,

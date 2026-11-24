@@ -50,7 +50,7 @@ impl ToolCallFence {
 /// and so before any local stop. A `pending` ToolCall refuses before its claim; a `dispatched`
 /// ToolCall settles `unknown` with its fence, and nothing is sent.
 pub(crate) async fn fence_on_cancel(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     project_scope: &ProjectScope,
     run_id: &str,
     fence_generation: u64,
@@ -95,7 +95,7 @@ pub(crate) async fn fence_on_cancel(
 /// Settles a `dispatched` ToolCall `unknown` with its fence: the outcome of the exchange is not
 /// known, and no Gateway sends it again.
 pub(crate) async fn settle_interrupted(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     fence: ToolCallFence,
@@ -130,7 +130,7 @@ pub(crate) async fn settle_interrupted(
 /// captured, and the reservation stays. A ToolCall that no fence settled yet keeps nothing: the
 /// next claim settles it.
 pub(crate) async fn record_late(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     request: &ToolCallRequest,
     dispatch: &ToolDispatchClaim,

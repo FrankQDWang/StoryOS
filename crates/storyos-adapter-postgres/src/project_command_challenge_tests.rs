@@ -85,6 +85,7 @@ async fn fixed_window_capacity_and_rollover_are_deterministic_under_concurrency(
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move { connection.await.unwrap() });
     let counts = admin
         .query_one(
@@ -151,6 +152,7 @@ async fn exact_retry_uses_one_rate_unit_and_rate_rows_obey_forced_rls() {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move { connection.await.unwrap() });
     assert_eq!(
         admin
@@ -166,7 +168,8 @@ async fn exact_retry_uses_one_rate_unit_and_rate_rows_obey_forced_rls() {
         1
     );
 
-    let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let (runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let mut runtime = crate::statement_cache::Client::new(runtime);
     tokio::spawn(async move { connection.await.unwrap() });
     let foreign_scope = runtime.transaction().await.unwrap();
     foreign_scope

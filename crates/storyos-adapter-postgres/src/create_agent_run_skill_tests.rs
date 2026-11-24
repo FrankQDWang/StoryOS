@@ -177,7 +177,10 @@ async fn catalog(admin: &Client, run_id: &str) -> Vec<SkillPackageReference> {
 }
 
 /// A runtime-role transaction in the Scope of `project`.
-async fn scoped<'a>(runtime: &'a mut Client, project: &str) -> tokio_postgres::Transaction<'a> {
+async fn scoped<'a>(
+    runtime: &'a mut Client,
+    project: &str,
+) -> crate::statement_cache::Transaction<'a> {
     let transaction = runtime.transaction().await.unwrap();
     transaction
         .execute(
@@ -191,7 +194,7 @@ async fn scoped<'a>(runtime: &'a mut Client, project: &str) -> tokio_postgres::T
 }
 
 /// The rows of the three Skill tables of `project`.
-async fn skill_rows(client: &impl tokio_postgres::GenericClient, project: &str) -> i64 {
+async fn skill_rows(client: &impl crate::statement_cache::GenericClient, project: &str) -> i64 {
     client
         .query_one(
             "SELECT (SELECT count(*) FROM storyos.skill_package_snapshots
@@ -295,7 +298,8 @@ async fn each_project_has_its_own_snapshots_and_the_runtime_role_cannot_change_a
         vec![expected(&dialogue, &other_run.envelope.ids.receipt_id)]
     );
 
-    let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let (runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let mut runtime = crate::statement_cache::Client::new(runtime);
     tokio::spawn(async move {
         let _ = connection.await;
     });

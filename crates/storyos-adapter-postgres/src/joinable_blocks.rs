@@ -8,7 +8,7 @@ use storyos_core::DeclaredTargetKind;
 /// block has no reservation. The joinable blocks and the pending Operations of that `block_edit`
 /// Proposal make one adjacent run.
 pub(crate) async fn mark(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     declared: &mut [DeclaredTarget],
 ) -> Result<(), CompleteAgentRunError> {

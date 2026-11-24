@@ -2,6 +2,7 @@
 //! sequence (ADR 0076). A refusal before Admission retains its Pre-Admission Refusal Record
 //! (ADR 0013).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AcceptProposalInput, AcceptProposalSettlement, AcceptanceRefusalBoundary,
     AcceptanceRefusalReason, ProjectCommandEnvelope, ProjectCommandError, RefusableCommandError,
@@ -13,7 +14,6 @@ use storyos_core::{
     ProposalSelectionIntent, TransitionOutcome, accept_proposal as classify_acceptance,
     classify_proposal_selection,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};

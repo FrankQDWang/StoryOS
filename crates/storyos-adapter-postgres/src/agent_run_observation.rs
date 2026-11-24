@@ -43,7 +43,7 @@ pub(crate) enum CreateSettlement<'a> {
 
 /// Records the stream and the Agent Decision of one Create exchange.
 pub(crate) async fn persist_create_result(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     result: CreateResult<'_>,
@@ -223,7 +223,7 @@ pub(crate) fn function_request_refusal(
 
 /// Opens the Proposal of one selected prose change of the Run.
 pub(crate) async fn open_selected_proposal(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     decision_id: &str,

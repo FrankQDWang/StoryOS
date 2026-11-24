@@ -3,13 +3,13 @@
 //! operation writes its version. A merge also writes the deleted version of each merged entry.
 //! A conflict flag writes a flag version.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{CompleteAgentRunError, ProjectScope};
 use storyos_core::{
     AdmittedOperation, CurrentMemoryEntry, MemoryEntryOrigin, MemoryEntryType,
     MemorySourceReference, PassConflict, PassMemoryEntry, PassObservation,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::damaged;

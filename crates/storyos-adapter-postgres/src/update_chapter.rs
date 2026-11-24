@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, UpdateChapterInput, UpdateChapterSettlement,
 };
@@ -6,7 +7,6 @@ use storyos_core::{
     ChapterJoin, UpdateChapter as CoreUpdateChapter, UpdateChapterApplied,
     update_chapter as classify_update_chapter,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};

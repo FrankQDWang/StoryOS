@@ -3,9 +3,9 @@
 //! direct call, and each pass Run and each Run of the author completes. The lead of the tests of
 //! S7-D4b is `62`, and the lead of the tests of the conflict flag (S7-D4b2) is `80`.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{ConversationSelection, ProjectScope, list_memory_entries};
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_load_skill::calls;

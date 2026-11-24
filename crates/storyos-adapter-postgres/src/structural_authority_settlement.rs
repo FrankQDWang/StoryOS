@@ -1,5 +1,5 @@
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandError, ProjectScope};
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::command_sequence::{CommitCounters, allocate_commit_counters, unavailable};

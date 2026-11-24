@@ -1,6 +1,6 @@
+use crate::statement_cache::Client;
 use storyos_application::{ApplyAuthorEditCommand, AuthorEditError};
 use storyos_core::{AuthorEditPrimitive, CurrentOwnershipFacts};
-use tokio_postgres::Client;
 
 use super::author_edit::author_edit_database_error;
 

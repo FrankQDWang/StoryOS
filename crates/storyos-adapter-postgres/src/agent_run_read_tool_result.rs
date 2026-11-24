@@ -10,7 +10,7 @@ use crate::agent_run_work::complete_unavailable;
 
 /// Reads the ToolCall `call_id` for the pending call `row`, and settles or refuses `row`.
 pub(crate) async fn execute(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     call_id: &str,

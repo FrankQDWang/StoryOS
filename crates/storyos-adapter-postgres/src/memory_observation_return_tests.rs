@@ -1,9 +1,9 @@
 //! The return of the observations of a refused operation of a pass (ADR 0094 section 6), each with
 //! a pass on the fake destination. The lead of these tests is `51`.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::ProjectScope;
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;

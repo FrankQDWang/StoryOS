@@ -5,6 +5,7 @@ use crate::shared_tests::command_sequence_structure::{SET_CURRENT_CHAPTER, UPDAT
 use crate::shared_tests::command_sequence_support::{CommandCall, issued};
 use crate::shared_tests::create_volume_authority::{NamedEdit, adjusted_edit_command};
 use crate::shared_tests::model_gateway::Admission;
+use crate::statement_cache::Client;
 use storyos_application::{
     ApplyAuthorEditCommand, ChallengeRateClass, ChapterId, ConversationSelection, EditorSessionId,
     ProjectScope, SetCurrentChapterInput, UpdateChapterInput,
@@ -12,7 +13,6 @@ use storyos_application::{
 use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot, UTF16_COORDINATE_PROFILE,
 };
-use tokio_postgres::Client;
 
 /// Admits one Run of the tool loop profile with `message` in `conversation` of the Project.
 pub(crate) async fn admitted(

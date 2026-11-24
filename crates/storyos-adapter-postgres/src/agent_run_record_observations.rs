@@ -9,7 +9,7 @@ use storyos_core::{MemoryEntryOrigin, ObservationCallSettlement, ObservationCand
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
 
 pub(crate) async fn execute(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     candidates: &[ObservationCandidate],

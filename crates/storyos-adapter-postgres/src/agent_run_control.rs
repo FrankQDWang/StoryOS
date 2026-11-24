@@ -1,11 +1,11 @@
 //! The shared steps of the AgentRun control commands: pauseAgentRun, cancelAgentRun, and
 //! steerAgentRun.
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AgentRunControlRefusal, ProjectCommandError, ProjectScope, RefusableCommandError,
 };
 use storyos_core::{AgentRunKind, AgentRunStatus};
-use tokio_postgres::Client;
 
 use crate::command_sequence::unavailable;
 

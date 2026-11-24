@@ -36,7 +36,7 @@ fn numeric(value: &str) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>
 /// The Memory revision that the Run pins: the revision of the Project head when the captured
 /// Conversation Memory Settings of the Run have `use_enabled` (`storyos_core::memory_revision_pin`).
 pub(crate) async fn memory_revision_pin(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Option<u64>, Box<dyn std::error::Error + Send + Sync>> {
@@ -71,7 +71,7 @@ pub(crate) async fn memory_revision_pin(
 /// The text of the current intent of each entry with a current result at `memory_revision`, by
 /// its identity, when a Run of the kind `reader` gets the intents (ADR 0101 section 5).
 async fn intents(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     memory_revision: u64,
     reader: AgentRunKind,
@@ -92,7 +92,7 @@ async fn intents(
 /// when its state is `current`. The entry is flagged when that version is a flag version (ADR
 /// 0094 section 7), and it has its current intent when the reader gets the intents.
 pub(crate) async fn read_memory_index(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     memory_revision: u64,
     reader: AgentRunKind,
@@ -137,7 +137,7 @@ pub(crate) async fn read_memory_index(
 /// The Memory revision of the Project head, with no lock. A Project with no head has the revision
 /// 0.
 pub(crate) async fn memory_head(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
     let row = client
@@ -156,7 +156,7 @@ pub(crate) async fn memory_head(
 /// writes the origin `author_request`, so the origin of the deleted entry is the origin of the
 /// version before the mark (ADR 0101 section 3).
 pub(crate) async fn read_delete_marks(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
 ) -> Result<Vec<MemoryDeleteMark>, Box<dyn std::error::Error + Send + Sync>> {
     let causes = storyos_core::MEMORY_DELETE_MARK_CAUSES;
@@ -201,7 +201,7 @@ pub(crate) async fn read_delete_marks(
 /// The Memory of the Project now: the Memory revision, the next entry number, and the last
 /// version of each current entry. A Project with no head has the revision 0 and the number 1.
 pub(crate) async fn current_memory(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
 ) -> Result<(u64, u64, Vec<CurrentMemoryEntry>), Box<dyn std::error::Error + Send + Sync>> {
     let values: [&(dyn tokio_postgres::types::ToSql + Sync); 2] =
@@ -256,7 +256,7 @@ pub(crate) async fn current_memory(
 /// the delete of the author move the Memory revision one at a time. A Project with no head has no
 /// entry, no row to lock, and the revision 0.
 pub(crate) async fn lock_memory_head(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
     let row = client
@@ -273,7 +273,7 @@ pub(crate) async fn lock_memory_head(
 /// The last version of the entry `memory_entry_id` of the Project in each state, or `None` when
 /// the Project has no entry with the identity.
 pub(crate) async fn last_entry_version(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     memory_entry_id: &str,
 ) -> Result<Option<LastMemoryVersion>, Box<dyn std::error::Error + Send + Sync>> {
@@ -327,7 +327,7 @@ pub(crate) const LAST_CHANGE: &str = "(SELECT changed.recorded_at
 /// kind `reader`, or `None` when no current entry has the number. A flag version gives its reason
 /// and its source now, and the entry has its current intent now when the reader gets the intents.
 pub(crate) async fn read_current_entry(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     number: i64,
     reader: AgentRunKind,
@@ -391,7 +391,7 @@ pub(crate) async fn read_current_entry(
 /// The source of a flag now: a live Chapter with its number in the Chapter list, a Project
 /// Conversation of the Project, or a source that the Project does not have now.
 async fn flag_source(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     source: &str,
 ) -> Result<MemoryFlagSource, Box<dyn std::error::Error + Send + Sync>> {
@@ -438,7 +438,7 @@ async fn flag_source(
 /// (ADR 0094 section 8), and the Memory Index is not a read. The start of a consolidation pass
 /// uses it for the mark `unused`.
 pub(crate) async fn last_memory_reads(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
 ) -> Result<Vec<(String, u64, Option<String>)>, Box<dyn std::error::Error + Send + Sync>> {
     let rows = client
@@ -482,7 +482,7 @@ pub(crate) struct VersionSource<'a> {
 /// head. A new entry gets the identity `new_entry_id` and the next entry number after it. The flag
 /// of a flag version goes into the columns `flag_reason` and `flag_source`.
 pub(crate) async fn write_memory_version(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     (revision, version, new_entry_id): (u64, &MemoryVersionWrite, &str),
     source: &VersionSource<'_>,

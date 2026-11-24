@@ -6,7 +6,7 @@ use uuid::Uuid;
 /// Gives the Proposal Revision and its Validation Receipt a copy of the Chapter Head as base.
 /// Thus the Head is not the base.
 pub(crate) async fn move_to_earlier_base(
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     acceptance: &AcceptProposalInput,
 ) {
     let earlier = Uuid::now_v7();

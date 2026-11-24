@@ -3,6 +3,7 @@
 use crate::PostgresProjectReader;
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::project_embedding_binding::FAKE;
+use crate::statement_cache::Client;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Mutex;
@@ -17,7 +18,6 @@ use storyos_application::{
 };
 use storyos_core::EmbeddingInput;
 use storyos_core::{EmbeddingRegistration, HOST_FAKE_EMBEDDING_REGISTRATION};
-use tokio_postgres::Client;
 
 pub(crate) const FAKE_ONLY: &[&EmbeddingRegistration] = &[&HOST_FAKE_EMBEDDING_REGISTRATION];
 

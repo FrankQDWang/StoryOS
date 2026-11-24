@@ -4,13 +4,13 @@ use crate::shared_tests::agent_run_retrieval::{TestCredential, destination, rese
 use crate::shared_tests::agent_run_tool_call::text_and_call_stream;
 use crate::shared_tests::agent_run_tool_exposure::{advisory_stream, finish_stream};
 use crate::shared_tests::json_row::json_of;
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_mcp_client::{McpClient, McpExchange};
 use storyos_application::{
     PreDispatchRefusal, PreparedRequest, ToolCallRequest, ToolDestinationAdapter,
 };
 use storyos_core::{EXA_TOOL_REGISTRATION, ToolObservation};
-use tokio_postgres::Client;
 
 pub(crate) const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 

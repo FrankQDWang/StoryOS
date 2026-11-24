@@ -6,7 +6,9 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 
 const CATALOG_PATH: &str = "generated/persistence-catalog/release-1-schema.json";
 
@@ -286,6 +288,7 @@ async fn the_committed_persistence_catalog_matches_the_activated_schema() {
     )
     .await
     .unwrap();
+    let client = crate::statement_cache::Client::new(client);
     tokio::spawn(connection);
     // Each definition names its objects relative to the search path, so the path is fixed.
     client

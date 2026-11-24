@@ -3,12 +3,12 @@
 
 use std::time::Duration;
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectId, ProjectScope, QuestionVector, UserId};
 use storyos_core::{
     AuthorEditPrimitive, HOST_FAKE_EMBEDDING_REGISTRATION, PASSAGE_CUT_REVISION, PassageBlock,
     PassageTerms, TransitionOutcome, cut_passages,
 };
-use tokio_postgres::Client;
 
 use super::NEAREST_PASSAGES_SQL;
 use crate::PostgresProjectReader;

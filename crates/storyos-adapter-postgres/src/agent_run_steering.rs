@@ -23,7 +23,7 @@ pub(crate) struct NextInput {
 /// The Chapter text references move to the head of their Chapter. Thus the next RunStep reads
 /// the current text (ADR 0062, ADR 0071, ADR 0085, ADR 0091).
 pub(crate) async fn read_next(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     active_position: &str,
     retained: &mut CurrentPassageAssemblyRecord,
@@ -97,7 +97,7 @@ pub(crate) async fn read_next(
 
 /// The position of the last RunStep up to `position` that read a steering input, or 0.
 pub(crate) async fn last_read_position(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     position: &str,
 ) -> Result<String, CompleteAgentRunError> {
@@ -123,7 +123,7 @@ pub(crate) async fn last_read_position(
 /// Moves the candidate target and the references of the requirement of `retained` to each
 /// candidate that a prose change or a `propose_edit` call of the RunStep at `position` revised.
 async fn move_revised_candidates(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     position: &str,
     retained: &mut CurrentPassageAssemblyRecord,
@@ -195,7 +195,7 @@ async fn move_revised_candidates(
 
 /// Whether the RunStep at `position` read a steering input.
 pub(crate) async fn reads_input(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     position: &str,
 ) -> Result<bool, CompleteAgentRunError> {
@@ -215,7 +215,7 @@ pub(crate) async fn reads_input(
 /// Opens the RunStep that reads the next steering input before the active RunStep sends its
 /// request. A RunStep that read a steering input sends its request first.
 pub(crate) async fn advance_before_request(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     active_position: &str,
     lease_seconds: i64,
@@ -230,7 +230,7 @@ pub(crate) async fn advance_before_request(
 /// Tool results of the Run, and claims the Run again. No RunStep opens after the last RunStep of
 /// the limit, and steerAgentRun retains no input for it (ADR 0091 section 5).
 pub(crate) async fn advance(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     lease_seconds: i64,
 ) -> Result<bool, CompleteAgentRunError> {
@@ -316,7 +316,7 @@ pub(crate) fn next_position(position: &str) -> Result<String, CompleteAgentRunEr
 }
 
 pub(crate) async fn inspect(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &storyos_application::ProjectScope,
     run_id: &str,
 ) -> Result<

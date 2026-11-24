@@ -126,7 +126,7 @@ impl MemoryEntryReader for PostgresProjectReader {
 }
 
 async fn read_facts(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
 ) -> Result<Option<Facts>, ProjectReadError> {
     set_scope(client, scope).await?;
@@ -223,7 +223,7 @@ const VERSIONS: &str =
 /// The intent version of each entry with a current result at the current Memory revision, by the
 /// rule of Core.
 async fn current_intents(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     values: &[&(dyn tokio_postgres::types::ToSql + Sync); 2],
 ) -> Result<HashMap<String, tokio_postgres::Row>, ProjectReadError> {
     let head = client
@@ -243,7 +243,7 @@ async fn current_intents(
 /// The intent version of each entry with a current result at the Memory revision `revision`, by
 /// the rule of Core. A Run of the author reads it at its pinned revision (ADR 0101 section 5).
 pub(crate) async fn intents_at(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     values: &[&(dyn tokio_postgres::types::ToSql + Sync); 2],
     revision: u64,
 ) -> Result<HashMap<String, tokio_postgres::Row>, ProjectReadError> {

@@ -4,6 +4,7 @@ use crate::PostgresProjectReader;
 use crate::shared_tests::command_sequence_support::{
     CommandCall, Route, issued, run_without_foreign_keys, two_chapter_writer,
 };
+use crate::statement_cache::Client;
 use storyos_application::EditorSessionId;
 use storyos_application::{
     ProjectCommandError, ProjectScope, RejectProposalOperationsInput,
@@ -11,7 +12,6 @@ use storyos_application::{
     WithdrawProposalSettlement, WithdrawalNote,
 };
 use storyos_contracts::CommandKind;
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 pub(crate) const REJECT_PROPOSAL_OPERATIONS: Route = Route {

@@ -6,9 +6,9 @@ use crate::shared_tests::command_sequence_secondary_operation::{
     TwoOperationProposal, proposal_head_revision,
 };
 use crate::shared_tests::command_sequence_support::{challenge_issue, command_call};
+use crate::statement_cache::Client;
 use storyos_application::{CurrentProducerWithdrawal, CurrentProducerWithdrawalSettlement};
 use storyos_core::TransitionOutcome;
-use tokio_postgres::Client;
 
 /// The Withdrawal of the current head by the AgentRun decision that produced the Proposal.
 /// Returns its Withdrawal event.

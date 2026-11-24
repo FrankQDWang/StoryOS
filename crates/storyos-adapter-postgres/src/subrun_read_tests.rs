@@ -1,6 +1,7 @@
 //! The reads of the Subruns of a Run: the field `subruns` of the Run read and the record of one
 //! Subrun (ADR 0103 section 3A, items 1 and 2 of #1836). Test prefix leads `91` and `92`.
 
+use crate::statement_cache::Client;
 use serde_json::json;
 use storyos_adapter_fake_destination::{FakeDestination, START_SUBRUN_SCRIPT, SUBRUN_SCRIPT_TITLE};
 use storyos_application::{
@@ -9,7 +10,6 @@ use storyos_application::{
     complete_agent_run,
 };
 use storyos_core::{SUBRUN_MAX_RUN_STEPS, SubrunState, SubrunStep};
-use tokio_postgres::Client;
 
 use super::control_tests::{Command, commanded};
 use super::tests::{parent, plan_parent, scripted, subruns};

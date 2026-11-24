@@ -3,8 +3,8 @@
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::shared_tests::command_sequence_support::{CommandCall, SequenceError, settlement_rows};
+use crate::statement_cache::Client;
 use storyos_application::ProjectCommandError;
-use tokio_postgres::Client;
 
 /// Marks the Command Challenge consumed and the Command Idempotency Fence in progress, then retries.
 ///

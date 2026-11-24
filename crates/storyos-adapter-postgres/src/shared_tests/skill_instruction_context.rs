@@ -7,11 +7,11 @@ use crate::shared_tests::create_agent_run_skill::{fixture, set};
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::Admission;
 use crate::shared_tests::model_gateway::{ReplacedInputLabel, sent_context};
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use storyos_application::{ConversationSelection, ProjectScope};
 use storyos_core::{SKILL_MD_PATH, SkillCatalogEntry, SkillPackage, SkillSet, skill_catalog_text};
-use tokio_postgres::Client;
 
 /// The two fixture Skills, the Skill set that offers them, and their selection in the reverse
 /// order of their names.

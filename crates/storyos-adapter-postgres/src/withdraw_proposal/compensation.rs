@@ -1,8 +1,8 @@
 //! The author withdrawal Compensation of Author Undo (ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::author_edit_proposal::{decode_proposal_compensation, proposal_receipt_payload};

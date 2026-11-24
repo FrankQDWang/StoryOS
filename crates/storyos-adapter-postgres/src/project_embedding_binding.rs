@@ -3,11 +3,11 @@
 //! its evidence, the Project Destination Grant `manuscript_embedding_v1`, and the use binding of
 //! the Embedding Registration. The configuration by the operator is the consent.
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandError, ProjectScope};
 use storyos_core::{
     EmbeddingBindingFacts, EmbeddingRegistration, GrantScope, embedding_binding_to_make,
 };
-use tokio_postgres::Client;
 
 use crate::command_sequence::unavailable;
 use crate::project_destination_binding::{

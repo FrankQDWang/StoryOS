@@ -7,7 +7,7 @@ use storyos_core::{AgentRunKind, AgentRunStatus};
 use super::{agent_run_database_error, agent_run_parse_error};
 
 pub(super) async fn load_agent_run(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
     selection: &storyos_application::AgentRunReadSelection,

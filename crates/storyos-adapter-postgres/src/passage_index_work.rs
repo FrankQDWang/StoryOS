@@ -3,11 +3,11 @@
 
 use std::time::Duration;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ClaimedPassageIndex, PASSAGE_INDEX_QUIET_TIME, PassageIndexWorkStore, PassageVectorKey,
     PassageVectorRow, ProjectId, ProjectReadError, ProjectScope, UserId,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_hybrid_search::DEPLOYMENT_REGISTRATION;
@@ -142,7 +142,7 @@ macro_rules! waiting_work {
 
 /// Whether a work row that a claim can take is in the worker scope of `client`.
 async fn passage_index_row_waits(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     registration_revisions: &[&str],
     cut_revision: &str,
 ) -> Result<bool, ProjectReadError> {
@@ -162,7 +162,7 @@ async fn passage_index_row_waits(
 
 /// Claims the next pending work row in the worker scope of `client`, after its quiet time.
 pub(crate) async fn claim_passage_index_row(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     registration_revisions: &[&str],
     cut_revision: &str,
     lease: Duration,

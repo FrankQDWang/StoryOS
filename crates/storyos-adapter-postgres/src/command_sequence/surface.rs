@@ -4,9 +4,9 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement};
 use storyos_core::TransitionOutcome;
-use tokio_postgres::Client;
 
 use super::{
     Admission, AppliedVariant, CommandError, CommandResponse, LockedProject, NoZeroAuthority,

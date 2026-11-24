@@ -1,8 +1,8 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     ConversationSelection, ModelProviderAdapter, NoContractFaults, ProjectScope, complete_agent_run,
 };
 use storyos_core::{ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_compaction_summary::{

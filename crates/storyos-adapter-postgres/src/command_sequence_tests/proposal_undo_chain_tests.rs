@@ -1,9 +1,9 @@
 //! Author Undo of a chain of Proposal candidate edits and withdrawals (ADR 0068). Each Undo
 //! takes the current Author Undo Frontier, as the Web Client does.
 
+use crate::statement_cache::Client;
 use storyos_application::{EditorSessionId, RejectProposalOperationsInput, RejectionNote};
 use storyos_core::{TransitionOutcome, UndoLatestAuthorActionUnavailable};
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_proposal_decision::{

@@ -70,7 +70,8 @@ async fn create_project_challenge_replays_conflicts_and_stays_user_isolated() {
         Err(ProjectCommandChallengeError::BindingConflict)
     ));
 
-    let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let (runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let mut runtime = crate::statement_cache::Client::new(runtime);
     tokio::spawn(async move {
         connection.await.unwrap();
     });
@@ -102,6 +103,7 @@ async fn create_project_challenge_replays_conflicts_and_stays_user_isolated() {
         (0, 0, 0, 1)
     );
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         admin_connection.await.unwrap();
     });

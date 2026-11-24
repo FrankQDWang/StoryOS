@@ -2,10 +2,10 @@
 //! 7), and the whole pass with each duty. Each test completes each capture and each pass Run. The
 //! lead of these tests is `79`.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{MemoryWorkOutcome, ProjectScope};
 use storyos_core::ConsolidationSkip;
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_load_skill::calls;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;

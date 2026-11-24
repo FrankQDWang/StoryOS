@@ -3,6 +3,7 @@
 use crate::shared_tests::agent_run_finish_rule::finish_before;
 use crate::shared_tests::model_gateway::RuntimeClock;
 use crate::shared_tests::model_gateway::claim_run;
+use crate::statement_cache::Client;
 use std::sync::Mutex;
 use storyos_application::{
     CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter, ModelStreamSink,
@@ -10,7 +11,6 @@ use storyos_application::{
     ToolProbeRequest, WirePayloadProjection, complete_agent_run,
 };
 use storyos_core::{DeploymentDestination, ModelAdapter, ToolChoice};
-use tokio_postgres::Client;
 
 pub(crate) const AUTHORIZATION: &str =
     "https://github.com/FrankQDWang/StoryOS/issues/393#issuecomment-6098554693";

@@ -21,7 +21,7 @@ use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_unavailable};
 
 /// Commits the Destination Attempt and Outbound Disclosure Event of one Retrieve request.
 pub(crate) async fn commit(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     request: &RetrieveRequest,
@@ -124,7 +124,7 @@ pub(crate) async fn commit(
 
 /// Records one original-result observation, then seals the retrieval subject.
 pub(crate) async fn record_original_result(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     dispatch: &DispatchClaim,
@@ -288,7 +288,7 @@ pub(crate) async fn record_original_result(
 
 /// Records the late Retrieve of the fenced predecessor. Only a complete result is evidence.
 pub(crate) async fn record_late_result(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     dispatch: &DispatchClaim,
@@ -385,7 +385,7 @@ impl RetrievedResult {
     /// response of a probe makes no Agent Decision. A complete function request of an ordinary
     /// request settles like a selected result, with the research refusal.
     pub(crate) async fn classify(
-        client: &tokio_postgres::Client,
+        client: &crate::statement_cache::Client,
         claim: &ClaimedAgentRun,
         observation: Observation,
         declared: &[storyos_core::DeclaredLocation],
@@ -522,7 +522,7 @@ pub(crate) struct RetrievalManifests {
 /// Copies the active Context Assembly of the interrupted Attempt at `decision_position` as the
 /// Context Assembly of `role` (`retrieval` or `successor`) at the same position.
 pub(crate) async fn copy_active_context(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     decision_position: &str,
     role: &str,
@@ -617,7 +617,7 @@ pub(crate) async fn copy_active_context(
 /// A late Retrieve reuses the Destination Context Manifest of the original retrieval at
 /// `decision_position`.
 async fn retrieval_manifests(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     decision_position: &str,
 ) -> Result<RetrievalManifests, CompleteAgentRunError> {

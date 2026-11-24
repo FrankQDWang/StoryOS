@@ -9,12 +9,12 @@ use crate::shared_tests::command_sequence_secondary_operation::{
 };
 use crate::shared_tests::command_sequence_support::{CommandCall, issued};
 use crate::shared_tests::command_sequence_undo::{issued_undo, latest_forward, undo};
+use crate::statement_cache::Client;
 use storyos_application::{
     EditorSessionId, ProjectScope, UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
     WithdrawProposalInput, WithdrawalNote,
 };
 use storyos_core::TransitionOutcome;
-use tokio_postgres::Client;
 
 /// Issues one Author Undo of the current Author Undo Frontier.
 pub(crate) async fn undo_call(

@@ -3,11 +3,11 @@
 //! Registration revision, and the Project Instruction revision of its parent Run, and it uses the
 //! Memory pin of its parent Run.
 
+use crate::statement_cache::Client;
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, SubrunWork};
 use storyos_core::{
     AgentRunKind, AgentRunStatus, CurrentPassageAssemblyRecord, ToolIntake, ToolResultCandidate,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};

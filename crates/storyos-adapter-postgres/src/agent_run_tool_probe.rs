@@ -16,7 +16,7 @@ pub(crate) struct ProbeRequest {
 /// call of an earlier probe of the same Conversation, Registration, and destination; without
 /// one, it has no call ID.
 pub(crate) async fn probe_request(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<Option<ProbeRequest>, CompleteAgentRunError> {
@@ -53,7 +53,7 @@ pub(crate) async fn probe_request(
 /// The response reference and the call ID of the latest function call probe of the Conversation.
 /// The probe must have the Registration, and thus the mapping, and the destination of `run`.
 async fn prior_function_call(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<Option<(String, String)>, CompleteAgentRunError> {

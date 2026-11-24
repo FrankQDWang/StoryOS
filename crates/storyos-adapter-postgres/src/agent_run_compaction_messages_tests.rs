@@ -1,10 +1,10 @@
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{AgentRunReadSelection, AgentRunReadStore, ConversationSelection};
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, AgentRunStatus,
     HOST_FAKE_COMPACTION_OUTPUT,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::{complete, tool_loop_run};
 use crate::shared_tests::agent_run_steering::{

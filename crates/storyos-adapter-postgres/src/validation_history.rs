@@ -2,7 +2,7 @@ use storyos_application::ProjectScope;
 use storyos_core::AcceptanceTargetResolution;
 
 pub(super) async fn unavailable_revisions(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
 ) -> Result<Vec<String>, tokio_postgres::Error> {
     let rows = client

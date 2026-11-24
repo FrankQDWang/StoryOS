@@ -89,7 +89,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                     .await;
                 }
                 DestinationRequest::Create(create) if create.successor_of.is_some() => {
-                    let assistance = read_assistance_record(client, &claim.project_scope)
+                    let assistance = read_assistance_record(&**client, &claim.project_scope)
                         .await
                         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
                     let route = crate::agent_run_work::route_facts(&run, assistance.as_ref());
@@ -148,7 +148,7 @@ impl ModelDispatchStore for PostgresProjectReader {
             {
                 return Ok(None);
             }
-            let assistance = read_assistance_record(client, &claim.project_scope)
+            let assistance = read_assistance_record(&**client, &claim.project_scope)
                 .await
                 .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
             let CreateAdmission::Dispatch {
@@ -544,7 +544,7 @@ fn contention(error: CompleteAgentRunError) -> CompleteAgentRunError {
 }
 
 async fn advance_steering(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     lease_seconds: i64,
     phase: WorkPhase,
@@ -558,7 +558,7 @@ async fn advance_steering(
 }
 
 async fn commit_retrieve(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     request: &storyos_application::RetrieveRequest,

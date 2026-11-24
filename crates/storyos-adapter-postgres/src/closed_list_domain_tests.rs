@@ -5,7 +5,9 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::storage_activation::ROUTE_CATALOG_JSON;
 use serde_json::Value;
 use std::collections::BTreeSet;
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 
 async fn domain_members(client: &Client, domain: &str) -> BTreeSet<String> {
     let definition: String = client
@@ -42,6 +44,7 @@ async fn the_command_and_event_kind_domains_equal_the_route_catalog() {
     )
     .await
     .unwrap();
+    let client = crate::statement_cache::Client::new(client);
     tokio::spawn(connection);
     let catalog: Value = serde_json::from_str(ROUTE_CATALOG_JSON).unwrap();
 

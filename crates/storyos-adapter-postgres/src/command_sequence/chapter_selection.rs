@@ -1,11 +1,11 @@
 //! The `ChapterSelection` settlement profile: the Structural Authority Settlement of one
 //! Current Chapter change, which has an Author Action and a Snapshot but no Commit (ADR 0026).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AuthorityEvidence, ChapterSelectionApplied, ChapterSelectionAuthority, ProjectCommandEnvelope,
     ProjectCommandError, ProjectScope,
 };
-use tokio_postgres::Client;
 
 use super::structural_records::{
     StructuralInput, StructuralRecords, WriterBaseRebind, persist_structural_records,

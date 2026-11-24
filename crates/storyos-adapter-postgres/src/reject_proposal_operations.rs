@@ -1,5 +1,6 @@
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProposalOperationsRejected,
     RejectProposalOperationsInput, RejectProposalOperationsSettlement, RejectionNote,
@@ -9,7 +10,6 @@ use storyos_core::{
     RejectProposalOperations as CoreReject, classify_proposal_selection,
     reject_proposal_operations,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

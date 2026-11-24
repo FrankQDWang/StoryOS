@@ -3,11 +3,11 @@
 
 use std::future::Future;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AdmittedProjectCommand, DiagnosticField as _, DiagnosticId, ProjectCommandEnvelope,
     ProjectCommandError,
 };
-use tokio_postgres::Client;
 
 use super::admission::insert_admission;
 use super::records::lock_project;

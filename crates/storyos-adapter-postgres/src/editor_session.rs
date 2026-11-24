@@ -180,7 +180,7 @@ impl EditorSessionStore for PostgresProjectReader {
 }
 
 async fn read_session(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     editor_session_id: &str,
     binding: &storyos_application::EditorClientBinding,
@@ -288,7 +288,7 @@ async fn read_session(
 /// The first acknowledgement of a settled Create Editor Session (protocol section 7.3). A fence
 /// without a captured acknowledgement predates the capture (ADR 0032).
 async fn replay_session(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     request: &OpenEditorSession,
     editor_session_id: &str,
 ) -> Result<EditorSession, EditorSessionError> {
@@ -377,7 +377,7 @@ async fn replay_session(
 
 /// The display body, the Blocks, and the payload digest of one stored Revision payload.
 async fn materialized_payload(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     chapter_id: &str,
     revision_id: &str,
@@ -410,7 +410,7 @@ fn damaged(message: &str) -> EditorSessionError {
 }
 
 pub(super) async fn current_author_undo_frontier_sequence(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     owner_user_id: &str,
     project_id: &str,
 ) -> Result<Option<u64>, EditorSessionError> {
@@ -418,7 +418,7 @@ pub(super) async fn current_author_undo_frontier_sequence(
 }
 
 async fn load_author_undo_frontier(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     owner_user_id: &str,
     project_id: &str,
 ) -> Result<Option<u64>, EditorSessionError> {

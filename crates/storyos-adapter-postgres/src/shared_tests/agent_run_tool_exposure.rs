@@ -1,6 +1,7 @@
 //! The shared test support from `agent_run_tool_exposure_tests.rs`.
 
 use crate::shared_tests::agent_run_retrieval::adapter;
+use crate::statement_cache::Client;
 use serde_json::json;
 use storyos_adapter_volcengine_responses::AgentPlanExchange;
 use storyos_application::{
@@ -8,7 +9,6 @@ use storyos_application::{
     PreparedRequest,
 };
 use storyos_core::{ExposureFacts, ModelAdapter, ToolExposure};
-use tokio_postgres::Client;
 
 /// The final answer of a closing response.
 pub(crate) const ADVISORY: &str = "Keep it.";

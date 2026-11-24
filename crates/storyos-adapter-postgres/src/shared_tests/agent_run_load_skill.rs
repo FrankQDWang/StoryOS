@@ -5,11 +5,11 @@ use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_steering::queued;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::Admission;
+use crate::statement_cache::Client;
 use serde_json::Value;
 use std::sync::Arc;
 use storyos_application::ProjectScope;
 use storyos_core::{SKILL_MD_PATH, SkillPackage, SkillSet};
-use tokio_postgres::Client;
 
 pub(crate) fn skill_md(package: &SkillPackage) -> String {
     let file = package.files.iter().find(|file| file.path == SKILL_MD_PATH);

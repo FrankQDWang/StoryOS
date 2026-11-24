@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -9,7 +10,6 @@ use storyos_core::{
     ADVISORY_TEXT, DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT, HOST_TOOL_REGISTRATION,
     RESEARCH_TOOL_OFFER,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;

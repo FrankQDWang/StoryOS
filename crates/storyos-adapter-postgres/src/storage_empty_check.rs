@@ -64,7 +64,7 @@ const USER_STATE_SQL: &str = "
            )";
 
 pub(crate) async fn database_has_user_state(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
 ) -> Result<bool, tokio_postgres::Error> {
     Ok(client
         .query_one(

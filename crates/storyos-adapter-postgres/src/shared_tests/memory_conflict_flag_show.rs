@@ -17,7 +17,7 @@ pub(crate) fn write(action: &str, arguments: Value) -> String {
 /// Admits a Run of the author with `message` in a new Conversation and completes it.
 pub(crate) async fn run(
     store: &PostgresProjectReader,
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     (scope, chapter_id): (&ProjectScope, &str),
     prefix: &str,
     message: &str,

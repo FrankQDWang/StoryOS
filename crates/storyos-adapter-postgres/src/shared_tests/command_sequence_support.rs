@@ -17,7 +17,9 @@ use storyos_application::{
 };
 use storyos_contracts::CommandKind;
 use storyos_core::{ReasonCode, TransitionOutcome};
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 use uuid::Uuid;
 
 /// The sequence error of a settlement that a contract row expects.
@@ -89,6 +91,7 @@ pub(crate) async fn stores() -> (PostgresProjectReader, Client) {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(connection);
     (PostgresProjectReader::new(runtime_url), admin)
 }

@@ -45,7 +45,7 @@ struct StoredToolCall {
 /// one to six of its Context Assembly, and makes it the active RunStep. The next work phase
 /// admits its Create.
 pub(crate) async fn open_continuation(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
@@ -67,7 +67,7 @@ pub(crate) async fn open_continuation(
 /// calls this directly: its Attempt already holds the produced binding of its
 /// function request, so the next RunStep continues the successor response (ADR 0088).
 pub(crate) async fn open_next_step(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
@@ -191,7 +191,7 @@ pub(crate) async fn open_next_step(
 
 /// Makes the RunStep at `next_position` the active RunStep of the Run.
 async fn activate_step(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     next_position: &str,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
@@ -218,7 +218,7 @@ pub(crate) struct RunToolResults(Vec<StoredToolCall>);
 
 impl RunToolResults {
     pub(crate) async fn load(
-        client: &tokio_postgres::Client,
+        client: &crate::statement_cache::Client,
         claim: &ClaimedAgentRun,
     ) -> Result<Self, CompleteAgentRunError> {
         stored_tool_calls(client, claim).await.map(Self)
@@ -274,7 +274,7 @@ impl RunToolResults {
 }
 
 async fn stored_tool_calls(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<Vec<StoredToolCall>, CompleteAgentRunError> {
     let rows = client
@@ -353,7 +353,7 @@ async fn stored_tool_calls(
 /// `prior_decision_id` of the prior response answer that response; the others belong to earlier
 /// RunSteps (ADR 0085 section 3).
 pub(crate) async fn tool_outputs(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     assembly: &CurrentPassageAssemblyRecord,
     prior_decision_id: Option<&str>,
@@ -428,7 +428,7 @@ fn canonical_arguments(stored: &str) -> Result<String, CompleteAgentRunError> {
 /// the RunStep reads, with each steering input. The prior response read the input of that
 /// Attempt, so an incremental request sends a changed input again (ADR 0085).
 pub(crate) async fn continuation_input_changed(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     author_message: &str,
 ) -> Result<bool, CompleteAgentRunError> {
@@ -488,7 +488,7 @@ pub(crate) async fn continuation_input_changed(
 /// Model Attempt, and the ToolCall identities. Otherwise, the lineage names the Research Artifact
 /// whose response the request continues, if any (ADR 0087).
 pub(crate) async fn proposal_source_lineage(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<Option<String>, tokio_postgres::Error> {
     let lineage = client

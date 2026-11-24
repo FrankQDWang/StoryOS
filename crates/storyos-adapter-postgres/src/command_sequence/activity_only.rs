@@ -1,10 +1,10 @@
 //! The `ActivityOnly` settlement profile: one Project Activity record and no Authoritative
 //! Commit, Author Action, Snapshot, or Manuscript Tree Revision change (ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ActivityApplied, ProjectCommandEnvelope, ProjectCommandError, ProjectScope,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use super::records::insert_applied_activity;

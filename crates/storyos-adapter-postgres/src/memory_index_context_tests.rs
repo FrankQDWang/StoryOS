@@ -1,12 +1,12 @@
 //! The pin of the Memory revision of a Run and its `memory_index` item at each request of the
 //! Run (ADR 0094 section 4, ADR 0085).
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{ChapterId, ConversationSelection, ProjectScope, UpdateChapterInput};
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, hex_sha256,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;

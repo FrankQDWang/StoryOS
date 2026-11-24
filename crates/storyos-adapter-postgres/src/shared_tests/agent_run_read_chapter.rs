@@ -9,6 +9,7 @@ use crate::shared_tests::command_sequence_support::issued;
 use crate::shared_tests::create_volume_authority::{NamedEdit, adjusted_edit_command};
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ApplyAuthorEditCommand,
@@ -18,7 +19,6 @@ use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, CreateChapterPlacement, SelectionSnapshot,
     TransitionOutcome, UTF16_COORDINATE_PROFILE,
 };
-use tokio_postgres::Client;
 
 /// The expected result of a read of the Chapter `number`: the header line and each Block.
 pub(crate) fn read_text(number: i64, chapter: (&str, &str, &str), blocks: &[&str]) -> String {

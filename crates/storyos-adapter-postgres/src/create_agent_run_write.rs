@@ -7,7 +7,7 @@ use storyos_core::AgentRunKind;
 use super::agent_run_database_error;
 
 pub(super) async fn persist_conversation_and_run(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     envelope: &ProjectCommandEnvelope,
     command: &CreateAgentRunInput,
     grant_id: &str,
@@ -42,7 +42,7 @@ pub(super) async fn persist_conversation_and_run(
 }
 
 async fn insert_new_conversation(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     envelope: &ProjectCommandEnvelope,
     command: &CreateAgentRunInput,
     grant_id: &str,
@@ -127,7 +127,7 @@ async fn insert_new_conversation(
 }
 
 async fn insert_existing_conversation_run(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     envelope: &ProjectCommandEnvelope,
     command: &CreateAgentRunInput,
     conversation_id: &str,
@@ -174,7 +174,7 @@ async fn insert_existing_conversation_run(
 }
 
 async fn insert_queued_run(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     envelope: &ProjectCommandEnvelope,
     command: &CreateAgentRunInput,
     run: CreateAgentRunApplied,

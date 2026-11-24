@@ -3,11 +3,11 @@
 use crate::PostgresProjectReader;
 use crate::shared_tests::model_gateway::RuntimeClock;
 use crate::shared_tests::model_gateway::{Admission, claim_run, queued_run};
+use crate::statement_cache::Client;
 use storyos_application::{
     ConversationSelection, ModelProviderAdapter, NoContractFaults, complete_agent_run,
 };
 use storyos_core::DeploymentDestination;
-use tokio_postgres::Client;
 
 /// Returns a test value that is not a real credential.
 pub(crate) struct TestCredential;
