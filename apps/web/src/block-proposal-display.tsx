@@ -5,7 +5,6 @@ import type {
   BlockProposalInspect, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-editor.tsx";
-import type { SettledProject } from "./boot.ts";
 import type { EditorReadyState } from "./editor-types.ts";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
 import { canonicalValue as canonical } from "./canonical-value.ts";
@@ -68,8 +67,8 @@ export function BlockProposalDisplay({
   locators: readonly ProposalLocator[];
   refreshKey: number;
   safeToProject: boolean;
-  /** Opens the Project again after a decision. `settled` is the Command-response Project of a settled decision. */
-  onAccepted: (settled?: SettledProject) => Promise<void>;
+  /** Opens the Project again after a decision. `settled` is true when the decision has a settled response. */
+  onAccepted: (settled: boolean) => Promise<void>;
   persistWorkspace: EditorReadyState | undefined;
   onFailure: (error: unknown) => void;
   baseUrl: string;
@@ -273,7 +272,7 @@ export function BlockProposalDisplay({
       if (active && !acceptingRef.current && result === "applied"
         && !refreshedAcceptance.current.has(proposal.proposal_id)) {
         refreshedAcceptance.current.add(proposal.proposal_id);
-        await onAccepted();
+        await onAccepted(false);
       }
       return result === "pending" || result === "applied" ? proposal.proposal_id : undefined;
     })).then((values) => {
@@ -484,7 +483,7 @@ export function BlockProposalDisplay({
           setAcceptanceRefusals((current) => ({ ...current, [target.proposalId]: refusal }));
         }
         setSettlementRefresh((value) => value + 1);
-        try { if (refresh) await onAccepted(response); } catch {
+        try { if (refresh) await onAccepted(true); } catch {
           setDecisionMessages((current) => ({ ...current,
             [target.proposalId]: "接受结果已记录。请刷新查看当前正文。" }));
         }
@@ -497,7 +496,7 @@ export function BlockProposalDisplay({
             : error instanceof Error && error.message.startsWith("请先")
               ? error.message : "接受结果暂不可确认。请刷新检查，或重试同一操作。" }));
         setSettlementRefresh((value) => value + 1);
-        try { await onAccepted(); } catch { /* The frozen command remains available. */ }
+        try { await onAccepted(false); } catch { /* The frozen command remains available. */ }
       } finally {
         finishDecision();
       }
@@ -533,13 +532,13 @@ export function BlockProposalDisplay({
             reason: response.effect.reason, earlier: false };
           setAcceptanceRefusals((current) => ({ ...current, [proposalId]: refusal }));
         }
-        if (refresh) await onAccepted(response);
+        if (refresh) await onAccepted(true);
         setSettlementRefresh((value) => value + 1);
       } catch {
         setDecisionMessages((current) => ({ ...current,
           [proposalId]: "接受结果暂不可确认。请重试同一操作。" }));
         setSettlementRefresh((value) => value + 1);
-        try { await onAccepted(); } catch { /* The frozen command remains available. */ }
+        try { await onAccepted(false); } catch { /* The frozen command remains available. */ }
       } finally {
         finishDecision();
       }
@@ -607,7 +606,7 @@ export function BlockProposalDisplay({
           refused: "此次拒绝未生效，请检查当前候选文字。" }[response.effect.kind];
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
         setSettlementRefresh((value) => value + 1);
-        await onAccepted(response);
+        await onAccepted(true);
       } catch (error) {
         setDecisionMessages((current) => ({ ...current,
           [target.proposalId]: historicalAcknowledgementUnavailable(error)
@@ -615,7 +614,7 @@ export function BlockProposalDisplay({
             : error instanceof Error && error.message.startsWith("请先")
               ? error.message : "拒绝结果暂不可确认。请刷新检查，或重试同一操作。" }));
         setSettlementRefresh((value) => value + 1);
-        try { await onAccepted(); } catch { /* The frozen command remains available. */ }
+        try { await onAccepted(false); } catch { /* The frozen command remains available. */ }
       } finally {
         finishDecision();
       }
@@ -643,7 +642,7 @@ export function BlockProposalDisplay({
           refused: "此次拒绝未生效，请检查当前候选文字。",
         }[response.effect.kind] }));
         setSettlementRefresh((value) => value + 1);
-        await onAccepted(response);
+        await onAccepted(true);
       } catch {
         setDecisionMessages((current) => ({ ...current,
           [proposalId]: "拒绝结果暂不可确认。请重试同一操作。" }));
@@ -666,7 +665,8 @@ export function BlockProposalDisplay({
     report: (proposalId: string, message: string) => setDecisionMessages((current) =>
       ({ ...current, [proposalId]: message })),
     refresh: () => setSettlementRefresh((value) => value + 1),
-    onAccepted,
+    // A withdrawal opens the Project with each check of the first open, as before #1875.
+    onAccepted: () => onAccepted(false),
   };
   const withdrawDisplayed = (target: {
     proposalId: string; operationId: string; revisionId: string; text: string;

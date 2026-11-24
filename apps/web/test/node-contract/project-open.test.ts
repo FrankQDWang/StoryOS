@@ -243,142 +243,103 @@ test("missing, empty, invalid, or mismatched owner identities fail closed", asyn
   }
 });
 
-test("a reopen fails closed when the Project of the command or of the read has another Scope", async () => {
-  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
-  const project = fixture<GetProjectResponse>("get-project.json");
-  const foreign = { ...project, project_scope: { ...project.project_scope,
-    owner_user_id: "018f0000-0000-7001-8000-000000000101" } };
-  const opened = { profile, project, title: project.project.title, revision: "1" };
-  const blocked = {
-    kind: "project-blocked",
-    code: "project_unavailable",
-    heading: "StoryOS 无法打开项目",
-    message: "无法读取这个受控项目或其当前章节。",
-  };
+/** A fake that serves only the given routes. It records each other request and throws. */
+function exactFake(routes: Map<string, { body: unknown; status?: number }>) {
   const requests: string[] = [];
   const unexpected: string[] = [];
   const fetchImpl: typeof fetch = async (url, init) => {
     const name = `${init?.method ?? "GET"} ${new URL(requestUrl(url)).pathname}`;
     requests.push(name);
-    if (name === `GET /api/v1/projects/${project.project.project_id}`) {
-      return new Response(JSON.stringify(foreign), { status: 200, headers: { "content-type": "application/json" } });
+    const route = routes.get(name);
+    if (route === undefined) {
+      unexpected.push(name);
+      throw new Error(`unexpected request: ${name}`);
     }
-    unexpected.push(name);
-    throw new Error(`unexpected request: ${name}`);
+    return new Response(JSON.stringify(route.body),
+      { status: route.status ?? 200, headers: { "content-type": "application/json" } });
   };
+  return { requests, unexpected, fetchImpl };
+}
 
-  const settled = await reopenControlledProject({ baseUrl: "http://storyos.test", opened, settled: foreign, fetchImpl });
-  const read = await reopenControlledProject({ baseUrl: "http://storyos.test", opened, fetchImpl });
+const PROJECT_BLOCKED = {
+  kind: "project-blocked",
+  code: "project_unavailable",
+  heading: "StoryOS 无法打开项目",
+  message: "无法读取这个受控项目或其当前章节。",
+};
 
-  assert.deepEqual({ settled, read, requests, unexpected }, {
-    settled: blocked, read: blocked, requests: [`GET /api/v1/projects/${project.project.project_id}`], unexpected: [],
+test("a reopen fails closed when the Project read has another Scope", async () => {
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const project = fixture<GetProjectResponse>("get-project.json");
+  const listed = fixture<ListProjectsResponse>("list-projects.json");
+  const projectId = project.project.project_id;
+  const foreign = { ...project, project_scope: { ...project.project_scope,
+    owner_user_id: "018f0000-0000-7001-8000-000000000101" } };
+  const fake = exactFake(new Map([
+    [`GET /api/v1/projects/${projectId}`, { body: foreign }],
+    ["GET /api/v1/projects", { body: listed }],
+  ]));
+
+  const state = await reopenControlledProject({ baseUrl: "http://storyos.test", opened: { profile, project },
+    fetchImpl: fake.fetchImpl });
+
+  assert.deepEqual({ state, requests: fake.requests.sort(), unexpected: fake.unexpected }, {
+    state: PROJECT_BLOCKED,
+    requests: ["GET /api/v1/projects", `GET /api/v1/projects/${projectId}`].sort(),
+    unexpected: [],
   });
 });
 
-test("a reopen reads the revision from the list when another tab renamed the Project", async () => {
+test("a reopen opens the Current Chapter of the Project read with the revision of the list", async () => {
   const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
   const project = fixture<GetProjectResponse>("get-project.json");
   const listed = fixture<ListProjectsResponse>("list-projects.json");
   const chapter = fixture<GetChapterResponse>("get-chapter.json");
   const projectId = project.project.project_id;
   const chapterId = project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "";
+  // Another tab renamed the Project, so the list has a new revision.
   listed.projects = listed.projects.map((entry) => entry.project_scope.project_id === projectId
     ? { ...entry, title: "Renamed", revision: "7" } : entry);
-  const routes = new Map<string, unknown>([
-    ["GET /api/v1/projects", listed],
-    [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`, chapter],
-  ]);
-  const requests: string[] = [];
-  const unexpected: string[] = [];
-  const fetchImpl: typeof fetch = async (url, init) => {
-    const name = `${init?.method ?? "GET"} ${new URL(requestUrl(url)).pathname}`;
-    requests.push(name);
-    if (!routes.has(name)) {
-      unexpected.push(name);
-      throw new Error(`unexpected request: ${name}`);
-    }
-    return new Response(JSON.stringify(routes.get(name)), { status: 200, headers: { "content-type": "application/json" } });
-  };
-  const settled = { project_scope: project.project_scope, project: { ...project.project, title: "Renamed" } };
-  const opened = { profile, project, title: project.project.title, revision: "1" };
+  const fake = exactFake(new Map([
+    [`GET /api/v1/projects/${projectId}`, { body: { ...project, project: { ...project.project, title: "Renamed" } } }],
+    ["GET /api/v1/projects", { body: listed }],
+    [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`, { body: chapter }],
+  ]));
 
-  const renamed = await reopenControlledProject({ baseUrl: "http://storyos.test", opened, settled, fetchImpl });
-  const same = await reopenControlledProject({ baseUrl: "http://storyos.test",
-    opened: { ...opened, title: "Renamed" }, settled, fetchImpl });
+  const state = await reopenControlledProject({ baseUrl: "http://storyos.test", opened: { profile, project },
+    fetchImpl: fake.fetchImpl });
 
   assert.deepEqual({
-    revisions: [renamed, same].map((state) => state.kind === "project-ready" ? state.revision : state.kind),
-    requests: requests.sort(), unexpected,
+    kind: state.kind,
+    title: state.kind === "project-ready" ? state.project.project.title : "",
+    revision: state.kind === "project-ready" ? state.revision : "",
+    requests: fake.requests.slice(0, 2).sort(),
+    later: fake.requests.slice(2),
+    unexpected: fake.unexpected,
   }, {
-    revisions: ["7", "1"],
-    requests: ["GET /api/v1/projects", `GET /api/v1/projects/${projectId}/chapters/${chapterId}`,
-      `GET /api/v1/projects/${projectId}/chapters/${chapterId}`].sort(),
+    kind: "project-ready",
+    title: "Renamed",
+    revision: "7",
+    requests: ["GET /api/v1/projects", `GET /api/v1/projects/${projectId}`].sort(),
+    later: [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`],
     unexpected: [],
   });
 });
 
-test("a reopen leaves the revision unknown when the list read fails after another tab renamed the Project", async () => {
+test("a reopen fails closed when the list read fails", async () => {
   const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
   const project = fixture<GetProjectResponse>("get-project.json");
-  const chapter = fixture<GetChapterResponse>("get-chapter.json");
   const projectId = project.project.project_id;
-  const chapterId = project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "";
-  const unexpected: string[] = [];
-  const fetchImpl: typeof fetch = async (url, init) => {
-    const name = `${init?.method ?? "GET"} ${new URL(requestUrl(url)).pathname}`;
-    if (name === "GET /api/v1/projects") {
-      return new Response(JSON.stringify({ schema_id: "storyos.problem.v1", code: "service_unavailable",
-        message: "Unavailable." }), { status: 503, headers: { "content-type": "application/json" } });
-    }
-    if (name === `GET /api/v1/projects/${projectId}/chapters/${chapterId}`) {
-      return new Response(JSON.stringify(chapter), { status: 200, headers: { "content-type": "application/json" } });
-    }
-    unexpected.push(name);
-    throw new Error(`unexpected request: ${name}`);
-  };
-  const settled = { project_scope: project.project_scope, project: { ...project.project, title: "Renamed" } };
+  const fake = exactFake(new Map([
+    [`GET /api/v1/projects/${projectId}`, { body: project }],
+    ["GET /api/v1/projects", { status: 503, body: { schema_id: "storyos.problem.v1", code: "service_unavailable",
+      message: "Unavailable." } }],
+  ]));
 
-  const state = await reopenControlledProject({ baseUrl: "http://storyos.test",
-    opened: { profile, project, title: project.project.title, revision: "1" }, settled, fetchImpl });
+  const state = await reopenControlledProject({ baseUrl: "http://storyos.test", opened: { profile, project },
+    fetchImpl: fake.fetchImpl });
 
-  // The view reads the list again, and the rename waits for the revision.
-  assert.deepEqual({ kind: state.kind, revision: state.kind === "project-ready" ? state.revision : "none", unexpected },
-    { kind: "project-ready", revision: undefined, unexpected: [] });
-});
-
-test("a reopen reads the Project when the Chapter of the Command-response Project cannot be read", async () => {
-  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
-  const project = fixture<GetProjectResponse>("get-project.json");
-  const chapter = fixture<GetChapterResponse>("get-chapter.json");
-  const projectId = project.project.project_id;
-  const chapterId = project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "";
-  // The stored response of an exact retry names a Chapter that a later command removed.
-  const removed = "018f0000-0000-7001-8000-0000000009f1";
-  const requests: string[] = [];
-  const unexpected: string[] = [];
-  const fetchImpl: typeof fetch = async (url, init) => {
-    const name = `${init?.method ?? "GET"} ${new URL(requestUrl(url)).pathname}`;
-    requests.push(name);
-    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
-      { status, headers: { "content-type": "application/json" } });
-    if (name === `GET /api/v1/projects/${projectId}/chapters/${removed}`) {
-      return json({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
-    }
-    if (name === `GET /api/v1/projects/${projectId}`) return json(project);
-    if (name === `GET /api/v1/projects/${projectId}/chapters/${chapterId}`) return json(chapter);
-    unexpected.push(name);
-    throw new Error(`unexpected request: ${name}`);
-  };
-  const settled = { project_scope: project.project_scope,
-    project: { ...project.project, open: { kind: "current_chapter" as const, current_chapter_id: removed } } };
-
-  const state = await reopenControlledProject({ baseUrl: "http://storyos.test",
-    opened: { profile, project, title: project.project.title, revision: "1" }, settled, fetchImpl });
-
-  assert.deepEqual({ kind: state.kind, chapter: state.kind === "project-ready" ? state.chapter.chapter.chapter_id : "",
-    requests, unexpected }, { kind: "project-ready", chapter: chapterId, requests: [
-    `GET /api/v1/projects/${projectId}/chapters/${removed}`, `GET /api/v1/projects/${projectId}`,
-    `GET /api/v1/projects/${projectId}/chapters/${chapterId}`], unexpected: [] });
+  assert.deepEqual({ state, unexpected: fake.unexpected }, { state: PROJECT_BLOCKED, unexpected: [] });
 });
 
 test("an incompatible protocol profile blocks the open while the Project reads do not end", async () => {

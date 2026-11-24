@@ -123,9 +123,6 @@ type ProjectOpenOptions = {
   cryptoImpl?: Crypto;
 };
 
-/** The Command-response Project of a settled command of this session for this Project. */
-export type SettledProject = Pick<GetProjectResponse, "project_scope" | "project">;
-
 type ReadResult<Value> = { kind: "read"; value: Value } | { kind: "failed"; error: unknown };
 const settle = <Value,>(promise: Promise<Value>): Promise<ReadResult<Value>> => promise.then(
   (value) => ({ kind: "read" as const, value }),
@@ -143,49 +140,25 @@ export async function openControlledProject(options: ProjectOpenOptions): Promis
   const read = await listed;
   if (read.kind === "failed") return projectUnavailable(read.error);
   if (read.value === undefined) return projectUnavailable();
-  const opened = await openProjectWorkspace(options, boot.profile, read.value.project, read.value.revision,
-    "no session check");
-  return opened.kind === "stale-command-response" ? projectUnavailable() : opened;
+  return await openProjectWorkspace(options, boot.profile, read.value.project, read.value.revision);
 }
 
 /**
- * Opens the Project again after a settled command of this page. The page holds the protocol profile and the
- * revision of the list, so a reopen reads only the Project (when the command response does not carry it), the
- * Chapter, and the Editor Session. A Command-response Project of an exact retry can be earlier than the current
- * Project: when the Editor Session has another Chapter, or the open with it fails, the reopen reads the Project.
+ * Opens the Project again after a settled command of this page. The page keeps only the protocol profile: the reopen
+ * reads the Project and the list of Projects at the same time, then the Chapter and the Editor Session at the same time.
  */
 export async function reopenControlledProject(options: Omit<ProjectOpenOptions, "projectId"> & {
-  opened: Pick<ProjectReadyState, "profile" | "project"> & { title: string; revision: string | undefined };
-  settled?: SettledProject | undefined;
+  opened: Pick<ProjectReadyState, "profile" | "project">;
 }): Promise<ControlledProjectState> {
-  const { baseUrl, opened, settled, fetchImpl = globalThis.fetch, signal } = options;
+  const { baseUrl, opened, fetchImpl = globalThis.fetch, signal } = options;
   const scope = opened.project.project_scope;
-  const projectId = scope.project_id;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
   try {
-    const projectValue: unknown = settled ?? await getProject({ ...queryOptions, projectId });
-    const projectView = projectValue as {
-      project_scope?: { owner_user_id?: unknown; project_id?: unknown };
-      project?: { project_id?: unknown; title?: unknown };
-    };
-    if (projectView?.project_scope?.owner_user_id !== scope.owner_user_id
-      || projectView?.project_scope?.project_id !== projectId
-      || projectView?.project?.project_id !== projectId) throw new Error("Project Scope mismatch");
-    const project: GetProjectResponse = settled === undefined ? projectValue as GetProjectResponse
-      : { ...opened.project, project_scope: settled.project_scope, project: settled.project };
-    // Only a rename changes the revision. A rename in another tab changes the title, so the list gives the revision.
-    // When the list read fails, the revision is unknown and the view reads the list again.
-    const revision = project.project.title === opened.title ? Promise.resolve(opened.revision)
-      : listProjects(queryOptions).then((listed) => listed.projects.find((entry) =>
-        entry.project_scope.project_id === projectId)?.revision, () => undefined);
-    const reopened = await openProjectWorkspace({ ...options, projectId }, opened.profile, project, revision,
-      settled === undefined ? "no session check" : "same chapter as the session");
-    // A stored response can name a Chapter that a later command removed, so a failed open reads the Project.
-    if (reopened.kind === "stale-command-response"
-      || (settled !== undefined && reopened.kind === "project-blocked")) {
-      return await reopenControlledProject({ ...options, settled: undefined });
-    }
-    return reopened;
+    const read = await readSessionProject(queryOptions, scope.project_id, "together");
+    if (read === undefined) return projectUnavailable();
+    if (read.project.project_scope.owner_user_id !== scope.owner_user_id) throw new Error("Project Scope mismatch");
+    return await openProjectWorkspace({ ...options, projectId: scope.project_id }, opened.profile, read.project,
+      read.revision);
   } catch (error) {
     return projectUnavailable(error);
   }
@@ -196,9 +169,8 @@ async function openProjectWorkspace(
   options: ProjectOpenOptions,
   profile: Release1ProtocolProfile,
   project: GetProjectResponse,
-  revisionRead: string | undefined | Promise<string | undefined>,
-  sessionChapterCheck: "no session check" | "same chapter as the session",
-): Promise<ControlledProjectState | { kind: "stale-command-response" }> {
+  revision: string,
+): Promise<ControlledProjectState> {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal,
     indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
@@ -223,7 +195,7 @@ async function openProjectWorkspace(
         || treeView.tree_revision.length === 0
         || !Array.isArray(treeView?.volumes)) throw new Error("Manuscript tree Scope mismatch");
       const tree = treeValue as GetManuscriptTreeResponse;
-      return { kind: "empty-project-ready", profile, project, revision: await revisionRead, tree };
+      return { kind: "empty-project-ready", profile, project, revision, tree };
     }
     const chapterId = project.project.open.current_chapter_id;
     const opening = startEditorWorkspace({ baseUrl, project, profile, fetchImpl, indexedDBImpl, cryptoImpl });
@@ -234,14 +206,8 @@ async function openProjectWorkspace(
       opening.abandon();
       throw error;
     }
-    const sessionChapterId = sessionChapterCheck === "same chapter as the session"
-      ? await opening.sessionChapterId() : undefined;
-    if (sessionChapterId !== undefined && sessionChapterId !== chapterId) {
-      opening.abandon();
-      return { kind: "stale-command-response" };
-    }
     const { editor, tree } = await opening.finish(chapter);
-    return { kind: "project-ready", profile, project, revision: await revisionRead, chapter, editor, tree };
+    return { kind: "project-ready", profile, project, revision, chapter, editor, tree };
   } catch (error) {
     return projectUnavailable(error);
   }
