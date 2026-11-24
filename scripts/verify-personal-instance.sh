@@ -189,22 +189,30 @@ read_through_proxy "$script" -H 'Accept-Encoding: gzip'
 step "install.sh, the step of the upgrade, gives the instance the compression of the template"
 run 0 sh "$deploy/install.sh" "$archive"
 await_server
+# Decompresses /tmp/body with gzip and compares the result with the file $1. A damaged body makes gzip fail.
+decompressed_body_is() { gzip -dc /tmp/body > /tmp/plain && cmp -s /tmp/plain "$1"; }
 read_through_proxy "$script" -H 'Accept-Encoding: gzip'
 [ "$(header_value content-encoding)" = gzip ] || fail "the Web script is not compressed"
-gzip -dc /tmp/body | cmp -s - "/opt/storyos/current/web$script" || fail "the decompressed Web script is not the script"
+decompressed_body_is "/opt/storyos/current/web$script" || fail "the decompressed Web script is not the script"
 proxied_cache=$(header_value cache-control)
 curl -fsS -D /tmp/headers -o /dev/null "http://127.0.0.1:3000$script"
 [ "$proxied_cache" = "$(header_value cache-control)" ] || fail "Caddy changed the cache header of the Web script"
 read_through_proxy "$script"
 [ -z "$(header_value content-encoding)" ] || fail "a request with no Accept-Encoding got a compressed Web script"
 cmp -s /tmp/body "/opt/storyos/current/web$script" || fail "the plain Web script is not the script"
+read_through_proxy / -H 'Accept-Encoding: gzip'
+[ "$(header_value content-encoding)" = gzip ] || fail "the HTML document is not compressed"
+decompressed_body_is /opt/storyos/current/web/index.html || fail "the decompressed HTML document is not index.html"
 read_through_proxy /api/v1/protocol -H 'Accept-Encoding: gzip'
 [ "$(header_value content-encoding)" = gzip ] || fail "the JSON response is not compressed"
 curl -fsS -o /tmp/direct.json http://127.0.0.1:3000/api/v1/protocol
-gzip -dc /tmp/body | cmp -s - /tmp/direct.json || fail "the decompressed JSON response is not the response"
+decompressed_body_is /tmp/direct.json || fail "the decompressed JSON response is not the response"
 
-step "An event of the activity stream goes through Caddy before the stream ends"
-# A stub in place of the Server sends one event and then keeps the stream open for 30 s.
+step "An event of the Project Activity Stream goes through Caddy before the stream ends"
+# A stub in place of the Server answers only the route of the stream. It sends one complete event that is larger
+# than the minimum of the encode block, and then it keeps the stream open for 30 s.
+activity='/api/v1/projects/019a0000-0000-7000-8000-000000000001/activity?snapshot_id=019a0000-0000-7000-8000-000000000002&protocol_release=1'
+{ printf 'id: 1\ndata: '; head -c 1024 /dev/zero | tr '\0' e; printf '\n\n'; } > /tmp/event
 listening() { grep -q ':0BB8 00000000:0000 0A' /proc/net/tcp; }
 systemctl stop storyos-server.service
 attempt=0
@@ -213,13 +221,18 @@ while listening; do
   [ "$attempt" -lt 50 ] || fail "the Server did not stop"
   sleep 0.1
 done
-perl -MIO::Socket::INET -e '
+STUB_PATH=$activity perl -MIO::Socket::INET -e '
   my $server = IO::Socket::INET->new(LocalAddr => "127.0.0.1:3000", Listen => 1, ReuseAddr => 1) or die "$!\n";
   my $client = $server->accept or die "$!\n";
+  my $request = <$client>;
   while (my $line = <$client>) { last if $line =~ /^\r?\n$/ }
   $client->autoflush(1);
-  print $client "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\n\r\n",
-    "id: 1\ndata: the first event\n\n";
+  if ($request !~ /^GET \Q$ENV{STUB_PATH}\E HTTP\/1\.1\r?\n$/) {
+    print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+    exit;
+  }
+  open(my $event, "<", "/tmp/event") or die "$!\n";
+  print $client "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\n\r\n", <$event>;
   sleep 30;' &
 stub=$!
 attempt=0
@@ -229,13 +242,12 @@ until listening; do
   sleep 0.1
 done
 status=0
-read_through_proxy /api/v1/projects/stream/activity -N --max-time 5 -H 'Accept-Encoding: gzip' \
-  -H 'Accept: text/event-stream' || status=$?
+read_through_proxy "$activity" -N --max-time 5 -H 'Accept-Encoding: gzip' -H 'Accept: text/event-stream' || status=$?
 kill "$stub" 2>/dev/null || true
 wait "$stub" 2>/dev/null || true
 [ "$status" = 28 ] || fail "the stream ended or failed before the time limit with status $status"
-grep -q '^data: the first event$' /tmp/body || fail "the event did not arrive in 5 s"
-[ -z "$(header_value content-encoding)" ] || fail "Caddy compressed the event stream"
+[ -z "$(header_value content-encoding)" ] || fail "Caddy compressed the Project Activity Stream"
+cmp -s /tmp/body /tmp/event || fail "the complete event did not arrive in 5 s"
 systemctl start storyos-server.service
 await_server
 

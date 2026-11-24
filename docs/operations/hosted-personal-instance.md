@@ -21,7 +21,7 @@ The repository is public. Do not write the address of the VPS, the Host, the ref
 
 Each file of `/etc/storyos/` and each dump has mode 600. The service user `storyos` has no login shell. The units are `storyos-server.service`, `storyos-worker.service`, `storyos-backup.service`, and `storyos-backup.timer`. Their logs go to the journal: `journalctl -u storyos-server`.
 
-The Server listens on `127.0.0.1:3000` in the public HTTPS profile, with `STORYOS_WORKER=0`. The Worker has the real model route (ADR 0104 section 3). Caddy asks for the proxy password on each path, sends HSTS, and redirects port 80 to `https`. It compresses the document, the style sheet, the Web script, and the JSON responses with zstd or gzip. It does not compress the activity stream, so each event goes to the browser when the Server sends it. The URLs of the binaries have `sslmode=require`. `psql`, `pg_dump`, and `pg_restore` of the scripts use `sslmode=verify-full` with `sslrootcert=system`.
+The Server listens on `127.0.0.1:3000` in the public HTTPS profile, with `STORYOS_WORKER=0`. The Worker has the real model route (ADR 0104 section 3). Caddy asks for the proxy password on each path, sends HSTS, and redirects port 80 to `https`. It compresses the document, the style sheet, the Web script, and the JSON responses with zstd or gzip. It does not compress the Project Activity Stream, so each event goes to the browser when the Server sends it. The URLs of the binaries have `sslmode=require`. `psql`, `pg_dump`, and `pg_restore` of the scripts use `sslmode=verify-full` with `sslrootcert=system`.
 
 ## The certificate of the database
 
