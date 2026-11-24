@@ -65,7 +65,10 @@ async fn delete(
 }
 
 /// The removal decisions of the Project.
-async fn removal_decisions(admin: &tokio_postgres::Client, scope: &ProjectScope) -> Vec<String> {
+async fn removal_decisions(
+    admin: &crate::statement_cache::Client,
+    scope: &ProjectScope,
+) -> Vec<String> {
     admin
         .query(
             "SELECT volume_id::text FROM storyos.volume_removal_decisions

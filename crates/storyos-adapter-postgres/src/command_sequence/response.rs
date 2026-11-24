@@ -1,10 +1,10 @@
 //! The acknowledgement records that the Command Idempotency Fence keeps for an exact retry.
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ChapterId, Project, ProjectAssistanceAcknowledgement, ProjectCommandEnvelope,
     ProjectCommandError,
 };
-use tokio_postgres::Client;
 
 use super::unavailable;
 use crate::command_replay::{CommandReplay, ReplayFault, response_project};

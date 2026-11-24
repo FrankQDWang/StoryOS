@@ -9,7 +9,7 @@ use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
 
 /// The Skills that the Run `run_id` used.
 pub(crate) async fn load(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Vec<SkillUse>, CreateAgentRunError> {

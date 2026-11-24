@@ -8,7 +8,7 @@ pub(crate) struct CandidateTarget {
 }
 
 pub(crate) async fn load(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     chapter_id: &str,
     target: &ProposalCandidateTarget,
@@ -71,7 +71,7 @@ pub(crate) async fn load(
 /// The pending candidate that a validated result revises. It is the candidate target of the Run,
 /// or the referenced candidate of the one candidate change of the result (ADR 0062, ADR 0071).
 pub(crate) async fn admitted(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &storyos_application::ClaimedAgentRun,
     produced: Option<&[storyos_core::ProseChangeCandidate]>,
 ) -> Result<
@@ -112,7 +112,7 @@ pub(crate) async fn admitted(
 
 /// The referenced pending candidates as declared targets, with their candidate text.
 pub(crate) async fn declared(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &storyos_application::ClaimedAgentRun,
 ) -> Result<Vec<storyos_application::DeclaredTarget>, storyos_application::CompleteAgentRunError> {
     let Some(record) = active_record(client, claim).await? else {
@@ -162,7 +162,7 @@ pub(crate) async fn declared(
 
 /// The primary Context Assembly record of the active decision of the Run.
 pub(crate) async fn active_record(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &storyos_application::ClaimedAgentRun,
 ) -> Result<
     Option<storyos_core::CurrentPassageAssemblyRecord>,

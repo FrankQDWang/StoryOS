@@ -1,8 +1,8 @@
 //! The structure Compensation of Author Undo (ADR 0029, ADR 0030, ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 mod frontier;
@@ -115,7 +115,7 @@ impl CompensationAdapter for StructureCompensation {
 }
 
 async fn restore_prior_tree(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     frontier: &ObservedStructureFrontier,
 ) -> Result<(), ProjectCommandError> {
@@ -188,7 +188,7 @@ async fn restore_prior_tree(
 }
 
 async fn persist_structure_removal(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     frontier: &ObservedStructureFrontier,
 ) -> Result<(), ProjectCommandError> {
@@ -289,7 +289,7 @@ async fn persist_structure_removal(
 }
 
 async fn restore_volume_update_sibling_order(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     frontier: &ObservedStructureFrontier,
 ) -> Result<(), ProjectCommandError> {
@@ -370,7 +370,7 @@ async fn restore_volume_update_sibling_order(
 }
 
 async fn restore_chapter_update_sibling_order(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     frontier: &ObservedStructureFrontier,
 ) -> Result<(), ProjectCommandError> {

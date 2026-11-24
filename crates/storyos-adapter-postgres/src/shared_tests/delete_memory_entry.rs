@@ -3,6 +3,7 @@
 use crate::PostgresProjectReader;
 use crate::shared_tests::command_sequence_memory_entry::DELETE_MEMORY_ENTRY;
 use crate::shared_tests::command_sequence_support::issued;
+use crate::statement_cache::Client;
 use std::convert::Infallible;
 use storyos_application::{
     DeleteMemoryEntryInput, MemoryEntryDeleted, ProjectScope, RefusableCommandError,
@@ -11,7 +12,6 @@ use storyos_core::{
     DeleteMemoryEntryConflict, DeleteMemoryEntryNoEffect, DeleteMemoryEntryRefusal,
     TransitionOutcome,
 };
-use tokio_postgres::Client;
 
 pub(crate) type Outcome = Result<
     TransitionOutcome<

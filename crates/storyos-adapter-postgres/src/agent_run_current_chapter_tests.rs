@@ -1,13 +1,13 @@
 //! A Run of the tool loop profile whose referenced Chapter text the author changes during the
 //! Run (ADR 0062, ADR 0085, ADR 0091), with the fake model of that profile.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     AcceptProposalInput, AgentRunDecisionInspect, ChapterId, DeleteChapterInput,
 };
 use storyos_core::{AuthorEditPrimitive, DeploymentDestination, SelectionReference, TextPoint};
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_current_candidate::settled;
 use crate::shared_tests::agent_run_propose_edit::{REVISE, opened, propose_edit_calls};

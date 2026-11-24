@@ -1,5 +1,6 @@
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ProjectAssistanceRecord, ProjectCommandEnvelope, ProjectCommandError, ProjectReadError,
     ProjectScope, UpdateProjectAssistanceInput, UpdateProjectAssistanceSettlement,
@@ -9,7 +10,6 @@ use storyos_core::{
     UpdateProjectAssistance as CoreUpdateProjectAssistance, UpdateProjectAssistanceApplied,
     update_project_assistance,
 };
-use tokio_postgres::Client;
 
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
@@ -153,7 +153,7 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
 }
 
 pub(crate) async fn read_assistance_record(
-    client: &Client,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
 ) -> Result<Option<ProjectAssistanceRecord>, ProjectReadError> {
     let row = client

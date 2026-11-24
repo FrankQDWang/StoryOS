@@ -2,6 +2,7 @@
 //! the selection of the Worker, at the dispatch seam with the fake destination (ADR 0103 section
 //! 3A). Test prefix lead `76`.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::{FakeDestination, START_SUBRUN_SCRIPT};
 use storyos_application::{
@@ -9,7 +10,6 @@ use storyos_application::{
     ContractFaultObserver, ContractFaultPoint, NoContractFaults, PauseAgentRunInput, ProjectScope,
     complete_agent_run,
 };
-use tokio_postgres::Client;
 
 use super::tests::{parent, records, scripted, start, stopped_end, subrun_calls, subruns};
 use crate::PostgresProjectReader;

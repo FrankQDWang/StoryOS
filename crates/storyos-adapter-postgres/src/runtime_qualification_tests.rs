@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ConversationSelection, DestinationRequest, ModelProviderAdapter, ModelResponse,
     ModelStreamSink, ModelUsage, NoContractFaults, Observation, PreDispatchRefusal,
@@ -10,7 +11,6 @@ use storyos_core::{
     AGENT_PLAN_ENDPOINT, AGENT_PLAN_REGISTRATION, AssistanceAvailability, BudgetBounds,
     DestinationKind, ModelAdapter, RuntimeQualification, ToolChoice,
 };
-use tokio_postgres::Client;
 
 /// The revision of the superseded Registration of S4-01, which the test makes (ADR 0097). No
 /// product code resolves it, and a Run that pinned it refuses with Registration drift.

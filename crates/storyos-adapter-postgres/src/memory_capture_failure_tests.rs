@@ -2,8 +2,8 @@
 //! a request that the destination rejects, and an input that tells the model to act. Each failed
 //! capture stores no observation, and the Host starts no second capture for the same input.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::calls;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;

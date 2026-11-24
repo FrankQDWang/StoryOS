@@ -35,7 +35,7 @@ pub(crate) const WORKER_SCOPE: &str = "SELECT set_config('storyos.scope_mode', '
 
 /// Sets the Worker scope in the open transaction of `client`.
 pub(crate) async fn set_worker_scope(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
 ) -> Result<(), ProjectReadError> {
     client
         .execute(WORKER_SCOPE, &[])

@@ -1,12 +1,12 @@
 //! The fixed Author Command Admission, Core Transition, and Command Acknowledgement sequence
 //! of the project commands (ADR 0041, ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     DiagnosticField, DiagnosticId, ProjectCommandEnvelope, ProjectCommandError,
     ProjectCommandSettlement,
 };
 use storyos_core::TransitionOutcome;
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 

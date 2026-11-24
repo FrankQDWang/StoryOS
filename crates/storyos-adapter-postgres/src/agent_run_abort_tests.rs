@@ -1,12 +1,12 @@
 use std::sync::Mutex;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     CacheUse, DestinationRequest, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
     NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, ReferenceRetrieval,
     ReportedBinding, ResponseReference, WirePayloadProjection, complete_agent_run,
 };
 use storyos_core::{AGENT_PLAN_REGISTRATION, DeploymentDestination, ModelAdapter, RetrievalBounds};
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;

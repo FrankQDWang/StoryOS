@@ -6,6 +6,7 @@ use crate::shared_tests::command_sequence_steer_agent_run::STEER_AGENT_RUN;
 use crate::shared_tests::command_sequence_support::{CommandCall, issued};
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{RuntimeClock, claim_run, queued_run_offering};
+use crate::statement_cache::Client;
 use serde_json::Value;
 use std::sync::Mutex;
 use storyos_adapter_fake_destination::FakeDestination;
@@ -19,7 +20,6 @@ use storyos_core::{
     DeploymentDestination, SelectionReference, SteerAgentRunConflict, SteerAgentRunNoEffect,
     TransitionOutcome,
 };
-use tokio_postgres::Client;
 
 /// When the author acts, by the count of the Create requests of the Run from 1: before the
 /// request goes out, or while it is out.

@@ -15,7 +15,7 @@ use crate::agent_run_work::complete_unavailable;
 /// `row`. A load of the response of `row` does not count, because its output is not in the
 /// conversation of the model yet.
 pub(crate) async fn execute(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     skill: &str,

@@ -1,8 +1,8 @@
 //! The Proposal edit Compensation of Author Undo (ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use super::{ProposalEditContext, append_proposal_revision_as};

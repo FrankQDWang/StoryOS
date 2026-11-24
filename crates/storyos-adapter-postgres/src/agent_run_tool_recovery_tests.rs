@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_mcp_client::McpExchange;
 use storyos_application::{
@@ -8,7 +9,6 @@ use storyos_application::{
 use storyos_core::{DeploymentDestination, ToolObservation};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::oneshot;
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_lease::SteppedClock;

@@ -1,10 +1,10 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     ActivityApplied, ProjectCommandEnvelope, ProjectCommandError, UpdateProjectInput,
     UpdateProjectSettlement,
 };
 use storyos_contracts::CommandKind;
 use storyos_core::{ReceiptResult, UpdateProjectApplied};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};

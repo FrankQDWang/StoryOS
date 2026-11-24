@@ -4,6 +4,7 @@
 
 use std::time::Duration;
 
+use crate::statement_cache::Client;
 use storyos_adapter_fake_destination::{
     EMBEDDING_NOT_SUBMITTED_MARKER, EMBEDDING_REJECTION_MARKER, EMBEDDING_UNKNOWN_MARKER,
 };
@@ -15,7 +16,6 @@ use storyos_core::{
     AGENT_PLAN_EMBEDDING_REGISTRATION, HOST_FAKE_EMBEDDING_REGISTRATION, PASSAGE_CUT_REVISION,
     TransitionOutcome,
 };
-use tokio_postgres::Client;
 
 use super::{MarkedChapters, claim_passage_index_row, mark_passage_index_work};
 use crate::PostgresProjectReader;

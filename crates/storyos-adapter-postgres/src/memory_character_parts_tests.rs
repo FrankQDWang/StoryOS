@@ -21,7 +21,7 @@ use crate::shared_tests::memory_consolidation_merge::{pass_on, seed};
 
 /// The text of each `memory_delete_marks` item of the decision Context Assembly at the RunStep 0
 /// of the Run.
-async fn first_marks(admin: &tokio_postgres::Client, run_id: &str) -> Value {
+async fn first_marks(admin: &crate::statement_cache::Client, run_id: &str) -> Value {
     json_of(
         admin,
         "SELECT COALESCE(jsonb_path_query_array(payload,

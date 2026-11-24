@@ -11,7 +11,7 @@ use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
 /// Searches the manuscript for `query` for the pending call `row`, and settles `row`. A search
 /// with no match also settles.
 pub(crate) async fn execute(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     query: &str,

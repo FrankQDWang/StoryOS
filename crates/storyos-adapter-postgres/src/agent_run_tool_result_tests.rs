@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_mcp_client::McpExchange;
 use storyos_application::{
@@ -8,7 +9,6 @@ use storyos_core::{
     CONTEXT_ITEM_TOKEN_LIMIT, DeploymentDestination, ToolCallState, ToolObservation,
     ToolResultProjection,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_retrieval::{adapter, destination, research_run};
 use crate::shared_tests::agent_run_tool_call::text_and_call_stream;

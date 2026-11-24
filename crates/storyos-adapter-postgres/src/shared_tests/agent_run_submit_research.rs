@@ -8,6 +8,7 @@ use crate::shared_tests::agent_run_tool_dispatch::{
 use crate::shared_tests::command_sequence_support::stores;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{Admission, RuntimeClock, claim_run, queued_run_offering};
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -15,7 +16,6 @@ use storyos_application::{
     ProjectScope, complete_agent_run, complete_agent_run_with_tools,
 };
 use storyos_core::{DeploymentDestination, RESEARCH_TOOL_OFFER};
-use tokio_postgres::Client;
 
 /// One Project of the tool loop profile with the research offer. Its `first` Run completed.
 pub(crate) struct ResearchProject {

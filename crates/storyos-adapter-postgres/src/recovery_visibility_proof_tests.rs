@@ -3,7 +3,9 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::{create_project_command, create_project_issue};
 use std::path::PathBuf;
 use storyos_application::{CreateProjectCommand, create_project, issue_create_project_challenge};
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const TITLE: &str = "Lawful Empty";
@@ -47,6 +49,7 @@ impl Drop for IsolatedProofDatabase {
                 let (client, connection) = tokio_postgres::connect(&cluster_admin_url, NoTls)
                     .await
                     .expect("restore login connect");
+                let client = crate::statement_cache::Client::new(client);
                 tokio::spawn(async move {
                     let _ = connection.await;
                 });
@@ -182,6 +185,7 @@ fn expected_empty_project() -> EmptyProjectFacts {
 
 async fn connect_admin(admin_url: &str) -> Client {
     let (admin, connection) = tokio_postgres::connect(admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         connection.await.unwrap();
     });

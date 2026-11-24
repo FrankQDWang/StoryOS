@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 
+use crate::statement_cache::Client;
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ContractFaultObserver,
@@ -8,7 +9,6 @@ use storyos_application::{
     complete_agent_run,
 };
 use storyos_core::{DeploymentDestination, NativeStreamItem, StreamItemRole, StreamItemState};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;

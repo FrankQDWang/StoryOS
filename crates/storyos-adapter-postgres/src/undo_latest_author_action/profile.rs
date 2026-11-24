@@ -1,11 +1,11 @@
 //! The `UndoCompensation` settlement profile: the records of one Author Undo, which the
 //! compensation adapter of the Forward command kind writes (ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ManuscriptBlock, ProjectCommandEnvelope, ProjectCommandError, ProjectScope, UndoApplied,
 };
 use storyos_core::UndoLatestAuthorActionApplied;
-use tokio_postgres::Client;
 
 use super::replay::{UndoReplay, frontier_as_of_receipt};
 use crate::accept_proposal::{AcceptanceCompensation, LoadedAcceptance, reversal_blocks};

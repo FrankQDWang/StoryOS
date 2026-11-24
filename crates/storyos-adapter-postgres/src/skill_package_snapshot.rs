@@ -4,12 +4,12 @@
 
 use std::collections::BTreeSet;
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectScope};
 use storyos_core::{
     SKILL_MD_PATH, SkillCatalogEntry, SkillInstructionSource, SkillPackage, SkillPackageReference,
     SkillRequirement, SkillSet, plan_skill_catalog,
 };
-use tokio_postgres::Client;
 
 use crate::command_sequence::unavailable;
 

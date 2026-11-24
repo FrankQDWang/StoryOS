@@ -4,8 +4,8 @@
 
 use std::time::SystemTime;
 
+use crate::statement_cache::Client;
 use storyos_application::{EditorSessionId, ProjectScope, UndoLatestAuthorActionInput};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};

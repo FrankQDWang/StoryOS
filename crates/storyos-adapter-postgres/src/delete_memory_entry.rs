@@ -3,6 +3,7 @@
 //! revision of the Project. Each earlier version stays. No diagnostic records a title, a
 //! description, or a text of an entry (ADR 0047).
 
+use crate::statement_cache::Client;
 use serde_json::json;
 use storyos_application::{
     DeleteMemoryEntryError, DeleteMemoryEntryInput, DeleteMemoryEntrySettlement,
@@ -13,7 +14,6 @@ use storyos_core::{
     DeleteMemoryEntry as CoreDeleteMemoryEntry, MemoryVersionWrite, TransitionOutcome,
     delete_memory_entry,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_control::CONTROL_SETTLEMENTS;

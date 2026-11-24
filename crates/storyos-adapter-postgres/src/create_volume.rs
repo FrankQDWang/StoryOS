@@ -1,5 +1,6 @@
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     CreateVolumeInput, CreateVolumePublicOrder, CreateVolumeSettlement, ProjectCommandEnvelope,
     ProjectCommandError, VolumeCreated,
@@ -8,7 +9,6 @@ use storyos_core::{
     CreateVolume as CoreCreateVolume, CreateVolumeApplied, TransitionOutcome,
     create_volume as classify_create_volume,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

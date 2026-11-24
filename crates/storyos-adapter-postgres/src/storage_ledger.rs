@@ -57,7 +57,7 @@ const ACTIVATE: Phase = Phase {
 /// The path and the checksum of each recorded file, in the byte order of the paths. The build
 /// script sorts the embedded files by name in the same order.
 pub(crate) async fn recorded_files(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
 ) -> Result<Vec<(String, String)>, tokio_postgres::Error> {
     let mut files: Vec<(String, String)> = client
         .query(
@@ -74,7 +74,7 @@ pub(crate) async fn recorded_files(
 
 /// Records one new attempt with `phases` and one row for each file of `applied`.
 pub(crate) async fn record_attempt(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     identity: &PackagedIdentity,
     phases: &[Phase],
     applied: &[EmbeddedSource],
@@ -129,7 +129,7 @@ pub(crate) async fn record_attempt(
 
 /// Writes the proof of `identity`. An upgrade replaces the proof of the earlier identity.
 pub(crate) async fn write_proof(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     identity: &PackagedIdentity,
 ) -> Result<(), tokio_postgres::Error> {
     client

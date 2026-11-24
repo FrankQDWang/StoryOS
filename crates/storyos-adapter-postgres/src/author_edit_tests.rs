@@ -343,7 +343,8 @@ async fn a_cut_after_the_commit_resolves_through_the_outcome_query_and_keeps_the
         .unwrap();
     assert!(injected.commit().await.is_err());
 
-    let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let mut admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move { connection.await.unwrap() });
     // The refused batch writes no part of its valid first unit.
     let refused_authority = admin

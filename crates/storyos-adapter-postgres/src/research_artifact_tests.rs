@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
@@ -7,7 +8,6 @@ use storyos_application::{
 };
 use storyos_contracts::ResearchArtifactInspect;
 use storyos_core::{Citation, DeploymentDestination, ResearchClaim, ResearchSynthesis};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_retrieval::{

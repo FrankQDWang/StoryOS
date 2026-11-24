@@ -10,7 +10,7 @@ use crate::create_agent_run::agent_run_database_error;
 /// Replaces the final answer `decision`, or the absent decision, of the completed Run `run_id`
 /// with the research synthesis of its Research Artifact, when the Run has one.
 pub(crate) async fn derive(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
     decision: &mut AgentRunDecisionInspect,

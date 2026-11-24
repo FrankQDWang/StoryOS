@@ -5,6 +5,7 @@ use crate::shared_tests::agent_run_propose_edit::{REVISE, complete};
 use crate::shared_tests::create_volume_authority::{NamedEdit, adjusted_edit_command};
 use crate::shared_tests::model_gateway::{Admission, queued_run_offering};
 use crate::shared_tests::set_current_chapter_authority::open_session_request;
+use crate::statement_cache::Client;
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorEditProposalTarget, EditorSessionStore, ProjectScope,
 };
@@ -12,7 +13,6 @@ use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, DeploymentDestination, SelectionReference,
     SelectionSnapshot, TextPoint,
 };
-use tokio_postgres::Client;
 
 pub(crate) const SENTENCES: [&str; 4] = ["Rain fell.", "Wind rose.", "Night came.", "Dawn broke."];
 

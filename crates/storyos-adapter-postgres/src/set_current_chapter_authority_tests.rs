@@ -61,10 +61,11 @@ fn switch_authority(settlement: &SetCurrentChapterSettlement) -> Option<ChapterS
     }
 }
 
-async fn open_admin() -> tokio_postgres::Client {
+async fn open_admin() -> crate::statement_cache::Client {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         admin_connection.await.unwrap();
     });

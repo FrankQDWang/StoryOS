@@ -14,7 +14,7 @@ use crate::agent_run_observation::{CreateResult, CreateSettlement, persist_creat
 use crate::agent_run_work::{RunPhaseRow, WorkPhase};
 
 pub(crate) async fn record_create(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     dispatch: &DispatchClaim,
@@ -176,7 +176,7 @@ pub(crate) enum PriorContext {
 
 /// Builds the provider-neutral Create request for the active decision.
 pub(crate) async fn create_request(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     record: &serde_json::Value,
@@ -326,7 +326,7 @@ pub(crate) fn record_input(
 /// The admitted Proposal targets of the Chapter of `run`. A background Run has no Chapter, so
 /// its requests declare no target (ADR 0094 section 5).
 pub(crate) async fn run_declared_targets(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<Vec<DeclaredTarget>, CompleteAgentRunError> {
@@ -338,7 +338,7 @@ pub(crate) async fn run_declared_targets(
 
 /// The admitted Proposal targets that a request of the active decision declares.
 pub(crate) async fn declared_targets(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     chapter_id: &str,
 ) -> Result<Vec<DeclaredTarget>, CompleteAgentRunError> {
@@ -363,7 +363,7 @@ pub(crate) async fn declared_targets(
 /// The prior binding of an incremental continuation, its destination reference, and whether the
 /// prior response read the current input. A claimed Attempt sends its own request again.
 async fn previous_response_reference(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     prior_context: PriorContext,
@@ -416,7 +416,7 @@ async fn previous_response_reference(
 
 /// The destination reference that the Model Attempt of one continuation binding produced.
 pub(crate) async fn binding_reference(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     binding: &str,
 ) -> Result<Option<String>, CompleteAgentRunError> {
@@ -439,7 +439,7 @@ pub(crate) async fn binding_reference(
 /// A destination rejection confirms the prior reference condition. The rejected Create keeps its
 /// own Destination Attempt and Outbound Disclosure Event, and the decision is rebuilt in this Run.
 async fn record_continuation_rejection(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     dispatch: &DispatchClaim,

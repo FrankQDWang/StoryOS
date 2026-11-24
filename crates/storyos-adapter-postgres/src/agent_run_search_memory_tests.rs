@@ -2,13 +2,13 @@
 //! the pin of the Index, the record of the call and the request after it, no read row, the
 //! Project Scope, a search with no match, a refused query, and a compaction.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::ConversationSelection;
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CallValidationRefusal,
     IntakeRefusal,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_load_skill::calls;

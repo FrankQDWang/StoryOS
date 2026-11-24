@@ -2,6 +2,7 @@
 //! and the first RunStep, each refusal, the runtime role, the Project Scope, and the Project
 //! Export Archive. Each test parks its capture Run.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -9,7 +10,6 @@ use storyos_application::{
     ProjectScope, StartedMemoryCapture, complete_agent_run,
 };
 use storyos_core::CaptureRefusal;
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::chapter_list_context::admitted;

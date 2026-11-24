@@ -1,11 +1,11 @@
 use std::convert::Infallible;
 
+use crate::statement_cache::GenericClient;
 use storyos_application::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts, ProjectCommandError,
     ProjectScope,
 };
 use storyos_core::{ReadableExportChapter, ReadableExportVolume, ReasonCode, canonical_json};
-use tokio_postgres::GenericClient;
 
 use super::{ProjectReadError, read_error};
 use crate::author_edit::sha256_hex;

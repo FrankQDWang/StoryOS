@@ -31,7 +31,7 @@ fn numbered(prefix: &str, count: u16) -> Vec<String> {
 }
 
 /// One test sends more author commands than one fixed challenge window admits.
-async fn reset_challenge_rate(admin: &tokio_postgres::Client, scope: &ProjectScope) {
+async fn reset_challenge_rate(admin: &crate::statement_cache::Client, scope: &ProjectScope) {
     admin
         .execute(
             "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
@@ -45,7 +45,7 @@ async fn reset_challenge_rate(admin: &tokio_postgres::Client, scope: &ProjectSco
 /// Seeds ten Volumes and twelve Chapters in the first Volume. The tree revision is 23 after it.
 async fn seed_long_tree(
     store: &PostgresProjectReader,
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     first_suffix: u16,
 ) -> (ProjectScope, String) {
     let scope = seed_project(store, &suffix(first_suffix)).await;
@@ -119,7 +119,7 @@ fn ranked(titles: &[String]) -> RankedTitles {
 
 /// Returns the Volume titles and the first Volume Chapter titles in physical storage order.
 async fn storage_titles(
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     scope: &ProjectScope,
     first_volume_id: &str,
 ) -> (String, String) {
@@ -148,7 +148,7 @@ async fn storage_titles(
 
 async fn readable_export_headings(
     store: &PostgresProjectReader,
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     scope: &ProjectScope,
 ) -> Vec<String> {
     reset_challenge_rate(admin, scope).await;
@@ -268,7 +268,7 @@ async fn update_volume_by_title(
 
 async fn assert_tree_and_storage_order(
     store: &PostgresProjectReader,
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     scope: &ProjectScope,
     first_volume_id: &str,
     volume_titles: &[String],

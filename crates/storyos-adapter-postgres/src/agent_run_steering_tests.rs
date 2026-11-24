@@ -1,6 +1,7 @@
 //! Steering and cancellation of a Run of the tool loop profile at each RunStep position
 //! (ADR 0062, ADR 0086, ADR 0091), with the fake model of that profile.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -9,7 +10,6 @@ use storyos_application::{
     complete_agent_run_with_tools,
 };
 use storyos_core::{AgentRunStatus, DeploymentDestination, RESEARCH_TOOL_OFFER};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_propose_edit::{REVISE, opened, propose_edit_calls};

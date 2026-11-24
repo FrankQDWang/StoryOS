@@ -3,7 +3,7 @@ use storyos_application::CreateAgentRunError;
 use storyos_core::{CurrentPassageAssembly, CurrentPassageAssemblyRecord, PassageContextTarget};
 
 pub(crate) async fn assemble(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &PassageContextInput<'_>,
     source: &CurrentPassageAssembly,
     targets: &[PassageContextTarget],

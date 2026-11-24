@@ -4,9 +4,9 @@ use crate::PostgresProjectReader;
 use crate::shared_tests::command_sequence_support::{
     CommandCall, Route, issued, seed_project, stores,
 };
+use crate::statement_cache::Client;
 use storyos_application::{DeleteMemoryEntryInput, ProjectScope};
 use storyos_contracts::CommandKind;
-use tokio_postgres::Client;
 
 pub(crate) const DELETE_MEMORY_ENTRY: Route = Route {
     kind: CommandKind::DeleteMemoryEntry,

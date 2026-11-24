@@ -19,13 +19,13 @@ use crate::shared_tests::command_sequence_support::{
     CommandCall, Route, issued, issued_with_bytes, run_without_foreign_keys, two_chapter_writer,
 };
 use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};
+use crate::statement_cache::Client;
 use crate::undo_latest_author_action::UndoLatestAuthorAction;
 use storyos_application::{
     AuthorEditProposalTarget, CreateVolumeInput, EditorSessionId, ProjectCommandError,
     ProjectScope, UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
 };
 use storyos_contracts::CommandKind;
-use tokio_postgres::Client;
 
 pub(crate) const UNDO_LATEST_AUTHOR_ACTION: Route = Route {
     kind: CommandKind::UndoLatestAuthorAction,

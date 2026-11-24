@@ -1,9 +1,9 @@
 //! The shared test support from `memory_capture_loop_tests.rs`.
 
 use crate::shared_tests::json_row::json_of;
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::ProjectScope;
-use tokio_postgres::Client;
 
 /// The input of a capture: one script line for each call, in RunStep order.
 pub(crate) fn script(calls: &[(&str, Value)]) -> String {

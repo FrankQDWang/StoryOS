@@ -3,6 +3,7 @@
 //! pass whose Run ends with no settled call. A pass is a Run of the kind `memory_consolidation`
 //! with one RunStep. No diagnostic records an entry, an observation, or an operation (ADR 0047).
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, ProjectReadError, ProjectScope,
@@ -12,7 +13,6 @@ use storyos_core::{
     AgentRunKind, CaptureRefusal, CaptureRunEnd, MemoryConsolidationAssembly,
     MemoryOperationCandidate, PassConflict, PassMemoryEntry,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};

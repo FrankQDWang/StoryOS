@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     ChapterDeleted, DeleteChapterInput, DeleteChapterSettlement, ProjectCommandEnvelope,
     ProjectCommandError,
@@ -7,7 +8,6 @@ use storyos_core::{
     ChapterJoin, ChapterRemovalLifecycle, DeleteChapter as CoreDeleteChapter, DeleteChapterApplied,
     DeleteChapterCurrent, delete_chapter as classify_delete_chapter,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

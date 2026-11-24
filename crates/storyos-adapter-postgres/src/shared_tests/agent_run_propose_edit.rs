@@ -3,11 +3,11 @@
 use crate::PostgresProjectReader;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::model_gateway::{RuntimeClock, claim_run};
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{NoContractFaults, ProjectScope, complete_agent_run};
 use storyos_core::PROPOSAL_WAITS_RESULT;
-use tokio_postgres::Client;
 
 pub(crate) const REVISE: &str = "Revise these passages in the narrator voice.";
 

@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use crate::statement_cache::Client;
 use serde_json::json;
 use storyos_application::{
     AgentRunReadSelection, AgentRunReadStore, ConversationSelection, ProjectScope,
@@ -12,7 +13,6 @@ use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, SKILL_MD_PATH,
     SkillFileInput, SkillPackage, SkillSet, SkillUse,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;

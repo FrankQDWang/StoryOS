@@ -1,5 +1,6 @@
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ChapterCreated, CreateChapterInput, CreateChapterPublicOrder, CreateChapterSettlement,
     ProjectCommandEnvelope, ProjectCommandError,
@@ -9,7 +10,6 @@ use storyos_core::{
     CreateChapterOpen, CreateChapterPlacement, VolumeJoin,
     create_chapter as classify_create_chapter,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

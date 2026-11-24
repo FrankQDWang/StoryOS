@@ -1,6 +1,7 @@
 use std::convert::Infallible;
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AgentRunControlRefusal, ProjectCommandEnvelope, ProjectCommandError, RefusableCommandError,
     SteerAgentRunError, SteerAgentRunInput, SteerAgentRunSettlement, SteeringRetained,
@@ -9,7 +10,6 @@ use storyos_core::{
     CONTEXT_ITEM_TOKEN_LIMIT, SteerAgentRunConflict, SteerAgentRunNoEffect, SteeringReader,
     TransitionOutcome, classify_steer_agent_run,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_control::{CONTROL_SETTLEMENTS, lock_agent_run};

@@ -1,11 +1,11 @@
 //! The shared test support from `memory_consolidation_schedule_tests.rs`.
 
 use crate::PostgresProjectReader;
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{
     MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource, ProjectScope,
 };
-use tokio_postgres::Client;
 
 /// The consolidation row of the Project: whether it names no Conversation and the Project as its
 /// source, and its due time. The due time is `null` when it is empty, `"now"` when it is in the

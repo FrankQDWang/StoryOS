@@ -143,7 +143,8 @@ async fn several_live_chapters_load_membership_in_one_statement() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
-    let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let (runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let mut runtime = crate::statement_cache::Client::new(runtime);
     tokio::spawn(async move { connection.await.unwrap() });
     let transaction = runtime.transaction().await.unwrap();
     transaction

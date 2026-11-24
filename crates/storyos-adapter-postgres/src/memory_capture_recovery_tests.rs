@@ -2,6 +2,7 @@
 //! delivery of the settled output call, a stale fence, a request with an unknown result, and a
 //! rejected request. A capture ends with one set of observations or with no observation.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -11,7 +12,6 @@ use storyos_application::{
     RetrievePurpose, ToolDispatchStore, complete_agent_run,
 };
 use storyos_core::{NativeStreamItem, StreamItemRole, StreamItemState};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_tool_recovery::{Fault, FaultAt};

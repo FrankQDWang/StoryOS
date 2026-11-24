@@ -27,7 +27,7 @@ pub(super) struct Producer {
 /// with no summary. The input digest binds the author message and the Working Target of the
 /// decision Context Assembly that the later request copies.
 pub(super) async fn insert_staged(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     source: &ChainSource,
@@ -109,7 +109,7 @@ pub(super) enum InstallOutcome {
 
 /// Decides the install of the staged summary for the decision request of the active RunStep.
 pub(super) async fn install_or_refuse(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     staged: &CompactionState,
@@ -172,7 +172,7 @@ pub(super) async fn install_or_refuse(
 /// out. A source that became restricted refuses the install, and the decision request then uses
 /// the ordinary continuation.
 pub(super) async fn source_still_eligible(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     staged: &CompactionState,
 ) -> Result<bool, CompleteAgentRunError> {
@@ -193,7 +193,7 @@ pub(super) async fn source_still_eligible(
 /// Whether the source of the staged install at `decision_position` of the claimed AgentRun is
 /// restricted now.
 pub(crate) async fn source_restricted_now(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     decision_position: &str,
 ) -> Result<bool, CompleteAgentRunError> {
@@ -205,7 +205,7 @@ pub(crate) async fn source_restricted_now(
 }
 
 async fn refuse(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     staged: &CompactionState,
     reason: &str,
@@ -255,7 +255,7 @@ fn decision_target(
 /// Commits the operation requirement and the Context Assembly Manifest of the later request
 /// `record`. Its new Step Snapshot selects the summary before the decision Context.
 async fn insert_later_request(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     record: &mut storyos_core::CurrentPassageAssemblyRecord,
@@ -315,7 +315,7 @@ pub(super) struct DerivedAssembly<'a> {
 /// Commits the operation requirement and the Context Assembly Manifest of `assembly`. The
 /// receipt, the sufficiency, and the position come from the decision records.
 pub(super) async fn insert_derived_assembly(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     assembly: &DerivedAssembly<'_>,
 ) -> Result<(), CompleteAgentRunError> {
@@ -377,7 +377,7 @@ pub(super) async fn insert_derived_assembly(
 /// Records the install at `decision_position` in the dispatch claim of the later request: its new
 /// RunStep, and the Model Invocation and Model Attempt of the claim.
 pub(crate) async fn mark_installed(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     decision_position: &str,
     model_attempt_id: &str,
@@ -529,7 +529,7 @@ fn assembly_input(
 }
 
 async fn current_target(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     chapter_id: &str,
 ) -> Result<(String, String), CompleteAgentRunError> {

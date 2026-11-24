@@ -1,8 +1,8 @@
 //! The shared test support from `memory_consolidation_conflict_tests.rs`.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::ProjectScope;
-use tokio_postgres::Client;
 
 /// A conflict item of a capture with the entry `entry` and the reason `reason`.
 pub(crate) fn conflict(entry: u64, reason: &str) -> Value {

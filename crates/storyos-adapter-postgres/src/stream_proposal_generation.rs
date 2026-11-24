@@ -1,9 +1,9 @@
 //! Writes one complete Proposal generation batch of a candidate revision (ADR 0062, ADR 0071).
 
 use crate::agent_run_work::complete_unavailable;
+use crate::statement_cache::Client;
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::hex_sha256;
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 pub(crate) struct LoadedGeneration {

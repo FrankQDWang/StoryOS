@@ -21,7 +21,7 @@ use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
 /// Refuses each `propose_edit` call of `batch` from `response` that the limits of the Run or the
 /// prose change validation against `declared` refuse.
 pub(crate) async fn screen(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     declared: &[DeclaredLocation],
     response: &storyos_application::ModelResponse,
@@ -87,7 +87,7 @@ pub(crate) async fn screen(
 /// the call. The Proposal source is the Decision that holds the call. A call that opens no
 /// Proposal is refused.
 pub(crate) async fn execute(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     edit: &ProposedEdit,
@@ -150,7 +150,7 @@ pub(crate) async fn execute(
 /// changed after the request read it, `ChangedHead` when a target Chapter head changed after it,
 /// and `NotOpened` when no other block opened.
 async fn open(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &crate::agent_run_work::RunPhaseRow,
     (attempt_id, decision_id): (&str, &str),
@@ -211,7 +211,7 @@ async fn open(
 /// such call in place of its final answer or of a later refusal. A Run with ToolCalls in
 /// progress keeps its `decision`.
 pub(crate) async fn public_decision(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
     decision: &mut AgentRunDecisionInspect,

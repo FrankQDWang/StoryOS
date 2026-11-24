@@ -8,7 +8,7 @@ use storyos_core::{
 };
 
 pub(crate) async fn apply(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     record: &CurrentPassageAssemblyRecord,
     target: &storyos_core::ProposalCandidateTarget,

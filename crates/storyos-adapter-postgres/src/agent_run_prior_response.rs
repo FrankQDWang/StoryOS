@@ -30,7 +30,7 @@ impl PriorResponse {
     /// The bound response that `key` names. A reference does not name one response: a test
     /// adapter can report the reference of an earlier response again.
     pub(crate) async fn load(
-        client: &tokio_postgres::Client,
+        client: &crate::statement_cache::Client,
         claim: &ClaimedAgentRun,
         key: PriorKey<'_>,
     ) -> Result<Self, CompleteAgentRunError> {

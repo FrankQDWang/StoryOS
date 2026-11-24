@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, UpdateVolumeInput, UpdateVolumeSettlement,
 };
@@ -6,7 +7,6 @@ use storyos_core::{
     UpdateVolume as CoreUpdateVolume, UpdateVolumeApplied, VolumeJoin,
     update_volume as classify_update_volume,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};

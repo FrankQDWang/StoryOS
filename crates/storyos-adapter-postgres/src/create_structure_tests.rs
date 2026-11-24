@@ -81,7 +81,10 @@ fn chapter_node(chapter_id: &str, title: &str, order: u64) -> ChapterNode {
 }
 
 /// The order of one Receipt payload and the order of its Activity payload.
-async fn recorded_orders(admin: &tokio_postgres::Client, receipt_id: &str) -> (String, String) {
+async fn recorded_orders(
+    admin: &crate::statement_cache::Client,
+    receipt_id: &str,
+) -> (String, String) {
     let row = admin
         .query_one(
             "SELECT receipt.result_payload::text, payload.payload->>'order'
@@ -99,7 +102,7 @@ async fn recorded_orders(admin: &tokio_postgres::Client, receipt_id: &str) -> (S
 
 /// Expires only the latest Snapshot. The older Snapshots stay valid, and a read must not fall back to them.
 async fn expire_latest_snapshot(
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     scope: &ProjectScope,
     snapshot_id: &str,
 ) {
@@ -626,7 +629,7 @@ async fn author_undo_compensates_create_chapter_and_keeps_the_initial_revision()
 /// The Compensation Author Actions of the Project and the Receipts of `removal_kind`. A
 /// Compensation of a creation is not a forward removal command.
 async fn compensation_rows(
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     scope: &ProjectScope,
     removal_kind: &str,
 ) -> serde_json::Value {

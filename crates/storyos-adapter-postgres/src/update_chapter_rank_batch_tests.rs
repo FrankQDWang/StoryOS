@@ -71,7 +71,7 @@ fn chapter_nodes(ids: &[String], titles: &[&str]) -> Vec<ChapterNode> {
         .collect()
 }
 
-async fn drop_chapter_tree_sql_probes(admin: &tokio_postgres::Client) {
+async fn drop_chapter_tree_sql_probes(admin: &crate::statement_cache::Client) {
     admin
         .batch_execute(
             "DROP TRIGGER IF EXISTS storyos_issue_650_count_manuscript_objects ON storyos.manuscript_objects;
@@ -84,7 +84,7 @@ async fn drop_chapter_tree_sql_probes(admin: &tokio_postgres::Client) {
         .unwrap();
 }
 
-async fn install_chapter_tree_sql_probes(admin: &tokio_postgres::Client) {
+async fn install_chapter_tree_sql_probes(admin: &crate::statement_cache::Client) {
     drop_chapter_tree_sql_probes(admin).await;
     admin
         .batch_execute(
@@ -144,7 +144,7 @@ async fn install_chapter_tree_sql_probes(admin: &tokio_postgres::Client) {
         .unwrap();
 }
 
-async fn chapter_tree_sql_counts(admin: &tokio_postgres::Client) -> (i64, i64, i64, i64) {
+async fn chapter_tree_sql_counts(admin: &crate::statement_cache::Client) -> (i64, i64, i64, i64) {
     let counts: serde_json::Value = json_of(
         admin,
         "SELECT jsonb_object_agg(name, statement_count)::text
@@ -211,7 +211,7 @@ async fn seed_volume_with_chapters(
 
 async fn measure_reorder(
     store: &PostgresProjectReader,
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     command: &CommandCall<UpdateChapterInput>,
 ) -> ((i64, i64, i64, i64), UpdateChapterSettlement) {
     install_chapter_tree_sql_probes(admin).await;
@@ -235,7 +235,7 @@ struct MeasuredReorder {
 
 async fn measure_applied_reorder(
     store: &PostgresProjectReader,
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     case: MeasuredReorder,
 ) {
     let (scope, volume_id, chapter_ids) =

@@ -11,7 +11,7 @@ use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
 /// The live Chapters of the Project of the Run in manuscript order, each with the text of each
 /// Block of its authoritative head. The Host Tools of the manuscript read them.
 pub(crate) async fn readable_chapters(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<Vec<ReadableChapter>, CompleteAgentRunError> {
     Ok(crate::manuscript_search::read_live_chapter_blocks(
@@ -34,7 +34,7 @@ pub(crate) async fn readable_chapters(
 /// Reads the Blocks `range` of the Chapter with the number `chapter` for the pending call `row`,
 /// and settles or refuses `row`.
 pub(crate) async fn execute(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     chapter: i64,

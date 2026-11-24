@@ -5,10 +5,10 @@ use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::shared_tests::command_sequence_support::{
     CommandCall, SequenceError, run_without_foreign_keys, with_new_request_ids,
 };
+use crate::statement_cache::Client;
 use std::fmt::Debug;
 use storyos_application::ProjectCommandError;
 use storyos_core::ReceiptResult;
-use tokio_postgres::Client;
 
 /// The replay error of one exact retry.
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -12,7 +12,7 @@ use crate::agent_run_work::{RunPhaseRow, complete_unavailable};
 /// The Exposure of `run` at this RunStep. A Registration revision without a lifecycle row is the
 /// active constant; a row with an unknown lifecycle is damaged.
 pub(crate) async fn tool_exposure(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<ToolExposure, CompleteAgentRunError> {

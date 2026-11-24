@@ -1,8 +1,8 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CredentialReference, RequestRoute,
 };
 use storyos_core::{BudgetBounds, ModelAdapter, ModelRegistration};
-use tokio_postgres::Client;
 
 use crate::agent_run_work::complete_unavailable;
 

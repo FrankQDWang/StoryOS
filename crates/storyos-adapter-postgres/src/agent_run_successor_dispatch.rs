@@ -21,7 +21,7 @@ use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_unavailable, update
 /// The one successor Create of the fenced predecessor. It repeats the same request, or
 /// re-observes the successor Attempt that a lost claim committed.
 pub(crate) async fn successor_request(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<CreateRequest, CompleteAgentRunError> {
@@ -67,7 +67,7 @@ pub(crate) async fn successor_request(
 /// and sends nothing: the successor can only repeat the request of its predecessor, and that
 /// request no longer fits the current Exposure. Returns `false` after that pause.
 pub(crate) async fn same_request(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     request: &CreateRequest,
@@ -105,7 +105,7 @@ pub(crate) async fn same_request(
 /// position of its predecessor. The predecessor already holds the consumed one-successor
 /// allowance.
 pub(crate) async fn commit(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     projection: &WirePayloadProjection,
@@ -195,7 +195,7 @@ pub(crate) async fn commit(
 /// repeated observation of a settled successor Attempt changes nothing: its Decision and its
 /// ToolCalls stay.
 pub(crate) async fn record(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     dispatch: &DispatchClaim,
@@ -435,7 +435,7 @@ pub(crate) async fn record(
 
 /// After the recorded successor: read a late predecessor result once, or complete the Run.
 pub(crate) async fn finish_dispatched(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     row: &DecisionRow,
@@ -545,7 +545,7 @@ pub(crate) async fn finish_dispatched(
 
 /// The identity and the payload of the recorded successor Attempt.
 async fn successor_payload<'a>(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     marker: &'a serde_json::Value,
 ) -> Result<(&'a str, serde_json::Value), CompleteAgentRunError> {
