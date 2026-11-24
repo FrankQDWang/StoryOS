@@ -759,12 +759,18 @@ STORYOS_STORAGE_UPGRADE=from $source_count files to $source_count files" ]; then
     echo "The package did not take the upgrade edge from another route catalog: $storage_status $storage_output" >&2
     exit 1
   fi
+  # A database that an earlier package activated has the digest of that package in its proof. When the earlier
+  # package had another baseline, its recorded checksum of the baseline is another checksum.
   baseline_path=crates/storyos-adapter-postgres/migrations/0001_release_1_baseline.sql
   baseline_checksum=$(provider_psql -c "SELECT checksum FROM storyos.migration_phase_checksums
     WHERE source_path = '$baseline_path'")
+  chain_digest=$(provider_psql -c "SELECT migration_chain_digest FROM storyos.storage_activation_proofs")
+  earlier_digest=sha256:2222222222222222222222222222222222222222222222222222222222222222
   provider_psql -c "UPDATE storyos.migration_phase_checksums
     SET checksum = 'sha256:1111111111111111111111111111111111111111111111111111111111111111'
-    WHERE source_path = '$baseline_path'" >/dev/null
+    WHERE source_path = '$baseline_path';
+    UPDATE storyos.storage_activation_proofs SET catalog_checksum = '$earlier_digest',
+      migration_chain_digest = '$earlier_digest', database_schema_identity = '$earlier_digest'" >/dev/null
   changed_state=$(provider_ledger_state)
   run_provider_storage
   if [ "$storage_status" -eq 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Refused
@@ -777,7 +783,9 @@ STORYOS_STORAGE_ACTIVATION_REASON=identity_mismatch" ]; then
     exit 1
   fi
   provider_psql -c "UPDATE storyos.migration_phase_checksums SET checksum = '$baseline_checksum'
-    WHERE source_path = '$baseline_path'" >/dev/null
+    WHERE source_path = '$baseline_path';
+    UPDATE storyos.storage_activation_proofs SET catalog_checksum = '$chain_digest',
+      migration_chain_digest = '$chain_digest', database_schema_identity = '$chain_digest'" >/dev/null
   run_provider_storage
   if [ "$storage_status" -ne 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Active" ]; then
     echo "The package did not accept its identity after the upgrade: $storage_status $storage_output" >&2
