@@ -278,10 +278,7 @@ type EditorWorkspaceOptions = {
 /** The Editor Session request of an open, which needs only the Project. `finish` validates it against the Chapter. */
 export interface EditorWorkspaceOpening {
   finish(chapter: GetChapterResponse): Promise<OpenedEditorWorkspace>;
-  /**
-   * Closes the Journal when the open stops before `finish`. It does not wait for the Session request. When that request
-   * created the writer Session, it stores the Session for the next open of this tab.
-   */
+  /** Closes the Journal when the open stops before `finish`. It does not wait for the Session request. */
   abandon(): void;
 }
 
@@ -319,22 +316,7 @@ export function startEditorWorkspace({
   })();
   return {
     finish: (chapter) => finishEditorWorkspace(started, { baseUrl, project, chapter, profile, fetchImpl, cryptoImpl }),
-    abandon: () => {
-      void started.then((start) => {
-        start.database?.close();
-        // A created Session that holds the writer stays the Session of this tab. The next open reads it, and does not
-        // create a second Session, which would be read-only (#1876). A Session that a later open stored stays.
-        const key = `active_session:${scope.owner_user_id}:${scope.project_id}`;
-        if (start.kind !== "started" || start.active || globalThis.sessionStorage?.getItem(key) !== null) return;
-        const created = start.sessionValue as Partial<GetEditorSessionResponse> | undefined;
-        const id = created?.editor_session?.editor_session_id;
-        if (created?.project_scope?.owner_user_id === scope.owner_user_id
-          && created.project_scope.project_id === scope.project_id
-          && created.writer?.kind === "current_writer" && typeof id === "string" && UUID.test(id)) {
-          globalThis.sessionStorage.setItem(key, id);
-        }
-      });
-    },
+    abandon: () => { void started.then((start) => { start.database?.close(); }); },
   };
 }
 

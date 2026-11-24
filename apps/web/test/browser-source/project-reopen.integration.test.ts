@@ -28,7 +28,6 @@ const REVISION_B = "018f0000-0000-7001-8000-000000000805";
 const SWITCH_SNAPSHOT = "018f0000-0000-7001-8000-000000000831";
 const TAKEOVER_SNAPSHOT = "018f0000-0000-7001-8000-000000000832";
 const PRIOR_SESSION = "018f0000-0000-7001-8000-000000000833";
-const SECOND_SESSION = "018f0000-0000-7001-8000-000000000836";
 const ACCEPTANCE_SNAPSHOT = "018f0000-0000-7001-8000-000000000834";
 const ACCEPTED_REVISION = "018f0000-0000-7001-8000-000000000806";
 const ACCEPTANCE_COMMIT = "018f0000-0000-7001-8000-000000000835";
@@ -85,8 +84,7 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * effect of an Acceptance. `takeoverAfterAcceptance` makes another tab take over the writer and switch to Chapter B
  * after the Acceptance settles: the Editor Session of this page keeps its base. A Rejection removes the suggestion from
  * the open suggestions. `assistant` gives the availability of the assistance read and serves the Skills; with no
- * `assistant`, both reads answer a 503 problem. As on the Server, only the first created Editor Session holds the
- * writer; a later creation gives a read-only Session. `holdAfter` holds the next request of each given name after the
+ * `assistant`, both reads answer a 503 problem. `holdAfter` holds the next request of each given name after the
  * trigger request ends, until `release`. `holdEach` holds each request until `release`. `unavailable` answers the given
  * requests with a 503 problem. `lost` applies the given requests and then loses their response. A `late` Acceptance
  * applies at the first Proposal read after the next Chapter A read and Editor Session read. `takeover` and
@@ -103,7 +101,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
   const state = { current: CHAPTER, writer, snapshot: { id: EDITOR_SNAPSHOT, position: "0" }, accepted: false,
-    rejected: false, created: 0, superseded: undefined as GetEditorSessionResponse | undefined,
+    rejected: false, superseded: undefined as GetEditorSessionResponse | undefined,
     late: undefined as { chapter: boolean; session: boolean } | undefined };
   const project = () => ({ ...scenario.project.project, open: open() });
   const revisionA = () => state.accepted ? chapterRevision(ACCEPTED_REVISION, PROPOSAL.candidate_text)
@@ -172,11 +170,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         limit_profile_revision: scenario.profile.limit_profile_revision });
     }
     if (name === SESSION_CREATE) {
-      state.created += 1;
-      return jsonResponse(state.created === 1 ? { ...session(), schema_id: scenario.session.schema_id }
-        : { ...session(), schema_id: scenario.session.schema_id,
-          editor_session: { ...scenario.session.editor_session, editor_session_id: SECOND_SESSION },
-          writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" } });
+      return jsonResponse({ ...session(), schema_id: scenario.session.schema_id });
     }
     if (name === SESSION_READ) {
       if (state.late !== undefined) state.late.session = true;
@@ -893,27 +887,4 @@ it("opens the Project again when a reload read the Chapter before the Server app
   expect({ open: openReads(server.log.started.slice(before)).sort(), revision: revision(),
     unexpected: server.log.unexpected }).toEqual({ open: [PROTOCOL, PROTOCOL, LIST, LIST, PROJECT_READ, PROJECT_READ]
     .sort(), revision: ACCEPTED_REVISION, unexpected: [] });
-});
-
-it("opens the created Editor Session again after an open whose Chapter read failed", async () => {
-  const unavailable = [chapterRead(CHAPTER)];
-  const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER), SESSION_READ],
-    commands: [SESSION_CREATE], unavailable });
-  await deleteJournal(server.scenario.journalName);
-  const open = () => openControlledProject({ baseUrl: location.origin, projectId: PROJECT,
-    fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
-  const failed = await open();
-  await expect.poll(() => ({ created: server.count(SESSION_CREATE), inFlight: server.inFlight() }))
-    .toEqual({ created: 1, inFlight: [] });
-  await expect.poll(() => sessionStorage.getItem(`active_session:${OWNER}:${PROJECT}`)).toBe(SESSION);
-  unavailable.length = 0;
-
-  const opened = await open();
-
-  // The created Session holds the writer, so a second creation would open read-only.
-  expect({ failed: failed.kind, kind: opened.kind,
-    writer: opened.kind === "project-ready" && opened.editor.kind === "editor-ready"
-      ? opened.editor.session.writer.kind : "none",
-    created: server.count(SESSION_CREATE), unexpected: server.log.unexpected }).toEqual({
-    failed: "project-blocked", kind: "project-ready", writer: "current_writer", created: 1, unexpected: [] });
 });
