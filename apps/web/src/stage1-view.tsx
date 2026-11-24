@@ -103,6 +103,8 @@ interface ProjectEditorViewProps extends ProjectReadyViewProps {
   treeRead: "reading" | "settled";
   /** The number of the last tree read of the workspace. */
   treeReads: { readonly current: number };
+  /** The number, the title, and the revision of the last settled Project rename of the workspace. */
+  renamed: { readonly current: { count: number; title: string; revision: string } };
   handle: { current: ProjectEditorHandle | undefined };
   onStatus: (status: ProjectEditorStatus) => void;
 }
@@ -139,6 +141,8 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   const editor = useRef<ProjectEditorHandle | undefined>(undefined);
   const [title, setTitle] = useState(state.project.project.title);
   const [revision, setRevision] = useState(state.revision);
+  // The last settled rename of this workspace. An open that started before it keeps its title and revision (#1888).
+  const renamed = useRef({ count: 0, title: "", revision: "" });
   const [tree, setTree] = useState<GetManuscriptTreeResponse | undefined>(state.tree);
   // The statistics wait for the tree read of each open, also when it fails.
   const [treeRead, setTreeRead] = useState<"reading" | "settled">(state.tree === undefined ? "reading" : "settled");
@@ -149,6 +153,8 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
     setShown(state);
     setTitle(state.project.project.title);
     setRevision(state.revision);
+    // The new editor part waits for the tree read of the new state, also for its first statistics read.
+    if (state.tree === undefined) setTreeRead("reading");
     setStatus((current) => ({ ...current, selectedChapterId: state.chapter.chapter.chapter_id }));
   }
   const currentChapterId = state.project.project.open.kind === "current_chapter"
@@ -172,7 +178,6 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
       setTreeRead("settled");
       return;
     }
-    setTreeRead("reading");
     readTree();
   }, [baseUrl, fetchImpl, projectId, state]);
   // A Chapter that the author creates, moves, renames, or removes changes the Chapter part of the draft labels.
@@ -207,6 +212,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
                 fetchImpl={fetchImpl}
                 cryptoImpl={cryptoImpl}
                 onRenamed={(nextTitle, nextRevision) => {
+                  renamed.current = { count: renamed.current.count + 1, title: nextTitle, revision: nextRevision };
                   setTitle(nextTitle);
                   setRevision(nextRevision);
                 }}
@@ -245,6 +251,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
         </>
       )}
       editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeRead={treeRead} treeReads={treeReads}
+        renamed={renamed}
         handle={editor}
         onStatus={setStatus} />}
     />
@@ -254,7 +261,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 /** The editor part of the workspace. It starts again with each new Chapter, writer, or base of the Editor Session. */
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
-  proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus,
+  proposalLocatorStore, writingTimers, tree, treeRead, treeReads, renamed, handle, onStatus,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -315,14 +322,21 @@ function ProjectEditorView({
   }), [writing, currentChapterId]);
 
   // A tree read of the workspace that starts during an open can be later than the tree of the open. Then the open gives
-  // no tree, so it cannot replace the later tree, and the workspace reads the tree again (#1876).
-  const treeCheck = () => {
+  // no tree, so it cannot replace the later tree, and the workspace reads the tree again (#1876). A Project rename that
+  // settles during an open is later than the title and the revision of the open, so the open keeps them (#1888).
+  const workspaceCheck = () => {
     const sequence = treeReads.current;
-    return (next: ControlledProjectState): ControlledProjectState =>
-      next.kind !== "project-ready" || treeReads.current === sequence ? next : { ...next, tree: undefined };
+    const renames = renamed.current.count;
+    return (next: ControlledProjectState): ControlledProjectState => {
+      if (next.kind !== "project-ready") return next;
+      const checked = treeReads.current === sequence ? next : { ...next, tree: undefined };
+      const rename = renamed.current;
+      return rename.count === renames ? checked : { ...checked, revision: rename.revision,
+        project: { ...checked.project, project: { ...checked.project.project, title: rename.title } } };
+    };
   };
   const opening = async (open: () => Promise<ControlledProjectState>) => {
-    const checked = treeCheck();
+    const checked = workspaceCheck();
     return checked(await open());
   };
   // A reopen after a settled command of this page reads the Project and the list of Projects, then the Chapter and the
@@ -551,7 +565,7 @@ function ProjectEditorView({
   const own: ProjectEditorHandle = {
     selectChapter, removeChapter, removeVolume, openedProposal, showRecovery: setSwitchRecovery,
     navigateProposal: (destination) => {
-      const checked = treeCheck();
+      const checked = workspaceCheck();
       navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
         onOpened: (next, focus, notice) => {
