@@ -29,6 +29,7 @@ import { verifyProductionResearchJourney } from "./production-research-journey-c
 import { verifyProductionSkillJourney } from "./production-skill-journey-command.ts";
 import { verifyProductionPlanJourney } from "./production-plan-journey-command.ts";
 import { verifyProductionSubrunJourney } from "./production-subrun-journey-command.ts";
+import { verifyProductionStage9Journey } from "./production-stage9-journey-command.ts";
 import { verifyProductionProjectConversations } from "./production-project-conversations-command.ts";
 import { verifyProductionMemorySettings } from "./production-memory-settings-command.ts";
 import { verifyProductionProjectSettings } from "./production-project-settings-command.ts";
@@ -136,6 +137,8 @@ export const storyOSBrowserCommands = {
         await verifyProductionPlanJourney(context.context);
       } else if (request.scenario === "subrun_journey") {
         await verifyProductionSubrunJourney(context.context);
+      } else if (request.scenario === "stage9_journey") {
+        await verifyProductionStage9Journey(context.context);
       } else if (request.scenario === "project_conversations") {
         await verifyProductionProjectConversations(context.context);
       } else if (request.scenario === "project_settings") {
