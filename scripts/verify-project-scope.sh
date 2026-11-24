@@ -520,35 +520,57 @@ ORDER BY 1;
 SQL
 }
 
-# The effective access to the StoryOS objects of each role that is not predefined (an OID from 16384), not a
-# superuser, not a storyos_* role, and not the admin login: one line for each privilege on the schema storyos, on its relations, and on its sequences, with
-# the mark read_all_data when the role has the rights of the predefined role pg_read_all_data.
+# The effective access to the StoryOS objects. The query examines each role that is not predefined (an OID from
+# 16384), not a superuser, not a storyos_* role, and not the admin login. It also examines each role that such a
+# role can become with SET ROLE. Each line gives the role, the role that it becomes ("as"), and one privilege on the
+# schema storyos, a relation, a sequence, or a function of it. A function is callable only with USAGE on the schema,
+# and the line says if the function runs with the rights of its owner (definer). The mark read_all_data shows the
+# rights of the predefined role pg_read_all_data.
 storyos_effective_access() {
   docker exec -i "$1" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At <<'SQL'
 WITH other_role AS (
-  SELECT oid, rolname, pg_has_role(oid, 'pg_read_all_data', 'USAGE') AS read_all_data
-    FROM pg_roles
+  SELECT oid, rolname FROM pg_roles
    WHERE oid >= 16384 AND NOT rolsuper AND rolname NOT LIKE 'storyos\_%' AND rolname <> current_user
+), assumed AS (
+  SELECT other_role.rolname, target.oid AS target, target.rolname AS target_name,
+         pg_has_role(target.oid, 'pg_read_all_data', 'USAGE') AS read_all_data
+    FROM other_role JOIN pg_roles AS target ON pg_has_role(other_role.oid, target.oid, 'SET')
 ), access AS (
-  SELECT other_role.*, 'schema ' || privilege AS privilege
-    FROM other_role, (VALUES ('USAGE'), ('CREATE')) AS kind (privilege)
-   WHERE has_schema_privilege(other_role.oid, 'storyos', kind.privilege)
+  SELECT assumed.*, 'schema ' || kind.privilege AS privilege
+    FROM assumed, (VALUES ('USAGE'), ('CREATE')) AS kind (privilege)
+   WHERE has_schema_privilege(assumed.target, 'storyos', kind.privilege)
   UNION
-  SELECT other_role.*, 'relation ' || kind.privilege
-    FROM other_role, pg_class AS relation,
+  SELECT assumed.*, 'relation ' || kind.privilege
+    FROM assumed, pg_class AS relation,
          (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('REFERENCES'), ('TRIGGER'),
                  ('MAINTAIN')) AS kind (privilege)
    WHERE relation.relnamespace = 'storyos'::regnamespace AND relation.relkind IN ('r', 'p', 'v', 'm', 'f')
-     AND has_table_privilege(other_role.oid, relation.oid, kind.privilege)
+     AND has_table_privilege(assumed.target, relation.oid, kind.privilege)
   UNION
-  SELECT other_role.*, 'sequence ' || kind.privilege
-    FROM other_role, pg_class AS sequence, (VALUES ('USAGE'), ('SELECT'), ('UPDATE')) AS kind (privilege)
+  SELECT assumed.*, 'sequence ' || kind.privilege
+    FROM assumed, pg_class AS sequence, (VALUES ('USAGE'), ('SELECT'), ('UPDATE')) AS kind (privilege)
    WHERE sequence.relnamespace = 'storyos'::regnamespace AND sequence.relkind = 'S'
-     AND has_sequence_privilege(other_role.oid, sequence.oid, kind.privilege)
+     AND has_sequence_privilege(assumed.target, sequence.oid, kind.privilege)
+  UNION
+  SELECT assumed.*, 'function EXECUTE ' || CASE WHEN function.prosecdef THEN 'definer' ELSE 'invoker' END
+    FROM assumed, pg_proc AS function
+   WHERE function.pronamespace = 'storyos'::regnamespace
+     AND has_schema_privilege(assumed.target, 'storyos', 'USAGE')
+     AND has_function_privilege(assumed.target, function.oid, 'EXECUTE')
 )
-SELECT rolname || ' ' || privilege || CASE WHEN read_all_data THEN ' read_all_data' ELSE '' END
+SELECT rolname || CASE WHEN target_name <> rolname THEN ' as ' || target_name ELSE '' END || ' ' || privilege
+       || CASE WHEN read_all_data THEN ' read_all_data' ELSE '' END
   FROM access ORDER BY 1;
 SQL
+}
+
+# Prints each line of the effective access $1 that is more than the read of pg_read_all_data (#1851, "Coordinator
+# decisions"): USAGE on the schema, SELECT on a relation or a sequence, and a call of a function that runs with the
+# rights of the caller. An empty access has no line.
+access_beyond_read() {
+  printf '%s\n' "$1" | grep -Ev \
+    '^$|^[a-z_]+( as [a-z_]+)? (schema USAGE|relation SELECT|sequence SELECT|function EXECUTE invoker) read_all_data$' \
+    || true
 }
 
 provider_psql() {
@@ -654,11 +676,33 @@ STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
     exit 1
   fi
   # The provider gives pg_read_all_data to some of its roles, which then read each table with no grant of the
-  # schema (an exception of #1851). Each other role has no access, and no role of the provider has more.
+  # schema (an exception of #1851). First the check proves that it finds more access: a write through SET ROLE,
+  # and the call of a function. An empty access gives no line.
+  if [ -n "$(access_beyond_read "")" ]; then
+    echo "The access check finds a violation in an empty access" >&2
+    exit 1
+  fi
+  provider_superuser_psql -c "CREATE ROLE access_probe LOGIN;
+    GRANT pg_write_all_data TO access_probe WITH INHERIT FALSE, SET TRUE;
+    GRANT pg_read_all_data TO access_probe" >/dev/null
+  probe_access=$(storyos_effective_access "$provider_container" | grep '^access_probe ' || true)
+  provider_superuser_psql -c "DROP ROLE access_probe" >/dev/null
+  case "$(access_beyond_read "$probe_access")" in
+    *"access_probe as pg_write_all_data relation INSERT"*) ;;
+    *)
+      echo "The access check does not find a write through SET ROLE: $probe_access" >&2
+      exit 1
+      ;;
+  esac
+  if ! printf '%s\n' "$probe_access" | grep -x 'access_probe function EXECUTE invoker read_all_data' >/dev/null; then
+    echo "The access check does not find the call of a function: $probe_access" >&2
+    exit 1
+  fi
   effective_access=$(storyos_effective_access "$provider_container")
   printf 'Roles of the provider with access to StoryOS objects:\n%s\n' "$effective_access"
-  if printf '%s\n' "$effective_access" | grep -Ev \
-    '^[a-z_]+ (schema USAGE|relation SELECT|sequence SELECT) read_all_data$'; then
+  beyond_read=$(access_beyond_read "$effective_access")
+  if [ -n "$beyond_read" ]; then
+    printf '%s\n' "$beyond_read" >&2
     echo "A role of the provider has access to a StoryOS object that is not the read of pg_read_all_data" >&2
     exit 1
   fi
