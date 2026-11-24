@@ -268,13 +268,16 @@ export function BlockProposalDisplay({
       }
       if (proposal === undefined) return await hasPendingDisplayedAcceptance(workspace,
         locator.proposalId) ? locator.proposalId : undefined;
-      const result = await reconcileDisplayedAcceptance(workspace, proposal);
-      if (active && !acceptingRef.current && result === "applied"
+      // The open of this view read the Chapter. Only when that read came before the Server applied the Acceptance,
+      // the view opens the Project again (#1876).
+      const result = await reconcileDisplayedAcceptance(workspace, proposal, authoritativeRevisionId);
+      if (active && !acceptingRef.current && result === "applied_not_shown"
         && !refreshedAcceptance.current.has(proposal.proposal_id)) {
         refreshedAcceptance.current.add(proposal.proposal_id);
-        await onAccepted(false);
+        await onAccepted(true);
       }
-      return result === "pending" || result === "applied" ? proposal.proposal_id : undefined;
+      return result === "pending" || result === "applied" || result === "applied_not_shown"
+        ? proposal.proposal_id : undefined;
     })).then((values) => {
       if (!active) return;
       setSessionBlockedIds([...new Set(blockedIds)]);
@@ -545,6 +548,19 @@ export function BlockProposalDisplay({
     })();
   };
 
+  /**
+   * Shows a settled Rejection (#1876). A resolved Rejection does not change the Chapter text, so the view reads the
+   * open suggestions again. A changed Chapter Head or a refusal opens the Project again: another tab can have applied
+   * the Operation.
+   */
+  const showRejection = async (effect: "resolved" | "conflicted" | "refused") => {
+    if (effect !== "resolved") {
+      await onAccepted(true);
+      return;
+    }
+    setSettlementRefresh((value) => value + 1);
+  };
+
   const rejectDisplayed = (target: {
     proposalId: string; operationId: string; revisionId: string; text: string; operationIds?: readonly string[] | undefined;
   }) => {
@@ -605,8 +621,7 @@ export function BlockProposalDisplay({
           conflicted: "正文已变化，拒绝结果请检查。",
           refused: "此次拒绝未生效，请检查当前候选文字。" }[response.effect.kind];
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
-        setSettlementRefresh((value) => value + 1);
-        await onAccepted(true);
+        await showRejection(response.effect.kind);
       } catch (error) {
         setDecisionMessages((current) => ({ ...current,
           [target.proposalId]: historicalAcknowledgementUnavailable(error)
@@ -641,8 +656,7 @@ export function BlockProposalDisplay({
           conflicted: "正文已变化，拒绝结果请检查。",
           refused: "此次拒绝未生效，请检查当前候选文字。",
         }[response.effect.kind] }));
-        setSettlementRefresh((value) => value + 1);
-        await onAccepted(true);
+        await showRejection(response.effect.kind);
       } catch {
         setDecisionMessages((current) => ({ ...current,
           [proposalId]: "拒绝结果暂不可确认。请重试同一操作。" }));

@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { EditorWriterProjection } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ControlledProjectState, ProjectReadyState } from "./editor-types.ts";
 import { takeOverOwnedProjectWriter } from "./take-over-writer.ts";
@@ -24,6 +26,8 @@ export function TakeOverWriterButton({
   onReopened: (next: ControlledProjectState) => void;
   onRefused: () => void;
 }) {
+  // From the click to the new view, the button is disabled and says that the takeover runs.
+  const [running, setRunning] = useState(false);
   const session = state.editor.kind === "editor-read-only-recovery"
     ? state.editor.editor_session
     : undefined;
@@ -32,9 +36,11 @@ export function TakeOverWriterButton({
     <button
       type="button"
       data-take-over-writer=""
+      disabled={running}
       onClick={() => {
         if (inFlightRef.current) return;
         inFlightRef.current = true;
+        setRunning(true);
         void (async () => {
           try {
             const takeover = await takeOverOwnedProjectWriter({
@@ -54,11 +60,12 @@ export function TakeOverWriterButton({
             onRefused();
           } finally {
             inFlightRef.current = false;
+            setRunning(false);
           }
         })();
       }}
     >
-      接管写作
+      {running ? "正在接管写作…" : "接管写作"}
     </button>
   );
 }

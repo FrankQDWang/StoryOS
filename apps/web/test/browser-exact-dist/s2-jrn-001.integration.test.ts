@@ -66,8 +66,9 @@ it("runs the AI-disabled production journey without losing Chapter work", {
   expect(root.querySelector('nav[aria-label="稿件目录"]')).not.toBeNull();
   expect(root.querySelector(MANUSCRIPT_EDITOR_SELECTOR)).not.toBeNull();
   expect(root.querySelector("[data-writing-assistant]")).not.toBeNull();
-  expect(root.querySelector("[data-writing-assistant]")
-    ?.getAttribute("data-assistant-availability")).toBe("unavailable");
+  // The panel shows the availability after the answer of the assistance read (#1876).
+  await expect.poll(() => root.querySelector("[data-writing-assistant]")
+    ?.getAttribute("data-assistant-availability"), { timeout: 10_000 }).toBe("unavailable");
   expect(root.textContent).not.toContain("模型");
   expect(root.textContent).not.toContain("Agent");
   const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
