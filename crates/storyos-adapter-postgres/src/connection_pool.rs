@@ -69,13 +69,14 @@ pub(crate) async fn open(
                 config.host(address.to_string());
             }
         }
-        let (client, connection) = config.connect(VerifiedTls::shared()).await?;
+        // A boxed connect future keeps each future that opens a connection small on the stack.
+        let (client, connection) = Box::pin(config.connect(VerifiedTls::shared())).await?;
         tokio::spawn(async move {
             let _connection_result = connection.await;
         });
         return Ok(client);
     }
-    let (client, connection) = config.connect(NoTls).await?;
+    let (client, connection) = Box::pin(config.connect(NoTls)).await?;
     tokio::spawn(async move {
         let _connection_result = connection.await;
     });
