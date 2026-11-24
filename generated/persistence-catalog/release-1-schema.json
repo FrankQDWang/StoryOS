@@ -4156,11 +4156,12 @@
         }
       },
       "constraints": {
+        "migration_phase_checksums_attempt_fkey": "FOREIGN KEY (attempt_id) REFERENCES storyos.schema_migrations(attempt_id)",
         "migration_phase_checksums_checksum_check": "CHECK ((checksum ~ '^sha256:[0-9a-f]{64}$'::text))",
-        "migration_phase_checksums_pkey": "PRIMARY KEY (attempt_id, source_path)"
+        "migration_phase_checksums_pkey": "PRIMARY KEY (source_path)"
       },
       "indexes": {
-        "migration_phase_checksums_pkey": "CREATE UNIQUE INDEX migration_phase_checksums_pkey ON storyos.migration_phase_checksums USING btree (attempt_id, source_path)"
+        "migration_phase_checksums_pkey": "CREATE UNIQUE INDEX migration_phase_checksums_pkey ON storyos.migration_phase_checksums USING btree (source_path)"
       },
       "owner": "storyos_owner",
       "policies": {},
@@ -4205,8 +4206,9 @@
         }
       },
       "constraints": {
+        "migration_phases_attempt_fkey": "FOREIGN KEY (attempt_id) REFERENCES storyos.schema_migrations(attempt_id)",
         "migration_phases_disposition_check": "CHECK ((disposition = 'passed'::text))",
-        "migration_phases_phase_id_check": "CHECK ((phase_id = ANY (ARRAY['preflight'::text, 'initial_schema_bootstrap'::text, 'validate_transaction'::text, 'activate'::text])))",
+        "migration_phases_phase_id_check": "CHECK ((phase_id = ANY (ARRAY['preflight'::text, 'initial_schema_bootstrap'::text, 'forward_migration'::text, 'validate_transaction'::text, 'activate'::text])))",
         "migration_phases_pkey": "PRIMARY KEY (attempt_id, phase_id)"
       },
       "indexes": {
@@ -8007,6 +8009,11 @@
     },
     "schema_migrations": {
       "columns": {
+        "attempt_id": {
+          "default": null,
+          "nullable": false,
+          "type": "bigint"
+        },
         "checksum": {
           "default": null,
           "nullable": false,
@@ -8049,12 +8056,13 @@
         }
       },
       "constraints": {
+        "schema_migrations_attempt_id_check": "CHECK ((attempt_id > 0))",
         "schema_migrations_checksum_check": "CHECK ((checksum ~ '^sha256:[0-9a-f]{64}$'::text))",
-        "schema_migrations_pkey": "PRIMARY KEY (schema_version)",
+        "schema_migrations_pkey": "PRIMARY KEY (attempt_id)",
         "schema_migrations_status_check": "CHECK ((status = 'applied'::text))"
       },
       "indexes": {
-        "schema_migrations_pkey": "CREATE UNIQUE INDEX schema_migrations_pkey ON storyos.schema_migrations USING btree (schema_version)"
+        "schema_migrations_pkey": "CREATE UNIQUE INDEX schema_migrations_pkey ON storyos.schema_migrations USING btree (attempt_id)"
       },
       "owner": "storyos_owner",
       "policies": {},

@@ -3,7 +3,8 @@
 -- activates with the same sources and has no vector table. The vector extension is not trusted, so
 -- the admin role of the Storage Activation creates it in the schema extensions. The read form is an
 -- exact scan in the Project Scope, so the table has no vector index. The rows are a Retrieval
--- Index: they hold no text of the author, and the Project export does not hold them.
+-- Index: they hold no text of the author, and the Project export does not hold them. The first statement
+-- sets the role (CODING_STANDARDS.md, section Migrations): the statements need the admin login.
 
 RESET ROLE;
 DO $migration$
@@ -41,4 +42,3 @@ BEGIN
     $ddl$;
 END
 $migration$;
-SET LOCAL ROLE storyos_owner;
