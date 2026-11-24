@@ -135,13 +135,14 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
     const state = drawer.locator("[data-subrun-drawer-state]");
     const sections = drawer.locator("section");
     // The author sees the heading and each line of each section of the drawer, in order.
-    const shownSections = async (rows: string[][]) => {
+    const shownSections = async (rows: [string, ...string[]][]) => {
       await expect(sections).toHaveCount(rows.length);
-      for (const [index, row] of rows.entries()) {
-        await expect(sections.nth(index)).toBeVisible();
-        const lines = sections.nth(index).locator(":scope > *");
-        await expect(lines).toHaveCount(row.length);
-        for (const [line, text] of row.entries()) await shown(lines.nth(line), text);
+      for (const [index, [heading, ...lines]] of rows.entries()) {
+        const section = sections.nth(index);
+        await expect(section).toBeVisible();
+        await shown(section.getByRole("heading", { name: heading, exact: true }), heading);
+        for (const text of lines) await shown(section.getByText(text, { exact: true }), text);
+        await expect(section).toHaveText([heading, ...lines].join(""));
       }
     };
     await expect(drawer).toBeVisible();
