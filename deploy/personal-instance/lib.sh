@@ -138,9 +138,12 @@ install_release() {
 run_storage() {
   password=$(read_secret database-admin-password)
   url=$(database_url "$STORYOS_DATABASE_ADMIN_USER" "$password")
-  result=$(STORYOS_STORAGE_ADMIN_URL=$url timeout 600 "$1/storyos-storage") || result="${result:-} (exit $?)"
+  status=0
+  result=$(STORYOS_STORAGE_ADMIN_URL=$url timeout 600 "$1/storyos-storage") || status=$?
   printf '%s\n' "$result"
-  [ "$result" = STORYOS_STORAGE_ACTIVATION=Active ]
+  # After an upgrade, a second line STORYOS_STORAGE_UPGRADE=... follows the first line.
+  [ "$status" = 0 ] || { echo "storyos-storage exited with $status"; return 1; }
+  [ "$(printf '%s\n' "$result" | head -n 1)" = STORYOS_STORAGE_ACTIVATION=Active ]
 }
 
 wait_for_server() {

@@ -150,16 +150,30 @@ run 0 sh "$deploy/upgrade.sh" "$archive"
 run 0 sh "$deploy/upgrade.sh" "$archive"
 current=$(readlink -f /opt/storyos/current)
 
+# Makes the archive /tmp/<$1>/storyos-linux-x86_64-<$1>.tar.gz of the current package, with a storyos-storage that
+# prints the lines $2 and exits with the status $3.
+storage_package() {
+  package=storyos-linux-x86_64-$1
+  mkdir "/tmp/$1"
+  cp -a "$(readlink -f /opt/storyos/current)" "/tmp/$1/$package"
+  printf '#!/bin/sh\nprintf "%%s\\n" %s\nexit %s\n' "$2" "$3" > "/tmp/$1/$package/storyos-storage"
+  (cd "/tmp/$1" && tar -czf "$package.tar.gz" "$package" && sha256sum "$package.tar.gz" > "$package.tar.gz.sha256")
+}
+
 step "upgrade.sh with a package that storyos-storage refuses keeps the old package"
-mkdir /tmp/refused
-cp -a "$current" /tmp/refused/storyos-linux-x86_64-refused
-printf '#!/bin/sh\necho STORYOS_STORAGE_ACTIVATION=Refused\nexit 1\n' \
-  > /tmp/refused/storyos-linux-x86_64-refused/storyos-storage
-(cd /tmp/refused && tar -czf storyos-linux-x86_64-refused.tar.gz storyos-linux-x86_64-refused \
-  && sha256sum storyos-linux-x86_64-refused.tar.gz > storyos-linux-x86_64-refused.tar.gz.sha256)
+storage_package refused "STORYOS_STORAGE_ACTIVATION=Refused" 1
 run 1 sh "$deploy/upgrade.sh" /tmp/refused/storyos-linux-x86_64-refused.tar.gz
 [ "$(readlink -f /opt/storyos/current)" = "$current" ] || fail "the refused upgrade changed the link"
 curl -fsS -o /dev/null http://127.0.0.1:3000/api/v1/protocol || fail "the old package does not answer"
+
+# A package of this build refuses each database of an earlier package (the ledger of #1852), so the upgrade line
+# comes from a storyos-storage that prints it.
+step "upgrade.sh accepts the upgrade line of storyos-storage"
+storage_package upgraded "STORYOS_STORAGE_ACTIVATION=Active STORYOS_STORAGE_UPGRADE='from 2 files to 3 files'" 0
+run 0 sh "$deploy/upgrade.sh" /tmp/upgraded/storyos-linux-x86_64-upgraded.tar.gz
+grep -q '^STORYOS_STORAGE_UPGRADE=from 2 files to 3 files$' /tmp/last || fail "upgrade.sh did not print the upgrade line"
+[ "$(readlink -f /opt/storyos/current)" = /opt/storyos/releases/upgraded ] || fail "the upgrade did not change the link"
+curl -fsS -o /dev/null http://127.0.0.1:3000/api/v1/protocol || fail "the upgraded package does not answer"
 
 step "The units pass systemd-analyze verify"
 systemd-analyze verify /etc/systemd/system/storyos-server.service /etc/systemd/system/storyos-worker.service \
