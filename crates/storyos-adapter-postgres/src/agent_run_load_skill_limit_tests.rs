@@ -2,12 +2,12 @@
 //! selected Skills included, each Skill one time, two loads as two separate outputs in call
 //! order, and the exact load outputs after a compaction (ADR 0093 section 5).
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, LoadSkillRefusal,
     SKILL_MD_PATH, SkillFileInput, SkillPackage,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_load_skill::{calls, loaded_run, record, skill_md};

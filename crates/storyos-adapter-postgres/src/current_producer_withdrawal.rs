@@ -1,6 +1,7 @@
 //! The current-producer form of Withdraw Proposal. It is an AgentRun decision without a Command
 //! Challenge or an Admission, so it stays outside the command sequence (ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AuthorCommandAdmissionIds, ChapterId, CurrentProducerWithdrawal,
     CurrentProducerWithdrawalSettlement, Project, ProjectCommandChallengeError,
@@ -10,7 +11,6 @@ use storyos_core::{
     TransitionOutcome, WithdrawProposal as CoreWithdraw, WithdrawProposalConflict,
     WithdrawProposalNoEffect, WithdrawProposalRefusal, WithdrawalCause, withdraw_proposal,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

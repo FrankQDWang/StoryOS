@@ -1,10 +1,10 @@
 //! The shared test support from `agent_run_write_memory_tests.rs`.
 
 use crate::shared_tests::json_row::json_of;
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::ProjectScope;
 use storyos_core::MemoryWriteRefusal;
-use tokio_postgres::Client;
 
 pub(crate) fn refused(refusal: MemoryWriteRefusal) -> Value {
     json!([

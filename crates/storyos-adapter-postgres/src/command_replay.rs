@@ -572,7 +572,7 @@ pub(crate) async fn read_command_replay(
 pub(crate) async fn read_snapshot<T>(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
-    read: impl AsyncFnOnce(&tokio_postgres::Client) -> Result<T, ReplayFault>,
+    read: impl AsyncFnOnce(&crate::statement_cache::Client) -> Result<T, ReplayFault>,
 ) -> Result<T, ReplayFault> {
     let client = store.connect_challenge().await.map_err(unavailable)?;
     client
@@ -597,7 +597,7 @@ pub(crate) async fn read_snapshot<T>(
 
 /// Reads the one JSON object text of an effect query that takes the owner, Project, and `key`.
 pub(crate) async fn read_effect(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     sql: &str,
     scope: &ProjectScope,
     key: &str,

@@ -1,7 +1,7 @@
 //! The shared test support from `grant_scope_tests.rs`.
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectScope, open_project_assistance};
-use tokio_postgres::Client;
 
 /// The current grant of the Project and its recorded scope.
 pub(crate) async fn current_grant(

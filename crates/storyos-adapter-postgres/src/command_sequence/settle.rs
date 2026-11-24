@@ -3,10 +3,10 @@
 //! The admit step consumes the Command Challenge and commits the Admission. The fence stays
 //! `in_progress`. The settle step settles the admitted command in a new transaction.
 
+use crate::statement_cache::Client;
 use storyos_application::{
     DiagnosticField as _, DiagnosticId, ProjectCommandEnvelope, ProjectCommandError,
 };
-use tokio_postgres::Client;
 
 use super::admission::insert_admission;
 use super::records::read_project;

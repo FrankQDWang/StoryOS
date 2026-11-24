@@ -38,7 +38,7 @@ pub(crate) enum ExpiryAdmission {
 }
 
 pub(crate) async fn plan_expiry_rebuild(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     assistance: Option<&ProjectAssistanceRecord>,
@@ -179,7 +179,7 @@ pub(crate) async fn plan_expiry_rebuild(
 }
 
 pub(crate) async fn insert_recovery(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     conversation_id: &str,
     row: &RecoveryDraft,
@@ -230,7 +230,7 @@ pub(crate) async fn insert_recovery(
 }
 
 pub(crate) async fn load_reference_recovery(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &storyos_application::ProjectScope,
     run_id: &str,
 ) -> Result<Option<ReferenceRecoveryInspect>, storyos_application::CreateAgentRunError> {
@@ -294,7 +294,7 @@ struct LatestAttempt {
 }
 
 async fn run_has_decision_attempt(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<bool, CompleteAgentRunError> {
     let row = client
@@ -316,7 +316,7 @@ async fn run_has_decision_attempt(
 }
 
 async fn load_latest_attempt(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     conversation_id: &str,
 ) -> Result<Option<LatestAttempt>, CompleteAgentRunError> {

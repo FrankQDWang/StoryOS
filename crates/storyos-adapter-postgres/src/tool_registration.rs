@@ -6,7 +6,7 @@ use storyos_core::ToolRegistration;
 
 /// Inserts the revision, and its tools only when this transaction inserted the revision.
 pub(crate) async fn insert_registration_rows(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     registration: &ToolRegistration,
 ) -> Result<(), tokio_postgres::Error> {
     let tools: Vec<_> = registration
@@ -66,7 +66,7 @@ pub(crate) async fn insert_registration_rows(
 /// differences. A revision that is already unavailable, or an unknown revision, does not change.
 /// The result is the number of changed rows: 1 or 0.
 pub(crate) async fn quarantine_revision(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     revision: &str,
     differences: &serde_json::Value,
 ) -> Result<u64, tokio_postgres::Error> {
@@ -84,7 +84,7 @@ pub(crate) async fn quarantine_revision(
 /// Inserts the global row of a Host Tool Registration, if it is absent. It has no server and no
 /// pinned server contract, so it has no tool rows.
 pub(crate) async fn insert_host_registration_row(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     registration: &storyos_core::HostToolRegistration,
 ) -> Result<(), tokio_postgres::Error> {
     client

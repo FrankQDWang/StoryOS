@@ -1,8 +1,8 @@
 //! The Current Chapter Compensation of Author Undo (ADR 0026, ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
-use tokio_postgres::Client;
 
 use crate::command_replay::ReplayFault;
 use crate::command_sequence::{ActionDisposition, insert_author_action};
@@ -108,7 +108,7 @@ impl CompensationAdapter for CurrentChapterCompensation {
 }
 
 async fn live_chapter_is_lawful_target(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     chapter_id: &str,
 ) -> Result<bool, ProjectCommandError> {
@@ -138,7 +138,7 @@ async fn live_chapter_is_lawful_target(
 }
 
 async fn persist_current_chapter_compensation(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     frontier: &ObservedCurrentChapterFrontier,
     sequences: CurrentChapterSequences,

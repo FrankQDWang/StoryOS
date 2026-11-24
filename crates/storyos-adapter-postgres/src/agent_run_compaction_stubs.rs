@@ -15,7 +15,7 @@ use super::{CompactionState, complete_unavailable, unavailable};
 /// The recent author messages of the earlier Runs go before the current input (ADR 0093 section
 /// 6).
 pub(super) async fn later_record(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     decision: &CurrentPassageAssemblyRecord,
     staged: &CompactionState,
@@ -40,7 +40,7 @@ pub(super) async fn later_record(
 /// Records on the staged compaction each ToolCall whose result the later request `later` sends
 /// as a stub.
 pub(super) async fn record(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     staged: &CompactionState,
     later: &CurrentPassageAssemblyRecord,

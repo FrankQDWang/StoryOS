@@ -1,6 +1,7 @@
 //! Author Undo of a chain of Forward actions on one Chapter (ADR 0067). Each Undo takes the
 //! Author Undo Frontier and the current Chapter Head, as the Web Client does.
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AcceptProposalInput, EditorSessionId, ProjectScope, UndoLatestAuthorActionInput,
     UndoLatestAuthorActionSettlement, UndoRecords,
@@ -8,7 +9,6 @@ use storyos_application::{
 use storyos_core::{
     AcceptanceTargetResolution, TransitionOutcome, UndoLatestAuthorActionUnavailable,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};

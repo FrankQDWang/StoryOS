@@ -30,7 +30,7 @@ pub(crate) struct ToolCallOwner<'a> {
 /// its `tool_call_settled` Activity Run Event for each refused call. An existing row of the same
 /// Attempt and call identifier stays as it is.
 pub(crate) async fn insert_tool_calls(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     owner: &ToolCallOwner<'_>,
     calls: &[RequestedToolCall],
@@ -152,7 +152,7 @@ pub(crate) async fn insert_tool_calls(
 
 /// Whether the Run has a ToolCall that no observation or refusal resolved.
 pub(crate) async fn pending_tool_call_exists(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<bool, CompleteAgentRunError> {
     client
@@ -176,7 +176,7 @@ pub(crate) async fn pending_tool_call_exists(
 /// observation, or one whose outcome Core classifies as unknown (ADR 0033 section 5, ADR 0086).
 /// A ToolCall of an earlier Decision can keep an unknown effect when a continuation starts.
 pub(crate) async fn unresolved_tool_effect(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<bool, CompleteAgentRunError> {
     let rows = client
@@ -212,7 +212,7 @@ pub(crate) async fn unresolved_tool_effect(
 /// call that failed its validation, which has no validated arguments, are not in the public list
 /// (ADR 0091).
 pub(crate) async fn hydrate_calls(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &storyos_application::ProjectScope,
     decision: &mut storyos_application::AgentRunDecisionInspect,
 ) -> Result<(), storyos_application::CreateAgentRunError> {
@@ -320,7 +320,7 @@ pub(crate) fn batch_evidence(batch: &ToolCallBatch) -> Option<serde_json::Value>
 /// `attempt_payload` pinned and against the current authority, which the transaction of the
 /// caller reads before it selects the Decision. A damaged Snapshot is a store fault.
 pub(crate) async fn validate_batch(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     attempt_payload: &serde_json::Value,
     response: &storyos_application::ModelResponse,
 ) -> Result<ToolCallBatch, CompleteAgentRunError> {
@@ -349,7 +349,7 @@ pub(crate) async fn validate_batch(
 /// the revision. A revision without a lifecycle row is the active constant, because the row
 /// appears at the first binding of the deployment.
 async fn current_tool_authority(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     exposure: &ExposureSnapshot,
 ) -> Result<Vec<CurrentToolAuthority>, CompleteAgentRunError> {
     let mut current: Vec<CurrentToolAuthority> = Vec::new();

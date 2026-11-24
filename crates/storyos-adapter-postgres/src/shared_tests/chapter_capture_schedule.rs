@@ -8,12 +8,12 @@ use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::run_capture;
 use crate::shared_tests::memory_capture_loop::{record, script};
 use crate::shared_tests::project_research_binding::park_queued_runs;
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{
     DiagnosticField, EditorSessionId, MemoryCaptureSource, MemoryWorkScheduleStore,
     MemoryWorkSource, ProjectScope, StartedMemoryCapture,
 };
-use tokio_postgres::Client;
 
 /// Makes the row of the Chapter due `seconds` ago, and each other row not due, so that the
 /// claim takes this row. A Chapter with no commit gets its row.

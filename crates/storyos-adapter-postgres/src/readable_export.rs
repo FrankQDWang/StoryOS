@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     CanonicalSnapshot, ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError,
     ExportHumanReadableManuscriptInput, GetHumanReadableManuscriptExport,
@@ -12,7 +13,6 @@ use storyos_core::{
     ProjectPresence, READABLE_EXPORT_PROFILE, ReadableExportVolume,
     export_human_readable_manuscript as classify_export,
 };
-use tokio_postgres::Client;
 
 use super::*;
 use crate::command_replay::{CommandReplay, EffectRecord, ReplayFault};

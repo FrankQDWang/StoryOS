@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::future::Future;
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AdmittedProjectCommand, ArchiveExportOperation, ArchiveExportRefusal, ArchiveExportWorkStore,
     ClaimedArchiveExport, ClaimedReadableExport, CompleteArchiveExport, CompleteReadableExport,
@@ -10,7 +11,6 @@ use storyos_application::{
     ProjectCommandError, ReadableExportOperation, ReadableExportWorkStore, RefusableCommandError,
 };
 use storyos_core::{ExportHumanReadableManuscriptRefusal, ProjectArchiveBuildRefusal};
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

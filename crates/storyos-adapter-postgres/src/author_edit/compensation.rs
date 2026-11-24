@@ -1,9 +1,9 @@
 //! The prose Compensation of Author Undo: it restores the Revision before one applied Author
 //! Edit through the `AuthoritativeRevision` profile (ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
-use tokio_postgres::Client;
 
 use crate::command_replay::ReplayFault;
 use crate::command_sequence::{

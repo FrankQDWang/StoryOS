@@ -1,13 +1,13 @@
 //! The `chapter_list` item of each RunStep of a Run, at each request of the Run (ADR 0095
 //! section 1, ADR 0085).
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{ConversationSelection, CreateChapterInput, EditorSessionStore};
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CreateChapterPlacement,
     TransitionOutcome, hex_sha256,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::complete;
 use crate::shared_tests::agent_run_finish_rule::conversation_of;

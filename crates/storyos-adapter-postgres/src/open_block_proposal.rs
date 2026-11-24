@@ -11,7 +11,7 @@ pub(crate) struct ProseOpening {
 }
 
 pub(crate) async fn open_selected_prose_change(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     chapter_id: &str,
     decision_id: &str,
@@ -48,7 +48,7 @@ pub(crate) async fn open_selected_prose_change(
 
 #[allow(clippy::too_many_arguments)]
 async fn open_chapter(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     chapter_id: &str,
     decision_id: &str,
@@ -208,7 +208,7 @@ struct PersistAppliedProposal<'a> {
 }
 
 async fn persist_applied_proposal(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     persist: &PersistAppliedProposal<'_>,
 ) -> Result<PersistedProposal, CompleteAgentRunError> {

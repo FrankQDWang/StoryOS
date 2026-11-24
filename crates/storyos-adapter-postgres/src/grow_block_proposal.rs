@@ -7,7 +7,7 @@ use storyos_core::{OpenBlockProposal, OpenBlockProposalResult, ProseChangeCandid
 /// Whether each joined block is still in the current head at the base of the candidate, with no
 /// reservation. The caller holds the lock of the Proposal head.
 pub(crate) async fn joined_blocks_are_free(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     base_revision_id: &str,
     joined: &[&ProseChangeCandidate],
@@ -40,7 +40,7 @@ pub(crate) async fn joined_blocks_are_free(
 /// the Proposal atomic. Returns the new Operation IDs in the order of `joined`. A candidate
 /// revision with no joined block keeps its bundle policy.
 pub(crate) async fn join(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     proposal_id: &str,
     joined: &[&ProseChangeCandidate],

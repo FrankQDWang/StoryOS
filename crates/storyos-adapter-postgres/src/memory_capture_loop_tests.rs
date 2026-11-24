@@ -2,10 +2,10 @@
 //! requires a call, an unexposed call and a refused list do not end it, and the settled call
 //! stores the observations, settles the capture, and completes the Run.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{ConversationSelection, MemoryCaptureSource, ProjectScope};
 use storyos_core::{DeploymentDestination, ObservationRefusal, RESEARCH_TOOL_OFFER};
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::{calls, complete};
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;

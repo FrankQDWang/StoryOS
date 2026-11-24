@@ -1,6 +1,6 @@
+use crate::statement_cache::Client;
 use storyos_application::{EditorSessionId, UndoLatestAuthorActionInput, UpdateProjectInput};
 use storyos_core::{ReceiptResult, TransitionOutcome};
-use tokio_postgres::Client;
 
 use crate::shared_tests::create_volume_authority::{NamedEdit, apply_named_edit};
 use crate::undo_latest_author_action::UndoLatestAuthorAction;

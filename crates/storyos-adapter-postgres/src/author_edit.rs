@@ -187,7 +187,7 @@ fn fault_error(point: &'static str) -> AuthorEditError {
 }
 
 async fn classify_author_edit(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &ApplyAuthorEditCommand,
     current_revision_id: &str,
     current_body: String,

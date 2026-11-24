@@ -3,6 +3,7 @@
 
 use std::sync::Mutex;
 
+use crate::statement_cache::Client;
 use storyos_adapter_fake_destination::{FakeDestination, UPDATE_PLAN_SCRIPT, UPDATE_PLAN_STEPS};
 use storyos_application::{
     AgentRunReadSelection, AgentRunReadStore, DestinationRequest, ModelProviderAdapter,
@@ -10,7 +11,6 @@ use storyos_application::{
     ProjectScope, complete_agent_run,
 };
 use storyos_core::{AgentRunStatus, PlanStep, PlanStepStatus};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;

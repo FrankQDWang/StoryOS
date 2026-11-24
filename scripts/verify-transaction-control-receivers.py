@@ -10,6 +10,15 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = ROOT / "crates/storyos-adapter-postgres/src"
 # `connection_pool::open` is the one connect path of production code (ADR 0104 section 5).
 CONNECT_OWNER = "connection_pool.rs"
+# The statement cache wraps the driver client, so each other file uses the cached types. The owner
+# may name the driver types and forward `batch_execute`; each other rule applies to it.
+STATEMENT_CACHE_OWNER = "statement_cache.rs"
+BATCH_EXECUTE_FORWARD = """    pub(crate) async fn batch_execute(&self, text: &str) -> Result<(), Error> {
+        self.connection.batch_execute(text).await
+    }"""
+DRIVER_CLIENT = re.compile(
+    r"\btokio_postgres::(?:\{[^}]*\b(Client|Transaction|GenericClient)\b|(Client|Transaction|GenericClient)\b)"
+)
 # The Storage Activation runs on its own admin connection, so the transaction-control rules do not apply to it.
 MAINTENANCE_OWNER = "storage_activation.rs"
 OPEN_CALLERS = {"storage_activation_proof.rs", MAINTENANCE_OWNER}
@@ -101,6 +110,13 @@ def check(source_dir: Path) -> tuple[list[str], int]:
         text = path.read_text(encoding="utf-8")
         if path.name == CONNECT_OWNER:
             continue
+        for match in [] if path.name == STATEMENT_CACHE_OWNER else DRIVER_CLIENT.finditer(text):
+            line = text[: match.start()].count("\n") + 1
+            name = match.group(1) or match.group(2)
+            violations.append(
+                f"{relative}:{line}: `tokio_postgres::{name}` skips the statement cache; "
+                f"use `statement_cache::{name}`"
+            )
         for word in CONNECT_WORDS:
             if word in text and not (path.name == TLS_OWNER and word == "VerifiedTls"):
                 line = text[: text.index(word)].count("\n") + 1
@@ -118,7 +134,10 @@ def check(source_dir: Path) -> tuple[list[str], int]:
             )
         if path.name == MAINTENANCE_OWNER:
             continue
-        for match in OPAQUE_STATEMENT_CALL.finditer(text):
+        # Only the first copy of the one forwarding method is exempt. Spaces keep the offsets of the lines.
+        blank = re.sub(r"[^\n]", " ", BATCH_EXECUTE_FORWARD)
+        statements = text.replace(BATCH_EXECUTE_FORWARD, blank, 1) if path.name == STATEMENT_CACHE_OWNER else text
+        for match in OPAQUE_STATEMENT_CALL.finditer(statements):
             line = text[: match.start()].count("\n") + 1
             violations.append(
                 f"{relative}:{line}: `{match.group(1)}` argument is not a string literal; "
@@ -174,7 +193,7 @@ impl Settled {
 """,
     "fail_parameter.rs": """
 async fn read_settlement(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     receipt_id: &str,
 ) -> Result<(), ProjectReadError> {
     client
@@ -200,25 +219,25 @@ async fn begin(client: &PooledClient) -> Result<u64, tokio_postgres::Error> {
 }
 """,
     "fail_connect.rs": """
-async fn open(url: &str) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+async fn open(url: &str) -> Result<crate::statement_cache::Client, tokio_postgres::Error> {
     let (client, connection) = tokio_postgres::connect(url, NoTls).await?;
     Ok(client)
 }
 """,
     "fail_config_connect.rs": """
-async fn open(config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+async fn open(config: &Config) -> Result<crate::statement_cache::Client, tokio_postgres::Error> {
     let (client, _connection) = config.connect(NoTls).await?;
     Ok(client)
 }
 """,
     "fail_config_parameter.rs": """
-async fn open<T>(config: &Config, tls: T) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+async fn open<T>(config: &Config, tls: T) -> Result<crate::statement_cache::Client, tokio_postgres::Error> {
     let (client, _connection) = config.connect(tls).await?;
     Ok(client)
 }
 """,
     "fail_config_turbofish.rs": """
-async fn open(config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+async fn open(config: &Config) -> Result<crate::statement_cache::Client, tokio_postgres::Error> {
     let (client, _connection) = config.connect::<Tls>(make_tls()).await?;
     Ok(client)
 }
@@ -236,13 +255,42 @@ async fn replay(store: &Store) -> Result<(), ProjectReadError> {
     client.batch_execute("BEGIN").await.map_err(read_error)
 }
 """,
+    "fail_driver_client.rs": """
+use tokio_postgres::{Client, Row};
+
+async fn read(transaction: &tokio_postgres::Transaction<'_>) -> Vec<Row> {
+    Vec::new()
+}
+""",
+    "statement_cache.rs": """
+pub(crate) struct Client {
+    connection: tokio_postgres::Client,
+}
+
+impl Client {
+    pub(crate) async fn batch_execute(&self, text: &str) -> Result<(), Error> {
+        self.connection.batch_execute(text).await
+    }
+
+    pub(crate) async fn open(&self, statement: &str) -> Result<(), Error> {
+        self.connection.batch_execute(statement).await?;
+        self.connection.batch_execute("BEGIN").await
+    }
+}
+
+impl Transaction<'_> {
+    pub(crate) async fn batch_execute(&self, text: &str) -> Result<(), Error> {
+        self.connection.batch_execute(text).await
+    }
+}
+""",
     "fail_opaque.rs": """
 async fn apply(client: &PooledClient, statement: &str) -> Result<(), tokio_postgres::Error> {
     client.batch_execute(statement).await
 }
 """,
     "ignored_tests.rs": """
-async fn raw(client: &tokio_postgres::Client) {
+async fn raw(client: &crate::statement_cache::Client) {
     client.batch_execute("BEGIN").await.unwrap();
 }
 """,
@@ -253,7 +301,7 @@ async fn stores() {
 }
 """,
     "storage_activation.rs": """
-async fn apply(client: &tokio_postgres::Client) -> Result<(), tokio_postgres::Error> {
+async fn apply(client: &crate::statement_cache::Client) -> Result<(), tokio_postgres::Error> {
     let client = crate::connection_pool::open(admin_url).await?;
     client.batch_execute("BEGIN").await
 }
@@ -268,7 +316,7 @@ def self_test() -> None:
             (source_dir / name).parent.mkdir(parents=True, exist_ok=True)
             (source_dir / name).write_text(body, encoding="utf-8")
         violations, checked = check(source_dir)
-    assert checked == 7, checked
+    assert checked == 8, checked
     expected = [
         "fail_config_connect.rs:3: `NoTls` outside the pool; use `connect()`",
         "fail_config_connect.rs:3: `connect` with an argument outside the pool; use `connect()`",
@@ -276,14 +324,21 @@ def self_test() -> None:
         "fail_config_turbofish.rs:3: `connect` with an argument outside the pool; use `connect()`",
         "fail_connect.rs:3: `tokio_postgres::connect` outside the pool; use `connect()`",
         "fail_connect.rs:3: `NoTls` outside the pool; use `connect()`",
+        "fail_driver_client.rs:2: `tokio_postgres::Client` skips the statement cache; use `statement_cache::Client`",
+        "fail_driver_client.rs:4: `tokio_postgres::Transaction` skips the statement cache; "
+        "use `statement_cache::Transaction`",
         "fail_generic.rs:3: `ROLLBACK` on parameter `client: &C` is not a `PooledClient`",
         "fail_local.rs:4: `BEGIN` on local `client` is not bound from `connect()`, "
         "`connect_challenge()`, or `checkout()`",
         "fail_method.rs:3: `BEGIN` runs through `execute`; use `batch_execute` so the pool records it",
         "fail_opaque.rs:3: `batch_execute` argument is not a string literal; the check cannot read it",
         "fail_open.rs:3: `connection_pool::open` outside the startup gate; use `connect()`",
-        "fail_parameter.rs:7: `BEGIN` on parameter `client: &tokio_postgres::Client` is not a `PooledClient`",
+        "fail_parameter.rs:7: `BEGIN` on parameter `client: &crate::statement_cache::Client` is not a "
+        "`PooledClient`",
         "postgres_tls.rs:4: `connect` with an argument outside the pool; use `connect()`",
+        "statement_cache.rs:12: `batch_execute` argument is not a string literal; the check cannot read it",
+        "statement_cache.rs:19: `batch_execute` argument is not a string literal; the check cannot read it",
+        "statement_cache.rs:13: `BEGIN` on self field `self.connection` is not a `PooledClient`",
     ]
     assert violations == expected, violations
     print("verify-transaction-control-receivers self-test passed")

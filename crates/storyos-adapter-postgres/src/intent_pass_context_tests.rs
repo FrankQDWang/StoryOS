@@ -3,8 +3,8 @@
 //! result, the items of each kind of Run, and the search. The leads of these tests are `71`, `72`,
 //! and `73`. Each test completes each Run that it queued.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
-use tokio_postgres::Client;
 
 use super::tests::{change, character, consolidate, run_intent};
 use crate::shared_tests::agent_run_finish_rule::{calls, complete};

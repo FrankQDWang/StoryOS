@@ -77,7 +77,7 @@ impl PassageVectorStore for PostgresProjectReader {
 
 /// Deletes the rows of `keys` of the Chapter, and returns the number of deleted rows.
 pub(crate) async fn delete_passage_vectors(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     chapter_id: &str,
     keys: &[PassageVectorKey],
@@ -110,7 +110,7 @@ pub(crate) async fn delete_passage_vectors(
 
 /// Writes one row. A row with the same key stays as it is.
 pub(crate) async fn insert_passage_vector(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     row: &PassageVectorRow<'_>,
 ) -> Result<(), ProjectReadError> {

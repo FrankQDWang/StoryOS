@@ -2,10 +2,10 @@
 //! author before a queued capture, and a capture gives its claim back between two RunSteps when a
 //! Run of the author is queued. The capture continues later at the same RunStep.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{NoContractFaults, complete_agent_run};
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_background_run::claim_in_project;

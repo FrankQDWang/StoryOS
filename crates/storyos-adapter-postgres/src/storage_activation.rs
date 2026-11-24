@@ -3,6 +3,7 @@
 use std::fmt;
 
 use sha2::{Digest, Sha256};
+use tokio_postgres::error::SqlState;
 
 use crate::connection_cause::connection_cause;
 use crate::database_url::{DatabaseUrlRefusal, check_database_url};
@@ -174,7 +175,7 @@ async fn activate_sources(
 }
 
 async fn run_state_machine(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     identity: &PackagedIdentity,
     sources: &[EmbeddedSource],
 ) -> Result<StorageActivation, StorageActivationError> {
@@ -229,7 +230,7 @@ fn later_sources<'a>(
 }
 
 async fn in_transaction(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     work: impl std::future::Future<Output = Result<(), StorageActivationError>>,
 ) -> Result<(), StorageActivationError> {
     client.batch_execute("BEGIN").await.map_err(unavailable)?;
@@ -253,7 +254,7 @@ enum Attempt {
 /// Applies `files` as the login of the activation, verifies the schema, and records the attempt
 /// and the proof.
 async fn persist(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     identity: &PackagedIdentity,
     files: &[EmbeddedSource],
     attempt: Attempt,
@@ -314,21 +315,12 @@ async fn persist(
     Ok(())
 }
 
+/// One statement, so a warm connection reads the proof in one round trip. A database with no
+/// proof relation has no proof.
 pub(crate) async fn read_proof(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
 ) -> Result<Option<PackagedIdentity>, StorageActivationError> {
-    let present: bool = client
-        .query_one(
-            "SELECT to_regclass('storyos.storage_activation_proofs') IS NOT NULL",
-            &[],
-        )
-        .await
-        .map_err(unavailable)?
-        .get(0);
-    if !present {
-        return Ok(None);
-    }
-    let row = client
+    let read = client
         .query_opt(
             "SELECT catalog_id, catalog_checksum, migration_chain_id, migration_chain_digest,
                     database_schema_identity, active_schema_version, public_release,
@@ -337,8 +329,17 @@ pub(crate) async fn read_proof(
              WHERE proof_id = $1 AND phase = 'active'",
             &[&PROOF_ID],
         )
-        .await
-        .map_err(unavailable)?;
+        .await;
+    let row = match read {
+        Ok(row) => row,
+        Err(error)
+            if error.code() == Some(&SqlState::UNDEFINED_TABLE)
+                || error.code() == Some(&SqlState::INVALID_SCHEMA_NAME) =>
+        {
+            return Ok(None);
+        }
+        Err(error) => return Err(unavailable(error)),
+    };
     Ok(row.map(|row| PackagedIdentity {
         catalog_id: row.get(0),
         catalog_checksum: row.get(1),

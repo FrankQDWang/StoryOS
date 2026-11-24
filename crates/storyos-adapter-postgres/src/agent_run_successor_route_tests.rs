@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     CacheUse, DestinationRequest, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
     NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, ReferenceRetrieval,
@@ -9,7 +10,6 @@ use storyos_core::{
     AGENT_PLAN_REGISTRATION, DeploymentDestination, ModelAdapter, NativeStreamItem,
     ProseChangeCandidate, RetrievalBounds,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::{finish_item, propose_edit_item, text_item};
 use crate::shared_tests::agent_run_retrieval::{

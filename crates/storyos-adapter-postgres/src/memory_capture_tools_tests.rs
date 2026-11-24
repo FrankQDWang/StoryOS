@@ -2,9 +2,9 @@
 //! first request sends the Memory Index, the Chapter list, and the delete marks after the input.
 //! The manuscript and Memory reads execute as in a Run of the author.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{ChapterId, DeleteChapterInput, ProjectScope};
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_structure::{DELETE_CHAPTER, delete_chapter};

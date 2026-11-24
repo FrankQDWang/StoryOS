@@ -99,7 +99,7 @@ impl PostgresProjectReader {
 }
 
 pub(super) async fn read_latest_refusal(
-    transaction: &tokio_postgres::Transaction<'_>,
+    transaction: &crate::statement_cache::Transaction<'_>,
     scope: &ProjectScope,
     proposal_id: &str,
 ) -> Result<Option<AcceptanceRefusal>, ProjectReadError> {

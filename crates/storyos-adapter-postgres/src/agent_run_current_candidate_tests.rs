@@ -1,6 +1,7 @@
 //! A Run of the tool loop profile whose referenced candidate the author changes during the Run
 //! (ADR 0085, ADR 0091), with the fake model of that profile.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -8,7 +9,6 @@ use storyos_application::{
     RejectProposalOperationsInput, RejectionNote, WithdrawProposalInput, WithdrawalNote,
 };
 use storyos_core::{DeploymentDestination, SelectionReference};
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_current_candidate::settled;
 use crate::shared_tests::agent_run_propose_edit::{REVISE, opened, propose_edit_calls};

@@ -21,7 +21,7 @@ use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
 
 /// Writes the capture of one settled ToolCall of the claimed Run.
 pub(crate) async fn capture(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     tool_call_id: &str,
     capture: &ResearchCapture,
@@ -297,7 +297,7 @@ impl PostgresProjectReader {
     pub(crate) async fn in_read_transaction<T>(
         &self,
         scope: &ProjectScope,
-        body: impl AsyncFnOnce(&tokio_postgres::Client) -> Result<T, CreateAgentRunError>,
+        body: impl AsyncFnOnce(&crate::statement_cache::Client) -> Result<T, CreateAgentRunError>,
     ) -> Result<T, CreateAgentRunError> {
         let client = self
             .connect_challenge()

@@ -2,6 +2,7 @@
 //! request of a capture and of a pass. The author still commits an edit, and a Run of the author
 //! completes with the Memory Index of the entries of the time before. The lead of this test is `a1`.
 
+use crate::statement_cache::Client;
 use serde_json::json;
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -9,7 +10,6 @@ use storyos_application::{
     ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
     ProjectScope, complete_agent_run,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_read_chapter::project;
 use crate::shared_tests::agent_run_write_memory::first_index;

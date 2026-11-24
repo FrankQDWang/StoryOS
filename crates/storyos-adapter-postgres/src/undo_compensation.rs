@@ -3,12 +3,12 @@
 use std::future::Future;
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AuthorCommandAdmissionIds, EditorSessionId, ProjectCommandEnvelope, ProjectCommandError,
     ProjectScope, UndoLatestAuthorActionInput, UndoRecords,
 };
 use storyos_core::AuthorUndoFrontierKind;
-use tokio_postgres::Client;
 
 use crate::command_replay::ReplayFault;
 

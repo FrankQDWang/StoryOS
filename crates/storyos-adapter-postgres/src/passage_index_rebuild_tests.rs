@@ -1,8 +1,8 @@
 //! S7-E1b: the store test of a loss of each vector row of a Project. Test prefixes `a25`, `a26`,
 //! and `a2f`: `damaged_evidence_tests` uses the Projects `a200` and `a210`.
 
+use crate::statement_cache::Client;
 use storyos_application::{PassageIndexWorkStore, ProjectScope};
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::memory_entries::write_versions;

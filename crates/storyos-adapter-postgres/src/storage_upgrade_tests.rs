@@ -4,8 +4,10 @@
 //! `provider-activation` gives on the image of the hosted provider.
 
 use sha2::{Digest, Sha256};
+use tokio_postgres::NoTls;
 use tokio_postgres::error::SqlState;
-use tokio_postgres::{Client, NoTls};
+
+use crate::statement_cache::Client;
 
 use super::{
     EMBEDDED_SOURCES, EmbeddedSource, PackagedIdentity, ROUTE_CATALOG_JSON, StorageActivation,
@@ -322,6 +324,7 @@ fn runtime_url(admin_url: &str) -> String {
 
 async fn connect(url: &str) -> Client {
     let (client, connection) = tokio_postgres::connect(url, NoTls).await.unwrap();
+    let client = crate::statement_cache::Client::new(client);
     tokio::spawn(async move {
         let _connection_result = connection.await;
     });

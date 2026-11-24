@@ -1,13 +1,13 @@
 //! `applyAuthorEdit` through the admit step and the settle step of the command sequence
 //! (ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorEditCommandSettlement, AuthorEditError, ProjectCommandEnvelope,
     ProjectCommandError,
 };
 use storyos_contracts::CommandKind;
 use storyos_core::{AuthorEditApplied, ManuscriptBlock, TransitionOutcome};
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use super::profile::{

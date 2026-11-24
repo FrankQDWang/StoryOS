@@ -16,7 +16,7 @@ pub(super) enum LinkMode<'a> {
 }
 
 pub(super) async fn evidence_usable(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     loaded: &LoadedAcceptance,
     facts: &AcceptanceFacts,
@@ -72,7 +72,7 @@ pub(super) async fn evidence_usable(
 }
 
 pub(super) async fn reservation_blocked(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     block_ids: &[String],
 ) -> Result<bool, ProjectCommandError> {
@@ -100,7 +100,7 @@ pub(super) async fn reservation_blocked(
 }
 
 pub(super) async fn place_proposal(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     facts: &AcceptanceFacts,
     base_revision_id: &str,

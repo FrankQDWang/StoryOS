@@ -4,7 +4,7 @@ use storyos_contracts::{
 };
 
 pub(crate) async fn hydrate_locations(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     decision: &mut AgentRunDecisionInspect,
 ) -> Result<(), CreateAgentRunError> {
@@ -22,7 +22,7 @@ pub(crate) async fn hydrate_locations(
 /// Gives each opened or revised location of the Decision `decision_id` the current state of its
 /// Proposal operation.
 pub(crate) async fn hydrate(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     decision_id: &str,
     locations: &mut [ProseChangeLocationInspect],

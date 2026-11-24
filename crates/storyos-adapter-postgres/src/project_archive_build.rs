@@ -279,7 +279,7 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
 ];
 
 pub(super) async fn collect_exportable_families(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
 ) -> Result<Vec<PinnedArchiveFamily>, ArchiveBuildError> {
     if !crate::validation_history::unavailable_revisions(client, scope)
@@ -307,7 +307,7 @@ pub(super) async fn collect_exportable_families(
 /// Reads the families of `ADMISSION_TABLES` again after the Admission and the operation row
 /// of the export, so the Pinned Export Source keeps these two rows.
 pub(super) async fn reload_admission_families(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     families: &mut [PinnedArchiveFamily],
 ) -> Result<(), ArchiveBuildError> {
@@ -323,7 +323,7 @@ pub(super) async fn reload_admission_families(
 }
 
 pub(super) async fn persist_export_archive(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     export_id: &str,
     snapshot: &CanonicalSnapshot,
@@ -413,7 +413,7 @@ pub(super) async fn persist_export_archive(
 }
 
 pub(super) async fn package_stored_export(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
     page: &ExportOperationPage,
 ) -> Result<VerifiedExportArchive, ProjectReadError> {
@@ -545,7 +545,7 @@ fn archive_root_facts(
 }
 
 async fn load_table_json(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     table: &str,
     scope: &ProjectScope,
 ) -> Result<Vec<serde_json::Value>, ArchiveBuildError> {

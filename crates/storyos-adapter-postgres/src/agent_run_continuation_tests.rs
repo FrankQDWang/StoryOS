@@ -1,13 +1,13 @@
 //! The Provider conversation of a later RunStep whose current input changed (ADR 0085), with the
 //! fake model of the tool loop profile.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ConversationSelection, NoContractFaults, ProjectScope, complete_agent_run,
 };
 use storyos_core::DeploymentDestination;
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_propose_edit::REVISE;

@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ProjectScope,
@@ -14,7 +15,6 @@ use storyos_core::{
     SKILL_MD_PATH, SkillFileInput, SkillPackage, SkillPackageReference, SkillResourceRefusal,
     SkillSet,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;

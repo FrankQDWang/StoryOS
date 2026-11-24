@@ -1,4 +1,4 @@
-use tokio_postgres::Client;
+use crate::statement_cache::Client;
 use tokio_postgres::error::SqlState;
 use uuid::Uuid;
 

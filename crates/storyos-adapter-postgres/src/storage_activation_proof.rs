@@ -57,7 +57,7 @@ pub async fn require_release1_storage_activation_proof(
 }
 
 pub(crate) async fn require_release1_storage_activation_proof_on(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
 ) -> Result<(), StorageActivationProofError> {
     let identity = packaged_identity();
     let proof = match read_proof(client).await {

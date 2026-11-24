@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use serde_json::json;
 use storyos_application::{NoContractFaults, complete_agent_run};
 use storyos_core::{
@@ -6,7 +7,6 @@ use storyos_core::{
     ToolCallBatch, ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle,
     validate_tool_call_batch,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::{finish_item, text_item};
 use crate::shared_tests::agent_run_retrieval::{AfterExchange, adapter, destination, research_run};

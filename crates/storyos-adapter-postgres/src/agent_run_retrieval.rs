@@ -110,7 +110,7 @@ pub(crate) fn subject(
 
 /// Keeps a blocked subject unknown, or returns the Retrieve request that the gates admit.
 pub(crate) async fn advance_original_result_retrieval(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     payload: &serde_json::Value,
     advance: RetrievalAdvance<'_>,
@@ -194,7 +194,7 @@ pub(crate) async fn advance_original_result_retrieval(
 
 /// Decides one subject with the current assistance admission and the retrieved result.
 pub(crate) async fn decide(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     subject: &serde_json::Value,
     advance: &RetrievalAdvance<'_>,
@@ -221,7 +221,7 @@ pub(crate) async fn decide(
 }
 
 pub(crate) async fn load_original_result_retrieval(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<
@@ -313,7 +313,7 @@ pub(crate) struct RecordedRetrieval {
 /// Seals the subject and settles the original Attempt and the Run from one decision. A selected
 /// result returns the sealed payload, and the caller records its decision.
 pub(crate) async fn settle(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     payload: &serde_json::Value,
     advance: &RetrievalAdvance<'_>,
@@ -400,7 +400,7 @@ pub(crate) async fn settle(
 }
 
 async fn write_unsettled_payload(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     attempt_id: &str,
     payload: &serde_json::Value,
@@ -433,7 +433,7 @@ async fn write_unsettled_payload(
 }
 
 async fn restore_reconciled(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     subject: &serde_json::Value,
 ) -> Result<(), CompleteAgentRunError> {

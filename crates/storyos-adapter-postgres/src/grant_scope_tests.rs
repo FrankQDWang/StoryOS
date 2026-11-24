@@ -1,10 +1,10 @@
+use crate::statement_cache::Client;
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     DestinationRequest, ModelProviderAdapter, ModelStreamSink, NoContractFaults, Observation,
     PreDispatchRefusal, PreparedRequest, ProjectScope, complete_agent_run, open_project_assistance,
 };
 use storyos_core::DeploymentDestination;
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;

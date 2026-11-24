@@ -1,10 +1,10 @@
+use crate::statement_cache::Client;
 use serde_json::json;
 use storyos_application::{ConversationSelection, NoContractFaults, complete_agent_run};
 use storyos_core::{
     BoundTool, DeploymentDestination, EXA_TOOL_REGISTRATION, ExposureFacts, RESEARCH_TOOL_OFFER,
     ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_retrieval::{
     adapter, broken_stream, destination, real_run, recovery, research_run,

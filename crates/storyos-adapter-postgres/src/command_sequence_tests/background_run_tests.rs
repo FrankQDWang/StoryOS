@@ -3,6 +3,7 @@
 //! and no command of the author gets it, and the Worker does not claim it. No code starts one
 //! yet, so each test inserts it with the test administrator connection.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{
     AgentRunControlRefusal, AgentRunReadSelection, AgentRunReadStore, CancelAgentRunInput,
@@ -10,7 +11,6 @@ use storyos_application::{
     RefusableCommandError, ResearchSourceReadStore, SteerAgentRunInput,
 };
 use storyos_core::{ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_sequence::settle_project_command;

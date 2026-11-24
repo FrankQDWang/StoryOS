@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 use storyos_adapter_fake_destination::FakeDestination;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ContractFaultObserver, ContractFaultPoint, DestinationRequest, ModelProviderAdapter,
     ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
@@ -10,7 +11,6 @@ use storyos_core::{
     AGENT_PLAN_REGISTRATION, AssistanceAvailability, DeploymentDestination, DestinationKind,
     RuntimeQualification,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;

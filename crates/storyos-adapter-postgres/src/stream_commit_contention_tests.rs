@@ -3,7 +3,9 @@ use storyos_application::{
     ClaimedAgentRun, ModelDispatchStore, NoContractFaults, complete_agent_run,
 };
 use storyos_core::{DeploymentDestination, NativeStreamItem, StreamItemRole, StreamItemState};
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;
@@ -75,6 +77,7 @@ async fn a_stream_commit_beside_the_work_of_another_run_commits() {
     // The stream commit reads its Run, then waits for the Attempt row that `holder` locks.
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL").unwrap();
     let (holder, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let holder = crate::statement_cache::Client::new(holder);
     tokio::spawn(connection);
     holder.batch_execute("BEGIN").await.unwrap();
     holder

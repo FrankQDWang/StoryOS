@@ -18,7 +18,7 @@ use crate::shared_tests::delete_structure::settle_delete_volume;
 use crate::shared_tests::json_row::json_of;
 
 async fn removed_volume_state(
-    admin: &tokio_postgres::Client,
+    admin: &crate::statement_cache::Client,
     scope: &ProjectScope,
 ) -> serde_json::Value {
     json_of(

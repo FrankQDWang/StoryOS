@@ -1,11 +1,11 @@
 //! Author Undo of a Proposal candidate edit after the Undo of a later Acceptance (ADR 0068).
 //! Each Undo takes the current Author Undo Frontier, as the Web Client does.
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AcceptProposalInput, EditorSessionId, UndoLatestAuthorActionSettlement, UndoRecords,
 };
 use storyos_core::{TransitionOutcome, UndoLatestAuthorActionUnavailable};
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

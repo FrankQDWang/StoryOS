@@ -4,10 +4,10 @@ use crate::PostgresProjectReader;
 use crate::shared_tests::json_row::json_of;
 use crate::shared_tests::memory_capture::{run_capture, start};
 use crate::shared_tests::memory_capture_loop::{record, script};
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{MemoryCaptureSource, ProjectScope, StartedMemoryConsolidation};
 use storyos_core::CaptureRefusal;
-use tokio_postgres::Client;
 
 /// Settles one capture of `source` with the observations `observations`.
 pub(crate) async fn capture(

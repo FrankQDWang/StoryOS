@@ -1,6 +1,7 @@
 //! The Conversation list and the Conversation read with real PostgreSQL, and the Provider
 //! continuation of each Conversation (ADR 0094 section 10, ADR 0053).
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -11,7 +12,6 @@ use storyos_application::{
 };
 use storyos_contracts::ProjectConversationCompleteness::Complete;
 use storyos_core::{AgentRunStatus, DeploymentDestination::HostFakeToolLoop};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;

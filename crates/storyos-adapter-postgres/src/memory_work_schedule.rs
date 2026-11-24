@@ -7,6 +7,7 @@
 
 use std::time::SystemTime;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ClaimedAgentRun, ClaimedMemoryWork, CompleteAgentRunError, MemoryCaptureSource,
     MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource, ProjectId, ProjectReadError,
@@ -16,7 +17,6 @@ use storyos_core::{
     ConsolidationFacts, ConsolidationSkip, ConversationCaptureFacts, ConversationCaptureSkip,
     ConversationRole, ConversationRunMessages, IntentPassFacts, IntentPassSkip,
 };
-use tokio_postgres::Client;
 
 use crate::agent_run_work::complete_unavailable;
 use crate::connection_pool::PooledClient;

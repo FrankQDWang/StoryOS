@@ -5,7 +5,9 @@ use storyos_application::{
 };
 use storyos_contracts::CommandKind;
 use storyos_core::AuthorEditPrimitive;
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 use uuid::Uuid;
 
 use super::*;
@@ -203,7 +205,8 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(&runtime_url);
-    let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let mut admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move { connection.await.unwrap() });
 
     let owner_user_id = Uuid::now_v7().to_string();

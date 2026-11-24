@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     ChapterCreated, CreateChapterPublicOrder, CreateVolumePublicOrder, VolumeCreated,
 };
@@ -6,7 +7,6 @@ use storyos_application::{
     UpdateVolumeInput, get_manuscript_tree,
 };
 use storyos_core::CreateChapterPlacement;
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_sequence::{CommandSpec, ProjectCommand, settle_project_command};

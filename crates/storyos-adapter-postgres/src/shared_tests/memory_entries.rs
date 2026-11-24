@@ -7,7 +7,9 @@ use storyos_application::{
     IssueProjectCommandChallenge, ProjectScope, VerifiedExportArchive, claim_next_archive_export,
     complete_archive_export, get_verified_export_archive, issue_project_command_challenge,
 };
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 
 /// One version row: the entry number, the version, the Memory revision, the state, the type, the
 /// title, and the description. The text is the description.
@@ -131,7 +133,8 @@ pub(crate) async fn as_runtime(
     statements: &[&str],
 ) -> Vec<Result<u64, String>> {
     let url = std::env::var("STORYOS_TEST_DATABASE_URL").expect("run through the script");
-    let (mut runtime, connection) = tokio_postgres::connect(&url, NoTls).await.unwrap();
+    let (runtime, connection) = tokio_postgres::connect(&url, NoTls).await.unwrap();
+    let mut runtime = crate::statement_cache::Client::new(runtime);
     tokio::spawn(connection);
     let mut results = Vec::new();
     for statement in statements {
@@ -143,7 +146,7 @@ pub(crate) async fn as_runtime(
             .execute(scoped, &[&values[0], &values[1]])
             .await
             .unwrap();
-        let result = transaction.execute(*statement, &[]).await;
+        let result = transaction.execute(statement, &[]).await;
         results.push(result.map_err(|error| {
             error
                 .code()

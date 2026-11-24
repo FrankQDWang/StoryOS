@@ -2,6 +2,7 @@
 //! ADR 0056, ADR 0086). Each test starts a pass with a direct call, and each pass Run completes.
 //! The lead of these tests is `61`.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -11,7 +12,6 @@ use storyos_application::{
 };
 use storyos_core::{AGENT_PLAN_REGISTRATION, MemoryEntryOrigin};
 use tokio::sync::Mutex;
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;

@@ -1,8 +1,8 @@
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{
     NoContractFaults, ProjectScope, ResearchSourceReadStore, complete_agent_run_with_tools,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_retrieval::{adapter, destination};

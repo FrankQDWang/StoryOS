@@ -6,12 +6,12 @@ use crate::shared_tests::command_sequence_undo::{edit_in_chapter_of, resulting_r
 use crate::shared_tests::create_volume_authority::{
     NamedEdit, adjusted_edit_command, apply_named_edit,
 };
+use crate::statement_cache::Client;
 use storyos_application::{
     AuthorEditProposalTarget, AuthorEditSettlement, AuthorEditSettlementEffect, ChapterId,
     OpenChapter, ProjectScope, open_chapter,
 };
 use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 pub(crate) const PRIMARY_TEXT: &str = "Primary candidate";

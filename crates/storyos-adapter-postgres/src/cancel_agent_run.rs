@@ -1,11 +1,11 @@
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     CancelAgentRunApplied, CancelAgentRunError, CancelAgentRunInput, CancelAgentRunSettlement,
     ProjectCommandEnvelope, ProjectCommandError, ProjectScope,
 };
 use storyos_core::classify_cancel_agent_run;
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_control::{

@@ -15,7 +15,7 @@ use crate::agent_run_work::{RunPhaseRow, complete_unavailable};
 /// Outbound Disclosure Event, which starts as OutcomeUnknown. `None` means that the prior
 /// reference or the prior input that the claim decides again is not that of the prepared request.
 pub(crate) async fn persist_uncertain_attempt(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     assistance: &ProjectAssistanceRecord,
@@ -233,7 +233,7 @@ pub(crate) struct NewModelAttempt<'a> {
 
 /// Writes `attempt` as a Model Attempt row whose dispatch state is `uncertain`.
 pub(crate) async fn insert_model_attempt(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     attempt: &NewModelAttempt<'_>,
 ) -> Result<(), tokio_postgres::Error> {
     client

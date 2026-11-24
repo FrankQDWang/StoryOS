@@ -1,10 +1,10 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProposalWithdrawn, WithdrawProposalInput,
     WithdrawProposalSettlement, WithdrawalNote,
 };
 use storyos_contracts::CommandKind;
 use storyos_core::{WithdrawProposal as CoreWithdraw, WithdrawalCause, withdraw_proposal};
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
