@@ -34,10 +34,12 @@ CHECK_LANES = \
 # The GitHub verify check runs only the make check-fast steps, and ADR 0070 keeps tooling self-tests out of it.
 CHECK_STEPS = $(CHECK_FAST_STEPS); \
 	python3 scripts/review-tests.py; \
+	python3 scripts/check-linux-package-tests.py; \
 	python3 scripts/check-lanes.py $(CHECK_LANES)
 # make check-full runs the lanes of make check and the project-scope lanes in one run of the lane runner.
 CHECK_FULL_STEPS = $(CHECK_FAST_STEPS); \
 	python3 scripts/review-tests.py; \
+	python3 scripts/check-linux-package-tests.py; \
 	python3 scripts/check-lanes.py $(CHECK_LANES) --project-scope
 
 check-fast:
@@ -55,12 +57,19 @@ check:
 check-full:
 	@scripts/check-evidence.sh $@ sh -exc '$(CHECK_FULL_STEPS)'
 
-.PHONY: release-package generate-contracts
+.PHONY: release-package release-package-linux generate-contracts
 # A fresh checkout has no Web dependencies, so the goal installs them and checks the types first.
 release-package:
 	pnpm install --frozen-lockfile
 	pnpm --dir apps/web run typecheck
 	python3 scripts/package-release.py
+
+# The same package for Linux x86_64 (ADR 0104 section 6). The Rust build and the checks run in containers.
+# It is not a step of make check or make check-full, because the build needs many minutes.
+release-package-linux:
+	pnpm install --frozen-lockfile
+	pnpm --dir apps/web run typecheck
+	python3 scripts/package-release.py --target linux-x86_64
 
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate
