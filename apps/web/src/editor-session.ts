@@ -275,10 +275,13 @@ type EditorWorkspaceOptions = {
   cryptoImpl?: Crypto;
 };
 
-/** The Editor Session request of an open, which needs only the Project. `finish` validates it against the Chapter. */
+/**
+ * The Editor Session of an open. The read of a stored Session needs only the Project. `finish` creates a Session when
+ * the tab has none, and validates the Session against the Chapter.
+ */
 export interface EditorWorkspaceOpening {
   finish(chapter: GetChapterResponse): Promise<OpenedEditorWorkspace>;
-  /** Closes the Journal when the open stops before `finish`. It does not wait for the Session request. */
+  /** Closes the Journal when the open stops before `finish`. It does not wait for the Session read. */
   abandon(): void;
 }
 
@@ -292,7 +295,7 @@ type EditorSessionStart =
   | { kind: "started"; database: IDBDatabase; active: string | null | undefined; sessionValue: unknown }
   | { kind: "failed"; database: IDBDatabase | undefined; error: unknown };
 
-/** Opens the Journal and sends the Editor Session request at once, so that it is in flight with the Chapter read. */
+/** Opens the Journal and reads the stored Editor Session at once, so that the read is in flight with the Chapter read. */
 export function startEditorWorkspace({
   baseUrl, project, profile, fetchImpl = globalThis.fetch,
   indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto,
@@ -305,10 +308,12 @@ export function startEditorWorkspace({
       const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
       const active = globalThis.sessionStorage
         ? globalThis.sessionStorage.getItem(activeSessionKey) : undefined;
+      // The read of a stored Session changes nothing on the Server, so it runs with the Chapter read. A creation waits
+      // until the Chapter read succeeded (#1884).
       const sessionValue: unknown = active
         ? await getEditorSession({ baseUrl, projectId: scope.project_id,
           editorSessionId: active, fetchImpl })
-        : await createSession({ baseUrl, project, profile, fetchImpl, cryptoImpl });
+        : undefined;
       return { kind: "started", database, active, sessionValue };
     } catch (error) {
       return { kind: "failed", database, error };
@@ -337,7 +342,14 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
   cryptoImpl: Crypto;
 }): Promise<OpenedEditorWorkspace> {
   const scope = project.project_scope;
-  const start = await started;
+  let start = await started;
+  if (start.kind === "started" && !start.active) {
+    try {
+      start = { ...start, sessionValue: await createSession({ baseUrl, project, profile, fetchImpl, cryptoImpl }) };
+    } catch (error) {
+      start = { kind: "failed", database: start.database, error };
+    }
+  }
   if (start.kind === "failed") {
     start.database?.close();
     // The Journal did not open, for example a Journal of an earlier version (ADR 0099), or the Session request failed.
