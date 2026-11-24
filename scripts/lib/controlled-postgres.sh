@@ -5,6 +5,11 @@
 storyos_postgres_image=pgvector/pgvector:0.8.7-pg17-bookworm@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
 # The C.UTF-8 locale keeps the text order of the earlier Alpine image (the record, "Text order").
 storyos_postgres_initdb_args=--locale=C.UTF-8
+# The PostgreSQL 17 image of the hosted provider (ADR 0104 section 5), with its exact tag and digest. It has the
+# schemas and the roles of the provider, and its admin login postgres is not a superuser. Its initdb arguments are
+# those of the image, which give the locale of the hosted database.
+storyos_provider_postgres_image=supabase/postgres:17.12.0.002@sha256:0b64586fb84124b9070525a6528616594a1aa84a75d84cd4c3d43acc8de3ba92
+storyos_provider_postgres_initdb_args="--allow-group-access --locale-provider=icu --encoding=UTF-8 --icu-locale=en_US.UTF-8"
 
 # Earlier stages use the 10-per-minute Command Challenge budget of the fixture Project.
 reset_command_challenge_rate_windows() {
@@ -22,15 +27,20 @@ start_postgres() {
   if [ "$#" -gt 0 ]; then
     shift
   fi
+  initdb_args=$storyos_postgres_initdb_args
+  if [ "$postgres_image" = "$storyos_provider_postgres_image" ]; then
+    initdb_args=$storyos_provider_postgres_initdb_args
+  fi
   docker run --detach --name "$name" ${STORYOS_CHECK_RUN:+--label "storyos.check-run=$STORYOS_CHECK_RUN"} \
     --env POSTGRES_PASSWORD=admin \
-    --env POSTGRES_INITDB_ARGS="$storyos_postgres_initdb_args" \
+    --env POSTGRES_INITDB_ARGS="$initdb_args" \
     --publish 127.0.0.1::5432 "$postgres_image" "$@" >/dev/null
   attempt=0
   until docker logs "$name" 2>&1 | grep -q "PostgreSQL init process complete" \
     && docker exec "$name" pg_isready -U postgres >/dev/null 2>&1; do
     attempt=$((attempt + 1))
-    if [ "$attempt" -ge 40 ]; then
+    # The init scripts of the provider image take some seconds more when the host is busy.
+    if [ "$attempt" -ge 120 ]; then
       echo "PostgreSQL did not become ready: $name" >&2
       exit 1
     fi

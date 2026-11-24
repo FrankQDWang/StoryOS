@@ -4,6 +4,7 @@ set -eu
 # The parts of make check-full after the steps of make check. scripts/check-lanes.py --project-scope runs each
 # part in a lane after the release package:
 #   scripts/verify-project-scope.sh activation      The storage activation checks.
+#   scripts/verify-project-scope.sh provider        The storage activation checks on the image of the hosted provider.
 #   scripts/verify-project-scope.sh journeys FILE...  The exact-dist journeys FILE, paths relative to apps/web.
 # The two modes of the recovery drill are scripts/verify-recovery-hold.sh.
 
@@ -481,6 +482,253 @@ run_activation_checks() {
   prove_bound_request_path_activation
 }
 
+# The privileges of the StoryOS objects: one line for each grant on the schema storyos and on each relation, column,
+# function, and type in it, with the default grants of PostgreSQL when the object has no ACL, and one line for each
+# membership in a storyos_* role or of a storyos_* role, with its options.
+storyos_privileges() {
+  docker exec -i "$1" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At <<'SQL'
+WITH object_acl AS (
+  SELECT 'schema storyos' AS object, nspowner AS owner, COALESCE(nspacl, acldefault('n'::"char", nspowner)) AS acl
+    FROM pg_namespace WHERE nspname = 'storyos'
+  UNION ALL
+  SELECT 'relation ' || oid::regclass::text, relowner,
+         COALESCE(relacl, acldefault((CASE WHEN relkind = 'S' THEN 's' ELSE 'r' END)::"char", relowner))
+    FROM pg_class WHERE relnamespace = 'storyos'::regnamespace AND relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+  UNION ALL
+  SELECT 'column ' || attribute.attrelid::regclass::text || '.' || quote_ident(attribute.attname), relation.relowner,
+         attribute.attacl
+    FROM pg_attribute AS attribute JOIN pg_class AS relation ON relation.oid = attribute.attrelid
+   WHERE relation.relnamespace = 'storyos'::regnamespace AND attribute.attacl IS NOT NULL
+  UNION ALL
+  SELECT 'function ' || oid::regprocedure::text, proowner, COALESCE(proacl, acldefault('f'::"char", proowner))
+    FROM pg_proc WHERE pronamespace = 'storyos'::regnamespace
+  UNION ALL
+  SELECT 'type ' || oid::regtype::text, typowner, COALESCE(typacl, acldefault('T'::"char", typowner))
+    FROM pg_type WHERE typnamespace = 'storyos'::regnamespace
+)
+SELECT object || ' owner=' || pg_get_userbyid(owner) || ' grantee='
+       || CASE WHEN grant_row.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(grant_row.grantee) END
+       || ' ' || grant_row.privilege_type || CASE WHEN grant_row.is_grantable THEN ' grantable' ELSE '' END
+  FROM object_acl, LATERAL aclexplode(acl) AS grant_row
+UNION
+SELECT 'membership ' || pg_get_userbyid(roleid) || ' member=' || pg_get_userbyid(member)
+       || CASE WHEN admin_option THEN ' admin' ELSE '' END || CASE WHEN inherit_option THEN ' inherit' ELSE '' END
+       || CASE WHEN set_option THEN ' set' ELSE '' END
+  FROM pg_auth_members
+ WHERE pg_get_userbyid(roleid) LIKE 'storyos\_%' OR pg_get_userbyid(member) LIKE 'storyos\_%'
+ORDER BY 1;
+SQL
+}
+
+# The effective access to the StoryOS objects. The query examines each role that is not predefined (an OID from
+# 16384), not a superuser, not a storyos_* role, and not the admin login. It also examines each role that such a
+# role can become with SET ROLE. Each line gives the role, the role that it becomes ("as"), and one privilege on the
+# schema storyos, a relation, a sequence, or a function of it. A function is callable only with USAGE on the schema,
+# and the line says if the function runs with the rights of its owner (definer). The mark read_all_data shows the
+# rights of the predefined role pg_read_all_data.
+storyos_effective_access() {
+  docker exec -i "$1" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At <<'SQL'
+WITH other_role AS (
+  SELECT oid, rolname FROM pg_roles
+   WHERE oid >= 16384 AND NOT rolsuper AND rolname NOT LIKE 'storyos\_%' AND rolname <> current_user
+), assumed AS (
+  SELECT other_role.rolname, target.oid AS target, target.rolname AS target_name,
+         pg_has_role(target.oid, 'pg_read_all_data', 'USAGE') AS read_all_data
+    FROM other_role JOIN pg_roles AS target ON pg_has_role(other_role.oid, target.oid, 'SET')
+), access AS (
+  SELECT assumed.*, 'schema ' || kind.privilege AS privilege
+    FROM assumed, (VALUES ('USAGE'), ('CREATE')) AS kind (privilege)
+   WHERE has_schema_privilege(assumed.target, 'storyos', kind.privilege)
+  UNION
+  SELECT assumed.*, 'relation ' || kind.privilege
+    FROM assumed, pg_class AS relation,
+         (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('REFERENCES'), ('TRIGGER'),
+                 ('MAINTAIN')) AS kind (privilege)
+   WHERE relation.relnamespace = 'storyos'::regnamespace AND relation.relkind IN ('r', 'p', 'v', 'm', 'f')
+     AND has_table_privilege(assumed.target, relation.oid, kind.privilege)
+  UNION
+  SELECT assumed.*, 'sequence ' || kind.privilege
+    FROM assumed, pg_class AS sequence, (VALUES ('USAGE'), ('SELECT'), ('UPDATE')) AS kind (privilege)
+   WHERE sequence.relnamespace = 'storyos'::regnamespace AND sequence.relkind = 'S'
+     AND has_sequence_privilege(assumed.target, sequence.oid, kind.privilege)
+  UNION
+  SELECT assumed.*, 'function EXECUTE ' || CASE WHEN function.prosecdef THEN 'definer' ELSE 'invoker' END
+    FROM assumed, pg_proc AS function
+   WHERE function.pronamespace = 'storyos'::regnamespace
+     AND has_schema_privilege(assumed.target, 'storyos', 'USAGE')
+     AND has_function_privilege(assumed.target, function.oid, 'EXECUTE')
+)
+SELECT rolname || CASE WHEN target_name <> rolname THEN ' as ' || target_name ELSE '' END || ' ' || privilege
+       || CASE WHEN read_all_data THEN ' read_all_data' ELSE '' END
+  FROM access ORDER BY 1;
+SQL
+}
+
+# Prints each line of the effective access $1 that is more than the read of pg_read_all_data (#1851, "Coordinator
+# decisions"): USAGE on the schema, SELECT on a relation or a sequence, and a call of a function that runs with the
+# rights of the caller. An empty access has no line.
+access_beyond_read() {
+  printf '%s\n' "$1" | grep -Ev \
+    '^$|^[a-z_]+( as [a-z_]+)? (schema USAGE|relation SELECT|sequence SELECT|function EXECUTE invoker) read_all_data$' \
+    || true
+}
+
+provider_psql() {
+  docker exec -i "$provider_container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At "$@"
+}
+
+# The superuser of the provider image makes the relations of the provider and of an application role.
+provider_superuser_psql() {
+  docker exec -i "$provider_container" psql -X -v ON_ERROR_STOP=1 -U supabase_admin -d postgres -At "$@"
+}
+
+# Runs storyos-storage with the admin login of the provider container. It sets storage_output and storage_status.
+run_provider_storage() {
+  if storage_output=$(STORYOS_STORAGE_ADMIN_URL=$(postgres_admin_url "$provider_container") "$storage_bin" 2>&1); then
+    storage_status=0
+  else
+    storage_status=$?
+  fi
+}
+
+# The Release 1 Storage Activation on a database of the hosted provider (ADR 0104 section 5). The admin login
+# postgres of the provider image is not a superuser.
+run_provider_activation_checks() {
+  start_postgres "$provider_container" "$storyos_provider_postgres_image"
+  if [ "$(provider_psql -c "SELECT rolsuper::text FROM pg_roles WHERE rolname = current_user")" != false ]; then
+    echo "The admin login of the provider image is a superuser" >&2
+    exit 1
+  fi
+  # The image differs from a new hosted project: there, storage and realtime have relations of the provider, the
+  # admin login owns the views of pg_stat_statements, and each statement of the admin login ends after 120 s.
+  provider_superuser_psql -c "CREATE TABLE storage.provider_objects (id integer);
+    ALTER TABLE storage.provider_objects OWNER TO supabase_storage_admin;
+    CREATE ROLE supabase_realtime_admin NOLOGIN;
+    CREATE TABLE realtime.provider_messages (id bigserial, at date NOT NULL) PARTITION BY RANGE (at);
+    CREATE TABLE realtime.provider_messages_now PARTITION OF realtime.provider_messages DEFAULT;
+    ALTER TABLE realtime.provider_messages OWNER TO supabase_realtime_admin;
+    ALTER TABLE realtime.provider_messages_now OWNER TO supabase_realtime_admin;
+    ALTER VIEW extensions.pg_stat_statements OWNER TO postgres;
+    ALTER VIEW extensions.pg_stat_statements_info OWNER TO postgres;
+    ALTER ROLE postgres SET statement_timeout = '120s'" >/dev/null
+  echo "Refusing a relation of the admin login or of an application role, also in a provider schema"
+  provider_superuser_psql -c "CREATE ROLE application_owner NOLOGIN" >/dev/null
+  for relation_owner in public.t:postgres extensions.t:postgres storage.t:application_owner; do
+    relation=${relation_owner%%:*}
+    provider_superuser_psql -c "CREATE TABLE $relation (id integer);
+      ALTER TABLE $relation OWNER TO ${relation_owner#*:}" >/dev/null
+    run_provider_storage
+    if [ "$storage_status" -eq 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Refused
+STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
+      echo "storyos-storage did not refuse the relation $relation_owner: $storage_status $storage_output" >&2
+      exit 1
+    fi
+    installed=$(provider_psql -c "SELECT COALESCE(to_regnamespace('storyos')::text, 'absent') || '/' ||
+      (SELECT count(*) FROM pg_roles WHERE rolname LIKE 'storyos\_%')::text")
+    if [ "$installed" != "absent/0" ]; then
+      echo "A refused activation installed StoryOS state: $installed" >&2
+      exit 1
+    fi
+    provider_superuser_psql -c "DROP TABLE $relation" >/dev/null
+  done
+  provider_superuser_psql -c "DROP ROLE application_owner" >/dev/null
+  echo "Activating the provider database with its admin login"
+  for run in first second; do
+    run_provider_storage
+    if [ "$storage_status" -ne 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Active" ]; then
+      echo "The $run activation of the provider database failed: $storage_status $storage_output" >&2
+      exit 1
+    fi
+  done
+  # The admin login made the vector extension and the vector table, and it can change the login of the runtime
+  # role, as the SECURITY DEFINER function of the baseline does in a recovery.
+  vector_state=$(provider_psql -c "SELECT COALESCE(to_regclass('storyos.passage_vectors')::text, 'absent') || '/' ||
+    (SELECT extnamespace::regnamespace::text FROM pg_extension WHERE extname = 'vector')")
+  if [ "$vector_state" != "storyos.passage_vectors/extensions" ]; then
+    echo "The provider activation has no vector table in the schema extensions: $vector_state" >&2
+    exit 1
+  fi
+  provider_psql -c "BEGIN; ALTER ROLE storyos_runtime NOLOGIN; ALTER ROLE storyos_runtime LOGIN; ROLLBACK" >/dev/null
+  echo "Comparing the privileges of the StoryOS objects with a local activation"
+  start_postgres "$activation_container"
+  STORYOS_STORAGE_ADMIN_URL=$(postgres_admin_url "$activation_container") "$storage_bin" >/dev/null
+  # PostgreSQL gives a creator of a role that is not a superuser the admin option on that role, and no rights of it.
+  creator_admin='^membership storyos_(owner|runtime|backup|restore) member=postgres admin$'
+  provider_privileges=$(storyos_privileges "$provider_container")
+  if [ "$(printf '%s\n' "$provider_privileges" | grep -Ec "$creator_admin")" != 4 ]; then
+    echo "The admin login of the provider database is not the creator of the four StoryOS roles" >&2
+    exit 1
+  fi
+  provider_privileges=$(printf '%s\n' "$provider_privileges" | grep -Ev "$creator_admin")
+  if ! printf '%s\n' "$provider_privileges" | grep -x 'membership storyos_owner member=postgres inherit set' >/dev/null; then
+    echo "The privileges of the provider database have no membership of the admin login in storyos_owner" >&2
+    exit 1
+  fi
+  if [ "$provider_privileges" != "$(storyos_privileges "$activation_container")" ]; then
+    echo "The privileges of the StoryOS objects on the provider database are not those of a local database" >&2
+    exit 1
+  fi
+  # Each grantee is the owner of the object or a storyos_* role. PUBLIC has only the defaults of PostgreSQL for a
+  # function and a type, and no right on the schema storyos, so it cannot use them.
+  if printf '%s\n' "$provider_privileges" | grep -Ev \
+    '^(schema|relation|column|function|type) .* owner=([a-z_]+) grantee=(\2|storyos_[a-z]+) |^function .* grantee=PUBLIC EXECUTE$|^type .* grantee=PUBLIC USAGE$|^membership storyos_owner member=postgres inherit set$'; then
+    echo "A role that is not a StoryOS role or the owner has a privilege on a StoryOS object" >&2
+    exit 1
+  fi
+  # The provider gives pg_read_all_data to some of its roles, which then read each table with no grant of the
+  # schema (an exception of #1851). First the check proves that it finds more access: a write through SET ROLE,
+  # and the call of a function. An empty access gives no line.
+  if [ -n "$(access_beyond_read "")" ]; then
+    echo "The access check finds a violation in an empty access" >&2
+    exit 1
+  fi
+  provider_superuser_psql -c "CREATE ROLE access_probe LOGIN;
+    GRANT pg_write_all_data TO access_probe WITH INHERIT FALSE, SET TRUE;
+    GRANT pg_read_all_data TO access_probe" >/dev/null
+  probe_access=$(storyos_effective_access "$provider_container" | grep '^access_probe ' || true)
+  provider_superuser_psql -c "DROP ROLE access_probe" >/dev/null
+  case "$(access_beyond_read "$probe_access")" in
+    *"access_probe as pg_write_all_data relation INSERT"*) ;;
+    *)
+      echo "The access check does not find a write through SET ROLE: $probe_access" >&2
+      exit 1
+      ;;
+  esac
+  if ! printf '%s\n' "$probe_access" | grep -x 'access_probe function EXECUTE invoker read_all_data' >/dev/null; then
+    echo "The access check does not find the call of a function: $probe_access" >&2
+    exit 1
+  fi
+  effective_access=$(storyos_effective_access "$provider_container")
+  printf 'Roles of the provider with access to StoryOS objects:\n%s\n' "$effective_access"
+  beyond_read=$(access_beyond_read "$effective_access")
+  if [ -n "$beyond_read" ]; then
+    printf '%s\n' "$beyond_read" >&2
+    echo "A role of the provider has access to a StoryOS object that is not the read of pg_read_all_data" >&2
+    exit 1
+  fi
+  provider_psql -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
+  provider_psql < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+  provider_runtime=$(postgres_runtime_url "$provider_container")
+  echo "Binding the packaged Server and the Worker on the provider database"
+  assert_packaged_server_binds "provider" "$provider_runtime"
+  STORYOS_DATABASE_URL="$provider_runtime" \
+  STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
+    "$worker_bin" --claim-only
+  (
+    container=$provider_container
+    STORYOS_TEST_DATABASE_URL=$provider_runtime
+    prove_bound_request_path_activation
+  )
+  echo "Running the Project Isolation tests and the vector store test on the provider database"
+  STORYOS_TEST_DATABASE_URL="$provider_runtime" \
+  STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$provider_container") \
+    cargo test --locked --workspace --all-features --test project_scope -- --ignored --nocapture
+  postgres_test_binary=$(find_postgres_test_binary)
+  STORYOS_TEST_DATABASE_URL="$provider_runtime" \
+  STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$provider_container") \
+    run_postgres_tests passage_vectors::tests::the_vector_store_is_available_exactly_when_the_database_offers_the_extension
+}
+
 # Runs the exact-dist journeys $1... with the order of the arguments, each file one time. The Stage 2
 # AI-independent journeys run first, with a Server without a model destination. Vitest writes its report of each
 # run to $STORYOS_JOURNEY_REPORT-<run>.json, which scripts/check-lanes.py reads.
@@ -526,11 +774,12 @@ container="storyos-issue105-$$"
 oracle_container="storyos-storage-oracle-$$"
 activation_container="storyos-storage-activation-$$"
 legacy_activation_container="storyos-storage-activation-legacy-$$"
+provider_container="storyos-storage-provider-$$"
 export CARGO_NET_OFFLINE=true
 cleanup() {
   stop_exact_dist_server
   docker rm -fv "$container" "$oracle_container" "$activation_container" \
-    "$legacy_activation_container" >/dev/null 2>&1 || true
+    "$legacy_activation_container" "$provider_container" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -541,6 +790,9 @@ case "${1:-}" in
   activation)
     run_activation_checks
     ;;
+  provider)
+    run_provider_activation_checks
+    ;;
   journeys)
     shift
     if [ "$#" -eq 0 ]; then
@@ -550,7 +802,7 @@ case "${1:-}" in
     run_journeys "$@"
     ;;
   *)
-    echo "usage: scripts/verify-project-scope.sh activation | journeys FILE..." >&2
+    echo "usage: scripts/verify-project-scope.sh activation | provider | journeys FILE..." >&2
     exit 2
     ;;
 esac
