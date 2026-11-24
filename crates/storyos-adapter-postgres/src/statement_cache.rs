@@ -16,8 +16,10 @@ use tokio_postgres::types::ToSql;
 use tokio_postgres::{Error, IsolationLevel, Row, Statement};
 
 /// The limit of the kept statements of one connection. A text that the code builds from data, for
-/// example a list of a changing length, can only push the statement of the oldest use out.
-pub(crate) const STATEMENT_CAPACITY: usize = 256;
+/// example a list of a changing length, can only push the statement of the oldest use out. One
+/// kept statement holds about 43 KB in the session of the database (PostgreSQL 17), so a full
+/// cache holds about 5.5 MB.
+pub(crate) const STATEMENT_CAPACITY: usize = 128;
 
 /// The prepared statements of one connection, by text. The code gives no parameter types, so the
 /// database infers them from the text: one text has one set of parameter types.
