@@ -395,8 +395,9 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
 }
 
 const openDatabases = new Set<IDBDatabase>();
-// Each Journal connection that the page closed.
+// Each Journal connection that the page closed, and the number of Journal transactions that completed.
 const closedDatabases = new Set<IDBDatabase>();
+const journalTransactions = { completed: 0 };
 const unmounts: (() => void)[] = [];
 // The view opens the Journal again at each reopen, so the test closes each connection before it deletes the Journal.
 const openJournal = indexedDB.open.bind(indexedDB);
@@ -409,6 +410,12 @@ beforeEach(() => {
       trackDatabase(database, openDatabases);
       const close = database.close.bind(database);
       database.close = () => { closedDatabases.add(database); close(); };
+      const transaction = database.transaction.bind(database);
+      database.transaction = ((...args: Parameters<IDBDatabase["transaction"]>) => {
+        const started = transaction(...args);
+        started.addEventListener("complete", () => { journalTransactions.completed += 1; });
+        return started;
+      }) as IDBDatabase["transaction"];
     });
     return request;
   } });
@@ -420,6 +427,7 @@ afterEach(async () => {
   history.replaceState(null, "", location.pathname);
   closeTrackedDatabases(openDatabases);
   closedDatabases.clear();
+  journalTransactions.completed = 0;
   document.body.replaceChildren();
   sessionStorage.clear();
   await deleteJournal(createBrowserScenario().journalName);
@@ -514,23 +522,22 @@ it("opens a Project in a new tab and creates the Editor Session only after the C
   await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ, PROTOCOL].sort());
   server.hold([chapterRead(CHAPTER)]);
   server.release();
-  // While the Chapter read waits, the Journal opens. A creation that ran now would compute its command digest after
-  // the Journal open and before the next task, and send the Challenge when the digest ends.
-  await expect.poll(() => ({ inFlight: server.inFlight(), journal: openDatabases.size }))
-    .toEqual({ inFlight: [chapterRead(CHAPTER)], journal: 1 });
-  await new Promise((resolve) => { setTimeout(resolve); });
-  await expect.poll(() => digests.ended).toBe(digests.started);
-  await new Promise((resolve) => { setTimeout(resolve); });
-  // A creation changes the Server, so it waits until the Chapter read succeeded (#1884).
-  expect({ digests: digests.started, requests: server.count(CHALLENGE) + server.count(SESSION_CREATE) })
-    .toEqual({ digests: 0, requests: 0 });
+  // While the Chapter read waits, the Journal opens and reads its schema. A creation that ran now would compute its
+  // command digest in the same task as that read, and send the Challenge when the digest ends.
+  await expect.poll(() => ({ inFlight: server.inFlight(), schemaRead: journalTransactions.completed > 0 }))
+    .toEqual({ inFlight: [chapterRead(CHAPTER)], schemaRead: true });
+  await expect.poll(() => digests.ended === digests.started
+    && server.count(CHALLENGE) >= Math.min(digests.started, 1)).toBe(true);
   server.release();
   const opened = await opening;
-  const chapterEnd = server.log.events.indexOf(`end ${chapterRead(CHAPTER)}`);
+  // A creation changes the Server, so its Challenge and its request start after the Chapter response (#1884).
+  const position = (event: string) => server.log.events.indexOf(event);
+  const chapterEnd = position(`end ${chapterRead(CHAPTER)}`);
   expect({ kind: opened.kind, editor: opened.kind === "project-ready" ? opened.editor.kind : undefined,
-    order: chapterEnd >= 0 && chapterEnd < server.log.events.indexOf(`start ${SESSION_CREATE}`),
-    unexpected: server.log.unexpected })
-    .toEqual({ kind: "project-ready", editor: "editor-ready", order: true, unexpected: [] });
+    challengeAfterChapter: chapterEnd >= 0 && chapterEnd < position(`start ${CHALLENGE}`),
+    creationAfterChapter: chapterEnd >= 0 && chapterEnd < position(`start ${SESSION_CREATE}`),
+    unexpected: server.log.unexpected }).toEqual({ kind: "project-ready", editor: "editor-ready",
+    challengeAfterChapter: true, creationAfterChapter: true, unexpected: [] });
 });
 
 it("creates no Editor Session when the Chapter read of a new tab fails, and the next open is the writer", async () => {
