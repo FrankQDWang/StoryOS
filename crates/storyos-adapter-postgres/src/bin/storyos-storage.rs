@@ -1,16 +1,14 @@
 use std::env;
 use std::process::ExitCode;
 
-use storyos_adapter_postgres::{
-    StorageActivation, StorageActivationError, activate_release1_storage,
-};
+use storyos_adapter_postgres::{StorageActivationError, activate_release1_storage};
 
 #[tokio::main]
 async fn main() -> ExitCode {
     match env::var("STORYOS_STORAGE_ADMIN_URL") {
         Ok(admin_url) => match activate_release1_storage(&admin_url).await {
-            Ok(StorageActivation::Active | StorageActivation::AlreadyActive) => {
-                println!("STORYOS_STORAGE_ACTIVATION=Active");
+            Ok(activation) => {
+                println!("{activation}");
                 ExitCode::SUCCESS
             }
             Err(error) => {
