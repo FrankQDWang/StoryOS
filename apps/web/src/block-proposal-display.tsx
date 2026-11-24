@@ -68,7 +68,7 @@ export function BlockProposalDisplay({
   locators: readonly ProposalLocator[];
   refreshKey: number;
   safeToProject: boolean;
-  /** Opens the Project again after a decision. `settled` is the Project of the decision response, when one settled. */
+  /** Opens the Project again after a decision. `settled` is the Command-response Project of a settled decision. */
   onAccepted: (settled?: SettledProject) => Promise<void>;
   persistWorkspace: EditorReadyState | undefined;
   onFailure: (error: unknown) => void;

@@ -126,9 +126,11 @@ function ProjectReadyView({
   const [readOnly, setReadOnly] = useState(state.editor.kind !== "editor-ready");
   const [title, setTitle] = useState(state.project.project.title);
   const [revision, setRevision] = useState(state.revision);
-  // A reopen after a rename keeps the revision of the rename.
-  const revisionRef = useRef(state.revision);
+  // A reopen after a rename keeps the title and the revision of the rename.
+  const renamedRef = useRef({ title: state.project.project.title, revision: state.revision });
   const [tree, setTree] = useState<GetManuscriptTreeResponse | undefined>(state.tree);
+  // The statistics wait for the first tree read, also when it fails.
+  const [treeRead, setTreeRead] = useState<"reading" | "settled">(state.tree === undefined ? "reading" : "settled");
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
   // The Chapter whose switch waits for the Retry-After of a Command Challenge rate limit (#1679).
@@ -177,11 +179,11 @@ function ProjectReadyView({
       baseUrl,
       projectId: state.project.project.project_id,
       fetchImpl,
-    }).then(setTree).catch(() => {});
+    }).then(setTree).catch(() => {}).finally(() => { setTreeRead("settled"); });
   }, [baseUrl, fetchImpl, state.project.project.project_id, state.tree]);
   // A reopen after a settled command of this page reads only the Project, the Chapter, and the Editor Session.
   const reopen = (settled?: SettledProject) => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
-    opened: { ...state, revision: revisionRef.current }, settled });
+    opened: { profile: state.profile, project: state.project, ...renamedRef.current }, settled });
   // A Chapter that the author creates, moves, renames, or removes changes the Chapter part of the draft labels.
   useEffect(() => {
     if (tree !== undefined) relabelDraftReferences(state.project.project_scope, tree);
@@ -447,7 +449,7 @@ function ProjectReadyView({
                 onRenamed={(nextTitle, nextRevision) => {
                   setTitle(nextTitle);
                   setRevision(nextRevision);
-                  revisionRef.current = nextRevision;
+                  renamedRef.current = { title: nextTitle, revision: nextRevision };
                 }}
               />
           <ManuscriptSearchPanel
@@ -507,7 +509,12 @@ function ProjectReadyView({
                 && pending.body === selectedChapter.chapter.current_revision.body
                 && JSON.stringify(pending.blocks)
                   === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
-            onAccepted={async (settled) => { onReopened(await reopen(settled)); }}
+            onAccepted={async (settled) => {
+              // A decision with no settled response opens the Project with each check of the first open.
+              onReopened(await (settled === undefined
+                ? openControlledProject({ baseUrl, projectId: state.project.project.project_id, fetchImpl, cryptoImpl })
+                : reopen(settled)));
+            }}
             onUndoCurrentChapter={(chapterId) => {
               // An Undo of a chapter switch moves the editor back to the earlier Current Chapter.
               if (chapterId === currentChapterId) return;
@@ -544,6 +551,7 @@ function ProjectReadyView({
             currentChapterId={currentChapterId}
             saveState={saveState}
             treeRevision={tree?.tree_revision}
+            treeRead={treeRead}
           />
           <small
             data-save-state={saveState}

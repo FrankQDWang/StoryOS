@@ -248,7 +248,7 @@ test("a reopen fails closed when the Project of the command or of the read has a
   const project = fixture<GetProjectResponse>("get-project.json");
   const foreign = { ...project, project_scope: { ...project.project_scope,
     owner_user_id: "018f0000-0000-7001-8000-000000000101" } };
-  const opened = { profile, project, revision: "1" };
+  const opened = { profile, project, title: project.project.title, revision: "1" };
   const blocked = {
     kind: "project-blocked",
     code: "project_unavailable",
@@ -256,15 +256,76 @@ test("a reopen fails closed when the Project of the command or of the read has a
     message: "无法读取这个受控项目或其当前章节。",
   };
   const requests: string[] = [];
-  const fetchImpl: typeof fetch = async (url) => {
-    requests.push(new URL(requestUrl(url)).pathname);
-    return new Response(JSON.stringify(foreign), { status: 200, headers: { "content-type": "application/json" } });
+  const unexpected: string[] = [];
+  const fetchImpl: typeof fetch = async (url, init) => {
+    const name = `${init?.method ?? "GET"} ${new URL(requestUrl(url)).pathname}`;
+    requests.push(name);
+    if (name === `GET /api/v1/projects/${project.project.project_id}`) {
+      return new Response(JSON.stringify(foreign), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    unexpected.push(name);
+    throw new Error(`unexpected request: ${name}`);
   };
 
   const settled = await reopenControlledProject({ baseUrl: "http://storyos.test", opened, settled: foreign, fetchImpl });
   const read = await reopenControlledProject({ baseUrl: "http://storyos.test", opened, fetchImpl });
 
-  assert.deepEqual({ settled, read, requests }, {
-    settled: blocked, read: blocked, requests: [`/api/v1/projects/${project.project.project_id}`],
+  assert.deepEqual({ settled, read, requests, unexpected }, {
+    settled: blocked, read: blocked, requests: [`GET /api/v1/projects/${project.project.project_id}`], unexpected: [],
   });
+});
+
+test("a reopen reads the revision from the list when another tab renamed the Project", async () => {
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const project = fixture<GetProjectResponse>("get-project.json");
+  const listed = fixture<ListProjectsResponse>("list-projects.json");
+  const chapter = fixture<GetChapterResponse>("get-chapter.json");
+  const projectId = project.project.project_id;
+  const chapterId = project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "";
+  listed.projects = listed.projects.map((entry) => entry.project_scope.project_id === projectId
+    ? { ...entry, title: "Renamed", revision: "7" } : entry);
+  const routes = new Map<string, unknown>([
+    ["GET /api/v1/projects", listed],
+    [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`, chapter],
+  ]);
+  const requests: string[] = [];
+  const unexpected: string[] = [];
+  const fetchImpl: typeof fetch = async (url, init) => {
+    const name = `${init?.method ?? "GET"} ${new URL(requestUrl(url)).pathname}`;
+    requests.push(name);
+    if (!routes.has(name)) {
+      unexpected.push(name);
+      throw new Error(`unexpected request: ${name}`);
+    }
+    return new Response(JSON.stringify(routes.get(name)), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const settled = { project_scope: project.project_scope, project: { ...project.project, title: "Renamed" } };
+  const opened = { profile, project, title: project.project.title, revision: "1" };
+
+  const renamed = await reopenControlledProject({ baseUrl: "http://storyos.test", opened, settled, fetchImpl });
+  const same = await reopenControlledProject({ baseUrl: "http://storyos.test",
+    opened: { ...opened, title: "Renamed" }, settled, fetchImpl });
+
+  assert.deepEqual({
+    revisions: [renamed, same].map((state) => state.kind === "project-ready" ? state.revision : state.kind),
+    requests: requests.sort(), unexpected,
+  }, {
+    revisions: ["7", "1"],
+    requests: ["GET /api/v1/projects", `GET /api/v1/projects/${projectId}/chapters/${chapterId}`,
+      `GET /api/v1/projects/${projectId}/chapters/${chapterId}`].sort(),
+    unexpected: [],
+  });
+});
+
+test("an incompatible protocol profile blocks the open while the Project reads do not end", async () => {
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const fetchImpl: typeof fetch = async (url) => new URL(requestUrl(url)).pathname === "/api/v1/protocol"
+    ? new Response(JSON.stringify({ ...profile, release_identity: { ...profile.release_identity, public_protocol_release: "0" } }),
+      { status: 200 })
+    : new Promise<Response>(() => {});
+
+  const state = await openControlledProject({ baseUrl: "http://storyos.test",
+    projectId: "018f0000-0000-7001-8000-000000000102", fetchImpl });
+
+  assert.equal(state.kind, "protocol-blocked");
 });

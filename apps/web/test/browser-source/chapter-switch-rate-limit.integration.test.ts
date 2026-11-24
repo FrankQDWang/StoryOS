@@ -103,15 +103,26 @@ function fakeServer() {
       return jsonResponse({ ...setCurrentChapterFixture,
         project: { ...setCurrentChapterFixture.project, open: open() } });
     }
-    return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
+    // The test is not about these panels, and a refused switch gets the same problem.
+    const notFound = [`/api/v1/projects/${PROJECT}/manuscript/statistics`, `/api/v1/projects/${PROJECT}/assistance`,
+      `/api/v1/projects/${PROJECT}/skills`, ...[CHAPTER, CHAPTER_B, CHAPTER_C]
+        .map((id) => `/api/v1/projects/${PROJECT}/chapters/${id}/open-proposals`)].map((route) => `GET ${route}`);
+    if (notFound.includes(`${method} ${path}`) || `${method} ${path}` === CURRENT_CHAPTER) {
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
+    }
+    unexpected.push(`${method} ${path}`);
+    throw new Error(`unexpected request: ${method} ${path}`);
   };
   return { scenario, server, fetchImpl };
 }
 
 const openDatabases = new Set<IDBDatabase>();
 const unmounts: (() => void)[] = [];
+// Each request that the fake does not serve. Each test asserts that it has none.
+const unexpected: string[] = [];
 
 afterEach(async () => {
+  expect(unexpected.splice(0)).toEqual([]);
   for (const unmount of unmounts.splice(0)) unmount();
   closeTrackedDatabases(openDatabases);
   document.body.replaceChildren();

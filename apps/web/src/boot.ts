@@ -123,32 +123,39 @@ type ProjectOpenOptions = {
   cryptoImpl?: Crypto;
 };
 
-/** The Project of a command response: the Server settled a command of this session for this Project. */
+/** The Command-response Project of a settled command of this session for this Project. */
 export type SettledProject = Pick<GetProjectResponse, "project_scope" | "project">;
+
+type ReadResult<Value> = { kind: "read"; value: Value } | { kind: "failed"; error: unknown };
+const settle = <Value,>(promise: Promise<Value>): Promise<ReadResult<Value>> => promise.then(
+  (value) => ({ kind: "read" as const, value }),
+  (error: unknown) => ({ kind: "failed" as const, error }),
+);
 
 export async function openControlledProject(options: ProjectOpenOptions): Promise<ControlledProjectState> {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
-  const [boot, listed] = await Promise.all([
-    bootProtectedWebClient(queryOptions),
-    readSessionProject(queryOptions, projectId).then(
-      (value) => ({ kind: "read" as const, value }),
-      (error: unknown) => ({ kind: "failed" as const, error }),
-    ),
-  ]);
+  // The protocol profile, the Project, and the list of Projects are independent reads.
+  const booted = bootProtectedWebClient(queryOptions);
+  const listed = settle(readSessionProject(queryOptions, projectId, "together"));
+  const boot = await booted;
   if (boot.kind !== "protected-ready") return boot;
-  if (listed.kind === "failed") return projectUnavailable(listed.error);
-  if (listed.value === undefined) return projectUnavailable();
-  return openProjectWorkspace(options, boot.profile, listed.value.project, listed.value.revision);
+  const read = await listed;
+  if (read.kind === "failed") return projectUnavailable(read.error);
+  if (read.value === undefined) return projectUnavailable();
+  const opened = await openProjectWorkspace(options, boot.profile, read.value.project, read.value.revision,
+    "no session check");
+  return opened.kind === "stale-command-response" ? projectUnavailable() : opened;
 }
 
 /**
  * Opens the Project again after a settled command of this page. The page holds the protocol profile and the
- * revision of the list, so only the Project (when the command response does not carry it), the Chapter, and the
- * Editor Session are read.
+ * revision of the list, so a reopen reads only the Project (when the command response does not carry it), the
+ * Chapter, and the Editor Session. A Command-response Project of an exact retry can be earlier than the current
+ * Project: when the Editor Session has another Chapter, the reopen reads the Project.
  */
 export async function reopenControlledProject(options: Omit<ProjectOpenOptions, "projectId"> & {
-  opened: Pick<ProjectReadyState, "profile" | "project" | "revision">;
+  opened: Pick<ProjectReadyState, "profile" | "project"> & { title: string; revision: string };
   settled?: SettledProject | undefined;
 }): Promise<ControlledProjectState> {
   const { baseUrl, opened, settled, fetchImpl = globalThis.fetch, signal } = options;
@@ -159,14 +166,22 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
     const projectValue: unknown = settled ?? await getProject({ ...queryOptions, projectId });
     const projectView = projectValue as {
       project_scope?: { owner_user_id?: unknown; project_id?: unknown };
-      project?: { project_id?: unknown };
+      project?: { project_id?: unknown; title?: unknown };
     };
     if (projectView?.project_scope?.owner_user_id !== scope.owner_user_id
       || projectView?.project_scope?.project_id !== projectId
       || projectView?.project?.project_id !== projectId) throw new Error("Project Scope mismatch");
     const project: GetProjectResponse = settled === undefined ? projectValue as GetProjectResponse
       : { ...opened.project, project_scope: settled.project_scope, project: settled.project };
-    return await openProjectWorkspace({ ...options, projectId }, opened.profile, project, opened.revision);
+    // Only a rename changes the revision. A rename in another tab changes the title, so the list gives the revision.
+    const revision = project.project.title === opened.title ? Promise.resolve(opened.revision)
+      : listProjects(queryOptions).then((listed) => listed.projects.find((entry) =>
+        entry.project_scope.project_id === projectId)?.revision ?? opened.revision, () => opened.revision);
+    const reopened = await openProjectWorkspace({ ...options, projectId }, opened.profile, project, revision,
+      settled === undefined ? "no session check" : "same chapter as the session");
+    return reopened.kind === "stale-command-response"
+      ? await reopenControlledProject({ ...options, settled: undefined })
+      : reopened;
   } catch (error) {
     return projectUnavailable(error);
   }
@@ -177,8 +192,9 @@ async function openProjectWorkspace(
   options: ProjectOpenOptions,
   profile: Release1ProtocolProfile,
   project: GetProjectResponse,
-  revision: string,
-): Promise<ControlledProjectState> {
+  revisionRead: string | Promise<string>,
+  sessionChapterCheck: "no session check" | "same chapter as the session",
+): Promise<ControlledProjectState | { kind: "stale-command-response" }> {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal,
     indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
@@ -203,7 +219,7 @@ async function openProjectWorkspace(
         || treeView.tree_revision.length === 0
         || !Array.isArray(treeView?.volumes)) throw new Error("Manuscript tree Scope mismatch");
       const tree = treeValue as GetManuscriptTreeResponse;
-      return { kind: "empty-project-ready", profile, project, revision, tree };
+      return { kind: "empty-project-ready", profile, project, revision: await revisionRead, tree };
     }
     const chapterId = project.project.open.current_chapter_id;
     const opening = startEditorWorkspace({ baseUrl, project, profile, fetchImpl, indexedDBImpl, cryptoImpl });
@@ -211,11 +227,17 @@ async function openProjectWorkspace(
     try {
       chapter = await readCurrentChapter(queryOptions, projectId, chapterId, ownerUserId);
     } catch (error) {
-      await opening.abandon();
+      opening.abandon();
       throw error;
     }
+    const sessionChapterId = sessionChapterCheck === "same chapter as the session"
+      ? await opening.sessionChapterId() : undefined;
+    if (sessionChapterId !== undefined && sessionChapterId !== chapterId) {
+      opening.abandon();
+      return { kind: "stale-command-response" };
+    }
     const { editor, tree } = await opening.finish(chapter);
-    return { kind: "project-ready", profile, project, revision, chapter, editor, tree };
+    return { kind: "project-ready", profile, project, revision: await revisionRead, chapter, editor, tree };
   } catch (error) {
     return projectUnavailable(error);
   }
@@ -249,42 +271,40 @@ export async function openProjectSettings(options: {
 }): Promise<ControlledProjectState> {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
-  const [boot, listed] = await Promise.all([
-    bootProtectedWebClient(queryOptions),
-    readSessionProject(queryOptions, projectId).then(
-      (value) => ({ kind: "read" as const, value }),
-      (error: unknown) => ({ kind: "failed" as const, error }),
-    ),
-  ]);
+  const boot = await bootProtectedWebClient(queryOptions);
   if (boot.kind !== "protected-ready") return boot;
-  if (listed.kind === "failed") return projectUnavailable(listed.error);
-  return listed.value === undefined
-    ? projectUnavailable()
-    : { kind: "project-settings-ready", profile: boot.profile, project: listed.value.project };
+  try {
+    const listed = await readSessionProject(queryOptions, projectId, "in series");
+    return listed === undefined
+      ? projectUnavailable()
+      : { kind: "project-settings-ready", profile: boot.profile, project: listed.project };
+  } catch (error) {
+    return projectUnavailable(error);
+  }
 }
 
-/**
- * The Project and its revision in the list when its read has the Scope of the path and the Project list of the
- * session has it. The two reads are in flight at the same time.
- */
+/** The Project and its revision in the list when its read has the Scope of the path and the Project list of the session has it. */
 async function readSessionProject(
   queryOptions: StoryOSQueryOptions,
   projectId: string,
+  order: "together" | "in series",
 ): Promise<{ project: GetProjectResponse; revision: string } | undefined> {
-  const [projectValue, listed] = await Promise.all([
-    getProject({ ...queryOptions, projectId }) as Promise<unknown>,
-    listProjects(queryOptions),
-  ]);
-  const projectView = projectValue as {
-    project_scope?: { owner_user_id?: unknown; project_id?: unknown };
-    project?: { project_id?: unknown; open?: { kind?: unknown; current_chapter_id?: unknown } };
-  };
-  const scope = projectView?.project_scope;
-  if (!validUuid(scope?.owner_user_id)
-    || scope?.project_id !== projectId
-    || projectView?.project?.project_id !== projectId) throw new Error("Project Scope mismatch");
+  const projectRead = (getProject({ ...queryOptions, projectId }) as Promise<unknown>).then((projectValue) => {
+    const projectView = projectValue as {
+      project_scope?: { owner_user_id?: unknown; project_id?: unknown };
+      project?: { project_id?: unknown; open?: { kind?: unknown; current_chapter_id?: unknown } };
+    };
+    const scope = projectView?.project_scope;
+    if (!validUuid(scope?.owner_user_id)
+      || scope?.project_id !== projectId
+      || projectView?.project?.project_id !== projectId) throw new Error("Project Scope mismatch");
+    return projectValue as GetProjectResponse;
+  });
+  const [project, listed] = order === "together"
+    ? await Promise.all([projectRead, listProjects(queryOptions)])
+    : [await projectRead, await listProjects(queryOptions)];
   const item = listed.projects.find((entry) => entry.project_scope.project_id === projectId);
-  return item === undefined ? undefined : { project: projectValue as GetProjectResponse, revision: item.revision };
+  return item === undefined ? undefined : { project, revision: item.revision };
 }
 
 function projectUnavailable(error?: unknown): ProjectBlockedState {

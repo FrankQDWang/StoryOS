@@ -278,8 +278,10 @@ type EditorWorkspaceOptions = {
 /** The Editor Session request of an open, which needs only the Project. `finish` validates it against the Chapter. */
 export interface EditorWorkspaceOpening {
   finish(chapter: GetChapterResponse): Promise<OpenedEditorWorkspace>;
-  /** Closes the Journal when the open stops before `finish`. */
-  abandon(): Promise<void>;
+  /** The Chapter of the base snapshot of the Editor Session response, before its validation. */
+  sessionChapterId(): Promise<unknown>;
+  /** Closes the Journal when the open stops before `finish`. It does not wait for the Session request. */
+  abandon(): void;
 }
 
 export interface OpenedEditorWorkspace {
@@ -316,7 +318,13 @@ export function startEditorWorkspace({
   })();
   return {
     finish: (chapter) => finishEditorWorkspace(started, { baseUrl, project, chapter, profile, fetchImpl, cryptoImpl }),
-    abandon: async () => { (await started).database?.close(); },
+    sessionChapterId: async () => {
+      const start = await started;
+      return start.kind === "started"
+        ? (start.sessionValue as { base_snapshot?: { chapter_id?: unknown } } | undefined)?.base_snapshot?.chapter_id
+        : undefined;
+    },
+    abandon: () => { void started.then((start) => { start.database?.close(); }); },
   };
 }
 
