@@ -5,6 +5,7 @@ use std::time::Duration;
 use rustls::CertificateError;
 use tokio_postgres::NoTls;
 
+use crate::connection_cause::connection_cause;
 use crate::connection_pool::ConnectionPool;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 
@@ -129,6 +130,19 @@ async fn verify_the_tls_cases(admin_url: &str) {
         assert!(row.get::<_, bool>(0));
     }
 
+    // The printed cause of storyos-storage gives the SQLSTATE and no name of the connection.
+    let wrong_password = Arc::new(ConnectionPool::new(
+        tls_url.replace("postgres:admin@", "postgres:wrong@"),
+    ))
+    .checkout()
+    .await
+    .err()
+    .unwrap();
+    assert_eq!(
+        connection_cause(&wrong_password),
+        "db error: SQLSTATE 28P01 (FATAL, auth_failed)"
+    );
+
     serve_certificate(admin_url, "other-ca").await;
     assert!(matches!(
         certificate_error(&tls_url).await,
@@ -140,6 +154,15 @@ async fn verify_the_tls_cases(admin_url: &str) {
         certificate_error(&tls_url).await,
         Some(CertificateError::NotValidForName | CertificateError::NotValidForNameContext { .. })
     ));
+    let name_mismatch = Arc::new(ConnectionPool::new(tls_url))
+        .checkout()
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(
+        connection_cause(&name_mismatch),
+        "error performing TLS handshake: the certificate of the server is not valid for the host name"
+    );
 }
 
 async fn certificate_error(tls_url: &str) -> Option<CertificateError> {

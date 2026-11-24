@@ -1,4 +1,4 @@
-use super::{DatabaseUrlRefusal, check_database_url, redacted_chain};
+use super::{DatabaseUrlRefusal, check_database_url};
 
 #[test]
 fn a_host_that_is_not_loopback_needs_sslmode_require() {
@@ -46,53 +46,15 @@ fn a_loopback_or_socket_url_with_no_sslmode_stays_valid() {
     assert_eq!(urls.map(check_database_url), [Ok(()); 6]);
 }
 
-#[derive(Debug)]
-struct Caused(&'static str, std::io::Error);
-
-impl std::fmt::Display for Caused {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(self.0)
-    }
-}
-
-impl std::error::Error for Caused {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.1)
-    }
-}
-
 #[test]
-fn the_cause_chain_names_no_host_user_database_or_password_of_the_url() {
-    let error = Caused(
-        "db error",
-        std::io::Error::other(
-            "FATAL: password authentication failed for user \"canary_user\" at \
-             db.canary.invalid:6543 to canary_db (canary_db_old, canary-secret), \
-             certificate not valid for name \"db.canary.invalid\"",
-        ),
-    );
+fn sslmode_require_needs_a_name_for_each_host() {
+    let urls = [
+        "host='' hostaddr=127.0.0.1 user=storyos sslmode=require",
+        "hostaddr=10.0.0.5 user=storyos sslmode=require",
+    ];
 
     assert_eq!(
-        redacted_chain(
-            "postgres://canary_user:canary-secret@db.canary.invalid:6543/canary_db?sslmode=require",
-            &error,
-        ),
-        "db error: FATAL: password authentication failed for user \"<user>\" at <host>:6543 \
-         to <database> (canary_db_old, <password>), certificate not valid for name \"<host>\""
-    );
-}
-
-#[test]
-fn the_cause_chain_names_no_ip_address_of_the_url_in_its_standard_form() {
-    let error = std::io::Error::other(
-        "certificate not valid for name \"2001:db8::1\"; certificate is only valid for 2001:db8::2",
-    );
-
-    assert_eq!(
-        redacted_chain(
-            "postgres://storyos@[2001:0db8:0000:0000:0000:0000:0000:0001]:6543/postgres?sslmode=require",
-            &error,
-        ),
-        "certificate not valid for name \"<host>\"; certificate is only valid for 2001:db8::2"
+        urls.map(check_database_url),
+        [Err(DatabaseUrlRefusal::TlsHostNameMissing), Ok(()),]
     );
 }

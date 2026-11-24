@@ -4,7 +4,8 @@ use std::fmt;
 
 use sha2::{Digest, Sha256};
 
-use crate::database_url::{DatabaseUrlRefusal, check_database_url, redacted_chain};
+use crate::connection_cause::connection_cause;
+use crate::database_url::{DatabaseUrlRefusal, check_database_url};
 
 include!(concat!(env!("OUT_DIR"), "/embedded_bootstrap.rs"));
 
@@ -140,7 +141,7 @@ pub async fn activate_release1_storage(
     activate(admin_url).await.map_err(|error| match error {
         StorageActivationError::Unavailable(source) => {
             let cause: &(dyn std::error::Error + 'static) = source.as_ref();
-            unavailable(std::io::Error::other(redacted_chain(admin_url, cause)))
+            unavailable(std::io::Error::other(connection_cause(cause)))
         }
         error @ (StorageActivationError::AdminUrlMissing
         | StorageActivationError::AdminUrlInvalid(_)

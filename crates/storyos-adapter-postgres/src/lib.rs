@@ -154,6 +154,7 @@ mod command_replay;
 mod command_response_assistance;
 mod command_response_project;
 mod command_sequence;
+mod connection_cause;
 mod connection_pool;
 mod create_agent_run;
 mod create_chapter;
