@@ -9,6 +9,7 @@
   --assistant-header-height: 40px;
   --assistant-rail-width: 44px;
   --assistant-toggle-size: 36px;
+  --assistant-panel-width: clamp(340px, 27.1vw, 404px);
 }
 
 * { box-sizing: border-box; }
@@ -44,7 +45,7 @@ input:focus-visible {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-columns: clamp(220px, 17.5vw, 268px) minmax(480px, 1fr) clamp(340px, 27.1vw, 404px);
+  grid-template-columns: clamp(220px, 17.5vw, 268px) minmax(480px, 1fr) var(--assistant-panel-width);
   position: relative;
   background: var(--canvas);
 }
@@ -404,6 +405,71 @@ input:focus-visible {
 .assistant-plan li[data-plan-step-status="in_progress"] .assistant-plan-mark { border-radius: 2px; transform: rotate(45deg); }
 .assistant-plan li[data-plan-step-status="completed"] .assistant-plan-mark { background: #88837a; }
 .assistant-plan li[data-plan-step-status="completed"] > span:last-child { color: #a29d94; text-decoration: line-through; }
+/* A Subrun card: line 1 has the state, and line 2 has the title. The mark of each state has its own shape. */
+.assistant-subruns { display: grid; gap: 8px; margin: 0 0 18px; }
+.assistant-exchange .assistant-subruns button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #47443e;
+  text-align: left;
+}
+.assistant-subrun-mark { width: 9px; height: 9px; border: 1.5px solid #88837a; border-radius: 50%; }
+.assistant-subruns [data-subrun-state="working"] .assistant-subrun-mark { border-radius: 2px; transform: rotate(45deg); }
+.assistant-subruns [data-subrun-state="completed"] .assistant-subrun-mark { background: #88837a; }
+.assistant-subruns [data-subrun-state="no_result"] .assistant-subrun-mark { border-style: dashed; }
+.assistant-subruns [data-subrun-state="stopped"] .assistant-subrun-mark { border-radius: 0; }
+.assistant-subrun-title {
+  grid-column: 2;
+  overflow: hidden;
+  color: #88837a;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The drawer covers the assistant panel from the right side, and the dim layer covers the rest of the window. */
+.subrun-drawer-layer { position: fixed; inset: 0; z-index: 60; background: rgba(35, 34, 30, .28); }
+.subrun-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+  width: var(--assistant-panel-width);
+  overflow: auto;
+  padding: 0 28px 28px;
+  background: var(--assistant-panel);
+  border-left: 1px solid var(--line);
+  color: #3c3a35;
+  font: 13px/1.9 "PingFang SC", sans-serif;
+}
+.subrun-drawer header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.subrun-drawer h2 { margin: 0; font: 15px/1.6 "Noto Serif SC", "Songti SC", serif; }
+.subrun-drawer header p { margin: 0; color: var(--muted); font-size: 12px; }
+.subrun-drawer header button {
+  margin-left: auto;
+  border: 0;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.subrun-drawer h3 { margin: 22px 0 6px; color: var(--muted); font-size: 12px; font-weight: 500; }
+.subrun-drawer p { margin: 0 0 6px; }
+.subrun-drawer-text { white-space: pre-wrap; }
+.subrun-drawer-line { color: #88837a; }
 .assistant-exchange button { border: 0; background: transparent; padding: 0; color: #88837a; font: inherit; cursor: pointer; }
 .proposal-locations { margin-top: 22px; }
 .proposal-locations p { margin: 0 0 21px; }

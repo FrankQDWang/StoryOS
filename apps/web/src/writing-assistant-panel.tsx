@@ -29,6 +29,7 @@ import { ResearchTurn, researchDecision } from "./research-turn.tsx";
 import { ManuscriptUseList } from "./manuscript-use-list.tsx";
 import { RunPlanList } from "./run-plan-list.tsx";
 import { RunResultList } from "./run-result-list.tsx";
+import { SubrunList } from "./subrun-list.tsx";
 import { SkillUseList } from "./skill-use-list.tsx";
 import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
@@ -731,6 +732,8 @@ export function WritingAssistantPanel({
               <AuthorMessages message={exchange.message} labels={exchange.referenceLabels}
                 skills={exchange.skillNames} run={exchange.run} guidance={exchange.guidance} />
               {exchange.run === undefined ? null : <RunPlanList run={exchange.run} />}
+              {exchange.run === undefined ? null
+                : <SubrunList run={exchange.run} context={context} scheduleRefresh={scheduleRefresh} />}
               {/* The button "用到故事里" stays with the current Run, because it sends in the current Conversation. */}
               {exchange.run !== undefined && runResults(exchange.run) !== undefined
                 ? <RunResultList run={exchange.run} results={runResults(exchange.run)!} context={context} history
@@ -757,8 +760,10 @@ export function WritingAssistantPanel({
               <AuthorMessages message={reference.message} labels={reference.referenceLabels}
                 skills={reference.skillNames} run={run} guidance={reference.guidance} />
               {!terminal ? <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p> : null}
-              {/* Below the status line while the Run works, and above the first result after it ends (ADR 0103). */}
+              {/* The plan and the Subruns are below the status line while the Run works, and above the first result
+                after it ends (ADR 0103). */}
               {run === undefined ? null : <RunPlanList run={run} />}
+              {run === undefined ? null : <SubrunList run={run} context={context} scheduleRefresh={scheduleRefresh} />}
               {run === undefined ? null : runResults(run) !== undefined
                 ? <RunResultList run={run} results={runResults(run)!} context={context} history={false} tree={context?.tree}
                   sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal}>{useResearch}</RunResultList>
