@@ -6,6 +6,8 @@ status: accepted
 
 [ADR 0079](0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md) partly supersedes this ADR. The embedded SQL set now comes from the migrations directory, and the build script derives the checksums and the migration chain digest. The hand-kept persistence catalog is removed. The activation state machine does not change.
 
+[ADR 0104](0104-run-the-personal-instance-of-the-author-on-the-hosted-topology-with-a-proxy-password-the-model-key-on-the-server-and-a-frozen-baseline.md) section 4 amends this ADR: `storyos-storage` also takes one upgrade edge from an Active database of an earlier identity of the same catalog.
+
 The production package must prove Release 1 Storage Activation before Server or Worker traffic. A maintenance owner, not the Server or Worker, runs the catalogued state machine from `NewInstallRequired` to `Active` on an empty baseline. That owner persists the ledger and the activation record. Runtime processes only consume that proof: they refuse to bind or claim when it is absent, and they refuse again on a protected request or Worker claim. They never run DDL.
 
 ## Considered options

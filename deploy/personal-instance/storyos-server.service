@@ -1,0 +1,27 @@
+# The Server of the personal instance (ADR 0104). install.sh writes this unit to /etc/systemd/system/ with the Host
+# of the instance. The in-process Worker is off: storyos-worker.service has the real route.
+[Unit]
+Description=StoryOS Server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=storyos
+Group=storyos
+EnvironmentFile=/etc/storyos/server.env
+Environment=STORYOS_PUBLIC_ORIGIN=https://@HOST@
+Environment=STORYOS_WORKER=0
+Environment=STORYOS_MODEL_DESTINATION=volcengine_agent_plan
+Environment=STORYOS_EMBEDDING_DESTINATION=volcengine_agent_plan
+# Only the Server reads the Skill directory (docs/operations/skills.md).
+Environment=STORYOS_SKILLS_DIR=/opt/storyos/current/skill-packages
+ExecStart=/opt/storyos/current/storyos-server --web-root /opt/storyos/current/web --bind 127.0.0.1:3000
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

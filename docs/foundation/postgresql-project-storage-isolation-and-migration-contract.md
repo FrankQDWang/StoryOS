@@ -50,8 +50,9 @@ same values. A mismatch returns `upgrade_required` before a domain attempt,
 Project Activity cursor advancement, external effect, or reopening live
 traffic. A matching semantic version alone is never sufficient.
 
-Release 1 is the initial persisted baseline. It has no supported stored
-predecessor and no migration edge. A new installation creates the schema,
+Release 1 is the initial persisted baseline. The baseline has no stored
+predecessor. A forward file after the baseline takes the upgrade edge of
+section 9.4 (ADR 0104 section 4). A new installation creates the schema,
 catalog, roles, forced-RLS policies, constraints, and administrative records in
 one atomic bootstrap before verification and activation. The migrations
 directory holds the closed SQL source set. The build script sorts the SQL files
@@ -61,10 +62,11 @@ for each value. The activation identity uses this digest as its
 `catalog_checksum` and its `database_schema_identity`. While no database that
 holds data exists, a Stage release can squash the source set into a new
 baseline again. When the first database that holds data exists, the baseline
-freezes, and each change is one forward migration ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)). A future Release 2
-can add a real edge only with a source-backed predecessor catalog, schema,
-persisted rows, and checksums. A semantic version or invented predecessor name
-never creates compatibility.
+freezes, and each change is one forward migration ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)). The baseline
+is now frozen (ADR 0104 section 4): the recorded files of a database are its
+predecessor, and the upgrade edge accepts only recorded files that are a prefix
+of the embedded files. A semantic version or invented predecessor name never
+creates compatibility.
 
 ### 0.1 Durable Author Command `outcome_unknown`
 
@@ -1193,12 +1195,16 @@ deletion system and gives no guarantee against a similar future inference.
 
 ### 9.1 Migration ledger and runner
 
-`schema_migrations` records a monotonic schema version, immutable bootstrap or
-migration ID, checksum, required StoryOS release identity, runner version,
-start and finish evidence, and final status. `migration_phases` records each
-future transactional or nontransactional migration phase and its verified
-postcondition; the initial Release 1 bootstrap writes the four phases of the
-table below from constants of the adapter. The migrator acquires one
+`schema_migrations` records one row for each attempt: the attempt number, the
+schema version, the bootstrap or migration ID, the checksum, the required
+StoryOS release identity, the runner version, the start and finish evidence,
+and the final status. `migration_phases` records the phases of each attempt
+and their verified postconditions from constants of the adapter: the first
+activation writes the four phases of the table below, and an upgrade writes
+`preflight`, `forward_migration`, `validate_transaction`, and `activate`.
+`migration_phase_checksums` records each migration file one time, with the
+attempt that applied it, so its rows are the recorded files of the database
+(ADR 0104 section 4). The migrator acquires one
 database-level advisory lock only to exclude another migrator, verifies the
 entire applied checksum chain and every LF-normalized source of the migrations
 directory, and refuses drift.
@@ -1236,8 +1242,9 @@ it does not claim a production data backfill or a migration Recovery Copy.
 ### 9.3 Release 1 initial baseline and future migration boundary
 
 The active Release 1 persistence contract is an initial baseline, identified as
-`storyos.persistence.bootstrap.release-1.v3`. It has no supported stored
-predecessor, no migration edge, and no production data migration claim. A fresh
+`storyos.persistence.bootstrap.release-1.v3`. The baseline has no stored
+predecessor and no production data migration claim. A forward file after the
+baseline takes the upgrade edge of section 9.4. A fresh
 database enters the positive path by creating the schema, catalog, roles,
 forced-RLS policies, composite constraints, and administrative records in one
 atomic bootstrap. The empty migration-chain identity and digest are still
@@ -1251,21 +1258,24 @@ give its order. The sources contain no inner transaction boundary. The runner
 executes the ordered set in one PostgreSQL transaction. The build script embeds
 each source with its LF-normalized SHA-256 and derives the migration chain
 digest from the ordered pairs of path and checksum. An added, removed, or
-changed SQL file changes the digest, so an activated database with the earlier
-digest refuses with `identity_mismatch`. A partial transaction blocks
-activation.
+changed SQL file changes the digest. An activated database with the earlier
+digest takes the upgrade edge of section 9.4 only when its recorded files are a
+prefix of the embedded files; else it refuses with `identity_mismatch`. A
+partial transaction blocks activation.
 
 The role source contains no password or secret material. Runtime credential
 provisioning is a deployment-secret step after the atomic bootstrap. It is not
 part of the SQL source set, a schema default, or a repository fixture.
 
-Future Release 2 or later may introduce a migration edge only after its owning
-contract supplies a real predecessor schema identity, persisted-format catalog,
-representative persisted rows or checksums, and an exact edge checksum. That
-future edge must use the Recovery Copy, transactional/nontransactional phase,
-backfill, invalid-index, restore-proof, and failure-state discipline below. The
-Release 1 catalog does not name or imply a predecessor and cannot be used to
-prove one.
+The baseline is frozen (ADR 0104 section 4). Each later change of the schema
+is one forward file after the baseline, and the recorded files of a database
+are the predecessor of the upgrade edge. A forward file sets its role as its
+first statement, because it runs as the admin login in an upgrade and as
+`storyos_owner` after the baseline in a first activation. A forward file that
+needs a nontransactional phase, a backfill, or a Recovery Copy must use the
+transactional/nontransactional phase, backfill, invalid-index, restore-proof,
+and failure-state discipline below; the current edge applies each file in the
+one transaction.
 
 The migration runner acquires the one database-level advisory lock only for
 migrator exclusion, records the lock owner and runner revision, and verifies
@@ -1296,7 +1306,7 @@ succeed.
 
 ### 9.4 Positive initial activation state machine
 
-The only positive path is:
+The positive path of a new installation is:
 
 ```text
 NewInstallRequired
@@ -1307,6 +1317,34 @@ NewInstallRequired
   -> Active
 ```
 
+The upgrade edge (ADR 0104 section 4) starts from `Active` with an earlier
+identity of the same catalog:
+
+```text
+Active (earlier identity)
+  -> Preflight
+  -> ForwardMigration
+  -> Verifying
+  -> Activating
+  -> Active
+```
+
+`Preflight` of the edge proves that the recorded files are a prefix of the
+embedded files, with the same path and the same checksum for each one.
+`ForwardMigration` applies each later file in order. The edge records the
+attempt and each new file, and it replaces the proof with the identity of the
+package, in one transaction with the files. A package with no new file and a
+changed identity, for example a changed route catalog, takes the same edge.
+The edge keeps the password of the runtime role and each domain row. A
+recorded file that the package does not have, a recorded file with another
+checksum, and another catalog identifier refuse with `identity_mismatch` and
+change nothing. A failure inside a new file rolls the transaction back, so the
+earlier proof stays and the earlier package still starts. The command prints
+`STORYOS_STORAGE_ACTIVATION=Active` and the line
+`STORYOS_STORAGE_UPGRADE=from <recorded> files to <embedded> files`. The
+Server and the Worker do not take the edge: they start only on the exact
+identity of their package.
+
 The runner may enter `Active` only after the exact gates in section 7.5 and the
 catalog's `active_write_gates` pass. `Preflight` checks the server-declared
 database identity, persisted-format catalog, empty migration-chain digest,
@@ -1314,7 +1352,7 @@ route catalog digest, same-release protocol identity, role posture, forced-RLS
 policy inventory, and bootstrap ledger. `InitialSchemaBootstrap` creates the
 full Release 1 physical surface in one transaction. No current state called
 `PredecessorPresent`, `RecoveryCopyRequired`, or `Migrating` is admitted for
-this initial baseline. The general Recovery Copy and PITR profile in section
+the first activation. The general Recovery Copy and PITR profile in section
 10 remains mandatory operational evidence, but it is not a predecessor input
 to an empty initial schema.
 
@@ -1529,8 +1567,9 @@ covers at least:
     than guessing or repairing history.
 19. the build script embeds each SQL file of the migrations directory in file
     name order with its LF-normalized checksum, and the activation identity
-    carries the migration chain digest of those files, with no supported
-    predecessor and no migration edge;
+    carries the migration chain digest of those files; an Active database of
+    an earlier identity takes the upgrade edge of section 9.4 only when its
+    recorded files are a prefix of the embedded files;
 20. every project-bearing catalog family has the complete Project Scope,
     forced-RLS, runtime-grant, and `MATCH FULL` composite-reference profile,
     while global and maintenance families are explicitly unscoped or isolated;
@@ -1610,10 +1649,10 @@ covers at least:
     catalog, migration chain/digest, public route catalog, and same-release
     identity; matching semantic versions cannot bypass migration or restore
     proof.
-16. Release 1 is an initial persisted baseline with no supported predecessor;
-    its empty migration chain and atomic bootstrap are checksummed and verified.
-    Any future predecessor requires a source-backed migration edge, and its
-    transactional or nontransactional failure leaves a verified checkpoint,
+16. Release 1 is an initial persisted baseline with no stored predecessor;
+    its atomic bootstrap and each forward file are checksummed and verified.
+    The recorded files of a database are the predecessor of the upgrade edge,
+    and an edge failure leaves a verified checkpoint,
     Recovery Copy, read-only state, or unavailable state rather than guessed
     history.
 17. Typed Receipts, Author Actions, Admissions, Application Wire Records,

@@ -62,6 +62,7 @@ pub(crate) mod model_registration;
 pub(crate) mod passage_index_work;
 pub(crate) mod passage_ranking;
 pub(crate) mod passage_vectors;
+pub(crate) mod postgres_container;
 pub(crate) mod project_archive_build;
 pub(crate) mod project_embedding_binding;
 pub(crate) mod project_instruction;

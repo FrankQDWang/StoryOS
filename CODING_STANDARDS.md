@@ -82,6 +82,11 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 - An applied variant that writes a Forward Author Action names its own `ForwardCommand` entry. Give that entry its Author Undo Disposition in `ForwardCommand::disposition`: a compensation in the module of the forward command, or a Barrier. Record the disposition in an ADR.
 - Add rows to the table-driven contract suite (`command_sequence_tests/`) for each applied variant and zero-authority outcome. The rows prove replay equality, the declared records only, rollback, an in-progress exact retry, and pre-capture versus damaged evidence.
 
+## Migrations
+
+- The baseline is frozen ([ADR 0104](docs/adr/0104-run-the-personal-instance-of-the-author-on-the-hosted-topology-with-a-proxy-password-the-model-key-on-the-server-and-a-frozen-baseline.md) section 4). A ticket that changes the schema adds one forward file to `crates/storyos-adapter-postgres/migrations/`, with the next number. It does not edit `0000_roles.sql`, `0001_release_1_baseline.sql`, or an earlier forward file.
+- A forward file runs as the admin login in an upgrade, and as `storyos_owner` after the baseline in a first activation. Thus its first statement sets its role: `SET LOCAL ROLE storyos_owner;`, or `RESET ROLE;` for statements that need the admin login. A file does not set the role for a later file.
+
 ## Comments and documentation
 
 - Prefer no comment. A comment that stays gives one non-obvious reason in one line. Code changes later, and comments do not.

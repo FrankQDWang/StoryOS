@@ -1,0 +1,10 @@
+# Starts storyos-backup.service one time each day. Persistent runs a missed backup after the VPS starts.
+[Unit]
+Description=Daily StoryOS backup
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

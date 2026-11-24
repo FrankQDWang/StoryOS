@@ -1,5 +1,5 @@
 -- The Release 1 baseline (ADR 0079): one definition of each object of the squashed migration chain.
--- Until the first database that holds data exists, a change can edit this file. The next migration is 0003.
+-- The baseline is frozen (ADR 0104 section 4). A change of the schema adds a forward file. The next one is 0003.
 
 CREATE SCHEMA storyos AUTHORIZATION storyos_owner;
 SET LOCAL ROLE storyos_owner;
@@ -2962,7 +2962,7 @@ CREATE TABLE storyos.recovery_visibility_proofs (
 
 GRANT SELECT,INSERT ON TABLE storyos.recovery_visibility_proofs TO storyos_restore;
 
--- The superuser owns this SECURITY DEFINER function.
+-- The login that runs the activation owns this SECURITY DEFINER function.
 RESET ROLE;
 
 CREATE FUNCTION storyos.pass_recovery_visibility_proof(p_recovery_copy_id uuid, p_restore_proof_id uuid, p_visibility_proof_id uuid, p_isolated_target_identity text, p_chain_sha256 text, p_required_wal_member text, p_recovery_target_lsn text, p_method text, p_catalog_identity text) RETURNS text
@@ -3383,9 +3383,11 @@ CREATE POLICY pinned_export_sources_worker_update ON storyos.pinned_export_sourc
 
 GRANT SELECT,INSERT,UPDATE ON TABLE storyos.pinned_export_sources TO storyos_runtime;
 
--- Storage activation ledger
+-- Storage activation ledger. Each activation and each upgrade is one attempt. Each migration file has one row
+-- with the attempt that applied it (ADR 0104 section 4).
 
 CREATE TABLE storyos.schema_migrations (
+    attempt_id bigint NOT NULL,
     schema_version text NOT NULL,
     migration_id text NOT NULL,
     checksum text NOT NULL,
@@ -3394,9 +3396,10 @@ CREATE TABLE storyos.schema_migrations (
     started_at timestamp with time zone NOT NULL,
     finished_at timestamp with time zone,
     status text NOT NULL,
+    CONSTRAINT schema_migrations_attempt_id_check CHECK ((attempt_id > 0)),
     CONSTRAINT schema_migrations_checksum_check CHECK ((checksum ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT schema_migrations_status_check CHECK ((status = 'applied'::text)),
-    CONSTRAINT schema_migrations_pkey PRIMARY KEY (schema_version)
+    CONSTRAINT schema_migrations_pkey PRIMARY KEY (attempt_id)
 );
 
 CREATE TABLE storyos.migration_phases (
@@ -3407,8 +3410,9 @@ CREATE TABLE storyos.migration_phases (
     disposition text NOT NULL,
     recorded_at timestamp with time zone NOT NULL,
     CONSTRAINT migration_phases_disposition_check CHECK ((disposition = 'passed'::text)),
-    CONSTRAINT migration_phases_phase_id_check CHECK ((phase_id = ANY (ARRAY['preflight'::text, 'initial_schema_bootstrap'::text, 'validate_transaction'::text, 'activate'::text]))),
-    CONSTRAINT migration_phases_pkey PRIMARY KEY (attempt_id, phase_id)
+    CONSTRAINT migration_phases_phase_id_check CHECK ((phase_id = ANY (ARRAY['preflight'::text, 'initial_schema_bootstrap'::text, 'forward_migration'::text, 'validate_transaction'::text, 'activate'::text]))),
+    CONSTRAINT migration_phases_pkey PRIMARY KEY (attempt_id, phase_id),
+    CONSTRAINT migration_phases_attempt_fkey FOREIGN KEY (attempt_id) REFERENCES storyos.schema_migrations(attempt_id)
 );
 
 CREATE TABLE storyos.migration_phase_checksums (
@@ -3416,7 +3420,8 @@ CREATE TABLE storyos.migration_phase_checksums (
     source_path text NOT NULL,
     checksum text NOT NULL,
     CONSTRAINT migration_phase_checksums_checksum_check CHECK ((checksum ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT migration_phase_checksums_pkey PRIMARY KEY (attempt_id, source_path)
+    CONSTRAINT migration_phase_checksums_pkey PRIMARY KEY (source_path),
+    CONSTRAINT migration_phase_checksums_attempt_fkey FOREIGN KEY (attempt_id) REFERENCES storyos.schema_migrations(attempt_id)
 );
 
 CREATE TABLE storyos.storage_activation_proofs (

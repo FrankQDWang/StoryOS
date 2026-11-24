@@ -3,51 +3,46 @@
 use std::fmt;
 
 use sha2::{Digest, Sha256};
-use tokio_postgres::NoTls;
+
+use crate::connection_cause::connection_cause;
+use crate::database_url::{DatabaseUrlRefusal, check_database_url};
+use crate::storage_ledger;
 
 include!(concat!(env!("OUT_DIR"), "/embedded_bootstrap.rs"));
 
-const RUNNER_REVISION: &str = "storyos-storage";
 const ADVISORY_LOCK_CLASS: i32 = 0x5354_4f53;
 const ADVISORY_LOCK_OBJECT: i32 = 0x4143_5431;
-const PROOF_ID: &str = "release-1";
+pub(crate) const PROOF_ID: &str = "release-1";
 pub(crate) const CATALOG_ID: &str = "storyos.persistence.release-1";
 const MIGRATION_CHAIN_ID: &str = "storyos.persistence.bootstrap.release-1.v3";
 const ACTIVE_SCHEMA_VERSION: &str = "storyos.persistence.release-1.v3";
-
-struct BootstrapPhase {
-    phase_id: &'static str,
-    class: &'static str,
-    postcondition: &'static str,
-}
-
-const BOOTSTRAP_PHASES: [BootstrapPhase; 4] = [
-    BootstrapPhase {
-        phase_id: "preflight",
-        class: "control_read",
-        postcondition: "new_install_active_catalog_and_empty_migration_chain_verified",
-    },
-    BootstrapPhase {
-        phase_id: "initial_schema_bootstrap",
-        class: "transactional_ddl",
-        postcondition: "release1_schema_catalog_roles_rls_and_constraints_created_atomically",
-    },
-    BootstrapPhase {
-        phase_id: "validate_transaction",
-        class: "transactional_validation",
-        postcondition: "constraints_indexes_digests_roles_and_catalog_bindings_valid",
-    },
-    BootstrapPhase {
-        phase_id: "activate",
-        class: "controlled_cutover",
-        postcondition: "one_exact_release_identity_active_and_traffic_fenced_until_proof",
-    },
-];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageActivation {
     Active,
     AlreadyActive,
+    /// The database was Active with an earlier identity, and it now holds `to_files` files.
+    Upgraded {
+        from_files: usize,
+        to_files: usize,
+    },
+}
+
+impl fmt::Display for StorageActivation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "STORYOS_STORAGE_ACTIVATION=Active")?;
+        if let Self::Upgraded {
+            from_files,
+            to_files,
+        } = self
+        {
+            write!(
+                formatter,
+                "\nSTORYOS_STORAGE_UPGRADE=from {from_files} files to {to_files} files"
+            )?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +63,7 @@ impl StorageActivationRefusal {
 #[derive(Debug)]
 pub enum StorageActivationError {
     AdminUrlMissing,
+    AdminUrlInvalid(DatabaseUrlRefusal),
     Refused { reason: StorageActivationRefusal },
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -79,15 +75,29 @@ impl fmt::Display for StorageActivationError {
                 formatter,
                 "STORYOS_STORAGE_ACTIVATION=Refused\nSTORYOS_STORAGE_ACTIVATION_REASON=admin_url_missing"
             ),
+            Self::AdminUrlInvalid(refusal) => write!(
+                formatter,
+                "STORYOS_STORAGE_ACTIVATION=Refused\nSTORYOS_STORAGE_ACTIVATION_REASON=admin_url_invalid\nSTORYOS_STORAGE_ADMIN_URL: {}",
+                refusal.rule()
+            ),
             Self::Refused { reason } => write!(
                 formatter,
                 "STORYOS_STORAGE_ACTIVATION=Refused\nSTORYOS_STORAGE_ACTIVATION_REASON={}",
                 reason.as_str()
             ),
-            Self::Unavailable(source) => write!(
-                formatter,
-                "STORYOS_STORAGE_ACTIVATION=Refused\nSTORYOS_STORAGE_ACTIVATION_REASON=unavailable\n{source}"
-            ),
+            Self::Unavailable(source) => {
+                write!(
+                    formatter,
+                    "STORYOS_STORAGE_ACTIVATION=Refused\nSTORYOS_STORAGE_ACTIVATION_REASON=unavailable\n{source}"
+                )?;
+                // A hosted run has no container log, so the line gives each cause of the chain.
+                let mut cause = source.source();
+                while let Some(next) = cause {
+                    write!(formatter, ": {next}")?;
+                    cause = next.source();
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -96,22 +106,22 @@ impl std::error::Error for StorageActivationError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::AdminUrlMissing | Self::Refused { .. } => None,
+            Self::AdminUrlMissing | Self::AdminUrlInvalid(_) | Self::Refused { .. } => None,
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct PackagedIdentity {
-    catalog_id: String,
-    catalog_checksum: String,
-    migration_chain_id: String,
-    migration_chain_digest: String,
-    database_schema_identity: String,
-    active_schema_version: String,
-    public_release: String,
-    route_catalog_id: String,
-    route_catalog_sha256: String,
+    pub(crate) catalog_id: String,
+    pub(crate) catalog_checksum: String,
+    pub(crate) migration_chain_id: String,
+    pub(crate) migration_chain_digest: String,
+    pub(crate) database_schema_identity: String,
+    pub(crate) active_schema_version: String,
+    pub(crate) public_release: String,
+    pub(crate) route_catalog_id: String,
+    pub(crate) route_catalog_sha256: String,
 }
 
 pub async fn activate_release1_storage(
@@ -120,13 +130,32 @@ pub async fn activate_release1_storage(
     if admin_url.is_empty() {
         return Err(StorageActivationError::AdminUrlMissing);
     }
-    let identity = packaged_identity();
-    let (client, connection) = tokio_postgres::connect(admin_url, NoTls)
+    check_database_url(admin_url).map_err(StorageActivationError::AdminUrlInvalid)?;
+    activate(admin_url).await.map_err(|error| match error {
+        StorageActivationError::Unavailable(source) => {
+            let cause: &(dyn std::error::Error + 'static) = source.as_ref();
+            unavailable(std::io::Error::other(connection_cause(cause)))
+        }
+        error @ (StorageActivationError::AdminUrlMissing
+        | StorageActivationError::AdminUrlInvalid(_)
+        | StorageActivationError::Refused { .. }) => error,
+    })
+}
+
+async fn activate(admin_url: &str) -> Result<StorageActivation, StorageActivationError> {
+    activate_sources(admin_url, &packaged_identity(), EMBEDDED_SOURCES).await
+}
+
+/// Runs the state machine with the identity and the files of a package. A test gives the files
+/// of an earlier package.
+async fn activate_sources(
+    admin_url: &str,
+    identity: &PackagedIdentity,
+    sources: &[EmbeddedSource],
+) -> Result<StorageActivation, StorageActivationError> {
+    let client = crate::connection_pool::open(admin_url)
         .await
         .map_err(unavailable)?;
-    tokio::spawn(async move {
-        let _connection_result = connection.await;
-    });
     client
         .execute(
             "SELECT pg_advisory_lock($1, $2)",
@@ -134,7 +163,7 @@ pub async fn activate_release1_storage(
         )
         .await
         .map_err(unavailable)?;
-    let outcome = run_state_machine(&client, &identity).await;
+    let outcome = run_state_machine(&client, identity, sources).await;
     let _unlock = client
         .execute(
             "SELECT pg_advisory_unlock($1, $2)",
@@ -147,23 +176,65 @@ pub async fn activate_release1_storage(
 async fn run_state_machine(
     client: &tokio_postgres::Client,
     identity: &PackagedIdentity,
+    sources: &[EmbeddedSource],
 ) -> Result<StorageActivation, StorageActivationError> {
     if let Some(existing) = read_proof(client).await? {
-        return if existing == *identity {
-            Ok(StorageActivation::AlreadyActive)
-        } else {
-            Err(refused(StorageActivationRefusal::IdentityMismatch))
+        if existing == *identity {
+            return Ok(StorageActivation::AlreadyActive);
+        }
+        if existing.catalog_id != identity.catalog_id {
+            return Err(refused(StorageActivationRefusal::IdentityMismatch));
+        }
+        let recorded = storage_ledger::recorded_files(client)
+            .await
+            .map_err(unavailable)?;
+        let Some(later) = later_sources(&recorded, sources) else {
+            return Err(refused(StorageActivationRefusal::IdentityMismatch));
         };
+        in_transaction(client, persist(client, identity, later, Attempt::Upgrade)).await?;
+        return Ok(StorageActivation::Upgraded {
+            from_files: recorded.len(),
+            to_files: sources.len(),
+        });
     }
-    if database_has_user_state(client).await? {
+    if crate::storage_empty_check::database_has_user_state(client)
+        .await
+        .map_err(unavailable)?
+    {
         return Err(refused(StorageActivationRefusal::NonEmptyWithoutLedger));
     }
+    in_transaction(
+        client,
+        persist(client, identity, sources, Attempt::FirstActivation),
+    )
+    .await?;
+    Ok(StorageActivation::Active)
+}
+
+/// The files of the package after the recorded files, when the recorded files are a prefix of
+/// the files of the package with the same path and the same checksum for each one.
+fn later_sources<'a>(
+    recorded: &[(String, String)],
+    sources: &'a [EmbeddedSource],
+) -> Option<&'a [EmbeddedSource]> {
+    // An Active database without a recorded file is not a state of the ledger.
+    if recorded.is_empty() || recorded.len() > sources.len() {
+        return None;
+    }
+    let prefix = recorded
+        .iter()
+        .zip(sources)
+        .all(|((path, checksum), source)| *path == source.path && *checksum == source.lf_sha256);
+    prefix.then(|| &sources[recorded.len()..])
+}
+
+async fn in_transaction(
+    client: &tokio_postgres::Client,
+    work: impl std::future::Future<Output = Result<(), StorageActivationError>>,
+) -> Result<(), StorageActivationError> {
     client.batch_execute("BEGIN").await.map_err(unavailable)?;
-    match persist_activation(client, identity).await {
-        Ok(()) => {
-            client.batch_execute("COMMIT").await.map_err(unavailable)?;
-            Ok(StorageActivation::Active)
-        }
+    match work.await {
+        Ok(()) => client.batch_execute("COMMIT").await.map_err(unavailable),
         Err(error) => {
             let _rollback = client.batch_execute("ROLLBACK").await;
             Err(error)
@@ -171,11 +242,23 @@ async fn run_state_machine(
     }
 }
 
-async fn persist_activation(
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Attempt {
+    /// The runtime role has no password yet: the operator sets it after the activation.
+    FirstActivation,
+    /// The database is in use: the attempt keeps the password of the runtime role and each row.
+    Upgrade,
+}
+
+/// Applies `files` as the login of the activation, verifies the schema, and records the attempt
+/// and the proof.
+async fn persist(
     client: &tokio_postgres::Client,
     identity: &PackagedIdentity,
+    files: &[EmbeddedSource],
+    attempt: Attempt,
 ) -> Result<(), StorageActivationError> {
-    for source in EMBEDDED_SOURCES {
+    for source in files {
         client
             .batch_execute(source.sql)
             .await
@@ -188,7 +271,7 @@ async fn persist_activation(
     let verified: bool = client
         .query_one(
             "SELECT NOT owner.rolcanlogin
-                    AND runtime.rolpassword IS NULL
+                    AND ($1 OR runtime.rolpassword IS NULL)
                     AND to_regnamespace('storyos') IS NOT NULL
                     AND to_regclass('storyos.storage_activation_proofs') IS NOT NULL
                     AND to_regclass('storyos.schema_migrations') IS NOT NULL
@@ -204,7 +287,7 @@ async fn persist_activation(
              FROM pg_roles AS owner
              JOIN pg_authid AS runtime ON runtime.rolname = 'storyos_runtime'
              WHERE owner.rolname = 'storyos_owner'",
-            &[],
+            &[&(attempt == Attempt::Upgrade)],
         )
         .await
         .map_err(unavailable)?
@@ -218,72 +301,14 @@ async fn persist_activation(
         .batch_execute("SET LOCAL ROLE storyos_owner")
         .await
         .map_err(unavailable)?;
-    let attempt_id = 1_i64;
-    client
-        .execute(
-            "INSERT INTO storyos.schema_migrations (
-               schema_version, migration_id, checksum, release_identity, runner_revision,
-               started_at, finished_at, status
-             ) VALUES ($1, $2, $3, $4, $5, clock_timestamp(), clock_timestamp(), 'applied')",
-            &[
-                &identity.active_schema_version,
-                &identity.migration_chain_id,
-                &identity.migration_chain_digest,
-                &identity.public_release,
-                &RUNNER_REVISION,
-            ],
-        )
+    let phases = match attempt {
+        Attempt::FirstActivation => &storage_ledger::FIRST_ACTIVATION_PHASES,
+        Attempt::Upgrade => &storage_ledger::UPGRADE_PHASES,
+    };
+    storage_ledger::record_attempt(client, identity, phases, files)
         .await
         .map_err(unavailable)?;
-    for phase in &BOOTSTRAP_PHASES {
-        client
-            .execute(
-                "INSERT INTO storyos.migration_phases (
-                   attempt_id, phase_id, class, postcondition, disposition, recorded_at
-                 ) VALUES ($1, $2, $3, $4, 'passed', clock_timestamp())",
-                &[
-                    &attempt_id,
-                    &phase.phase_id,
-                    &phase.class,
-                    &phase.postcondition,
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
-    }
-    for source in EMBEDDED_SOURCES {
-        client
-            .execute(
-                "INSERT INTO storyos.migration_phase_checksums (
-                   attempt_id, source_path, checksum
-                 ) VALUES ($1, $2, $3)",
-                &[&attempt_id, &source.path, &source.lf_sha256],
-            )
-            .await
-            .map_err(unavailable)?;
-    }
-    client
-        .execute(
-            "INSERT INTO storyos.storage_activation_proofs (
-               proof_id, phase, catalog_id, catalog_checksum, migration_chain_id,
-               migration_chain_digest, database_schema_identity, active_schema_version,
-               public_release, route_catalog_id, route_catalog_sha256, activated_at
-             ) VALUES (
-               $1, 'active', $2, $3, $4, $5, $6, $7, $8, $9, $10, clock_timestamp()
-             )",
-            &[
-                &PROOF_ID,
-                &identity.catalog_id,
-                &identity.catalog_checksum,
-                &identity.migration_chain_id,
-                &identity.migration_chain_digest,
-                &identity.database_schema_identity,
-                &identity.active_schema_version,
-                &identity.public_release,
-                &identity.route_catalog_id,
-                &identity.route_catalog_sha256,
-            ],
-        )
+    storage_ledger::write_proof(client, identity)
         .await
         .map_err(unavailable)?;
     Ok(())
@@ -325,28 +350,6 @@ pub(crate) async fn read_proof(
         route_catalog_id: row.get(7),
         route_catalog_sha256: row.get(8),
     }))
-}
-
-async fn database_has_user_state(
-    client: &tokio_postgres::Client,
-) -> Result<bool, StorageActivationError> {
-    Ok(client
-        .query_one(
-            "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'storyos')
-                    OR EXISTS (
-                      SELECT 1
-                      FROM pg_class AS cls
-                      JOIN pg_namespace AS ns ON ns.oid = cls.relnamespace
-                      WHERE ns.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-                        AND ns.nspname NOT LIKE 'pg_temp_%'
-                        AND ns.nspname NOT LIKE 'pg_toast_temp_%'
-                        AND cls.relkind IN ('r', 'p', 'v', 'm', 'S')
-                    )",
-            &[],
-        )
-        .await
-        .map_err(unavailable)?
-        .get(0))
 }
 
 pub(crate) fn packaged_identity() -> PackagedIdentity {
@@ -393,3 +396,7 @@ fn unavailable(
 #[cfg(test)]
 #[path = "storage_activation_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "storage_upgrade_tests.rs"]
+mod upgrade_tests;

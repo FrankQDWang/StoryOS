@@ -10,6 +10,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tokio_postgres::NoTls;
+use tokio_postgres::config::{Config, SslMode};
+
+use crate::postgres_tls::VerifiedTls;
 
 const IDLE_CAPACITY: usize = 8;
 
@@ -53,10 +56,27 @@ impl fmt::Debug for ConnectionPool {
     }
 }
 
+/// The one connect path of the production connections: verified TLS with `sslmode=require`, and
+/// a plain connection as before with each other mode (ADR 0104 section 5).
 pub(crate) async fn open(
     database_url: &str,
 ) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
-    let (client, connection) = tokio_postgres::connect(database_url, NoTls).await?;
+    let mut config = database_url.parse::<Config>()?;
+    if config.get_ssl_mode() == SslMode::Require {
+        // With only `hostaddr`, the driver gives the TLS connector no name; the address is the name.
+        if config.get_hosts().is_empty() {
+            for address in config.get_hostaddrs().to_vec() {
+                config.host(address.to_string());
+            }
+        }
+        // A boxed connect future keeps each future that opens a connection small on the stack.
+        let (client, connection) = Box::pin(config.connect(VerifiedTls::shared())).await?;
+        tokio::spawn(async move {
+            let _connection_result = connection.await;
+        });
+        return Ok(client);
+    }
+    let (client, connection) = Box::pin(config.connect(NoTls)).await?;
     tokio::spawn(async move {
         let _connection_result = connection.await;
     });

@@ -8,8 +8,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = ROOT / "crates/storyos-adapter-postgres/src"
-CONNECT_OWNERS = {"connection_pool.rs", "storage_activation.rs"}
-STARTUP_GATE = "storage_activation_proof.rs"
+# `connection_pool::open` is the one connect path of production code (ADR 0104 section 5).
+CONNECT_OWNER = "connection_pool.rs"
+# The Storage Activation runs on its own admin connection, so the transaction-control rules do not apply to it.
+MAINTENANCE_OWNER = "storage_activation.rs"
+OPEN_CALLERS = {"storage_activation_proof.rs", MAINTENANCE_OWNER}
+# A production connection names its TLS connector, so each of these words outside the owners is a second connect path.
+CONNECT_WORDS = ("tokio_postgres::connect", "Config::connect", "NoTls", "VerifiedTls")
+TLS_OWNER = "postgres_tls.rs"
+# `Config::connect` and the TLS handshake take an argument; the pooled `connect()` takes none.
+CONNECT_WITH_ARGUMENT = re.compile(r"\.connect\s*(?:::\s*<[^>]*>\s*)?\(\s*[^)\s]")
+# The one connect call with an argument that the TLS owner may have.
+TLS_HANDSHAKE = "self.connector.connect(self.name, stream)"
 POOLED_SOURCES = re.compile(r"\.(connect|connect_challenge|checkout)\s*\(")
 # `ROLLBACK TO` keeps the transaction open.
 TRANSACTION_CONTROL = re.compile(
@@ -89,18 +99,25 @@ def check(source_dir: Path) -> tuple[list[str], int]:
         if path.name.endswith("_tests.rs") or any(part.endswith("_tests") for part in relative.parts[:-1]):
             continue
         text = path.read_text(encoding="utf-8")
-        if path.name in CONNECT_OWNERS:
+        if path.name == CONNECT_OWNER:
             continue
-        if "tokio_postgres::connect" in text:
-            line = text[: text.index("tokio_postgres::connect")].count("\n") + 1
-            violations.append(
-                f"{relative}:{line}: `tokio_postgres::connect` outside the pool; use `connect()`"
-            )
-        if path.name != STARTUP_GATE and "connection_pool::open" in text:
+        for word in CONNECT_WORDS:
+            if word in text and not (path.name == TLS_OWNER and word == "VerifiedTls"):
+                line = text[: text.index(word)].count("\n") + 1
+                violations.append(f"{relative}:{line}: `{word}` outside the pool; use `connect()`")
+        match = CONNECT_WITH_ARGUMENT.search(
+            text.replace(TLS_HANDSHAKE, "") if path.name == TLS_OWNER else text
+        )
+        if match:
+            line = text[: match.start()].count("\n") + 1
+            violations.append(f"{relative}:{line}: `connect` with an argument outside the pool; use `connect()`")
+        if path.name not in OPEN_CALLERS and "connection_pool::open" in text:
             line = text[: text.index("connection_pool::open")].count("\n") + 1
             violations.append(
                 f"{relative}:{line}: `connection_pool::open` outside the startup gate; use `connect()`"
             )
+        if path.name == MAINTENANCE_OWNER:
+            continue
         for match in OPAQUE_STATEMENT_CALL.finditer(text):
             line = text[: match.start()].count("\n") + 1
             violations.append(
@@ -188,6 +205,31 @@ async fn open(url: &str) -> Result<tokio_postgres::Client, tokio_postgres::Error
     Ok(client)
 }
 """,
+    "fail_config_connect.rs": """
+async fn open(config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+    let (client, _connection) = config.connect(NoTls).await?;
+    Ok(client)
+}
+""",
+    "fail_config_parameter.rs": """
+async fn open<T>(config: &Config, tls: T) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+    let (client, _connection) = config.connect(tls).await?;
+    Ok(client)
+}
+""",
+    "fail_config_turbofish.rs": """
+async fn open(config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+    let (client, _connection) = config.connect::<Tls>(make_tls()).await?;
+    Ok(client)
+}
+""",
+    "postgres_tls.rs": """
+async fn handshake(self, stream: Socket) -> io::Result<Stream> {
+    let stream = self.connector.connect(self.name, stream).await?;
+    let (client, _connection) = self.config.connect(tls).await?;
+    Ok(stream)
+}
+""",
     "fail_local.rs": """
 async fn replay(store: &Store) -> Result<(), ProjectReadError> {
     let client = store.raw_client().await?;
@@ -212,7 +254,7 @@ async fn stores() {
 """,
     "storage_activation.rs": """
 async fn apply(client: &tokio_postgres::Client) -> Result<(), tokio_postgres::Error> {
-    let (client, connection) = tokio_postgres::connect(admin_url, NoTls).await?;
+    let client = crate::connection_pool::open(admin_url).await?;
     client.batch_execute("BEGIN").await
 }
 """,
@@ -228,7 +270,12 @@ def self_test() -> None:
         violations, checked = check(source_dir)
     assert checked == 7, checked
     expected = [
+        "fail_config_connect.rs:3: `NoTls` outside the pool; use `connect()`",
+        "fail_config_connect.rs:3: `connect` with an argument outside the pool; use `connect()`",
+        "fail_config_parameter.rs:3: `connect` with an argument outside the pool; use `connect()`",
+        "fail_config_turbofish.rs:3: `connect` with an argument outside the pool; use `connect()`",
         "fail_connect.rs:3: `tokio_postgres::connect` outside the pool; use `connect()`",
+        "fail_connect.rs:3: `NoTls` outside the pool; use `connect()`",
         "fail_generic.rs:3: `ROLLBACK` on parameter `client: &C` is not a `PooledClient`",
         "fail_local.rs:4: `BEGIN` on local `client` is not bound from `connect()`, "
         "`connect_challenge()`, or `checkout()`",
@@ -236,6 +283,7 @@ def self_test() -> None:
         "fail_opaque.rs:3: `batch_execute` argument is not a string literal; the check cannot read it",
         "fail_open.rs:3: `connection_pool::open` outside the startup gate; use `connect()`",
         "fail_parameter.rs:7: `BEGIN` on parameter `client: &tokio_postgres::Client` is not a `PooledClient`",
+        "postgres_tls.rs:4: `connect` with an argument outside the pool; use `connect()`",
     ]
     assert violations == expected, violations
     print("verify-transaction-control-receivers self-test passed")
