@@ -7,7 +7,8 @@ use std::time::Duration;
 use storyos_application::{ContractFaultObserver, ContractFaultPoint};
 
 /// Holds the Worker process at a Contract Fault Point while the named test hold file exists. The
-/// dispatch hold applies from the `dispatch_from`-th `DispatchClaimed` of the process.
+/// dispatch hold starts at the `DispatchClaimed` whose number in the process is `dispatch_from`,
+/// counted from 1, and applies to each later one.
 pub(crate) struct ContractFaultHolds {
     dispatch: Option<PathBuf>,
     dispatch_from: NonZeroUsize,

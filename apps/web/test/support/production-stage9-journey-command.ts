@@ -20,6 +20,8 @@ const SAVED = '[data-save-state="saved"][data-unsettled-intent-count="0"]';
 const PLAN_SCRIPT = "SCRIPT:update_plan";
 const SUBRUN_SCRIPT = "SCRIPT:start_subrun";
 const STEPS = ["读第一章到第五章", "列出不一致之处", "改写第三章第一段"];
+// The accessible name of the mark of each state of a plan step.
+const MARKS = { completed: "已完成", in_progress: "进行中", pending: "未开始" } as const;
 // A message with no script: the fake model answers it with its text answer, and with no plan and no Subrun.
 const SIMPLE = "这一段的节奏怎么样？";
 const ADVICE = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
@@ -67,28 +69,43 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
     };
     const ended = (runId: string) =>
       page.locator(`[data-assistant-run-id="${runId}"][data-assistant-dispatch="completed"]`).waitFor();
-    // Starts one Worker pass that holds before model request `from` of the Run, and gives the end of the pass.
+    // Starts one Worker pass that holds before model request `from` of the Run, and gives the end of the pass. When an
+    // assertion fails, the cleanup deletes the file and waits for the end of the pass, so no held Worker stays for a
+    // later journey.
+    let held: Promise<unknown> | undefined;
     const holdFrom = (from: number) => {
       mkdirSync(join(HOLD, ".."), { recursive: true });
       writeFileSync(HOLD, "hold");
       const pass = runWorker(["--once"], { extraEnv: { STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: HOLD,
         STORYOS_TEST_FAKE_DISPATCH_HOLD_FROM: String(from) } });
-      void pass.catch(() => undefined);
+      held = pass.catch(() => undefined);
       return async () => {
         rmSync(HOLD);
         await pass;
       };
     };
-    started.push(async () => { if (existsSync(HOLD)) rmSync(HOLD); });
+    started.push(async () => {
+      if (existsSync(HOLD)) rmSync(HOLD);
+      await held;
+    });
 
     // 1. While the Run works, the plan list is below the status line, and the first step is in progress. After the
     // end, the list is above the answer, and each step is done.
     const plan = await message(PLAN_SCRIPT);
     let release = holdFrom(2);
-    const steps = turn.locator("[data-assistant-plan] > li");
-    const statuses = () => steps.evaluateAll((items) => items.map((item) => item.getAttribute("data-plan-step-status")));
-    await expect(steps).toHaveText(STEPS);
-    await expect.poll(statuses).toEqual(["in_progress", "pending", "pending"]);
+    const list = turn.locator("[data-assistant-plan]");
+    const steps = list.locator(":scope > li");
+    // The author sees each step text and the mark of its state.
+    const shownPlan = async (states: (keyof typeof MARKS)[]) => {
+      await expect(list).toBeVisible();
+      await expect(steps).toHaveText(STEPS);
+      for (const [index, state] of states.entries()) {
+        await expect(steps.nth(index)).toBeVisible();
+        await expect(steps.nth(index)).toHaveAttribute("data-plan-step-status", state);
+        await expect(steps.nth(index).getByRole("img", { name: MARKS[state] })).toBeVisible();
+      }
+    };
+    await shownPlan(["in_progress", "pending", "pending"]);
     await expect(turn.locator("[data-assistant-run-status] + [data-assistant-plan]")).toHaveCount(1);
     await expect(turn.locator("[data-assistant-run-status]")).toHaveText("正在处理");
     await release();
@@ -97,7 +114,7 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
     const planAnswer = planRun.results?.[0];
     assert.ok(planAnswer?.kind === "answer");
     await ended(plan.runId);
-    await expect.poll(statuses).toEqual(["completed", "completed", "completed"]);
+    await shownPlan(["completed", "completed", "completed"]);
     await expect(turn.locator("[data-assistant-plan] + .assistant-result")).toHaveText(planAnswer.text);
 
     // 2. While the Subrun works, its card says that it reads, and its drawer opens from the right side with the brief
@@ -114,8 +131,13 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
       subrunId: working.subrun_id })).brief;
     await card.click();
     const drawer = page.getByRole("dialog", { name: "子任务记录" });
-    await expect(drawer.locator("[data-subrun-drawer-state]")).toHaveText("进行中 · 第 1 步");
-    await expect(drawer.locator("section h3 + *").first()).toHaveText(brief);
+    const state = drawer.locator("[data-subrun-drawer-state]");
+    const sections = drawer.locator("section");
+    await expect(drawer).toBeVisible();
+    await expect(state).toBeVisible();
+    await expect(state).toHaveText("进行中 · 第 1 步");
+    await expect(sections.first()).toBeVisible();
+    await expect(sections.first()).toHaveText(`指令${brief}`);
     const box = await drawer.boundingBox();
     assert.ok(box !== null && Math.round(box.x + box.width) === page.viewportSize()?.width);
     await release();
@@ -124,8 +146,10 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
     const subrun = await getSubrun({ baseUrl: server.baseUrl, fetchImpl: setup.fetchImpl, projectId: project,
       subrunId: working.subrun_id });
     assert.ok(subrun.state === "completed" && subrun.answer !== undefined);
-    await expect(drawer.locator("[data-subrun-drawer-state]")).toHaveText(`已完成 · ${subrun.step_count} 步`);
-    await expect(drawer.locator("section")).toHaveText([`指令${brief}`, "过程读取 Chapter A", `结论${subrun.answer}`]);
+    await expect(state).toHaveText(`已完成 · ${subrun.step_count} 步`);
+    await expect(drawer).toBeVisible();
+    await expect(sections).toHaveText([`指令${brief}`, "过程读取 Chapter A", `结论${subrun.answer}`]);
+    for (const section of await sections.all()) await expect(section).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(drawer).toHaveCount(0);
     await ended(delegated.runId);
