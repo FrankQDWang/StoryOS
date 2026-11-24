@@ -43,17 +43,28 @@ def run_limited(arguments, limit, capture=False, **options):
         try:
             result, _ = process.communicate(timeout=limit)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
+            stop_group(process)
             raise SystemExit(f"{' '.join(arguments[:2])} did not end in {limit} s") from None
+        except BaseException:
+            stop_group(process)
+            raise
     if process.returncode != 0:
         raise SystemExit(f"{' '.join(arguments[:2])} failed with the status {process.returncode}")
     return result
 
 
+def stop_group(process):
+    os.killpg(process.pid, signal.SIGKILL)
+    process.wait()
+
+
 def remove_containers(*names):
-    subprocess.run(["docker", "rm", "-fv", *names], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                   timeout=cleanup_limit, check=False)
+    """Remove each container. A container that does not exist is not an error."""
+    for name in names:
+        removal = subprocess.run(["docker", "rm", "-fv", name], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                 text=True, timeout=cleanup_limit, check=False)
+        if removal.returncode != 0 and "No such container" not in removal.stderr:
+            raise SystemExit(f"docker rm could not remove {name}: {removal.stderr.strip()}")
 
 
 def source_identity():
@@ -136,11 +147,24 @@ def write_archive(package, commit):
         new_checksum_file = Path(temporary) / checksum_file.name
         new_checksum_file.write_text(f"{checksum}  {archive.name}\n")
         new_archive.replace(archive)
-        new_checksum_file.replace(checksum_file)
+        try:
+            new_checksum_file.replace(checksum_file)
+        except OSError:
+            # No archive stays with a checksum of another archive.
+            archive.unlink(missing_ok=True)
+            checksum_file.unlink(missing_ok=True)
+            raise
     return archive, checksum
 
 
+def stop_on_signal(number, _frame):
+    raise SystemExit(128 + number)
+
+
 def main():
+    # A stop signal runs the cleanup of each container that the script started.
+    signal.signal(signal.SIGTERM, stop_on_signal)
+    signal.signal(signal.SIGINT, stop_on_signal)
     arguments = argparse.ArgumentParser(description=__doc__)
     arguments.add_argument("--target", choices=("host", "linux-x86_64"), default="host")
     selected = arguments.parse_args().target

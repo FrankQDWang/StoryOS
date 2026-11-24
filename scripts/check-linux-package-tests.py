@@ -9,9 +9,13 @@ import contextlib
 import importlib.util
 import io
 from pathlib import Path
+import signal
 import subprocess
+import sys
 import tempfile
+import time
 import unittest
+from unittest import mock
 
 ROOT = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
 SPEC = importlib.util.spec_from_file_location("package_release", ROOT / "scripts/package-release.py")
@@ -24,15 +28,19 @@ PASSING = {
 }
 
 
+def write_package(package, binaries):
+    (Path(package) / "web").mkdir()
+    for name, body in binaries.items():
+        path = Path(package) / name
+        path.write_text(f"#!/bin/sh\n{body}\n")
+        path.chmod(0o755)
+
+
 def check(binaries, limit=120):
     """Return the printed lines and the refusal of the check, or None when the check passes."""
     printed = io.StringIO()
     with tempfile.TemporaryDirectory(prefix="linux-package-", dir=ROOT / "target") as package:
-        (Path(package) / "web").mkdir()
-        for name, body in binaries.items():
-            path = Path(package) / name
-            path.write_text(f"#!/bin/sh\n{body}\n")
-            path.chmod(0o755)
+        write_package(package, binaries)
         try:
             with contextlib.redirect_stdout(printed):
                 PACKAGE_RELEASE.check_linux_package(package, limit)
@@ -80,6 +88,60 @@ class CheckLinuxPackageTests(unittest.TestCase):
         printed, refusal = check({**PASSING, "storyos-storage": "echo STORYOS_STORAGE_ACTIVATION=Refused"})
         self.assertEqual(refusal, "storyos-storage did not activate the database")
         self.assertNotIn("The Linux package passed its checks", printed)
+
+    def test_a_stop_signal_stops_the_check_and_removes_its_containers(self):
+        with tempfile.TemporaryDirectory(prefix="linux-package-", dir=ROOT / "target") as package:
+            write_package(package, {**PASSING, "storyos-worker": "sleep 600"})
+            script = (
+                "import importlib.util, signal, sys\n"
+                "spec = importlib.util.spec_from_file_location('package_release', sys.argv[1])\n"
+                "module = importlib.util.module_from_spec(spec)\n"
+                "spec.loader.exec_module(module)\n"
+                # The handler of main(); a module with no handler gets the default action.
+                "signal.signal(signal.SIGTERM, getattr(module, 'stop_on_signal', signal.SIG_DFL))\n"
+                "module.check_linux_package(sys.argv[2])\n"
+            )
+            with subprocess.Popen([sys.executable, "-c", script, str(ROOT / "scripts/package-release.py"), package],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as process:
+                worker = f"storyos-linux-package-{process.pid}-worker"
+                deadline = time.monotonic() + 60
+                while worker not in package_containers():
+                    self.assertLess(time.monotonic(), deadline, "the Worker check did not start")
+                    time.sleep(0.2)
+                process.send_signal(signal.SIGTERM)
+                self.assertEqual(process.wait(timeout=90), 128 + signal.SIGTERM)
+
+    def test_a_failed_container_removal_fails_the_check(self):
+        refused = subprocess.CompletedProcess([], 1, stdout="", stderr="Error response from daemon: refused")
+        with mock.patch.object(PACKAGE_RELEASE.subprocess, "run", return_value=refused):
+            with self.assertRaises(SystemExit) as refusal:
+                PACKAGE_RELEASE.remove_containers("storyos-linux-package-0")
+        self.assertIn("could not remove storyos-linux-package-0", str(refusal.exception))
+
+
+class WriteArchiveTests(unittest.TestCase):
+    def test_a_failed_move_of_the_checksum_leaves_no_archive_with_another_checksum(self):
+        commit = "0123456789ab" + "0" * 28
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            package = output / "package"
+            package.mkdir()
+            (package / "storyos-server").write_text("new")
+            archive = output / "storyos-linux-x86_64-0123456789ab.tar.gz"
+            checksum = output / "storyos-linux-x86_64-0123456789ab.tar.gz.sha256"
+            archive.write_text("old")
+            checksum.write_text(f"{'0' * 64}  {archive.name}\n")
+            replace = Path.replace
+
+            def refuse_checksum(path, destination):
+                if Path(destination).name.endswith(".sha256"):
+                    raise OSError("refused")
+                return replace(path, destination)
+
+            with mock.patch.object(PACKAGE_RELEASE, "target", output), \
+                    mock.patch.object(Path, "replace", refuse_checksum), self.assertRaises(OSError):
+                PACKAGE_RELEASE.write_archive(package, commit)
+            self.assertEqual((archive.exists(), checksum.exists()), (False, False))
 
 
 if __name__ == "__main__":
