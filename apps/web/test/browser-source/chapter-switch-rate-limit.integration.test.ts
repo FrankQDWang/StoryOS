@@ -51,30 +51,32 @@ function fakeServer() {
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const method = init?.method ?? "GET";
-    server.requests.push(`${method} ${path}`);
-    if (path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
-    if (path === "/api/v1/projects") {
+    const name = `${method} ${path}`;
+    const P = `/api/v1/projects/${PROJECT}`;
+    server.requests.push(name);
+    if (name === "GET /api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
+    if (name === "GET /api/v1/projects") {
       return jsonResponse({ schema_id: "storyos.query.project-list.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000013", owner_user_id: OWNER,
         projects: [{ project_scope: scope, title: "Project A", revision: "1", open: open() }] });
     }
-    if (path === `/api/v1/projects/${PROJECT}`) {
+    if (name === `GET ${P}`) {
       return jsonResponse({ ...scenario.project, project: { ...scenario.project.project, open: open() } });
     }
-    if (path === `/api/v1/projects/${PROJECT}/chapters/${CHAPTER}`) return jsonResponse(scenario.chapter);
-    const chapterId = path.split("/chapters/")[1];
-    if (chapterId !== undefined && REVISIONS[chapterId] !== undefined) {
+    if (name === `GET ${P}/chapters/${CHAPTER}`) return jsonResponse(scenario.chapter);
+    const chapterId = [CHAPTER_B, CHAPTER_C].find((id) => name === `GET ${P}/chapters/${id}`);
+    if (chapterId !== undefined) {
       return jsonResponse({ ...scenario.chapter, chapter: { chapter_id: chapterId, title: TITLES[chapterId],
         current_revision: chapterRevision(REVISIONS[chapterId]!, "") } });
     }
-    if (path === `/api/v1/projects/${PROJECT}/manuscript/tree`) {
+    if (name === `GET ${P}/manuscript/tree`) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000014", project_scope: scope, tree_revision: "3",
         snapshot: { snapshot_id: "018f0000-0000-7001-8000-000000000032", project_scope: scope },
         volumes: [{ volume_id: VOLUME, title: "Volume A", order: "1", chapters: [CHAPTER, CHAPTER_B, CHAPTER_C]
           .map((id, index) => ({ chapter_id: id, title: TITLES[id], order: String(index + 1) })) }] });
     }
-    if (path.endsWith("/anti-forgery-challenges")) {
+    if (name === `POST ${P}/anti-forgery-challenges`) {
       const request = JSON.parse(String(init?.body)) as { command_schema: string; idempotency_key: string };
       if (request.command_schema === SET_CURRENT_CHAPTER) server.challengeKeys.push(request.idempotency_key);
       if (request.command_schema === server.limited) {
@@ -91,27 +93,29 @@ function fakeServer() {
       return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-09-12T00:00:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
-    if (path.endsWith("/editor-sessions")) return jsonResponse(session());
-    if (path.endsWith(`/editor-sessions/${SESSION}`)) {
+    if (name === `POST ${P}/editor-sessions`) return jsonResponse(session());
+    if (name === `GET ${P}/editor-sessions/${SESSION}`) {
       return jsonResponse({ ...session(), schema_id: "storyos.query.editor-session.response.v1" });
     }
-    if (path.endsWith("/activity")) return emptyActivityStream();
-    if (`${method} ${path}` === CURRENT_CHAPTER && !server.switchRefused) {
+    if (name === `GET ${P}/activity`) return emptyActivityStream();
+    if (name === CURRENT_CHAPTER && !server.switchRefused) {
       current = (JSON.parse(String(init?.body)) as { set_current_chapter_input: { chapter_id: string } })
         .set_current_chapter_input.chapter_id;
       // The reopen opens the Chapter of the response, so the response names the Chapter of the request (#1875).
       return jsonResponse({ ...setCurrentChapterFixture,
-        project: { ...setCurrentChapterFixture.project, open: open() } });
+        project: { ...setCurrentChapterFixture.project, open: open() },
+        effect: { ...setCurrentChapterFixture.effect, current_chapter_id: current },
+        receipt: { ...setCurrentChapterFixture.receipt, expected_heads: [REVISIONS[current]!],
+          prior_heads: [REVISIONS[current]!], resulting_heads: [REVISIONS[current]!] } });
     }
     // The test is not about these panels, and a refused switch gets the same problem.
-    const notFound = [`/api/v1/projects/${PROJECT}/manuscript/statistics`, `/api/v1/projects/${PROJECT}/assistance`,
-      `/api/v1/projects/${PROJECT}/skills`, ...[CHAPTER, CHAPTER_B, CHAPTER_C]
-        .map((id) => `/api/v1/projects/${PROJECT}/chapters/${id}/open-proposals`)].map((route) => `GET ${route}`);
-    if (notFound.includes(`${method} ${path}`) || `${method} ${path}` === CURRENT_CHAPTER) {
+    const notFound = [`${P}/manuscript/statistics`, `${P}/assistance`, `${P}/skills`,
+      ...[CHAPTER, CHAPTER_B, CHAPTER_C].map((id) => `${P}/chapters/${id}/open-proposals`)].map((route) => `GET ${route}`);
+    if (notFound.includes(name) || name === CURRENT_CHAPTER) {
       return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
     }
-    unexpected.push(`${method} ${path}`);
-    throw new Error(`unexpected request: ${method} ${path}`);
+    unexpected.push(name);
+    throw new Error(`unexpected request: ${name}`);
   };
   return { scenario, server, fetchImpl };
 }

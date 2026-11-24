@@ -388,8 +388,8 @@ interface EmptyProjectReadyState {
   kind: "empty-project-ready";
   profile: Release1ProtocolProfile;
   project: GetProjectResponse;
-  /** The revision of the Project in the list of the open. A rename changes it. */
-  revision: string;
+  /** The revision of the Project in the list of the open, or undefined when a reopen could not read it. */
+  revision: string | undefined;
   tree: GetManuscriptTreeResponse;
 }
 
@@ -397,8 +397,8 @@ export interface ProjectReadyState {
   kind: "project-ready";
   profile: Release1ProtocolProfile;
   project: GetProjectResponse;
-  /** The revision of the Project in the list of the open. A rename changes it. */
-  revision: string;
+  /** The revision of the Project in the list of the open, or undefined when a reopen could not read it. */
+  revision: string | undefined;
   chapter: GetChapterResponse;
   editor: EditorState;
   /** The tree that the takeover check of the open read, when it ran. */

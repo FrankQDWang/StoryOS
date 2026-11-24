@@ -22,7 +22,13 @@ const CHAPTER_B = setCurrentChapterFixture.project.open.current_chapter_id;
 const REVISION_B = "018f0000-0000-7001-8000-000000000805";
 const SWITCH_SNAPSHOT = "018f0000-0000-7001-8000-000000000831";
 const TAKEOVER_SNAPSHOT = "018f0000-0000-7001-8000-000000000832";
+const PRIOR_SESSION = "018f0000-0000-7001-8000-000000000833";
+const ACCEPTANCE_SNAPSHOT = "018f0000-0000-7001-8000-000000000834";
+const ACCEPTED_REVISION = "018f0000-0000-7001-8000-000000000806";
+const ACCEPTANCE_COMMIT = "018f0000-0000-7001-8000-000000000835";
 const EMPTY_BODY_DIGEST = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+// The SHA-256 of the candidate text of the Proposal, which an applied Acceptance makes the body of Chapter A.
+const ACCEPTED_BODY_DIGEST = "c4cd3b16acbe6d2358948ccb2004fc1eec27d078096d06fed3fbaa9c16fa22e6";
 const PROTOCOL = "GET /api/v1/protocol";
 const LIST = "GET /api/v1/projects";
 const PROJECT_READ = `GET ${P}`;
@@ -43,28 +49,49 @@ const REJECTION = `POST ${P}/proposals/${PROPOSAL.proposal_id}/rejections`;
 
 type Writer = GetEditorSessionResponse["writer"];
 
+/** The command of each route template that a Challenge names. */
+const CHALLENGE_ROUTES: Record<string, string> = {
+  "POST /api/v1/projects/{project_id}/editor-sessions": SESSION_CREATE,
+  "PUT /api/v1/projects/{project_id}/current-chapter": SWITCH,
+  "POST /api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers": TAKEOVER,
+  "POST /api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances": ACCEPTANCE,
+  "POST /api/v1/projects/{project_id}/proposals/{proposal_id}/rejections": REJECTION,
+};
+
 /**
- * A fake Server of one Project with Chapters A (current) and B. It serves only the reads of the workspace and the
- * commands of `commands`, and it records the start and the end of each request. A switch and a takeover settle a new
- * Snapshot, which the Editor Session base, the Chapter read, and the tree name. `holdAfter` holds the next request of
+ * A fake Server of one Project with Chapters A (current) and B. It serves only the reads of the workspace, the
+ * commands of `commands` (the creation of an Editor Session too), and a Challenge for one of these commands. It records
+ * the start and the end of each request. A switch, a takeover, and an applied Acceptance settle a new Snapshot, which
+ * the Editor Session base, the Chapter read, and the tree name. `acceptance` gives the effect of an Acceptance.
+ * `renameAtSwitch` renames the Project at the switch, as another tab does, and fails the next list read one time. `holdAfter` holds the next request of
  * each given name after the trigger request ends, until `release`. `earlierSwitchResponse` gives the stored
  * Command-response Project of an exact retry: it names the Chapter before the switch. `unavailable` answers the given
  * requests with a 503 problem.
  */
 function fakeServer({ writer = { kind: "current_writer", writer_generation: "1" }, commands = [], proposals = false,
-  earlierSwitchResponse = false, unavailable = [] }: {
-  writer?: Writer; commands?: string[]; proposals?: boolean; earlierSwitchResponse?: boolean; unavailable?: string[];
+  acceptance = "refused", earlierSwitchResponse = false, renameAtSwitch = false, unavailable = [] }: {
+  writer?: Writer; commands?: string[]; proposals?: boolean; acceptance?: "refused" | "applied";
+  earlierSwitchResponse?: boolean; renameAtSwitch?: boolean; unavailable?: string[];
 } = {}) {
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
-  const state = { current: CHAPTER, writer, snapshot: { id: EDITOR_SNAPSHOT, position: "0" } };
+  const state = { current: CHAPTER, writer, snapshot: { id: EDITOR_SNAPSHOT, position: "0" }, accepted: false,
+    title: "Project A", revision: "1", listFailures: 0 };
+  const project = () => ({ ...scenario.project.project, title: state.title, open: open() });
+  const revisionA = () => state.accepted ? chapterRevision(ACCEPTED_REVISION, PROPOSAL.candidate_text)
+    : chapterRevision(REVISION, "Base");
   const log = { started: [] as string[], unexpected: [] as string[], active: new Map<string, number>() };
   let armed: { trigger: string; names: string[] } | undefined;
   let holding = new Set<string>();
   const held: (() => void)[] = [];
   const open = () => ({ kind: "current_chapter" as const, current_chapter_id: state.current });
   const session = (): GetEditorSessionResponse => {
-    const base = state.current === CHAPTER ? scenario.session.base_snapshot : { ...scenario.session.base_snapshot,
+    const base = state.current === CHAPTER ? { ...scenario.session.base_snapshot,
+      authoritative_head_revision_id: revisionA().revision_id, materialized_revision: revisionA(),
+      materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
+        value_hex_lowercase: state.accepted ? ACCEPTED_BODY_DIGEST
+          : scenario.session.base_snapshot.materialized_payload_digest.value_hex_lowercase } }
+      : { ...scenario.session.base_snapshot,
       chapter_id: CHAPTER_B, authoritative_head_revision_id: REVISION_B, target_refs: [`manuscript:${CHAPTER_B}`],
       materialized_revision: chapterRevision(REVISION_B, ""),
       materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
@@ -73,7 +100,8 @@ function fakeServer({ writer = { kind: "current_writer", writer_generation: "1" 
       base_snapshot: { ...base, snapshot_id: state.snapshot.id, project_activity_position: state.snapshot.position } };
   };
   const chapter = (chapterId: string) => chapterId === CHAPTER
-    ? { ...scenario.chapter, project_activity_position: state.snapshot.position }
+    ? { ...scenario.chapter, project_activity_position: state.snapshot.position,
+      chapter: { ...scenario.chapter.chapter, current_revision: revisionA() } }
     : { ...scenario.chapter, project_activity_position: state.snapshot.position,
       chapter: { chapter_id: CHAPTER_B, title: "Chapter B", current_revision: chapterRevision(REVISION_B, "") } };
   const canonical = (): SnapshotDescriptor => ({ snapshot_id: state.snapshot.id, project_scope: scope,
@@ -84,23 +112,31 @@ function fakeServer({ writer = { kind: "current_writer", writer_generation: "1" 
     state.snapshot = { id: snapshotId, position: String(Number(state.snapshot.position) + 1) };
   };
   const answer = async (name: string, init: RequestInit | undefined): Promise<Response> => {
-    if (unavailable.includes(name)) {
+    if (unavailable.includes(name) || (name === LIST && state.listFailures > 0 && state.listFailures--)) {
       return jsonResponse({ schema_id: "storyos.problem.v1", code: "service_unavailable", message: "Unavailable." }, 503);
     }
     if (name === PROTOCOL) return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
     if (name === LIST) {
       return jsonResponse({ schema_id: "storyos.query.project-list.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000013", owner_user_id: OWNER,
-        projects: [{ project_scope: scope, title: "Project A", revision: "1", open: open() }] });
+        projects: [{ project_scope: scope, title: state.title, revision: state.revision, open: open() }] });
     }
-    if (name === PROJECT_READ) return jsonResponse({ ...scenario.project, project: { ...scenario.project.project, open: open() } });
+    if (name === PROJECT_READ) return jsonResponse({ ...scenario.project, project: project() });
     if (name === chapterRead(CHAPTER)) return jsonResponse(chapter(CHAPTER));
     if (name === chapterRead(CHAPTER_B)) return jsonResponse(chapter(CHAPTER_B));
     if (name === CHALLENGE) {
+      const route = JSON.parse(String(init?.body)) as { method?: string; route_template?: string };
+      const command = CHALLENGE_ROUTES[`${route.method} ${route.route_template}`];
+      if (command === undefined || !commands.includes(command)) {
+        log.unexpected.push(`${name} for ${route.method} ${route.route_template}`);
+        throw new Error(`unexpected Challenge: ${route.method} ${route.route_template}`);
+      }
       return jsonResponse({ nonce: "a".repeat(64), expires_at: new Date(Date.now() + 60_000).toISOString(),
         limit_profile_revision: scenario.profile.limit_profile_revision });
     }
-    if (name === SESSION_CREATE) return jsonResponse({ ...session(), schema_id: scenario.session.schema_id });
+    if (name === SESSION_CREATE && commands.includes(SESSION_CREATE)) {
+      return jsonResponse({ ...session(), schema_id: scenario.session.schema_id });
+    }
     if (name === SESSION_READ) return jsonResponse(session());
     if (name === TREE) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
@@ -121,10 +157,15 @@ function fakeServer({ writer = { kind: "current_writer", writer_generation: "1" 
     if (name === `GET ${P}/chapters/${state.current}/open-proposals`) {
       return jsonResponse({ schema_id: "storyos.query.chapter-open-proposals.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000c71", project_scope: scope, chapter_id: state.current,
-        completeness: "complete", proposals: (proposals ? [PROPOSAL] : []).map(({ proposal_id, revision_id, kind,
+        completeness: "complete", proposals: (proposals && !state.accepted ? [PROPOSAL] : []).map(({ proposal_id, revision_id, kind,
           source }) => ({ proposal_id, revision_id, kind, source })) });
     }
-    if (name === PROPOSAL_READ && proposals) return jsonResponse({ ...proposalFixture, project_scope: scope, proposal: PROPOSAL });
+    if (name === PROPOSAL_READ && proposals) {
+      return jsonResponse({ ...proposalFixture, project_scope: scope, proposal: state.accepted
+        ? { ...PROPOSAL, operation_resolution: "applied", operations: PROPOSAL.operations
+          .map((operation) => ({ ...operation, resolution: "applied" })) }
+        : PROPOSAL });
+    }
     if (!commands.includes(name)) {
       log.unexpected.push(name);
       throw new Error(`unexpected request: ${name}`);
@@ -134,18 +175,33 @@ function fakeServer({ writer = { kind: "current_writer", writer_generation: "1" 
       state.current = (JSON.parse(String(init?.body)) as { set_current_chapter_input: { chapter_id: string } })
         .set_current_chapter_input.chapter_id;
       settle(SWITCH_SNAPSHOT);
-      return jsonResponse({ ...setCurrentChapterFixture, project: { ...setCurrentChapterFixture.project,
-        open: earlierSwitchResponse ? earlier : open() } });
+      if (renameAtSwitch) Object.assign(state, { title: "Project B", revision: "2", listFailures: 1 });
+      return jsonResponse({ ...setCurrentChapterFixture, project: { ...project(),
+        open: earlierSwitchResponse ? earlier : open() },
+        effect: { ...setCurrentChapterFixture.effect, base_snapshot_id: SWITCH_SNAPSHOT,
+          current_chapter_id: state.current, project_activity_position: state.snapshot.position },
+        receipt: { ...setCurrentChapterFixture.receipt, expected_heads: [REVISION_B], prior_heads: [REVISION_B],
+          resulting_heads: [REVISION_B] } });
     }
     if (name === TAKEOVER) {
       state.writer = { kind: "current_writer", writer_generation: "2" };
       settle(TAKEOVER_SNAPSHOT);
-      return jsonResponse(takeoverFixture);
+      return jsonResponse({ ...takeoverFixture,
+        receipt: { ...takeoverFixture.receipt, expected_heads: [REVISION], prior_heads: [REVISION],
+          resulting_heads: [REVISION] },
+        result: { ...takeoverFixture.result, prior_editor_session_id: PRIOR_SESSION,
+          resulting_editor_session_id: SESSION, resulting_heads: [REVISION], resulting_snapshot_id: TAKEOVER_SNAPSHOT,
+          resulting_snapshot_activity_position: state.snapshot.position } });
     }
     if (name === ACCEPTANCE) {
-      // A refused Acceptance changes no head, so the Server keeps its Snapshot.
+      // A refused Acceptance changes no head, so the Server keeps its Snapshot. An applied one settles a Snapshot.
       const request = JSON.parse(String(init?.body)) as AcceptProposalRequest;
       const input = request.accept_proposal_input;
+      const applied = acceptance === "applied";
+      if (applied) {
+        state.accepted = true;
+        settle(ACCEPTANCE_SNAPSHOT);
+      }
       return jsonResponse({ schema_id: "storyos.command.accept-proposal.response.v1",
         correlation_id: input.correlation_id, project_scope: scope, command_id: "018f0000-0000-7001-8000-000000000e05",
         author_command_admission_id: "018f0000-0000-7001-8000-000000000e06",
@@ -156,15 +212,18 @@ function fakeServer({ writer = { kind: "current_writer", writer_generation: "1" 
           proposal_revision_id: input.proposal_revision_id, validation_receipt_id: input.validation_receipt_id,
           selected_operation_ids: input.selected_operation_ids,
           prior_authoritative_revision_ids: [input.expected_authoritative_revision_id],
-          resulting_authoritative_revision_ids: [input.expected_authoritative_revision_id],
-          authoritative_commit_ids: [], condition_refs: [], result: "refused", created_at: "2026-10-18T08:00:00.000Z" },
-        project: { ...scenario.project.project, open: open() },
-        effect: { kind: "refused", reason: "not_eligible" } });
+          resulting_authoritative_revision_ids: [applied ? ACCEPTED_REVISION : input.expected_authoritative_revision_id],
+          authoritative_commit_ids: applied ? [ACCEPTANCE_COMMIT] : [], condition_refs: [],
+          result: applied ? "applied" : "refused", created_at: "2026-10-18T08:00:00.000Z" },
+        project: project(),
+        effect: applied ? { kind: "applied", author_action_sequence: "1", authoritative_commit_id: ACCEPTANCE_COMMIT,
+          authoritative_revision: revisionA(), project_activity_position: state.snapshot.position,
+          target_resolution: "exact_base" } : { kind: "refused", reason: "not_eligible" } });
     }
     const request = JSON.parse(String(init?.body)) as RejectProposalOperationsRequest;
     const input = request.reject_proposal_operations_input;
     return jsonResponse({ ...rejectionFixture, correlation_id: input.correlation_id, project_scope: scope,
-      project: { ...scenario.project.project, open: open() },
+      project: project(),
       effect: { ...rejectionFixture.effect, operation_ids: input.selected_pending_operation_ids },
       receipt: { ...rejectionFixture.receipt, project_scope: scope,
         command_digest: await digestRejectProposalOperations(request, crypto),
@@ -243,7 +302,7 @@ it.each([
   { tab: "with its stored Editor Session", stored: true, session: SESSION_READ },
   { tab: "in a new tab", stored: false, session: SESSION_CREATE },
 ])("opens a Project $tab with the independent reads in flight at the same time", async ({ stored, session }) => {
-  const server = fakeServer();
+  const server = fakeServer({ commands: stored ? [] : [SESSION_CREATE] });
   await deleteJournal(server.scenario.journalName);
   if (stored) sessionStorage.setItem(`active_session:${OWNER}:${PROJECT}`, SESSION);
   server.hold([PROTOCOL, PROJECT_READ, LIST]);
@@ -261,7 +320,7 @@ it.each([
 });
 
 it("reopens after a Chapter switch with only the Chapter read and the Editor Session read, at the same time", async () => {
-  const server = fakeServer({ commands: [SWITCH] });
+  const server = fakeServer({ commands: [SESSION_CREATE, SWITCH] });
   const workspace = await openWorkspace(server);
   await expect.poll(() => workspace.root.querySelector(`button[data-chapter-id="${CHAPTER_B}"]`)).not.toBeNull();
   const before = server.log.started.length;
@@ -283,7 +342,7 @@ it.each([
     message: undefined },
 ])("reopens after $decision with only the Chapter read and the Editor Session read, at the same time",
   async ({ button, command, message }) => {
-    const server = fakeServer({ commands: [command], proposals: true });
+    const server = fakeServer({ commands: [SESSION_CREATE, command], proposals: true });
     const workspace = await openWorkspace(server);
     const card = () => workspace.root.querySelector(`.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"]`);
     const control = () => card()?.querySelector<HTMLButtonElement>(button);
@@ -305,10 +364,35 @@ it.each([
       .toEqual({ decisions: 1, open: [], unexpected: [] });
   });
 
+it("reopens after an applied acceptance with only the Chapter read and the Editor Session read, at the same time",
+  async () => {
+    const server = fakeServer({ commands: [SESSION_CREATE, ACCEPTANCE], proposals: true, acceptance: "applied" });
+    const workspace = await openWorkspace(server);
+    const control = () => workspace.root.querySelector<HTMLButtonElement>(
+      `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
+    await expect.poll(() => control()?.disabled).toBe(false);
+    const before = server.log.started.length;
+    server.holdAfter(ACCEPTANCE, [chapterRead(CHAPTER), SESSION_READ]);
+
+    control()!.click();
+    await expect.poll(server.inFlight).toEqual([chapterRead(CHAPTER), SESSION_READ].sort());
+    // The reopen uses the Command-response Project. A later reconciliation of the remounted view is SP1-02.
+    const reopen = server.log.started.slice(server.log.started.indexOf(ACCEPTANCE, before));
+    expect({ open: openReads(reopen), unexpected: server.log.unexpected }).toEqual({ open: [], unexpected: [] });
+    server.release();
+
+    const revision = () => workspace.root.querySelector("[data-authoritative-revision-id]")
+      ?.getAttribute("data-authoritative-revision-id");
+    await expect.poll(() => ({ ...workspace.shown(), revision: revision() }))
+      .toEqual({ title: "Chapter A", save: "saved", failure: "", revision: ACCEPTED_REVISION });
+    expect({ decisions: server.count(ACCEPTANCE), unexpected: server.log.unexpected })
+      .toEqual({ decisions: 1, unexpected: [] });
+  });
+
 it("reopens after a takeover with the Project read, then the Chapter read and the Editor Session read at the same time",
   async () => {
     const server = fakeServer({ writer: { kind: "read_only", observed_writer_generation: "1",
-      reason: "secondary_session" }, commands: [TAKEOVER] });
+      reason: "secondary_session" }, commands: [SESSION_CREATE, TAKEOVER] });
     const workspace = await openWorkspace(server);
     const takeOver = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
     await expect.poll(takeOver).not.toBeNull();
@@ -337,7 +421,7 @@ it("reopens after a takeover with the Project read, then the Chapter read and th
   });
 
 it("reads the list of Projects, the tree, and the statistics one time for one open", async () => {
-  const server = fakeServer();
+  const server = fakeServer({ commands: [SESSION_CREATE] });
   server.hold([TREE]);
   const workspace = await openWorkspace(server);
   await expect.poll(server.inFlight).toContain(TREE);
@@ -364,7 +448,7 @@ it("reads the tree one time for one open with a writer generation above 1", asyn
 });
 
 it("reads the Project when the Command-response Project of the switch names an earlier Chapter", async () => {
-  const server = fakeServer({ commands: [SWITCH], earlierSwitchResponse: true });
+  const server = fakeServer({ commands: [SESSION_CREATE, SWITCH], earlierSwitchResponse: true });
   const workspace = await openWorkspace(server);
   await expect.poll(() => workspace.root.querySelector(`button[data-chapter-id="${CHAPTER_B}"]`)).not.toBeNull();
   const before = server.log.started.length;
@@ -379,8 +463,25 @@ it("reads the Project when the Command-response Project of the switch names an e
     open: [PROJECT_READ], chapters: [chapterRead(CHAPTER), chapterRead(CHAPTER_B)], unexpected: [] });
 });
 
+it("reads the list again when the reopen after a rename in another tab cannot read it", async () => {
+  const server = fakeServer({ commands: [SESSION_CREATE, SWITCH], renameAtSwitch: true });
+  const workspace = await openWorkspace(server);
+  await expect.poll(() => workspace.root.querySelector(`button[data-chapter-id="${CHAPTER_B}"]`)).not.toBeNull();
+
+  workspace.root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`)!.click();
+
+  // The reopen does not know the revision of the new title, so the view reads the list, and then the rename can start.
+  await expect.poll(() => ({ ...workspace.shown(), project: workspace.root.querySelector(".project-heading h1")
+    ?.textContent, list: server.count(LIST) }))
+    .toEqual({ title: "Chapter B", save: "saved", failure: "", project: "Project B", list: 3 });
+  workspace.root.querySelector<HTMLButtonElement>("button[data-project-menu]")!.click();
+  await expect.poll(() => workspace.root.querySelector<HTMLButtonElement>("button[data-begin-rename-project]")
+    ?.disabled).toBe(false);
+  expect(server.log.unexpected).toEqual([]);
+});
+
 it("reads the statistics one time when the tree read fails", async () => {
-  const server = fakeServer({ unavailable: [TREE] });
+  const server = fakeServer({ commands: [SESSION_CREATE], unavailable: [TREE] });
   await openWorkspace(server);
 
   // The tree read tries three times, with waits of 0.5 s and 1 s.
@@ -389,7 +490,7 @@ it("reads the statistics one time when the tree read fails", async () => {
 });
 
 it("opens the Project with each check of the first open after a decision that did not settle", async () => {
-  const server = fakeServer({ commands: [REJECTION], proposals: true, unavailable: [REJECTION] });
+  const server = fakeServer({ commands: [SESSION_CREATE, REJECTION], proposals: true, unavailable: [REJECTION] });
   const workspace = await openWorkspace(server);
   const card = () => workspace.root.querySelector(`.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"]`);
   const control = () => card()?.querySelector<HTMLButtonElement>("button[data-proposal-reject]");

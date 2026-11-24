@@ -172,6 +172,16 @@ function ProjectReadyView({
     if (projection.save_state !== "needs_attention") setEditorFailure(undefined);
   }), [writing, currentChapterId]);
 
+  // A reopen that could not read the list leaves the revision unknown.
+  useEffect(() => {
+    if (state.revision !== undefined) return;
+    void listProjects({ baseUrl, fetchImpl }).then((response) => {
+      const item = response.projects.find((entry) => entry.project_scope.project_id === state.project.project.project_id);
+      if (item === undefined || renamedRef.current.revision !== undefined) return;
+      setRevision(item.revision);
+      renamedRef.current = { title: item.title, revision: item.revision };
+    }).catch(() => {});
+  }, [baseUrl, fetchImpl, state.project.project.project_id, state.revision]);
   // The takeover check of the open read the tree already.
   useEffect(() => {
     if (state.tree !== undefined) return;
@@ -694,7 +704,7 @@ function EmptyProjectReadyView({
   onChapterCreated,
 }: {
   project: GetProjectResponse;
-  revision: string;
+  revision: string | undefined;
   tree: GetManuscriptTreeResponse;
   baseUrl: string;
   fetchImpl: typeof fetch;
@@ -706,6 +716,14 @@ function EmptyProjectReadyView({
   const [revision, setRevision] = useState(openedRevision);
   const [volumeRemoval, setVolumeRemoval] = useState<string>();
   const [addressNotice, setAddressNotice] = useState<string>();
+  // A reopen that could not read the list leaves the revision unknown.
+  useEffect(() => {
+    if (openedRevision !== undefined) return;
+    void listProjects({ baseUrl, fetchImpl }).then((response) => {
+      const item = response.projects.find((entry) => entry.project_scope.project_id === project.project.project_id);
+      if (item !== undefined) setRevision((current) => current ?? item.revision);
+    }).catch(() => {});
+  }, [baseUrl, fetchImpl, project.project.project_id, openedRevision]);
   // A Project with no Chapter has no Chapter to open from the address.
   const holdAddressConversation = useAddressChapter({ tree, currentChapterId: undefined, canChangeCurrentChapter: false,
     open: async () => false, onNotFound: () => setAddressNotice(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });

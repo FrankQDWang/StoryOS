@@ -152,10 +152,10 @@ export async function openControlledProject(options: ProjectOpenOptions): Promis
  * Opens the Project again after a settled command of this page. The page holds the protocol profile and the
  * revision of the list, so a reopen reads only the Project (when the command response does not carry it), the
  * Chapter, and the Editor Session. A Command-response Project of an exact retry can be earlier than the current
- * Project: when the Editor Session has another Chapter, the reopen reads the Project.
+ * Project: when the Editor Session has another Chapter, or the open with it fails, the reopen reads the Project.
  */
 export async function reopenControlledProject(options: Omit<ProjectOpenOptions, "projectId"> & {
-  opened: Pick<ProjectReadyState, "profile" | "project"> & { title: string; revision: string };
+  opened: Pick<ProjectReadyState, "profile" | "project"> & { title: string; revision: string | undefined };
   settled?: SettledProject | undefined;
 }): Promise<ControlledProjectState> {
   const { baseUrl, opened, settled, fetchImpl = globalThis.fetch, signal } = options;
@@ -174,14 +174,18 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
     const project: GetProjectResponse = settled === undefined ? projectValue as GetProjectResponse
       : { ...opened.project, project_scope: settled.project_scope, project: settled.project };
     // Only a rename changes the revision. A rename in another tab changes the title, so the list gives the revision.
+    // When the list read fails, the revision is unknown and the view reads the list again.
     const revision = project.project.title === opened.title ? Promise.resolve(opened.revision)
       : listProjects(queryOptions).then((listed) => listed.projects.find((entry) =>
-        entry.project_scope.project_id === projectId)?.revision ?? opened.revision, () => opened.revision);
+        entry.project_scope.project_id === projectId)?.revision, () => undefined);
     const reopened = await openProjectWorkspace({ ...options, projectId }, opened.profile, project, revision,
       settled === undefined ? "no session check" : "same chapter as the session");
-    return reopened.kind === "stale-command-response"
-      ? await reopenControlledProject({ ...options, settled: undefined })
-      : reopened;
+    // A stored response can name a Chapter that a later command removed, so a failed open reads the Project.
+    if (reopened.kind === "stale-command-response"
+      || (settled !== undefined && reopened.kind === "project-blocked")) {
+      return await reopenControlledProject({ ...options, settled: undefined });
+    }
+    return reopened;
   } catch (error) {
     return projectUnavailable(error);
   }
@@ -192,7 +196,7 @@ async function openProjectWorkspace(
   options: ProjectOpenOptions,
   profile: Release1ProtocolProfile,
   project: GetProjectResponse,
-  revisionRead: string | Promise<string>,
+  revisionRead: string | undefined | Promise<string | undefined>,
   sessionChapterCheck: "no session check" | "same chapter as the session",
 ): Promise<ControlledProjectState | { kind: "stale-command-response" }> {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal,
