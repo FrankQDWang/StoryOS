@@ -30,6 +30,7 @@ const REVISION_B = "018f0000-0000-7001-8000-000000000805";
 const SWITCH_SNAPSHOT = "018f0000-0000-7001-8000-000000000831";
 const TAKEOVER_SNAPSHOT = "018f0000-0000-7001-8000-000000000832";
 const PRIOR_SESSION = "018f0000-0000-7001-8000-000000000833";
+const SECOND_SESSION = "018f0000-0000-7001-8000-000000000837";
 const ACCEPTANCE_SNAPSHOT = "018f0000-0000-7001-8000-000000000834";
 const ACCEPTED_REVISION = "018f0000-0000-7001-8000-000000000806";
 const ACCEPTANCE_COMMIT = "018f0000-0000-7001-8000-000000000835";
@@ -102,7 +103,8 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * applies at the first Proposal read after the next Chapter A read and Editor Session read. `takeover` and
  * `rejection` give the effect of these commands. Before a `conflicted` Rejection, another tab changes the text of
  * Chapter A, and the Operation stays pending. Before a `refused` Rejection, another tab applies the Operation. `other`
- * adds a second open Proposal. A rename of Chapter A changes its title in the tree and advances the tree revision. With
+ * adds a second open Proposal. As on the Server, only the first created Editor Session holds the writer; a later
+ * creation gives a read-only Session. A rename of Chapter A changes its title in the tree and advances the tree revision. With
  * `proposalResult`, the Run of the Conversation has a Proposal result with a change in Chapter A.
  */
 function fakeServer({ reads, writer = { kind: "current_writer", writer_generation: "1" }, commands = [],
@@ -117,13 +119,14 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
   const state = { current: CHAPTER, writer, snapshot: { id: EDITOR_SNAPSHOT, position: "0" }, accepted: false,
-    rejected: false, edited: false, title: "Chapter A", treeRevision: 3,
+    rejected: false, edited: false, title: "Chapter A", treeRevision: 3, created: 0,
     superseded: undefined as GetEditorSessionResponse | undefined,
     late: undefined as { chapter: boolean; session: boolean } | undefined };
   const project = () => ({ ...scenario.project.project, open: open() });
   const revisionA = () => state.accepted ? chapterRevision(ACCEPTED_REVISION, PROPOSAL.candidate_text)
     : state.edited ? chapterRevision(EDITED_REVISION, PROPOSAL.candidate_text) : chapterRevision(REVISION, "Base");
-  const log = { started: [] as string[], unexpected: [] as string[], active: new Map<string, number>() };
+  const log = { started: [] as string[], unexpected: [] as string[], active: new Map<string, number>(),
+    events: [] as string[] };
   let armed: { trigger: string; names: string[] } | undefined;
   let holding = new Set<string>();
   let holdEach = false;
@@ -187,7 +190,11 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         limit_profile_revision: scenario.profile.limit_profile_revision });
     }
     if (name === SESSION_CREATE) {
-      return jsonResponse({ ...session(), schema_id: scenario.session.schema_id });
+      state.created += 1;
+      return jsonResponse(state.created === 1 ? { ...session(), schema_id: scenario.session.schema_id }
+        : { ...session(), schema_id: scenario.session.schema_id,
+          editor_session: { ...scenario.session.editor_session, editor_session_id: SECOND_SESSION },
+          writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" } });
     }
     if (name === SESSION_READ) {
       if (state.late !== undefined) state.late.session = true;
@@ -359,6 +366,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   const fetchImpl: typeof fetch = async (input, init) => {
     const name = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
     log.started.push(name);
+    log.events.push(`start ${name}`);
     log.active.set(name, (log.active.get(name) ?? 0) + 1);
     try {
       if (holding.delete(name) || holdEach) await new Promise<void>((resolve) => { held.push(resolve); });
@@ -367,6 +375,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
       return response;
     } finally {
       log.active.set(name, log.active.get(name)! - 1);
+      log.events.push(`end ${name}`);
       if (armed?.trigger === name) {
         holding = new Set(armed.names);
         armed = undefined;
@@ -386,6 +395,9 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
 }
 
 const openDatabases = new Set<IDBDatabase>();
+// Each Journal connection that the page closed, and each connection with a completed transaction.
+const closedDatabases = new Set<IDBDatabase>();
+const readDatabases = new WeakSet<IDBDatabase>();
 const unmounts: (() => void)[] = [];
 // The view opens the Journal again at each reopen, so the test closes each connection before it deletes the Journal.
 const openJournal = indexedDB.open.bind(indexedDB);
@@ -393,7 +405,18 @@ const openJournal = indexedDB.open.bind(indexedDB);
 beforeEach(() => {
   Object.defineProperty(indexedDB, "open", { configurable: true, value: (name: string, version?: number) => {
     const request = openJournal(name, version);
-    request.addEventListener("success", () => { trackDatabase(request.result, openDatabases); });
+    request.addEventListener("success", () => {
+      const database = request.result;
+      trackDatabase(database, openDatabases);
+      const close = database.close.bind(database);
+      database.close = () => { closedDatabases.add(database); close(); };
+      const transaction = database.transaction.bind(database);
+      database.transaction = ((...args: Parameters<IDBDatabase["transaction"]>) => {
+        const started = transaction(...args);
+        started.addEventListener("complete", () => { readDatabases.add(database); });
+        return started;
+      }) as IDBDatabase["transaction"];
+    });
     return request;
   } });
 });
@@ -403,6 +426,7 @@ afterEach(async () => {
   Reflect.deleteProperty(indexedDB, "open");
   history.replaceState(null, "", location.pathname);
   closeTrackedDatabases(openDatabases);
+  closedDatabases.clear();
   document.body.replaceChildren();
   sessionStorage.clear();
   await deleteJournal(createBrowserScenario().journalName);
@@ -456,26 +480,87 @@ async function expectReopenSteps(server: ReturnType<typeof fakeServer>, command:
   };
 }
 
-it.each([
-  { tab: "with its stored Editor Session", stored: true, session: SESSION_READ },
-  { tab: "in a new tab", stored: false, session: SESSION_CREATE },
-])("opens a Project $tab with the independent reads in flight at the same time", async ({ stored, session }) => {
-  const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER), ...(stored ? [SESSION_READ] : [])],
-    commands: stored ? [] : [SESSION_CREATE] });
+it("opens a Project with its stored Editor Session with the independent reads in flight at the same time", async () => {
+  const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER), SESSION_READ] });
   await deleteJournal(server.scenario.journalName);
-  if (stored) sessionStorage.setItem(`active_session:${OWNER}:${PROJECT}`, SESSION);
+  sessionStorage.setItem(`active_session:${OWNER}:${PROJECT}`, SESSION);
   server.hold([PROTOCOL, PROJECT_READ, LIST]);
   const opening = openControlledProject({ baseUrl: location.origin, projectId: PROJECT,
     fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
   await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ, PROTOCOL].sort());
-  // In a new tab the Challenge ends first, and the creation of the Session is in flight with the Chapter read.
-  server.hold([chapterRead(CHAPTER), session]);
+  server.hold([chapterRead(CHAPTER), SESSION_READ]);
   server.release();
-  await expect.poll(server.inFlight).toEqual([chapterRead(CHAPTER), session].sort());
+  await expect.poll(server.inFlight).toEqual([chapterRead(CHAPTER), SESSION_READ].sort());
   server.release();
   const opened = await opening;
   expect({ kind: opened.kind, editor: opened.kind === "project-ready" ? opened.editor.kind : undefined,
     unexpected: server.log.unexpected }).toEqual({ kind: "project-ready", editor: "editor-ready", unexpected: [] });
+});
+
+/** A `Crypto` that counts the digests that it computes, for example the digest that prepares a command. */
+function countingCrypto() {
+  const digests = { started: 0, ended: 0 };
+  const subtle = new Proxy(crypto.subtle, { get: (target, key) => key === "digest"
+    ? async (...args: Parameters<SubtleCrypto["digest"]>) => {
+      digests.started += 1;
+      try { return await target.digest(...args); } finally { digests.ended += 1; }
+    }
+    : (Reflect.get(target, key) as (...args: unknown[]) => unknown).bind(target) });
+  const cryptoImpl = new Proxy(crypto, { get: (target, key) => key === "subtle" ? subtle
+    : (Reflect.get(target, key) as (...args: unknown[]) => unknown).bind(target) });
+  return { cryptoImpl, digests };
+}
+
+it("opens a Project in a new tab and creates the Editor Session only after the Chapter response", async () => {
+  const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER)], commands: [SESSION_CREATE] });
+  await deleteJournal(server.scenario.journalName);
+  const { cryptoImpl, digests } = countingCrypto();
+  server.hold([PROTOCOL, PROJECT_READ, LIST]);
+  const opening = openControlledProject({ baseUrl: location.origin, projectId: PROJECT,
+    fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl });
+  await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ, PROTOCOL].sort());
+  server.hold([chapterRead(CHAPTER)]);
+  server.release();
+  // While the Chapter read waits, the Journal of this open reads its schema. A creation that ran now would compute its
+  // command digest in the same task, and then send its Challenge and its request.
+  await expect.poll(() => ({ inFlight: server.inFlight(),
+    schemaRead: [...openDatabases].some((database) => readDatabases.has(database)) }))
+    .toEqual({ inFlight: [chapterRead(CHAPTER)], schemaRead: true });
+  await expect.poll(() => digests.ended === digests.started
+    && (server.count(CHALLENGE) === 0 || server.count(SESSION_CREATE) > 0)).toBe(true);
+  server.release();
+  const opened = await opening;
+  // A creation changes the Server, so its request starts after the end of the Chapter read (#1884).
+  const chapterEnd = server.log.events.indexOf(`end ${chapterRead(CHAPTER)}`);
+  expect({ kind: opened.kind, editor: opened.kind === "project-ready" ? opened.editor.kind : undefined,
+    creationAfterChapter: chapterEnd >= 0 && chapterEnd < server.log.events.indexOf(`start ${SESSION_CREATE}`),
+    unexpected: server.log.unexpected }).toEqual({ kind: "project-ready", editor: "editor-ready",
+    creationAfterChapter: true, unexpected: [] });
+});
+
+it("creates no Editor Session when the Chapter read of a new tab fails, and the next open is the writer", async () => {
+  const unavailable = [chapterRead(CHAPTER)];
+  const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER)], commands: [SESSION_CREATE],
+    unavailable });
+  await deleteJournal(server.scenario.journalName);
+  const open = () => openControlledProject({ baseUrl: location.origin, projectId: PROJECT,
+    fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
+  const failed = await open();
+  // The failed open closes its Journal as its last step, so no work of it is left after that.
+  await expect.poll(() => openDatabases.size === 1 && [...openDatabases].every((database) =>
+    closedDatabases.has(database))).toBe(true);
+  const created = server.count(SESSION_CREATE);
+  const retry = server.log.started.length;
+  unavailable.length = 0;
+
+  const opened = await open();
+
+  // Only the first created Session holds the writer, so an earlier creation would make this open read-only.
+  expect({ failed: failed.kind, created, retry: server.log.started.slice(retry)
+    .filter((name) => name === SESSION_CREATE).length, kind: opened.kind,
+    writer: opened.kind === "project-ready" && opened.editor.kind === "editor-ready"
+      ? opened.editor.session.writer.kind : "none", unexpected: server.log.unexpected }).toEqual({
+    failed: "project-blocked", created: 0, retry: 1, kind: "project-ready", writer: "current_writer", unexpected: [] });
 });
 
 it("reopens after a Chapter switch with the Project read and the list read, then the Chapter and the Editor Session",
