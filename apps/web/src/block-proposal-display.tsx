@@ -57,14 +57,6 @@ type ProposalRead = {
   proposal?: BlockProposalInspect | undefined;
 };
 
-/** True when the Proposal comes from the Run and the decision that the locator names. An empty name matches each. */
-function proposalMatches(locator: ProposalLocator, proposal: BlockProposalInspect) {
-  return (locator.runId === "" || (proposal.source.kind === "agent_run_decision"
-      && proposal.source.run_id === locator.runId))
-    && (locator.decisionId === "" || (proposal.source.kind === "agent_run_decision"
-      && proposal.source.decision_id === locator.decisionId));
-}
-
 export function BlockProposalDisplay({
   scope, chapterId, authoritativeRevisionId, locators, refreshKey, safeToProject,
   onAccepted, ...editorProps
@@ -189,65 +181,40 @@ export function BlockProposalDisplay({
     decisionGeneration, locators.map((locator) => locator.proposalId).join("|"),
     editorProps.baseUrl, editorProps.fetchImpl]);
 
-  // A Proposal read checks the Scope, the Proposal, and the Run and the decision that the locator names.
-  const readProposal = async (locator: ProposalLocator): Promise<ProposalRead> => {
-    try {
-      const response = await getProposal({
-        baseUrl: editorProps.baseUrl,
-        fetchImpl: editorProps.fetchImpl,
-        projectId: scope.project_id,
-        proposalId: locator.proposalId,
-      });
-      if (response.project_scope.owner_user_id !== scope.owner_user_id
-        || response.project_scope.project_id !== scope.project_id
-        || response.proposal.proposal_id !== locator.proposalId
-        || !proposalMatches(locator, response.proposal)) {
-        return { locator };
-      }
-      return { locator: locator.runId === "" && response.proposal.source.kind === "agent_run_decision" ? {
-        proposalId: locator.proposalId,
-        runId: response.proposal.source.run_id,
-        decisionId: response.proposal.source.decision_id,
-      } : locator, proposal: response.proposal };
-    } catch {
-      return { locator };
-    }
-  };
-  // Each Proposal read has a number. A response never replaces the result of a later read of the same Proposal (#1876).
-  const proposalReads = useRef({ last: 0, latest: new Map<string, number>() });
-  const startProposalRead = (proposalId: string) => {
-    proposalReads.current.last += 1;
-    proposalReads.current.latest.set(proposalId, proposalReads.current.last);
-    return proposalReads.current.last;
-  };
-  // The refresh whose results the view shows. A change of the locators alone reads only a Proposal with no read.
-  const shownRefresh = useRef<string | undefined>(undefined);
-
   useEffect(() => {
     let active = true;
-    const refresh = canonical([scope.owner_user_id, scope.project_id, chapterId, refreshKey, settlementRefresh,
-      settlements, editorProps.baseUrl]);
-    const reading = effectiveLocators.filter((locator) => shownRefresh.current !== refresh
-      || !reads.some((item) => item.proposal !== undefined && item.locator.proposalId === locator.proposalId
-        && proposalMatches(locator, item.proposal)))
-      .map((locator) => ({ locator, sequence: startProposalRead(locator.proposalId) }));
-    void Promise.all(reading.map(async ({ locator, sequence }) => ({ sequence, read: await readProposal(locator) })))
-      .then((results) => {
-        if (!active) return;
-        shownRefresh.current = refresh;
-        // Navigation can reorder the same locators. If the result does not change, no new Acceptance check is necessary.
-        const unordered = (items: readonly ProposalRead[]) => canonical([...items].sort((left, right) =>
-          left.locator.proposalId.localeCompare(right.locator.proposalId)));
-        setReads((current) => {
-          const next = effectiveLocators.map((locator) => {
-            const result = results.find(({ read }) => read.locator.proposalId === locator.proposalId);
-            const kept = current.find((item) => item.locator.proposalId === locator.proposalId);
-            return result !== undefined && proposalReads.current.latest.get(locator.proposalId) === result.sequence
-              ? result.read : kept ?? { locator };
-          });
-          return unordered(current) === unordered(next) ? current : next;
+    void Promise.all(effectiveLocators.map(async (locator): Promise<ProposalRead> => {
+      try {
+        const response = await getProposal({
+          baseUrl: editorProps.baseUrl,
+          fetchImpl: editorProps.fetchImpl,
+          projectId: scope.project_id,
+          proposalId: locator.proposalId,
         });
-      });
+        if (response.project_scope.owner_user_id !== scope.owner_user_id
+          || response.project_scope.project_id !== scope.project_id
+          || response.proposal.proposal_id !== locator.proposalId
+          || (locator.runId !== "" && (response.proposal.source.kind !== "agent_run_decision"
+            || response.proposal.source.run_id !== locator.runId))
+          || (locator.decisionId !== ""
+            && (response.proposal.source.kind !== "agent_run_decision"
+              || response.proposal.source.decision_id !== locator.decisionId))) {
+          return { locator };
+        }
+        return { locator: locator.runId === "" && response.proposal.source.kind === "agent_run_decision" ? {
+          proposalId: locator.proposalId,
+          runId: response.proposal.source.run_id,
+          decisionId: response.proposal.source.decision_id,
+        } : locator, proposal: response.proposal };
+      } catch {
+        return { locator };
+      }
+    })).then((result) => {
+      // Navigation can reorder the same locators. If the result does not change, no new Acceptance check is necessary.
+      const unordered = (items: readonly ProposalRead[]) => canonical([...items].sort((left, right) =>
+        left.locator.proposalId.localeCompare(right.locator.proposalId)));
+      if (active) setReads((current) => unordered(current) === unordered(result) ? current : result);
+    });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, locatorKey, refreshKey,
     settlementRefresh, settlements,
@@ -582,23 +549,15 @@ export function BlockProposalDisplay({
   };
 
   /**
-   * Shows a settled Rejection (#1876). The Chapter text does not change, so the view reads only the rejected Proposal
-   * again, and the decision reads the open suggestions. A changed Chapter Head or a failed read opens the Project again.
+   * Shows a settled Rejection (#1876). The Chapter text does not change, so the view reads the open suggestions again.
+   * A changed Chapter Head opens the Project again.
    */
-  const showRejection = async (proposalId: string, effect: "resolved" | "conflicted" | "refused") => {
-    const shown = reads.find((item) => item.locator.proposalId === proposalId)?.locator;
-    if (effect === "conflicted" || shown === undefined) {
+  const showRejection = async (effect: "resolved" | "conflicted" | "refused") => {
+    if (effect === "conflicted") {
       await onAccepted(true);
       return;
     }
-    const sequence = startProposalRead(proposalId);
-    const read = await readProposal(shown);
-    if (read.proposal === undefined) {
-      await onAccepted(true);
-      return;
-    }
-    if (proposalReads.current.latest.get(proposalId) !== sequence) return;
-    setReads((current) => current.map((item) => item.locator.proposalId === proposalId ? read : item));
+    setSettlementRefresh((value) => value + 1);
   };
 
   const rejectDisplayed = (target: {
@@ -661,7 +620,7 @@ export function BlockProposalDisplay({
           conflicted: "正文已变化，拒绝结果请检查。",
           refused: "此次拒绝未生效，请检查当前候选文字。" }[response.effect.kind];
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
-        await showRejection(target.proposalId, response.effect.kind);
+        await showRejection(response.effect.kind);
       } catch (error) {
         setDecisionMessages((current) => ({ ...current,
           [target.proposalId]: historicalAcknowledgementUnavailable(error)
@@ -696,7 +655,7 @@ export function BlockProposalDisplay({
           conflicted: "正文已变化，拒绝结果请检查。",
           refused: "此次拒绝未生效，请检查当前候选文字。",
         }[response.effect.kind] }));
-        await showRejection(proposalId, response.effect.kind);
+        await showRejection(response.effect.kind);
       } catch {
         setDecisionMessages((current) => ({ ...current,
           [proposalId]: "拒绝结果暂不可确认。请重试同一操作。" }));

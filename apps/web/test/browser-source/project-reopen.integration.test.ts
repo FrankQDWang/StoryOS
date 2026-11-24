@@ -101,22 +101,21 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * requests with a 503 problem. `lost` applies the given requests and then loses their response. A `late` Acceptance
  * applies at the first Proposal read after the next Chapter A read and Editor Session read. `takeover` and
  * `rejection` give the effect of these commands. Before a `conflicted` Rejection, another tab changes the text of
- * Chapter A, and the Operation stays pending. `other` adds a second open Proposal. `rejectedReadFails` answers the
- * first Proposal read after a Rejection with a 503 problem. A rename of Chapter A changes its title in the tree.
+ * Chapter A, and the Operation stays pending. `other` adds a second open Proposal. A rename of Chapter A changes its
+ * title in the tree.
  */
 function fakeServer({ reads, writer = { kind: "current_writer", writer_generation: "1" }, commands = [],
   proposals = false, acceptance = "refused", takeoverAfterAcceptance = false, assistant, unavailable = [], lost = [],
-  takeover = "applied", rejection = "resolved", other = false, rejectedReadFails = false }: {
+  takeover = "applied", rejection = "resolved", other = false }: {
   reads: string[]; writer?: Writer; commands?: string[]; proposals?: boolean;
   acceptance?: "refused" | "applied" | "late"; takeoverAfterAcceptance?: boolean;
   assistant?: "available" | "unavailable"; unavailable?: string[]; lost?: string[];
   takeover?: "applied" | "compare_failed"; rejection?: "resolved" | "conflicted"; other?: boolean;
-  rejectedReadFails?: boolean;
 }) {
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
   const state = { current: CHAPTER, writer, snapshot: { id: EDITOR_SNAPSHOT, position: "0" }, accepted: false,
-    rejected: false, edited: false, readFails: rejectedReadFails, title: "Chapter A",
+    rejected: false, edited: false, title: "Chapter A",
     superseded: undefined as GetEditorSessionResponse | undefined,
     late: undefined as { chapter: boolean; session: boolean } | undefined };
   const project = () => ({ ...scenario.project.project, open: open() });
@@ -239,10 +238,6 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
       settle(ACCEPTANCE_SNAPSHOT);
     }
     if (name === OTHER_READ) return jsonResponse({ ...proposalFixture, project_scope: scope, proposal: OTHER });
-    if (name === PROPOSAL_READ && state.rejected && state.readFails) {
-      state.readFails = false;
-      return jsonResponse({ schema_id: "storyos.problem.v1", code: "service_unavailable", message: "Unavailable." }, 503);
-    }
     if (name === RENAME) {
       state.title = (JSON.parse(String(init?.body)) as { update_chapter_input: { title: string } })
         .update_chapter_input.title;
@@ -834,32 +829,12 @@ it("reads only the suggestions after a rejection", async () => {
   await expect.poll(card).toBeNull();
   await expect.poll(server.inFlight).toEqual([]);
   const later = server.log.started.slice(server.log.started.indexOf(REJECTION, before) + 1);
-  // The Chapter text does not change, so the page reads the open suggestions and the rejected Proposal. It reads no
-  // other Proposal, Project, list, Chapter, Editor Session, or tree.
+  // The Chapter text does not change, so the page reads the open suggestions again: the list and each Proposal. It
+  // reads no Project, list of Projects, Chapter, Editor Session, or tree. The other suggestion stays.
   expect({ ...workspace.shown(), later: [...new Set(later.filter((entry) => entry !== CHALLENGE
     && entry !== STATISTICS))].sort(), other: otherCard() !== null,
     unexpected: server.log.unexpected }).toEqual({ title: "Chapter A", save: "saved", failure: "",
-    later: [openProposalsRead(CHAPTER), PROPOSAL_READ].sort(), other: true, unexpected: [] });
-});
-
-it("opens the Project again when the read of the rejected Proposal fails", async () => {
-  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ, SESSION_READ],
-    commands: [SESSION_CREATE, REJECTION], proposals: true, other: true, rejectedReadFails: true });
-  const workspace = await openWorkspace(server);
-  const card = () => workspace.root.querySelector(`.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"]`);
-  const reject = () => card()?.querySelector<HTMLButtonElement>("button[data-proposal-reject]");
-  await expect.poll(() => reject()?.disabled).toBe(false);
-  const before = server.log.started.length;
-  const steps = await expectReopenSteps(server, REJECTION, CHAPTER);
-
-  reject()!.click();
-  await steps();
-
-  await expect.poll(card).toBeNull();
-  await expect.poll(server.inFlight).toEqual([]);
-  expect({ ...workspace.shown(), open: openReads(server.log.started.slice(before)).sort(),
-    unexpected: server.log.unexpected }).toEqual({ title: "Chapter A", save: "saved", failure: "",
-    open: [LIST, PROJECT_READ].sort(), unexpected: [] });
+    later: [openProposalsRead(CHAPTER), PROPOSAL_READ, OTHER_READ].sort(), other: true, unexpected: [] });
 });
 
 it("opens the Project again after a rejection that found a changed Chapter Head", async () => {
