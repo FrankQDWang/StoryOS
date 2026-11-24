@@ -130,7 +130,7 @@ pub(crate) async fn pass_entries(
                           WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                           ORDER BY memory_entry_id, memory_revision DESC) AS latest
                   WHERE state = 'current'
-                  ORDER BY entry_number"
+                  ORDER BY latest.entry_number"
             ),
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )

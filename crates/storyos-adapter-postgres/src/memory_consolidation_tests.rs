@@ -474,3 +474,39 @@ async fn the_archive_holds_the_passes_and_the_conversation_memory_settings() {
         (stored_passes, stored_settings, json!(pass.run_id))
     );
 }
+
+/// The entry numbers are numbers, so a pass gives 11 entries in the order 1 to 11, and not in the
+/// order of their texts 1, 10, 11, 2 (#1861).
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_pass_gives_eleven_entries_in_the_order_of_their_numbers() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let scope = crate::shared_tests::command_sequence_support::seed_project(&store, "d910").await;
+    let titles: Vec<String> = (1..=11).map(|number| format!("条目{number}")).collect();
+    let versions: Vec<_> = titles
+        .iter()
+        .zip(1..=11_u64)
+        .map(|(title, number)| {
+            (
+                number,
+                1,
+                number,
+                "current",
+                "other",
+                title.as_str(),
+                "说明",
+            )
+        })
+        .collect();
+    write_versions(&admin, &scope, &versions).await;
+
+    let numbers: Vec<u64> = crate::memory_consolidation_versions::pass_entries(&admin, &scope)
+        .await
+        .unwrap()
+        .iter()
+        .map(|stored| stored.entry.entry.number)
+        .collect();
+
+    assert_eq!(numbers, (1..=11).collect::<Vec<u64>>());
+}

@@ -138,7 +138,7 @@ pub(crate) async fn read_current_revision(
             "SELECT instruction_revision_id::text, revision::text, text
                FROM storyos.project_instruction_revisions
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-              ORDER BY revision DESC
+              ORDER BY project_instruction_revisions.revision DESC
               LIMIT 1",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )

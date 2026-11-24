@@ -20,7 +20,7 @@ async fn revision_rows(admin: &Client, scope: &ProjectScope) -> Vec<ProjectInstr
             "SELECT instruction_revision_id::text, revision::text, text
                FROM storyos.project_instruction_revisions
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-              ORDER BY revision",
+              ORDER BY project_instruction_revisions.revision",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )
         .await
@@ -183,5 +183,51 @@ async fn the_runtime_role_cannot_change_or_delete_a_revision() {
             vec![Err(Some("42501".to_owned())); 2],
             vec![revision(&saved, "Kept text.")],
         )
+    );
+}
+
+/// The Revisions are numbers, so the read after 11 saves gives Revision 11 and not Revision 9, the
+/// last of the texts of the numbers (#1861).
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_read_after_eleven_saves_gives_the_eleventh_revision() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let scope = seed_project(&store, "d900").await;
+    // The Shared Challenges of one Project have a limit of 10 in one minute.
+    let reset_rate_windows = || async {
+        admin
+            .execute(
+                "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+                  WHERE project_id = $1::text::uuid",
+                &[&scope.project_id.as_ref()],
+            )
+            .await
+            .unwrap();
+    };
+    for revision in 1..=11_u16 {
+        reset_rate_windows().await;
+        let text = format!("Instruction {revision}.");
+        applied(
+            &save(
+                &store,
+                &scope,
+                0xd900 + revision,
+                &text,
+                u64::from(revision) - 1,
+            )
+            .await,
+        );
+    }
+    let current = open_project_instruction(&store, &scope)
+        .await
+        .unwrap()
+        .unwrap();
+    reset_rate_windows().await;
+    let twelfth = applied(&save(&store, &scope, 0xd90c, "Instruction 12.", 11).await);
+
+    assert_eq!(
+        (current.revision, current.text.as_str(), twelfth.revision),
+        (11, "Instruction 11.", 12)
     );
 }
