@@ -395,6 +395,8 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
 }
 
 const openDatabases = new Set<IDBDatabase>();
+// Each Journal connection that the page closed.
+const closedDatabases = new Set<IDBDatabase>();
 const unmounts: (() => void)[] = [];
 // The view opens the Journal again at each reopen, so the test closes each connection before it deletes the Journal.
 const openJournal = indexedDB.open.bind(indexedDB);
@@ -402,7 +404,12 @@ const openJournal = indexedDB.open.bind(indexedDB);
 beforeEach(() => {
   Object.defineProperty(indexedDB, "open", { configurable: true, value: (name: string, version?: number) => {
     const request = openJournal(name, version);
-    request.addEventListener("success", () => { trackDatabase(request.result, openDatabases); });
+    request.addEventListener("success", () => {
+      const database = request.result;
+      trackDatabase(database, openDatabases);
+      const close = database.close.bind(database);
+      database.close = () => { closedDatabases.add(database); close(); };
+    });
     return request;
   } });
 });
@@ -412,6 +419,7 @@ afterEach(async () => {
   Reflect.deleteProperty(indexedDB, "open");
   history.replaceState(null, "", location.pathname);
   closeTrackedDatabases(openDatabases);
+  closedDatabases.clear();
   document.body.replaceChildren();
   sessionStorage.clear();
   await deleteJournal(createBrowserScenario().journalName);
@@ -482,18 +490,40 @@ it("opens a Project with its stored Editor Session with the independent reads in
     unexpected: server.log.unexpected }).toEqual({ kind: "project-ready", editor: "editor-ready", unexpected: [] });
 });
 
+/** A `Crypto` that counts the digests that it computes, for example the digest that prepares a command. */
+function countingCrypto() {
+  const digests = { started: 0, ended: 0 };
+  const subtle = new Proxy(crypto.subtle, { get: (target, key) => key === "digest"
+    ? async (...args: Parameters<SubtleCrypto["digest"]>) => {
+      digests.started += 1;
+      try { return await target.digest(...args); } finally { digests.ended += 1; }
+    }
+    : (Reflect.get(target, key) as (...args: unknown[]) => unknown).bind(target) });
+  const cryptoImpl = new Proxy(crypto, { get: (target, key) => key === "subtle" ? subtle
+    : (Reflect.get(target, key) as (...args: unknown[]) => unknown).bind(target) });
+  return { cryptoImpl, digests };
+}
+
 it("opens a Project in a new tab and creates the Editor Session only after the Chapter response", async () => {
   const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER)], commands: [SESSION_CREATE] });
   await deleteJournal(server.scenario.journalName);
+  const { cryptoImpl, digests } = countingCrypto();
   server.hold([PROTOCOL, PROJECT_READ, LIST]);
   const opening = openControlledProject({ baseUrl: location.origin, projectId: PROJECT,
-    fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
+    fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl });
   await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ, PROTOCOL].sort());
-  // A creation changes the Server, so it waits until the Chapter read succeeded (#1884).
   server.hold([chapterRead(CHAPTER)]);
   server.release();
-  await expect.poll(server.inFlight).toEqual([chapterRead(CHAPTER)]);
-  expect(server.count(CHALLENGE) + server.count(SESSION_CREATE)).toBe(0);
+  // While the Chapter read waits, the Journal opens. A creation that ran now would compute its command digest after
+  // the Journal open and before the next task, and send the Challenge when the digest ends.
+  await expect.poll(() => ({ inFlight: server.inFlight(), journal: openDatabases.size }))
+    .toEqual({ inFlight: [chapterRead(CHAPTER)], journal: 1 });
+  await new Promise((resolve) => { setTimeout(resolve); });
+  await expect.poll(() => digests.ended).toBe(digests.started);
+  await new Promise((resolve) => { setTimeout(resolve); });
+  // A creation changes the Server, so it waits until the Chapter read succeeded (#1884).
+  expect({ digests: digests.started, requests: server.count(CHALLENGE) + server.count(SESSION_CREATE) })
+    .toEqual({ digests: 0, requests: 0 });
   server.release();
   const opened = await opening;
   const chapterEnd = server.log.events.indexOf(`end ${chapterRead(CHAPTER)}`);
@@ -511,17 +541,21 @@ it("creates no Editor Session when the Chapter read of a new tab fails, and the 
   const open = () => openControlledProject({ baseUrl: location.origin, projectId: PROJECT,
     fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
   const failed = await open();
-  await expect.poll(server.inFlight).toEqual([]);
+  // The failed open closes its Journal as its last step, so no work of it is left after that.
+  await expect.poll(() => openDatabases.size === 1 && [...openDatabases].every((database) =>
+    closedDatabases.has(database))).toBe(true);
   const created = server.count(SESSION_CREATE);
+  const retry = server.log.started.length;
   unavailable.length = 0;
 
   const opened = await open();
 
   // Only the first created Session holds the writer, so an earlier creation would make this open read-only.
-  expect({ failed: failed.kind, created, kind: opened.kind,
+  expect({ failed: failed.kind, created, retry: server.log.started.slice(retry)
+    .filter((name) => name === SESSION_CREATE).length, kind: opened.kind,
     writer: opened.kind === "project-ready" && opened.editor.kind === "editor-ready"
       ? opened.editor.session.writer.kind : "none", unexpected: server.log.unexpected }).toEqual({
-    failed: "project-blocked", created: 0, kind: "project-ready", writer: "current_writer", unexpected: [] });
+    failed: "project-blocked", created: 0, retry: 1, kind: "project-ready", writer: "current_writer", unexpected: [] });
 });
 
 it("reopens after a Chapter switch with the Project read and the list read, then the Chapter and the Editor Session",

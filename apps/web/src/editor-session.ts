@@ -308,8 +308,7 @@ export function startEditorWorkspace({
       const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
       const active = globalThis.sessionStorage
         ? globalThis.sessionStorage.getItem(activeSessionKey) : undefined;
-      // The read of a stored Session changes nothing on the Server, so it runs with the Chapter read. A creation waits
-      // until the Chapter read succeeded (#1884).
+      // A stored Session read changes nothing on the Server, so it runs with the Chapter read; a creation waits (#1884).
       const sessionValue: unknown = active
         ? await getEditorSession({ baseUrl, projectId: scope.project_id,
           editorSessionId: active, fetchImpl })
