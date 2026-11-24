@@ -475,8 +475,7 @@ async fn the_archive_holds_the_passes_and_the_conversation_memory_settings() {
     );
 }
 
-/// The entry numbers are numbers, so a pass gives 11 entries in the order 1 to 11, and not in the
-/// order of their texts 1, 10, 11, 2 (#1861).
+/// As text, entry 10 sorts before entry 2 (#1861).
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_pass_gives_eleven_entries_in_the_order_of_their_numbers() {

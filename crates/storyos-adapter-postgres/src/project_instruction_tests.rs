@@ -186,8 +186,7 @@ async fn the_runtime_role_cannot_change_or_delete_a_revision() {
     );
 }
 
-/// The Revisions are numbers, so the read after 11 saves gives Revision 11 and not Revision 9, the
-/// last of the texts of the numbers (#1861).
+/// As text, Revision 9 sorts after Revision 10 and 11 (#1861).
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_read_after_eleven_saves_gives_the_eleventh_revision() {
