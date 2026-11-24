@@ -4,6 +4,7 @@
 Each test makes a package of shell scripts in the place of the three binaries, so the test needs no Linux build.
 """
 
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -17,7 +18,7 @@ PASSING = {
 }
 
 
-def check(binaries):
+def check(binaries, check_seconds=120):
     with tempfile.TemporaryDirectory(prefix="linux-package-", dir=ROOT / "target") as package:
         (Path(package) / "web").mkdir()
         for name, body in binaries.items():
@@ -25,7 +26,13 @@ def check(binaries):
             path.write_text(f"#!/bin/sh\n{body}\n")
             path.chmod(0o755)
         return subprocess.run([str(ROOT / "scripts/check-linux-package.sh"), package], cwd=ROOT,
-                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                              env={**os.environ, "STORYOS_LINUX_PACKAGE_CHECK_SECONDS": str(check_seconds)},
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=600)
+
+
+def package_containers():
+    names = subprocess.check_output(["docker", "ps", "--all", "--format", "{{.Names}}"], text=True).split()
+    return {name for name in names if name.startswith("storyos-linux-package-")}
 
 
 class CheckLinuxPackageTests(unittest.TestCase):
@@ -45,6 +52,13 @@ class CheckLinuxPackageTests(unittest.TestCase):
                 result = check({**PASSING, name: body})
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertNotIn("The Linux package passed its checks", result.stdout)
+
+    def test_a_check_that_does_not_end_fails_the_command_and_removes_its_container(self):
+        before = package_containers()
+        result = check({**PASSING, "storyos-worker": "sleep 600"}, check_seconds=5)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("The Linux package passed its checks", result.stdout)
+        self.assertEqual(package_containers(), before)
 
     def test_a_storage_run_that_does_not_report_active_fails_the_command(self):
         result = check({**PASSING, "storyos-storage": "echo STORYOS_STORAGE_ACTIVATION=Refused"})

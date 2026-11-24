@@ -21,6 +21,8 @@ binaries = ("storyos-server", "storyos-worker", "storyos-storage")
 packages = ("-p", "storyos-server", "-p", "storyos-worker-bin", "-p", "storyos-adapter-postgres")
 # The Rust version of Cargo.toml (rust-version) on Debian bookworm, which has glibc 2.36.
 rust_image = "rust:1.98.1-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e"
+# Seconds for the container build. A first build needs approximately 4 minutes (docs/operations/production-web.md).
+build_limit = 3600
 
 
 def output(*arguments):
@@ -49,12 +51,16 @@ def build_linux(package, digest):
     # The Cargo home and the build output stay below target/, so a second build is incremental.
     build_root = target / "linux-x86_64"
     build_root.mkdir(exist_ok=True)
-    subprocess.run(["docker", "run", "--rm", "--platform", "linux/amd64",
-                    "--volume", f"{root}:/src:ro", "--volume", f"{build_root}:/src/target/linux-x86_64",
-                    "--workdir", "/src", "--env", "CARGO_HOME=/src/target/linux-x86_64/cargo-home",
-                    "--env", f"STORYOS_WEB_MANIFEST_SHA256={digest}", rust_image,
-                    "cargo", "build", "--locked", "--release", "--target-dir", "/src/target/linux-x86_64/build",
-                    *packages], check=True)
+    container = f"storyos-linux-build-{os.getpid()}"
+    try:
+        subprocess.run(["docker", "run", "--rm", "--name", container, "--platform", "linux/amd64",
+                        "--volume", f"{root}:/src:ro", "--volume", f"{build_root}:/src/target/linux-x86_64",
+                        "--workdir", "/src", "--env", "CARGO_HOME=/src/target/linux-x86_64/cargo-home",
+                        "--env", f"STORYOS_WEB_MANIFEST_SHA256={digest}", rust_image,
+                        "cargo", "build", "--locked", "--release", "--target-dir",
+                        "/src/target/linux-x86_64/build", *packages], check=True, timeout=build_limit)
+    finally:
+        subprocess.run(["docker", "rm", "-fv", container], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for binary in binaries:
         shutil.copy2(build_root / "build" / "release" / binary, package / binary)
     subprocess.run([str(root / "scripts/check-linux-package.sh"), str(package)], cwd=root, check=True)
@@ -63,10 +69,18 @@ def build_linux(package, digest):
 def write_archive(package, commit):
     name = f"storyos-linux-x86_64-{commit[:12]}"
     archive = target / f"{name}.tar.gz"
-    with tarfile.open(archive, "w:gz") as tar:
-        tar.add(package, arcname=name)
-    checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
-    (target / f"{name}.tar.gz.sha256").write_text(f"{checksum}  {archive.name}\n")
+    checksum_file = target / f"{name}.tar.gz.sha256"
+    # Both files are complete before they replace an earlier archive of the same commit.
+    with tempfile.TemporaryDirectory(prefix="release-archive-", dir=target) as temporary:
+        new_archive = Path(temporary) / archive.name
+        with tarfile.open(new_archive, "w:gz") as tar:
+            tar.add(package, arcname=name)
+        checksum = hashlib.sha256(new_archive.read_bytes()).hexdigest()
+        new_checksum_file = Path(temporary) / checksum_file.name
+        new_checksum_file.write_text(f"{checksum}  {archive.name}\n")
+        checksum_file.unlink(missing_ok=True)
+        new_archive.replace(archive)
+        new_checksum_file.replace(checksum_file)
     return archive, checksum
 
 

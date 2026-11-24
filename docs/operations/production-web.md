@@ -21,11 +21,11 @@ The VPS of [ADR 0022](../adr/0022-prefer-widely-validated-hosted-infrastructure.
 make release-package-linux
 ```
 
-The package is `target/release-package-linux-x86_64/`, with the same members as `target/release-package/`. The command also writes `target/storyos-linux-x86_64-<commit>.tar.gz` and its SHA-256 in `target/storyos-linux-x86_64-<commit>.tar.gz.sha256`, for the copy to the VPS. `<commit>` is the first 12 characters of the source commit. The Linux package of a commit comes only from this command ([ADR 0104](../adr/0104-run-the-personal-instance-of-the-author-on-the-hosted-topology-with-a-proxy-password-the-model-key-on-the-server-and-a-frozen-baseline.md) section 6).
+The package is `target/release-package-linux-x86_64/`, with the same members as `target/release-package/`. For the copy to the VPS, the command also writes an archive of the package. The archive is `target/storyos-linux-x86_64-<commit>.tar.gz`. Its SHA-256 is in `target/storyos-linux-x86_64-<commit>.tar.gz.sha256`. `<commit>` is the first 12 characters of the source commit. The Linux package of a commit comes only from this command ([ADR 0104](../adr/0104-run-the-personal-instance-of-the-author-on-the-hosted-topology-with-a-proxy-password-the-model-key-on-the-server-and-a-frozen-baseline.md) section 6).
 
 - The Web resources and the manifest come from the build of the host, with the same code as `make release-package`. Thus the two packages of one commit have the same manifest digest.
 - The Rust build runs in a `linux/amd64` container of the pinned Rust image (Debian bookworm, glibc 2.36). The Cargo cache and the build output stay below `target/linux-x86_64/`, so a second build is incremental. On the Mac of the author with OrbStack, the first build needs approximately 4 minutes, and a second build of a changed commit needs approximately 1 minute.
-- The command then checks the package in a `linux/amd64` container of Ubuntu 24.04 with no Rust: `storyos-server --check-web-root`, `storyos-worker --check`, and `storyos-storage` against a new PostgreSQL container. A failed check fails the command.
+- The command then checks the package in a `linux/amd64` container of Ubuntu 24.04 with no Rust: `storyos-server --check-web-root`, `storyos-worker --check`, and `storyos-storage` against a new PostgreSQL container. A failed check fails the command. A check that does not end in 120 seconds also fails it.
 - The command refuses a worktree with a change, and it prints the source commit, the tree, the manifest digest, the archive, and its SHA-256.
 
 ## Prepare the runtime
