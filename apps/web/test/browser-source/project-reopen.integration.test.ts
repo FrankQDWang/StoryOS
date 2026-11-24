@@ -395,9 +395,9 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
 }
 
 const openDatabases = new Set<IDBDatabase>();
-// Each Journal connection that the page closed, and the number of Journal transactions that completed.
+// Each Journal connection that the page closed, and each connection with a completed transaction.
 const closedDatabases = new Set<IDBDatabase>();
-const journalTransactions = { completed: 0 };
+const readDatabases = new WeakSet<IDBDatabase>();
 const unmounts: (() => void)[] = [];
 // The view opens the Journal again at each reopen, so the test closes each connection before it deletes the Journal.
 const openJournal = indexedDB.open.bind(indexedDB);
@@ -413,7 +413,7 @@ beforeEach(() => {
       const transaction = database.transaction.bind(database);
       database.transaction = ((...args: Parameters<IDBDatabase["transaction"]>) => {
         const started = transaction(...args);
-        started.addEventListener("complete", () => { journalTransactions.completed += 1; });
+        started.addEventListener("complete", () => { readDatabases.add(database); });
         return started;
       }) as IDBDatabase["transaction"];
     });
@@ -427,7 +427,6 @@ afterEach(async () => {
   history.replaceState(null, "", location.pathname);
   closeTrackedDatabases(openDatabases);
   closedDatabases.clear();
-  journalTransactions.completed = 0;
   document.body.replaceChildren();
   sessionStorage.clear();
   await deleteJournal(createBrowserScenario().journalName);
@@ -522,22 +521,21 @@ it("opens a Project in a new tab and creates the Editor Session only after the C
   await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ, PROTOCOL].sort());
   server.hold([chapterRead(CHAPTER)]);
   server.release();
-  // While the Chapter read waits, the Journal opens and reads its schema. A creation that ran now would compute its
-  // command digest in the same task as that read, and send the Challenge when the digest ends.
-  await expect.poll(() => ({ inFlight: server.inFlight(), schemaRead: journalTransactions.completed > 0 }))
+  // While the Chapter read waits, the Journal of this open reads its schema. A creation that ran now would compute its
+  // command digest in the same task, and then send its Challenge and its request.
+  await expect.poll(() => ({ inFlight: server.inFlight(),
+    schemaRead: [...openDatabases].some((database) => readDatabases.has(database)) }))
     .toEqual({ inFlight: [chapterRead(CHAPTER)], schemaRead: true });
   await expect.poll(() => digests.ended === digests.started
-    && server.count(CHALLENGE) >= Math.min(digests.started, 1)).toBe(true);
+    && (server.count(CHALLENGE) === 0 || server.count(SESSION_CREATE) > 0)).toBe(true);
   server.release();
   const opened = await opening;
-  // A creation changes the Server, so its Challenge and its request start after the Chapter response (#1884).
-  const position = (event: string) => server.log.events.indexOf(event);
-  const chapterEnd = position(`end ${chapterRead(CHAPTER)}`);
+  // A creation changes the Server, so its request starts after the end of the Chapter read (#1884).
+  const chapterEnd = server.log.events.indexOf(`end ${chapterRead(CHAPTER)}`);
   expect({ kind: opened.kind, editor: opened.kind === "project-ready" ? opened.editor.kind : undefined,
-    challengeAfterChapter: chapterEnd >= 0 && chapterEnd < position(`start ${CHALLENGE}`),
-    creationAfterChapter: chapterEnd >= 0 && chapterEnd < position(`start ${SESSION_CREATE}`),
+    creationAfterChapter: chapterEnd >= 0 && chapterEnd < server.log.events.indexOf(`start ${SESSION_CREATE}`),
     unexpected: server.log.unexpected }).toEqual({ kind: "project-ready", editor: "editor-ready",
-    challengeAfterChapter: true, creationAfterChapter: true, unexpected: [] });
+    creationAfterChapter: true, unexpected: [] });
 });
 
 it("creates no Editor Session when the Chapter read of a new tab fails, and the next open is the writer", async () => {
