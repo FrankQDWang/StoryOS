@@ -26,9 +26,6 @@ ask() {
     printf '\n' >&2
   fi
   [ -n "$secret" ] || fail "the $1 is empty"
-  case $secret in
-    *"'"* | *'\'*) fail "the $1 has a quote or a backslash, which the settings files do not permit" ;;
-  esac
 }
 
 write_secret() {
@@ -41,7 +38,14 @@ write_secret() {
       hash=$(printf '%s\n' "$secret" | caddy hash-password)
       secret=$(printf 'basic_auth {\n\t%s %s\n}' "$STORYOS_PROXY_USER" "$hash")
       ;;
-    database-admin-password | model-key | web-search-key) ask "$1" ;;
+    database-admin-password) ask "$1" ;;
+    model-key | web-search-key)
+      ask "$1"
+      # worker.env has each value in single quotes.
+      case $secret in
+        *"'"* | *'\'*) fail "the $1 has a quote or a backslash, which worker.env does not permit" ;;
+      esac
+      ;;
     session-token) secret=$(openssl rand -hex 16) ;;
     challenge-secret | runtime-password) secret=$(openssl rand -hex 32) ;;
     *) fail "unknown secret $1. The names are: $asked_secrets $made_secrets" ;;

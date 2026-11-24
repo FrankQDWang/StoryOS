@@ -36,10 +36,10 @@ The hosted database gives a certificate chain with a private root. Thus the oper
 
 3. `push.sh` copies the file to the VPS as `storyos-deploy/database-ca.crt`. On the VPS, run the same command on that file, and compare the two fingerprints. They must be equal.
 4. `install.sh` puts the file into `/usr/local/share/ca-certificates/` and runs `update-ca-certificates`.
-5. Check that the connection verifies with the trust store. The line `Verify return code: 0 (ok)` must appear:
+5. Check that the certificate chain and the host name verify with the trust store, with the host and the port of `instance.env`. The line `Verify return code: 0 (ok)` must appear:
 
    ```sh
-   openssl s_client -starttls postgres -connect <database host>:5432 -verify_return_error < /dev/null
+   openssl s_client -starttls postgres -connect <database host>:<port> -verify_hostname <database host> -verify_return_error < /dev/null
    ```
 
 ## A new instance
@@ -69,7 +69,7 @@ The steps that have **(author)** need a secret of the author or an account of th
 
 A second run of `install.sh`, `secrets.sh`, or `activate.sh` changes nothing that is correct.
 
-To write one secret again, run `secrets.sh <name>` and then `install.sh`. The names are `database-admin-password`, `proxy-password`, `model-key`, `web-search-key`, `challenge-secret`, `session-token`, and `runtime-password`. For `runtime-password`, run `activate.sh` before `install.sh`, so that the role has the new password before the services restart with it.
+To write one secret again, run `secrets.sh <name>` and then `install.sh`. The names are `database-admin-password`, `proxy-password`, `model-key`, `web-search-key`, `challenge-secret`, `session-token`, and `runtime-password`. For `runtime-password`, run `activate.sh` before `install.sh`, so that the role has the new password before the services restart with it. After `session-token`, remove the cookies of the Host in each browser, because the Server issues no cookie to a request with the old token.
 
 ## The session
 
@@ -84,7 +84,7 @@ The Server keeps the binding of the session in its memory for 8 hours from the s
 
 The script verifies the SHA-256, extracts the package, and checks its Web root. It then stops the Worker and the Server, makes one dump with `backup.sh`, runs `storyos-storage` of the new package, changes the link `/opt/storyos/current`, and starts the two services. When the backup or `storyos-storage` fails, the script starts the old package again and exits with an error. The earlier package stays in `/opt/storyos/releases/`.
 
-The edge of `storyos-storage` applies the new migrations (ADR 0104 section 4). After a migration, the old package cannot use the database. To go back to the old package after that, restore the dump of the upgrade.
+The edge of `storyos-storage` applies the new migrations (ADR 0104 section 4). After a migration, the old package cannot use the database. To go back to the old package after that, restore the dump of the upgrade into a new database project ("The restore"), and before you start the services, point the link to the old package: `sudo ln -sfn /opt/storyos/releases/<old commit> /opt/storyos/current`.
 
 ## The backup
 
@@ -105,7 +105,7 @@ The dump is a backup of the whole instance, and not Project Restore. The dumps s
 1. **(author)** Make a new database project. The roles of PostgreSQL are in the cluster, so the database must be in a new project.
 2. **(author)** Stop the services: `sudo systemctl stop storyos-worker storyos-server`.
 3. **(author)** Set the database values of the new project in `/etc/storyos/instance.env`. Run `secrets.sh database-admin-password` for its admin password.
-4. **(author)** Run `sudo sh storyos-deploy/restore.sh /var/backups/storyos/<dump>`.
+4. **(author)** Run `sudo sh storyos-deploy/restore.sh /var/backups/storyos/<dump>`. When the load fails, the transaction leaves no table, and a second run into the same database uses the roles of the first run.
 5. **(author)** Run `install.sh`, which writes the new runtime URL, and start the services: `sudo systemctl start storyos-server storyos-worker`.
 
 `make check-full` runs the same scripts in the drill `scripts/verify-personal-instance-restore.sh`: it writes one Chapter through the packaged Server, runs `backup.sh`, runs `restore.sh` into a second new database, and reads the Chapter there. `make verify-personal-instance` runs the other scripts in an Ubuntu 24.04 container with the Linux package of the commit. It needs the network, and a fake `systemctl` starts the commands of the units, because a container has no systemd.
@@ -119,7 +119,7 @@ Do these checks on the real instance in the acceptance run (S12-07), and record 
 3. Each file of `/etc/storyos/` has mode 600: `sudo find /etc/storyos -type f ! -perm 600` prints nothing.
 4. A request with no password gets `401` from Caddy: `curl -s -o /dev/null -w '%{http_code}' https://<Host>/api/v1/protocol`.
 5. `http://<Host>/` redirects to `https`, and a response has the header `Strict-Transport-Security`.
-6. In Google Chrome, after the proxy password: the home page opens, a new Project opens, a saved Chapter text stays after a reload, a Run of the assistant shows its activity, and a download of an export completes.
+6. In Google Chrome, after the proxy password: the home page opens, a new Project opens, a saved Chapter text stays after a reload, the Project Activity Stream shows a Run of the assistant, and a download of an export completes.
 7. A Run uses the real model route, and the Worker log has no refusal of its settings: `journalctl -u storyos-worker`.
 8. `sudo /opt/storyos/deploy/backup.sh` writes one dump, and `systemctl list-timers storyos-backup.timer` shows the next run.
 9. The earlier deployment is removed, and `/etc/caddy/Caddyfile.before-storyos` is kept or removed by a decision of the author.

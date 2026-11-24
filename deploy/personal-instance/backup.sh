@@ -11,7 +11,8 @@ load_instance
 [ "$#" = 0 ] || fail "usage: backup.sh"
 use_admin_connection
 install -d -m 700 "$backup_dir"
-dump=$backup_dir/storyos-$(date -u +%Y%m%dT%H%M%SZ).dump
+# The nanoseconds keep two dumps of one second apart.
+dump=$backup_dir/storyos-$(date -u +%Y%m%dT%H%M%S.%NZ).dump
 partial=$(mktemp "$backup_dir/.partial.XXXXXX")
 trap 'rm -f "$partial"' EXIT
 pg_dump --no-password --format=custom --schema=storyos --file="$partial" || fail "pg_dump failed"

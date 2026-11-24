@@ -24,7 +24,7 @@ if [ "${1:-}" != --inside ]; then
   # Each secret is a value of this run. The admin password has the characters that a URL must encode.
   admin_password="a $(openssl rand -hex 8)%@:/?#"
   (umask 077 && printf '%s\n' "$admin_password" "p$(openssl rand -hex 12)" "m$(openssl rand -hex 16)" \
-    "w$(openssl rand -hex 16)" "m$(openssl rand -hex 16)" > "$work/secrets")
+    "w$(openssl rand -hex 16)" "m$(openssl rand -hex 16)" "p$(openssl rand -hex 12)" > "$work/secrets")
   start_postgres "$check-db"
   docker exec -i "$check-db" psql -X -q -v ON_ERROR_STOP=1 -U postgres <<EOF
 ALTER ROLE postgres PASSWORD '$admin_password';
@@ -122,6 +122,13 @@ proxy -D /tmp/headers --netrc-file /tmp/netrc "https://$host/"
 grep -qi '^strict-transport-security: max-age=31536000' /tmp/headers || fail "no HSTS"
 grep -qi '^set-cookie: storyos_session=.*Secure' /tmp/headers || fail "the document GET issued no Secure cookie"
 [ "$(proxy -w '%{http_code}' "http://$host/")" = 308 ] || fail "port 80 does not redirect"
+sed -n 6p /check/secrets | run 0 sh "$deploy/secrets.sh" proxy-password
+run 0 sh "$deploy/install.sh" "$archive" /tmp/ca.crt
+[ "$(proxy -w '%{http_code}' --netrc-file /tmp/netrc "https://$host/api/v1/protocol")" = 401 ] \
+  || fail "the old proxy password still works"
+printf 'machine %s login author password %s\n' "$host" "$(sed -n 6p /check/secrets)" > /tmp/netrc
+[ "$(proxy -w '%{http_code}' --netrc-file /tmp/netrc "https://$host/api/v1/protocol")" = 200 ] \
+  || fail "the new proxy password does not work"
 
 step "backup.sh removes the dumps older than 14 days, and a failed dump keeps the older dumps"
 install -m 600 /dev/null /var/backups/storyos/storyos-old.dump
@@ -165,7 +172,10 @@ for name in database-admin-password model-key web-search-key challenge-secret se
   value=$(cat "/etc/storyos/secrets/$name")
   ! grep -qF -- "$value" /tmp/output /tmp/ps || fail "the secret $name is in the output or in ps"
 done
-for line in 1 2 3 4 5; do
+for line in 1 2 3 4 5 6; do
   ! grep -qF -- "$(sed -n "${line}p" /check/secrets)" /tmp/output /tmp/ps || fail "test secret $line is visible"
 done
+# The URLs have the admin password in the percent encoding of lib.sh.
+encoded=$(sed -n 1p /check/secrets | tr -d '\n' | od -An -v -tx1 | tr -d ' \n' | sed 's/../%&/g')
+! grep -qiF -- "$encoded" /tmp/output /tmp/ps || fail "the encoded admin password is visible"
 echo "The scripts of the personal instance passed their checks"

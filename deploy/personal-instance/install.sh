@@ -116,7 +116,10 @@ if [ -f /etc/caddy/Caddyfile ] && [ ! -f /etc/caddy/Caddyfile.before-storyos ] \
   cp -p /etc/caddy/Caddyfile /etc/caddy/Caddyfile.before-storyos
   echo "Kept the earlier Caddyfile as /etc/caddy/Caddyfile.before-storyos"
 fi
-caddyfile=$(sed "s/@HOST@/$STORYOS_HOST/g" "$here/Caddyfile.template")
+# The digest of the proxy file makes the Caddyfile change, and Caddy reload, when the proxy password changes.
+proxy_digest=$(sha256sum < "$(secret_file proxy-password)" | cut -c 1-64)
+caddyfile=$(printf '# The SHA-256 of proxy-auth.caddy: %s\n' "$proxy_digest"
+  sed "s/@HOST@/$STORYOS_HOST/g" "$here/Caddyfile.template")
 candidate=$(mktemp /etc/caddy/Caddyfile.XXXXXX)
 printf '%s\n' "$caddyfile" > "$candidate"
 caddy validate --adapter caddyfile --config "$candidate" >/dev/null 2>&1 || {

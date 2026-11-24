@@ -76,9 +76,10 @@ generate-contracts:
 
 .PHONY: verify-personal-instance
 # Runs the scripts of deploy/personal-instance/ in an Ubuntu 24.04 container with the Linux package of the commit
-# (issue 1855). It needs the network for the packages of Caddy and of the PostgreSQL client, so it is not a step of
-# make check-full.
-verify-personal-instance: release-package-linux
+# (issue 1855). It builds that package only when its archive is absent. It needs the network for the packages of
+# Caddy and of the PostgreSQL client, so it is not a step of make check-full.
+verify-personal-instance:
+	test -f target/storyos-linux-x86_64-$$(git rev-parse --short=12 HEAD).tar.gz || $(MAKE) release-package-linux
 	sh scripts/verify-personal-instance.sh
 
 .PHONY: generate-persistence-catalog

@@ -17,8 +17,16 @@ use_admin_connection
 runtime_password=$(read_secret runtime-password)
 schemas=$(admin_psql -c "SELECT count(*) FROM pg_catalog.pg_namespace WHERE nspname = 'storyos'")
 [ "$schemas" = 0 ] || fail "the database has the schema storyos. Restore only into an empty database"
-admin_psql -f "$here/0000_roles.sql"
+# A failed load leaves the roles, so a second attempt into the same database uses them.
+roles=$(admin_psql -c "SELECT count(*) FROM pg_catalog.pg_roles WHERE rolname LIKE 'storyos\_%'")
+case $roles in
+  0) admin_psql -f "$here/0000_roles.sql" ;;
+  4) ;;
+  *) fail "the database has $roles of the 4 roles of 0000_roles.sql" ;;
+esac
 admin_psql <<'EOF'
+SET client_min_messages = warning;
+GRANT storyos_owner TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;
 CREATE SCHEMA IF NOT EXISTS extensions;
 CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
 EOF

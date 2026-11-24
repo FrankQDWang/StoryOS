@@ -44,7 +44,12 @@ start() {
 stop() {
   if running "$1"; then
     kill "$(cat "$state/$1.pid")"
-    while running "$1"; do sleep 0.1; done
+    attempt=0
+    while running "$1"; do
+      attempt=$((attempt + 1))
+      [ "$attempt" -lt 100 ] || { echo "fake systemctl: $1 did not stop in 10 s" >&2; exit 1; }
+      sleep 0.1
+    done
   fi
   rm -f "$state/$1.pid"
 }

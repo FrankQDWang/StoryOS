@@ -37,8 +37,9 @@ load_instance() {
   case $STORYOS_PROXY_USER in
     *[!A-Za-z0-9._-]*) fail "STORYOS_PROXY_USER must have only letters, digits, '.', '_', and '-'" ;;
   esac
-  case $STORYOS_DATABASE_TLS in
-    require | none) ;;
+  case $STORYOS_DATABASE_TLS:$STORYOS_DATABASE_HOST in
+    require:* | none:127.0.0.1 | none:::1 | none:localhost) ;;
+    none:*) fail "STORYOS_DATABASE_TLS=none is only for a database on the loopback address" ;;
     *) fail "STORYOS_DATABASE_TLS must be require or none" ;;
   esac
 }
