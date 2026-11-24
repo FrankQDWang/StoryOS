@@ -19,7 +19,7 @@ export function TakeOverWriterButton({
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   inFlightRef: { current: boolean };
-  /** Opens the Project again. The takeover response does not carry the Project, so the reopen reads it. */
+  /** Opens the Project again after the takeover: it reads the Project and the list, then the Chapter and the Session. */
   reopen: () => Promise<ControlledProjectState>;
   onReopened: (next: ControlledProjectState) => void;
   onRefused: () => void;

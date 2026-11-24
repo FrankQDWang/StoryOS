@@ -179,7 +179,8 @@ function ProjectReadyView({
       fetchImpl,
     }).then(setTree).catch(() => {}).finally(() => { setTreeRead("settled"); });
   }, [baseUrl, fetchImpl, state.project.project.project_id, state.tree]);
-  // A reopen after a settled command of this page reads only the Project, the Chapter, and the Editor Session.
+  // A reopen after a settled command of this page reads the Project and the list of Projects, then the Chapter and the
+  // Editor Session. It does not read the protocol profile again.
   const reopen = () => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
     opened: { profile: state.profile, project: state.project } });
   // A Chapter that the author creates, moves, renames, or removes changes the Chapter part of the draft labels.
