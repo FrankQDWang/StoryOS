@@ -1,6 +1,7 @@
 #!/bin/sh
-# Loads one dump of backup.sh into an empty database (ADR 0104 section 7): the roles of 0000_roles.sql, the schema
-# extensions with vector, the dump, the grants outside the schema storyos, and the password of the runtime role.
+# Loads one dump of backup.sh into a database with no schema storyos, in a new database project (ADR 0104 section
+# 7): the roles of 0000_roles.sql, the schema extensions with vector, the dump, the grants outside the schema
+# storyos, and the password of the runtime role.
 # After it, the Server of the same package starts with no run of storyos-storage, because the dump holds the
 # activation proof.
 #
@@ -16,7 +17,7 @@ load_instance
 use_admin_connection
 runtime_password=$(read_secret runtime-password)
 schemas=$(admin_psql -c "SELECT count(*) FROM pg_catalog.pg_namespace WHERE nspname = 'storyos'")
-[ "$schemas" = 0 ] || fail "the database has the schema storyos. Restore only into an empty database"
+[ "$schemas" = 0 ] || fail "the database has the schema storyos. Restore only into a database with no schema storyos"
 # The role file runs in one transaction. A failed restore leaves all of its roles or none, and a second attempt into
 # the same database uses the roles of the first attempt.
 roles=$(admin_psql -c "SELECT count(*) FROM pg_catalog.pg_roles WHERE rolname IN

@@ -1,13 +1,14 @@
 # The Worker of the personal instance (ADR 0104 section 3). It reads the model key and the web search key from
-# STORYOS_ENV_FILE (ADR 0050), which belongs to the service user and has mode 600.
+# STORYOS_ENV_FILE (ADR 0050), which belongs to the user storyos-worker and has mode 600. The Server runs as the
+# user storyos, which cannot read that file.
 [Unit]
 Description=StoryOS Worker
 Wants=network-online.target
 After=network-online.target
 
 [Service]
-User=storyos
-Group=storyos
+User=storyos-worker
+Group=storyos-worker
 Environment=STORYOS_ENV_FILE=/etc/storyos/worker.env
 Environment=STORYOS_MODEL_DESTINATION=volcengine_agent_plan
 Environment=STORYOS_EMBEDDING_DESTINATION=volcengine_agent_plan

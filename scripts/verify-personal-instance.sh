@@ -29,12 +29,20 @@ if [ "${1:-}" != --inside ]; then
   docker exec -i "$check-db" psql -X -q -v ON_ERROR_STOP=1 -U postgres <<EOF
 ALTER ROLE postgres PASSWORD '$admin_password';
 EOF
-  # --init reaps each stopped service, so that the fake systemctl sees that it ended.
+  # --init reaps each stopped service, so that the fake systemctl sees that it ended. The inner part has a time
+  # limit. At the limit, timeout sends TERM, then KILL after 10 s, and the container ends with the inner part.
+  # timeout prints each signal that it sends.
+  limit=1200
+  status=0
   docker run --rm --init --name "$check" --platform linux/amd64 --network "container:$check-db" \
     --volume "$work:/check:ro" ${STORYOS_CHECK_RUN:+--label "storyos.check-run=$STORYOS_CHECK_RUN"} \
     ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b \
-    sh /check/verify-personal-instance.sh --inside
-  exit
+    timeout --verbose --kill-after=10 "$limit" sh /check/verify-personal-instance.sh --inside || status=$?
+  case $status in
+    124) echo "FAIL: the inner part of the check did not end in $limit s" >&2 ;;
+    137) echo "FAIL: the inner part of the check ended with SIGKILL" >&2 ;;
+  esac
+  exit "$status"
 fi
 
 deploy=/check/deploy
@@ -109,8 +117,24 @@ grep -qFf /tmp/model-key /etc/storyos/worker.env || fail "worker.env has not the
 
 step "Each file of /etc/storyos has mode 600"
 [ -z "$(find /etc/storyos -type f ! -perm 600)" ] || fail "a file of /etc/storyos does not have mode 600"
-[ "$(stat -c %U /etc/storyos/worker.env /etc/storyos/proxy-auth.caddy | tr '\n' ' ')" = "storyos caddy " ] \
-  || fail "worker.env must belong to storyos and proxy-auth.caddy to caddy"
+[ "$(stat -c %U /etc/storyos/worker.env /etc/storyos/proxy-auth.caddy | tr '\n' ' ')" = "storyos-worker caddy " ] \
+  || fail "worker.env must belong to storyos-worker and proxy-auth.caddy to caddy"
+
+step "The Server and the Worker run as two users, and the user of the Server cannot read worker.env"
+# The process of a service starts as root and changes its user, so the check waits at most 5 s for the user $2.
+expect_user() {
+  attempt=0
+  until [ "$(ps -o user= -p "$(cat "/run/fake-systemd/$1.pid")")" = "$2" ]; do
+    attempt=$((attempt + 1))
+    [ "$attempt" -lt 50 ] || fail "$1 does not run as $2"
+    sleep 0.1
+  done
+}
+expect_user storyos-server storyos
+expect_user storyos-worker storyos-worker
+if setpriv --reuid=storyos --regid=storyos --init-groups cat /etc/storyos/worker.env >/dev/null 2>&1; then
+  fail "the user of the Server can read worker.env"
+fi
 
 step "The Server answers through Caddy only with the password"
 printf 'machine %s login author password %s\n' "$host" "$(sed -n 2p /check/secrets)" > /tmp/netrc
@@ -151,29 +175,41 @@ run 0 sh "$deploy/upgrade.sh" "$archive"
 current=$(readlink -f /opt/storyos/current)
 
 # Makes the archive /tmp/<$1>/storyos-linux-x86_64-<$1>.tar.gz of the current package, with a storyos-storage that
-# prints the lines $2 and exits with the status $3.
+# is the shell script $2.
 storage_package() {
   package=storyos-linux-x86_64-$1
   mkdir "/tmp/$1"
   cp -a "$(readlink -f /opt/storyos/current)" "/tmp/$1/$package"
-  printf '#!/bin/sh\nprintf "%%s\\n" %s\nexit %s\n' "$2" "$3" > "/tmp/$1/$package/storyos-storage"
+  printf '#!/bin/sh\n%s\n' "$2" > "/tmp/$1/$package/storyos-storage"
   (cd "/tmp/$1" && tar -czf "$package.tar.gz" "$package" && sha256sum "$package.tar.gz" > "$package.tar.gz.sha256")
 }
 
-step "upgrade.sh with a package that storyos-storage refuses keeps the old package"
-storage_package refused "STORYOS_STORAGE_ACTIVATION=Refused" 1
+step "upgrade.sh with a package that storyos-storage refuses on each run keeps the old package"
+storage_package refused 'echo STORYOS_STORAGE_ACTIVATION=Refused; exit 1'
 run 1 sh "$deploy/upgrade.sh" /tmp/refused/storyos-linux-x86_64-refused.tar.gz
+[ "$(grep -c '^STORYOS_STORAGE_ACTIVATION=Refused$' /tmp/last)" = 2 ] \
+  || fail "upgrade.sh did not run storyos-storage two times"
 [ "$(readlink -f /opt/storyos/current)" = "$current" ] || fail "the refused upgrade changed the link"
 curl -fsS -o /dev/null http://127.0.0.1:3000/api/v1/protocol || fail "the old package does not answer"
 
 # A package of this build refuses each database of an earlier package (the ledger of #1852), so the upgrade line
 # comes from a storyos-storage that prints it.
 step "upgrade.sh accepts the upgrade line of storyos-storage"
-storage_package upgraded "STORYOS_STORAGE_ACTIVATION=Active STORYOS_STORAGE_UPGRADE='from 2 files to 3 files'" 0
+storage_package upgraded \
+  "printf '%s\n' STORYOS_STORAGE_ACTIVATION=Active 'STORYOS_STORAGE_UPGRADE=from 2 files to 3 files'"
 run 0 sh "$deploy/upgrade.sh" /tmp/upgraded/storyos-linux-x86_64-upgraded.tar.gz
 grep -q '^STORYOS_STORAGE_UPGRADE=from 2 files to 3 files$' /tmp/last || fail "upgrade.sh did not print the upgrade line"
 [ "$(readlink -f /opt/storyos/current)" = /opt/storyos/releases/upgraded ] || fail "the upgrade did not change the link"
 curl -fsS -o /dev/null http://127.0.0.1:3000/api/v1/protocol || fail "the upgraded package does not answer"
+
+# A second run of a committed upgrade answers Active, so this fake fails only on its first run.
+step "upgrade.sh continues when the second run of storyos-storage answers Active"
+storage_package lost '[ -f /tmp/lost/ran ] || { : > /tmp/lost/ran; echo "the connection ended"; exit 1; }
+echo STORYOS_STORAGE_ACTIVATION=Active'
+run 0 sh "$deploy/upgrade.sh" /tmp/lost/storyos-linux-x86_64-lost.tar.gz
+grep -q '^the connection ended$' /tmp/last || fail "upgrade.sh did not print the output of the first run"
+[ "$(readlink -f /opt/storyos/current)" = /opt/storyos/releases/lost ] || fail "the upgrade did not change the link"
+curl -fsS -o /dev/null http://127.0.0.1:3000/api/v1/protocol || fail "the new package does not answer"
 
 step "The units pass systemd-analyze verify"
 systemd-analyze verify /etc/systemd/system/storyos-server.service /etc/systemd/system/storyos-worker.service \

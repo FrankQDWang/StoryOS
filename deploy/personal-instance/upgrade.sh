@@ -2,7 +2,8 @@
 # Upgrades the personal instance to a new release package (ADR 0104 section 4). It installs the archive, stops
 # the Worker and the Server, makes a dump with backup.sh, runs storyos-storage of the new package, changes the link
 # /opt/storyos/current, and starts the two services. When a step before the change of the link fails, the script
-# starts the old package again and exits with an error.
+# starts the old package again and exits with an error. A failed run of storyos-storage gets a second run first: the
+# edge can commit and lose its result, and a second run of a committed upgrade answers Active.
 #
 # Usage: upgrade.sh <archive>
 here=$(cd "$(dirname "$0")" && pwd)
@@ -21,7 +22,7 @@ keep_old() {
 }
 systemctl stop storyos-worker.service storyos-server.service
 "$here/backup.sh" || keep_old "the backup failed"
-run_storage "$release" || keep_old "storyos-storage of $release refused the database"
+run_storage "$release" || run_storage "$release" || keep_old "storyos-storage of $release refused the database"
 ln -sfn "$release" "$opt/current.new"
 mv -T "$opt/current.new" "$opt/current"
 systemctl start storyos-server.service storyos-worker.service

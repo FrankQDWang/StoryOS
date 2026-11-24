@@ -15,7 +15,7 @@ The repository is public. Do not write the address of the VPS, the Host, the ref
 | `/etc/storyos/secrets/` | One file for each secret. |
 | `/etc/storyos/proxy-auth.caddy` | The user name of the proxy and the hash of its password, which the Caddyfile imports. It belongs to `caddy`. |
 | `/etc/storyos/server.env` | The settings of the Server that systemd reads: the runtime URL, the session, and the challenge secret. |
-| `/etc/storyos/worker.env` | The env file of the Worker (`STORYOS_ENV_FILE`, ADR 0050): the runtime URL, the model key, and the web search key. It belongs to the service user `storyos`. |
+| `/etc/storyos/worker.env` | The env file of the Worker (`STORYOS_ENV_FILE`, ADR 0050): the runtime URL, the model key, and the web search key. It belongs to the user `storyos-worker` of the Worker. The Server runs as the user `storyos`, which cannot read it. |
 | `/etc/storyos/user-id` | The ID of the one User. |
 | `/var/backups/storyos/` | The daily dumps of the last 14 days. |
 
@@ -82,7 +82,7 @@ The Server keeps the binding of the session in its memory for 8 hours from the s
 1. On the Mac, build the new Linux package, and run `push.sh` with the new archive.
 2. **(author)** On the VPS, run `sudo sh storyos-deploy/upgrade.sh storyos-deploy/<archive>`.
 
-The script verifies the SHA-256, extracts the package, and checks its Web root. It then stops the Worker and the Server, makes one dump with `backup.sh`, runs `storyos-storage` of the new package, changes the link `/opt/storyos/current`, and starts the two services. When the backup or `storyos-storage` fails, the script starts the old package again and exits with an error. The earlier package stays in `/opt/storyos/releases/`.
+The script verifies the SHA-256, extracts the package, and checks its Web root. It then stops the Worker and the Server, makes one dump with `backup.sh`, runs `storyos-storage` of the new package, changes the link `/opt/storyos/current`, and starts the two services. When `storyos-storage` fails, the script runs it a second time, because the edge can commit and lose its result: a second run of a committed upgrade answers `Active`, and the script continues with the new package. When the backup fails, or `storyos-storage` fails on the second run too, the script starts the old package again and exits with an error. The earlier package stays in `/opt/storyos/releases/`.
 
 The edge of `storyos-storage` applies the new migrations (ADR 0104 section 4). After the edge, it prints a second line `STORYOS_STORAGE_UPGRADE=from <n> files to <m> files`. After a migration, the old package cannot use the database. To go back to the old package after that, restore the dump of the upgrade into a new database project ("The restore"), and before you start the services, point the link to the old package: `sudo ln -sfn /opt/storyos/releases/<old commit> /opt/storyos/current`.
 
@@ -100,7 +100,7 @@ The dump is a backup of the whole instance, and not Project Restore. The dumps s
 
 ## The restore
 
-`restore.sh` loads one dump into an empty database: the roles of `0000_roles.sql`, the schema `extensions` with `vector`, the dump, the grants outside the schema `storyos`, and the password of the runtime role. The dump holds the activation proof. Thus the Server of the same package starts with no run of `storyos-storage`.
+`restore.sh` loads one dump into a database of a new database project. The database must have no schema `storyos`, and it must have all or none of the four roles of `0000_roles.sql`. The script does not examine other relations, because the dump loads only the schema `storyos`. It loads: the roles of `0000_roles.sql`, the schema `extensions` with `vector`, the dump, the grants outside the schema `storyos`, and the password of the runtime role. The dump holds the activation proof. Thus the Server of the same package starts with no run of `storyos-storage`.
 
 1. **(author)** Make a new database project. The roles of PostgreSQL are in the cluster, so the database must be in a new project.
 2. **(author)** Stop the services: `sudo systemctl stop storyos-worker storyos-server`.

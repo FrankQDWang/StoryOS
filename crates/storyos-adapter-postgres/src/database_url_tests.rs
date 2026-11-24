@@ -41,9 +41,11 @@ fn a_loopback_or_socket_url_with_no_sslmode_stays_valid() {
         "postgres://postgres:admin@127.0.0.1/postgres?sslmode=disable",
         "postgres://postgres:admin@localhost/postgres?sslmode=require",
         "host=/var/run/postgresql user=postgres",
+        "postgres:///postgres",
+        "user=postgres",
     ];
 
-    assert_eq!(urls.map(check_database_url), [Ok(()); 6]);
+    assert_eq!(urls.map(check_database_url), [Ok(()); 8]);
 }
 
 #[test]
@@ -51,10 +53,19 @@ fn sslmode_require_needs_a_name_for_each_host() {
     let urls = [
         "host='' hostaddr=127.0.0.1 user=storyos sslmode=require",
         "hostaddr=10.0.0.5 user=storyos sslmode=require",
+        "postgres:///postgres?sslmode=require",
+        "postgres://storyos:secret@/postgres?sslmode=require",
+        "user=storyos sslmode=require",
     ];
 
     assert_eq!(
         urls.map(check_database_url),
-        [Err(DatabaseUrlRefusal::TlsHostNameMissing), Ok(()),]
+        [
+            Err(DatabaseUrlRefusal::TlsHostNameMissing),
+            Ok(()),
+            Err(DatabaseUrlRefusal::TlsHostNameMissing),
+            Err(DatabaseUrlRefusal::TlsHostNameMissing),
+            Err(DatabaseUrlRefusal::TlsHostNameMissing),
+        ]
     );
 }
