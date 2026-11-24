@@ -520,6 +520,37 @@ ORDER BY 1;
 SQL
 }
 
+# The effective access to the StoryOS objects of each role that is not predefined (an OID from 16384), not a
+# superuser, not a storyos_* role, and not the admin login: one line for each privilege on the schema storyos, on its relations, and on its sequences, with
+# the mark read_all_data when the role has the rights of the predefined role pg_read_all_data.
+storyos_effective_access() {
+  docker exec -i "$1" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At <<'SQL'
+WITH other_role AS (
+  SELECT oid, rolname, pg_has_role(oid, 'pg_read_all_data', 'USAGE') AS read_all_data
+    FROM pg_roles
+   WHERE oid >= 16384 AND NOT rolsuper AND rolname NOT LIKE 'storyos\_%' AND rolname <> current_user
+), access AS (
+  SELECT other_role.*, 'schema ' || privilege AS privilege
+    FROM other_role, (VALUES ('USAGE'), ('CREATE')) AS kind (privilege)
+   WHERE has_schema_privilege(other_role.oid, 'storyos', kind.privilege)
+  UNION
+  SELECT other_role.*, 'relation ' || kind.privilege
+    FROM other_role, pg_class AS relation,
+         (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('REFERENCES'), ('TRIGGER'),
+                 ('MAINTAIN')) AS kind (privilege)
+   WHERE relation.relnamespace = 'storyos'::regnamespace AND relation.relkind IN ('r', 'p', 'v', 'm', 'f')
+     AND has_table_privilege(other_role.oid, relation.oid, kind.privilege)
+  UNION
+  SELECT other_role.*, 'sequence ' || kind.privilege
+    FROM other_role, pg_class AS sequence, (VALUES ('USAGE'), ('SELECT'), ('UPDATE')) AS kind (privilege)
+   WHERE sequence.relnamespace = 'storyos'::regnamespace AND sequence.relkind = 'S'
+     AND has_sequence_privilege(other_role.oid, sequence.oid, kind.privilege)
+)
+SELECT rolname || ' ' || privilege || CASE WHEN read_all_data THEN ' read_all_data' ELSE '' END
+  FROM access ORDER BY 1;
+SQL
+}
+
 provider_psql() {
   docker exec -i "$provider_container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At "$@"
 }
@@ -622,6 +653,15 @@ STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
     echo "A role that is not a StoryOS role or the owner has a privilege on a StoryOS object" >&2
     exit 1
   fi
+  # The provider gives pg_read_all_data to some of its roles, which then read each table with no grant of the
+  # schema (an exception of #1851). Each other role has no access, and no role of the provider has more.
+  effective_access=$(storyos_effective_access "$provider_container")
+  printf 'Roles of the provider with access to StoryOS objects:\n%s\n' "$effective_access"
+  if printf '%s\n' "$effective_access" | grep -Ev \
+    '^[a-z_]+ (schema USAGE|relation SELECT|sequence SELECT) read_all_data$'; then
+    echo "A role of the provider has access to a StoryOS object that is not the read of pg_read_all_data" >&2
+    exit 1
+  fi
   provider_psql -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
   provider_psql < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
   provider_runtime=$(postgres_runtime_url "$provider_container")
@@ -630,6 +670,11 @@ STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
   STORYOS_DATABASE_URL="$provider_runtime" \
   STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
     "$worker_bin" --claim-only
+  (
+    container=$provider_container
+    STORYOS_TEST_DATABASE_URL=$provider_runtime
+    prove_bound_request_path_activation
+  )
   echo "Running the Project Isolation tests and the vector store test on the provider database"
   STORYOS_TEST_DATABASE_URL="$provider_runtime" \
   STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$provider_container") \

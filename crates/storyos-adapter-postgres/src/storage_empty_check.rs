@@ -5,7 +5,7 @@
 /// `supabase/postgres` that `scripts/lib/controlled-postgres.sh` pins and of a new hosted project
 /// (2026-11-24), and for `supabase_migrations` the preflight
 /// `docs/research/supabase-free-compatibility-preflight.md`.
-pub(crate) const PROVIDER_SCHEMAS: [&str; 9] = [
+const PROVIDER_SCHEMAS: [&str; 9] = [
     "auth",
     "extensions",
     "graphql",
@@ -19,7 +19,7 @@ pub(crate) const PROVIDER_SCHEMAS: [&str; 9] = [
 
 /// The roles of the hosted provider that own its relations. The sources are the relation owners of
 /// the same image and of the same hosted project, which has `supabase_realtime_admin`.
-pub(crate) const PROVIDER_OWNERS: [&str; 4] = [
+const PROVIDER_OWNERS: [&str; 4] = [
     "supabase_admin",
     "supabase_auth_admin",
     "supabase_realtime_admin",
@@ -28,7 +28,7 @@ pub(crate) const PROVIDER_OWNERS: [&str; 4] = [
 
 /// The extensions of the hosted provider that have relations. On the hosted project, the admin login
 /// owns the views of `pg_stat_statements`, so the owner alone does not identify them.
-pub(crate) const PROVIDER_EXTENSIONS: [&str; 2] = ["pg_stat_statements", "supabase_vault"];
+const PROVIDER_EXTENSIONS: [&str; 2] = ["pg_stat_statements", "supabase_vault"];
 
 /// True when the database holds the StoryOS schema or a relation that is not of the provider. A
 /// relation is of the provider only when it is in a provider schema, and a provider role owns it
