@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import setCurrentChapterFixture from "../../../../generated/golden-wire/storyos-public-release-1/set-current-chapter.json";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { loadStoryOSWebState } from "../../src/app.ts";
@@ -32,49 +32,60 @@ async function drainMicrotasks() {
 }
 
 /**
- * A fake Server with Chapters A (current), B, and C. It refuses the next Challenge of `limited` one time. When
- * `held` is true, it also refuses the Challenge after that one, but only when the test calls `release`.
+ * A fake Server with Chapters A (current), B, and C. It serves only the reads of the workspace and the reads of
+ * `chapters`, records each other request, and throws. It refuses the next Challenge of `limited` one time. When
+ * `held` is true, it also refuses the Challenge after that one, but only when the test calls `release`. A switch
+ * settles a new Snapshot, which the Editor Session base, the Chapter read, and the switch response name.
  */
-function fakeServer() {
+function fakeServer(chapters: string[]) {
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
   let current = CHAPTER;
+  let snapshot = { id: scenario.session.base_snapshot.snapshot_id, position: "0" };
   const server = { requests: [] as string[], challengeKeys: [] as string[], limited: undefined as string | undefined,
     held: false, release: undefined as (() => void) | undefined, switchRefused: false };
-  const session = () => current === CHAPTER ? scenario.session : { ...scenario.session,
-    base_snapshot: { ...scenario.session.base_snapshot, chapter_id: current,
-      authoritative_head_revision_id: REVISIONS[current]!, target_refs: [`manuscript:${current}`],
+  const session = () => {
+    const base = current === CHAPTER ? scenario.session.base_snapshot : { ...scenario.session.base_snapshot,
+      chapter_id: current, authoritative_head_revision_id: REVISIONS[current]!, target_refs: [`manuscript:${current}`],
       materialized_revision: chapterRevision(REVISIONS[current]!, ""),
       materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
-        value_hex_lowercase: EMPTY_BODY_DIGEST } } };
+        value_hex_lowercase: EMPTY_BODY_DIGEST } };
+    return { ...scenario.session,
+      base_snapshot: { ...base, snapshot_id: snapshot.id, project_activity_position: snapshot.position } };
+  };
   const open = () => ({ kind: "current_chapter" as const, current_chapter_id: current });
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const method = init?.method ?? "GET";
-    server.requests.push(`${method} ${path}`);
-    if (path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
-    if (path === "/api/v1/projects") {
+    const name = `${method} ${path}`;
+    const P = `/api/v1/projects/${PROJECT}`;
+    server.requests.push(name);
+    if (name === "GET /api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
+    if (name === "GET /api/v1/projects") {
       return jsonResponse({ schema_id: "storyos.query.project-list.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000013", owner_user_id: OWNER,
         projects: [{ project_scope: scope, title: "Project A", revision: "1", open: open() }] });
     }
-    if (path === `/api/v1/projects/${PROJECT}`) {
+    if (name === `GET ${P}`) {
       return jsonResponse({ ...scenario.project, project: { ...scenario.project.project, open: open() } });
     }
-    if (path === `/api/v1/projects/${PROJECT}/chapters/${CHAPTER}`) return jsonResponse(scenario.chapter);
-    const chapterId = path.split("/chapters/")[1];
-    if (chapterId !== undefined && REVISIONS[chapterId] !== undefined) {
-      return jsonResponse({ ...scenario.chapter, chapter: { chapter_id: chapterId, title: TITLES[chapterId],
+    if (name === `GET ${P}/chapters/${CHAPTER}`) {
+      return jsonResponse({ ...scenario.chapter, project_activity_position: snapshot.position });
+    }
+    const chapterId = chapters.find((id) => name === `GET ${P}/chapters/${id}`);
+    if (chapterId !== undefined) {
+      return jsonResponse({ ...scenario.chapter, project_activity_position: snapshot.position,
+        chapter: { chapter_id: chapterId, title: TITLES[chapterId],
         current_revision: chapterRevision(REVISIONS[chapterId]!, "") } });
     }
-    if (path === `/api/v1/projects/${PROJECT}/manuscript/tree`) {
+    if (name === `GET ${P}/manuscript/tree`) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000014", project_scope: scope, tree_revision: "3",
         snapshot: { snapshot_id: "018f0000-0000-7001-8000-000000000032", project_scope: scope },
         volumes: [{ volume_id: VOLUME, title: "Volume A", order: "1", chapters: [CHAPTER, CHAPTER_B, CHAPTER_C]
           .map((id, index) => ({ chapter_id: id, title: TITLES[id], order: String(index + 1) })) }] });
     }
-    if (path.endsWith("/anti-forgery-challenges")) {
+    if (name === `POST ${P}/anti-forgery-challenges`) {
       const request = JSON.parse(String(init?.body)) as { command_schema: string; idempotency_key: string };
       if (request.command_schema === SET_CURRENT_CHAPTER) server.challengeKeys.push(request.idempotency_key);
       if (request.command_schema === server.limited) {
@@ -91,26 +102,56 @@ function fakeServer() {
       return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-09-12T00:00:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
-    if (path.endsWith("/editor-sessions")) return jsonResponse(session());
-    if (path.endsWith(`/editor-sessions/${SESSION}`)) {
+    if (name === `POST ${P}/editor-sessions`) return jsonResponse(session());
+    if (name === `GET ${P}/editor-sessions/${SESSION}`) {
       return jsonResponse({ ...session(), schema_id: "storyos.query.editor-session.response.v1" });
     }
-    if (path.endsWith("/activity")) return emptyActivityStream();
-    if (`${method} ${path}` === CURRENT_CHAPTER && !server.switchRefused) {
+    if (name === `GET ${P}/activity`) return emptyActivityStream();
+    if (name === CURRENT_CHAPTER && !server.switchRefused) {
       current = (JSON.parse(String(init?.body)) as { set_current_chapter_input: { chapter_id: string } })
         .set_current_chapter_input.chapter_id;
-      return jsonResponse(setCurrentChapterFixture);
+      const position = Number(snapshot.position) + 1;
+      snapshot = { id: `018f0000-0000-7001-8000-00000000094${position}`, position: String(position) };
+      // The reopen opens the Chapter of the response, so the response names the Chapter of the request (#1875).
+      return jsonResponse({ ...setCurrentChapterFixture,
+        project: { ...setCurrentChapterFixture.project, open: open() },
+        effect: { ...setCurrentChapterFixture.effect, base_snapshot_id: snapshot.id, current_chapter_id: current,
+          project_activity_position: snapshot.position },
+        receipt: { ...setCurrentChapterFixture.receipt, expected_heads: [REVISIONS[current]!],
+          prior_heads: [REVISIONS[current]!], resulting_heads: [REVISIONS[current]!] } });
     }
-    return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
+    // The test is not about these panels, and a refused switch gets the same problem.
+    const notFound = [`${P}/manuscript/statistics`, `${P}/assistance`, `${P}/skills`,
+      ...[CHAPTER, ...chapters].map((id) => `${P}/chapters/${id}/open-proposals`)].map((route) => `GET ${route}`);
+    if (notFound.includes(name) || name === CURRENT_CHAPTER) {
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
+    }
+    unexpected.push(name);
+    throw new Error(`unexpected request: ${name}`);
   };
   return { scenario, server, fetchImpl };
 }
 
 const openDatabases = new Set<IDBDatabase>();
+// The writable workspace that opens again after a switch opens the Journal again, so the test closes each connection
+// before it deletes the Journal.
+const openJournal = indexedDB.open.bind(indexedDB);
+
+beforeEach(() => {
+  Object.defineProperty(indexedDB, "open", { configurable: true, value: (name: string, version?: number) => {
+    const request = openJournal(name, version);
+    request.addEventListener("success", () => { trackDatabase(request.result, openDatabases); });
+    return request;
+  } });
+});
 const unmounts: (() => void)[] = [];
+// Each request that the fake does not serve. Each test asserts that it has none.
+const unexpected: string[] = [];
 
 afterEach(async () => {
+  expect(unexpected.splice(0)).toEqual([]);
   for (const unmount of unmounts.splice(0)) unmount();
+  Reflect.deleteProperty(indexedDB, "open");
   closeTrackedDatabases(openDatabases);
   document.body.replaceChildren();
   sessionStorage.clear();
@@ -118,8 +159,8 @@ afterEach(async () => {
 });
 
 /** Opens the workspace, refuses the next Challenge of `limited`, and clicks Chapter B in the manuscript tree. */
-async function clickWhileLimited(limited: string, held = false) {
-  const { scenario, server, fetchImpl } = fakeServer();
+async function clickWhileLimited(limited: string, held = false, chapters = [CHAPTER_B]) {
+  const { scenario, server, fetchImpl } = fakeServer(chapters);
   await deleteJournal(scenario.journalName);
   document.body.innerHTML = '<main id="app"></main>';
   const loaded = await loadStoryOSWebState({ documentImpl: document,
@@ -131,9 +172,6 @@ async function clickWhileLimited(limited: string, held = false) {
     clearTimeoutImpl: (timer) => { if (typeof timer === "number" && timers[timer]) timers[timer].cleared = true; },
   } });
   unmounts.push(() => view.unmount());
-  if (loaded.state.kind === "project-ready" && loaded.state.editor.kind === "editor-ready") {
-    trackDatabase(loaded.state.editor.database, openDatabases);
-  }
   const click = (chapterId: string) =>
     loaded.root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${chapterId}"]`)!.click();
   await expect.poll(() => loaded.root.querySelector(`button[data-chapter-id="${CHAPTER_B}"]`)).not.toBeNull();
@@ -141,7 +179,10 @@ async function clickWhileLimited(limited: string, held = false) {
   server.held = held;
   click(CHAPTER_B);
   await expect.poll(() => timers.filter((timer) => timer.timeout === 7_000).length).toBe(1);
+  // A writable workspace shows the saved state. A read-only recovery shows "needs_attention" and a failure.
   const shown = () => ({ title: loaded.root.querySelector(".editor-panel h2")?.textContent,
+    save: loaded.root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
+    failure: loaded.root.querySelector("[data-editor-failure]")?.getAttribute("data-editor-failure"),
     alert: loaded.root.querySelector('[role="alert"]')?.textContent,
     status: loaded.root.querySelector('.editor-panel > [role="status"]')?.textContent,
     waiting: loaded.root.querySelector("[data-chapter-switch-waiting]")?.getAttribute("data-chapter-switch-waiting") });
@@ -156,13 +197,13 @@ it("keeps the switch in progress through a Challenge rate limit and opens the Ch
 
   opened.timers.find((timer) => timer.timeout === 7_000)!.callback();
 
-  await expect.poll(opened.shown).toEqual({ title: "Chapter B", alert: undefined, status: undefined, waiting: "" });
+  await expect.poll(opened.shown).toEqual({ title: "Chapter B", save: "saved", failure: "", alert: undefined, status: undefined, waiting: "" });
   expect({ waited: opened.waited, switchesBefore, switches: opened.switches(),
     challenges: opened.server.challengeKeys.length, keys: new Set(opened.server.challengeKeys).size,
     // The repeat does not read Chapter B again, so its Revision and the idempotency key stay the same.
     chapterB: opened.server.requests.filter((entry) => entry.endsWith(`/chapters/${CHAPTER_B}`)).length,
     sessions: opened.server.requests.filter((entry) => entry.endsWith("/editor-sessions")).length }).toEqual({
-    waited: { title: "Chapter A", alert: undefined, status: WAITING, waiting: CHAPTER_B },
+    waited: { title: "Chapter A", save: "saved", failure: "", alert: undefined, status: WAITING, waiting: CHAPTER_B },
     switchesBefore: 0,
     switches: 1,
     challenges: 2,
@@ -173,10 +214,10 @@ it("keeps the switch in progress through a Challenge rate limit and opens the Ch
 });
 
 it("ends the wait of a switch when the author clicks another Chapter, and opens the later Chapter", async () => {
-  const opened = await clickWhileLimited(SET_CURRENT_CHAPTER);
+  const opened = await clickWhileLimited(SET_CURRENT_CHAPTER, false, [CHAPTER_B, CHAPTER_C]);
 
   opened.click(CHAPTER_C);
-  await expect.poll(opened.shown).toEqual({ title: "Chapter C", alert: undefined, status: undefined, waiting: "" });
+  await expect.poll(opened.shown).toEqual({ title: "Chapter C", save: "saved", failure: "", alert: undefined, status: undefined, waiting: "" });
   opened.timers.find((timer) => timer.timeout === 7_000)!.callback();
   await drainMicrotasks();
 
@@ -184,12 +225,12 @@ it("ends the wait of a switch when the author clicks another Chapter, and opens 
     chapterB: opened.server.requests.filter((entry) => entry.endsWith(`/chapters/${CHAPTER_B}`)).length,
     shown: opened.shown() }).toEqual({
     cleared: true, switches: 1, chapterB: 1,
-    shown: { title: "Chapter C", alert: undefined, status: undefined, waiting: "" },
+    shown: { title: "Chapter C", save: "saved", failure: "", alert: undefined, status: undefined, waiting: "" },
   });
 });
 
 it("shows the sentence of the wait only while the later switch also waits", async () => {
-  const opened = await clickWhileLimited(SET_CURRENT_CHAPTER);
+  const opened = await clickWhileLimited(SET_CURRENT_CHAPTER, false, [CHAPTER_B, CHAPTER_C]);
 
   opened.server.limited = SET_CURRENT_CHAPTER;
   opened.click(CHAPTER_C);
@@ -197,8 +238,8 @@ it("shows the sentence of the wait only while the later switch also waits", asyn
   const laterWait = opened.shown();
   opened.timers.filter((timer) => timer.timeout === 7_000 && !timer.cleared).at(-1)!.callback();
 
-  await expect.poll(opened.shown).toEqual({ title: "Chapter C", alert: undefined, status: undefined, waiting: "" });
-  expect(laterWait).toEqual({ title: "Chapter A", alert: undefined, status: WAITING, waiting: CHAPTER_C });
+  await expect.poll(opened.shown).toEqual({ title: "Chapter C", save: "saved", failure: "", alert: undefined, status: undefined, waiting: "" });
+  expect(laterWait).toEqual({ title: "Chapter A", save: "saved", failure: "", alert: undefined, status: WAITING, waiting: CHAPTER_C });
 });
 
 it("ends the sentence of the wait when the repeat gets a refusal that is not a rate limit", async () => {
@@ -207,12 +248,12 @@ it("ends the sentence of the wait when the repeat gets a refusal that is not a r
   opened.server.switchRefused = true;
   opened.timers.find((timer) => timer.timeout === 7_000)!.callback();
 
-  await expect.poll(opened.shown).toEqual({ title: "Chapter A", alert: "无法打开这一章。", status: undefined,
+  await expect.poll(opened.shown).toEqual({ title: "Chapter A", save: "saved", failure: "", alert: "无法打开这一章。", status: undefined,
     waiting: "" });
   // A later click completes the command of the same key, so the next test starts with no command in flight.
   opened.server.switchRefused = false;
   opened.click(CHAPTER_B);
-  await expect.poll(opened.shown).toEqual({ title: "Chapter B", alert: undefined, status: undefined, waiting: "" });
+  await expect.poll(opened.shown).toEqual({ title: "Chapter B", save: "saved", failure: "", alert: undefined, status: undefined, waiting: "" });
 });
 
 it("ends the wait of a switch when the author leaves the Project, and sends no request later", async () => {
