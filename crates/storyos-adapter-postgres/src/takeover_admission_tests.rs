@@ -315,7 +315,7 @@ async fn durable_state(admin: &Client, fixture: &TakeoverFixture) -> DurableTake
             "SELECT writer_generation::text, current_editor_session_id::text
                FROM storyos.project_writer_generations
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-              ORDER BY writer_generation",
+              ORDER BY project_writer_generations.writer_generation",
             &[&USER, &fixture.project_id.as_str()],
         )
         .await
