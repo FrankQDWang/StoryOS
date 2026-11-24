@@ -21,6 +21,16 @@ if [ "${1:-}" != --inside ]; then
   mkdir "$work/deploy"
   cp "$repository_root"/deploy/personal-instance/* "$archive" "$archive.sha256" "$work/deploy/"
   cp "$repository_root/scripts/verify-personal-instance.sh" "$repository_root/scripts/lib/fake-systemctl.sh" "$work/"
+  # The stream check of the inner part sends the golden Project Activity event of the public release as one frame.
+  python3 - "$repository_root/generated/golden-wire/storyos-public-release-1/activity-stream.json" \
+    > "$work/activity-event" <<'PYTHON'
+import json
+import sys
+
+frame = json.load(open(sys.argv[1], encoding="utf-8"))
+data = json.dumps(frame["data"], separators=(",", ":"), ensure_ascii=False)
+sys.stdout.write(f"id: {frame['id']}\nevent: {frame['event']}\ndata: {data}\n\n")
+PYTHON
   # Each secret is a value of this run. The admin password has the characters that a URL must encode.
   admin_password="a $(openssl rand -hex 8)%@:/?#"
   (umask 077 && printf '%s\n' "$admin_password" "p$(openssl rand -hex 12)" "m$(openssl rand -hex 16)" \
@@ -209,10 +219,13 @@ curl -fsS -o /tmp/direct.json http://127.0.0.1:3000/api/v1/protocol
 decompressed_body_is /tmp/direct.json || fail "the decompressed JSON response is not the response"
 
 step "An event of the Project Activity Stream goes through Caddy before the stream ends"
-# A stub in place of the Server answers only the route of the stream. It sends one complete event that is larger
-# than the minimum of the encode block, and then it keeps the stream open for 30 s.
-activity='/api/v1/projects/019a0000-0000-7000-8000-000000000001/activity?snapshot_id=019a0000-0000-7000-8000-000000000002&protocol_release=1'
-{ printf 'id: 1\ndata: '; head -c 1024 /dev/zero | tr '\0' e; printf '\n\n'; } > /tmp/event
+# A stub in place of the Server answers only the route of the stream of the golden event. It sends that complete
+# event, which is larger than the minimum of the encode block, and then it keeps the stream open for 30 s.
+cp /check/activity-event /tmp/event
+[ "$(wc -c < /tmp/event)" -gt 256 ] || fail "the golden event is not larger than the minimum of the encode block"
+project=$(grep -o '"project_id":"[^"]*"' /tmp/event | head -n 1 | cut -d '"' -f 4)
+[ -n "$project" ] || fail "the golden event has no project_id"
+activity="/api/v1/projects/$project/activity?snapshot_id=019a0000-0000-7000-8000-000000000002&protocol_release=storyos.public.release.1"
 listening() { grep -q ':0BB8 00000000:0000 0A' /proc/net/tcp; }
 systemctl stop storyos-server.service
 attempt=0
