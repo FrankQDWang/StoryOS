@@ -268,9 +268,16 @@ export function BlockProposalDisplay({
       }
       if (proposal === undefined) return await hasPendingDisplayedAcceptance(workspace,
         locator.proposalId) ? locator.proposalId : undefined;
-      // The open of this view read the Chapter, so an applied Acceptance needs no second open (#1876).
-      const result = await reconcileDisplayedAcceptance(workspace, proposal);
-      return result === "pending" || result === "applied" ? proposal.proposal_id : undefined;
+      // The open of this view read the Chapter. Only when that read came before the Server applied the Acceptance,
+      // the view opens the Project again (#1876).
+      const result = await reconcileDisplayedAcceptance(workspace, proposal, authoritativeRevisionId);
+      if (active && !acceptingRef.current && result === "applied_not_shown"
+        && !refreshedAcceptance.current.has(proposal.proposal_id)) {
+        refreshedAcceptance.current.add(proposal.proposal_id);
+        await onAccepted(false);
+      }
+      return result === "pending" || result === "applied" || result === "applied_not_shown"
+        ? proposal.proposal_id : undefined;
     })).then((values) => {
       if (!active) return;
       setSessionBlockedIds([...new Set(blockedIds)]);
@@ -541,6 +548,26 @@ export function BlockProposalDisplay({
     })();
   };
 
+  /**
+   * Shows a settled Rejection (#1876). A changed Chapter Head opens the Project again. Otherwise the Chapter text does
+   * not change, so the view reads only the rejected Proposal again, and the decision reads the open suggestions.
+   */
+  const showRejection = async (proposalId: string, effect: "resolved" | "conflicted" | "refused") => {
+    if (effect === "conflicted") {
+      await onAccepted(true);
+      return;
+    }
+    const response = await getProposal({ baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
+      projectId: scope.project_id, proposalId }).catch(() => undefined);
+    if (response === undefined || response.project_scope.owner_user_id !== scope.owner_user_id
+      || response.project_scope.project_id !== scope.project_id || response.proposal.proposal_id !== proposalId) {
+      setSettlementRefresh((value) => value + 1);
+      return;
+    }
+    setReads((current) => current.map((item) => item.locator.proposalId === proposalId
+      ? { ...item, proposal: response.proposal } : item));
+  };
+
   const rejectDisplayed = (target: {
     proposalId: string; operationId: string; revisionId: string; text: string; operationIds?: readonly string[] | undefined;
   }) => {
@@ -601,8 +628,7 @@ export function BlockProposalDisplay({
           conflicted: "正文已变化，拒绝结果请检查。",
           refused: "此次拒绝未生效，请检查当前候选文字。" }[response.effect.kind];
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
-        // A rejection changes no Chapter text, so the view reads only the open suggestions again (#1876).
-        setSettlementRefresh((value) => value + 1);
+        await showRejection(target.proposalId, response.effect.kind);
       } catch (error) {
         setDecisionMessages((current) => ({ ...current,
           [target.proposalId]: historicalAcknowledgementUnavailable(error)
@@ -637,7 +663,7 @@ export function BlockProposalDisplay({
           conflicted: "正文已变化，拒绝结果请检查。",
           refused: "此次拒绝未生效，请检查当前候选文字。",
         }[response.effect.kind] }));
-        setSettlementRefresh((value) => value + 1);
+        await showRejection(proposalId, response.effect.kind);
       } catch {
         setDecisionMessages((current) => ({ ...current,
           [proposalId]: "拒绝结果暂不可确认。请重试同一操作。" }));

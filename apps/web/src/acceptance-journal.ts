@@ -416,8 +416,13 @@ export async function hasPendingDisplayedAcceptance(workspace: EditorReadyState,
   });
 }
 
+/**
+ * The result of the Acceptance record of `proposal`. `applied_not_shown` is an applied Acceptance whose view still
+ * shows the Chapter Head before it: the open read the Chapter before the Server applied the Acceptance.
+ */
 export async function reconcileDisplayedAcceptance(workspace: EditorReadyState,
-  proposal: BlockProposalInspect): Promise<"none" | "pending" | "applied" | "refused"> {
+  proposal: BlockProposalInspect, shownRevisionId: string,
+): Promise<"none" | "pending" | "applied" | "applied_not_shown" | "refused"> {
   const prefix = `acceptance:${workspace.partition.journal_partition_id}:${proposal.proposal_id}:`;
   const request = workspace.database.transaction("metadata", "readonly").objectStore("metadata")
     .getAll(IDBKeyRange.bound(prefix, `${prefix}\uffff`));
@@ -432,7 +437,10 @@ export async function reconcileDisplayedAcceptance(workspace: EditorReadyState,
     || flight.editor_session_id !== workspace.partition.editor_session_id
     || flight.writer_generation !== workspace.partition.writer_generation) return "pending";
   if (proposal.revision_id === flight.request.accept_proposal_input.proposal_revision_id
-    && decisionMembers(flight.author_visible_decision_ref).every((id) => proposal.operations.some((operation) => operation.operation_id === id && operation.resolution === "applied"))) return "applied";
+    && decisionMembers(flight.author_visible_decision_ref).every((id) => proposal.operations.some((operation) => operation.operation_id === id && operation.resolution === "applied"))) {
+    return flight.request.accept_proposal_input.expected_authoritative_revision_id === shownRevisionId
+      ? "applied_not_shown" : "applied";
+  }
   if (proposal.latest_acceptance_refusal.kind === "present"
     && proposal.latest_acceptance_refusal.correlation_id
       === flight.request.accept_proposal_input.correlation_id) {

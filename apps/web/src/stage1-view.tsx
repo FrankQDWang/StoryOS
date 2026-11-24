@@ -153,19 +153,25 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
     ? state.project.project.open.current_chapter_id
     : state.chapter.chapter.chapter_id;
 
+  // Only the latest tree read sets the tree, so an earlier response cannot replace a later tree.
+  const treeReads = useRef(0);
+  const readTree = () => {
+    treeReads.current += 1;
+    const sequence = treeReads.current;
+    void readManuscriptTree({ baseUrl, projectId, fetchImpl })
+      .then((next) => { if (sequence === treeReads.current) setTree(next); }).catch(() => {})
+      .finally(() => { if (sequence === treeReads.current) setTreeRead("settled"); });
+  };
   // The takeover check of the open read the tree already. Until the new tree arrives, the list shows the last tree.
   useEffect(() => {
     if (state.tree !== undefined) {
+      treeReads.current += 1;
       setTree(state.tree);
       setTreeRead("settled");
       return;
     }
-    let active = true;
     setTreeRead("reading");
-    void readManuscriptTree({ baseUrl, projectId, fetchImpl })
-      .then((next) => { if (active) setTree(next); }).catch(() => {})
-      .finally(() => { if (active) setTreeRead("settled"); });
-    return () => { active = false; };
+    readTree();
   }, [baseUrl, fetchImpl, projectId, state]);
   // A Chapter that the author creates, moves, renames, or removes changes the Chapter part of the draft labels.
   useEffect(() => {
@@ -176,9 +182,6 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   const holdAddressConversation = useAddressChapter({ tree, currentChapterId, open: selectChapter,
     canChangeCurrentChapter: state.editor.kind === "editor-ready" && state.editor.session.writer.kind === "current_writer",
     onNotFound: () => editor.current?.showRecovery(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
-  const refreshTree = () => {
-    void readManuscriptTree({ baseUrl, projectId, fetchImpl }).then(setTree).catch(() => {});
-  };
   return (
     <WritingWorkspace
       writer={state.editor.kind === "editor-ready" ? state.editor.session.writer : state.editor.writer}
@@ -222,8 +225,8 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
               cryptoImpl={cryptoImpl}
               selectedChapterId={status.selectedChapterId}
               onSelectChapter={selectChapter}
-              onChapterCreated={refreshTree}
-              onVolumeUpdated={refreshTree}
+              onChapterCreated={readTree}
+              onVolumeUpdated={readTree}
               onRemoveChapter={(chapterId) => editor.current?.removeChapter(chapterId)}
               onRemoveVolume={(volumeId) => editor.current?.removeVolume(volumeId)}
             />

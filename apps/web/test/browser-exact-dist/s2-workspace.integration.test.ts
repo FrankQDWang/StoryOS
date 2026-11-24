@@ -42,9 +42,10 @@ it("the production page uses the approved workspace without losing writing state
   const emptyWorkspace = workspace(frame);
   expect(empty.querySelector('nav[aria-label="稿件目录"]')).not.toBeNull();
   expect(empty.querySelector(".editor-panel textarea")).toBeNull();
-  expect(emptyWorkspace.querySelector("[data-writing-assistant]")?.getAttribute(
+  // The panel shows the availability after the answer of the assistance read (#1876).
+  await expect.poll(() => emptyWorkspace.querySelector("[data-writing-assistant]")?.getAttribute(
     "data-assistant-availability",
-  )).toBe("unavailable");
+  ), { timeout: 10_000 }).toBe("unavailable");
   expect(empty.textContent).not.toContain("模型");
   expect(empty.textContent).not.toContain("Agent");
   expect(empty.textContent).not.toContain("Provider");
@@ -89,6 +90,9 @@ it("the production page uses the approved workspace without losing writing state
     || currentChapter === null) {
     throw new Error("the production writing columns are incomplete");
   }
+  // The panel shows the availability after the answer of the assistance read (#1876).
+  await expect.poll(() => assistant.getAttribute("data-assistant-availability"), { timeout: 10_000 })
+    .not.toBe("unknown");
   expect({
     tree: root.querySelector('nav[aria-label="稿件目录"]') !== null,
     createChapter: root.querySelector("[data-add-chapter]") !== null,
