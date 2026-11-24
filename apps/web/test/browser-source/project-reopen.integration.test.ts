@@ -101,21 +101,23 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * requests with a 503 problem. `lost` applies the given requests and then loses their response. A `late` Acceptance
  * applies at the first Proposal read after the next Chapter A read and Editor Session read. `takeover` and
  * `rejection` give the effect of these commands. Before a `conflicted` Rejection, another tab changes the text of
- * Chapter A, and the Operation stays pending. `other` adds a second open Proposal. A rename of Chapter A changes its
- * title in the tree.
+ * Chapter A, and the Operation stays pending. Before a `refused` Rejection, another tab applies the Operation. `other`
+ * adds a second open Proposal. A rename of Chapter A changes its title in the tree and advances the tree revision. With
+ * `proposalResult`, the Run of the Conversation has a Proposal result with a change in Chapter A.
  */
 function fakeServer({ reads, writer = { kind: "current_writer", writer_generation: "1" }, commands = [],
   proposals = false, acceptance = "refused", takeoverAfterAcceptance = false, assistant, unavailable = [], lost = [],
-  takeover = "applied", rejection = "resolved", other = false }: {
+  takeover = "applied", rejection = "resolved", other = false, proposalResult = false }: {
   reads: string[]; writer?: Writer; commands?: string[]; proposals?: boolean;
   acceptance?: "refused" | "applied" | "late"; takeoverAfterAcceptance?: boolean;
   assistant?: "available" | "unavailable"; unavailable?: string[]; lost?: string[];
-  takeover?: "applied" | "compare_failed"; rejection?: "resolved" | "conflicted"; other?: boolean;
+  takeover?: "applied" | "compare_failed"; rejection?: "resolved" | "conflicted" | "refused"; other?: boolean;
+  proposalResult?: boolean;
 }) {
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
   const state = { current: CHAPTER, writer, snapshot: { id: EDITOR_SNAPSHOT, position: "0" }, accepted: false,
-    rejected: false, edited: false, title: "Chapter A",
+    rejected: false, edited: false, title: "Chapter A", treeRevision: 3,
     superseded: undefined as GetEditorSessionResponse | undefined,
     late: undefined as { chapter: boolean; session: boolean } | undefined };
   const project = () => ({ ...scenario.project.project, open: open() });
@@ -193,7 +195,8 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     }
     if (name === TREE) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
-        correlation_id: "018f0000-0000-7001-8000-000000000014", project_scope: scope, tree_revision: "3",
+        correlation_id: "018f0000-0000-7001-8000-000000000014", project_scope: scope,
+        tree_revision: String(state.treeRevision),
         snapshot: canonical(), volumes: [{ volume_id: "018f0000-0000-7001-8000-000000000815", title: "Volume A",
           order: "1", chapters: [{ chapter_id: CHAPTER, title: state.title, order: "1" },
             { chapter_id: CHAPTER_B, title: "Chapter B", order: "2" }] }] });
@@ -218,7 +221,13 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     }
     if (name === RUN_READ) {
       return jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUN, conversation_id: CONVERSATION,
-        status: "completed", results: [], decision: { kind: "advisory", decision_id: "018f0000-0000-7001-8000-000000000893",
+        status: "completed", results: proposalResult ? [{ kind: "proposal", decision_id: PROPOSAL.source.decision_id,
+          proposal_id: PROPOSAL.proposal_id, locations: [{ chapter_id: CHAPTER, manuscript_block_id: BLOCK,
+            base_authoritative_revision_id: REVISION, candidate_text: PROPOSAL.candidate_text,
+            explanation: "Keep the narrator voice.", current: null, outcome: { kind: "opened",
+              proposal_id: PROPOSAL.proposal_id, operation_id: PROPOSAL.operations[0]!.operation_id,
+              revision_id: PROPOSAL.revision_id, validation_receipt_id: "018f0000-0000-7001-8000-000000000897" } }] }]
+          : [], decision: { kind: "advisory", decision_id: "018f0000-0000-7001-8000-000000000893",
           selected: true, text: "Keep the voice of Chapter A.", continuation: { kind: "absent" } } });
     }
     // A test that is not about these panels shows that their read is unavailable.
@@ -241,8 +250,10 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     if (name === RENAME) {
       state.title = (JSON.parse(String(init?.body)) as { update_chapter_input: { title: string } })
         .update_chapter_input.title;
+      state.treeRevision += 1;
       return jsonResponse({ ...updateChapterFixture, project_scope: scope, project: project(),
-        effect: { ...updateChapterFixture.effect, chapter_id: CHAPTER, title: state.title, order: "1" },
+        effect: { ...updateChapterFixture.effect, chapter_id: CHAPTER, title: state.title, order: "1",
+          tree_revision: String(state.treeRevision) },
         receipt: { ...updateChapterFixture.receipt, project_scope: scope } });
     }
     if (name === PROPOSAL_READ) {
@@ -325,12 +336,17 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
       // Another tab changed the Chapter text. The Operation stays pending, so the Server finds a changed Chapter Head.
       state.edited = true;
       settle(EDIT_SNAPSHOT);
+    } else if (rejection === "refused") {
+      // Another tab applied the Operation, so the Server refuses: the Operation is not pending.
+      state.accepted = true;
+      settle(ACCEPTANCE_SNAPSHOT);
     } else {
       state.rejected = true;
     }
     return jsonResponse({ ...rejectionFixture, correlation_id: input.correlation_id, project_scope: scope,
       project: project(),
       effect: rejection === "conflicted" ? { kind: "conflicted", reason: "changed_head" }
+        : rejection === "refused" ? { kind: "refused", reason: "operation_not_pending" }
         : { ...rejectionFixture.effect, operation_ids: input.selected_pending_operation_ids },
       receipt: { ...rejectionFixture.receipt, project_scope: scope,
         command_digest: await digestRejectProposalOperations(request, crypto),
@@ -338,7 +354,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         proposal_revision_id: input.proposal_revision_id,
         selected_pending_operation_ids: input.selected_pending_operation_ids,
         expected_target_revisions: input.expected_target_revisions,
-        ...(rejection === "conflicted" ? { result: "conflicted" } : {}) } });
+        ...(rejection === "resolved" ? {} : { result: rejection }) } });
   };
   const fetchImpl: typeof fetch = async (input, init) => {
     const name = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
@@ -773,6 +789,43 @@ it("keeps the tree of a rename that the author makes while a takeover opens the 
     .toEqual({ title: "Chapter A, renamed", unexpected: [] });
 });
 
+it("keeps the tree of a rename that the author makes while a Proposal link opens the Chapter", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT),
+    snapshotRead(SWITCH_SNAPSHOT), PROPOSAL_READ, CONVERSATION_READ, RUN_READ, SOURCES_READ],
+  writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
+  commands: [SESSION_CREATE, TAKEOVER, SWITCH, RENAME], assistant: "available", proposalResult: true });
+  const workspace = await openWorkspace(server, `?conversation=${CONVERSATION}`);
+  const link = () => workspace.root.querySelector<HTMLButtonElement>("button[data-proposal-location]");
+  const title = () => workspace.root.querySelector(`.tree-panel button[data-chapter-id="${CHAPTER}"]`)?.textContent;
+  // A takeover gives writer generation 2, so each open reads the tree in its takeover check.
+  await expect.poll(() => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]")?.disabled)
+    .toBe(false);
+  workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]")!.click();
+  await expect.poll(() => ({ ...workspace.shown(), link: link()?.disabled }))
+    .toEqual({ title: "Chapter A", save: "saved", failure: "", link: false });
+  await expect.poll(server.inFlight).toEqual([]);
+  // The open after the switch read the tree. It waits for its Snapshot read, before its last Editor Session read.
+  server.holdAfter(SWITCH, [snapshotRead(SWITCH_SNAPSHOT)]);
+  link()!.click();
+  await expect.poll(server.inFlight).toEqual([snapshotRead(SWITCH_SNAPSHOT)]);
+
+  await beginTreeAction(workspace.root, `li[data-chapter-id="${CHAPTER}"]`, "[data-begin-rename-chapter]");
+  workspace.root.querySelector<HTMLButtonElement>("[data-begin-rename-chapter]")!.click();
+  await expect.poll(() => workspace.root.querySelector(`form[data-rename-chapter="${CHAPTER}"] input`)).not.toBeNull();
+  const input = workspace.root.querySelector<HTMLInputElement>(`form[data-rename-chapter="${CHAPTER}"] input`)!;
+  input.value = "Chapter A, renamed";
+  input.form!.requestSubmit();
+  await expect.poll(title).toBe("Chapter A, renamed");
+  const released = server.log.started.length;
+  server.release();
+
+  // The new editor part reads the open suggestions of the Chapter after the new view arrives.
+  await expect.poll(() => server.log.started.slice(released).includes(openProposalsRead(CHAPTER))).toBe(true);
+  await expect.poll(server.inFlight).toEqual([]);
+  expect({ ...workspace.shown(), tree: title(), unexpected: server.log.unexpected })
+    .toEqual({ title: "Chapter A", save: "saved", failure: "", tree: "Chapter A, renamed", unexpected: [] });
+});
+
 it("shows that the takeover runs, and sends one takeover for two clicks", async () => {
   const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT)],
     writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
@@ -855,6 +908,27 @@ it("opens the Project again after a rejection that found a changed Chapter Head"
     ?.getAttribute("data-authoritative-revision-id");
   await expect.poll(() => ({ ...workspace.shown(), revision: revision() }))
     .toEqual({ title: "Chapter A", save: "saved", failure: "", revision: EDITED_REVISION });
+  expect({ open: openReads(server.log.started.slice(before)).sort(), unexpected: server.log.unexpected })
+    .toEqual({ open: [LIST, PROJECT_READ].sort(), unexpected: [] });
+});
+
+it("opens the Project again after a rejection that the Server refused because another tab applied it", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ], commands: [SESSION_CREATE, REJECTION],
+    proposals: true, rejection: "refused" });
+  const workspace = await openWorkspace(server);
+  const reject = () => workspace.root.querySelector<HTMLButtonElement>(
+    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-reject]`);
+  await expect.poll(() => reject()?.disabled).toBe(false);
+  const before = server.log.started.length;
+
+  reject()!.click();
+
+  // The page shows the current Chapter text, which has the applied Operation.
+  const revision = () => workspace.root.querySelector("[data-authoritative-revision-id]")
+    ?.getAttribute("data-authoritative-revision-id");
+  await expect.poll(() => ({ ...workspace.shown(), revision: revision() }))
+    .toEqual({ title: "Chapter A", save: "saved", failure: "", revision: ACCEPTED_REVISION });
+  await expect.poll(server.inFlight).toEqual([]);
   expect({ open: openReads(server.log.started.slice(before)).sort(), unexpected: server.log.unexpected })
     .toEqual({ open: [LIST, PROJECT_READ].sort(), unexpected: [] });
 });

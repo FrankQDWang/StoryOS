@@ -316,10 +316,14 @@ function ProjectEditorView({
 
   // A tree read of the workspace that starts during an open can be later than the tree of the open. Then the open gives
   // no tree, so it cannot replace the later tree, and the workspace reads the tree again (#1876).
-  const opening = async (open: () => Promise<ControlledProjectState>): Promise<ControlledProjectState> => {
+  const treeCheck = () => {
     const sequence = treeReads.current;
-    const next = await open();
-    return next.kind !== "project-ready" || treeReads.current === sequence ? next : { ...next, tree: undefined };
+    return (next: ControlledProjectState): ControlledProjectState =>
+      next.kind !== "project-ready" || treeReads.current === sequence ? next : { ...next, tree: undefined };
+  };
+  const opening = async (open: () => Promise<ControlledProjectState>) => {
+    const checked = treeCheck();
+    return checked(await open());
   };
   // A reopen after a settled command of this page reads the Project and the list of Projects, then the Chapter and the
   // Editor Session. It does not read the protocol profile again.
@@ -546,12 +550,15 @@ function ProjectEditorView({
   };
   const own: ProjectEditorHandle = {
     selectChapter, removeChapter, removeVolume, openedProposal, showRecovery: setSwitchRecovery,
-    navigateProposal: (destination) => navigateProposal({ state, destination,
-      navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
-      onOpened: (next, focus, notice) => {
-        setSwitchRecovery(undefined); onProposalOpened(next, focus, notice);
-      }, onFailure: setSwitchRecovery, onLocator: openedProposal,
-    }),
+    navigateProposal: (destination) => {
+      const checked = treeCheck();
+      navigateProposal({ state, destination,
+        navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
+        onOpened: (next, focus, notice) => {
+          setSwitchRecovery(undefined); onProposalOpened(checked(next), focus, notice);
+        }, onFailure: setSwitchRecovery, onLocator: openedProposal,
+      });
+    },
   };
   useLayoutEffect(() => {
     handle.current = own;
