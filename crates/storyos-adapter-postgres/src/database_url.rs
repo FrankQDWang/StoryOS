@@ -70,7 +70,17 @@ pub(crate) fn redacted_chain(url: &str, error: &(dyn std::error::Error + 'static
     let mut parts = Vec::new();
     for host in config.get_hosts() {
         match host {
-            Host::Tcp(name) => parts.push((name.clone(), "<host>")),
+            Host::Tcp(name) => {
+                parts.push((name.clone(), "<host>"));
+                // A TLS message gives an IP address in its standard form, which can differ from the URL.
+                if let Ok(address) = name
+                    .trim_start_matches('[')
+                    .trim_end_matches(']')
+                    .parse::<IpAddr>()
+                {
+                    parts.push((address.to_string(), "<host>"));
+                }
+            }
             #[cfg(unix)]
             Host::Unix(path) => parts.push((path.display().to_string(), "<host>")),
         }

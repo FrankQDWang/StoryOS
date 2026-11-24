@@ -61,8 +61,14 @@ impl fmt::Debug for ConnectionPool {
 pub(crate) async fn open(
     database_url: &str,
 ) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
-    let config = database_url.parse::<Config>()?;
+    let mut config = database_url.parse::<Config>()?;
     if config.get_ssl_mode() == SslMode::Require {
+        // With only `hostaddr`, the driver gives the TLS connector no name; the address is the name.
+        if config.get_hosts().is_empty() {
+            for address in config.get_hostaddrs().to_vec() {
+                config.host(address.to_string());
+            }
+        }
         let (client, connection) = config.connect(VerifiedTls::shared()).await?;
         tokio::spawn(async move {
             let _connection_result = connection.await;

@@ -81,3 +81,18 @@ fn the_cause_chain_names_no_host_user_database_or_password_of_the_url() {
          to <database> (canary_db_old, <password>), certificate not valid for name \"<host>\""
     );
 }
+
+#[test]
+fn the_cause_chain_names_no_ip_address_of_the_url_in_its_standard_form() {
+    let error = std::io::Error::other(
+        "certificate not valid for name \"2001:db8::1\"; certificate is only valid for 2001:db8::2",
+    );
+
+    assert_eq!(
+        redacted_chain(
+            "postgres://storyos@[2001:0db8:0000:0000:0000:0000:0000:0001]:6543/postgres?sslmode=require",
+            &error,
+        ),
+        "certificate not valid for name \"<host>\"; certificate is only valid for 2001:db8::2"
+    );
+}

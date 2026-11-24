@@ -142,7 +142,9 @@ pub async fn activate_release1_storage(
             let cause: &(dyn std::error::Error + 'static) = source.as_ref();
             unavailable(std::io::Error::other(redacted_chain(admin_url, cause)))
         }
-        other => other,
+        error @ (StorageActivationError::AdminUrlMissing
+        | StorageActivationError::AdminUrlInvalid(_)
+        | StorageActivationError::Refused { .. }) => error,
     })
 }
 

@@ -10,7 +10,7 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 
 const CHILD_ADMIN_URL: &str = "STORYOS_TEST_TLS_ADMIN_URL";
 const CERTIFICATES: &str = "/var/lib/postgresql/tls";
-// Each server certificate is for `localhost`, except `other-host`. Only `trusted-root` is in SSL_CERT_FILE.
+// Each server certificate is for `localhost`, except `other-host`; `trusted` is also for 127.0.0.1. Only `trusted-root` is in SSL_CERT_FILE.
 const MAKE_CERTIFICATES: &str = r#"
 mkdir -p /var/lib/postgresql/tls && cd /var/lib/postgresql/tls
 key="-newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes"
@@ -20,12 +20,12 @@ for ca in trusted other; do
 done
 leaf() {
   openssl req $key -subj "/CN=$3" -keyout $1.key -out $1.csr
-  printf 'basicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:%s\n' "$3" > $1.ext
+  printf 'basicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth\nsubjectAltName=%s\n' "$4" > $1.ext
   openssl x509 -req -in $1.csr -CA $2-root.crt -CAkey $2-root.key -CAcreateserial -days 2 -extfile $1.ext -out $1.crt
 }
-leaf trusted trusted localhost
-leaf other-ca other localhost
-leaf other-host trusted storyos-other-host.invalid
+leaf trusted trusted localhost DNS:localhost,IP:127.0.0.1
+leaf other-ca other localhost DNS:localhost
+leaf other-host trusted storyos-other-host.invalid DNS:storyos-other-host.invalid
 chmod 600 *.key
 "#;
 
@@ -83,6 +83,21 @@ async fn verify_the_tls_cases(admin_url: &str) {
         .await
         .unwrap();
     let row = client
+        .query_one(
+            "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert!(row.get::<_, bool>(0));
+    // With only `hostaddr`, the certificate must be valid for the IP address.
+    let address_only = Arc::new(ConnectionPool::new(format!(
+        "user=postgres password=admin dbname=postgres hostaddr=127.0.0.1 port={port} sslmode=require"
+    )))
+    .checkout()
+    .await
+    .unwrap();
+    let row = address_only
         .query_one(
             "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()",
             &[],
