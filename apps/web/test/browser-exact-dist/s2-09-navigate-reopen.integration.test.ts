@@ -67,7 +67,9 @@ it("the author opens each Chapter from the tree and reopens the current Chapter"
   }
   childWindow.localStorage.setItem("current_chapter", chapterBId);
   const reopened = nextFrameLoad(frame);
-  frame.src = `/projects/${projectId}?chapter=${chapterBId}#chapter=${chapterBId}`;
+  // A stale Chapter in the local storage or in the fragment does not change the Current Chapter of the reopen. The
+  // address `?chapter=` opens its Chapter (ADR 0094 section 9), so the reopen does not use it.
+  frame.src = `/projects/${projectId}#chapter=${chapterBId}`;
   await reopened;
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state") === "project-ready"

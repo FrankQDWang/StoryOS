@@ -388,6 +388,8 @@ interface EmptyProjectReadyState {
   kind: "empty-project-ready";
   profile: Release1ProtocolProfile;
   project: GetProjectResponse;
+  /** The revision of the Project in the list of the open. A rename changes it. */
+  revision: string;
   tree: GetManuscriptTreeResponse;
 }
 
@@ -395,8 +397,12 @@ export interface ProjectReadyState {
   kind: "project-ready";
   profile: Release1ProtocolProfile;
   project: GetProjectResponse;
+  /** The revision of the Project in the list of the open. A rename changes it. */
+  revision: string;
   chapter: GetChapterResponse;
   editor: EditorState;
+  /** The tree that the takeover check of the open read, when it ran. */
+  tree?: GetManuscriptTreeResponse | undefined;
 }
 
 /** The settings page of a Project (ADR 0094 section 9). It opens no Editor Session. */

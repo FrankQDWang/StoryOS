@@ -5,6 +5,7 @@ import { test } from "vitest";
 import {
   openControlledProject,
   PROJECT_OPEN_DIAGNOSTIC_CAUSE,
+  reopenControlledProject,
 } from "../../src/boot.ts";
 import type {
   GetChapterResponse,
@@ -240,4 +241,125 @@ test("missing, empty, invalid, or mismatched owner identities fail closed", asyn
       message: "无法读取这个受控项目或其当前章节。",
     }, name);
   }
+});
+
+/** A fake that serves only the given routes. It records each other request and throws. */
+function exactFake(routes: Map<string, { body: unknown; status?: number }>) {
+  const requests: string[] = [];
+  const unexpected: string[] = [];
+  const fetchImpl: typeof fetch = async (url, init) => {
+    const name = `${init?.method ?? "GET"} ${new URL(requestUrl(url)).pathname}`;
+    requests.push(name);
+    const route = routes.get(name);
+    if (route === undefined) {
+      unexpected.push(name);
+      throw new Error(`unexpected request: ${name}`);
+    }
+    return new Response(JSON.stringify(route.body),
+      { status: route.status ?? 200, headers: { "content-type": "application/json" } });
+  };
+  return { requests, unexpected, fetchImpl };
+}
+
+const PROJECT_BLOCKED = {
+  kind: "project-blocked",
+  code: "project_unavailable",
+  heading: "StoryOS 无法打开项目",
+  message: "无法读取这个受控项目或其当前章节。",
+};
+
+test("a reopen fails closed when the Project read has another Scope", async () => {
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const project = fixture<GetProjectResponse>("get-project.json");
+  const listed = fixture<ListProjectsResponse>("list-projects.json");
+  const projectId = project.project.project_id;
+  const foreign = { ...project, project_scope: { ...project.project_scope,
+    owner_user_id: "018f0000-0000-7001-8000-000000000101" } };
+  const fake = exactFake(new Map([
+    [`GET /api/v1/projects/${projectId}`, { body: foreign }],
+    ["GET /api/v1/projects", { body: listed }],
+  ]));
+
+  const state = await reopenControlledProject({ baseUrl: "http://storyos.test", opened: { profile, project },
+    fetchImpl: fake.fetchImpl });
+
+  assert.deepEqual({ state, requests: fake.requests.sort(), unexpected: fake.unexpected }, {
+    state: PROJECT_BLOCKED,
+    requests: ["GET /api/v1/projects", `GET /api/v1/projects/${projectId}`].sort(),
+    unexpected: [],
+  });
+});
+
+test("a reopen opens the Current Chapter of the Project read with the revision of the list", async () => {
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const project = fixture<GetProjectResponse>("get-project.json");
+  const listed = fixture<ListProjectsResponse>("list-projects.json");
+  const chapter = fixture<GetChapterResponse>("get-chapter.json");
+  const projectId = project.project.project_id;
+  const chapterId = project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "";
+  // Another tab renamed the Project, so the list has a new revision.
+  listed.projects = listed.projects.map((entry) => entry.project_scope.project_id === projectId
+    ? { ...entry, title: "Renamed", revision: "7" } : entry);
+  const fake = exactFake(new Map([
+    [`GET /api/v1/projects/${projectId}`, { body: { ...project, project: { ...project.project, title: "Renamed" } } }],
+    ["GET /api/v1/projects", { body: listed }],
+    [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`, { body: chapter }],
+  ]));
+
+  const state = await reopenControlledProject({ baseUrl: "http://storyos.test", opened: { profile, project },
+    fetchImpl: fake.fetchImpl });
+
+  assert.deepEqual({
+    kind: state.kind,
+    title: state.kind === "project-ready" ? state.project.project.title : "",
+    revision: state.kind === "project-ready" ? state.revision : "",
+    requests: fake.requests.slice(0, 2).sort(),
+    later: fake.requests.slice(2),
+    unexpected: fake.unexpected,
+  }, {
+    kind: "project-ready",
+    title: "Renamed",
+    revision: "7",
+    requests: ["GET /api/v1/projects", `GET /api/v1/projects/${projectId}`].sort(),
+    later: [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`],
+    unexpected: [],
+  });
+});
+
+test("a reopen fails closed when the list read fails", async () => {
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const project = fixture<GetProjectResponse>("get-project.json");
+  const projectId = project.project.project_id;
+  const fake = exactFake(new Map([
+    [`GET /api/v1/projects/${projectId}`, { body: project }],
+    ["GET /api/v1/projects", { status: 503, body: { schema_id: "storyos.problem.v1", code: "service_unavailable",
+      message: "Unavailable." } }],
+  ]));
+
+  const state = await reopenControlledProject({ baseUrl: "http://storyos.test", opened: { profile, project },
+    fetchImpl: fake.fetchImpl });
+
+  assert.deepEqual({ state, unexpected: fake.unexpected }, { state: PROJECT_BLOCKED, unexpected: [] });
+});
+
+test("an incompatible protocol profile blocks the open while the Project reads do not end", async () => {
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const projectId = "018f0000-0000-7001-8000-000000000102";
+  // The Project reads of the open do not end. The fake records each other request.
+  const reads = ["GET /api/v1/projects", `GET /api/v1/projects/${projectId}`];
+  const unexpected: string[] = [];
+  const fetchImpl: typeof fetch = async (url, init) => {
+    const name = `${init?.method ?? "GET"} ${new URL(requestUrl(url)).pathname}`;
+    if (name === "GET /api/v1/protocol") {
+      return new Response(JSON.stringify({ ...profile,
+        release_identity: { ...profile.release_identity, public_protocol_release: "0" } }), { status: 200 });
+    }
+    if (reads.includes(name)) return new Promise<Response>(() => {});
+    unexpected.push(name);
+    throw new Error(`unexpected request: ${name}`);
+  };
+
+  const state = await openControlledProject({ baseUrl: "http://storyos.test", projectId, fetchImpl });
+
+  assert.deepEqual({ kind: state.kind, unexpected }, { kind: "protocol-blocked", unexpected: [] });
 });
