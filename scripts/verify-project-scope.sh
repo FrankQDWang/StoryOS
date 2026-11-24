@@ -425,7 +425,7 @@ run_activation_checks() {
   # activates with the same storage identity and has no vector table. This is the one use of the
   # image without pgvector.
   echo "Running packaged storyos-storage against a fresh database without the vector extension"
-  start_postgres "$legacy_activation_container" postgres:16-alpine
+  start_postgres "$legacy_activation_container" postgres:17-alpine
   legacy_admin=$(postgres_admin_url "$legacy_activation_container")
   STORYOS_STORAGE_ADMIN_URL="$legacy_admin" "$storage_bin"
   activation_facts() {
