@@ -4,6 +4,21 @@
 @HOST@ {
 	import /etc/storyos/proxy-auth.caddy
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	# Compress the document, the style sheet, the Web script, and the JSON responses (issue 1878). The match has no
+	# text/event-stream, so each event of the Project Activity Stream goes to the browser when the Server sends it.
+	# The packaged document has about 440 bytes, so the minimum is 256 bytes and not the default 512 bytes.
+	encode {
+		zstd
+		gzip
+		minimum_length 256
+		match {
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type text/javascript*
+			header Content-Type application/json*
+			header Content-Type application/problem+json*
+		}
+	}
 	reverse_proxy 127.0.0.1:3000 {
 		header_up Host @HOST@
 	}

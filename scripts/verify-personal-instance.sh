@@ -21,6 +21,16 @@ if [ "${1:-}" != --inside ]; then
   mkdir "$work/deploy"
   cp "$repository_root"/deploy/personal-instance/* "$archive" "$archive.sha256" "$work/deploy/"
   cp "$repository_root/scripts/verify-personal-instance.sh" "$repository_root/scripts/lib/fake-systemctl.sh" "$work/"
+  # The stream check of the inner part sends the golden Project Activity event of the public release as one frame.
+  python3 - "$repository_root/generated/golden-wire/storyos-public-release-1/activity-stream.json" \
+    > "$work/activity-event" <<'PYTHON'
+import json
+import sys
+
+frame = json.load(open(sys.argv[1], encoding="utf-8"))
+data = json.dumps(frame["data"], separators=(",", ":"), ensure_ascii=False)
+sys.stdout.write(f"id: {frame['id']}\nevent: {frame['event']}\ndata: {data}\n\n")
+PYTHON
   # Each secret is a value of this run. The admin password has the characters that a URL must encode.
   admin_password="a $(openssl rand -hex 8)%@:/?#"
   (umask 077 && printf '%s\n' "$admin_password" "p$(openssl rand -hex 12)" "m$(openssl rand -hex 16)" \
@@ -153,6 +163,106 @@ run 0 sh "$deploy/install.sh" "$archive" /tmp/ca.crt
 printf 'machine %s login author password %s\n' "$host" "$(sed -n 6p /check/secrets)" > /tmp/netrc
 [ "$(proxy -w '%{http_code}' --netrc-file /tmp/netrc "https://$host/api/v1/protocol")" = 200 ] \
   || fail "the new proxy password does not work"
+
+# Reads the path $1 through Caddy with the password and the curl arguments after $1. The headers go to /tmp/headers
+# and the body goes to /tmp/body, with no decompression.
+read_through_proxy() {
+  path=$1
+  shift
+  curl -fsSk --resolve "$host:443:127.0.0.1" --netrc-file /tmp/netrc -D /tmp/headers -o /tmp/body "$@" \
+    "https://$host$path"
+}
+header_value() { tr -d '\r' < /tmp/headers | sed -n "s/^$1: *//Ip"; }
+# install.sh restarts the Server with no wait when the Caddyfile changes, so a read waits until the Server answers.
+await_server() {
+  attempt=0
+  until curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:3000/api/v1/protocol 2>/dev/null; do
+    attempt=$((attempt + 1))
+    [ "$attempt" -lt 60 ] || fail "the Server does not answer on 127.0.0.1:3000"
+    sleep 1
+  done
+}
+script=$(grep -o '/assets/[^"]*\.js' /opt/storyos/current/web/index.html | head -n 1)
+[ -n "$script" ] || fail "index.html names no Web script"
+
+step "An instance with the Caddyfile of today sends the Web script with no compression"
+# The Caddyfile of today is the template with no encode block.
+mkdir /tmp/today
+find "$deploy" -maxdepth 1 -type f ! -name '*.tar.gz*' -exec cp {} /tmp/today/ \;
+sed -i '/^\t# Compress the document/,/^\t}$/d' /tmp/today/Caddyfile.template
+! grep -q encode /tmp/today/Caddyfile.template || fail "the Caddyfile of today has an encode block"
+run 0 sh /tmp/today/install.sh "$archive"
+await_server
+read_through_proxy "$script" -H 'Accept-Encoding: gzip'
+[ -z "$(header_value content-encoding)" ] || fail "the Caddyfile of today compressed the Web script"
+
+step "install.sh, the step of the upgrade, gives the instance the compression of the template"
+run 0 sh "$deploy/install.sh" "$archive"
+await_server
+# Decompresses /tmp/body with gzip and compares the result with the file $1. A damaged body makes gzip fail.
+decompressed_body_is() { gzip -dc /tmp/body > /tmp/plain && cmp -s /tmp/plain "$1"; }
+read_through_proxy "$script" -H 'Accept-Encoding: gzip'
+[ "$(header_value content-encoding)" = gzip ] || fail "the Web script is not compressed"
+decompressed_body_is "/opt/storyos/current/web$script" || fail "the decompressed Web script is not the script"
+proxied_cache=$(header_value cache-control)
+curl -fsS -D /tmp/headers -o /dev/null "http://127.0.0.1:3000$script"
+[ "$proxied_cache" = "$(header_value cache-control)" ] || fail "Caddy changed the cache header of the Web script"
+read_through_proxy "$script"
+[ -z "$(header_value content-encoding)" ] || fail "a request with no Accept-Encoding got a compressed Web script"
+cmp -s /tmp/body "/opt/storyos/current/web$script" || fail "the plain Web script is not the script"
+read_through_proxy / -H 'Accept-Encoding: gzip'
+[ "$(header_value content-encoding)" = gzip ] || fail "the HTML document is not compressed"
+decompressed_body_is /opt/storyos/current/web/index.html || fail "the decompressed HTML document is not index.html"
+read_through_proxy /api/v1/protocol -H 'Accept-Encoding: gzip'
+[ "$(header_value content-encoding)" = gzip ] || fail "the JSON response is not compressed"
+curl -fsS -o /tmp/direct.json http://127.0.0.1:3000/api/v1/protocol
+decompressed_body_is /tmp/direct.json || fail "the decompressed JSON response is not the response"
+
+step "An event of the Project Activity Stream goes through Caddy before the stream ends"
+# A stub in place of the Server answers only the route of the stream of the golden event. It sends that complete
+# event, which is larger than the minimum of the encode block, and then it keeps the stream open for 30 s.
+cp /check/activity-event /tmp/event
+[ "$(wc -c < /tmp/event)" -gt 256 ] || fail "the golden event is not larger than the minimum of the encode block"
+project=$(grep -o '"project_id":"[^"]*"' /tmp/event | head -n 1 | cut -d '"' -f 4)
+[ -n "$project" ] || fail "the golden event has no project_id"
+activity="/api/v1/projects/$project/activity?snapshot_id=019a0000-0000-7000-8000-000000000002&protocol_release=storyos.public.release.1"
+listening() { grep -q ':0BB8 00000000:0000 0A' /proc/net/tcp; }
+systemctl stop storyos-server.service
+attempt=0
+while listening; do
+  attempt=$((attempt + 1))
+  [ "$attempt" -lt 50 ] || fail "the Server did not stop"
+  sleep 0.1
+done
+STUB_PATH=$activity perl -MIO::Socket::INET -e '
+  my $server = IO::Socket::INET->new(LocalAddr => "127.0.0.1:3000", Listen => 1, ReuseAddr => 1) or die "$!\n";
+  my $client = $server->accept or die "$!\n";
+  my $request = <$client>;
+  while (my $line = <$client>) { last if $line =~ /^\r?\n$/ }
+  $client->autoflush(1);
+  if ($request !~ /^GET \Q$ENV{STUB_PATH}\E HTTP\/1\.1\r?\n$/) {
+    print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+    exit;
+  }
+  open(my $event, "<", "/tmp/event") or die "$!\n";
+  print $client "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\n\r\n", <$event>;
+  sleep 30;' &
+stub=$!
+attempt=0
+until listening; do
+  attempt=$((attempt + 1))
+  [ "$attempt" -lt 50 ] || fail "the stub does not listen"
+  sleep 0.1
+done
+status=0
+read_through_proxy "$activity" -N --max-time 5 -H 'Accept-Encoding: gzip' -H 'Accept: text/event-stream' || status=$?
+kill "$stub" 2>/dev/null || true
+wait "$stub" 2>/dev/null || true
+[ "$status" = 28 ] || fail "the stream ended or failed before the time limit with status $status"
+[ -z "$(header_value content-encoding)" ] || fail "Caddy compressed the Project Activity Stream"
+cmp -s /tmp/body /tmp/event || fail "the complete event did not arrive in 5 s"
+systemctl start storyos-server.service
+await_server
 
 step "backup.sh removes the dumps older than 14 days, and a failed dump keeps the older dumps"
 install -m 600 /dev/null /var/backups/storyos/storyos-old.dump
