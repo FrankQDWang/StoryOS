@@ -592,10 +592,14 @@ STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
   provider_runtime=$(postgres_runtime_url "$provider_container")
   echo "Binding the packaged Server on the provider database"
   assert_packaged_server_binds "provider" "$provider_runtime"
-  echo "Running the Project Isolation tests on the provider database"
+  echo "Running the Project Isolation tests and the vector store test on the provider database"
   STORYOS_TEST_DATABASE_URL="$provider_runtime" \
   STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$provider_container") \
     cargo test --locked --workspace --all-features --test project_scope -- --ignored --nocapture
+  postgres_test_binary=$(find_postgres_test_binary)
+  STORYOS_TEST_DATABASE_URL="$provider_runtime" \
+  STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$provider_container") \
+    run_postgres_tests passage_vectors::tests::the_vector_store_is_available_exactly_when_the_database_offers_the_extension
 }
 
 # Runs the exact-dist journeys $1... with the order of the arguments, each file one time. The Stage 2
