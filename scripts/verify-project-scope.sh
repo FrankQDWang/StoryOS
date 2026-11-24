@@ -730,24 +730,96 @@ STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
   run_provider_upgrade_checks
 }
 
-# Each row of the proof and of the ledger of the provider database, as one text.
+# Each row of the proof and of the ledger of the provider database, as one text. The order of the rows is the order
+# of their texts, because the ledger before #1852 has no attempt column in schema_migrations.
 provider_ledger_state() {
   provider_psql -c "SELECT jsonb_build_array(
       (SELECT jsonb_agg(row_to_json(proof)) FROM storyos.storage_activation_proofs AS proof),
-      (SELECT jsonb_agg(row_to_json(attempt) ORDER BY attempt_id) FROM storyos.schema_migrations AS attempt),
-      (SELECT jsonb_agg(row_to_json(phase) ORDER BY attempt_id, phase_id) FROM storyos.migration_phases AS phase),
-      (SELECT jsonb_agg(row_to_json(file) ORDER BY source_path) FROM storyos.migration_phase_checksums AS file)
+      (SELECT jsonb_agg(row_to_json(attempt) ORDER BY row_to_json(attempt)::text) FROM storyos.schema_migrations AS attempt),
+      (SELECT jsonb_agg(row_to_json(phase) ORDER BY row_to_json(phase)::text) FROM storyos.migration_phases AS phase),
+      (SELECT jsonb_agg(row_to_json(file) ORDER BY row_to_json(file)::text) FROM storyos.migration_phase_checksums AS file)
     )::text"
 }
 
-# The upgrade edge on a new provider database (ADR 0104 section 4). The test activates the package without its
-# last file, writes a Project with a Chapter, and takes the edge to the package and then to another route catalog.
-# Then the package of this build takes the edge back to its identity, refuses a changed checksum of a recorded file
-# with no change, and accepts its identity.
+# The integration tip before the ledger of each attempt (#1852). The hosted trial database has its identity.
+earlier_ledger_commit=8901e320a31e6ba131d11e796cef27790ed36981
+
+# Prints the SQL of the activation of a new database by the package of $earlier_ledger_commit: its migration files
+# in one transaction, and the ledger and the proof that its persist_activation writes.
+earlier_ledger_activation_sql() {
+  python3 - "$earlier_ledger_commit" <<'PY'
+import hashlib, json, subprocess, sys
+commit = sys.argv[1]
+def show(path):
+    return subprocess.run(["git", "show", f"{commit}:{path}"], check=True, capture_output=True, text=True).stdout
+def lf_sha256(text):
+    return "sha256:" + hashlib.sha256(text.replace("\r\n", "\n").replace("\r", "\n").encode()).hexdigest()
+def literal(text):
+    return "'" + text.replace("'", "''") + "'"
+directory = "crates/storyos-adapter-postgres/migrations"
+names = sorted(name for name in subprocess.run(["git", "ls-tree", "--name-only", f"{commit}:{directory}"],
+               check=True, capture_output=True, text=True).stdout.split() if name.endswith(".sql"))
+files = [(f"{directory}/{name}", show(f"{directory}/{name}")) for name in names]
+digest = lf_sha256("".join(f"{path}\n{lf_sha256(sql)}\n" for path, sql in files))
+route_catalog = show("generated/route-catalog/versioned-protocol-release-1-route-catalog.json")
+phases = [("preflight", "control_read", "new_install_active_catalog_and_empty_migration_chain_verified"),
+          ("initial_schema_bootstrap", "transactional_ddl",
+           "release1_schema_catalog_roles_rls_and_constraints_created_atomically"),
+          ("validate_transaction", "transactional_validation",
+           "constraints_indexes_digests_roles_and_catalog_bindings_valid"),
+          ("activate", "controlled_cutover", "one_exact_release_identity_active_and_traffic_fenced_until_proof")]
+print("BEGIN;")
+for _path, sql in files:
+    print(sql)
+print("RESET ROLE;\nSET LOCAL ROLE storyos_owner;")
+print("INSERT INTO storyos.schema_migrations (schema_version, migration_id, checksum, release_identity, "
+      "runner_revision, started_at, finished_at, status) VALUES ('storyos.persistence.release-1.v3', "
+      f"'storyos.persistence.bootstrap.release-1.v3', {literal(digest)}, 'storyos.public.release.1', "
+      "'storyos-storage', clock_timestamp(), clock_timestamp(), 'applied');")
+for phase_id, phase_class, postcondition in phases:
+    print("INSERT INTO storyos.migration_phases (attempt_id, phase_id, class, postcondition, disposition, recorded_at) "
+          f"VALUES (1, {literal(phase_id)}, {literal(phase_class)}, {literal(postcondition)}, 'passed', clock_timestamp());")
+for path, sql in files:
+    print("INSERT INTO storyos.migration_phase_checksums (attempt_id, source_path, checksum) "
+          f"VALUES (1, {literal(path)}, {literal(lf_sha256(sql))});")
+print("INSERT INTO storyos.storage_activation_proofs (proof_id, phase, catalog_id, catalog_checksum, "
+      "migration_chain_id, migration_chain_digest, database_schema_identity, active_schema_version, public_release, "
+      "route_catalog_id, route_catalog_sha256, activated_at) VALUES ('release-1', 'active', "
+      f"'storyos.persistence.release-1', {literal(digest)}, 'storyos.persistence.bootstrap.release-1.v3', "
+      f"{literal(digest)}, {literal(digest)}, 'storyos.persistence.release-1.v3', 'storyos.public.release.1', "
+      f"{literal(json.loads(route_catalog)['catalog_id'])}, {literal(lf_sha256(route_catalog))}, clock_timestamp());")
+print("COMMIT;")
+PY
+}
+
+# The upgrade edge on new provider databases (ADR 0104 section 4). First the package refuses a database that the
+# package of $earlier_ledger_commit activated, because the checksum of a recorded file changed, and it changes
+# nothing. Then the test activates the package without its last file, writes a Project with a Chapter, and takes
+# the edge to the package and then to another route catalog. The package of this build takes the edge back to its
+# identity and then accepts its identity.
 run_provider_upgrade_checks() {
   docker rm -fv "$provider_container" >/dev/null
   # The helpers of the provider database use $provider_container.
   provider_container=$provider_upgrade_container
+  echo "Refusing a provider database of the ledger before #1852"
+  start_postgres "$provider_container" "$storyos_provider_postgres_image"
+  earlier_ledger_activation_sql | provider_psql >/dev/null
+  if [ "$(provider_psql -c "SELECT catalog_id FROM storyos.storage_activation_proofs")" != storyos.persistence.release-1 ]; then
+    echo "The database of the ledger before #1852 has not the catalog of the package" >&2
+    exit 1
+  fi
+  earlier_state=$(provider_ledger_state)
+  run_provider_storage
+  if [ "$storage_status" -eq 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Refused
+STORYOS_STORAGE_ACTIVATION_REASON=identity_mismatch" ]; then
+    echo "The package did not refuse the database of the ledger before #1852: $storage_status $storage_output" >&2
+    exit 1
+  fi
+  if [ "$(provider_ledger_state)" != "$earlier_state" ]; then
+    echo "The refusal of the database of the ledger before #1852 changed the proof or the ledger" >&2
+    exit 1
+  fi
+  docker rm -fv "$provider_container" >/dev/null
   start_postgres "$provider_container" "$storyos_provider_postgres_image"
   echo "Taking the upgrade edge on a provider database"
   STORYOS_TEST_UPGRADE_ADMIN_URL=$(postgres_admin_url "$provider_container") \
@@ -759,33 +831,6 @@ STORYOS_STORAGE_UPGRADE=from $source_count files to $source_count files" ]; then
     echo "The package did not take the upgrade edge from another route catalog: $storage_status $storage_output" >&2
     exit 1
   fi
-  # A database that an earlier package activated has the digest of that package in its proof. When the earlier
-  # package had another baseline, its recorded checksum of the baseline is another checksum.
-  baseline_path=crates/storyos-adapter-postgres/migrations/0001_release_1_baseline.sql
-  baseline_checksum=$(provider_psql -c "SELECT checksum FROM storyos.migration_phase_checksums
-    WHERE source_path = '$baseline_path'")
-  chain_digest=$(provider_psql -c "SELECT migration_chain_digest FROM storyos.storage_activation_proofs")
-  earlier_digest=sha256:2222222222222222222222222222222222222222222222222222222222222222
-  provider_psql -c "UPDATE storyos.migration_phase_checksums
-    SET checksum = 'sha256:1111111111111111111111111111111111111111111111111111111111111111'
-    WHERE source_path = '$baseline_path';
-    UPDATE storyos.storage_activation_proofs SET catalog_checksum = '$earlier_digest',
-      migration_chain_digest = '$earlier_digest', database_schema_identity = '$earlier_digest'" >/dev/null
-  changed_state=$(provider_ledger_state)
-  run_provider_storage
-  if [ "$storage_status" -eq 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Refused
-STORYOS_STORAGE_ACTIVATION_REASON=identity_mismatch" ]; then
-    echo "The package did not refuse a changed checksum of a recorded file: $storage_status $storage_output" >&2
-    exit 1
-  fi
-  if [ "$(provider_ledger_state)" != "$changed_state" ]; then
-    echo "The refusal of a changed checksum changed the proof or the ledger" >&2
-    exit 1
-  fi
-  provider_psql -c "UPDATE storyos.migration_phase_checksums SET checksum = '$baseline_checksum'
-    WHERE source_path = '$baseline_path';
-    UPDATE storyos.storage_activation_proofs SET catalog_checksum = '$chain_digest',
-      migration_chain_digest = '$chain_digest', database_schema_identity = '$chain_digest'" >/dev/null
   run_provider_storage
   if [ "$storage_status" -ne 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Active" ]; then
     echo "The package did not accept its identity after the upgrade: $storage_status $storage_output" >&2

@@ -50,8 +50,9 @@ same values. A mismatch returns `upgrade_required` before a domain attempt,
 Project Activity cursor advancement, external effect, or reopening live
 traffic. A matching semantic version alone is never sufficient.
 
-Release 1 is the initial persisted baseline. It has no supported stored
-predecessor and no migration edge. A new installation creates the schema,
+Release 1 is the initial persisted baseline. The baseline has no stored
+predecessor. A forward file after the baseline takes the upgrade edge of
+section 9.4 (ADR 0104 section 4). A new installation creates the schema,
 catalog, roles, forced-RLS policies, constraints, and administrative records in
 one atomic bootstrap before verification and activation. The migrations
 directory holds the closed SQL source set. The build script sorts the SQL files
@@ -61,10 +62,11 @@ for each value. The activation identity uses this digest as its
 `catalog_checksum` and its `database_schema_identity`. While no database that
 holds data exists, a Stage release can squash the source set into a new
 baseline again. When the first database that holds data exists, the baseline
-freezes, and each change is one forward migration ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)). A future Release 2
-can add a real edge only with a source-backed predecessor catalog, schema,
-persisted rows, and checksums. A semantic version or invented predecessor name
-never creates compatibility.
+freezes, and each change is one forward migration ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)). The baseline
+is now frozen (ADR 0104 section 4): the recorded files of a database are its
+predecessor, and the upgrade edge accepts only recorded files that are a prefix
+of the embedded files. A semantic version or invented predecessor name never
+creates compatibility.
 
 ### 0.1 Durable Author Command `outcome_unknown`
 
@@ -1565,8 +1567,9 @@ covers at least:
     than guessing or repairing history.
 19. the build script embeds each SQL file of the migrations directory in file
     name order with its LF-normalized checksum, and the activation identity
-    carries the migration chain digest of those files, with no supported
-    predecessor and no migration edge;
+    carries the migration chain digest of those files; an Active database of
+    an earlier identity takes the upgrade edge of section 9.4 only when its
+    recorded files are a prefix of the embedded files;
 20. every project-bearing catalog family has the complete Project Scope,
     forced-RLS, runtime-grant, and `MATCH FULL` composite-reference profile,
     while global and maintenance families are explicitly unscoped or isolated;
@@ -1646,10 +1649,10 @@ covers at least:
     catalog, migration chain/digest, public route catalog, and same-release
     identity; matching semantic versions cannot bypass migration or restore
     proof.
-16. Release 1 is an initial persisted baseline with no supported predecessor;
-    its empty migration chain and atomic bootstrap are checksummed and verified.
-    Any future predecessor requires a source-backed migration edge, and its
-    transactional or nontransactional failure leaves a verified checkpoint,
+16. Release 1 is an initial persisted baseline with no stored predecessor;
+    its atomic bootstrap and each forward file are checksummed and verified.
+    The recorded files of a database are the predecessor of the upgrade edge,
+    and an edge failure leaves a verified checkpoint,
     Recovery Copy, read-only state, or unavailable state rather than guessed
     history.
 17. Typed Receipts, Author Actions, Admissions, Application Wire Records,

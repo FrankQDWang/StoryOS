@@ -4,6 +4,7 @@
 //! `provider-activation` gives on the image of the hosted provider.
 
 use sha2::{Digest, Sha256};
+use tokio_postgres::error::SqlState;
 use tokio_postgres::{Client, NoTls};
 
 use super::{
@@ -12,6 +13,7 @@ use super::{
     packaged_identity, read_proof,
 };
 use crate::PostgresProjectReader;
+use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_structure::{titled_chapter, titled_volume};
 use crate::shared_tests::command_sequence_support::seed_owned_project;
 use crate::shared_tests::postgres_container::PostgresContainer;
@@ -25,6 +27,7 @@ const FAILING_FILE: &str =
 #[tokio::test]
 #[ignore = "run through make check"]
 async fn an_active_database_of_an_earlier_package_takes_the_upgrade_edge() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let container = std::env::var(ADMIN_URL)
         .is_err()
         .then(|| PostgresContainer::start("storyos-upgrade-test"));
@@ -72,15 +75,16 @@ async fn an_active_database_of_an_earlier_package_takes_the_upgrade_edge() {
     assert_eq!(titles, ("Empty Novel".to_owned(), "Chapter A".to_owned()));
     let runtime = connect(&runtime_url(&admin_url)).await;
     runtime.simple_query("SELECT 1").await.unwrap();
-    let last = EMBEDDED_SOURCES[full - 1].path;
-    assert_eq!(
-        attempts_of_files(&admin).await,
-        vec![
-            (1, EMBEDDED_SOURCES[0].path.to_owned()),
-            (1, EMBEDDED_SOURCES[1].path.to_owned()),
-            (2, last.to_owned()),
-        ]
-    );
+    let (_, later_files) = EMBEDDED_SOURCES.split_at(earlier_files.len());
+    let expected_files: Vec<(i64, String)> = [(1, earlier_files), (2, later_files)]
+        .into_iter()
+        .flat_map(|(attempt_id, files)| {
+            files
+                .iter()
+                .map(move |source| (attempt_id, source.path.to_owned()))
+        })
+        .collect();
+    assert_eq!(attempts_of_files(&admin).await, expected_files);
     assert_eq!(attempt_count(&admin).await, 2);
     let upgrade_phases: i64 = admin
         .query_one(
@@ -202,8 +206,15 @@ async fn a_failing_new_file_keeps_the_earlier_state(
     )
     .await;
     assert!(
-        matches!(outcome, Err(StorageActivationError::Unavailable(_))),
-        "{outcome:?}"
+        matches!(
+            &outcome,
+            Err(StorageActivationError::Unavailable(source))
+                if source
+                    .downcast_ref::<tokio_postgres::Error>()
+                    .and_then(tokio_postgres::Error::code)
+                    == Some(&SqlState::DIVISION_BY_ZERO)
+        ),
+        "the second statement must fail: {outcome:?}"
     );
     assert_eq!(ledger_state(admin).await, state);
     assert_eq!(read_proof(admin).await.unwrap().as_ref(), Some(earlier));
