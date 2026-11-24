@@ -68,6 +68,8 @@ function SubrunDrawer({ context, subrunId, cardWorking, scheduleRefresh, onClose
   onClose: () => void;
 }) {
   const [record, setRecord] = useState<GetSubrunResponse>();
+  // A read failed. The drawer shows the sentence only while it has no record.
+  const [unreadable, setUnreadable] = useState(false);
   const close = useRef<HTMLButtonElement>(null);
   // The newest state of the card. A change of the card does not start a new read.
   const working = useRef(cardWorking);
@@ -95,8 +97,10 @@ function SubrunDrawer({ context, subrunId, cardWorking, scheduleRefresh, onClose
         setRecord(response);
         if (response.state === "working") cancel = scheduleRefresh(read);
       }, () => {
+        if (!active) return;
+        setUnreadable(true);
         // The card can change before the refresh, so the refresh checks it again.
-        if (active && working.current) cancel = scheduleRefresh(() => { if (working.current) read(); });
+        if (working.current) cancel = scheduleRefresh(() => { if (working.current) read(); });
       });
     };
     read();
@@ -114,8 +118,10 @@ function SubrunDrawer({ context, subrunId, cardWorking, scheduleRefresh, onClose
       tabIndex={-1}>
       <header>
         <h2>子任务：通读前文</h2>
-        {/* The place of the state text. A failed read with no record shows no text here. */}
-        {record === undefined ? null : <p data-subrun-drawer-state="">{stateText(record)}</p>}
+        {/* The place of the state text. A failed read with no record shows the sentence of the panel for a result
+            that it cannot read. */}
+        {record !== undefined ? <p data-subrun-drawer-state="">{stateText(record)}</p>
+          : unreadable ? <p data-subrun-drawer-state="">请求结果暂不可读取，请稍后检查。</p> : null}
         <button type="button" ref={close} onClick={onClose}>关闭</button>
       </header>
       {record === undefined ? null : <>

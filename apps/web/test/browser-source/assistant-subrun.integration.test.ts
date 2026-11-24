@@ -23,6 +23,8 @@ const settled = { kind: "advisory", decision_id: answer.decision_id, selected: t
   continuation: { kind: "absent" } };
 const PLAN = [{ text: "读第一章到第五章", status: "in_progress" }, { text: "改写第三章第一段", status: "pending" }];
 const BRIEF = "读第一章到第五章，\n列出林舟的名字的每种写法。";
+// The sentence of the panel for a result that it cannot read.
+const UNREADABLE = "请求结果暂不可读取，请稍后检查。";
 const LONG_TITLE = "通读第一章到第五章，列出林舟、沈月、顾川的每种名字写法，再找出每处时间不一致的段落";
 
 type State = "working" | "completed" | "no_result" | "stopped";
@@ -360,6 +362,7 @@ it("keeps the last record after a failed read, and reads again only while the ca
     await shown.click(shown.cards()[0]);
     const shownWorking = [shownDrawer(shown.drawer()).slice(1)];
     await shown.tick();
+    // The second read fails. The drawer has a record, so it keeps the state text and shows no sentence.
     shownWorking.push(shownDrawer(shown.drawer()).slice(1));
     await shown.tick();
     shownWorking.push(shownDrawer(shown.drawer()).slice(1));
@@ -385,10 +388,30 @@ it("keeps the last record after a failed read, and reads again only while the ca
 
     expect([failed, afterTick, shownDrawer(done.drawer()).slice(1),
       done.requests.filter(request => request === readSubrun(ended)).length, done.unexpected]).toEqual([
-      [["子任务：通读前文", undefined], 1], [],
+      [["子任务：通读前文", UNREADABLE], 1], [],
       ["已完成 · 1 步", ["指令", BRIEF], ["过程", "先读第一章。"], ["结论", "灯在渡口。"]], 2, []]);
   } finally {
     await done.panel.close();
+  }
+});
+
+// A failed read with no record shows the sentence of the panel in the place of the state text, and no section. The
+// next read that gives a record removes the sentence.
+it("shows the sentence for a failed read with no record until a read gives the record", async () => {
+  const subrun = id(0x2e);
+  const shown = await renderList(subrun, [null, record(subrun, "working", 0, [{ kind: "text", text: "先读第一章。" }])]);
+  try {
+    await shown.show([entry(0x2e, "working")]);
+    await shown.open();
+    const failed = [shownDrawer(shown.drawer()), shown.drawer()?.querySelectorAll("button").length];
+    await shown.tick();
+
+    expect([failed, shownDrawer(shown.drawer()), shown.requests, shown.unexpected]).toEqual([
+      [["子任务：通读前文", UNREADABLE], 1],
+      ["子任务：通读前文", "进行中 · 第 1 步", ["指令", BRIEF], ["过程", "先读第一章。"]],
+      Array(2).fill(`GET ${project}/subruns/${subrun}`), []]);
+  } finally {
+    await shown.panel.close();
   }
 });
 
