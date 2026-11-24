@@ -54,10 +54,10 @@ fi
 install -d -m 755 "$opt" "$opt/releases" "$opt/deploy"
 install -d -m 700 "$backup_dir"
 # A run that stops after a change and before its reloads leaves this marker, so that the next run does them.
-pending=/run/storyos-install-pending
+marker=/run/storyos-install-reload
 restart=0
-[ ! -f "$pending" ] || restart=1
-: > "$pending"
+[ ! -f "$marker" ] || restart=1
+: > "$marker"
 
 if [ "$#" = 2 ]; then
   openssl x509 -in "$2" -noout 2>/dev/null || fail "$2 is not a certificate in the PEM form"
@@ -138,5 +138,5 @@ if [ "$restart" -gt 0 ]; then
   systemctl try-restart storyos-server.service storyos-worker.service
 fi
 systemctl is-active --quiet caddy || systemctl start caddy
-rm -f "$pending"
+rm -f "$marker"
 echo "The instance is installed. For a new database, run activate.sh"
