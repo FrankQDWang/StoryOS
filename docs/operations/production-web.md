@@ -13,6 +13,21 @@ The package is `target/release-package/`. It contains `storyos-server`, `storyos
 
 `make check-full` is the local HTTP oracle. It builds one matching package, retains the source and exact-dist checks, and runs the real production Chrome journey through the existing Browser Mode provider on loopback HTTP. It records the installed Google Chrome Stable version. The journey checks direct production pages and API calls, Trusted Types, blocked embedding, Project creation and opening, manual save, reload recovery, old-writer fencing, and a new writer's save. Its PostgreSQL oracle checks exact receipts and final authority. It does not claim a Takeover UI or later Stage 2 acceptance. It does not open a public Host, obtain a certificate, or run the public-origin operator checklist.
 
+### The Linux package
+
+The VPS of [ADR 0022](../adr/0022-prefer-widely-validated-hosted-infrastructure.md) is Linux on `x86_64`. On a clean checkout, run:
+
+```sh
+make release-package-linux
+```
+
+The package is `target/release-package-linux-x86_64/`, with the same members as `target/release-package/`. For the copy to the VPS, the command also writes an archive of the package. The archive is `target/storyos-linux-x86_64-<commit>.tar.gz`. Its SHA-256 is in `target/storyos-linux-x86_64-<commit>.tar.gz.sha256`. `<commit>` is the first 12 characters of the source commit. The Linux package of a commit comes only from this command ([ADR 0104](../adr/0104-run-the-personal-instance-of-the-author-on-the-hosted-topology-with-a-proxy-password-the-model-key-on-the-server-and-a-frozen-baseline.md) section 6).
+
+- The Web resources and the manifest come from the build of the host, with the same code as `make release-package`. Thus the two packages of one commit have the same manifest digest.
+- The Rust build runs in a `linux/amd64` container of the pinned Rust image (Debian bookworm, glibc 2.36). The Cargo cache and the build output stay below `target/linux-x86_64/`, so a second build is incremental. On the Mac of the author with OrbStack, the first build needs approximately 4 minutes, and a second build of a changed commit needs approximately 1 minute.
+- The command then checks the package in a `linux/amd64` container of Ubuntu 24.04 with no Rust: `storyos-server --check-web-root`, `storyos-worker --check`, and `storyos-storage` against a new PostgreSQL container. A failed check fails the command. A check that does not end in 120 seconds also fails it.
+- The command refuses a worktree with a change, and it prints the source commit, the tree, the manifest digest, the archive, and its SHA-256.
+
 ## Prepare the runtime
 
 Use the existing [PostgreSQL storage and bootstrap contract](../foundation/postgresql-project-storage-isolation-and-migration-contract.md). Run packaged `storyos-storage` against a distinct admin connection on an empty database until Release 1 Storage Activation is `Active`. Then set the `storyos_runtime` password as an external secret. Do not connect the application as the database owner or superuser. Tracked SQL installs no runtime password.
