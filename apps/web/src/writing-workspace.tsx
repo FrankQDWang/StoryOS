@@ -37,10 +37,7 @@ export function WritingWorkspace({
   assistant?: AssistantContext;
   onNavigateProposal?: (destination: ProposalDestination) => void;
   onOpenedProposal?: (locator: ProposalLocator) => void;
-  /**
-   * True while the workspace opens the Chapter of its address. A Chapter change mounts a new workspace, so the
-   * Conversation of the address waits for the workspace of that Chapter.
-   */
+  /** True while the workspace opens the Chapter of its address. The Conversation of the address waits for that open. */
   holdAddressConversation?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);

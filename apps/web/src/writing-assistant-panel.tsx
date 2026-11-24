@@ -286,7 +286,9 @@ export function WritingAssistantPanel({
   context?: AssistantContext | undefined;
   onOpenedProposal?: ((locator: ProposalLocator) => void) | undefined;
 }) {
-  const [availability, setAvailability] = useState<"available" | "unavailable">("unavailable");
+  // Before the first answer of the assistance read, the panel shows no availability sentence.
+  const [availability, setAvailability] = useState<"unknown" | "available" | "unavailable">(
+    () => context === undefined ? "unavailable" : "unknown");
   const [reference, setReference] = useState<RequestReference | undefined>(
     () => context === undefined ? undefined : readReference(context.scope),
   );

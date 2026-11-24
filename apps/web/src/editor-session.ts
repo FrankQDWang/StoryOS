@@ -316,7 +316,19 @@ export function startEditorWorkspace({
   })();
   return {
     finish: (chapter) => finishEditorWorkspace(started, { baseUrl, project, chapter, profile, fetchImpl, cryptoImpl }),
-    abandon: () => { void started.then((start) => { start.database?.close(); }); },
+    abandon: () => {
+      void started.then((start) => {
+        start.database?.close();
+        // The first created Session of a Project holds the writer. The next open of this tab reads it and does not
+        // create a second Session, which would be read-only (#1876).
+        const created = start.kind === "started" && !start.active
+          ? (start.sessionValue as { editor_session?: { editor_session_id?: unknown } } | undefined)
+            ?.editor_session?.editor_session_id : undefined;
+        if (typeof created === "string" && UUID.test(created)) {
+          globalThis.sessionStorage?.setItem(`active_session:${scope.owner_user_id}:${scope.project_id}`, created);
+        }
+      });
+    },
   };
 }
 

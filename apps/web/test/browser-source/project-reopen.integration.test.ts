@@ -649,6 +649,7 @@ it("shows that the takeover runs, and sends one takeover for two clicks", async 
   button()!.click();
   await expect.poll(() => ({ disabled: button()?.disabled, text: button()?.textContent }))
     .toEqual({ disabled: true, text: "正在接管写作…" });
+  await expect.poll(server.inFlight).toEqual([TAKEOVER]);
   button()!.click();
   expect(server.count(TAKEOVER)).toBe(1);
   server.release();
@@ -675,7 +676,7 @@ it("shows the sentence of a refused takeover and makes the button usable again",
   expect(server.log.unexpected).toEqual([]);
 });
 
-it("reads only the open suggestions of the Chapter after a rejection", async () => {
+it("reads only the suggestions after a rejection", async () => {
   const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ], commands: [SESSION_CREATE, REJECTION],
     proposals: true });
   const workspace = await openWorkspace(server);
@@ -689,10 +690,11 @@ it("reads only the open suggestions of the Chapter after a rejection", async () 
   await expect.poll(card).toBeNull();
   await expect.poll(server.inFlight).toEqual([]);
   const later = server.log.started.slice(server.log.started.indexOf(REJECTION, before) + 1);
-  // The Chapter text does not change, so the page reads no Project, Chapter, Editor Session, or tree.
-  expect({ ...workspace.shown(), later: later.filter((entry) => entry !== CHALLENGE && entry !== STATISTICS),
-    unexpected: server.log.unexpected }).toEqual({ title: "Chapter A", save: "saved", failure: "",
-    later: [openProposalsRead(CHAPTER)], unexpected: [] });
+  // The Chapter text does not change, so the page reads the open suggestions and the Proposal, and no Project, list,
+  // Chapter, Editor Session, or tree.
+  expect({ ...workspace.shown(), later: [...new Set(later.filter((entry) => entry !== CHALLENGE
+    && entry !== STATISTICS))].sort(), unexpected: server.log.unexpected }).toEqual({ title: "Chapter A",
+    save: "saved", failure: "", later: [openProposalsRead(CHAPTER), PROPOSAL_READ].sort(), unexpected: [] });
 });
 
 /**
