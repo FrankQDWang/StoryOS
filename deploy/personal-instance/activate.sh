@@ -18,9 +18,6 @@ runtime_password=$(read_secret runtime-password)
 user_id=$(cat "$etc/user-id")
 # The text goes to psql on its standard input, so no secret is a process argument.
 admin_psql <<EOF
-SET client_min_messages = warning;
--- The admin login of the provider is not a superuser (ADR 0104 section 5). A second grant changes nothing.
-GRANT storyos_owner TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;
 ALTER ROLE storyos_runtime PASSWORD '$runtime_password';
 BEGIN;
 SET LOCAL ROLE storyos_owner;

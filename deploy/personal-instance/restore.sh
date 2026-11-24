@@ -25,8 +25,6 @@ case $roles in
   *) fail "the database has $roles of the 4 roles of 0000_roles.sql" ;;
 esac
 admin_psql <<'EOF'
-SET client_min_messages = warning;
-GRANT storyos_owner TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;
 CREATE SCHEMA IF NOT EXISTS extensions;
 CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
 EOF
