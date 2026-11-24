@@ -790,6 +790,13 @@ function EmptyProjectReadyView({
 }) {
   const [title, setTitle] = useState(project.project.title);
   const [revision, setRevision] = useState(openedRevision);
+  // An open that stays on an Empty Project keeps this view, so the view takes the title and the revision of each state.
+  const [shown, setShown] = useState(project);
+  if (shown !== project) {
+    setShown(project);
+    setTitle(project.project.title);
+    setRevision(openedRevision);
+  }
   const [volumeRemoval, setVolumeRemoval] = useState<string>();
   const [addressNotice, setAddressNotice] = useState<string>();
   // A Project with no Chapter has no Chapter to open from the address.
@@ -1030,8 +1037,7 @@ function Stage1View({
   const held = useRef(projectName(state));
   const take = (next: ControlledProjectState) => {
     const name = held.current;
-    // An equal revision also keeps the held values. The title of an open comes from the Project read and its revision
-    // from the list read, so a reopen in flight while a rename settles can bring the earlier title with the new revision.
+    // Equal also keeps them: an open takes the title from the Project read and the revision from the list read.
     if ((next.kind === "project-ready" || next.kind === "empty-project-ready") && name !== undefined
       && name.projectId === next.project.project.project_id && BigInt(next.revision) <= BigInt(name.revision)) {
       setCurrent({ ...next, revision: name.revision,
