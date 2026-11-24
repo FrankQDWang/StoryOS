@@ -74,6 +74,13 @@ release-package-linux:
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate
 
+.PHONY: verify-personal-instance
+# Runs the scripts of deploy/personal-instance/ in an Ubuntu 24.04 container with the Linux package of the commit
+# (issue 1855). It needs the network for the packages of Caddy and of the PostgreSQL client, so it is not a step of
+# make check-full.
+verify-personal-instance: release-package-linux
+	sh scripts/verify-personal-instance.sh
+
 .PHONY: generate-persistence-catalog
 # Rewrites generated/persistence-catalog/ from a new database that the committed migrations activate (ADR 0079).
 # The goal packages the release first, so commit the migration change before you run it.

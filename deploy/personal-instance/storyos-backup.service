@@ -1,0 +1,15 @@
+# The daily dump of the personal instance (ADR 0104 section 7). storyos-backup.timer starts it. A failed dump makes
+# this unit fail.
+[Unit]
+Description=StoryOS backup
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/storyos/deploy/backup.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/backups/storyos

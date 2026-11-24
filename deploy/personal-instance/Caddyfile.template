@@ -1,0 +1,10 @@
+# The Caddyfile of the personal instance (ADR 0104 section 2). install.sh writes it to /etc/caddy/Caddyfile with the
+# Host of the instance. Each path needs the proxy password, also the document GET that issues the session cookie.
+# Caddy gets the certificate, and it redirects port 80 to https.
+@HOST@ {
+	import /etc/storyos/proxy-auth.caddy
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	reverse_proxy 127.0.0.1:3000 {
+		header_up Host @HOST@
+	}
+}

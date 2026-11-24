@@ -5,7 +5,8 @@ A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -e
 --browser-source adds the lanes of the browser-source Vitest project, one browser process for each lane.
 --postgres-shards adds the ignored tests of the library test binaries in shards, each with its own database.
 --project-scope adds the parts of `make check-full` after the lanes `build` and `package`: the storage activation
-checks, the exact-dist journeys in shards, and the two modes of the recovery drill.
+checks, the exact-dist journeys in shards, the two modes of the recovery drill, and the restore drill of the personal
+instance.
 `scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; scripts/browser-vitest.sh runs it
 before each browser Vitest run. `scripts/check-lanes.py --watch-run SCRIPT RUN OUTPUT` stops a run of that script that
 connected to no browser session and does not exit, and `--connected-to-no-browser OUTPUT` examines its output.
@@ -69,6 +70,7 @@ OTHER_JOURNEY_SECONDS = 3
 PHYSICAL_DRILL_FILE = "test/browser-exact-dist/s2-physical-drill.integration.test.ts"
 RECOVERY_DRILLS = ("mixed", "fixture-only")
 RECOVERY_DRILL_END = "Isolated restore continued writing after Recovery Visibility Proof"
+PERSONAL_INSTANCE_RESTORE_END = "The restore drill of the personal instance read the same Chapter text"
 # The project-scope lanes also wait for the build lane, which gives the PostgreSQL shards. Thus the shards get the
 # lanes first also when the release package is up to date and its lane ends after 4 s. Without this wait, in a run
 # on 2026-11-20 the drills and a journey shard started first, the first shard started after 150 s, and a journey
@@ -224,6 +226,12 @@ def recovery_drill_lane(root, mode):
                 browser=True)
 
 
+def personal_instance_restore_passed(log):
+    if PERSONAL_INSTANCE_RESTORE_END not in log:
+        raise ValueError(f"personal-instance-restore: the log has no line '{PERSONAL_INSTANCE_RESTORE_END}'")
+    return []
+
+
 def project_scope_lanes(root):
     # The lanes that take more time start first: the drills, then the journey shards.
     lanes = [recovery_drill_lane(root, mode) for mode in RECOVERY_DRILLS]
@@ -231,6 +239,9 @@ def project_scope_lanes(root):
     # The activation checks run ignored tests of the library test binary of the build lane.
     lanes.append(Lane("activation", [str(root / "scripts/verify-project-scope.sh"), "activation"],
                       after=PROJECT_SCOPE_AFTER))
+    # The restore drill of the personal instance uses deploy/personal-instance/ with the release package.
+    lanes.append(Lane("personal-instance-restore", [str(root / "scripts/verify-personal-instance-restore.sh")],
+                      after=PROJECT_SCOPE_AFTER, passed=personal_instance_restore_passed))
     return lanes
 
 

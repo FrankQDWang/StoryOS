@@ -1,6 +1,6 @@
 # Run the Local Real Model Route
 
-The real Volcengine Agent Plan route runs only on the author's Mac local deployment (ADR 0039, ADR 0048). The Server offers the destination, and the separate `storyos-worker` resolves the credential. The Server never reads the env file or the key.
+The real Volcengine Agent Plan route runs on the author's Mac local deployment (ADR 0039, ADR 0048), and on the VPS of the personal instance of the author ([ADR 0104](../adr/0104-run-the-personal-instance-of-the-author-on-the-hosted-topology-with-a-proxy-password-the-model-key-on-the-server-and-a-frozen-baseline.md) section 3). This document is for the Mac. For the VPS, read [Operate the hosted personal instance](hosted-personal-instance.md). The Server offers the destination, and the separate `storyos-worker` resolves the credential. The Server never reads the env file or the key.
 
 ## Settings and the key
 
