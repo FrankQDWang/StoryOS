@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::net::{Shutdown, TcpListener, TcpStream};
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use storyos_application::{ProjectId, ProjectScope, UserId};
@@ -140,7 +139,7 @@ async fn statement_texts_built_from_data_keep_no_more_statements_than_the_capaci
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn the_storage_activation_proof_read_on_a_warm_connection_is_one_round_trip() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
-    let (proxy_url, round_trips) = round_trip_proxy(
+    let (proxy_url, messages) = message_counting_proxy(
         &std::env::var("STORYOS_TEST_DATABASE_URL")
             .expect("run through scripts/verify-project-scope.sh"),
     );
@@ -149,49 +148,82 @@ async fn the_storage_activation_proof_read_on_a_warm_connection_is_one_round_tri
         .require_release1_storage_activation_proof()
         .await
         .unwrap();
-    let before = round_trips.load(Ordering::SeqCst);
+    *messages.lock().unwrap() = SentMessages::default();
 
     store
         .require_release1_storage_activation_proof()
         .await
         .unwrap();
 
-    assert_eq!(round_trips.load(Ordering::SeqCst) - before, 1);
+    assert_eq!(
+        *messages.lock().unwrap(),
+        SentMessages {
+            round_trips: 1,
+            simple_queries: 0,
+            parses: 0,
+            executes: 1,
+        }
+    );
 }
 
 const SSL_REQUEST: [u8; 4] = 80_877_103_u32.to_be_bytes();
 
-/// A TCP proxy in front of the database that counts each client message that waits for an answer:
-/// each Sync and each simple Query. The Sync after the Close of a dropped statement waits for
-/// nothing, so it does not count.
-fn round_trip_proxy(database_url: &str) -> (String, Arc<AtomicUsize>) {
+/// The client messages that went through a [`message_counting_proxy`]. A round trip is a Sync or
+/// a simple Query, which wait for an answer. The Sync after the Close of a dropped statement waits
+/// for nothing, so it is no round trip. One Execute runs one statement; one simple Query can run
+/// more than one.
+#[derive(Debug, Default, PartialEq)]
+struct SentMessages {
+    round_trips: usize,
+    simple_queries: usize,
+    parses: usize,
+    executes: usize,
+}
+
+/// A TCP proxy in front of the database that counts the client messages of its connections.
+fn message_counting_proxy(database_url: &str) -> (String, Arc<Mutex<SentMessages>>) {
     let config = database_url.parse::<tokio_postgres::Config>().unwrap();
     let port = config.get_ports()[0];
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let proxy_port = listener.local_addr().unwrap().port();
-    let round_trips = Arc::new(AtomicUsize::new(0));
-    let counted = Arc::clone(&round_trips);
+    let messages = Arc::new(Mutex::new(SentMessages::default()));
+    let counted = Arc::clone(&messages);
     std::thread::spawn(move || {
         for client in listener.incoming() {
-            let (Ok(client), Ok(server)) = (client, TcpStream::connect(("127.0.0.1", port))) else {
+            let (Ok(mut client), Ok(mut server)) =
+                (client, TcpStream::connect(("127.0.0.1", port)))
+            else {
                 return;
             };
-            let (client_read, server_write) =
+            let (mut client_read, mut server_write) =
                 (client.try_clone().unwrap(), server.try_clone().unwrap());
             let counted = Arc::clone(&counted);
-            std::thread::spawn(move || count_and_forward(client_read, server_write, &counted));
             std::thread::spawn(move || {
-                let (mut server, mut client) = (server, client);
+                count_and_forward(&mut client_read, &mut server_write, &counted);
+                close_both(&client_read, &server_write);
+            });
+            std::thread::spawn(move || {
                 let _copied = std::io::copy(&mut server, &mut client);
+                close_both(&server, &client);
             });
         }
     });
     let proxy_url = database_url.replacen(&format!(":{port}/"), &format!(":{proxy_port}/"), 1);
-    (proxy_url, round_trips)
+    (proxy_url, messages)
+}
+
+// When one side ends, the other side sees the end too.
+fn close_both(first: &TcpStream, second: &TcpStream) {
+    let _first = first.shutdown(Shutdown::Both);
+    let _second = second.shutdown(Shutdown::Both);
 }
 
 // The count goes up before the message goes on, so a client that has its answer sees the count.
-fn count_and_forward(mut client: TcpStream, mut server: TcpStream, round_trips: &AtomicUsize) {
+fn count_and_forward(
+    client: &mut TcpStream,
+    server: &mut TcpStream,
+    messages: &Mutex<SentMessages>,
+) {
     let read_message = |from: &mut TcpStream, header: &mut [u8]| {
         from.read_exact(header).ok()?;
         let length = u32::from_be_bytes(header[header.len() - 4..].try_into().ok()?);
@@ -202,7 +234,7 @@ fn count_and_forward(mut client: TcpStream, mut server: TcpStream, round_trips: 
     // An SSLRequest can come before the startup message; neither has a type byte.
     loop {
         let mut header = [0; 4];
-        let Some(body) = read_message(&mut client, &mut header) else {
+        let Some(body) = read_message(client, &mut header) else {
             return;
         };
         if server.write_all(&[&header[..], &body].concat()).is_err() {
@@ -215,11 +247,20 @@ fn count_and_forward(mut client: TcpStream, mut server: TcpStream, round_trips: 
     let mut previous = 0;
     loop {
         let mut header = [0; 5];
-        let Some(body) = read_message(&mut client, &mut header) else {
+        let Some(body) = read_message(client, &mut header) else {
             return;
         };
-        if header[0] == b'Q' || (header[0] == b'S' && previous != b'C') {
-            round_trips.fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut counts) = messages.lock() {
+            match header[0] {
+                b'Q' => {
+                    counts.simple_queries += 1;
+                    counts.round_trips += 1;
+                }
+                b'S' if previous != b'C' => counts.round_trips += 1,
+                b'P' => counts.parses += 1,
+                b'E' => counts.executes += 1,
+                _ => {}
+            }
         }
         previous = header[0];
         if server.write_all(&[&header[..], &body].concat()).is_err() {
