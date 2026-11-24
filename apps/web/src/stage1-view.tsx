@@ -1030,8 +1030,10 @@ function Stage1View({
   const held = useRef(projectName(state));
   const take = (next: ControlledProjectState) => {
     const name = held.current;
+    // An equal revision also keeps the held values. The title of an open comes from the Project read and its revision
+    // from the list read, so a reopen in flight while a rename settles can bring the earlier title with the new revision.
     if ((next.kind === "project-ready" || next.kind === "empty-project-ready") && name !== undefined
-      && name.projectId === next.project.project.project_id && BigInt(next.revision) < BigInt(name.revision)) {
+      && name.projectId === next.project.project.project_id && BigInt(next.revision) <= BigInt(name.revision)) {
       setCurrent({ ...next, revision: name.revision,
         project: { ...next.project, project: { ...next.project.project, title: name.title } } });
       return;

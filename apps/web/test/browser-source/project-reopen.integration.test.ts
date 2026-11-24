@@ -101,8 +101,8 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * after the Acceptance settles: the Editor Session of this page keeps its base. A Rejection removes the suggestion from
  * the open suggestions. `assistant` gives the availability of the assistance read and serves the Skills; with no
  * `assistant`, both reads answer a 503 problem. `holdAfter` holds the next request of each given name after the
- * trigger request ends, until `release`. After `answerBeforeHold`, a held request has the answer of the Server at its
- * start. `holdEach` holds each request until `release`. `unavailable` answers the given
+ * trigger request ends, until `release`. After `answerBeforeHold(names)`, a held request of these names has the answer
+ * of the Server at its start. `holdEach` holds each request until `release`. `unavailable` answers the given
  * requests with a 503 problem. `lost` applies the given requests and then loses their response. A `late` Acceptance
  * applies at the first Proposal read after the next Chapter A read and Editor Session read. `takeover` and
  * `rejection` give the effect of these commands. Before a `conflicted` Rejection, another tab changes the text of
@@ -137,7 +137,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   let armed: { trigger: string; names: string[] } | undefined;
   let holding = new Set<string>();
   let holdEach = false;
-  let answerFirst = false;
+  let answerFirst = new Set<string>();
   const held: (() => void)[] = [];
   const open = () => ({ kind: "current_chapter" as const, current_chapter_id: state.current });
   const session = (): GetEditorSessionResponse => {
@@ -389,7 +389,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     log.active.set(name, (log.active.get(name) ?? 0) + 1);
     try {
       const hold = holding.delete(name) || holdEach;
-      const early = hold && answerFirst ? answer(name, init) : undefined;
+      const early = hold && answerFirst.has(name) ? answer(name, init) : undefined;
       if (hold) await new Promise<void>((resolve) => { held.push(resolve); });
       const response = await (early ?? answer(name, init));
       if (lost.includes(name)) throw new TypeError("Failed to fetch");
@@ -405,7 +405,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   };
   return {
     scenario, log, fetchImpl, projectRenames: state.projectRenames,
-    answerBeforeHold() { answerFirst = true; },
+    answerBeforeHold(names: string[]) { answerFirst = new Set(names); },
     renameElsewhere(title: string) { state.projectTitle = title; state.projectRevision += 1; },
     holdAfter(trigger: string, names: string[]) { armed = { trigger, names }; },
     hold(names: string[]) { holding = new Set(names); },
@@ -924,7 +924,7 @@ it("keeps the title and the revision of a Project rename that settles while a ta
     const button = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
     await expect.poll(() => button()?.disabled).toBe(false);
     // The Project read and the list read of the reopen have the answer from before the rename.
-    server.answerBeforeHold();
+    server.answerBeforeHold([PROJECT_READ, LIST]);
     server.holdAfter(TAKEOVER, [PROJECT_READ, LIST]);
     button()!.click();
     await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ].sort());
@@ -940,6 +940,30 @@ it("keeps the title and the revision of a Project rename that settles while a ta
       .toEqual({ shown: "Project A, renamed", revisions: ["1", "2"], unexpected: [] });
   });
 
+it("keeps the title of a Project rename when a reopen brings the earlier title with the new revision", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT)],
+    writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
+    commands: [SESSION_CREATE, TAKEOVER, PROJECT_RENAME] });
+  const workspace = await openWorkspace(server);
+  const button = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
+  await expect.poll(() => button()?.disabled).toBe(false);
+  // The Project read of the reopen has the title from before the rename, and its list read has the new revision.
+  server.answerBeforeHold([PROJECT_READ]);
+  server.holdAfter(TAKEOVER, [PROJECT_READ, LIST]);
+  button()!.click();
+  await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ].sort());
+
+  await renameProject(workspace.root, "Project A, renamed");
+  server.release();
+  await expect.poll(() => ({ ...workspace.shown(), button: button() }))
+    .toEqual({ title: "Chapter A", save: "saved", failure: "", button: null });
+  const shown = projectHeading(workspace.root);
+  await renameProject(workspace.root, "Project A, renamed again");
+
+  expect({ shown, revisions: server.projectRenames, unexpected: server.log.unexpected })
+    .toEqual({ shown: "Project A, renamed", revisions: ["1", "2"], unexpected: [] });
+});
+
 it("keeps the title and the revision of a Project rename that settles while a Proposal link opens the Chapter",
   async () => {
     const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(SWITCH_SNAPSHOT), PROPOSAL_READ,
@@ -949,7 +973,7 @@ it("keeps the title and the revision of a Project rename that settles while a Pr
     const link = () => workspace.root.querySelector<HTMLButtonElement>("button[data-proposal-location]");
     await expect.poll(() => link()?.disabled).toBe(false);
     // The last open of the Proposal link has the Project read and the list read from before the rename.
-    server.answerBeforeHold();
+    server.answerBeforeHold([PROJECT_READ, LIST]);
     server.holdAfter(SWITCH, [PROJECT_READ, LIST]);
     link()!.click();
     await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ].sort());
@@ -989,7 +1013,7 @@ it("keeps the later title and revision of a reopen when a rename response of an 
     const workspace = await openWorkspace(server);
     await expect.poll(() => workspace.root.querySelector(`button[data-chapter-id="${CHAPTER_B}"]`)).not.toBeNull();
     // The rename applies at revision 2, and its response waits. Then another tab renames the Project to revision 3.
-    server.answerBeforeHold();
+    server.answerBeforeHold([PROJECT_RENAME]);
     server.hold([PROJECT_RENAME]);
     await submitProjectRename(workspace.root, "Project A, renamed");
     await expect.poll(server.held).toBe(1);
