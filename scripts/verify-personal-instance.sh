@@ -30,14 +30,14 @@ if [ "${1:-}" != --inside ]; then
 ALTER ROLE postgres PASSWORD '$admin_password';
 EOF
   # --init reaps each stopped service, so that the fake systemctl sees that it ended. The inner part has a time
-  # limit. At the limit, timeout stops it, and the container ends with it.
+  # limit. At the limit, timeout sends TERM, then KILL after 10 s, and the container ends with the inner part.
   limit=1200
   status=0
   docker run --rm --init --name "$check" --platform linux/amd64 --network "container:$check-db" \
     --volume "$work:/check:ro" ${STORYOS_CHECK_RUN:+--label "storyos.check-run=$STORYOS_CHECK_RUN"} \
     ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b \
-    timeout "$limit" sh /check/verify-personal-instance.sh --inside || status=$?
-  [ "$status" != 124 ] || echo "FAIL: the inner part of the check did not end in $limit s" >&2
+    timeout --kill-after=10 "$limit" sh /check/verify-personal-instance.sh --inside || status=$?
+  case $status in 124 | 137) echo "FAIL: the inner part of the check did not end in $limit s" >&2 ;; esac
   exit "$status"
 fi
 
@@ -117,10 +117,17 @@ step "Each file of /etc/storyos has mode 600"
   || fail "worker.env must belong to storyos-worker and proxy-auth.caddy to caddy"
 
 step "The Server and the Worker run as two users, and the user of the Server cannot read worker.env"
-[ "$(ps -o user= -p "$(cat /run/fake-systemd/storyos-server.pid)")" = storyos ] \
-  || fail "the Server does not run as storyos"
-[ "$(ps -o user= -p "$(cat /run/fake-systemd/storyos-worker.pid)")" = storyos-worker ] \
-  || fail "the Worker does not run as storyos-worker"
+# The process of a service starts as root and changes its user, so the check waits at most 5 s for the user $2.
+expect_user() {
+  attempt=0
+  until [ "$(ps -o user= -p "$(cat "/run/fake-systemd/$1.pid")")" = "$2" ]; do
+    attempt=$((attempt + 1))
+    [ "$attempt" -lt 50 ] || fail "$1 does not run as $2"
+    sleep 0.1
+  done
+}
+expect_user storyos-server storyos
+expect_user storyos-worker storyos-worker
 if setpriv --reuid=storyos --regid=storyos --init-groups cat /etc/storyos/worker.env >/dev/null 2>&1; then
   fail "the user of the Server can read worker.env"
 fi
@@ -191,7 +198,8 @@ grep -q '^STORYOS_STORAGE_UPGRADE=from 2 files to 3 files$' /tmp/last || fail "u
 [ "$(readlink -f /opt/storyos/current)" = /opt/storyos/releases/upgraded ] || fail "the upgrade did not change the link"
 curl -fsS -o /dev/null http://127.0.0.1:3000/api/v1/protocol || fail "the upgraded package does not answer"
 
-# The first run commits the edge and loses its result. The second run finds the committed upgrade.
+# The fake of a commit with a lost result: the first run fails, and the second run answers Active as a second run of
+# a committed upgrade does.
 step "upgrade.sh continues when the second run of storyos-storage answers Active"
 storage_package lost '[ -f /tmp/lost/ran ] || { : > /tmp/lost/ran; echo "the connection ended"; exit 1; }
 echo STORYOS_STORAGE_ACTIVATION=Active'
