@@ -52,9 +52,10 @@ if ! id "$service_user" >/dev/null 2>&1; then
   useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin "$service_user"
 fi
 install -d -m 755 "$opt" "$opt/releases" "$opt/deploy"
-install -d -m 700 "$backup_dir"
-# A run that stops after a change and before its reloads leaves this marker, so that the next run does them.
-marker=/run/storyos-install-reload
+install -d -m 700 "$backup_dir" /var/lib/storyos
+# A run that stops after a change and before its reloads leaves this marker, so that the next run does them. The
+# marker is not below /run, so it stays after a reboot.
+marker=/var/lib/storyos/install-reload
 restart=0
 [ ! -f "$marker" ] || restart=1
 : > "$marker"

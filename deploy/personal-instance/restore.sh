@@ -19,7 +19,8 @@ schemas=$(admin_psql -c "SELECT count(*) FROM pg_catalog.pg_namespace WHERE nspn
 [ "$schemas" = 0 ] || fail "the database has the schema storyos. Restore only into an empty database"
 # The role file runs in one transaction. A failed restore leaves all of its roles or none, and a second attempt into
 # the same database uses the roles of the first attempt.
-roles=$(admin_psql -c "SELECT count(*) FROM pg_catalog.pg_roles WHERE rolname LIKE 'storyos\_%'")
+roles=$(admin_psql -c "SELECT count(*) FROM pg_catalog.pg_roles WHERE rolname IN
+  ('storyos_owner', 'storyos_runtime', 'storyos_backup', 'storyos_restore')")
 case $roles in
   0) admin_psql --single-transaction -f "$here/0000_roles.sql" ;;
   4) ;;

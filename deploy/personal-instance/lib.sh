@@ -81,7 +81,9 @@ percent_encode() {
 
 # The URL of the user $1 with the password $2, for the binaries of the package.
 database_url() {
-  url="postgres://$(percent_encode "$1"):$(percent_encode "$2")@$STORYOS_DATABASE_HOST:$STORYOS_DATABASE_PORT"
+  address=$STORYOS_DATABASE_HOST
+  case $address in *:*) address="[$address]" ;; esac
+  url="postgres://$(percent_encode "$1"):$(percent_encode "$2")@$address:$STORYOS_DATABASE_PORT"
   url="$url/$STORYOS_DATABASE_NAME"
   if [ "$STORYOS_DATABASE_TLS" = require ]; then
     url="$url?sslmode=require"
