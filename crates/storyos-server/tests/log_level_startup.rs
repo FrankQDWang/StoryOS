@@ -89,7 +89,7 @@ fn a_database_url_whose_host_is_not_loopback_refuses_startup_without_sslmode_req
         .args(["--web-root", "/__storyos_missing_web"])
         .env(
             "STORYOS_DATABASE_URL",
-            format!("postgres://storyos_runtime:{password}@{host}:6543/postgres"),
+            format!("postgres://storyos_canary_user:{password}@{host}:6543/storyos_canary_db"),
         )
         .env(
             "STORYOS_CHALLENGE_SECRET",
@@ -108,10 +108,17 @@ fn a_database_url_whose_host_is_not_loopback_refuses_startup_without_sslmode_req
     assert!(!output.status.success(), "{stderr}");
     assert!(stderr.contains("STORYOS_DATABASE_URL"), "{stderr}");
     assert!(
-        stderr.contains("a URL whose host is not a loopback address must say sslmode=require"),
+        stderr.contains("a URL whose host is not a loopback IP address or a Unix socket must say sslmode=require"),
         "{stderr}"
     );
-    for part in [host, password, "6543", "postgres://"] {
+    for part in [
+        host,
+        password,
+        "storyos_canary_user",
+        "storyos_canary_db",
+        "6543",
+        "postgres://",
+    ] {
         assert!(!stderr.contains(part), "{part} in {stderr}");
     }
 }

@@ -90,6 +90,29 @@ async fn verify_the_tls_cases(admin_url: &str) {
         .await
         .unwrap();
     assert!(row.get::<_, bool>(0));
+    // PostgreSQL 17 also accepts a direct TLS connection, which needs the ALPN protocol.
+    let version: i32 = connect_plain(admin_url)
+        .await
+        .query_one("SELECT current_setting('server_version_num')::int", &[])
+        .await
+        .unwrap()
+        .get(0);
+    if version >= 170_000 {
+        let direct = Arc::new(ConnectionPool::new(format!(
+            "{tls_url}&sslnegotiation=direct"
+        )))
+        .checkout()
+        .await
+        .unwrap();
+        let row = direct
+            .query_one(
+                "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()",
+                &[],
+            )
+            .await
+            .unwrap();
+        assert!(row.get::<_, bool>(0));
+    }
 
     serve_certificate(admin_url, "other-ca").await;
     assert!(matches!(

@@ -13,6 +13,9 @@ CONNECT_OWNER = "connection_pool.rs"
 # The Storage Activation runs on its own admin connection, so the transaction-control rules do not apply to it.
 MAINTENANCE_OWNER = "storage_activation.rs"
 OPEN_CALLERS = {"storage_activation_proof.rs", MAINTENANCE_OWNER}
+# A production connection names its TLS connector, so each of these words outside the owners is a second connect path.
+CONNECT_WORDS = ("tokio_postgres::connect", "Config::connect", "NoTls", "VerifiedTls")
+TLS_OWNER = "postgres_tls.rs"
 POOLED_SOURCES = re.compile(r"\.(connect|connect_challenge|checkout)\s*\(")
 # `ROLLBACK TO` keeps the transaction open.
 TRANSACTION_CONTROL = re.compile(
@@ -94,11 +97,10 @@ def check(source_dir: Path) -> tuple[list[str], int]:
         text = path.read_text(encoding="utf-8")
         if path.name == CONNECT_OWNER:
             continue
-        if "tokio_postgres::connect" in text:
-            line = text[: text.index("tokio_postgres::connect")].count("\n") + 1
-            violations.append(
-                f"{relative}:{line}: `tokio_postgres::connect` outside the pool; use `connect()`"
-            )
+        for word in CONNECT_WORDS:
+            if word in text and not (path.name == TLS_OWNER and word == "VerifiedTls"):
+                line = text[: text.index(word)].count("\n") + 1
+                violations.append(f"{relative}:{line}: `{word}` outside the pool; use `connect()`")
         if path.name not in OPEN_CALLERS and "connection_pool::open" in text:
             line = text[: text.index("connection_pool::open")].count("\n") + 1
             violations.append(
@@ -193,6 +195,12 @@ async fn open(url: &str) -> Result<tokio_postgres::Client, tokio_postgres::Error
     Ok(client)
 }
 """,
+    "fail_config_connect.rs": """
+async fn open(config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+    let (client, _connection) = config.connect(NoTls).await?;
+    Ok(client)
+}
+""",
     "fail_local.rs": """
 async fn replay(store: &Store) -> Result<(), ProjectReadError> {
     let client = store.raw_client().await?;
@@ -217,7 +225,7 @@ async fn stores() {
 """,
     "storage_activation.rs": """
 async fn apply(client: &tokio_postgres::Client) -> Result<(), tokio_postgres::Error> {
-    let (client, connection) = tokio_postgres::connect(admin_url, NoTls).await?;
+    let client = crate::connection_pool::open(admin_url).await?;
     client.batch_execute("BEGIN").await
 }
 """,
@@ -233,7 +241,9 @@ def self_test() -> None:
         violations, checked = check(source_dir)
     assert checked == 7, checked
     expected = [
+        "fail_config_connect.rs:3: `NoTls` outside the pool; use `connect()`",
         "fail_connect.rs:3: `tokio_postgres::connect` outside the pool; use `connect()`",
+        "fail_connect.rs:3: `NoTls` outside the pool; use `connect()`",
         "fail_generic.rs:3: `ROLLBACK` on parameter `client: &C` is not a `PooledClient`",
         "fail_local.rs:4: `BEGIN` on local `client` is not bound from `connect()`, "
         "`connect_challenge()`, or `checkout()`",

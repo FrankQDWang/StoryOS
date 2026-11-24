@@ -42,10 +42,12 @@ fn client_config() -> Result<Arc<ClientConfig>, rustls::Error> {
     let (_added, _ignored) =
         roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
     let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
-    let config = ClientConfig::builder_with_provider(provider)
+    let mut config = ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()?
         .with_root_certificates(roots)
         .with_no_client_auth();
+    // PostgreSQL 17 refuses a direct TLS connection (`sslnegotiation=direct`) without this protocol.
+    config.alpn_protocols = vec![b"postgresql".to_vec()];
     Ok(Arc::new(config))
 }
 

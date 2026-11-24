@@ -4,7 +4,7 @@ use std::fmt;
 
 use sha2::{Digest, Sha256};
 
-use crate::database_url::{DatabaseUrlRefusal, check_database_url};
+use crate::database_url::{DatabaseUrlRefusal, check_database_url, redacted_chain};
 
 include!(concat!(env!("OUT_DIR"), "/embedded_bootstrap.rs"));
 
@@ -137,6 +137,16 @@ pub async fn activate_release1_storage(
         return Err(StorageActivationError::AdminUrlMissing);
     }
     check_database_url(admin_url).map_err(StorageActivationError::AdminUrlInvalid)?;
+    activate(admin_url).await.map_err(|error| match error {
+        StorageActivationError::Unavailable(source) => {
+            let cause: &(dyn std::error::Error + 'static) = source.as_ref();
+            unavailable(std::io::Error::other(redacted_chain(admin_url, cause)))
+        }
+        other => other,
+    })
+}
+
+async fn activate(admin_url: &str) -> Result<StorageActivation, StorageActivationError> {
     let identity = packaged_identity();
     let client = crate::connection_pool::open(admin_url)
         .await

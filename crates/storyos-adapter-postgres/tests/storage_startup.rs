@@ -26,7 +26,7 @@ fn a_host_that_is_not_loopback_without_sslmode_require_refuses_with_the_rule_and
         [
             "STORYOS_STORAGE_ACTIVATION=Refused",
             "STORYOS_STORAGE_ACTIVATION_REASON=admin_url_invalid",
-            "STORYOS_STORAGE_ADMIN_URL: a URL whose host is not a loopback address must say sslmode=require",
+            "STORYOS_STORAGE_ADMIN_URL: a URL whose host is not a loopback IP address or a Unix socket must say sslmode=require",
         ]
     );
 }
