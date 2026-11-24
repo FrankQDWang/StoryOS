@@ -59,7 +59,7 @@ Each idea must pass two questions: does it need setup before writing (then it is
 
 ### 4.4 Proof of the position
 
-- The author writes the author's own novel in StoryOS, and not in a general agent.
+- The author writes the author's own novel in StoryOS, and not in a general agent. The personal instance of the author on the hosted topology gives this use ([ADR 0104](docs/adr/0104-run-the-personal-instance-of-the-author-on-the-hosted-topology-with-a-proxy-password-the-model-key-on-the-server-and-a-frozen-baseline.md)).
 - One trial writes the same scene with StoryOS and with a general agent, and the author compares the two results.
 
 ## 5. Open points
