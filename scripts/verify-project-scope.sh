@@ -482,9 +482,9 @@ run_activation_checks() {
   prove_bound_request_path_activation
 }
 
-# The privileges of the StoryOS objects: one line for each grant on the schema storyos and on each relation,
+# The privileges of the StoryOS objects: one line for each grant on the schema storyos and on each relation, column,
 # function, and type in it, with the default grants of PostgreSQL when the object has no ACL, and one line for each
-# membership in a storyos_* role that gives its rights (INHERIT or SET).
+# membership in a storyos_* role or of a storyos_* role, with its options.
 storyos_privileges() {
   docker exec -i "$1" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At <<'SQL'
 WITH object_acl AS (
@@ -494,6 +494,11 @@ WITH object_acl AS (
   SELECT 'relation ' || oid::regclass::text, relowner,
          COALESCE(relacl, acldefault((CASE WHEN relkind = 'S' THEN 's' ELSE 'r' END)::"char", relowner))
     FROM pg_class WHERE relnamespace = 'storyos'::regnamespace AND relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+  UNION ALL
+  SELECT 'column ' || attribute.attrelid::regclass::text || '.' || quote_ident(attribute.attname), relation.relowner,
+         attribute.attacl
+    FROM pg_attribute AS attribute JOIN pg_class AS relation ON relation.oid = attribute.attrelid
+   WHERE relation.relnamespace = 'storyos'::regnamespace AND attribute.attacl IS NOT NULL
   UNION ALL
   SELECT 'function ' || oid::regprocedure::text, proowner, COALESCE(proacl, acldefault('f'::"char", proowner))
     FROM pg_proc WHERE pronamespace = 'storyos'::regnamespace
@@ -507,10 +512,10 @@ SELECT object || ' owner=' || pg_get_userbyid(owner) || ' grantee='
   FROM object_acl, LATERAL aclexplode(acl) AS grant_row
 UNION
 SELECT 'membership ' || pg_get_userbyid(roleid) || ' member=' || pg_get_userbyid(member)
-       || CASE WHEN inherit_option THEN ' inherit' ELSE '' END || CASE WHEN set_option THEN ' set' ELSE '' END
+       || CASE WHEN admin_option THEN ' admin' ELSE '' END || CASE WHEN inherit_option THEN ' inherit' ELSE '' END
+       || CASE WHEN set_option THEN ' set' ELSE '' END
   FROM pg_auth_members
- WHERE (inherit_option OR set_option)
-   AND (pg_get_userbyid(roleid) LIKE 'storyos\_%' OR pg_get_userbyid(member) LIKE 'storyos\_%')
+ WHERE pg_get_userbyid(roleid) LIKE 'storyos\_%' OR pg_get_userbyid(member) LIKE 'storyos\_%'
 ORDER BY 1;
 SQL
 }
@@ -519,25 +524,38 @@ provider_psql() {
   docker exec -i "$provider_container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At "$@"
 }
 
-provider_storage_output() {
-  STORYOS_STORAGE_ADMIN_URL=$(postgres_admin_url "$provider_container") "$storage_bin" 2>&1 || true
+# The superuser of the provider image makes the relations of the provider and of an application role.
+provider_superuser_psql() {
+  docker exec -i "$provider_container" psql -X -v ON_ERROR_STOP=1 -U supabase_admin -d postgres -At "$@"
 }
 
-# The Storage Activation on a database of the hosted provider (ADR 0104 section 5). Each psql call of the provider
-# container uses its admin login postgres, which is not a superuser, except the one that makes a provider relation.
+# Runs storyos-storage with the admin login of the provider container. It sets storage_output and storage_status.
+run_provider_storage() {
+  if storage_output=$(STORYOS_STORAGE_ADMIN_URL=$(postgres_admin_url "$provider_container") "$storage_bin" 2>&1); then
+    storage_status=0
+  else
+    storage_status=$?
+  fi
+}
+
+# The Release 1 Storage Activation on a database of the hosted provider (ADR 0104 section 5). The admin login
+# postgres of the provider image is not a superuser.
 run_provider_activation_checks() {
   start_postgres "$provider_container" "$storyos_provider_postgres_image"
   if [ "$(provider_psql -c "SELECT rolsuper::text FROM pg_roles WHERE rolname = current_user")" != false ]; then
     echo "The admin login of the provider image is a superuser" >&2
     exit 1
   fi
-  echo "Refusing a provider database with a relation of the admin login in public or in a provider schema"
-  for relation in public.t extensions.t; do
-    provider_psql -c "CREATE TABLE $relation (id integer)" >/dev/null
-    refusal=$(provider_storage_output)
-    if [ "$refusal" != "STORYOS_STORAGE_ACTIVATION=Refused
+  echo "Refusing a relation of the admin login or of an application role, also in a provider schema"
+  provider_superuser_psql -c "CREATE ROLE application_owner NOLOGIN" >/dev/null
+  for relation_owner in public.t:postgres extensions.t:postgres storage.t:application_owner; do
+    relation=${relation_owner%%:*}
+    provider_superuser_psql -c "CREATE TABLE $relation (id integer);
+      ALTER TABLE $relation OWNER TO ${relation_owner#*:}" >/dev/null
+    run_provider_storage
+    if [ "$storage_status" -eq 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Refused
 STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
-      echo "storyos-storage did not refuse the relation $relation: $refusal" >&2
+      echo "storyos-storage did not refuse the relation $relation_owner: $storage_status $storage_output" >&2
       exit 1
     fi
     installed=$(provider_psql -c "SELECT COALESCE(to_regnamespace('storyos')::text, 'absent') || '/' ||
@@ -546,17 +564,17 @@ STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
       echo "A refused activation installed StoryOS state: $installed" >&2
       exit 1
     fi
-    provider_psql -c "DROP TABLE $relation" >/dev/null
+    provider_superuser_psql -c "DROP TABLE $relation" >/dev/null
   done
-  # The image has no relation in the schema storage. A hosted project has them, with the owner of the provider.
-  docker exec "$provider_container" psql -X -v ON_ERROR_STOP=1 -U supabase_admin -d postgres -c \
-    "CREATE TABLE storage.provider_objects (id integer);
-     ALTER TABLE storage.provider_objects OWNER TO supabase_storage_admin" >/dev/null
+  provider_superuser_psql -c "DROP ROLE application_owner" >/dev/null
+  # The image has no relation in the schema storage. A hosted project has them, with an owner of the provider.
+  provider_superuser_psql -c "CREATE TABLE storage.provider_objects (id integer);
+    ALTER TABLE storage.provider_objects OWNER TO supabase_storage_admin" >/dev/null
   echo "Activating the provider database with its admin login"
   for run in first second; do
-    activation=$(provider_storage_output)
-    if [ "$activation" != "STORYOS_STORAGE_ACTIVATION=Active" ]; then
-      echo "The $run activation of the provider database failed: $activation" >&2
+    run_provider_storage
+    if [ "$storage_status" -ne 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Active" ]; then
+      echo "The $run activation of the provider database failed: $storage_status $storage_output" >&2
       exit 1
     fi
   done
@@ -572,7 +590,14 @@ STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
   echo "Comparing the privileges of the StoryOS objects with a local activation"
   start_postgres "$activation_container"
   STORYOS_STORAGE_ADMIN_URL=$(postgres_admin_url "$activation_container") "$storage_bin" >/dev/null
+  # PostgreSQL gives a creator of a role that is not a superuser the admin option on that role, and no rights of it.
+  creator_admin='^membership storyos_(owner|runtime|backup|restore) member=postgres admin$'
   provider_privileges=$(storyos_privileges "$provider_container")
+  if [ "$(printf '%s\n' "$provider_privileges" | grep -Ec "$creator_admin")" != 4 ]; then
+    echo "The admin login of the provider database is not the creator of the four StoryOS roles" >&2
+    exit 1
+  fi
+  provider_privileges=$(printf '%s\n' "$provider_privileges" | grep -Ev "$creator_admin")
   if ! printf '%s\n' "$provider_privileges" | grep -x 'membership storyos_owner member=postgres inherit set' >/dev/null; then
     echo "The privileges of the provider database have no membership of the admin login in storyos_owner" >&2
     exit 1
@@ -581,17 +606,21 @@ STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
     echo "The privileges of the StoryOS objects on the provider database are not those of a local database" >&2
     exit 1
   fi
-  # The grantees are the owner of the object, a storyos_* role, and PUBLIC, which has the defaults of PostgreSQL.
+  # Each grantee is the owner of the object or a storyos_* role. PUBLIC has only the defaults of PostgreSQL for a
+  # function and a type, and no right on the schema storyos, so it cannot use them.
   if printf '%s\n' "$provider_privileges" | grep -Ev \
-    '^(schema|relation|function|type) .* owner=([a-z_]+) grantee=(\2|storyos_[a-z]+|PUBLIC) |^membership storyos_owner member=postgres inherit set$'; then
+    '^(schema|relation|column|function|type) .* owner=([a-z_]+) grantee=(\2|storyos_[a-z]+) |^function .* grantee=PUBLIC EXECUTE$|^type .* grantee=PUBLIC USAGE$|^membership storyos_owner member=postgres inherit set$'; then
     echo "A role that is not a StoryOS role or the owner has a privilege on a StoryOS object" >&2
     exit 1
   fi
   provider_psql -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
   provider_psql < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
   provider_runtime=$(postgres_runtime_url "$provider_container")
-  echo "Binding the packaged Server on the provider database"
+  echo "Binding the packaged Server and the Worker on the provider database"
   assert_packaged_server_binds "provider" "$provider_runtime"
+  STORYOS_DATABASE_URL="$provider_runtime" \
+  STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
+    "$worker_bin" --claim-only
   echo "Running the Project Isolation tests and the vector store test on the provider database"
   STORYOS_TEST_DATABASE_URL="$provider_runtime" \
   STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$provider_container") \
