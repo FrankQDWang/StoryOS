@@ -39,7 +39,8 @@ export function ManuscriptStatisticsPanel({
   const [outcome, setOutcome] = useState<StatisticsOutcome | undefined>(undefined);
 
   useEffect(() => {
-    if (saveState === "saving") return;
+    // One read for one tree revision: the read waits for the tree.
+    if (saveState === "saving" || treeRevision === undefined) return;
     let cancelled = false;
     void (async () => {
       try {

@@ -1,5 +1,4 @@
 import type { EditorWriterProjection } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { openControlledProject } from "./boot.ts";
 import type { ControlledProjectState, ProjectReadyState } from "./editor-types.ts";
 import { takeOverOwnedProjectWriter } from "./take-over-writer.ts";
 
@@ -10,6 +9,7 @@ export function TakeOverWriterButton({
   fetchImpl,
   cryptoImpl,
   inFlightRef,
+  reopen,
   onReopened,
   onRefused,
 }: {
@@ -19,6 +19,8 @@ export function TakeOverWriterButton({
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   inFlightRef: { current: boolean };
+  /** Opens the Project again. The takeover response does not carry the Project, so the reopen reads it. */
+  reopen: () => Promise<ControlledProjectState>;
   onReopened: (next: ControlledProjectState) => void;
   onRefused: () => void;
 }) {
@@ -47,12 +49,7 @@ export function TakeOverWriterButton({
               onRefused();
               return;
             }
-            onReopened(await openControlledProject({
-              baseUrl,
-              projectId: state.project.project.project_id,
-              fetchImpl,
-              cryptoImpl,
-            }));
+            onReopened(await reopen());
           } catch {
             onRefused();
           } finally {

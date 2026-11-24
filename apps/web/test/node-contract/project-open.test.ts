@@ -5,6 +5,7 @@ import { test } from "vitest";
 import {
   openControlledProject,
   PROJECT_OPEN_DIAGNOSTIC_CAUSE,
+  reopenControlledProject,
 } from "../../src/boot.ts";
 import type {
   GetChapterResponse,
@@ -240,4 +241,30 @@ test("missing, empty, invalid, or mismatched owner identities fail closed", asyn
       message: "无法读取这个受控项目或其当前章节。",
     }, name);
   }
+});
+
+test("a reopen fails closed when the Project of the command or of the read has another Scope", async () => {
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const project = fixture<GetProjectResponse>("get-project.json");
+  const foreign = { ...project, project_scope: { ...project.project_scope,
+    owner_user_id: "018f0000-0000-7001-8000-000000000101" } };
+  const opened = { profile, project, revision: "1" };
+  const blocked = {
+    kind: "project-blocked",
+    code: "project_unavailable",
+    heading: "StoryOS 无法打开项目",
+    message: "无法读取这个受控项目或其当前章节。",
+  };
+  const requests: string[] = [];
+  const fetchImpl: typeof fetch = async (url) => {
+    requests.push(new URL(requestUrl(url)).pathname);
+    return new Response(JSON.stringify(foreign), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  const settled = await reopenControlledProject({ baseUrl: "http://storyos.test", opened, settled: foreign, fetchImpl });
+  const read = await reopenControlledProject({ baseUrl: "http://storyos.test", opened, fetchImpl });
+
+  assert.deepEqual({ settled, read, requests }, {
+    settled: blocked, read: blocked, requests: [`/api/v1/projects/${project.project.project_id}`],
+  });
 });

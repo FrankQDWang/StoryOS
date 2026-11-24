@@ -187,7 +187,9 @@ it("opens the settings page of a Project of the session and no other Project or 
   const blocked = await open(`/projects/${FOREIGN}/settings`, foreign.fetchImpl);
   expect([blocked.state.kind, blocked.state.kind === "project-blocked" && blocked.state.code])
     .toEqual(["project-blocked", "project_unavailable"]);
-  expect(foreign.sent.map(({ path }) => path)).toEqual(["/api/v1/protocol", `/api/v1/projects/${FOREIGN}`]);
+  // The list read is in flight with the Project read, so it is sent also when the Project read refuses (#1875).
+  expect(foreign.sent.map(({ path }) => path)).toEqual(["/api/v1/protocol", `/api/v1/projects/${FOREIGN}`,
+    "/api/v1/projects"]);
 
   for (const pathname of ["/projects/not-a-uuid/settings", `/projects/${PROJECT}/settings/extra`,
     `/projects/${PROJECT}/SETTINGS`]) {

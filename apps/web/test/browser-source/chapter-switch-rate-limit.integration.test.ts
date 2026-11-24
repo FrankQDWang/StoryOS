@@ -99,7 +99,9 @@ function fakeServer() {
     if (`${method} ${path}` === CURRENT_CHAPTER && !server.switchRefused) {
       current = (JSON.parse(String(init?.body)) as { set_current_chapter_input: { chapter_id: string } })
         .set_current_chapter_input.chapter_id;
-      return jsonResponse(setCurrentChapterFixture);
+      // The reopen opens the Chapter of the response, so the response names the Chapter of the request (#1875).
+      return jsonResponse({ ...setCurrentChapterFixture,
+        project: { ...setCurrentChapterFixture.project, open: open() } });
     }
     return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
   };
