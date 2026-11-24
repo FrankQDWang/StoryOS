@@ -8,6 +8,7 @@ use tokio_postgres::NoTls;
 use crate::connection_cause::connection_cause;
 use crate::connection_pool::ConnectionPool;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
+use crate::shared_tests::postgres_container::{PostgresContainer, succeed};
 
 const CHILD_ADMIN_URL: &str = "STORYOS_TEST_TLS_ADMIN_URL";
 const CERTIFICATES: &str = "/var/lib/postgresql/tls";
@@ -220,44 +221,31 @@ async fn connect_plain(url: &str) -> tokio_postgres::Client {
 
 /// A PostgreSQL container of the controlled image with the test certificates; drop removes it.
 struct TlsContainer {
-    name: String,
+    postgres: PostgresContainer,
     trusted_ca_file: std::path::PathBuf,
 }
 
 impl TlsContainer {
     fn start() -> Self {
-        let name = format!("storyos-tls-test-{}", uuid::Uuid::now_v7().simple());
-        let mut run = Command::new("docker");
-        run.args(["run", "--detach", "--name", &name]);
-        if let Ok(check_run) = std::env::var("STORYOS_CHECK_RUN") {
-            run.args(["--label", &format!("storyos.check-run={check_run}")]);
-        }
-        run.args([
-            "--env",
-            "POSTGRES_PASSWORD=admin",
-            "--publish",
-            "127.0.0.1::5432",
-            &controlled_postgres_image(),
-        ]);
-        let trusted_ca_file = std::env::temp_dir().join(format!("{name}-trusted-ca.crt"));
+        let postgres = PostgresContainer::start("storyos-tls-test");
+        let trusted_ca_file =
+            std::env::temp_dir().join(format!("{}-trusted-ca.crt", postgres.name));
         let container = Self {
-            name,
+            postgres,
             trusted_ca_file,
         };
-        succeed(&mut run);
-        container.wait_until_ready();
         succeed(Command::new("docker").args([
             "exec",
             "--user",
             "postgres",
-            &container.name,
+            &container.postgres.name,
             "sh",
             "-ec",
             MAKE_CERTIFICATES,
         ]));
         let trusted_ca = succeed(Command::new("docker").args([
             "exec",
-            &container.name,
+            &container.postgres.name,
             "cat",
             &format!("{CERTIFICATES}/trusted-root.crt"),
         ]));
@@ -265,62 +253,13 @@ impl TlsContainer {
         container
     }
 
-    fn wait_until_ready(&self) {
-        for _attempt in 0..120 {
-            let logs = Command::new("docker")
-                .args(["logs", &self.name])
-                .output()
-                .unwrap();
-            let initialized = String::from_utf8_lossy(&logs.stdout)
-                .contains("PostgreSQL init process complete")
-                || String::from_utf8_lossy(&logs.stderr)
-                    .contains("PostgreSQL init process complete");
-            let ready = initialized
-                && Command::new("docker")
-                    .args(["exec", &self.name, "pg_isready", "-U", "postgres"])
-                    .output()
-                    .unwrap()
-                    .status
-                    .success();
-            if ready {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(250));
-        }
-        panic!("PostgreSQL did not become ready: {}", self.name);
-    }
-
     fn admin_url(&self) -> String {
-        let published = succeed(Command::new("docker").args(["port", &self.name, "5432/tcp"]));
-        let published = String::from_utf8(published).unwrap();
-        let port = published.trim().rsplit_once(':').unwrap().1;
-        format!("postgres://postgres:admin@127.0.0.1:{port}/postgres")
+        self.postgres.admin_url()
     }
 }
 
 impl Drop for TlsContainer {
     fn drop(&mut self) {
-        let _removed = Command::new("docker")
-            .args(["rm", "--force", "--volumes", &self.name])
-            .output();
         let _deleted = std::fs::remove_file(&self.trusted_ca_file);
     }
-}
-
-fn controlled_postgres_image() -> String {
-    include_str!("../../../scripts/lib/controlled-postgres.sh")
-        .lines()
-        .find_map(|line| line.strip_prefix("storyos_postgres_image="))
-        .expect("scripts/lib/controlled-postgres.sh names the PostgreSQL image")
-        .to_owned()
-}
-
-fn succeed(command: &mut Command) -> Vec<u8> {
-    let output = command.output().unwrap();
-    assert!(
-        output.status.success(),
-        "{command:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    output.stdout
 }

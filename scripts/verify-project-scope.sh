@@ -413,10 +413,10 @@ run_activation_checks() {
   if docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 \
     -U storyos_runtime -d postgres -c \
     "INSERT INTO storyos.schema_migrations (
-       schema_version, migration_id, checksum, release_identity, runner_revision,
+       attempt_id, schema_version, migration_id, checksum, release_identity, runner_revision,
        started_at, status
      ) VALUES (
-       'forged', 'forged', 'sha256:3333333333333333333333333333333333333333333333333333333333333333',
+       2, 'forged', 'forged', 'sha256:3333333333333333333333333333333333333333333333333333333333333333',
        'forged', 'forged', clock_timestamp(), 'applied'
      )" >/dev/null 2>&1; then
     echo "storyos_runtime ran the storage state machine" >&2
@@ -727,6 +727,74 @@ STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
   STORYOS_TEST_DATABASE_URL="$provider_runtime" \
   STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$provider_container") \
     run_postgres_tests passage_vectors::tests::the_vector_store_is_available_exactly_when_the_database_offers_the_extension
+  run_provider_upgrade_checks
+}
+
+# Each row of the proof and of the ledger of the provider database, as one text.
+provider_ledger_state() {
+  provider_psql -c "SELECT jsonb_build_array(
+      (SELECT jsonb_agg(row_to_json(proof)) FROM storyos.storage_activation_proofs AS proof),
+      (SELECT jsonb_agg(row_to_json(attempt) ORDER BY attempt_id) FROM storyos.schema_migrations AS attempt),
+      (SELECT jsonb_agg(row_to_json(phase) ORDER BY attempt_id, phase_id) FROM storyos.migration_phases AS phase),
+      (SELECT jsonb_agg(row_to_json(file) ORDER BY source_path) FROM storyos.migration_phase_checksums AS file)
+    )::text"
+}
+
+# The upgrade edge on a new provider database (ADR 0104 section 4). The test activates the package without its
+# last file, writes a Project with a Chapter, and takes the edge to the package and then to another route catalog.
+# Then the package of this build takes the edge back to its identity, refuses a changed checksum of a recorded file
+# with no change, and accepts its identity.
+run_provider_upgrade_checks() {
+  docker rm -fv "$provider_container" >/dev/null
+  # The helpers of the provider database use $provider_container.
+  provider_container=$provider_upgrade_container
+  start_postgres "$provider_container" "$storyos_provider_postgres_image"
+  echo "Taking the upgrade edge on a provider database"
+  STORYOS_TEST_UPGRADE_ADMIN_URL=$(postgres_admin_url "$provider_container") \
+    run_postgres_tests storage_activation::upgrade_tests::an_active_database_of_an_earlier_package_takes_the_upgrade_edge
+  source_count=$(find crates/storyos-adapter-postgres/migrations -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
+  run_provider_storage
+  if [ "$storage_status" -ne 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Active
+STORYOS_STORAGE_UPGRADE=from $source_count files to $source_count files" ]; then
+    echo "The package did not take the upgrade edge from another route catalog: $storage_status $storage_output" >&2
+    exit 1
+  fi
+  baseline_path=crates/storyos-adapter-postgres/migrations/0001_release_1_baseline.sql
+  baseline_checksum=$(provider_psql -c "SELECT checksum FROM storyos.migration_phase_checksums
+    WHERE source_path = '$baseline_path'")
+  provider_psql -c "UPDATE storyos.migration_phase_checksums
+    SET checksum = 'sha256:1111111111111111111111111111111111111111111111111111111111111111'
+    WHERE source_path = '$baseline_path'" >/dev/null
+  changed_state=$(provider_ledger_state)
+  run_provider_storage
+  if [ "$storage_status" -eq 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Refused
+STORYOS_STORAGE_ACTIVATION_REASON=identity_mismatch" ]; then
+    echo "The package did not refuse a changed checksum of a recorded file: $storage_status $storage_output" >&2
+    exit 1
+  fi
+  if [ "$(provider_ledger_state)" != "$changed_state" ]; then
+    echo "The refusal of a changed checksum changed the proof or the ledger" >&2
+    exit 1
+  fi
+  provider_psql -c "UPDATE storyos.migration_phase_checksums SET checksum = '$baseline_checksum'
+    WHERE source_path = '$baseline_path'" >/dev/null
+  run_provider_storage
+  if [ "$storage_status" -ne 0 ] || [ "$storage_output" != "STORYOS_STORAGE_ACTIVATION=Active" ]; then
+    echo "The package did not accept its identity after the upgrade: $storage_status $storage_output" >&2
+    exit 1
+  fi
+  upgrade_state=$(provider_psql -c "SELECT (SELECT count(*) FROM storyos.schema_migrations)::text || '/' ||
+      (SELECT string_agg(title, ',') FROM storyos.projects) || '/' ||
+      COALESCE(to_regclass('storyos.passage_vectors')::text, 'absent')")
+  if [ "$upgrade_state" != "4/Empty Novel/storyos.passage_vectors" ]; then
+    echo "The upgraded provider database has not the attempts, the Project, or the vector table: $upgrade_state" >&2
+    exit 1
+  fi
+  if [ "$(docker exec "$provider_container" psql -X -v ON_ERROR_STOP=1 -At \
+    "postgresql://storyos_runtime:runtime@127.0.0.1:5432/postgres" -c "SELECT current_user")" != storyos_runtime ]; then
+    echo "The password of the runtime role does not work after the upgrade" >&2
+    exit 1
+  fi
 }
 
 # Runs the exact-dist journeys $1... with the order of the arguments, each file one time. The Stage 2
@@ -775,11 +843,12 @@ oracle_container="storyos-storage-oracle-$$"
 activation_container="storyos-storage-activation-$$"
 legacy_activation_container="storyos-storage-activation-legacy-$$"
 provider_container="storyos-storage-provider-$$"
+provider_upgrade_container="storyos-storage-provider-upgrade-$$"
 export CARGO_NET_OFFLINE=true
 cleanup() {
   stop_exact_dist_server
   docker rm -fv "$container" "$oracle_container" "$activation_container" \
-    "$legacy_activation_container" "$provider_container" >/dev/null 2>&1 || true
+    "$legacy_activation_container" "$provider_container" "$provider_upgrade_container" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 trap 'exit 130' INT

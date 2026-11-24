@@ -22,6 +22,7 @@ No database holds data. [ADR 0022](0022-prefer-widely-validated-hosted-infrastru
 - The build script lists the migrations directory, sorts the files by name, computes the LF-normalized SHA-256 of each file, and embeds each file. The migration chain digest is the SHA-256 of the ordered path and checksum pairs. The catalog identifier is the constant `storyos.persistence.release-1`. The ledger keeps its three tables: one `schema_migrations` row, four `migration_phases` rows from constants of the adapter, and one `migration_phase_checksums` row for each embedded file.
 - The faulted rollback of the project-scope script injects its fault after the first table of the baseline, inside the one bootstrap transaction.
 - The activation state machine of ADR 0020 does not change. `storyos-storage` activates an empty installation or accepts an exact already-active identity. No upgrade edge exists.
+- [ADR 0104](0104-run-the-personal-instance-of-the-author-on-the-hosted-topology-with-a-proxy-password-the-model-key-on-the-server-and-a-frozen-baseline.md) section 4 amends this section: the baseline is frozen, the ledger records each attempt, and `storyos-storage` has one upgrade edge.
 - The rule for the next squash: while no database that holds data exists, the coordinator can squash the baseline again at each Stage release, and a ticket can edit the baseline file directly. When the first database that holds data exists, the baseline freezes, and each change is one forward migration.
 
 ### 2. Closed lists as domains
