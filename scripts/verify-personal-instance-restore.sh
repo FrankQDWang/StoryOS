@@ -3,8 +3,8 @@
 #
 # It activates a new database with storyos-storage of target/release-package, writes one Project with one Chapter
 # through the packaged Server, runs deploy/personal-instance/backup.sh, runs restore.sh into a second new
-# database, starts the packaged Server on it with no run of storyos-storage, and reads the Chapter with the same
-# text. The two scripts run in a container of the PostgreSQL image, which has psql and pg_dump of PostgreSQL 17.
+# database of the provider image (its admin login is not a superuser), starts the packaged Server on it with no run
+# of storyos-storage, and reads the Chapter with the same text. The two scripts run in a container of the PostgreSQL image, which has psql and pg_dump of PostgreSQL 17.
 set -eu
 repository_root=$(cd "$(dirname "$0")/.." && pwd)
 . "$repository_root/scripts/lib/controlled-postgres.sh"
@@ -86,7 +86,7 @@ dump=$(cd "$work/backups" && ls storyos-*.dump)
 [ "$(printf '%s\n' "$dump" | wc -l | tr -d ' ')" = 1 ] || { echo "backup.sh did not write one dump" >&2; exit 1; }
 echo "backup.sh wrote $dump"
 
-start_postgres "$drill-b"
+start_postgres "$drill-b" "$storyos_provider_postgres_image"
 run_script "$drill-b" /deploy/restore.sh "/backups/$dump"
 start_server "$drill-b"
 read_text=$(node "$repository_root/scripts/personal-instance-chapter.mjs" read "$server_url" drill-session $ids)

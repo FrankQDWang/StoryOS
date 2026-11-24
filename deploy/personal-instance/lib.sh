@@ -94,13 +94,13 @@ database_url() {
 use_admin_connection() {
   PGPASSWORD=$(read_secret database-admin-password)
   PGHOST=$STORYOS_DATABASE_HOST PGPORT=$STORYOS_DATABASE_PORT PGDATABASE=$STORYOS_DATABASE_NAME
-  PGUSER=$STORYOS_DATABASE_ADMIN_USER PGSSLMODE=disable
+  PGUSER=$STORYOS_DATABASE_ADMIN_USER PGSSLMODE=disable PGCONNECT_TIMEOUT=30
   if [ "$STORYOS_DATABASE_TLS" = require ]; then
     PGSSLMODE=verify-full
     PGSSLROOTCERT=system
     export PGSSLROOTCERT
   fi
-  export PGPASSWORD PGHOST PGPORT PGDATABASE PGUSER PGSSLMODE
+  export PGPASSWORD PGHOST PGPORT PGDATABASE PGUSER PGSSLMODE PGCONNECT_TIMEOUT
 }
 
 admin_psql() {
@@ -131,18 +131,19 @@ install_release() {
   printf '%s\n' "$release"
 }
 
-# Runs storyos-storage of the package directory $1. The admin URL goes only into the environment of that process.
+# Runs storyos-storage of the package directory $1 for at most 10 minutes. The admin URL goes only into the
+# environment of that process.
 run_storage() {
   password=$(read_secret database-admin-password)
   url=$(database_url "$STORYOS_DATABASE_ADMIN_USER" "$password")
-  result=$(STORYOS_STORAGE_ADMIN_URL=$url "$1/storyos-storage") || result="${result:-} (exit $?)"
+  result=$(STORYOS_STORAGE_ADMIN_URL=$url timeout 600 "$1/storyos-storage") || result="${result:-} (exit $?)"
   printf '%s\n' "$result"
   [ "$result" = STORYOS_STORAGE_ACTIVATION=Active ]
 }
 
 wait_for_server() {
   attempt=0
-  until curl -fsS -o /dev/null http://127.0.0.1:3000/api/v1/protocol 2>/dev/null; do
+  until curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:3000/api/v1/protocol 2>/dev/null; do
     attempt=$((attempt + 1))
     [ "$attempt" -lt 60 ] || fail "the Server does not answer on 127.0.0.1:3000. Read journalctl -u storyos-server"
     sleep 1
