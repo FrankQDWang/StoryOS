@@ -101,6 +101,8 @@ interface ProjectEditorStatus {
 interface ProjectEditorViewProps extends ProjectReadyViewProps {
   tree: GetManuscriptTreeResponse | undefined;
   treeRead: "reading" | "settled";
+  /** The number of the last tree read of the workspace. */
+  treeReads: { readonly current: number };
   handle: { current: ProjectEditorHandle | undefined };
   onStatus: (status: ProjectEditorStatus) => void;
 }
@@ -242,7 +244,8 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
           </div>
         </>
       )}
-      editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeRead={treeRead} handle={editor}
+      editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeRead={treeRead} treeReads={treeReads}
+        handle={editor}
         onStatus={setStatus} />}
     />
   );
@@ -251,7 +254,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 /** The editor part of the workspace. It starts again with each new Chapter, writer, or base of the Editor Session. */
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
-  proposalLocatorStore, writingTimers, tree, treeRead, handle, onStatus,
+  proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -311,10 +314,17 @@ function ProjectEditorView({
     if (projection.save_state !== "needs_attention") setEditorFailure(undefined);
   }), [writing, currentChapterId]);
 
+  // A tree read of the workspace that starts during an open can be later than the tree of the open. Then the open gives
+  // no tree, so it cannot replace the later tree, and the workspace reads the tree again (#1876).
+  const opening = async (open: () => Promise<ControlledProjectState>): Promise<ControlledProjectState> => {
+    const sequence = treeReads.current;
+    const next = await open();
+    return next.kind !== "project-ready" || treeReads.current === sequence ? next : { ...next, tree: undefined };
+  };
   // A reopen after a settled command of this page reads the Project and the list of Projects, then the Chapter and the
   // Editor Session. It does not read the protocol profile again.
-  const reopen = () => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
-    opened: { profile: state.profile, project: state.project } });
+  const reopen = () => opening(() => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
+    opened: { profile: state.profile, project: state.project } }));
 
   // A read-only editor has no writing controller and no input to wait for.
   const runWhenQuiet = <Result,>(condition: "journaled" | "settled",
@@ -576,8 +586,8 @@ function ProjectEditorView({
               === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
         onAccepted={async (settled) => {
           // A decision with no settled response opens the Project with each check of the first open.
-          onReopened(await (settled ? reopen()
-            : openControlledProject({ baseUrl, projectId: state.project.project.project_id, fetchImpl, cryptoImpl })));
+          onReopened(await (settled ? reopen() : opening(() => openControlledProject({ baseUrl,
+            projectId: state.project.project.project_id, fetchImpl, cryptoImpl }))));
         }}
         onUndoCurrentChapter={(chapterId) => {
           // An Undo of a chapter switch moves the editor back to the earlier Current Chapter.
