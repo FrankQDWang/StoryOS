@@ -45,10 +45,12 @@ pub fn check_database_url(url: &str) -> Result<(), DatabaseUrlRefusal> {
         };
     }
     // The TLS connector verifies the certificate against the host name, and an empty name has none.
-    if config
-        .get_hosts()
-        .iter()
-        .any(|host| matches!(host, Host::Tcp(name) if name.is_empty()))
+    // A URL with neither host nor hostaddr has no name too.
+    let hosts = config.get_hosts();
+    if (hosts.is_empty() && config.get_hostaddrs().is_empty())
+        || hosts
+            .iter()
+            .any(|host| matches!(host, Host::Tcp(name) if name.is_empty()))
     {
         return Err(DatabaseUrlRefusal::TlsHostNameMissing);
     }

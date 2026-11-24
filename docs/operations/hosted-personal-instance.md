@@ -15,7 +15,7 @@ The repository is public. Do not write the address of the VPS, the Host, the ref
 | `/etc/storyos/secrets/` | One file for each secret. |
 | `/etc/storyos/proxy-auth.caddy` | The user name of the proxy and the hash of its password, which the Caddyfile imports. It belongs to `caddy`. |
 | `/etc/storyos/server.env` | The settings of the Server that systemd reads: the runtime URL, the session, and the challenge secret. |
-| `/etc/storyos/worker.env` | The env file of the Worker (`STORYOS_ENV_FILE`, ADR 0050): the runtime URL, the model key, and the web search key. It belongs to the service user `storyos`. |
+| `/etc/storyos/worker.env` | The env file of the Worker (`STORYOS_ENV_FILE`, ADR 0050): the runtime URL, the model key, and the web search key. It belongs to the user `storyos-worker` of the Worker. The Server runs as the user `storyos`, which cannot read it. |
 | `/etc/storyos/user-id` | The ID of the one User. |
 | `/var/backups/storyos/` | The daily dumps of the last 14 days. |
 
@@ -100,7 +100,7 @@ The dump is a backup of the whole instance, and not Project Restore. The dumps s
 
 ## The restore
 
-`restore.sh` loads one dump into an empty database: the roles of `0000_roles.sql`, the schema `extensions` with `vector`, the dump, the grants outside the schema `storyos`, and the password of the runtime role. The dump holds the activation proof. Thus the Server of the same package starts with no run of `storyos-storage`.
+`restore.sh` loads one dump into a database of a new database project. The database must have no schema `storyos`, and it must have all or none of the four roles of `0000_roles.sql`. The script does not examine other relations, because the dump loads only the schema `storyos`. It loads: the roles of `0000_roles.sql`, the schema `extensions` with `vector`, the dump, the grants outside the schema `storyos`, and the password of the runtime role. The dump holds the activation proof. Thus the Server of the same package starts with no run of `storyos-storage`.
 
 1. **(author)** Make a new database project. The roles of PostgreSQL are in the cluster, so the database must be in a new project.
 2. **(author)** Stop the services: `sudo systemctl stop storyos-worker storyos-server`.

@@ -8,7 +8,9 @@ set -eu
 etc=${STORYOS_ETC:-/etc/storyos}
 backup_dir=${STORYOS_BACKUP_DIR:-/var/backups/storyos}
 opt=/opt/storyos
-service_user=storyos
+# The service users of the Server and of the Worker. Only the user of the Worker reads worker.env (ADR 0104 section 3).
+server_user=storyos
+worker_user=storyos-worker
 # The secrets that the author gives, and the secrets that secrets.sh makes.
 asked_secrets="database-admin-password proxy-password model-key web-search-key"
 made_secrets="challenge-secret session-token runtime-password"

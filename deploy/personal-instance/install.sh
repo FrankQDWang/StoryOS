@@ -48,9 +48,11 @@ if ! pg_dump --version 2>/dev/null | grep -q ' 17\.'; then
   apt_install postgresql-client-17
 fi
 
-if ! id "$service_user" >/dev/null 2>&1; then
-  useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin "$service_user"
-fi
+for user in "$server_user" "$worker_user"; do
+  if ! id "$user" >/dev/null 2>&1; then
+    useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin "$user"
+  fi
+done
 install -d -m 755 "$opt" "$opt/releases" "$opt/deploy"
 install -d -m 700 "$backup_dir" /var/lib/storyos
 # A run that stops after a change and before its reloads leaves this marker, so that the next run does them. The
@@ -106,8 +108,8 @@ write_file "$etc/server.env" root 600 "$(printf "%s='%s'\n" \
 restart=$((restart + changed))
 model_key=$(read_secret model-key)
 web_search_key=$(read_secret web-search-key)
-# Only the Worker reads this file (ADR 0050), so it belongs to the service user.
-write_file "$etc/worker.env" "$service_user" 600 "$(printf "%s='%s'\n" \
+# Only the Worker reads this file (ADR 0050), so it belongs to the user of the Worker.
+write_file "$etc/worker.env" "$worker_user" 600 "$(printf "%s='%s'\n" \
   STORYOS_DATABASE_URL "$runtime_url" \
   STORYOS_AGENT_PLAN_API_KEY "$model_key" \
   STORYOS_EXA_API_KEY "$web_search_key")"
