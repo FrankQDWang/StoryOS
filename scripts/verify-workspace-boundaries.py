@@ -61,9 +61,11 @@ if any("storyos-worker-bin" in names for names in dependencies.values()):
     problems.append("a package depends on the storyos-worker-bin composition root")
 if any(tool_crates & names for names in dependencies.values()):
     problems.append("a package depends on a repository tool crate")
-transport = {"reqwest", "hyper", "rustls", "native-tls", "openssl"}
+# ADR 0104 section 5: the adapter has the rustls TLS of the PostgreSQL connection, and no HTTP client and no
+# other TLS stack.
+transport = {"reqwest", "hyper", "native-tls", "openssl"}
 if transport & closure("storyos-adapter-postgres"):
-    problems.append("storyos-adapter-postgres depends on an HTTP or TLS client")
+    problems.append("storyos-adapter-postgres depends on an HTTP client or another TLS stack")
 # ADR 0089: only the Server decodes the YAML frontmatter of a SkillPackage.
 for name in dependencies:
     if name != "storyos-server" and "yaml-rust2" in closure(name):

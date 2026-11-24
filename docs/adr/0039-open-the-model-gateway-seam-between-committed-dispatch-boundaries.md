@@ -81,6 +81,7 @@ The adapter resolves the Credential Reference at step 2, before the dispatch cla
 - `storyos-adapter-fake-destination` contains the adapter for the Contract-Faithful Fake Destination. It takes the scripted fake planner from `storyos-core`. It also takes the recovery observations that the PostgreSQL adapter now writes in advance. It derives each result from the request and the reference. It keeps no process memory that a restart can lose.
 - `storyos-adapter-volcengine-responses` contains the Agent Plan Responses adapter. It is the only crate that depends on an HTTP client and TLS.
 - `storyos-adapter-postgres` keeps SQL and persistence. It gets no HTTP, TLS, or credential dependency.
+  [ADR 0104](0104-run-the-personal-instance-of-the-author-on-the-hosted-topology-with-a-proxy-password-the-model-key-on-the-server-and-a-frozen-baseline.md) section 5 amends this rule: the adapter gets the TLS dependency of the PostgreSQL connection, and still no HTTP and no credential dependency.
 - The `storyos-worker` library contains the Worker loop. It does not depend on a Provider adapter.
 - One binary package composes the Worker loop with the PostgreSQL store, the fake and Volcengine adapters, and the credential resolver. No other package depends on that binary package.
 - The Worker binary moves into that package and keeps its name. For each request, it uses the adapter that the Model Registration binds. Thus process tests and the real route use the same Worker binary.

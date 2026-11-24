@@ -17,12 +17,14 @@ const PREFIX: &str = "STORYOS_";
 const DESTINATION_VARIABLE: &str = "STORYOS_MODEL_DESTINATION";
 const REAL_DESTINATION: &str = "volcengine_agent_plan";
 
-/// A refusal at startup. It names each wrong or missing variable, and the env file that the
-/// settings read, if any. It holds no value.
+/// A refusal at startup. It names each wrong or missing variable, the env file that the
+/// settings read, if any, and the rule that the value breaks, if the binary gives one. It holds
+/// no value.
 #[derive(Debug, Eq, PartialEq)]
 pub struct SettingsError {
     variables: Vec<String>,
     env_file: Option<PathBuf>,
+    rule: Option<&'static str>,
 }
 
 impl SettingsError {
@@ -31,6 +33,15 @@ impl SettingsError {
         Self {
             variables: vec![variable.to_owned()],
             env_file: env_file.map(Path::to_path_buf),
+            rule: None,
+        }
+    }
+
+    /// The same refusal with the rule that the value breaks.
+    pub fn with_rule(self, rule: &'static str) -> Self {
+        Self {
+            rule: Some(rule),
+            ..self
         }
     }
 }
@@ -43,8 +54,12 @@ impl fmt::Display for SettingsError {
             self.variables.join(", ")
         )?;
         match &self.env_file {
-            Some(path) => write!(formatter, " (env file: {})", path.display()),
-            None => write!(formatter, " (no env file)"),
+            Some(path) => write!(formatter, " (env file: {})", path.display())?,
+            None => write!(formatter, " (no env file)")?,
+        }
+        match self.rule {
+            Some(rule) => write!(formatter, ". The rule: {rule}"),
+            None => Ok(()),
         }
     }
 }
@@ -119,6 +134,7 @@ pub fn load_from<T: DeserializeOwned>(
                 .map(|error| variable_name(&error))
                 .collect(),
             env_file: env_file.clone(),
+            rule: None,
         })?;
     Ok(Loaded { settings, env_file })
 }

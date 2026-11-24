@@ -48,11 +48,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = settings.database_url.clone().ok_or_else(|| {
         "STORYOS_DATABASE_URL is required for Release 1 Storage Activation".to_owned()
     })?;
-    if !storyos_adapter_postgres::database_url_parses(database_url.expose_secret()) {
+    if let Err(refusal) = storyos_adapter_postgres::check_database_url(database_url.expose_secret())
+    {
         return Err(storyos_settings::SettingsError::new(
             "STORYOS_DATABASE_URL",
             /*env_file*/ None,
         )
+        .with_rule(refusal.rule())
         .into());
     }
     let model_destination = settings.model_destination()?;

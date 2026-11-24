@@ -65,7 +65,11 @@ pub(crate) async fn require_release1_storage_activation_proof_on(
         Err(StorageActivationError::Unavailable(source)) => {
             return Err(StorageActivationProofError::Unavailable(source));
         }
-        Err(StorageActivationError::AdminUrlMissing | StorageActivationError::Refused { .. }) => {
+        Err(
+            StorageActivationError::AdminUrlMissing
+            | StorageActivationError::AdminUrlInvalid(_)
+            | StorageActivationError::Refused { .. },
+        ) => {
             return Err(StorageActivationProofError::MissingOrInactive);
         }
     };
