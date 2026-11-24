@@ -75,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 },
             },
         },
-        observer: contract_fault_holds::ContractFaultHolds::from_env(),
+        observer: contract_fault_holds::ContractFaultHolds::from_env()?,
         tools: storyos_adapter_mcp_client::McpClient {
             resolver: credential::SettingsCredentials {
                 agent_plan_api_key: None,
