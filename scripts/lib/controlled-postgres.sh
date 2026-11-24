@@ -1,8 +1,8 @@
 # Source after setting repository_root.
 
-# The PostgreSQL image with pgvector of the record of S7-C1 (ADR 0095), with its exact tag and
+# The PostgreSQL 17 image with pgvector (ADR 0095, ADR 0104 section 5), with its exact tag and
 # digest. Each script that starts PostgreSQL reads this variable.
-storyos_postgres_image=pgvector/pgvector:0.8.7-pg16-bookworm@sha256:484e838076e04939d27d3e176e91c86eea96236126023be8d3059761122e579f
+storyos_postgres_image=pgvector/pgvector:0.8.7-pg17-bookworm@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
 # The C.UTF-8 locale keeps the text order of the earlier Alpine image (the record, "Text order").
 storyos_postgres_initdb_args=--locale=C.UTF-8
 
