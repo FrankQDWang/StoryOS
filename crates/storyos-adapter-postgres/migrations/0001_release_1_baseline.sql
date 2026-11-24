@@ -2962,7 +2962,7 @@ CREATE TABLE storyos.recovery_visibility_proofs (
 
 GRANT SELECT,INSERT ON TABLE storyos.recovery_visibility_proofs TO storyos_restore;
 
--- The superuser owns this SECURITY DEFINER function.
+-- The login that runs the activation owns this SECURITY DEFINER function.
 RESET ROLE;
 
 CREATE FUNCTION storyos.pass_recovery_visibility_proof(p_recovery_copy_id uuid, p_restore_proof_id uuid, p_visibility_proof_id uuid, p_isolated_target_identity text, p_chain_sha256 text, p_required_wal_member text, p_recovery_target_lsn text, p_method text, p_catalog_identity text) RETURNS text

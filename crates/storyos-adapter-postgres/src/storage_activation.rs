@@ -182,7 +182,10 @@ async fn run_state_machine(
             Err(refused(StorageActivationRefusal::IdentityMismatch))
         };
     }
-    if database_has_user_state(client).await? {
+    if crate::storage_empty_check::database_has_user_state(client)
+        .await
+        .map_err(unavailable)?
+    {
         return Err(refused(StorageActivationRefusal::NonEmptyWithoutLedger));
     }
     client.batch_execute("BEGIN").await.map_err(unavailable)?;
@@ -352,28 +355,6 @@ pub(crate) async fn read_proof(
         route_catalog_id: row.get(7),
         route_catalog_sha256: row.get(8),
     }))
-}
-
-async fn database_has_user_state(
-    client: &tokio_postgres::Client,
-) -> Result<bool, StorageActivationError> {
-    Ok(client
-        .query_one(
-            "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'storyos')
-                    OR EXISTS (
-                      SELECT 1
-                      FROM pg_class AS cls
-                      JOIN pg_namespace AS ns ON ns.oid = cls.relnamespace
-                      WHERE ns.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-                        AND ns.nspname NOT LIKE 'pg_temp_%'
-                        AND ns.nspname NOT LIKE 'pg_toast_temp_%'
-                        AND cls.relkind IN ('r', 'p', 'v', 'm', 'S')
-                    )",
-            &[],
-        )
-        .await
-        .map_err(unavailable)?
-        .get(0))
 }
 
 pub(crate) fn packaged_identity() -> PackagedIdentity {
