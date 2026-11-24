@@ -80,6 +80,8 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   onProposalOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onReopened: (state: ControlledProjectState) => void;
   onLocalRecoveryContinued: (state: ControlledProjectState) => void;
+  /** Holds a settled rename. It is false when the workspace holds a later revision, and the view keeps its values. */
+  onRenamed: (projectId: string, title: string, revision: string) => boolean;
 }
 
 /** The commands of the editor part that the contents list and the assistant panel start. */
@@ -134,7 +136,7 @@ function editorParagraphs(
  * assistant panel stay on the screen, and only the editor part starts again with the new Chapter or base (#1876).
  */
 function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { editorKey: string }) {
-  const { state, baseUrl, fetchImpl, cryptoImpl } = props;
+  const { state, baseUrl, fetchImpl, cryptoImpl, onRenamed } = props;
   const projectId = state.project.project.project_id;
   const editor = useRef<ProjectEditorHandle | undefined>(undefined);
   const [title, setTitle] = useState(state.project.project.title);
@@ -149,6 +151,9 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
     setShown(state);
     setTitle(state.project.project.title);
     setRevision(state.revision);
+    // The new editor part starts with the tree of the new state, or it waits for the tree read of the new state.
+    if (state.tree === undefined) setTreeRead("reading");
+    else setTree(state.tree);
     setStatus((current) => ({ ...current, selectedChapterId: state.chapter.chapter.chapter_id }));
   }
   const currentChapterId = state.project.project.open.kind === "current_chapter"
@@ -172,7 +177,6 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
       setTreeRead("settled");
       return;
     }
-    setTreeRead("reading");
     readTree();
   }, [baseUrl, fetchImpl, projectId, state]);
   // A Chapter that the author creates, moves, renames, or removes changes the Chapter part of the draft labels.
@@ -207,6 +211,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
                 fetchImpl={fetchImpl}
                 cryptoImpl={cryptoImpl}
                 onRenamed={(nextTitle, nextRevision) => {
+                  if (!onRenamed(projectId, nextTitle, nextRevision)) return;
                   setTitle(nextTitle);
                   setRevision(nextRevision);
                 }}
@@ -771,6 +776,7 @@ function EmptyProjectReadyView({
   cryptoImpl,
   onVolumeCreated,
   onChapterCreated,
+  onRenamed,
 }: {
   project: GetProjectResponse;
   revision: string;
@@ -780,9 +786,17 @@ function EmptyProjectReadyView({
   cryptoImpl: Crypto;
   onVolumeCreated: () => void;
   onChapterCreated: () => void;
+  onRenamed: (projectId: string, title: string, revision: string) => boolean;
 }) {
   const [title, setTitle] = useState(project.project.title);
   const [revision, setRevision] = useState(openedRevision);
+  // An open that stays on an Empty Project keeps this view, so the view takes the title and the revision of each state.
+  const [shown, setShown] = useState(project);
+  if (shown !== project) {
+    setShown(project);
+    setTitle(project.project.title);
+    setRevision(openedRevision);
+  }
   const [volumeRemoval, setVolumeRemoval] = useState<string>();
   const [addressNotice, setAddressNotice] = useState<string>();
   // A Project with no Chapter has no Chapter to open from the address.
@@ -807,6 +821,7 @@ function EmptyProjectReadyView({
               fetchImpl={fetchImpl}
               cryptoImpl={cryptoImpl}
               onRenamed={(nextTitle, nextRevision) => {
+                if (!onRenamed(project.project.project_id, nextTitle, nextRevision)) return;
                 setTitle(nextTitle);
                 setRevision(nextRevision);
               }}
@@ -1006,10 +1021,39 @@ function ProtectedReadyView({
   );
 }
 
+/** The Project, its title, and its revision of a state that opened a Project. */
+function projectName(state: ControlledProjectState) {
+  return state.kind === "project-ready" || state.kind === "empty-project-ready"
+    ? { projectId: state.project.project.project_id, title: state.project.project.title, revision: state.revision }
+    : undefined;
+}
+
 function Stage1View({
   state, baseUrl, fetchImpl, cryptoImpl, writingTimers, setBootState,
 }: Stage1ViewProps & { setBootState: (kind: string) => void }) {
   const [current, setCurrent] = useState(state);
+  // The Project title and revision that the workspace holds: from the last taken state or a settled rename. Only a
+  // rename changes the revision, by 1, so a state with a lower revision is earlier and keeps the held values (#1888).
+  const held = useRef(projectName(state));
+  const take = (next: ControlledProjectState) => {
+    const name = held.current;
+    // Equal also keeps them: an open takes the title from the Project read and the revision from the list read.
+    if ((next.kind === "project-ready" || next.kind === "empty-project-ready") && name !== undefined
+      && name.projectId === next.project.project.project_id && BigInt(next.revision) <= BigInt(name.revision)) {
+      setCurrent({ ...next, revision: name.revision,
+        project: { ...next.project, project: { ...next.project.project, title: name.title } } });
+      return;
+    }
+    held.current = projectName(next);
+    setCurrent(next);
+  };
+  // A late rename response of an earlier revision, or of another Project, changes nothing.
+  const renamed = (projectId: string, title: string, revision: string) => {
+    const name = held.current;
+    if (name === undefined || name.projectId !== projectId || BigInt(revision) < BigInt(name.revision)) return false;
+    held.current = { projectId, title, revision };
+    return true;
+  };
   const [editorGeneration, setEditorGeneration] = useState(0);
   const [proposalFocus, setProposalFocus] = useState<ProposalFocus>();
   const [proposalNotice, setProposalNotice] = useState<string>();
@@ -1045,9 +1089,10 @@ function Stage1View({
         proposalNotice={proposalNotice}
         proposalLocatorStore={proposalLocatorStore.current}
         writingTimers={writingTimers}
-        onProposalOpened={(next, focus, notice) => { setProposalFocus(focus); setProposalNotice(notice); setCurrent(next); }}
-        onReopened={setCurrent}
-        onLocalRecoveryContinued={(next) => { setCurrent(next); setEditorGeneration((value) => value + 1); }}
+        onProposalOpened={(next, focus, notice) => { setProposalFocus(focus); setProposalNotice(notice); take(next); }}
+        onReopened={take}
+        onLocalRecoveryContinued={(next) => { take(next); setEditorGeneration((value) => value + 1); }}
+        onRenamed={renamed}
       />
     );
   }
@@ -1066,7 +1111,7 @@ function Stage1View({
             projectId: current.project.project.project_id,
             fetchImpl,
             cryptoImpl,
-          }).then(setCurrent);
+          }).then(take);
         }}
         onChapterCreated={() => {
           void openControlledProject({
@@ -1074,8 +1119,9 @@ function Stage1View({
             projectId: current.project.project.project_id,
             fetchImpl,
             cryptoImpl,
-          }).then(setCurrent);
+          }).then(take);
         }}
+        onRenamed={renamed}
       />
     );
   }
@@ -1088,7 +1134,7 @@ function Stage1View({
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}
         cryptoImpl={cryptoImpl}
-        setCurrent={setCurrent}
+        setCurrent={take}
       />
     );
   }
