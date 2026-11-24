@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrowserContext } from "playwright";
+import type { BrowserContext, Locator } from "playwright";
 import { expect } from "playwright/test";
 
 import { getSubrun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -101,6 +101,7 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
       await expect(steps).toHaveText(STEPS);
       for (const [index, state] of states.entries()) {
         await expect(steps.nth(index)).toBeVisible();
+        await shown(steps.nth(index).locator("span:not(.assistant-plan-mark)"), STEPS[index]!);
         await expect(steps.nth(index)).toHaveAttribute("data-plan-step-status", state);
         await expect(steps.nth(index).getByRole("img", { name: MARKS[state] })).toBeVisible();
       }
@@ -123,8 +124,8 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
     release = holdFrom(2);
     const card = turn.locator("[data-assistant-subrun]");
     await expect(card).toHaveAttribute("data-subrun-state", "working");
-    await expect(card.locator(".assistant-subrun-state")).toHaveText("正在通读前文");
-    await expect(card.locator(".assistant-subrun-title")).toHaveText("读当前章");
+    await shown(card.locator(".assistant-subrun-state"), "正在通读前文");
+    await shown(card.locator(".assistant-subrun-title"), "读当前章");
     const working = (await inspectRun(server.baseUrl, setup, delegated.runId)).subruns?.[0];
     assert.ok(working !== undefined && working.state === "working");
     const brief = (await getSubrun({ baseUrl: server.baseUrl, fetchImpl: setup.fetchImpl, projectId: project,
@@ -133,11 +134,19 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
     const drawer = page.getByRole("dialog", { name: "子任务记录" });
     const state = drawer.locator("[data-subrun-drawer-state]");
     const sections = drawer.locator("section");
+    // The author sees the heading and each line of each section of the drawer, in order.
+    const shownSections = async (rows: string[][]) => {
+      await expect(sections).toHaveCount(rows.length);
+      for (const [index, row] of rows.entries()) {
+        await expect(sections.nth(index)).toBeVisible();
+        const lines = sections.nth(index).locator(":scope > *");
+        await expect(lines).toHaveCount(row.length);
+        for (const [line, text] of row.entries()) await shown(lines.nth(line), text);
+      }
+    };
     await expect(drawer).toBeVisible();
-    await expect(state).toBeVisible();
-    await expect(state).toHaveText("进行中 · 第 1 步");
-    await expect(sections.first()).toBeVisible();
-    await expect(sections.first()).toHaveText(`指令${brief}`);
+    await shown(state, "进行中 · 第 1 步");
+    await shownSections([["指令", brief], ["过程"]]);
     const box = await drawer.boundingBox();
     assert.ok(box !== null && Math.round(box.x + box.width) === page.viewportSize()?.width);
     await release();
@@ -146,15 +155,15 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
     const subrun = await getSubrun({ baseUrl: server.baseUrl, fetchImpl: setup.fetchImpl, projectId: project,
       subrunId: working.subrun_id });
     assert.ok(subrun.state === "completed" && subrun.answer !== undefined);
-    await expect(state).toHaveText(`已完成 · ${subrun.step_count} 步`);
+    await shown(state, `已完成 · ${subrun.step_count} 步`);
     await expect(drawer).toBeVisible();
-    await expect(sections).toHaveText([`指令${brief}`, "过程读取 Chapter A", `结论${subrun.answer}`]);
-    for (const section of await sections.all()) await expect(section).toBeVisible();
+    await shownSections([["指令", brief], ["过程", "读取 Chapter A"], ["结论", subrun.answer]]);
     await page.keyboard.press("Escape");
     await expect(drawer).toHaveCount(0);
     await ended(delegated.runId);
     await expect(card).toHaveAttribute("data-subrun-state", "completed");
-    await expect(card.locator(".assistant-subrun-state")).toHaveText("已通读前文");
+    await shown(card.locator(".assistant-subrun-state"), "已通读前文");
+    await shown(card.locator(".assistant-subrun-title"), "读当前章");
     const delegatedAnswer = subrunRun.results?.[0];
     assert.ok(delegatedAnswer?.kind === "answer" && delegatedAnswer.text.includes(subrun.answer));
     await expect(turn.locator(".assistant-subruns + .assistant-result")).toHaveText(delegatedAnswer.text);
@@ -200,6 +209,12 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
   } finally {
     for (const close of started.reverse()) await close();
   }
+}
+
+/** The author sees `locator`, and it has exactly `text`. */
+async function shown(locator: Locator, text: string) {
+  await expect(locator).toBeVisible();
+  await expect(locator).toHaveText(text);
 }
 
 /** The text of the current Revision of a Chapter. */
