@@ -4,6 +4,7 @@ set -eu
 # The parts of make check-full after the steps of make check. scripts/check-lanes.py --project-scope runs each
 # part in a lane after the release package:
 #   scripts/verify-project-scope.sh activation      The storage activation checks.
+#   scripts/verify-project-scope.sh provider        The storage activation checks on the image of the hosted provider.
 #   scripts/verify-project-scope.sh journeys FILE...  The exact-dist journeys FILE, paths relative to apps/web.
 # The two modes of the recovery drill are scripts/verify-recovery-hold.sh.
 
@@ -481,6 +482,122 @@ run_activation_checks() {
   prove_bound_request_path_activation
 }
 
+# The privileges of the StoryOS objects: one line for each grant on the schema storyos and on each relation,
+# function, and type in it, with the default grants of PostgreSQL when the object has no ACL, and one line for each
+# membership in a storyos_* role that gives its rights (INHERIT or SET).
+storyos_privileges() {
+  docker exec -i "$1" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At <<'SQL'
+WITH object_acl AS (
+  SELECT 'schema storyos' AS object, nspowner AS owner, COALESCE(nspacl, acldefault('n'::"char", nspowner)) AS acl
+    FROM pg_namespace WHERE nspname = 'storyos'
+  UNION ALL
+  SELECT 'relation ' || oid::regclass::text, relowner,
+         COALESCE(relacl, acldefault((CASE WHEN relkind = 'S' THEN 's' ELSE 'r' END)::"char", relowner))
+    FROM pg_class WHERE relnamespace = 'storyos'::regnamespace AND relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+  UNION ALL
+  SELECT 'function ' || oid::regprocedure::text, proowner, COALESCE(proacl, acldefault('f'::"char", proowner))
+    FROM pg_proc WHERE pronamespace = 'storyos'::regnamespace
+  UNION ALL
+  SELECT 'type ' || oid::regtype::text, typowner, COALESCE(typacl, acldefault('T'::"char", typowner))
+    FROM pg_type WHERE typnamespace = 'storyos'::regnamespace
+)
+SELECT object || ' owner=' || pg_get_userbyid(owner) || ' grantee='
+       || CASE WHEN grant_row.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(grant_row.grantee) END
+       || ' ' || grant_row.privilege_type || CASE WHEN grant_row.is_grantable THEN ' grantable' ELSE '' END
+  FROM object_acl, LATERAL aclexplode(acl) AS grant_row
+UNION
+SELECT 'membership ' || pg_get_userbyid(roleid) || ' member=' || pg_get_userbyid(member)
+       || CASE WHEN inherit_option THEN ' inherit' ELSE '' END || CASE WHEN set_option THEN ' set' ELSE '' END
+  FROM pg_auth_members
+ WHERE (inherit_option OR set_option)
+   AND (pg_get_userbyid(roleid) LIKE 'storyos\_%' OR pg_get_userbyid(member) LIKE 'storyos\_%')
+ORDER BY 1;
+SQL
+}
+
+provider_psql() {
+  docker exec -i "$provider_container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At "$@"
+}
+
+provider_storage_output() {
+  STORYOS_STORAGE_ADMIN_URL=$(postgres_admin_url "$provider_container") "$storage_bin" 2>&1 || true
+}
+
+# The Storage Activation on a database of the hosted provider (ADR 0104 section 5). Each psql call of the provider
+# container uses its admin login postgres, which is not a superuser, except the one that makes a provider relation.
+run_provider_activation_checks() {
+  start_postgres "$provider_container" "$storyos_provider_postgres_image"
+  if [ "$(provider_psql -c "SELECT rolsuper::text FROM pg_roles WHERE rolname = current_user")" != false ]; then
+    echo "The admin login of the provider image is a superuser" >&2
+    exit 1
+  fi
+  echo "Refusing a provider database with a relation of the admin login in public or in a provider schema"
+  for relation in public.t extensions.t; do
+    provider_psql -c "CREATE TABLE $relation (id integer)" >/dev/null
+    refusal=$(provider_storage_output)
+    if [ "$refusal" != "STORYOS_STORAGE_ACTIVATION=Refused
+STORYOS_STORAGE_ACTIVATION_REASON=non_empty_without_ledger" ]; then
+      echo "storyos-storage did not refuse the relation $relation: $refusal" >&2
+      exit 1
+    fi
+    installed=$(provider_psql -c "SELECT COALESCE(to_regnamespace('storyos')::text, 'absent') || '/' ||
+      (SELECT count(*) FROM pg_roles WHERE rolname LIKE 'storyos\_%')::text")
+    if [ "$installed" != "absent/0" ]; then
+      echo "A refused activation installed StoryOS state: $installed" >&2
+      exit 1
+    fi
+    provider_psql -c "DROP TABLE $relation" >/dev/null
+  done
+  # The image has no relation in the schema storage. A hosted project has them, with the owner of the provider.
+  docker exec "$provider_container" psql -X -v ON_ERROR_STOP=1 -U supabase_admin -d postgres -c \
+    "CREATE TABLE storage.provider_objects (id integer);
+     ALTER TABLE storage.provider_objects OWNER TO supabase_storage_admin" >/dev/null
+  echo "Activating the provider database with its admin login"
+  for run in first second; do
+    activation=$(provider_storage_output)
+    if [ "$activation" != "STORYOS_STORAGE_ACTIVATION=Active" ]; then
+      echo "The $run activation of the provider database failed: $activation" >&2
+      exit 1
+    fi
+  done
+  # The admin login made the vector extension and the vector table, and it can change the login of the runtime
+  # role, as the SECURITY DEFINER function of the baseline does in a recovery.
+  vector_state=$(provider_psql -c "SELECT COALESCE(to_regclass('storyos.passage_vectors')::text, 'absent') || '/' ||
+    (SELECT extnamespace::regnamespace::text FROM pg_extension WHERE extname = 'vector')")
+  if [ "$vector_state" != "storyos.passage_vectors/extensions" ]; then
+    echo "The provider activation has no vector table in the schema extensions: $vector_state" >&2
+    exit 1
+  fi
+  provider_psql -c "BEGIN; ALTER ROLE storyos_runtime NOLOGIN; ALTER ROLE storyos_runtime LOGIN; ROLLBACK" >/dev/null
+  echo "Comparing the privileges of the StoryOS objects with a local activation"
+  start_postgres "$activation_container"
+  STORYOS_STORAGE_ADMIN_URL=$(postgres_admin_url "$activation_container") "$storage_bin" >/dev/null
+  provider_privileges=$(storyos_privileges "$provider_container")
+  if ! printf '%s\n' "$provider_privileges" | grep -x 'membership storyos_owner member=postgres inherit set' >/dev/null; then
+    echo "The privileges of the provider database have no membership of the admin login in storyos_owner" >&2
+    exit 1
+  fi
+  if [ "$provider_privileges" != "$(storyos_privileges "$activation_container")" ]; then
+    echo "The privileges of the StoryOS objects on the provider database are not those of a local database" >&2
+    exit 1
+  fi
+  # The grantees are the owner of the object, a storyos_* role, and PUBLIC, which has the defaults of PostgreSQL.
+  if printf '%s\n' "$provider_privileges" | grep -Ev \
+    '^(schema|relation|function|type) .* owner=([a-z_]+) grantee=(\2|storyos_[a-z]+|PUBLIC) |^membership storyos_owner member=postgres inherit set$'; then
+    echo "A role that is not a StoryOS role or the owner has a privilege on a StoryOS object" >&2
+    exit 1
+  fi
+  provider_psql -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
+  provider_psql < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+  provider_runtime=$(postgres_runtime_url "$provider_container")
+  echo "Binding the packaged Server on the provider database"
+  assert_packaged_server_binds "provider" "$provider_runtime"
+  echo "Running the Project Isolation tests on the provider database"
+  STORYOS_TEST_DATABASE_URL="$provider_runtime" \
+  STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$provider_container") \
+    cargo test --locked --workspace --all-features --test project_scope -- --ignored --nocapture
+}
+
 # Runs the exact-dist journeys $1... with the order of the arguments, each file one time. The Stage 2
 # AI-independent journeys run first, with a Server without a model destination. Vitest writes its report of each
 # run to $STORYOS_JOURNEY_REPORT-<run>.json, which scripts/check-lanes.py reads.
@@ -526,11 +643,12 @@ container="storyos-issue105-$$"
 oracle_container="storyos-storage-oracle-$$"
 activation_container="storyos-storage-activation-$$"
 legacy_activation_container="storyos-storage-activation-legacy-$$"
+provider_container="storyos-storage-provider-$$"
 export CARGO_NET_OFFLINE=true
 cleanup() {
   stop_exact_dist_server
   docker rm -fv "$container" "$oracle_container" "$activation_container" \
-    "$legacy_activation_container" >/dev/null 2>&1 || true
+    "$legacy_activation_container" "$provider_container" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -541,6 +659,9 @@ case "${1:-}" in
   activation)
     run_activation_checks
     ;;
+  provider)
+    run_provider_activation_checks
+    ;;
   journeys)
     shift
     if [ "$#" -eq 0 ]; then
@@ -550,7 +671,7 @@ case "${1:-}" in
     run_journeys "$@"
     ;;
   *)
-    echo "usage: scripts/verify-project-scope.sh activation | journeys FILE..." >&2
+    echo "usage: scripts/verify-project-scope.sh activation | provider | journeys FILE..." >&2
     exit 2
     ;;
 esac

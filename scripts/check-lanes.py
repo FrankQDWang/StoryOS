@@ -5,7 +5,7 @@ A lane with AFTER names starts when those lanes passed. COMMAND runs with `sh -e
 --browser-source adds the lanes of the browser-source Vitest project, one browser process for each lane.
 --postgres-shards adds the ignored tests of the library test binaries in shards, each with its own database.
 --project-scope adds the parts of `make check-full` after the lanes `build` and `package`: the storage activation
-checks, the exact-dist journeys in shards, and the two modes of the recovery drill.
+checks, also on the image of the hosted provider, the exact-dist journeys in shards, and the two modes of the recovery drill.
 `scripts/check-lanes.py --browser-start` waits for the start gap of Google Chrome; scripts/browser-vitest.sh runs it
 before each browser Vitest run. `scripts/check-lanes.py --watch-run SCRIPT RUN OUTPUT` stops a run of that script that
 connected to no browser session and does not exit, and `--connected-to-no-browser OUTPUT` examines its output.
@@ -230,6 +230,8 @@ def project_scope_lanes(root):
     lanes += [journey_lane(root, f"journeys-{index + 1}", files) for index, files in enumerate(journey_shards(root))]
     # The activation checks run ignored tests of the library test binary of the build lane.
     lanes.append(Lane("activation", [str(root / "scripts/verify-project-scope.sh"), "activation"],
+                      after=PROJECT_SCOPE_AFTER))
+    lanes.append(Lane("provider-activation", [str(root / "scripts/verify-project-scope.sh"), "provider"],
                       after=PROJECT_SCOPE_AFTER))
     return lanes
 
