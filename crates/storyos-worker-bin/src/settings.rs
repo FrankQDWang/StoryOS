@@ -64,13 +64,16 @@ impl WorkerSettings {
         {
             return refused("STORYOS_EXA_API_KEY");
         }
-        if loaded
+        if let Some(Err(refusal)) = loaded
             .settings
             .database_url
             .as_ref()
-            .is_some_and(|url| !storyos_adapter_postgres::database_url_parses(url.expose_secret()))
+            .map(|url| storyos_adapter_postgres::check_database_url(url.expose_secret()))
         {
-            return refused("STORYOS_DATABASE_URL");
+            return Err(
+                SettingsError::new("STORYOS_DATABASE_URL", loaded.env_file.as_deref())
+                    .with_rule(refusal.rule()),
+            );
         }
         Ok(loaded)
     }

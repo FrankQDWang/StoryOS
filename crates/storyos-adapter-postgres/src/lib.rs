@@ -154,6 +154,7 @@ mod command_replay;
 mod command_response_assistance;
 mod command_response_project;
 mod command_sequence;
+mod connection_cause;
 mod connection_pool;
 mod create_agent_run;
 mod create_chapter;
@@ -161,6 +162,7 @@ mod create_project;
 mod create_project_challenge;
 mod create_volume;
 mod current_producer_withdrawal;
+mod database_url;
 mod delete_chapter;
 mod delete_memory_entry;
 mod delete_volume;
@@ -191,6 +193,7 @@ mod passage_ranking;
 mod passage_vectors;
 mod pause_agent_run;
 mod pinned_export_source;
+mod postgres_tls;
 mod project_archive_build;
 mod project_conversations;
 mod project_destination_binding;
@@ -241,18 +244,13 @@ use storyos_application::{
     ProjectReader, ProjectScope, RevisionId,
 };
 
+pub use database_url::{DatabaseUrlRefusal, check_database_url};
 pub use storage_activation::{
     StorageActivation, StorageActivationError, activate_release1_storage,
 };
 pub use storage_activation_proof::{
     StorageActivationProofError, require_release1_storage_activation_proof,
 };
-
-/// Whether `url` is a PostgreSQL connection string that the client can parse. A binary checks
-/// it at startup, before storage activation (ADR 0050).
-pub fn database_url_parses(url: &str) -> bool {
-    url.parse::<tokio_postgres::Config>().is_ok()
-}
 
 /// Returns the SQLSTATE code of a PostgreSQL error, for the Diagnostic Projection (ADR 0047).
 pub fn sql_state(error: &(dyn std::error::Error + 'static)) -> Option<String> {
