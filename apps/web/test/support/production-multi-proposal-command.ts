@@ -166,8 +166,14 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.locator(`[data-proposal-location="${firstOutcome.operation_id}"]`).click();
     await observed;
     assert.ok(locations[2]!.outcome.kind !== 'refused');
+    // The second click stops the first navigation before it shows Chapter A, so the heading stays Chapter B and
+    // gives no wait. The focus comes after the switch of the second navigation and one more open (#1892).
+    const switchedToB = page.waitForResponse((response) => response.request().method() === 'PUT'
+      && new URL(response.url()).pathname.endsWith('/current-chapter')
+      && response.request().postDataJSON().set_current_chapter_input.chapter_id === chapters[1]);
     await page.locator(`[data-proposal-location="${locations[2]!.outcome.operation_id}"]`).click();
     releaseHeld(); await page.unroute(proposalRoute, undefined);
+    assert.ok((await switchedToB).ok());
     await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
     await expect(page.locator(`[data-proposal-operation-id="${locations[2]!.outcome.operation_id}"]`)).toHaveAttribute('data-proposal-focused', 'true');
     await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
