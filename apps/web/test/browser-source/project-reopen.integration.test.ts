@@ -67,6 +67,10 @@ const OTHER = { ...PROPOSAL, proposal_id: "018f0000-0000-7001-8000-000000000894"
   revision_id: "018f0000-0000-7001-8000-000000000895", operations: PROPOSAL.operations
     .map((operation) => ({ ...operation, operation_id: "018f0000-0000-7001-8000-000000000896" })) };
 const OTHER_READ = `GET ${P}/proposals/${OTHER.proposal_id}`;
+// The Proposal after another tab edited its candidate text: a new Proposal revision.
+const REVISED_TEXT = "Keep the narrator voice close in this passage.";
+const REVISED_PROPOSAL = { ...PROPOSAL, revision_id: "018f0000-0000-7001-8000-000000000898", candidate_text: REVISED_TEXT,
+  operations: PROPOSAL.operations.map((operation) => ({ ...operation, candidate_text: REVISED_TEXT })) };
 const RENAME = `PATCH ${P}/chapters/${CHAPTER}`;
 const PROJECT_RENAME = `PATCH ${P}`;
 const snapshotRead = (snapshotId: string) => `GET ${P}/snapshots/${snapshotId}`;
@@ -112,7 +116,11 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * requests with a 503 problem. `lost` applies the given requests and then loses their response. A `late` Acceptance
  * applies at the first Proposal read after the next Chapter A read and Editor Session read. `takeover` and
  * `rejection` give the effect of these commands. Before a `conflicted` Rejection, another tab changes the text of
- * Chapter A, and the Operation stays pending. Before a `refused` Rejection, another tab applies the Operation. `other`
+ * Chapter A, and the Operation stays pending. Before a `refused` Rejection, another tab applies the Operation.
+ * `decideElsewhere` is a change of the Proposal in another tab: a new Proposal revision, or a rejection of its
+ * Operation. As on the Server (`reject_proposal_operations.rs`), a Rejection of an earlier Proposal revision gets
+ * `refused stale_proposal_revision`, and a Rejection of an Operation that is not pending gets `refused
+ * operation_not_pending`; these refusals change nothing. `other`
  * adds a second open Proposal. As on the Server, only the first created Editor Session holds the writer; a later
  * creation gives a read-only Session. A Session with writer generation above 1 has the Snapshot of its takeover at
  * position 1. A rename of Chapter A changes its title in the tree and advances the tree revision. A
@@ -138,7 +146,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   const takenOver = writer.kind === "current_writer" && writer.writer_generation !== "1";
   const state = { current: CHAPTER, writer, snapshot: { id: EDITOR_SNAPSHOT, position: takenOver ? "1" : "0" },
     accepted: false,
-    rejected: false, edited: false, title: "Chapter A", treeRevision: 3, created: 0,
+    rejected: false, revised: false, edited: false, title: "Chapter A", treeRevision: 3, created: 0,
     projectTitle: "Project A", projectRevision: 1, projectRenames: [] as string[],
     superseded: undefined as GetEditorSessionResponse | undefined,
     late: undefined as { chapter: boolean; session: boolean } | undefined };
@@ -146,7 +154,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   const revisionA = () => state.accepted ? chapterRevision(ACCEPTED_REVISION, PROPOSAL.candidate_text)
     : state.edited ? chapterRevision(EDITED_REVISION, PROPOSAL.candidate_text) : chapterRevision(REVISION, "Base");
   const log = { started: [] as string[], unexpected: [] as string[], active: new Map<string, number>(),
-    events: [] as string[], consumed: [] as string[] };
+    events: [] as string[], consumed: [] as string[], rejectedRevisions: [] as string[] };
   let armed: { trigger: string; names: string[] } | undefined;
   let holding = new Set<string>();
   let holdEach = false;
@@ -154,6 +162,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   const failing = new Set<string>();
   const held: { name: string; resolve: () => void }[] = [];
   const open = () => ({ kind: "current_chapter" as const, current_chapter_id: state.current });
+  const current = () => state.revised ? REVISED_PROPOSAL : PROPOSAL;
   const session = (): GetEditorSessionResponse => {
     if (state.superseded !== undefined) return state.superseded;
     const base = state.current === CHAPTER ? { ...scenario.session.base_snapshot,
@@ -269,7 +278,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     if (name === `GET ${P}/chapters/${state.current}/open-proposals`) {
       return jsonResponse({ schema_id: "storyos.query.chapter-open-proposals.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000c71", project_scope: scope, chapter_id: state.current,
-        completeness: "complete", proposals: [...(proposals && !state.accepted && !state.rejected ? [PROPOSAL] : []),
+        completeness: "complete", proposals: [...(proposals && !state.accepted && !state.rejected ? [current()] : []),
           ...(other ? [OTHER] : [])].map(({ proposal_id, revision_id, kind,
           source }) => ({ proposal_id, revision_id, kind, source })) });
     }
@@ -290,8 +299,8 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     }
     if (name === PROPOSAL_READ) {
       const resolution = state.accepted ? "applied" : state.rejected ? "rejected" : undefined;
-      return jsonResponse({ ...proposalFixture, project_scope: scope, proposal: resolution === undefined ? PROPOSAL
-        : { ...PROPOSAL, operation_resolution: resolution, operations: PROPOSAL.operations
+      return jsonResponse({ ...proposalFixture, project_scope: scope, proposal: resolution === undefined ? current()
+        : { ...current(), operation_resolution: resolution, operations: current().operations
           .map((operation) => ({ ...operation, resolution })) } });
     }
     if (name === PROJECT_RENAME) {
@@ -374,7 +383,12 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     }
     const request = JSON.parse(String(init?.body)) as RejectProposalOperationsRequest;
     const input = request.reject_proposal_operations_input;
-    if (rejection === "conflicted") {
+    log.rejectedRevisions.push(input.proposal_revision_id);
+    const refusal = input.proposal_revision_id !== current().revision_id ? "stale_proposal_revision"
+      : state.accepted || state.rejected ? "operation_not_pending" : undefined;
+    if (refusal !== undefined) {
+      // A refused Rejection changes nothing.
+    } else if (rejection === "conflicted") {
       // Another tab changed the Chapter text. The Operation stays pending, so the Server finds a changed Chapter Head.
       state.edited = true;
       settle(EDIT_SNAPSHOT);
@@ -387,7 +401,8 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     }
     return jsonResponse({ ...rejectionFixture, correlation_id: input.correlation_id, project_scope: scope,
       project: project(),
-      effect: rejection === "conflicted" ? { kind: "conflicted", reason: "changed_head" }
+      effect: refusal !== undefined ? { kind: "refused", reason: refusal }
+        : rejection === "conflicted" ? { kind: "conflicted", reason: "changed_head" }
         : rejection === "refused" ? { kind: "refused", reason: "operation_not_pending" }
         : { ...rejectionFixture.effect, operation_ids: input.selected_pending_operation_ids },
       receipt: { ...rejectionFixture.receipt, project_scope: scope,
@@ -396,7 +411,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         proposal_revision_id: input.proposal_revision_id,
         selected_pending_operation_ids: input.selected_pending_operation_ids,
         expected_target_revisions: input.expected_target_revisions,
-        ...(rejection === "resolved" ? {} : { result: rejection }) } });
+        ...(refusal !== undefined ? { result: "refused" } : rejection === "resolved" ? {} : { result: rejection }) } });
   };
   const fetchImpl: typeof fetch = async (input, init) => {
     const name = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
@@ -428,6 +443,10 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   return {
     scenario, log, fetchImpl, projectRenames: state.projectRenames,
     answerBeforeHold(names: string[]) { answerFirst = new Set(names); },
+    decideElsewhere(change: "revised" | "rejected") {
+      if (change === "revised") state.revised = true;
+      else state.rejected = true;
+    },
     renameElsewhere(title: string) { state.projectTitle = title; state.projectRevision += 1; },
     takeOverElsewhere(generation: string) {
       // The Server keeps the base of this Session, and the takeover settles a new Snapshot.
@@ -1510,6 +1529,112 @@ it("opens the Project again after a rejection that the Server refused because an
   await expect.poll(server.inFlight).toEqual([]);
   expect({ open: openReads(server.log.started.slice(before)).sort(), unexpected: server.log.unexpected })
     .toEqual({ open: [LIST, PROJECT_READ].sort(), unexpected: [] });
+});
+
+/** The reads after a settled command start together in an order that changes, so a test compares them sorted. */
+const sorted = (entries: string[]) => [...entries].sort();
+/** The reads of a reopen after a decision: the Chapter, the Project, the list, and the panels. */
+const REOPEN_AFTER_DECISION = [chapterRead(CHAPTER), PROJECT_READ, LIST, TREE, `GET ${P}/activity`, STATISTICS];
+
+it.each([
+  // After the command, the requests are those of today (#1900 removes only the read before the command).
+  { decision: "acceptance", command: ACCEPTANCE, button: "accept", reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ],
+    settled: (root: HTMLElement) => root.querySelector("[data-authoritative-revision-id]")
+      ?.getAttribute("data-authoritative-revision-id") === ACCEPTED_REVISION,
+    after: [...REOPEN_AFTER_DECISION, openProposalsRead(CHAPTER), PROPOSAL_READ, SESSION_READ, PROPOSAL_READ,
+      openProposalsRead(CHAPTER), PROPOSAL_READ] },
+  { decision: "rejection", command: REJECTION, button: "reject", reads: [...OPEN_READS, PROPOSAL_READ],
+    settled: (root: HTMLElement) => root.querySelector(`.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"]`)
+      === null,
+    after: [openProposalsRead(CHAPTER), PROPOSAL_READ, PROPOSAL_READ] },
+])("sends the $decision of a suggestion with no Proposal read before it", async ({ command, button, reads, settled,
+  after }) => {
+  const server = fakeServer({ reads, commands: [SESSION_CREATE, command], proposals: true, acceptance: "applied" });
+  const workspace = await openWorkspace(server);
+  const control = () => workspace.root.querySelector<HTMLButtonElement>(
+    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-${button}]`);
+  await expect.poll(() => control()?.disabled).toBe(false);
+  await expect.poll(server.inFlight).toEqual([]);
+  const from = server.log.started.length;
+  server.hold([command]);
+
+  control()!.click();
+
+  // The fake holds the command, so the log has each request from the click to the command.
+  await expect.poll(() => server.count(command)).toBe(1);
+  expect(server.log.started.slice(from)).toEqual([CHALLENGE, command]);
+  server.releaseOnly([command]);
+  await expect.poll(() => settled(workspace.root)).toBe(true);
+  await expect.poll(server.inFlight).toEqual([]);
+  expect({ after: sorted(server.log.started.slice(from + 2)), unexpected: server.log.unexpected })
+    .toEqual({ after: sorted(after), unexpected: [] });
+});
+
+const REFUSED_REJECTION = "此次拒绝未生效，请检查当前候选文字。";
+/** The requests of a refused rejection: the reopen, and then one read of the Proposal (#1900). */
+const REFUSED_LATER = [CHALLENGE, REJECTION, ...REOPEN_AFTER_DECISION, SESSION_READ, openProposalsRead(CHAPTER),
+  PROPOSAL_READ];
+
+/** The suggestion card of the Proposal, its status, and the Chapter revision that the page shows. */
+function proposalView(root: HTMLElement) {
+  const card = () => root.querySelector<HTMLElement>(`.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"]`);
+  return { card, reject: () => card()?.querySelector<HTMLButtonElement>("button[data-proposal-reject]"),
+    status: () => root.querySelector(`[data-proposal-decision="${PROPOSAL.proposal_id}"]`)?.textContent ?? null,
+    revision: () => root.querySelector("[data-authoritative-revision-id]")?.getAttribute("data-authoritative-revision-id") };
+}
+
+it("shows the sentence of a refused rejection of an earlier Proposal revision under the current revision, and the next"
+  + " rejection sends the current revision", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ], commands: [SESSION_CREATE, REJECTION],
+    proposals: true });
+  const workspace = await openWorkspace(server);
+  const view = proposalView(workspace.root);
+  await expect.poll(() => view.reject()?.disabled).toBe(false);
+  await expect.poll(server.inFlight).toEqual([]);
+  // Another tab edits the candidate text: the Proposal has a new revision.
+  server.decideElsewhere("revised");
+  const from = server.log.started.length;
+
+  view.reject()!.click();
+
+  await expect.poll(() => ({ status: view.status(), revision: view.card()?.getAttribute("data-proposal-revision-id"),
+    text: view.card()?.textContent?.includes(REVISED_TEXT),
+    earlierText: view.card()?.textContent?.includes(PROPOSAL.candidate_text) })).toEqual({ status: REFUSED_REJECTION,
+    revision: REVISED_PROPOSAL.revision_id, text: true, earlierText: false });
+  await expect.poll(server.inFlight).toEqual([]);
+  const refused = sorted(server.log.started.slice(from));
+  expect({ ...workspace.shown(), revision: view.revision(), status: view.status() })
+    .toEqual({ title: "Chapter A", save: "saved", failure: "", revision: REVISION, status: REFUSED_REJECTION });
+  await expect.poll(() => view.reject()?.disabled).toBe(false);
+  view.reject()!.click();
+
+  await expect.poll(view.card).toBeNull();
+  expect({ revisions: server.log.rejectedRevisions, refused, unexpected: server.log.unexpected }).toEqual({
+    revisions: [PROPOSAL.revision_id, REVISED_PROPOSAL.revision_id], refused: sorted(REFUSED_LATER),
+    unexpected: [] });
+});
+
+it("shows the sentence of a refused rejection when another tab rejected the Operation, then no card, and keeps the"
+  + " Chapter text", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ], commands: [SESSION_CREATE, REJECTION],
+    proposals: true });
+  const workspace = await openWorkspace(server);
+  const view = proposalView(workspace.root);
+  await expect.poll(() => view.reject()?.disabled).toBe(false);
+  await expect.poll(server.inFlight).toEqual([]);
+  server.decideElsewhere("rejected");
+  const from = server.log.started.length;
+
+  view.reject()!.click();
+
+  await expect.poll(() => ({ status: view.status(), card: view.card() })).toEqual({ status: REFUSED_REJECTION,
+    card: null });
+  await expect.poll(server.inFlight).toEqual([]);
+  // With no open suggestion of this Proposal, the view reads it one more time.
+  expect({ ...workspace.shown(), revision: view.revision(), status: view.status(),
+    later: sorted(server.log.started.slice(from)), unexpected: server.log.unexpected }).toEqual({ title: "Chapter A",
+    save: "saved", failure: "", revision: REVISION, status: REFUSED_REJECTION,
+    later: sorted([...REFUSED_LATER, PROPOSAL_READ]), unexpected: [] });
 });
 
 /** The status of an accepted Proposal whose Acceptance record the Local Edit Journal keeps. */

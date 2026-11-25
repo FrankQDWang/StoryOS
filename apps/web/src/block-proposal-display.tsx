@@ -436,17 +436,6 @@ export function BlockProposalDisplay({
             && (projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0))) {
           throw new Error("请先保存候选文字。");
         }
-        const current = await getProposal({
-          baseUrl: editorProps.baseUrl,
-          fetchImpl: editorProps.fetchImpl,
-          projectId: scope.project_id,
-          proposalId: target.proposalId,
-        });
-        if (current.project_scope.owner_user_id !== scope.owner_user_id
-          || current.project_scope.project_id !== scope.project_id
-          || canonical(current.proposal.source) !== canonical(displayed.source)) {
-          throw new Error("候选文字的项目身份已变化。");
-        }
         const response = await acceptDisplayedBlockProposal({
           baseUrl: editorProps.baseUrl,
           fetchImpl: editorProps.fetchImpl,
@@ -551,11 +540,13 @@ export function BlockProposalDisplay({
   /**
    * Shows a settled Rejection (#1876). A resolved Rejection does not change the Chapter text, so the view reads the
    * open suggestions again. A changed Chapter Head or a refusal opens the Project again: another tab can have applied
-   * the Operation.
+   * the Operation. After a refusal the view also reads the Proposal again, so the card shows its current revision
+   * (#1900).
    */
   const showRejection = async (effect: "resolved" | "conflicted" | "refused") => {
     if (effect !== "resolved") {
       await onAccepted(true);
+      if (effect === "refused") setSettlementRefresh((value) => value + 1);
       return;
     }
     setSettlementRefresh((value) => value + 1);
@@ -593,17 +584,6 @@ export function BlockProposalDisplay({
         if (workspace.partition.disposition !== "current_writer_open"
           || projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0) {
           throw new Error("请先保存候选文字。");
-        }
-        const current = await getProposal({ baseUrl: editorProps.baseUrl,
-          fetchImpl: editorProps.fetchImpl, projectId: scope.project_id,
-          proposalId: target.proposalId });
-        if (current.project_scope.owner_user_id !== scope.owner_user_id
-          || current.project_scope.project_id !== scope.project_id
-          || current.proposal.revision_id !== target.revisionId
-          || canonical(current.proposal.source) !== canonical(displayed.source)
-          || current.proposal.operations.find((item) => item.operation_id === target.operationId
-            && item.resolution === "pending") === undefined) {
-          throw new Error("候选文字的身份已变化。");
         }
         const response = await rejectDisplayedBlockProposal({ baseUrl: editorProps.baseUrl,
             fetchImpl: editorProps.fetchImpl, cryptoImpl: editorProps.cryptoImpl,
