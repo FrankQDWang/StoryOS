@@ -330,10 +330,11 @@ function ProjectEditorView({
     const checked = treeCheck();
     return checked(await open());
   };
-  // A reopen after a settled command of this page reads the Project and the list of Projects, then the Chapter and the
-  // Editor Session. It does not read the protocol profile again.
-  const reopen = () => opening(() => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
-    opened: { profile: state.profile, project: state.project, editor: state.editor } }));
+  // A reopen after a settled command of this page reads the Project, the list of Projects, the Chapter `chapterId` (by
+  // default the Current Chapter of the page), and the Editor Session at the same time. It does not read the protocol
+  // profile again.
+  const reopen = (chapterId?: string) => opening(() => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
+    opened: { profile: state.profile, project: state.project, editor: state.editor }, chapterId }));
 
   // A read-only editor has no writing controller and no input to wait for.
   const runWhenQuiet = <Result,>(condition: "journaled" | "settled",
@@ -446,7 +447,8 @@ function ProjectEditorView({
               return;
             }
             reopened = switched.effect.kind === "authoritative_applied";
-            onReopened(await reopen());
+            onReopened(await reopen(switched.effect.kind === "authoritative_applied"
+              ? switched.effect.current_chapter_id : undefined));
           });
         }, () => {
           active.waiting = true;
@@ -604,7 +606,7 @@ function ProjectEditorView({
         onUndoCurrentChapter={(chapterId) => {
           // An Undo of a chapter switch moves the editor back to the earlier Current Chapter.
           if (chapterId === currentChapterId) return;
-          void reopen().then(onReopened);
+          void reopen(chapterId).then(onReopened);
         }}
         blocks={editorBlocks}
         referenceSource={{

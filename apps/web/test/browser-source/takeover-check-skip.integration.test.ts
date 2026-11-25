@@ -5,11 +5,12 @@ import type {
   GetEditorSessionResponse,
   SnapshotDescriptor,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { reopenControlledProject } from "../../src/boot.ts";
 import { openEditorWorkspace } from "../../src/editor-session.ts";
 import { createEditorSessionWritingController, type EditorSessionWritingController }
   from "../../src/editor-session-writing.ts";
 import type { EditorReadyState } from "../../src/editor-types.ts";
-import { readJournalSnapshot } from "../../src/local-edit-journal.ts";
+import { readJournalSnapshot, rebuildPendingProjection } from "../../src/local-edit-journal.ts";
 import { consumeOwnedProjectActivity } from "../../src/project-activity-sync.ts";
 import {
   CHAPTER, EDITOR_SNAPSHOT, OWNER, PROJECT, SESSION, chapterRevision, closeTrackedDatabases, createAppliedActivityEvent, createBrowserScenario,
@@ -25,6 +26,9 @@ const REVISION_B = "018f0000-0000-7001-8000-000000000842";
 const BLOCK_B = "018f0000-0000-7001-8000-000000000843";
 const SWITCH_SNAPSHOT = "018f0000-0000-7001-8000-000000000845";
 const SESSION_READ = `GET ${P}/editor-sessions/${SESSION}`;
+const PROJECT_READ = `GET ${P}`;
+const LIST = "GET /api/v1/projects";
+const CHAPTER_READ = `GET ${P}/chapters/${CHAPTER}`;
 const TREE = `GET ${P}/manuscript/tree`;
 const snapshotRead = (snapshotId: string) => `GET ${P}/snapshots/${snapshotId}`;
 const ACTIVITY = `GET ${P}/activity`;
@@ -54,9 +58,13 @@ async function activityEvent(kind: "chapter_updated" | "current_chapter_set", sc
  * A fake Server of one Project whose Editor Session holds writer generation 2. The takeover settled the Snapshot of the
  * Session base at position 1. The fake serves only the exact requests of these tests and records each other request.
  * Its stream has a rename of Chapter A in another tab at position 2. `switchChapter` settles a Chapter switch to Chapter
- * B, as the Server does: the Session base and the canonical Snapshot are the Snapshot of the switch at position 3, the
- * stream has the `current_chapter_set` Event of the switch, and then a rename of Chapter B in another tab. A stream
- * request starts after its `Last-Event-ID`, or else after the position of its Snapshot. After `takeOverElsewhere`, another Editor Session holds
+ * B, as the Server does: the Session base and the canonical Snapshot are the Snapshot of the switch at position 3, and
+ * the stream has the `current_chapter_set` Event of the switch. `renameChapterBElsewhere` adds a rename of Chapter B in
+ * another tab at position 4. A stream request starts after its `Last-Event-ID`, or else after the position of its
+ * Snapshot. The Project read, the list read, and the read of Chapter A serve a reopen; `holdProjectRead` holds the next
+ * Project read until its release. As on the Server, the read of Chapter A gives the title after the rename and the
+ * position of the last Event of the stream.
+ * After `takeOverElsewhere`, another Editor Session holds
  * generation 3, this Session is read-only, and the Server refuses an author edit of this Session
  * (`editor_writer_stale`).
  */
@@ -96,7 +104,8 @@ async function fakeServer() {
   let canonical = descriptor(session.base_snapshot);
   const positions = new Map([[EDITOR_SNAPSHOT, 1], [SWITCH_SNAPSHOT, 3]]);
   const stream = [{ id: "cursor-a", event: eventA }];
-  const log = { requests: [] as string[], unexpected: [] as string[],
+  let projectGate: Promise<void> | undefined;
+  const log = { requests: [] as string[], unexpected: [] as string[], answered: [] as string[],
     activity: [] as { snapshotId: string | null; lastEventId: string | null }[] };
   let idempotencyKey: string | undefined;
   let challengeExpiresAt = "";
@@ -104,7 +113,20 @@ async function fakeServer() {
     const url = new URL(input instanceof Request ? input.url : input);
     const name = `${init?.method ?? "GET"} ${url.pathname}`;
     log.requests.push(name);
+    if (name === PROJECT_READ && projectGate !== undefined) await projectGate;
+    log.answered.push(name);
     if (name === SESSION_READ) return jsonResponse(session);
+    if (name === PROJECT_READ) return jsonResponse(scenario.project);
+    if (name === LIST) {
+      return jsonResponse({ schema_id: "storyos.query.project-list.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-00000000085a", owner_user_id: OWNER,
+        projects: [{ project_scope: scope, title: scenario.project.project.title, revision: "1",
+          open: scenario.project.project.open }] });
+    }
+    if (name === CHAPTER_READ) {
+      return jsonResponse({ ...chapterA, project_activity_position: stream.at(-1)!.event.stream_sequence,
+        chapter: { ...chapterA.chapter, title: "Chapter A, renamed" } });
+    }
     if (name === TREE) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000854", project_scope: scope,
@@ -152,7 +174,13 @@ async function fakeServer() {
     switchChapter() {
       session = { ...session, base_snapshot: baseB };
       canonical = descriptor(baseB);
-      stream.push({ id: "cursor-b", event: eventB }, { id: "cursor-c", event: eventC });
+      stream.push({ id: "cursor-b", event: eventB });
+    },
+    renameChapterBElsewhere() { stream.push({ id: "cursor-c", event: eventC }); },
+    holdProjectRead() {
+      let release = () => {};
+      projectGate = new Promise<void>((resolve) => { release = resolve; });
+      return () => { projectGate = undefined; release(); };
     },
     takeOverElsewhere() {
       session = { ...session, writer: { kind: "read_only", observed_writer_generation: "3",
@@ -175,7 +203,7 @@ afterEach(async () => {
 /**
  * Opens the Editor Session of the tab with generation 2, which runs the takeover check, then takes the first Event when
  * `consume` is true. Then the Chapter switch settles, and the open of Chapter B gives the partition of the first open as
- * the last ready open of this page.
+ * the last ready open of this page. After the open, another tab renames Chapter B.
  */
 async function openAfterSwitch(server: Awaited<ReturnType<typeof fakeServer>>, consume = true) {
   const { scenario, fetchImpl } = server;
@@ -193,6 +221,7 @@ async function openAfterSwitch(server: Awaited<ReturnType<typeof fakeServer>>, c
     readyPartitionId: first.partition.journal_partition_id });
   requireEditorReady(switched);
   trackDatabase(switched.database, databases);
+  server.renameChapterBElsewhere();
   return { first, firstActivity, switched, switchReads: server.log.requests.slice(before) };
 }
 
@@ -263,3 +292,63 @@ it("makes the tab read-only and keeps the typed text when the Session lost the w
       stored: { ...partition, disposition: "read_only_observer" },
       records: 1, groups: 1, failures: 1, commands: 1, unexpected: [] });
   });
+
+it("opens as the writer when another Editor Session takes over between the Session read and the Project read of a reopen,"
+  + " and makes the tab read-only at the next author edit", async () => {
+  const server = await fakeServer();
+  const { scenario, fetchImpl } = server;
+  await deleteJournal(scenario.journalName);
+  sessionStorage.setItem(`active_session:${OWNER}:${PROJECT}`, SESSION);
+  const first = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
+    profile: scenario.profile, fetchImpl, chapter: server.chapterA });
+  requireEditorReady(first);
+  trackDatabase(first.database, databases);
+  await consumeOwnedProjectActivity(first, { baseUrl: location.origin, fetchImpl });
+  const stored = async (database: IDBDatabase) => {
+    const transaction = database.transaction(["partitions", "metadata"], "readonly");
+    const scope = first.partition.project_scope;
+    const [partition, base, cursor] = await Promise.all([
+      requestResult(transaction.objectStore("partitions").get(first.partition.journal_partition_id)),
+      requestResult(transaction.objectStore("metadata").get(`active_base:${first.partition.journal_partition_id}`)),
+      requestResult(transaction.objectStore("metadata").get(`project_activity_stream:${scope.owner_user_id}:${
+        scope.project_id}`))]);
+    return { partition, base, cursor };
+  };
+  const before = { requests: server.log.requests.length, answered: server.log.answered.length,
+    stored: await stored(first.database) };
+  const releaseProject = server.holdProjectRead();
+
+  const reopening = reopenControlledProject({ baseUrl: location.origin, fetchImpl, indexedDBImpl: indexedDB,
+    opened: { profile: scenario.profile, project: scenario.project, editor: first } });
+  await expect.poll(() => server.log.answered.slice(before.answered).sort())
+    .toEqual([CHAPTER_READ, LIST, SESSION_READ].sort());
+  // Another tab takes over after the Server answered the Session read, and before it answers the Project read.
+  server.takeOverElsewhere();
+  releaseProject();
+  const reopened = await reopening;
+  if (reopened.kind !== "project-ready") throw new Error(`reopen gave ${reopened.kind}`);
+  const workspace = reopened.editor;
+  requireEditorReady(workspace);
+  trackDatabase(workspace.database, databases);
+  // The open stored what an open with this Session response stores: the partition, the base, and the cursor stay.
+  const opened = { writer: workspace.session.writer, stored: await stored(workspace.database) };
+  const failures: unknown[] = [];
+  controller = createEditorSessionWritingController({ workspace, baseUrl: location.origin, fetchImpl,
+    setTimeoutImpl: () => 1, clearTimeoutImpl: () => {}, onFailure: (error) => { failures.push(error); } });
+
+  controller.capture({ from: 4, to: 4, text: " typed", resultingBody: "Base typed" }, "typing");
+  await controller.whenIdle();
+  await controller.flush();
+
+  expect({ reopen: server.log.requests.slice(before.requests, before.requests + 4).sort(),
+    answered: server.log.answered.slice(before.answered, before.answered + 4).at(-1), opened,
+    input: controller.canAcceptInput(false), body: controller.snapshot().projection.body,
+    rebuilt: (await rebuildPendingProjection(workspace)).body,
+    partition: (await stored(workspace.database)).partition,
+    failures: failures.length, commands: server.log.requests.filter((name) => name === AUTHOR_EDIT).length,
+    unexpected: server.log.unexpected }).toEqual({
+    reopen: [CHAPTER_READ, LIST, PROJECT_READ, SESSION_READ].sort(), answered: PROJECT_READ,
+    opened: { writer: { kind: "current_writer", writer_generation: "2" }, stored: before.stored },
+    input: false, body: "Base typed", rebuilt: "Base typed",
+    partition: { ...first.partition, disposition: "read_only_observer" }, failures: 1, commands: 1, unexpected: [] });
+});
