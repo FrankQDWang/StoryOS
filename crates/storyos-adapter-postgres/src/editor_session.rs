@@ -453,6 +453,7 @@ fn session_challenge_error(error: ProjectCommandChallengeError) -> EditorSession
     match error {
         ProjectCommandChallengeError::BindingConflict => EditorSessionError::BindingConflict,
         ProjectCommandChallengeError::InvalidOrExpired
+        | ProjectCommandChallengeError::MissingProject
         | ProjectCommandChallengeError::RateLimited { .. } => EditorSessionError::InvalidChallenge,
         ProjectCommandChallengeError::Unavailable(source) => {
             EditorSessionError::Unavailable(source)
