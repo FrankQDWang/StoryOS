@@ -42,7 +42,9 @@ const ACCEPTANCE_COMMIT = "018f0000-0000-7001-8000-000000000835";
 // The Chapter A revision and the Snapshot of an edit in another tab, which writes the candidate text by hand.
 const EDITED_REVISION = "018f0000-0000-7001-8000-000000000807";
 const EDIT_SNAPSHOT = "018f0000-0000-7001-8000-000000000836";
-const EMPTY_BODY_DIGEST = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+const CHAPTER_B_BODY = "Text of Chapter B";
+// The SHA-256 digest of CHAPTER_B_BODY.
+const CHAPTER_B_BODY_DIGEST = "d845fc2318f60d01dc1be9c5076aa60b964a0a43ade6d5c017a6134f1813c564";
 // The SHA-256 of the candidate text of the Proposal, which an applied Acceptance makes the body of Chapter A.
 const ACCEPTED_BODY_DIGEST = "c4cd3b16acbe6d2358948ccb2004fc1eec27d078096d06fed3fbaa9c16fa22e6";
 const PROTOCOL = "GET /api/v1/protocol";
@@ -99,7 +101,7 @@ const CHALLENGE_ROUTES: Record<string, string> = {
 /**
  * A fake Server of one Project with Chapters A (current) and B. It serves only the `reads` and the `commands` of the
  * test (the creation of an Editor Session too), and a Challenge for one of these commands. It records each other
- * request and throws. It records the start and the end of each request. A switch, a takeover, and an applied Acceptance
+ * request and throws. It records the start and the end of each request, and each response body that the client read. A switch, a takeover, and an applied Acceptance
  * settle a new Snapshot, which the Editor Session base, the Chapter read, and the tree name. `acceptance` gives the
  * effect of an Acceptance. `takeoverAfterAcceptance` makes another tab take over the writer and switch to Chapter B
  * after the Acceptance settles: the Editor Session of this page keeps its base. A Rejection removes the suggestion from
@@ -144,7 +146,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   const revisionA = () => state.accepted ? chapterRevision(ACCEPTED_REVISION, PROPOSAL.candidate_text)
     : state.edited ? chapterRevision(EDITED_REVISION, PROPOSAL.candidate_text) : chapterRevision(REVISION, "Base");
   const log = { started: [] as string[], unexpected: [] as string[], active: new Map<string, number>(),
-    events: [] as string[] };
+    events: [] as string[], consumed: [] as string[] };
   let armed: { trigger: string; names: string[] } | undefined;
   let holding = new Set<string>();
   let holdEach = false;
@@ -161,9 +163,9 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
           : scenario.session.base_snapshot.materialized_payload_digest.value_hex_lowercase } }
       : { ...scenario.session.base_snapshot,
       chapter_id: CHAPTER_B, authoritative_head_revision_id: REVISION_B, target_refs: [`manuscript:${CHAPTER_B}`],
-      materialized_revision: chapterRevision(REVISION_B, ""),
+      materialized_revision: chapterRevision(REVISION_B, CHAPTER_B_BODY),
       materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
-        value_hex_lowercase: EMPTY_BODY_DIGEST } };
+        value_hex_lowercase: CHAPTER_B_BODY_DIGEST } };
     return { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1", writer: state.writer,
       base_snapshot: { ...base, snapshot_id: state.snapshot.id, project_activity_position: state.snapshot.position } };
   };
@@ -171,7 +173,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     ? { ...scenario.chapter, project_activity_position: state.snapshot.position,
       chapter: { ...scenario.chapter.chapter, current_revision: revisionA() } }
     : { ...scenario.chapter, project_activity_position: state.snapshot.position,
-      chapter: { chapter_id: CHAPTER_B, title: "Chapter B", current_revision: chapterRevision(REVISION_B, "") } };
+      chapter: { chapter_id: CHAPTER_B, title: "Chapter B", current_revision: chapterRevision(REVISION_B, CHAPTER_B_BODY) } };
   const canonical = (): SnapshotDescriptor => ({ snapshot_id: state.snapshot.id, project_scope: scope,
     snapshot_kind: "canonical", project_activity_position: state.snapshot.position, source_watermarks: {},
     projection_generations: {}, redaction_profile: "storyos.author.v1", schema_profile: "storyos.public.release.1",
@@ -407,6 +409,12 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
       if (hold) await new Promise<void>((resolve) => { held.push({ name, resolve }); });
       const response = await (early ?? answer(name, init));
       if (lost.includes(name)) throw new TypeError("Failed to fetch");
+      const text = response.text.bind(response);
+      response.text = async () => {
+        const body = await text();
+        log.consumed.push(name);
+        return body;
+      };
       return response;
     } finally {
       log.active.set(name, log.active.get(name)! - 1);
@@ -758,15 +766,28 @@ it("discards the Chapter read of a switch when the Project read names another Ch
     const workspace = await openWorkspace(server);
     await expect.poll(() => chapterB(workspace.root)?.disabled).toBe(false);
     await expect.poll(server.inFlight).toEqual([]);
+    // The open stores the cursor of its Project Activity Stream after the client read the stream.
+    await expect.poll(async () => JSON.stringify(await journalRows(server))).toContain(
+      `"project_activity_stream:${OWNER}:${PROJECT}"`);
     const journal = await journalRows(server);
     const before = server.log.started.length;
-    // The observer records the title and the text of the editor at each change of the page.
+    // The observer records the title and the text of the editor at each change of the page. It also records each
+    // text of the title or the editor that a change replaced, because a later render in the same task replaces a
+    // render before the observer reads the page.
     const shownChapters = new Set<string>();
-    const observer = new MutationObserver(() => {
+    const replaced = new Set<string>();
+    const inShownChapter = (node: Node) => (node instanceof Element ? node : node.parentElement)
+      ?.closest(".editor-panel h2, [data-manuscript-editor]") != null;
+    const observer = new MutationObserver((records) => {
+      for (const record of records.filter(({ target }) => inShownChapter(target))) {
+        if (record.oldValue !== null) replaced.add(record.oldValue);
+        for (const node of record.removedNodes) replaced.add(node.textContent ?? "");
+      }
       shownChapters.add(JSON.stringify([workspace.root.querySelector(".editor-panel h2")?.textContent,
         workspace.root.querySelector("[data-manuscript-editor]")?.textContent]));
     });
-    observer.observe(workspace.root, { subtree: true, childList: true, characterData: true });
+    observer.observe(workspace.root, { subtree: true, childList: true, characterData: true,
+      characterDataOldValue: true });
     server.holdAfter(SWITCH, reopenReads(CHAPTER_B));
 
     chapterB(workspace.root)!.click();
@@ -774,15 +795,17 @@ it("discards the Chapter read of a switch when the Project read names another Ch
     // A duplicated tab with the same Editor Session switches back to Chapter A before the four reads end.
     server.switchElsewhere();
     server.hold([chapterRead(CHAPTER)]);
-    const events = server.log.events.length;
+    const consumedBefore = server.log.consumed.length;
+    const consumed = (names: string[]) => names.every((name) => server.log.consumed.slice(consumedBefore).includes(name));
     // The discarded open ends before its replacement starts: the fake answers the early Chapter read and then the
-    // early Session read, each after the Project read.
+    // early Session read, each after the Project read. After the client read a response body, the steps that follow
+    // it in the client end before the next poll, so a request that they start is in flight at the check.
     server.releaseOnly([PROJECT_READ, LIST]);
-    await expect.poll(server.inFlight).toEqual([chapterRead(CHAPTER_B), SESSION_READ].sort());
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await expect.poll(() => consumed([PROJECT_READ, LIST])).toBe(true);
+    expect(server.inFlight()).toEqual([chapterRead(CHAPTER_B), SESSION_READ].sort());
     server.releaseOnly([chapterRead(CHAPTER_B)]);
-    await expect.poll(server.inFlight).toEqual([SESSION_READ]);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await expect.poll(() => consumed([chapterRead(CHAPTER_B)])).toBe(true);
+    expect(server.inFlight()).toEqual([SESSION_READ]);
     server.releaseOnly([SESSION_READ]);
     await expect.poll(server.inFlight).toEqual([chapterRead(CHAPTER)]);
     // The discarded reads ended and wrote nothing to the Journal.
@@ -793,15 +816,12 @@ it("discards the Chapter read of a switch when the Project read names another Ch
       .toEqual({ title: "Chapter A", save: "saved", failure: "", inFlight: [] });
     observer.disconnect();
     const later = server.log.started.slice(server.log.started.indexOf(SWITCH, before));
-    const order = server.log.events.slice(events);
-    const fallback = order.indexOf(`start ${chapterRead(CHAPTER)}`);
-    expect({ shown: [...shownChapters], journal: discarded,
-      fallback: { afterChapter: fallback > order.indexOf(`end ${chapterRead(CHAPTER_B)}`),
-        afterSession: fallback > order.indexOf(`end ${SESSION_READ}`)
-          && order.lastIndexOf(`start ${SESSION_READ}`) > order.indexOf(`end ${SESSION_READ}`) },
+    expect({ shown: [...shownChapters],
+      replaced: [...replaced].filter((text) => text.includes("Chapter B") || text.includes(CHAPTER_B_BODY)),
+      journal: discarded,
       chapters: later.filter((name) => name.startsWith(`GET ${P}/chapters/`) && !name.endsWith("/open-proposals")),
       unexpected: server.log.unexpected }).toEqual({
-      shown: [JSON.stringify(["Chapter A", "Base"])], journal, fallback: { afterChapter: true, afterSession: true },
+      shown: [JSON.stringify(["Chapter A", "Base"])], replaced: [], journal,
       chapters: [chapterRead(CHAPTER_B), chapterRead(CHAPTER)], unexpected: [] });
   });
 

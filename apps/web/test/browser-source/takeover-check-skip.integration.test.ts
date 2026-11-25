@@ -10,7 +10,7 @@ import { openEditorWorkspace } from "../../src/editor-session.ts";
 import { createEditorSessionWritingController, type EditorSessionWritingController }
   from "../../src/editor-session-writing.ts";
 import type { EditorReadyState } from "../../src/editor-types.ts";
-import { readJournalSnapshot } from "../../src/local-edit-journal.ts";
+import { readJournalSnapshot, rebuildPendingProjection } from "../../src/local-edit-journal.ts";
 import { consumeOwnedProjectActivity } from "../../src/project-activity-sync.ts";
 import {
   CHAPTER, EDITOR_SNAPSHOT, OWNER, PROJECT, SESSION, chapterRevision, closeTrackedDatabases, createAppliedActivityEvent, createBrowserScenario,
@@ -58,10 +58,12 @@ async function activityEvent(kind: "chapter_updated" | "current_chapter_set", sc
  * A fake Server of one Project whose Editor Session holds writer generation 2. The takeover settled the Snapshot of the
  * Session base at position 1. The fake serves only the exact requests of these tests and records each other request.
  * Its stream has a rename of Chapter A in another tab at position 2. `switchChapter` settles a Chapter switch to Chapter
- * B, as the Server does: the Session base and the canonical Snapshot are the Snapshot of the switch at position 3, the
- * stream has the `current_chapter_set` Event of the switch, and then a rename of Chapter B in another tab. A stream
- * request starts after its `Last-Event-ID`, or else after the position of its Snapshot. The Project read, the list
- * read, and the read of Chapter A serve a reopen; `holdProjectRead` holds the next Project read until its release.
+ * B, as the Server does: the Session base and the canonical Snapshot are the Snapshot of the switch at position 3, and
+ * the stream has the `current_chapter_set` Event of the switch. `renameChapterBElsewhere` adds a rename of Chapter B in
+ * another tab at position 4. A stream request starts after its `Last-Event-ID`, or else after the position of its
+ * Snapshot. The Project read, the list read, and the read of Chapter A serve a reopen; `holdProjectRead` holds the next
+ * Project read until its release. As on the Server, the read of Chapter A gives the title after the rename and the
+ * position of the last Event of the stream.
  * After `takeOverElsewhere`, another Editor Session holds
  * generation 3, this Session is read-only, and the Server refuses an author edit of this Session
  * (`editor_writer_stale`).
@@ -121,7 +123,10 @@ async function fakeServer() {
         projects: [{ project_scope: scope, title: scenario.project.project.title, revision: "1",
           open: scenario.project.project.open }] });
     }
-    if (name === CHAPTER_READ) return jsonResponse(chapterA);
+    if (name === CHAPTER_READ) {
+      return jsonResponse({ ...chapterA, project_activity_position: stream.at(-1)!.event.stream_sequence,
+        chapter: { ...chapterA.chapter, title: "Chapter A, renamed" } });
+    }
     if (name === TREE) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000854", project_scope: scope,
@@ -169,8 +174,9 @@ async function fakeServer() {
     switchChapter() {
       session = { ...session, base_snapshot: baseB };
       canonical = descriptor(baseB);
-      stream.push({ id: "cursor-b", event: eventB }, { id: "cursor-c", event: eventC });
+      stream.push({ id: "cursor-b", event: eventB });
     },
+    renameChapterBElsewhere() { stream.push({ id: "cursor-c", event: eventC }); },
     holdProjectRead() {
       let release = () => {};
       projectGate = new Promise<void>((resolve) => { release = resolve; });
@@ -197,7 +203,7 @@ afterEach(async () => {
 /**
  * Opens the Editor Session of the tab with generation 2, which runs the takeover check, then takes the first Event when
  * `consume` is true. Then the Chapter switch settles, and the open of Chapter B gives the partition of the first open as
- * the last ready open of this page.
+ * the last ready open of this page. After the open, another tab renames Chapter B.
  */
 async function openAfterSwitch(server: Awaited<ReturnType<typeof fakeServer>>, consume = true) {
   const { scenario, fetchImpl } = server;
@@ -215,6 +221,7 @@ async function openAfterSwitch(server: Awaited<ReturnType<typeof fakeServer>>, c
     readyPartitionId: first.partition.journal_partition_id });
   requireEditorReady(switched);
   trackDatabase(switched.database, databases);
+  server.renameChapterBElsewhere();
   return { first, firstActivity, switched, switchReads: server.log.requests.slice(before) };
 }
 
@@ -333,15 +340,15 @@ it("opens as the writer when another Editor Session takes over between the Sessi
   await controller.whenIdle();
   await controller.flush();
 
-  const journal = await readJournalSnapshot(workspace);
   expect({ reopen: server.log.requests.slice(before.requests, before.requests + 4).sort(),
     answered: server.log.answered.slice(before.answered, before.answered + 4).at(-1), opened,
     input: controller.canAcceptInput(false), body: controller.snapshot().projection.body,
-    partition: (await stored(workspace.database)).partition, records: journal.records.length,
+    rebuilt: (await rebuildPendingProjection(workspace)).body,
+    partition: (await stored(workspace.database)).partition,
     failures: failures.length, commands: server.log.requests.filter((name) => name === AUTHOR_EDIT).length,
     unexpected: server.log.unexpected }).toEqual({
     reopen: [CHAPTER_READ, LIST, PROJECT_READ, SESSION_READ].sort(), answered: PROJECT_READ,
     opened: { writer: { kind: "current_writer", writer_generation: "2" }, stored: before.stored },
-    input: false, body: "Base typed", partition: { ...first.partition, disposition: "read_only_observer" },
-    records: 1, failures: 1, commands: 1, unexpected: [] });
+    input: false, body: "Base typed", rebuilt: "Base typed",
+    partition: { ...first.partition, disposition: "read_only_observer" }, failures: 1, commands: 1, unexpected: [] });
 });
