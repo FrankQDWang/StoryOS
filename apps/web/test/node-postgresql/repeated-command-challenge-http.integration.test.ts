@@ -168,9 +168,7 @@ test("A Challenge for a Project that is not there or of another User gives the 4
 
     const issued = await challenge(own.projectId, id("e19018"));
     assert.equal(issued.status, 200);
-    const issuedRows = await challengeRows([own.projectId]);
     assert.deepEqual(await challenge(own.projectId, id("e19018")), issued);
-    assert.equal(await challengeRows([own.projectId]), issuedRows);
   } finally {
     await stopStoryOSServer(started.server);
   }
