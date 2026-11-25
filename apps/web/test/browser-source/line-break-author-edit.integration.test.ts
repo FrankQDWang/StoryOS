@@ -19,7 +19,7 @@ import {
   requireEditorReady,
 } from "./scenario.ts";
 
-// One block with line break characters, as an accepted suggestion of three paragraphs makes it (#1894).
+// One block with line break characters, as an accepted Proposal of three paragraphs makes it (#1894).
 const BODY = "One\nTwo\nThree";
 
 async function sha256Hex(text: string): Promise<string> {

@@ -12,8 +12,8 @@ import { manuscriptJson } from "../../src/manuscript-doc.ts";
 import { storyosManuscriptExtensions } from "../../src/manuscript-tiptap-adapter.ts";
 import { applyImeComposition, applyTrustedInput } from "../support/browser-command-client.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
-import { BLOCK, createAppliedAuthorEditResponse, createBrowserScenario, jsonResponse, withOpenProposalList,
-} from "./scenario.ts";
+import { BLOCK, PROJECT, SESSION, createAppliedAuthorEditResponse, createBrowserScenario, jsonResponse,
+  withOpenProposalList } from "./scenario.ts";
 
 type Proposal = typeof proposalFixture.proposal;
 
@@ -291,20 +291,23 @@ it("keeps each line break character of a candidate after typing in it", async ()
     operations: base.operations.map((operation) => ({ ...operation, candidate_text: candidateText })) };
   const sent: { author_edit_units: { normalized_primitives: unknown }[] }[] = [];
   const unexpected: string[] = [];
+  const projectPath = `/api/v1/projects/${PROJECT}`;
   const fetchImpl: typeof fetch = async (input, init) => {
-    const path = new URL(input instanceof Request ? input.url : input).pathname;
-    if (path.endsWith(`/proposals/${proposal.proposal_id}`)) {
+    const request = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
+    if (request === `GET ${projectPath}/proposals/${proposal.proposal_id}`) {
       return jsonResponse({ ...proposalFixture, project_scope: scenario.project.project_scope, proposal });
     }
-    if (path.endsWith("/anti-forgery-challenges")) return jsonResponse({ nonce: "a".repeat(64),
+    if (request === `POST ${projectPath}/anti-forgery-challenges`) return jsonResponse({ nonce: "a".repeat(64),
       expires_at: new Date(Date.now() + 60_000).toISOString(), limit_profile_revision: "storyos.foundation.absolute.v1" });
-    if (path.includes("/editor-sessions/")) return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
-    if (path.endsWith("/manuscript/author-edits")) {
+    if (request === `GET ${projectPath}/editor-sessions/${SESSION}`) {
+      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+    }
+    if (request === `POST ${projectPath}/manuscript/author-edits`) {
       sent.push(JSON.parse(String(init?.body)));
       return new Promise<Response>(() => {});
     }
-    unexpected.push(path);
-    throw new Error(`No request handler: ${path}`);
+    unexpected.push(request);
+    throw new Error(`No request handler: ${request}`);
   };
   await withActEnvironment(async () => {
     const view = await renderCandidate(test.workspace, proposal, fetchImpl);
