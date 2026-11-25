@@ -19,13 +19,6 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
   await page.setViewportSize({ width: 1487, height: 1058 });
   page.setDefaultTimeout(10_000);
   let phase = "setup";
-  // TEMPORARY TRACE FOR #1892: each Challenge response of the page.
-  const challenges: string[] = [];
-  page.on('response', (response) => {
-    if (response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/anti-forgery-challenges')) {
-      challenges.push(`${new Date().toISOString()} ${phase} ${response.status()} ${response.headers()['retry-after'] ?? ''}`);
-    }
-  });
   try {
     await page.goto(origin);
     await page.locator('input[name="title"]').fill(`Multi-location ${id()}`);
@@ -90,7 +83,6 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const completeRun = async (message: string) => {
       admitted = undefined;
       await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
-      challenges.push(`${new Date().toISOString()} reset`);
       await page.locator('[data-assistant-availability="available"]').waitFor();
       await page.locator('[name="assistant-message"]').fill(message);
       await page.locator('.composer button.send-button').click();
@@ -166,48 +158,22 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const held = new Promise<void>(resolve => { releaseHeld = resolve; });
     const observed = new Promise<void>(resolve => { observedHeld = resolve; });
     let navigationReads = 0;
-    // TEMPORARY TRACE FOR #1892.
-    const t0 = Date.now(); const trace: string[] = [];
-    const mark = (event: string) => trace.push(`${Date.now() - t0} ${event}`);
-    const delayMs = Number(process.env.STORYOS_1892_DELAY_MS ?? '0');
-    const onRequest = (request: { method(): string; url(): string }) => {
-      const url = new URL(request.url()); if (url.pathname.startsWith('/api/')) mark(`> ${request.method()} ${url.pathname}`); };
-    const onFinished = (request: { method(): string; url(): string }) => {
-      const url = new URL(request.url()); if (url.pathname.startsWith('/api/')) mark(`< ${request.method()} ${url.pathname}`); };
-    page.on('request', onRequest); page.on('requestfinished', onFinished);
-    const slowRoute = (url: URL) => url.pathname.startsWith('/api/') && !url.pathname.endsWith(`/proposals/${proposalId}`);
-    if (delayMs > 0) await page.route(slowRoute, async route => {
-      const response = await route.fetch(); await new Promise(resolve => setTimeout(resolve, delayMs));
-      await route.fulfill({ response }); });
     await page.route(proposalRoute, async route => {
       const response = await route.fetch();
-      const read = ++navigationReads; mark(`proposal read ${read} fetched`);
-      if (read === 2) { observedHeld(); await held; mark('held read released'); }
-      if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
+      if (++navigationReads === 2) { observedHeld(); await held; }
       await route.fulfill({ response });
     });
-    const windows = async () => queryStoryOSPostgres(`SELECT coalesce(jsonb_agg(jsonb_build_object('start', window_started_at,
-      'policy', policy_revision, 'generation', client_session_generation, 'issued', issued_count))::text, '[]')
-      FROM storyos.project_command_challenge_rate_windows WHERE project_id='${projectId}'::uuid`);
-    const windowsBefore = await windows();
-    mark('click 1'); await page.locator(`[data-proposal-location="${firstOutcome.operation_id}"]`).click();
-    await observed; mark('observed');
+    await page.locator(`[data-proposal-location="${firstOutcome.operation_id}"]`).click();
+    await observed;
     assert.ok(locations[2]!.outcome.kind !== 'refused');
-    mark('click 2'); await page.locator(`[data-proposal-location="${locations[2]!.outcome.operation_id}"]`).click();
-    releaseHeld(); await page.unroute(proposalRoute, undefined); mark('unrouted');
-    const shown = async () => ({ h2: await page.locator('.editor-panel h2').textContent(),
-      alert: await page.locator('.editor-panel [role="alert"]').allTextContents(),
-      focused: await page.locator(`[data-proposal-operation-id="${locations[2]!.outcome.operation_id}"]`).getAttribute('data-proposal-focused').catch(() => 'absent') });
-    const states: string[] = [];
-    for (let poll = 0; poll < 300; poll++) {
-      const state = await shown(); const line = JSON.stringify(state);
-      if (states.at(-1)?.endsWith(line) !== true) states.push(`${Date.now() - t0} ${line}`);
-      if (state.focused === 'true') break;
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    page.off('request', onRequest); page.off('requestfinished', onFinished);
-    if (delayMs > 0) await page.unroute(slowRoute, undefined);
-    await writeFile(join(repositoryRoot, `target/1892-trace-${delayMs}.json`), JSON.stringify({ trace, states, windowsBefore, windowsAfter: await windows(), challenges }, null, 1));
+    // The second click stops the first navigation before it shows Chapter A, so the heading stays Chapter B and
+    // gives no wait. The focus comes after the switch of the second navigation and one more open (#1892).
+    const switchedToB = page.waitForResponse((response) => response.request().method() === 'PUT'
+      && new URL(response.url()).pathname.endsWith('/current-chapter')
+      && response.request().postDataJSON().set_current_chapter_input.chapter_id === chapters[1]);
+    await page.locator(`[data-proposal-location="${locations[2]!.outcome.operation_id}"]`).click();
+    releaseHeld(); await page.unroute(proposalRoute, undefined);
+    assert.ok((await switchedToB).ok());
     await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
     await expect(page.locator(`[data-proposal-operation-id="${locations[2]!.outcome.operation_id}"]`)).toHaveAttribute('data-proposal-focused', 'true');
     await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
