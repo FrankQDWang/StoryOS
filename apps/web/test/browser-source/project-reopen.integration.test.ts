@@ -21,7 +21,7 @@ import { mountStage1View } from "../../src/stage1-view.tsx";
 import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import {
   BLOCK, CHAPTER, EDITOR_SNAPSHOT, OWNER, PROJECT, REVISION, SESSION, chapterRevision, closeTrackedDatabases,
-  createBrowserScenario, deleteJournal, emptyActivityStream, jsonResponse, trackDatabase,
+  createBrowserScenario, deleteJournal, emptyActivityStream, jsonResponse, requestResult, trackDatabase,
 } from "./scenario.ts";
 
 // A Project opens, and opens again after a command, with fewer requests in series (#1875).
@@ -110,7 +110,8 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * adds a second open Proposal. As on the Server, only the first created Editor Session holds the writer; a later
  * creation gives a read-only Session. A rename of Chapter A changes its title in the tree and advances the tree revision. A
  * rename of the Project changes its title, advances its revision, and records the expected revision.
- * `renameElsewhere` is a rename of the Project in another tab. With
+ * `renameElsewhere` is a rename of the Project in another tab. `takeOverElsewhere(generation)` is a takeover in
+ * another tab with the Editor Session of this tab, for example a duplicated tab: the Session holds that generation. With
  * `proposalResult`, the Run of the Conversation has a Proposal result with a change in Chapter A.
  */
 function fakeServer({ reads, writer = { kind: "current_writer", writer_generation: "1" }, commands = [],
@@ -407,6 +408,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     scenario, log, fetchImpl, projectRenames: state.projectRenames,
     answerBeforeHold(names: string[]) { answerFirst = new Set(names); },
     renameElsewhere(title: string) { state.projectTitle = title; state.projectRevision += 1; },
+    takeOverElsewhere(generation: string) { state.writer = { kind: "current_writer", writer_generation: generation }; },
     holdAfter(trigger: string, names: string[]) { armed = { trigger, names }; },
     hold(names: string[]) { holding = new Set(names); },
     holdEach(on: boolean) { holdEach = on; },
@@ -733,6 +735,140 @@ it("reads the tree one time for one open with a writer generation above 1", asyn
     unexpected: server.log.unexpected }).toEqual({
     title: "Chapter A", save: "saved", failure: "", list: 1, tree: 1, unexpected: [] });
 });
+
+// The takeover check runs only when this page did not do its work for the Editor Session and the writer generation
+// (#1897). Its reads are the tree, the Snapshot of the tree, and a second Editor Session read.
+/** The Editor Session, tree, and Snapshot reads in `requests` up to the last Editor Session read. */
+const checkReads = (requests: string[]) => requests.slice(0, requests.lastIndexOf(SESSION_READ) + 1)
+  .filter((name) => name === TREE || name === SESSION_READ || name.startsWith(`GET ${P}/snapshots/`));
+const chapterB = (root: HTMLElement) => root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`);
+
+/** Opens the workspace with the Editor Session of this tab, which holds writer generation 2. */
+async function openSecondGeneration(server: ReturnType<typeof fakeServer>) {
+  sessionStorage.setItem(`active_session:${OWNER}:${PROJECT}`, SESSION);
+  const workspace = await openWorkspace(server);
+  await expect.poll(() => chapterB(workspace.root)?.disabled).toBe(false);
+  await expect.poll(server.inFlight).toEqual([]);
+  return workspace;
+}
+
+/**
+ * Holds the second Editor Session read of the check after the read of the Snapshot `snapshotId`. Then another tab with
+ * the same Editor Session takes over the writer with `generation`, so the check refuses the open.
+ */
+async function takeOverDuringCheck(server: ReturnType<typeof fakeServer>, snapshotId: string, generation: string) {
+  server.holdAfter(snapshotRead(snapshotId), [SESSION_READ]);
+  return async () => {
+    await expect.poll(server.inFlight).toEqual([SESSION_READ]);
+    server.takeOverElsewhere(generation);
+    server.release();
+  };
+}
+
+const SWITCH_READS = [...OPEN_READS, SESSION_READ, chapterRead(CHAPTER_B), openProposalsRead(CHAPTER_B)];
+
+it("opens the Chapter of a switch with writer generation 2 and sends no read of the takeover check", async () => {
+  const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT)],
+    writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
+  const workspace = await openSecondGeneration(server);
+  const before = server.log.started.length;
+  // The view reads the tree after the new view. A check of the open waits for this held read.
+  server.holdAfter(SWITCH, [TREE]);
+
+  chapterB(workspace.root)!.click();
+
+  await expect.poll(() => ({ ...workspace.shown(), held: server.inFlight().includes(TREE) }))
+    .toEqual({ title: "Chapter B", save: "saved", failure: "", held: true });
+  server.release();
+  await expect.poll(server.inFlight).toEqual([]);
+  const later = server.log.started.slice(server.log.started.indexOf(SWITCH, before));
+  expect({ first: checkReads(server.log.started.slice(0, before)), later: checkReads(later),
+    unexpected: server.log.unexpected }).toEqual({ first: [SESSION_READ, TREE, snapshotRead(EDITOR_SNAPSHOT),
+    SESSION_READ], later: [SESSION_READ], unexpected: [] });
+});
+
+it("runs the takeover check at the first open after a takeover in this tab, and refuses a changed Session",
+  async () => {
+    const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT)],
+      writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
+      commands: [SESSION_CREATE, TAKEOVER] });
+    const workspace = await openWorkspace(server);
+    const takeOver = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
+    await expect.poll(() => takeOver()?.disabled).toBe(false);
+    const before = server.log.started.length;
+    const takenOver = await takeOverDuringCheck(server, TAKEOVER_SNAPSHOT, "3");
+
+    takeOver()!.click();
+    await takenOver();
+
+    await expect.poll(() => workspace.shown().save).toBe("needs_attention");
+    expect({ check: checkReads(server.log.started.slice(before)), unexpected: server.log.unexpected })
+      .toEqual({ check: [SESSION_READ, TREE, snapshotRead(TAKEOVER_SNAPSHOT), SESSION_READ], unexpected: [] });
+  });
+
+it("runs the takeover check at a reload with an empty local database, and refuses a changed Session", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(EDITOR_SNAPSHOT)],
+    writer: { kind: "current_writer", writer_generation: "2" } });
+  await openSecondGeneration(server);
+  for (const unmount of unmounts.splice(0)) unmount();
+  closeTrackedDatabases(openDatabases);
+  await deleteJournal(server.scenario.journalName);
+  const before = server.log.started.length;
+  const takenOver = await takeOverDuringCheck(server, EDITOR_SNAPSHOT, "3");
+
+  const reloaded = reloadWorkspace(server);
+  await takenOver();
+  const root = await reloaded;
+
+  await expect.poll(() => root.querySelector("[data-save-state]")?.getAttribute("data-save-state"))
+    .toBe("needs_attention");
+  expect({ check: checkReads(server.log.started.slice(before)), unexpected: server.log.unexpected })
+    .toEqual({ check: [SESSION_READ, TREE, snapshotRead(EDITOR_SNAPSHOT), SESSION_READ], unexpected: [] });
+});
+
+it("runs the takeover check after a takeover with writer generation 3 in another tab, and refuses a changed Session",
+  async () => {
+    const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT), snapshotRead(SWITCH_SNAPSHOT)],
+      writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
+    const workspace = await openSecondGeneration(server);
+    const before = server.log.started.length;
+    server.holdAfter(SWITCH, [PROJECT_READ, LIST]);
+
+    chapterB(workspace.root)!.click();
+    await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ].sort());
+    // A tab with the Editor Session of this tab takes over the writer after the switch settled.
+    server.takeOverElsewhere("3");
+    const takenOver = await takeOverDuringCheck(server, SWITCH_SNAPSHOT, "4");
+    server.release();
+    await takenOver();
+
+    await expect.poll(() => workspace.shown()).toEqual({ title: "Chapter B", save: "needs_attention", failure: "" });
+    expect({ check: checkReads(server.log.started.slice(server.log.started.indexOf(SWITCH, before))),
+      unexpected: server.log.unexpected }).toEqual({
+      check: [SESSION_READ, TREE, snapshotRead(SWITCH_SNAPSHOT), SESSION_READ], unexpected: [] });
+  });
+
+it("refuses the open of a switch with writer generation 2 when the Journal holds a partition of another User",
+  async () => {
+    const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT)],
+      writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
+    const workspace = await openSecondGeneration(server);
+    const otherUser = "018f0000-0000-7001-8000-000000000838";
+    const journal = await requestResult(indexedDB.open(server.scenario.journalName)) as IDBDatabase;
+    const partitions = journal.transaction("partitions", "readwrite").objectStore("partitions");
+    const [stored] = await requestResult(partitions.getAll()) as { journal_partition_id: string;
+      project_scope: { owner_user_id: string; project_id: string } }[];
+    await requestResult(partitions.put({ ...stored!, project_scope: { ...stored!.project_scope, owner_user_id: otherUser },
+      journal_partition_id: stored!.journal_partition_id.replace(OWNER, otherUser) }));
+    journal.close();
+    const before = server.log.started.length;
+
+    chapterB(workspace.root)!.click();
+
+    await expect.poll(() => workspace.shown()).toEqual({ title: "Chapter B", save: "needs_attention", failure: "" });
+    await expect.poll(server.inFlight).toEqual([]);
+    expect(server.log.unexpected).toEqual([]);
+  });
 
 it("reads the statistics one time when the tree read fails", async () => {
   const server = fakeServer({ reads: OPEN_READS, commands: [SESSION_CREATE], unavailable: [TREE] });

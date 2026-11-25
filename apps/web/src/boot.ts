@@ -144,11 +144,12 @@ export async function openControlledProject(options: ProjectOpenOptions): Promis
 }
 
 /**
- * Opens the Project again after a settled command of this page. The page keeps only the protocol profile: the reopen
- * reads the Project and the list of Projects at the same time, then the Chapter and the Editor Session at the same time.
+ * Opens the Project again after a settled command of this page. The page keeps the protocol profile and the editor of
+ * its last open: the reopen reads the Project and the list of Projects at the same time, then the Chapter and the
+ * Editor Session at the same time. The takeover check runs only when the last open had another Journal partition.
  */
 export async function reopenControlledProject(options: Omit<ProjectOpenOptions, "projectId"> & {
-  opened: Pick<ProjectReadyState, "profile" | "project">;
+  opened: Pick<ProjectReadyState, "profile" | "project"> & Partial<Pick<ProjectReadyState, "editor">>;
 }): Promise<ControlledProjectState> {
   const { baseUrl, opened, fetchImpl = globalThis.fetch, signal } = options;
   const scope = opened.project.project_scope;
@@ -158,7 +159,7 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
     if (read === undefined) return projectUnavailable();
     if (read.project.project_scope.owner_user_id !== scope.owner_user_id) throw new Error("Project Scope mismatch");
     return await openProjectWorkspace({ ...options, projectId: scope.project_id }, opened.profile, read.project,
-      read.revision);
+      read.revision, opened.editor?.kind === "editor-ready" ? opened.editor.partition.journal_partition_id : undefined);
   } catch (error) {
     return projectUnavailable(error);
   }
@@ -170,6 +171,7 @@ async function openProjectWorkspace(
   profile: Release1ProtocolProfile,
   project: GetProjectResponse,
   revision: string,
+  readyPartitionId?: string,
 ): Promise<ControlledProjectState> {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal,
     indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto } = options;
@@ -198,7 +200,8 @@ async function openProjectWorkspace(
       return { kind: "empty-project-ready", profile, project, revision, tree };
     }
     const chapterId = project.project.open.current_chapter_id;
-    const opening = startEditorWorkspace({ baseUrl, project, profile, fetchImpl, indexedDBImpl, cryptoImpl });
+    const opening = startEditorWorkspace({ baseUrl, project, profile, fetchImpl, indexedDBImpl, cryptoImpl,
+      readyPartitionId });
     let chapter: GetChapterResponse;
     try {
       chapter = await readCurrentChapter(queryOptions, projectId, chapterId, ownerUserId);
