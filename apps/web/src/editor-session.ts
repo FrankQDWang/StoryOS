@@ -9,6 +9,7 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CreateEditorSessionRequest,
+  CreateProjectCommandChallengeResponse,
   GetChapterResponse,
   GetEditorSessionResponse,
   GetManuscriptTreeResponse,
@@ -139,13 +140,23 @@ function partitionFrom(
   };
 }
 
-async function createSession({ baseUrl, project, profile, fetchImpl, cryptoImpl }: {
+type SessionCreationOptions = {
   baseUrl: string;
   project: GetProjectResponse;
   profile: Release1ProtocolProfile;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
-}): Promise<GetEditorSessionResponse> {
+};
+
+/** An Editor Session creation and its Challenge request, which starts at once (#1899). */
+type SessionCreation = {
+  request: CreateEditorSessionRequest;
+  idempotencyKey: string;
+  challenge: Promise<CreateProjectCommandChallengeResponse>;
+};
+
+function prepareSessionCreation({ baseUrl, project, profile, fetchImpl, cryptoImpl }: SessionCreationOptions):
+  SessionCreation {
   const request: CreateEditorSessionRequest = {
     command_schema: "storyos.command.create-editor-session.request.v1",
     client_contract_revision: profile.release_identity.web_client_contract_revision,
@@ -153,22 +164,30 @@ async function createSession({ baseUrl, project, profile, fetchImpl, cryptoImpl 
     correlation_id: uuidV7(cryptoImpl),
   };
   const idempotencyKey = uuidV7(cryptoImpl);
-  const canonicalCommandDigest = await digestCreateEditorSession(request, cryptoImpl);
-  const challenge = await createProjectCommandChallenge({
-    baseUrl,
-    projectId: project.project.project_id,
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/editor-sessions",
-      command_schema: request.command_schema,
-      canonical_command_digest: canonicalCommandDigest,
-      idempotency_key: idempotencyKey,
-    },
-    fetchImpl,
-  });
+  const challenge = digestCreateEditorSession(request, cryptoImpl).then((canonicalCommandDigest) =>
+    createProjectCommandChallenge({
+      baseUrl,
+      projectId: project.project.project_id,
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/editor-sessions",
+        command_schema: request.command_schema,
+        canonical_command_digest: canonicalCommandDigest,
+        idempotency_key: idempotencyKey,
+      },
+      fetchImpl,
+    }));
+  // An open that stops before the creation does not use the Challenge.
+  challenge.catch(() => {});
+  return { request, idempotencyKey, challenge };
+}
+
+async function createSession(creation: SessionCreation, options: SessionCreationOptions):
+  Promise<GetEditorSessionResponse> {
+  const challenge = await creation.challenge;
   return createEditorSession({
-    baseUrl, projectId: project.project.project_id, request, idempotencyKey,
-    antiForgery: challenge.nonce, fetchImpl,
+    baseUrl: options.baseUrl, projectId: options.project.project.project_id, request: creation.request,
+    idempotencyKey: creation.idempotencyKey, antiForgery: challenge.nonce, fetchImpl: options.fetchImpl,
   });
 }
 
@@ -276,6 +295,8 @@ type EditorWorkspaceOptions = {
   cryptoImpl?: Crypto;
   /** The Journal partition of the last ready open of this page, when it had one. */
   readyPartitionId?: string | undefined;
+  /** False keeps the Challenge of a Session creation until `finish`. */
+  earlyChallenge?: boolean;
 };
 
 /**
@@ -296,28 +317,32 @@ export interface OpenedEditorWorkspace {
 }
 
 type EditorSessionStart =
-  | { kind: "started"; database: IDBDatabase; active: string | null | undefined; sessionValue: unknown }
+  | { kind: "started"; database: IDBDatabase; active: string | null | undefined; sessionValue: unknown;
+    creation: SessionCreation | undefined }
   | { kind: "failed"; database: IDBDatabase | undefined; error: unknown };
 
 /** Opens the Journal and reads the stored Editor Session at once, so that the read is in flight with the Chapter read. */
 export function startEditorWorkspace({
   baseUrl, project, profile, fetchImpl = globalThis.fetch,
-  indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto, readyPartitionId,
+  indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto, readyPartitionId, earlyChallenge = true,
 }: EditorWorkspaceOptions): EditorWorkspaceOpening {
   const scope = project.project_scope;
   const started = (async (): Promise<EditorSessionStart> => {
     let database: IDBDatabase | undefined;
     try {
-      database = await openJournalDatabase(indexedDBImpl, scope);
       const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
       const active = globalThis.sessionStorage
         ? globalThis.sessionStorage.getItem(activeSessionKey) : undefined;
-      // A stored Session read changes nothing on the Server, so it runs with the Chapter read; a creation waits (#1884).
+      // The creation waits for the Chapter read (#1884), and its Challenge starts with that read (#1899).
+      const creation = !active && earlyChallenge
+        ? prepareSessionCreation({ baseUrl, project, profile, fetchImpl, cryptoImpl }) : undefined;
+      database = await openJournalDatabase(indexedDBImpl, scope);
+      // A stored Session read changes nothing on the Server, so it runs with the Chapter read.
       const sessionValue: unknown = active
         ? await getEditorSession({ baseUrl, projectId: scope.project_id,
           editorSessionId: active, fetchImpl })
         : undefined;
-      return { kind: "started", database, active, sessionValue };
+      return { kind: "started", database, active, sessionValue, creation };
     } catch (error) {
       return { kind: "failed", database, error };
     }
@@ -363,7 +388,9 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
   let start = await started;
   if (start.kind === "started" && !start.active) {
     try {
-      start = { ...start, sessionValue: await createSession({ baseUrl, project, profile, fetchImpl, cryptoImpl }) };
+      const options = { baseUrl, project, profile, fetchImpl, cryptoImpl };
+      start = { ...start, sessionValue: await createSession(start.creation ?? prepareSessionCreation(options),
+        options) };
     } catch (error) {
       start = { kind: "failed", database: start.database, error };
     }

@@ -62,10 +62,11 @@ function tree(volumes: Volume[]) {
   };
 }
 
+/** A Challenge as the Server issues it: it expires 5 minutes after its issue. */
 export function challenge() {
   return {
     nonce: "a".repeat(64),
-    expires_at: "2026-09-12T00:00:00.000Z",
+    expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
     limit_profile_revision: "storyos.foundation.absolute.v1",
   };
 }
