@@ -298,10 +298,11 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         receipt: { ...updateChapterFixture.receipt, project_scope: scope } });
     }
     if (name === PROPOSAL_READ) {
+      // As on the Server, a decided Operation has a resolved reservation.
       const resolution = state.accepted ? "applied" : state.rejected ? "rejected" : undefined;
       return jsonResponse({ ...proposalFixture, project_scope: scope, proposal: resolution === undefined ? current()
-        : { ...current(), operation_resolution: resolution, operations: current().operations
-          .map((operation) => ({ ...operation, resolution })) } });
+        : { ...current(), operation_resolution: resolution, reservation_state: "resolved", operations: current()
+          .operations.map((operation) => ({ ...operation, resolution, reservation_state: "resolved" })) } });
     }
     if (name === PROJECT_RENAME) {
       const input = (JSON.parse(String(init?.body)) as {
@@ -410,7 +411,10 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         idempotency_key: new Headers(init?.headers).get("idempotency-key") ?? "", proposal_id: PROPOSAL.proposal_id,
         proposal_revision_id: input.proposal_revision_id,
         selected_pending_operation_ids: input.selected_pending_operation_ids,
+        // As on the Server (`reject_proposal_operations.rs`), the three lists have the expected Chapter revision.
         expected_target_revisions: input.expected_target_revisions,
+        prior_authoritative_revision_ids: input.expected_target_revisions,
+        resulting_authoritative_revision_ids: input.expected_target_revisions,
         ...(refusal !== undefined ? { result: "refused" } : rejection === "resolved" ? {} : { result: rejection }) } });
   };
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -1547,7 +1551,7 @@ it.each([
     settled: (root: HTMLElement) => root.querySelector(`.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"]`)
       === null,
     after: [openProposalsRead(CHAPTER), PROPOSAL_READ, PROPOSAL_READ] },
-])("sends the $decision of a suggestion with no Proposal read before it", async ({ command, button, reads, settled,
+])("sends the $decision of a Proposal Operation with no Proposal read before it", async ({ command, button, reads, settled,
   after }) => {
   const server = fakeServer({ reads, commands: [SESSION_CREATE, command], proposals: true, acceptance: "applied" });
   const workspace = await openWorkspace(server);
@@ -1571,16 +1575,20 @@ it.each([
 });
 
 const REFUSED_REJECTION = "此次拒绝未生效，请检查当前候选文字。";
-/** The requests of a refused rejection: the reopen, and then one read of the Proposal (#1900). */
-const REFUSED_LATER = [CHALLENGE, REJECTION, ...REOPEN_AFTER_DECISION, SESSION_READ, openProposalsRead(CHAPTER),
-  PROPOSAL_READ];
+/** The requests of a refused rejection: the read of the list and the Proposal before the reopen, the reopen, and the
+ * read of the list at the end of the decision (decision 6 of #1900), as after a refused acceptance. */
+const REFUSED_LATER = [CHALLENGE, REJECTION, openProposalsRead(CHAPTER), PROPOSAL_READ, ...REOPEN_AFTER_DECISION,
+  SESSION_READ, openProposalsRead(CHAPTER)];
 
-/** The suggestion card of the Proposal, its status, and the Chapter revision that the page shows. */
+/** The suggestion card of the Proposal, its status, and the Chapter revision and text that the page shows. */
 function proposalView(root: HTMLElement) {
   const card = () => root.querySelector<HTMLElement>(`.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"]`);
   return { card, reject: () => card()?.querySelector<HTMLButtonElement>("button[data-proposal-reject]"),
     status: () => root.querySelector(`[data-proposal-decision="${PROPOSAL.proposal_id}"]`)?.textContent ?? null,
-    revision: () => root.querySelector("[data-authoritative-revision-id]")?.getAttribute("data-authoritative-revision-id") };
+    revision: () => root.querySelector("[data-authoritative-revision-id]")?.getAttribute("data-authoritative-revision-id"),
+    // The blocks of the Chapter text, with no suggestion card.
+    text: () => [...root.querySelector("[data-manuscript-editor]")?.children ?? []]
+      .filter((block) => !block.classList.contains("block-proposal")).map((block) => block.textContent) };
 }
 
 it("shows the sentence of a refused rejection of an earlier Proposal revision under the current revision, and the next"
@@ -1591,6 +1599,8 @@ it("shows the sentence of a refused rejection of an earlier Proposal revision un
   const view = proposalView(workspace.root);
   await expect.poll(() => view.reject()?.disabled).toBe(false);
   await expect.poll(server.inFlight).toEqual([]);
+  const shownText = view.text();
+  expect(shownText).toEqual(["Base"]);
   // Another tab edits the candidate text: the Proposal has a new revision.
   server.decideElsewhere("revised");
   const from = server.log.started.length;
@@ -1603,8 +1613,9 @@ it("shows the sentence of a refused rejection of an earlier Proposal revision un
     revision: REVISED_PROPOSAL.revision_id, text: true, earlierText: false });
   await expect.poll(server.inFlight).toEqual([]);
   const refused = sorted(server.log.started.slice(from));
-  expect({ ...workspace.shown(), revision: view.revision(), status: view.status() })
-    .toEqual({ title: "Chapter A", save: "saved", failure: "", revision: REVISION, status: REFUSED_REJECTION });
+  expect({ ...workspace.shown(), revision: view.revision(), text: view.text(), status: view.status() })
+    .toEqual({ title: "Chapter A", save: "saved", failure: "", revision: REVISION, text: shownText,
+      status: REFUSED_REJECTION });
   await expect.poll(() => view.reject()?.disabled).toBe(false);
   view.reject()!.click();
 
@@ -1622,6 +1633,8 @@ it("shows the sentence of a refused rejection when another tab rejected the Oper
   const view = proposalView(workspace.root);
   await expect.poll(() => view.reject()?.disabled).toBe(false);
   await expect.poll(server.inFlight).toEqual([]);
+  const shownText = view.text();
+  expect(shownText).toEqual(["Base"]);
   server.decideElsewhere("rejected");
   const from = server.log.started.length;
 
@@ -1630,10 +1643,11 @@ it("shows the sentence of a refused rejection when another tab rejected the Oper
   await expect.poll(() => ({ status: view.status(), card: view.card() })).toEqual({ status: REFUSED_REJECTION,
     card: null });
   await expect.poll(server.inFlight).toEqual([]);
-  // With no open suggestion of this Proposal, the view reads it one more time.
-  expect({ ...workspace.shown(), revision: view.revision(), status: view.status(),
+  // With no open suggestion of this Proposal, the view reads it one more time, as after a resolved rejection
+  // (decision 5 of #1900).
+  expect({ ...workspace.shown(), revision: view.revision(), text: view.text(), status: view.status(),
     later: sorted(server.log.started.slice(from)), unexpected: server.log.unexpected }).toEqual({ title: "Chapter A",
-    save: "saved", failure: "", revision: REVISION, status: REFUSED_REJECTION,
+    save: "saved", failure: "", revision: REVISION, text: shownText, status: REFUSED_REJECTION,
     later: sorted([...REFUSED_LATER, PROPOSAL_READ]), unexpected: [] });
 });
 

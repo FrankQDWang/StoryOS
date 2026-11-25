@@ -540,13 +540,13 @@ export function BlockProposalDisplay({
   /**
    * Shows a settled Rejection (#1876). A resolved Rejection does not change the Chapter text, so the view reads the
    * open suggestions again. A changed Chapter Head or a refusal opens the Project again: another tab can have applied
-   * the Operation. After a refusal the view also reads the Proposal again, so the card shows its current revision
-   * (#1900).
+   * the Operation. A refusal also reads the Proposal again before the reopen, as a refused acceptance does, so the
+   * card shows its current revision (#1900).
    */
   const showRejection = async (effect: "resolved" | "conflicted" | "refused") => {
     if (effect !== "resolved") {
-      await onAccepted(true);
       if (effect === "refused") setSettlementRefresh((value) => value + 1);
+      await onAccepted(true);
       return;
     }
     setSettlementRefresh((value) => value + 1);
