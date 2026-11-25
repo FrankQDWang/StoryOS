@@ -29,6 +29,8 @@ const NEW_TAB = [PROTOCOL, PROJECT_READ, LIST, CHAPTER_READ, CHALLENGE, CREATION
 const EMPTY = [PROTOCOL, PROJECT_READ, LIST, TREE];
 const MISSING = [PROTOCOL, PROJECT_READ, LIST];
 const STORED = [PROTOCOL, PROJECT_READ, LIST, CHAPTER_READ, SESSION_READ];
+const FAILED_CHAPTER = [PROTOCOL, PROJECT_READ, LIST, CHAPTER_READ, CHALLENGE];
+const REOPEN = [PROJECT_READ, LIST, CHAPTER_READ, CHALLENGE, CREATION];
 /** The class `shared` of the Server: 10 new Challenges in each fixed window of 60 s (`ChallengeRateClass`). */
 const SHARED_CAPACITY = 10;
 const WINDOW_MS = 60_000;
@@ -48,10 +50,12 @@ type Entry = { open: number; name: string };
  * challenge_rate_limited`. A creation needs the nonce of an unused, unexpired Challenge with its idempotency key and
  * the digest of its request, else `422 challenge_invalid`. Each created Editor Session has its own base Snapshot, and
  * its response has the correlation identity of its request. Only the first created Editor Session holds the writer.
- * `hold(names)` holds the next request of each given name until `releaseOnly`. `failNext(names)` answers the next
+ * `serve(names)` replaces `serves` for the next open. `hold(names)` holds the next request of each given name until `releaseOnly`. `failNext(names)` answers the next
  * request of each given name with the 503 problem of an unavailable Project store.
  */
-function fakeServer({ serves, open: initial = "current_chapter" }: { serves: string[]; open?: Open | undefined }) {
+function fakeServer({ serves: initialServes, open: initial = "current_chapter" }:
+  { serves: string[]; open?: Open | undefined }) {
+  let serves = initialServes;
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
   let state: Open = initial;
@@ -175,6 +179,7 @@ function fakeServer({ serves, open: initial = "current_chapter" }: { serves: str
   const server = {
     scenario, log, fetchFor, challenges, creations,
     setOpen(next: Open) { state = next; },
+    serve(names: string[]) { serves = names; },
     hold(names: string[]) { holding = new Set(names); },
     failNext(names: string[]) { for (const name of names) failing.add(name); },
     releaseOnly(names: string[]) {
@@ -289,7 +294,7 @@ it.each([
   { order: "before the Challenge", first: CHAPTER_READ },
 ])("creates no Editor Session when the Chapter read of a new tab fails $order, and the next open uses its own"
   + " Challenge", async ({ first }) => {
-  const server = fakeServer({ serves: NEW_TAB });
+  const server = fakeServer({ serves: FAILED_CHAPTER });
   server.hold([CHAPTER_READ, CHALLENGE]);
   server.failNext([CHAPTER_READ]);
   const failing = open(server, 0);
@@ -299,6 +304,7 @@ it.each([
   server.releaseOnly([CHALLENGE, CHAPTER_READ]);
   const failed = await failing;
   await expect.poll(() => server.consumed(CHALLENGE, 0)).toBe(1);
+  server.serve(NEW_TAB);
 
   const next = await open(server, 1);
 
@@ -329,7 +335,7 @@ it("reopens with the Challenge request of the replacement open with its Chapter 
 
 it("reopens with the early open and no stored Editor Session, and requests its one Challenge at the creation after"
   + " the Chapter read", async () => {
-  const server = fakeServer({ serves: [PROJECT_READ, LIST, CHAPTER_READ, CHALLENGE, CREATION] });
+  const server = fakeServer({ serves: REOPEN });
   const { cryptoImpl, digests } = countingCrypto();
   server.hold([CHAPTER_READ]);
   const reopening = reopen(server, { kind: "current_chapter", current_chapter_id: CHAPTER }, { cryptoImpl });
@@ -347,16 +353,17 @@ it("reopens with the early open and no stored Editor Session, and requests its o
 });
 
 it.each([
-  { path: "the open of a new tab, as the page of an Empty Project does after its first Chapter",
+  { path: "the open of a new tab, as the page of an Empty Project does after its first Chapter", serves: NEW_TAB,
     run: (server: ReturnType<typeof fakeServer>) => open(server, 1) },
-  { path: "a reopen from the page of the Empty Project, which has no early open",
+  { path: "a reopen from the page of the Empty Project, which has no early open", serves: REOPEN,
     run: (server: ReturnType<typeof fakeServer>) => reopen(server, { kind: "empty" }, { index: 1 }) },
 ])("opens an Empty Project with no Challenge, and after its first Chapter, with no stored Editor Session, requests one"
-  + " Challenge with the Chapter read by $path", async ({ run }) => {
-  const server = fakeServer({ serves: [...EMPTY, CHAPTER_READ, CHALLENGE, CREATION], open: "empty" });
+  + " Challenge with the Chapter read by $path", async ({ serves, run }) => {
+  const server = fakeServer({ serves: EMPTY, open: "empty" });
   const empty = await open(server, 0);
   // The author creates the first Chapter, and the Project names it.
   server.setOpen("current_chapter");
+  server.serve(serves);
   server.hold([CHAPTER_READ]);
   const opening = run(server);
 
@@ -383,7 +390,8 @@ it("opens a Project with the stored Editor Session of the tab with no Challenge"
 // On the Server, only the first created Editor Session holds the writer. A later one opens in the read-only recovery.
 it.each([
   { kind: "a new tab", per: 1, first: "current_writer", later: "editor-read-only-recovery", serves: NEW_TAB },
-  { kind: "a failed Chapter read", per: 1, first: "project-blocked", later: "project-blocked", serves: NEW_TAB },
+  { kind: "a failed Chapter read", per: 1, first: "project-blocked", later: "project-blocked",
+    serves: FAILED_CHAPTER },
   { kind: "an Empty Project", per: 0, first: "empty-project-ready", later: "empty-project-ready", serves: EMPTY,
     open: "empty" as const },
   { kind: "a Project that is not there", per: 0, first: "project-blocked", later: "project-blocked", serves: MISSING,
@@ -402,7 +410,7 @@ it.each([
       if (kind === "a stored Editor Session") sessionStorage.setItem(`active_session:${OWNER}:${PROJECT}`, SESSION);
       if (kind === "a failed Chapter read") server.failNext([CHAPTER_READ]);
       const state = await open(server, index);
-      // The open of a failed Chapter read ends when the client read the response of its Challenge.
+      // Wait for the Challenge response of this open, so that the count has it.
       if (kind === "a failed Chapter read") await expect.poll(() => server.consumed(CHALLENGE, index)).toBe(1);
       outcomes.push(writerOf(state));
     }
