@@ -190,6 +190,8 @@ export const blockProposalDecoration = TiptapNode.create({
   name: "blockProposal",
   group: "block",
   content: "text*",
+  // A candidate keeps its line break characters when the editor reads it from the page (#1894).
+  whitespace: "pre",
   selectable: false,
   isolating: true,
   addAttributes() {

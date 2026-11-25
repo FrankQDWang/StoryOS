@@ -281,3 +281,48 @@ it("keeps the caret in place when only a Proposal changes its attributes", () =>
     editor.destroy(); host.remove();
   }
 });
+
+it("keeps each line break character of a candidate after typing in it", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const scenario = createBrowserScenario();
+  const base = candidateFor(test.workspace);
+  const candidateText = "Old\nNew";
+  const proposal = { ...base, candidate_text: candidateText,
+    operations: base.operations.map((operation) => ({ ...operation, candidate_text: candidateText })) };
+  const sent: { author_edit_units: { normalized_primitives: unknown }[] }[] = [];
+  const unexpected: string[] = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const path = new URL(input instanceof Request ? input.url : input).pathname;
+    if (path.endsWith(`/proposals/${proposal.proposal_id}`)) {
+      return jsonResponse({ ...proposalFixture, project_scope: scenario.project.project_scope, proposal });
+    }
+    if (path.endsWith("/anti-forgery-challenges")) return jsonResponse({ nonce: "a".repeat(64),
+      expires_at: new Date(Date.now() + 60_000).toISOString(), limit_profile_revision: "storyos.foundation.absolute.v1" });
+    if (path.includes("/editor-sessions/")) return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+    if (path.endsWith("/manuscript/author-edits")) {
+      sent.push(JSON.parse(String(init?.body)));
+      return new Promise<Response>(() => {});
+    }
+    unexpected.push(path);
+    throw new Error(`No request handler: ${path}`);
+  };
+  await withActEnvironment(async () => {
+    const view = await renderCandidate(test.workspace, proposal, fetchImpl);
+    try {
+      const text = () => view.surface.querySelector(".block-proposal-text")!;
+      view.surface.focus();
+      window.getSelection()!.setBaseAndExtent(text().firstChild!, candidateText.length,
+        text().firstChild!, candidateText.length);
+      document.dispatchEvent(new Event("selectionchange"));
+      await applyTrustedInput({ operation: "insert_text", text: "!" });
+      void view.writing.flush();
+      await expect.poll(() => sent.length).toBe(1);
+      expect({ primitives: sent[0]!.author_edit_units.map((unit) => unit.normalized_primitives),
+        text: text().textContent, unexpected, failures: view.failures })
+        .toEqual({ primitives: [[{ kind: "replace_selection", from: candidateText.length, to: candidateText.length,
+          text: "!" }]], text: `${candidateText}!`, unexpected: [], failures: [] });
+    } finally {
+      await view.unmount(); await test.close();
+    }
+  });
+});
