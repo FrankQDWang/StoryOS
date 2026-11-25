@@ -184,16 +184,10 @@ function prepareSessionCreation({ baseUrl, project, profile, fetchImpl, cryptoIm
 
 async function createSession(creation: SessionCreation, options: SessionCreationOptions):
   Promise<GetEditorSessionResponse> {
-  let used = creation;
-  let challenge = await used.challenge;
-  // A Challenge past its expiry gets a new creation, as the open of a creation with no early Challenge does.
-  if (!(Date.parse(challenge.expires_at) > Date.now())) {
-    used = prepareSessionCreation(options);
-    challenge = await used.challenge;
-  }
+  const challenge = await creation.challenge;
   return createEditorSession({
-    baseUrl: options.baseUrl, projectId: options.project.project.project_id, request: used.request,
-    idempotencyKey: used.idempotencyKey, antiForgery: challenge.nonce, fetchImpl: options.fetchImpl,
+    baseUrl: options.baseUrl, projectId: options.project.project.project_id, request: creation.request,
+    idempotencyKey: creation.idempotencyKey, antiForgery: challenge.nonce, fetchImpl: options.fetchImpl,
   });
 }
 
@@ -339,8 +333,7 @@ export function startEditorWorkspace({
       const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
       const active = globalThis.sessionStorage
         ? globalThis.sessionStorage.getItem(activeSessionKey) : undefined;
-      // A creation changes the Server, so it waits for the Chapter read (#1884). Its Challenge needs no data of that
-      // read, so it starts before the first wait of the open (#1899).
+      // The creation waits for the Chapter read (#1884), and its Challenge starts with that read (#1899).
       const creation = !active && earlyChallenge
         ? prepareSessionCreation({ baseUrl, project, profile, fetchImpl, cryptoImpl }) : undefined;
       database = await openJournalDatabase(indexedDBImpl, scope);
