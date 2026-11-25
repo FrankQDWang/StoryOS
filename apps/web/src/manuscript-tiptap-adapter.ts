@@ -227,8 +227,9 @@ export function storyosManuscriptExtensions(
 ) {
   return [
     Document.extend({ content: "(paragraph | heading | blockProposal)+" }),
-    Paragraph,
-    Heading.configure({ levels: [1] }),
+    // A block keeps its line break characters when the editor reads a changed block from the page (#1894).
+    Paragraph.extend({ whitespace: "pre" }),
+    Heading.extend({ whitespace: "pre" }).configure({ levels: [1] }),
     Text,
     blockProposalDecoration,
     UniqueID.configure({
