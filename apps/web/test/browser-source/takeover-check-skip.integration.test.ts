@@ -12,7 +12,7 @@ import type { EditorReadyState } from "../../src/editor-types.ts";
 import { readJournalSnapshot } from "../../src/local-edit-journal.ts";
 import { consumeOwnedProjectActivity } from "../../src/project-activity-sync.ts";
 import {
-  OWNER, PROJECT, SESSION, chapterRevision, closeTrackedDatabases, createAppliedActivityEvent, createBrowserScenario,
+  CHAPTER, EDITOR_SNAPSHOT, OWNER, PROJECT, SESSION, chapterRevision, closeTrackedDatabases, createAppliedActivityEvent, createBrowserScenario,
   deleteJournal, jsonResponse, requestResult, requireEditorReady, trackDatabase,
 } from "./scenario.ts";
 
@@ -20,70 +20,90 @@ import {
 // 1 with the form checks and the partition checks (#1897, decisions 1 and 2 of the coordinator).
 const P = `/api/v1/projects/${PROJECT}`;
 const CHAPTER_B = "018f0000-0000-7001-8000-000000000841";
+const VOLUME = "018f0000-0000-7001-8000-000000000853";
 const REVISION_B = "018f0000-0000-7001-8000-000000000842";
 const BLOCK_B = "018f0000-0000-7001-8000-000000000843";
-const CANONICAL = "018f0000-0000-7001-8000-000000000844";
 const SWITCH_SNAPSHOT = "018f0000-0000-7001-8000-000000000845";
 const SESSION_READ = `GET ${P}/editor-sessions/${SESSION}`;
 const TREE = `GET ${P}/manuscript/tree`;
-const SNAPSHOT = `GET ${P}/snapshots/${CANONICAL}`;
+const SNAPSHOT = `GET ${P}/snapshots/${EDITOR_SNAPSHOT}`;
 const ACTIVITY = `GET ${P}/activity`;
 const CHALLENGE = `POST ${P}/anti-forgery-challenges`;
 const AUTHOR_EDIT = `POST ${P}/manuscript/author-edits`;
 const outcomeQuery = (idempotencyKey: string) => `GET ${P}/manuscript/author-edit-outcomes/${idempotencyKey}`;
-const EXPIRES_AT = "2026-08-13T08:05:00.000Z";
 
 const hex = async (text: string) => [...new Uint8Array(await crypto.subtle.digest("SHA-256",
   new TextEncoder().encode(text)))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
 /**
+ * An Activity Event of `kind` in the form of the stream of the Server: the aggregate of the kind and the payload with its
+ * `kind` field, digested with sorted keys.
+ */
+async function activityEvent(kind: "chapter_updated" | "current_chapter_set", schema: string, sequence: string,
+  ids: string[], aggregateId: string, fields: Record<string, string>) {
+  const [eventId, commandId, receiptId, correlationId] = ids as [string, string, string, string];
+  const event = await createAppliedActivityEvent({ eventId, commandId, receiptId, correlationId,
+    revisionId: eventId, commitId: commandId, sequence, occurredAt: `2026-08-20T0${sequence}:00:00.000Z` });
+  const payload = Object.fromEntries(Object.entries({ ...fields, kind }).sort(([left], [right]) =>
+    left < right ? -1 : 1));
+  return { ...event, event_kind: kind, event_schema: schema, aggregate_ref: { kind: "chapter", id: aggregateId },
+    payload, payload_digest: { ...event.payload_digest, value_hex_lowercase: await hex(JSON.stringify(payload)) } };
+}
+
+/**
  * A fake Server of one Project whose Editor Session holds writer generation 2. It serves only the exact requests of
- * these tests and records each other request. `switchChapter` settles a Chapter switch to Chapter B, as the Server
- * does: the Session base is the Snapshot of the switch, and the Activity stream has the next Event. After
- * `takeOverElsewhere`, another Editor Session holds generation 3, this Session is read-only, and the Server refuses
- * an author edit of this Session (`editor_writer_stale`).
+ * these tests and records each other request. Its stream has a rename of Chapter A in another tab. `switchChapter`
+ * settles a Chapter switch to Chapter B, as the Server does: the Session base is the Snapshot of the switch, and the
+ * stream has the `current_chapter_set` Event of the switch. After `takeOverElsewhere`, another Editor Session holds
+ * generation 3, this Session is read-only, and the Server refuses an author edit of this Session
+ * (`editor_writer_stale`).
  */
 async function fakeServer() {
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
-  const eventA = await createAppliedActivityEvent({ eventId: "018f0000-0000-7001-8000-000000000846",
-    commandId: "018f0000-0000-7001-8000-000000000847", receiptId: "018f0000-0000-7001-8000-000000000848",
-    correlationId: "018f0000-0000-7001-8000-000000000849", revisionId: "018f0000-0000-7001-8000-00000000084a",
-    commitId: "018f0000-0000-7001-8000-00000000084b", sequence: "1", occurredAt: "2026-08-20T03:00:00.000Z" });
-  const eventB = await createAppliedActivityEvent({ eventId: "018f0000-0000-7001-8000-00000000084c",
-    commandId: "018f0000-0000-7001-8000-00000000084d", receiptId: "018f0000-0000-7001-8000-00000000084e",
-    correlationId: "018f0000-0000-7001-8000-00000000084f", revisionId: "018f0000-0000-7001-8000-000000000850",
-    commitId: "018f0000-0000-7001-8000-000000000851", sequence: "2", authorActionSequence: "2",
-    occurredAt: "2026-08-20T04:00:00.000Z" });
+  const eventA = await activityEvent("chapter_updated", "storyos.event.chapter-updated.v1", "1",
+    ["018f0000-0000-7001-8000-000000000846", "018f0000-0000-7001-8000-000000000847",
+      "018f0000-0000-7001-8000-000000000848", "018f0000-0000-7001-8000-000000000849"], CHAPTER,
+    { chapter_id: CHAPTER, title: "Chapter A, renamed", tree_revision: "3", order: "1", prior_title: "Chapter A",
+      prior_order: "1" });
+  const eventB = await activityEvent("current_chapter_set", "storyos.event.current-chapter-set.v1", "2",
+    ["018f0000-0000-7001-8000-00000000084c", "018f0000-0000-7001-8000-00000000084d",
+      "018f0000-0000-7001-8000-00000000084e", "018f0000-0000-7001-8000-00000000084f"], CHAPTER_B,
+    { prior_chapter_id: CHAPTER, current_chapter_id: CHAPTER_B, base_snapshot_id: SWITCH_SNAPSHOT });
   const chapterB: GetChapterResponse = { ...scenario.chapter, project_activity_position: "2",
     chapter: { chapter_id: CHAPTER_B, title: "Chapter B", current_revision: chapterRevision(REVISION_B, "B", BLOCK_B) } };
   const baseB = { ...scenario.session.base_snapshot, snapshot_id: SWITCH_SNAPSHOT, chapter_id: CHAPTER_B,
     project_activity_position: "2", authoritative_head_revision_id: REVISION_B, target_refs: [`manuscript:${CHAPTER_B}`],
-    materialized_revision: chapterB.chapter.current_revision,
+    materialized_revision: chapterB.chapter.current_revision, created_at: "2026-08-20T02:00:00.000Z",
     materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
       value_hex_lowercase: await hex("B") } };
   let session: GetEditorSessionResponse = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1",
     writer: { kind: "current_writer", writer_generation: "2" } };
-  const canonical: SnapshotDescriptor = { snapshot_id: CANONICAL, project_scope: scope, snapshot_kind: "canonical",
-    project_activity_position: "0", source_watermarks: {}, projection_generations: {},
+  // The canonical Snapshot of the first open is the base of the Session.
+  const canonical: SnapshotDescriptor = { snapshot_id: EDITOR_SNAPSHOT, project_scope: scope,
+    snapshot_kind: "canonical", project_activity_position: "0", source_watermarks: {}, projection_generations: {},
     redaction_profile: "storyos.author.v1", schema_profile: "storyos.public.release.1", replay_generation: "2",
-    created_at: "2026-08-20T02:00:00.000Z", expires_at: null };
+    created_at: scenario.session.base_snapshot.created_at, expires_at: null };
   const stream = [{ id: "cursor-a", event: eventA }];
   const log = { requests: [] as string[], unexpected: [] as string[],
     activity: [] as { snapshotId: string | null; lastEventId: string | null }[] };
   let idempotencyKey: string | undefined;
+  let challengeExpiresAt = "";
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : input);
     const name = `${init?.method ?? "GET"} ${url.pathname}`;
     log.requests.push(name);
     if (name === SESSION_READ) return jsonResponse(session);
     if (name === TREE) {
-      return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1", correlation_id: SESSION,
-        project_scope: scope, tree_revision: "2", snapshot: canonical, volumes: [] });
+      return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-000000000854", project_scope: scope, tree_revision: "2",
+        snapshot: canonical, volumes: [{ volume_id: VOLUME, title: "Volume A", order: "1", chapters: [
+          { chapter_id: CHAPTER, title: "Chapter A", order: "1" }, { chapter_id: CHAPTER_B, title: "Chapter B",
+            order: "2" }] }] });
     }
     if (name === SNAPSHOT) {
-      return jsonResponse({ schema_id: "storyos.query.snapshot.response.v1", correlation_id: SESSION,
-        project_scope: scope, snapshot: canonical });
+      return jsonResponse({ schema_id: "storyos.query.snapshot.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-000000000855", project_scope: scope, snapshot: canonical });
     }
     if (name === ACTIVITY) {
       const lastEventId = new Headers(init?.headers).get("last-event-id");
@@ -94,7 +114,8 @@ async function fakeServer() {
       { status: 200, headers: { "content-type": "text/event-stream" } });
     }
     if (name === CHALLENGE) {
-      return jsonResponse({ nonce: "a".repeat(64), expires_at: EXPIRES_AT,
+      challengeExpiresAt = new Date(Date.now() + 60_000).toISOString();
+      return jsonResponse({ nonce: "a".repeat(64), expires_at: challengeExpiresAt,
         limit_profile_revision: scenario.profile.limit_profile_revision });
     }
     if (name === AUTHOR_EDIT && session.writer.kind === "read_only") {
@@ -106,7 +127,7 @@ async function fakeServer() {
       return jsonResponse({ schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000852", project_scope: scope,
         outcome: { outcome_kind: "still_unknown", observation: { observation_kind: "challenge_issued",
-          expires_at: EXPIRES_AT } } });
+          expires_at: challengeExpiresAt } } });
     }
     log.unexpected.push(name);
     throw new Error(`unexpected request: ${name}`);

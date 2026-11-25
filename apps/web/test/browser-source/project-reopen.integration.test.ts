@@ -32,6 +32,8 @@ const SWITCH_SNAPSHOT = "018f0000-0000-7001-8000-000000000831";
 const TAKEOVER_SNAPSHOT = "018f0000-0000-7001-8000-000000000832";
 const PRIOR_SESSION = "018f0000-0000-7001-8000-000000000833";
 const SECOND_SESSION = "018f0000-0000-7001-8000-000000000837";
+// The Snapshot of a takeover by another Editor Session.
+const ELSEWHERE_SNAPSHOT = "018f0000-0000-7001-8000-000000000839";
 const ACCEPTANCE_SNAPSHOT = "018f0000-0000-7001-8000-000000000834";
 const ACCEPTED_REVISION = "018f0000-0000-7001-8000-000000000806";
 const ACCEPTANCE_COMMIT = "018f0000-0000-7001-8000-000000000835";
@@ -111,7 +113,8 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * creation gives a read-only Session. A rename of Chapter A changes its title in the tree and advances the tree revision. A
  * rename of the Project changes its title, advances its revision, and records the expected revision.
  * `renameElsewhere` is a rename of the Project in another tab. `takeOverElsewhere(generation)` is a takeover by the
- * Editor Session of another tab: the Session of this tab is read-only with `superseded_by_takeover`. With
+ * Editor Session of another tab: the Session of this tab is read-only with `superseded_by_takeover`, and the
+ * takeover settles a new Snapshot. With
  * `proposalResult`, the Run of the Conversation has a Proposal result with a change in Chapter A.
  */
 function fakeServer({ reads, writer = { kind: "current_writer", writer_generation: "1" }, commands = [],
@@ -409,7 +412,10 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     answerBeforeHold(names: string[]) { answerFirst = new Set(names); },
     renameElsewhere(title: string) { state.projectTitle = title; state.projectRevision += 1; },
     takeOverElsewhere(generation: string) {
-      state.writer = { kind: "read_only", observed_writer_generation: generation, reason: "superseded_by_takeover" };
+      // The Server keeps the base of this Session, and the takeover settles a new Snapshot.
+      state.superseded = { ...session(), writer: { kind: "read_only", observed_writer_generation: generation,
+        reason: "superseded_by_takeover" } };
+      settle(ELSEWHERE_SNAPSHOT);
     },
     holdAfter(trigger: string, names: string[]) { armed = { trigger, names }; },
     hold(names: string[]) { holding = new Set(names); },
@@ -844,20 +850,31 @@ it("refuses the open after a Chapter switch when another Editor Session took ove
     server.takeOverElsewhere("3");
     server.release();
 
-    await expect.poll(() => workspace.shown()).toEqual({ title: "Chapter B", save: "needs_attention", failure: "" });
+    // The open refuses the Session, so the workspace shows no writer.
+    await expect.poll(() => ({ ...workspace.shown(), inFlight: server.inFlight(),
+      writer: workspace.root.querySelector("[data-writer-kind]")?.getAttribute("data-writer-kind") }))
+      .toEqual({ title: "Chapter B", save: "needs_attention", failure: "", inFlight: [], writer: undefined });
     expect({ check: checkReads(server.log.started.slice(server.log.started.indexOf(SWITCH, before))),
       unexpected: server.log.unexpected }).toEqual({ check: [SESSION_READ], unexpected: [] });
   });
 
-/** Puts a copy of the stored partition with another owner User into the Journal of the Project. */
+/**
+ * Puts a copy of the stored partition and of its active base into the Journal of the Project, with another owner User.
+ * The base is older than the base of the next open, so only the comparison of the User can refuse the copy.
+ */
 async function storePartitionOfAnotherUser(server: ReturnType<typeof fakeServer>) {
   const otherUser = "018f0000-0000-7001-8000-000000000838";
   const journal = await requestResult(indexedDB.open(server.scenario.journalName)) as IDBDatabase;
-  const partitions = journal.transaction("partitions", "readwrite").objectStore("partitions");
+  const transaction = journal.transaction(["partitions", "metadata"], "readwrite");
+  const partitions = transaction.objectStore("partitions");
+  const metadata = transaction.objectStore("metadata");
   const [stored] = await requestResult(partitions.getAll()) as { journal_partition_id: string;
     project_scope: { owner_user_id: string; project_id: string } }[];
+  const copyId = stored!.journal_partition_id.replace(OWNER, otherUser);
+  const base = await requestResult(metadata.get(`active_base:${stored!.journal_partition_id}`)) as { value: unknown };
   await requestResult(partitions.put({ ...stored!, project_scope: { ...stored!.project_scope, owner_user_id: otherUser },
-    journal_partition_id: stored!.journal_partition_id.replace(OWNER, otherUser) }));
+    journal_partition_id: copyId }));
+  await requestResult(metadata.put({ key: `active_base:${copyId}`, value: base.value }));
   journal.close();
 }
 
@@ -893,6 +910,29 @@ it("refuses the open of a switch with writer generation 2 when the Journal holds
 
     await expect.poll(() => workspace.shown()).toEqual({ title: "Chapter B", save: "needs_attention", failure: "" });
     await expect.poll(server.inFlight).toEqual([]);
+    expect({ check: checkReads(server.log.started.slice(server.log.started.indexOf(SWITCH, before))),
+      unexpected: server.log.unexpected }).toEqual({ check: [SESSION_READ], unexpected: [] });
+  });
+
+it("refuses the open of a switch with writer generation 2 when the Journal lost the rows of the partition",
+  async () => {
+    const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT)],
+      writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
+    const workspace = await openSecondGeneration(server);
+    // For example, the browser removed the site data while the page stayed open.
+    const journal = await requestResult(indexedDB.open(server.scenario.journalName)) as IDBDatabase;
+    const transaction = journal.transaction(["partitions", "metadata"], "readwrite");
+    const [stored] = await requestResult(transaction.objectStore("partitions").getAll()) as
+      { journal_partition_id: string }[];
+    await requestResult(transaction.objectStore("partitions").delete(stored!.journal_partition_id));
+    await requestResult(transaction.objectStore("metadata").delete(`active_base:${stored!.journal_partition_id}`));
+    journal.close();
+    const before = server.log.started.length;
+
+    chapterB(workspace.root)!.click();
+
+    await expect.poll(() => ({ ...workspace.shown(), inFlight: server.inFlight() }))
+      .toEqual({ title: "Chapter B", save: "needs_attention", failure: "", inFlight: [] });
     expect({ check: checkReads(server.log.started.slice(server.log.started.indexOf(SWITCH, before))),
       unexpected: server.log.unexpected }).toEqual({ check: [SESSION_READ], unexpected: [] });
   });
