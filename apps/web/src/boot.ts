@@ -173,10 +173,12 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
     ? opened.editor.partition.journal_partition_id : undefined;
   const open = opened.project.project.open;
   const chapterId = options.chapterId ?? (open.kind === "current_chapter" ? open.current_chapter_id : undefined);
+  // The early open requests no Challenge: when the open discards it, its replacement requests one, and one open
+  // requests at most one Challenge (#1899).
   const early = chapterId === undefined ? undefined : { chapterId,
     chapter: settle(readCurrentChapter(queryOptions, scope.project_id, chapterId, scope.owner_user_id)),
     opening: startEditorWorkspace({ baseUrl, project: opened.project, profile: opened.profile, fetchImpl,
-      indexedDBImpl, cryptoImpl, readyPartitionId }) };
+      indexedDBImpl, cryptoImpl, readyPartitionId, earlyChallenge: false }) };
   try {
     const read = await readSessionProject(queryOptions, scope.project_id, "together");
     if (read === undefined) {

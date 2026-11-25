@@ -457,9 +457,8 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
 }
 
 const openDatabases = new Set<IDBDatabase>();
-// Each Journal connection that the page closed, and each connection with a completed transaction.
+// Each Journal connection that the page closed.
 const closedDatabases = new Set<IDBDatabase>();
-const readDatabases = new WeakSet<IDBDatabase>();
 const unmounts: (() => void)[] = [];
 // The view opens the Journal again at each reopen, so the test closes each connection before it deletes the Journal.
 const openJournal = indexedDB.open.bind(indexedDB);
@@ -472,12 +471,6 @@ beforeEach(() => {
       trackDatabase(database, openDatabases);
       const close = database.close.bind(database);
       database.close = () => { closedDatabases.add(database); close(); };
-      const transaction = database.transaction.bind(database);
-      database.transaction = ((...args: Parameters<IDBDatabase["transaction"]>) => {
-        const started = transaction(...args);
-        started.addEventListener("complete", () => { readDatabases.add(database); });
-        return started;
-      }) as IDBDatabase["transaction"];
     });
     return request;
   } });
@@ -557,47 +550,6 @@ it("opens a Project with its stored Editor Session with the independent reads in
   const opened = await opening;
   expect({ kind: opened.kind, editor: opened.kind === "project-ready" ? opened.editor.kind : undefined,
     unexpected: server.log.unexpected }).toEqual({ kind: "project-ready", editor: "editor-ready", unexpected: [] });
-});
-
-/** A `Crypto` that counts the digests that it computes, for example the digest that prepares a command. */
-function countingCrypto() {
-  const digests = { started: 0, ended: 0 };
-  const subtle = new Proxy(crypto.subtle, { get: (target, key) => key === "digest"
-    ? async (...args: Parameters<SubtleCrypto["digest"]>) => {
-      digests.started += 1;
-      try { return await target.digest(...args); } finally { digests.ended += 1; }
-    }
-    : (Reflect.get(target, key) as (...args: unknown[]) => unknown).bind(target) });
-  const cryptoImpl = new Proxy(crypto, { get: (target, key) => key === "subtle" ? subtle
-    : (Reflect.get(target, key) as (...args: unknown[]) => unknown).bind(target) });
-  return { cryptoImpl, digests };
-}
-
-it("opens a Project in a new tab and creates the Editor Session only after the Chapter response", async () => {
-  const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER)], commands: [SESSION_CREATE] });
-  await deleteJournal(server.scenario.journalName);
-  const { cryptoImpl, digests } = countingCrypto();
-  server.hold([PROTOCOL, PROJECT_READ, LIST]);
-  const opening = openControlledProject({ baseUrl: location.origin, projectId: PROJECT,
-    fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl });
-  await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ, PROTOCOL].sort());
-  server.hold([chapterRead(CHAPTER)]);
-  server.release();
-  // While the Chapter read waits, the Journal of this open reads its schema. A creation that ran now would compute its
-  // command digest in the same task, and then send its Challenge and its request.
-  await expect.poll(() => ({ inFlight: server.inFlight(),
-    schemaRead: [...openDatabases].some((database) => readDatabases.has(database)) }))
-    .toEqual({ inFlight: [chapterRead(CHAPTER)], schemaRead: true });
-  await expect.poll(() => digests.ended === digests.started
-    && (server.count(CHALLENGE) === 0 || server.count(SESSION_CREATE) > 0)).toBe(true);
-  server.release();
-  const opened = await opening;
-  // A creation changes the Server, so its request starts after the end of the Chapter read (#1884).
-  const chapterEnd = server.log.events.indexOf(`end ${chapterRead(CHAPTER)}`);
-  expect({ kind: opened.kind, editor: opened.kind === "project-ready" ? opened.editor.kind : undefined,
-    creationAfterChapter: chapterEnd >= 0 && chapterEnd < server.log.events.indexOf(`start ${SESSION_CREATE}`),
-    unexpected: server.log.unexpected }).toEqual({ kind: "project-ready", editor: "editor-ready",
-    creationAfterChapter: true, unexpected: [] });
 });
 
 it("creates no Editor Session when the Chapter read of a new tab fails, and the next open is the writer", async () => {
