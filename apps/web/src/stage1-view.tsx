@@ -333,7 +333,7 @@ function ProjectEditorView({
   // A reopen after a settled command of this page reads the Project and the list of Projects, then the Chapter and the
   // Editor Session. It does not read the protocol profile again.
   const reopen = () => opening(() => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
-    opened: { profile: state.profile, project: state.project } }));
+    opened: { profile: state.profile, project: state.project, editor: state.editor } }));
 
   // A read-only editor has no writing controller and no input to wait for.
   const runWhenQuiet = <Result,>(condition: "journaled" | "settled",
