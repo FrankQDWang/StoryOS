@@ -158,16 +158,44 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const held = new Promise<void>(resolve => { releaseHeld = resolve; });
     const observed = new Promise<void>(resolve => { observedHeld = resolve; });
     let navigationReads = 0;
+    // TEMPORARY TRACE FOR #1892.
+    const t0 = Date.now(); const trace: string[] = [];
+    const mark = (event: string) => trace.push(`${Date.now() - t0} ${event}`);
+    const delayMs = Number(process.env.STORYOS_1892_DELAY_MS ?? '0');
+    const onRequest = (request: { method(): string; url(): string }) => {
+      const url = new URL(request.url()); if (url.pathname.startsWith('/api/')) mark(`> ${request.method()} ${url.pathname}`); };
+    const onFinished = (request: { method(): string; url(): string }) => {
+      const url = new URL(request.url()); if (url.pathname.startsWith('/api/')) mark(`< ${request.method()} ${url.pathname}`); };
+    page.on('request', onRequest); page.on('requestfinished', onFinished);
+    const slowRoute = (url: URL) => url.pathname.startsWith('/api/') && !url.pathname.endsWith(`/proposals/${proposalId}`);
+    if (delayMs > 0) await page.route(slowRoute, async route => {
+      const response = await route.fetch(); await new Promise(resolve => setTimeout(resolve, delayMs));
+      await route.fulfill({ response }); });
     await page.route(proposalRoute, async route => {
       const response = await route.fetch();
-      if (++navigationReads === 2) { observedHeld(); await held; }
+      const read = ++navigationReads; mark(`proposal read ${read} fetched`);
+      if (read === 2) { observedHeld(); await held; mark('held read released'); }
+      if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
       await route.fulfill({ response });
     });
-    await page.locator(`[data-proposal-location="${firstOutcome.operation_id}"]`).click();
-    await observed;
+    mark('click 1'); await page.locator(`[data-proposal-location="${firstOutcome.operation_id}"]`).click();
+    await observed; mark('observed');
     assert.ok(locations[2]!.outcome.kind !== 'refused');
-    await page.locator(`[data-proposal-location="${locations[2]!.outcome.operation_id}"]`).click();
-    releaseHeld(); await page.unroute(proposalRoute, undefined);
+    mark('click 2'); await page.locator(`[data-proposal-location="${locations[2]!.outcome.operation_id}"]`).click();
+    releaseHeld(); await page.unroute(proposalRoute, undefined); mark('unrouted');
+    const shown = async () => ({ h2: await page.locator('.editor-panel h2').textContent(),
+      alert: await page.locator('.editor-panel [role="alert"]').allTextContents(),
+      focused: await page.locator(`[data-proposal-operation-id="${locations[2]!.outcome.operation_id}"]`).getAttribute('data-proposal-focused').catch(() => 'absent') });
+    const states: string[] = [];
+    for (let poll = 0; poll < 300; poll++) {
+      const state = await shown(); const line = JSON.stringify(state);
+      if (states.at(-1)?.endsWith(line) !== true) states.push(`${Date.now() - t0} ${line}`);
+      if (state.focused === 'true') break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    page.off('request', onRequest); page.off('requestfinished', onFinished);
+    if (delayMs > 0) await page.unroute(slowRoute, undefined);
+    await writeFile(join(repositoryRoot, `target/1892-trace-${delayMs}.json`), JSON.stringify({ trace, states }, null, 1));
     await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
     await expect(page.locator(`[data-proposal-operation-id="${locations[2]!.outcome.operation_id}"]`)).toHaveAttribute('data-proposal-focused', 'true');
     await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
