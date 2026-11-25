@@ -9,6 +9,7 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CreateEditorSessionRequest,
+  CreateProjectCommandChallengeResponse,
   GetChapterResponse,
   GetEditorSessionResponse,
   GetManuscriptTreeResponse,
@@ -31,6 +32,7 @@ import {
   stageProjectActivitySnapshot,
   validatedCanonicalSnapshot,
 } from "./project-activity-ingest.ts";
+import { storedActivityStreamCursor } from "./project-activity-sync.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
@@ -138,13 +140,23 @@ function partitionFrom(
   };
 }
 
-async function createSession({ baseUrl, project, profile, fetchImpl, cryptoImpl }: {
+type SessionCreationOptions = {
   baseUrl: string;
   project: GetProjectResponse;
   profile: Release1ProtocolProfile;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
-}): Promise<GetEditorSessionResponse> {
+};
+
+/** An Editor Session creation and its Challenge request, which starts at once (#1899). */
+type SessionCreation = {
+  request: CreateEditorSessionRequest;
+  idempotencyKey: string;
+  challenge: Promise<CreateProjectCommandChallengeResponse>;
+};
+
+function prepareSessionCreation({ baseUrl, project, profile, fetchImpl, cryptoImpl }: SessionCreationOptions):
+  SessionCreation {
   const request: CreateEditorSessionRequest = {
     command_schema: "storyos.command.create-editor-session.request.v1",
     client_contract_revision: profile.release_identity.web_client_contract_revision,
@@ -152,22 +164,30 @@ async function createSession({ baseUrl, project, profile, fetchImpl, cryptoImpl 
     correlation_id: uuidV7(cryptoImpl),
   };
   const idempotencyKey = uuidV7(cryptoImpl);
-  const canonicalCommandDigest = await digestCreateEditorSession(request, cryptoImpl);
-  const challenge = await createProjectCommandChallenge({
-    baseUrl,
-    projectId: project.project.project_id,
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/editor-sessions",
-      command_schema: request.command_schema,
-      canonical_command_digest: canonicalCommandDigest,
-      idempotency_key: idempotencyKey,
-    },
-    fetchImpl,
-  });
+  const challenge = digestCreateEditorSession(request, cryptoImpl).then((canonicalCommandDigest) =>
+    createProjectCommandChallenge({
+      baseUrl,
+      projectId: project.project.project_id,
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/editor-sessions",
+        command_schema: request.command_schema,
+        canonical_command_digest: canonicalCommandDigest,
+        idempotency_key: idempotencyKey,
+      },
+      fetchImpl,
+    }));
+  // An open that stops before the creation does not use the Challenge.
+  challenge.catch(() => {});
+  return { request, idempotencyKey, challenge };
+}
+
+async function createSession(creation: SessionCreation, options: SessionCreationOptions):
+  Promise<GetEditorSessionResponse> {
+  const challenge = await creation.challenge;
   return createEditorSession({
-    baseUrl, projectId: project.project.project_id, request, idempotencyKey,
-    antiForgery: challenge.nonce, fetchImpl,
+    baseUrl: options.baseUrl, projectId: options.project.project.project_id, request: creation.request,
+    idempotencyKey: creation.idempotencyKey, antiForgery: challenge.nonce, fetchImpl: options.fetchImpl,
   });
 }
 
@@ -273,16 +293,21 @@ type EditorWorkspaceOptions = {
   fetchImpl?: typeof fetch;
   indexedDBImpl?: IDBFactory;
   cryptoImpl?: Crypto;
+  /** The Journal partition of the last ready open of this page, when it had one. */
+  readyPartitionId?: string | undefined;
+  /** False keeps the Challenge of a Session creation until `finish`. */
+  earlyChallenge?: boolean;
 };
 
 /**
- * The Editor Session of an open. The read of a stored Session needs only the Project. `finish` creates a Session when
- * the tab has none, and validates the Session against the Chapter.
+ * The Editor Session of an open. The read of a stored Session needs only the Scope of the Project. `finish` creates a
+ * Session when the tab has none, and validates the Session against the Chapter and `project`, by default the Project of
+ * the start.
  */
 export interface EditorWorkspaceOpening {
-  finish(chapter: GetChapterResponse): Promise<OpenedEditorWorkspace>;
-  /** Closes the Journal when the open stops before `finish`. It does not wait for the Session read. */
-  abandon(): void;
+  finish(chapter: GetChapterResponse, project?: GetProjectResponse): Promise<OpenedEditorWorkspace>;
+  /** Closes the Journal when the open stops before `finish`. The promise ends after the Session read ended. */
+  abandon(): Promise<void>;
 }
 
 export interface OpenedEditorWorkspace {
@@ -292,35 +317,40 @@ export interface OpenedEditorWorkspace {
 }
 
 type EditorSessionStart =
-  | { kind: "started"; database: IDBDatabase; active: string | null | undefined; sessionValue: unknown }
+  | { kind: "started"; database: IDBDatabase; active: string | null | undefined; sessionValue: unknown;
+    creation: SessionCreation | undefined }
   | { kind: "failed"; database: IDBDatabase | undefined; error: unknown };
 
 /** Opens the Journal and reads the stored Editor Session at once, so that the read is in flight with the Chapter read. */
 export function startEditorWorkspace({
   baseUrl, project, profile, fetchImpl = globalThis.fetch,
-  indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto,
+  indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto, readyPartitionId, earlyChallenge = true,
 }: EditorWorkspaceOptions): EditorWorkspaceOpening {
   const scope = project.project_scope;
   const started = (async (): Promise<EditorSessionStart> => {
     let database: IDBDatabase | undefined;
     try {
-      database = await openJournalDatabase(indexedDBImpl, scope);
       const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
       const active = globalThis.sessionStorage
         ? globalThis.sessionStorage.getItem(activeSessionKey) : undefined;
-      // A stored Session read changes nothing on the Server, so it runs with the Chapter read; a creation waits (#1884).
+      // The creation waits for the Chapter read (#1884), and its Challenge starts with that read (#1899).
+      const creation = !active && earlyChallenge
+        ? prepareSessionCreation({ baseUrl, project, profile, fetchImpl, cryptoImpl }) : undefined;
+      database = await openJournalDatabase(indexedDBImpl, scope);
+      // A stored Session read changes nothing on the Server, so it runs with the Chapter read.
       const sessionValue: unknown = active
         ? await getEditorSession({ baseUrl, projectId: scope.project_id,
           editorSessionId: active, fetchImpl })
         : undefined;
-      return { kind: "started", database, active, sessionValue };
+      return { kind: "started", database, active, sessionValue, creation };
     } catch (error) {
       return { kind: "failed", database, error };
     }
   })();
   return {
-    finish: (chapter) => finishEditorWorkspace(started, { baseUrl, project, chapter, profile, fetchImpl, cryptoImpl }),
-    abandon: () => { void started.then((start) => { start.database?.close(); }); },
+    finish: (chapter, read = project) => finishEditorWorkspace(started, { baseUrl, project: read, chapter, profile,
+      fetchImpl, cryptoImpl, readyPartitionId }),
+    abandon: () => started.then((start) => { start.database?.close(); }),
   };
 }
 
@@ -330,8 +360,21 @@ export async function openEditorWorkspace(options: EditorWorkspaceOptions & {
   return (await startEditorWorkspace(options).finish(options.chapter)).editor;
 }
 
+// Reads the local part of the proof of a staged takeover Snapshot in one read-only transaction.
+async function journalHoldsStagedSnapshot({ database, partition }: EditorWorkspace): Promise<boolean> {
+  const transaction = database.transaction(["metadata", "partitions"], "readonly");
+  const metadata = transaction.objectStore("metadata");
+  const [stored, activeBase, cursor] = await Promise.all([
+    requestResult(transaction.objectStore("partitions").get(partition.journal_partition_id)),
+    requestResult(metadata.get(`active_base:${partition.journal_partition_id}`)),
+    storedActivityStreamCursor(metadata, partition.project_scope),
+  ]);
+  return JSON.stringify(stored) === JSON.stringify(partition) && activeBase !== undefined
+    && cursor !== undefined;
+}
+
 async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
-  baseUrl, project, chapter, profile, fetchImpl, cryptoImpl,
+  baseUrl, project, chapter, profile, fetchImpl, cryptoImpl, readyPartitionId,
 }: {
   baseUrl: string;
   project: GetProjectResponse;
@@ -339,12 +382,15 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
   profile: Release1ProtocolProfile;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
+  readyPartitionId: string | undefined;
 }): Promise<OpenedEditorWorkspace> {
   const scope = project.project_scope;
   let start = await started;
   if (start.kind === "started" && !start.active) {
     try {
-      start = { ...start, sessionValue: await createSession({ baseUrl, project, profile, fetchImpl, cryptoImpl }) };
+      const options = { baseUrl, project, profile, fetchImpl, cryptoImpl };
+      start = { ...start, sessionValue: await createSession(start.creation ?? prepareSessionCreation(options),
+        options) };
     } catch (error) {
       start = { kind: "failed", database: start.database, error };
     }
@@ -363,8 +409,13 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
       maxJsonStringUtf8Bytes: profile.max_json_string_utf8_bytes };
     let canonicalSnapshot: SnapshotDescriptor | undefined;
     let canonicalTree: GetManuscriptTreeResponse | undefined;
-    if (session.writer.kind === "current_writer" && BigInt(session.writer.writer_generation) > 1n) {
-      const base = session.base_snapshot;
+    const takenOver = session.writer.kind === "current_writer" && BigInt(session.writer.writer_generation) > 1n;
+    // A ready open of this page with this partition committed the Snapshot of the takeover already,
+    // and the Journal still holds its partition, its base, and a stream cursor (#1897).
+    const snapshotStaged = takenOver && readyPartitionId === partition.journal_partition_id
+      && await journalHoldsStagedSnapshot(workspace);
+    const base = session.base_snapshot;
+    if (takenOver) {
       if (active !== session.editor_session.editor_session_id
         || session.schema_id !== "storyos.query.editor-session.response.v1"
         || !UUID.test(session.correlation_id)
@@ -378,6 +429,8 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
         || JSON.stringify(chapter.project_scope) !== JSON.stringify(scope)) {
         throw new Error("Takeover Session binding mismatch");
       }
+    }
+    if (takenOver && !snapshotStaged) {
       // The base and the canonical query boundary have separate roles. Read the
       // locator independently, then recheck the Session before local writes.
       const tree = await getManuscriptTree({ baseUrl, projectId: scope.project_id, fetchImpl });
@@ -399,7 +452,7 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
         throw new Error("Takeover Snapshot binding mismatch");
       }
       const current = await validateSession(await getEditorSession({
-        baseUrl, projectId: scope.project_id, editorSessionId: active, fetchImpl,
+        baseUrl, projectId: scope.project_id, editorSessionId: session.editor_session.editor_session_id, fetchImpl,
       }), scope, chapter, profile, cryptoImpl);
       if (!UUID.test(current.correlation_id)
         || JSON.stringify({ ...current, correlation_id: session.correlation_id }) !== JSON.stringify(session)) {
@@ -416,9 +469,11 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
     const [existingPartition, activeBase, storedPartitions] = await Promise.all([
       requestResult(partitions.get(partition.journal_partition_id)),
       requestResult(metadata.get(activeBaseKey)),
-      canonicalSnapshot ? requestResult(partitions.getAll()) : Promise.resolve([]),
+      takenOver ? requestResult(partitions.getAll()) : Promise.resolve([]),
     ]);
-    if (existingPartition && JSON.stringify(existingPartition) !== JSON.stringify(partition)) {
+    // The rows can go between the read of journalHoldsStagedSnapshot and this transaction.
+    if ((existingPartition && JSON.stringify(existingPartition) !== JSON.stringify(partition))
+      || (snapshotStaged && (!existingPartition || !activeBase))) {
       transaction.abort();
       throw new Error("Local Edit Journal partition is corrupt");
     }

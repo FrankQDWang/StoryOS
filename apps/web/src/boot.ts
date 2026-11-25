@@ -21,7 +21,7 @@ import type {
   ProtocolBootState,
   StateDifference,
 } from "./editor-types.ts";
-import { startEditorWorkspace } from "./editor-session.ts";
+import { startEditorWorkspace, type EditorWorkspaceOpening } from "./editor-session.ts";
 
 const { release_identity: expectedIdentity, required_capabilities: expectedCapabilities, ...expectedProtocol } = RELEASE_1_PROTOCOL_PROFILE;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -143,40 +143,79 @@ export async function openControlledProject(options: ProjectOpenOptions): Promis
   return await openProjectWorkspace(options, boot.profile, read.value.project, read.value.revision);
 }
 
+/** The Chapter read and the Editor Session read that a reopen starts with the Project read (#1898). */
+type EarlyChapterOpen = {
+  chapterId: string;
+  chapter: Promise<ReadResult<GetChapterResponse>>;
+  opening: EditorWorkspaceOpening;
+};
+
 /**
- * Opens the Project again after a settled command of this page. The page keeps only the protocol profile: the reopen
- * reads the Project and the list of Projects at the same time, then the Chapter and the Editor Session at the same time.
+ * Opens the Project again after a settled command of this page. The page keeps the protocol profile and the editor of
+ * its last open. The reopen sends four reads at the same time: the Project, the list of Projects, the Chapter
+ * `chapterId` (the Current Chapter that the command gave, else the Current Chapter of the page), and the Editor
+ * Session. The Project read stays the authority: when it names another Chapter, or an empty Project, the open discards
+ * the early Chapter read and the early Editor Session read and reads as the first open does. The open of the
+ * workspace ends after the Chapter read of the Chapter of the Project read, and only that open writes to the Journal.
+ * For a current writer with a generation above 1, the takeover check of #1897 runs unless each part of its local proof
+ * is there: the page state (the Journal partition of the last ready open of this page is the partition of the new
+ * Editor Session), the partition row, the active base row, and the cursor of the Project Activity Stream.
  */
 export async function reopenControlledProject(options: Omit<ProjectOpenOptions, "projectId"> & {
-  opened: Pick<ProjectReadyState, "profile" | "project">;
+  opened: Pick<ProjectReadyState, "profile" | "project"> & Partial<Pick<ProjectReadyState, "editor">>;
+  chapterId?: string | undefined;
 }): Promise<ControlledProjectState> {
-  const { baseUrl, opened, fetchImpl = globalThis.fetch, signal } = options;
+  const { baseUrl, opened, fetchImpl = globalThis.fetch, signal, indexedDBImpl = globalThis.indexedDB,
+    cryptoImpl = globalThis.crypto } = options;
   const scope = opened.project.project_scope;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
+  const readyPartitionId = opened.editor?.kind === "editor-ready"
+    ? opened.editor.partition.journal_partition_id : undefined;
+  const open = opened.project.project.open;
+  const chapterId = options.chapterId ?? (open.kind === "current_chapter" ? open.current_chapter_id : undefined);
+  // The early open requests no Challenge: when the open discards it, its replacement requests one, and one open
+  // requests at most one Challenge (#1899).
+  const early = chapterId === undefined ? undefined : { chapterId,
+    chapter: settle(readCurrentChapter(queryOptions, scope.project_id, chapterId, scope.owner_user_id)),
+    opening: startEditorWorkspace({ baseUrl, project: opened.project, profile: opened.profile, fetchImpl,
+      indexedDBImpl, cryptoImpl, readyPartitionId, earlyChallenge: false }) };
   try {
     const read = await readSessionProject(queryOptions, scope.project_id, "together");
-    if (read === undefined) return projectUnavailable();
+    if (read === undefined) {
+      void early?.opening.abandon();
+      return projectUnavailable();
+    }
     if (read.project.project_scope.owner_user_id !== scope.owner_user_id) throw new Error("Project Scope mismatch");
     return await openProjectWorkspace({ ...options, projectId: scope.project_id }, opened.profile, read.project,
-      read.revision);
+      read.revision, readyPartitionId, early);
   } catch (error) {
+    void early?.opening.abandon();
     return projectUnavailable(error);
   }
 }
 
-/** Reads the Chapter and the Editor Session of a Project at the same time, or the tree of an empty Project. */
+/**
+ * Reads the Chapter and the Editor Session of a Project at the same time, or the tree of an empty Project. It uses the
+ * early reads of a reopen only when they are of the Current Chapter of `project`.
+ */
 async function openProjectWorkspace(
   options: ProjectOpenOptions,
   profile: Release1ProtocolProfile,
   project: GetProjectResponse,
   revision: string,
+  readyPartitionId?: string,
+  early?: EarlyChapterOpen,
 ): Promise<ControlledProjectState> {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal,
     indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
   try {
     const ownerUserId = project.project_scope.owner_user_id;
-    if (project.project.open.kind === "empty") {
+    const open = project.project.open;
+    const used = open.kind === "current_chapter" && early?.chapterId === open.current_chapter_id ? early : undefined;
+    // A discarded open ends before its replacement starts: its Chapter read and its Session read end first.
+    if (used === undefined && early !== undefined) await Promise.all([early.chapter, early.opening.abandon()]);
+    if (open.kind === "empty") {
       const treeValue: unknown = await getManuscriptTree({ ...queryOptions, projectId });
       const treeView = treeValue as {
         project_scope?: { owner_user_id?: unknown; project_id?: unknown };
@@ -197,17 +236,16 @@ async function openProjectWorkspace(
       const tree = treeValue as GetManuscriptTreeResponse;
       return { kind: "empty-project-ready", profile, project, revision, tree };
     }
-    const chapterId = project.project.open.current_chapter_id;
-    const opening = startEditorWorkspace({ baseUrl, project, profile, fetchImpl, indexedDBImpl, cryptoImpl });
-    let chapter: GetChapterResponse;
-    try {
-      chapter = await readCurrentChapter(queryOptions, projectId, chapterId, ownerUserId);
-    } catch (error) {
-      opening.abandon();
-      throw error;
+    const opening = used?.opening ?? startEditorWorkspace({ baseUrl, project, profile, fetchImpl, indexedDBImpl,
+      cryptoImpl, readyPartitionId });
+    const chapter = await (used?.chapter
+      ?? settle(readCurrentChapter(queryOptions, projectId, open.current_chapter_id, ownerUserId)));
+    if (chapter.kind === "failed") {
+      void opening.abandon();
+      throw chapter.error;
     }
-    const { editor, tree } = await opening.finish(chapter);
-    return { kind: "project-ready", profile, project, revision, chapter, editor, tree };
+    const { editor, tree } = await opening.finish(chapter.value, project);
+    return { kind: "project-ready", profile, project, revision, chapter: chapter.value, editor, tree };
   } catch (error) {
     return projectUnavailable(error);
   }

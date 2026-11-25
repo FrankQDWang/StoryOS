@@ -158,9 +158,11 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const held = new Promise<void>(resolve => { releaseHeld = resolve; });
     const observed = new Promise<void>(resolve => { observedHeld = resolve; });
     let navigationReads = 0;
+    // Hold read 1, the Proposal read of the first navigation, so it switches no Chapter before the next click. Read 2
+    // is the reread of the Proposal display after read 1, and the first navigation does not wait for it (#1910).
     await page.route(proposalRoute, async route => {
       const response = await route.fetch();
-      if (++navigationReads === 2) { observedHeld(); await held; }
+      if (++navigationReads === 1) { observedHeld(); await held; }
       await route.fulfill({ response });
     });
     await page.locator(`[data-proposal-location="${firstOutcome.operation_id}"]`).click();
