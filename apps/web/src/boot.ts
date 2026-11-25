@@ -159,7 +159,7 @@ type EarlyChapterOpen = {
  * workspace ends after the Chapter read of the Chapter of the Project read, and only that open writes to the Journal.
  * For a current writer with a generation above 1, the takeover check of #1897 runs unless each part of its local proof
  * is there: the page state (the Journal partition of the last ready open of this page is the partition of the new
- * Editor Session), the partition row, the active base row, and the Project Activity stream cursor.
+ * Editor Session), the partition row, the active base row, and the cursor of the Project Activity Stream.
  */
 export async function reopenControlledProject(options: Omit<ProjectOpenOptions, "projectId"> & {
   opened: Pick<ProjectReadyState, "profile" | "project"> & Partial<Pick<ProjectReadyState, "editor">>;
@@ -180,14 +180,14 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
   try {
     const read = await readSessionProject(queryOptions, scope.project_id, "together");
     if (read === undefined) {
-      early?.opening.abandon();
+      void early?.opening.abandon();
       return projectUnavailable();
     }
     if (read.project.project_scope.owner_user_id !== scope.owner_user_id) throw new Error("Project Scope mismatch");
     return await openProjectWorkspace({ ...options, projectId: scope.project_id }, opened.profile, read.project,
       read.revision, readyPartitionId, early);
   } catch (error) {
-    early?.opening.abandon();
+    void early?.opening.abandon();
     return projectUnavailable(error);
   }
 }
@@ -211,7 +211,8 @@ async function openProjectWorkspace(
     const ownerUserId = project.project_scope.owner_user_id;
     const open = project.project.open;
     const used = open.kind === "current_chapter" && early?.chapterId === open.current_chapter_id ? early : undefined;
-    if (used === undefined) early?.opening.abandon();
+    // A discarded open ends before its replacement starts: its Chapter read and its Session read end first.
+    if (used === undefined && early !== undefined) await Promise.all([early.chapter, early.opening.abandon()]);
     if (open.kind === "empty") {
       const treeValue: unknown = await getManuscriptTree({ ...queryOptions, projectId });
       const treeView = treeValue as {
@@ -238,7 +239,7 @@ async function openProjectWorkspace(
     const chapter = await (used?.chapter
       ?? settle(readCurrentChapter(queryOptions, projectId, open.current_chapter_id, ownerUserId)));
     if (chapter.kind === "failed") {
-      opening.abandon();
+      void opening.abandon();
       throw chapter.error;
     }
     const { editor, tree } = await opening.finish(chapter.value, project);

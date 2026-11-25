@@ -119,7 +119,7 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * Editor Session of another tab: the Session of this tab is read-only with `superseded_by_takeover`, and the
  * takeover settles a new Snapshot. `switchElsewhere` is a switch to Chapter A in a duplicated tab with the same Editor
  * Session, so the Session base follows the switch. `failNext(names)` answers the next request of each given name with a
- * 503 problem. With
+ * 503 problem. `releaseOnly(names)` releases only the held requests of the given names. With
  * `proposalResult`, the Run of the Conversation has a Proposal result with a change in Chapter A.
  */
 function fakeServer({ reads, writer = { kind: "current_writer", writer_generation: "1" }, commands = [],
@@ -150,7 +150,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   let holdEach = false;
   let answerFirst = new Set<string>();
   const failing = new Set<string>();
-  const held: (() => void)[] = [];
+  const held: { name: string; resolve: () => void }[] = [];
   const open = () => ({ kind: "current_chapter" as const, current_chapter_id: state.current });
   const session = (): GetEditorSessionResponse => {
     if (state.superseded !== undefined) return state.superseded;
@@ -185,7 +185,9 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
       throw new Error(`unexpected request: ${name}`);
     }
     if (unavailable.includes(name) || failing.delete(name)) {
-      return jsonResponse({ schema_id: "storyos.problem.v1", code: "service_unavailable", message: "Unavailable." }, 503);
+      // The problem of a Server whose Project store is unavailable (`project_reader` of `storyos-server`).
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "project_store_unavailable",
+        message: "The Project store is unavailable." }, 503);
     }
     if (name === PROTOCOL) return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
     if (name === LIST) {
@@ -402,7 +404,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     try {
       const hold = holding.delete(name) || holdEach;
       const early = hold && answerFirst.has(name) ? answer(name, init) : undefined;
-      if (hold) await new Promise<void>((resolve) => { held.push(resolve); });
+      if (hold) await new Promise<void>((resolve) => { held.push({ name, resolve }); });
       const response = await (early ?? answer(name, init));
       if (lost.includes(name)) throw new TypeError("Failed to fetch");
       return response;
@@ -434,7 +436,13 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     hold(names: string[]) { holding = new Set(names); },
     holdEach(on: boolean) { holdEach = on; },
     held: () => held.length,
-    release() { for (const resolve of held.splice(0)) resolve(); },
+    release() { for (const { resolve } of held.splice(0)) resolve(); },
+    releaseOnly(names: string[]) {
+      for (const entry of held.filter(({ name }) => names.includes(name))) {
+        held.splice(held.indexOf(entry), 1);
+        entry.resolve();
+      }
+    },
     inFlight: () => [...log.active].filter(([, count]) => count > 0).map(([name]) => name).sort(),
     count: (name: string) => log.started.filter((entry) => entry === name).length,
   };
@@ -752,10 +760,11 @@ it("discards the Chapter read of a switch when the Project read names another Ch
     await expect.poll(server.inFlight).toEqual([]);
     const journal = await journalRows(server);
     const before = server.log.started.length;
-    // The editor of the page shows only Chapter A, with its body.
-    const titles = new Set<string | null | undefined>();
+    // The observer records the title and the text of the editor at each change of the page.
+    const shownChapters = new Set<string>();
     const observer = new MutationObserver(() => {
-      titles.add(workspace.root.querySelector(".editor-panel h2")?.textContent);
+      shownChapters.add(JSON.stringify([workspace.root.querySelector(".editor-panel h2")?.textContent,
+        workspace.root.querySelector("[data-manuscript-editor]")?.textContent]));
     });
     observer.observe(workspace.root, { subtree: true, childList: true, characterData: true });
     server.holdAfter(SWITCH, reopenReads(CHAPTER_B));
@@ -765,7 +774,16 @@ it("discards the Chapter read of a switch when the Project read names another Ch
     // A duplicated tab with the same Editor Session switches back to Chapter A before the four reads end.
     server.switchElsewhere();
     server.hold([chapterRead(CHAPTER)]);
-    server.release();
+    const events = server.log.events.length;
+    // The discarded open ends before its replacement starts: the fake answers the early Chapter read and then the
+    // early Session read, each after the Project read.
+    server.releaseOnly([PROJECT_READ, LIST]);
+    await expect.poll(server.inFlight).toEqual([chapterRead(CHAPTER_B), SESSION_READ].sort());
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    server.releaseOnly([chapterRead(CHAPTER_B)]);
+    await expect.poll(server.inFlight).toEqual([SESSION_READ]);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    server.releaseOnly([SESSION_READ]);
     await expect.poll(server.inFlight).toEqual([chapterRead(CHAPTER)]);
     // The discarded reads ended and wrote nothing to the Journal.
     const discarded = await journalRows(server);
@@ -775,10 +793,15 @@ it("discards the Chapter read of a switch when the Project read names another Ch
       .toEqual({ title: "Chapter A", save: "saved", failure: "", inFlight: [] });
     observer.disconnect();
     const later = server.log.started.slice(server.log.started.indexOf(SWITCH, before));
-    expect({ titles: [...titles], body: workspace.root.querySelector("[data-manuscript-editor]")?.textContent,
-      journal: discarded, chapters: later.filter((name) => name.startsWith(`GET ${P}/chapters/`)
-        && !name.endsWith("/open-proposals")), unexpected: server.log.unexpected }).toEqual({
-      titles: ["Chapter A"], body: "Base", journal,
+    const order = server.log.events.slice(events);
+    const fallback = order.indexOf(`start ${chapterRead(CHAPTER)}`);
+    expect({ shown: [...shownChapters], journal: discarded,
+      fallback: { afterChapter: fallback > order.indexOf(`end ${chapterRead(CHAPTER_B)}`),
+        afterSession: fallback > order.indexOf(`end ${SESSION_READ}`)
+          && order.lastIndexOf(`start ${SESSION_READ}`) > order.indexOf(`end ${SESSION_READ}`) },
+      chapters: later.filter((name) => name.startsWith(`GET ${P}/chapters/`) && !name.endsWith("/open-proposals")),
+      unexpected: server.log.unexpected }).toEqual({
+      shown: [JSON.stringify(["Chapter A", "Base"])], journal, fallback: { afterChapter: true, afterSession: true },
       chapters: [chapterRead(CHAPTER_B), chapterRead(CHAPTER)], unexpected: [] });
   });
 

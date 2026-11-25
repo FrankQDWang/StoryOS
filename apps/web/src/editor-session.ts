@@ -285,8 +285,8 @@ type EditorWorkspaceOptions = {
  */
 export interface EditorWorkspaceOpening {
   finish(chapter: GetChapterResponse, project?: GetProjectResponse): Promise<OpenedEditorWorkspace>;
-  /** Closes the Journal when the open stops before `finish`. It does not wait for the Session read. */
-  abandon(): void;
+  /** Closes the Journal when the open stops before `finish`. The promise ends after the Session read ended. */
+  abandon(): Promise<void>;
 }
 
 export interface OpenedEditorWorkspace {
@@ -325,7 +325,7 @@ export function startEditorWorkspace({
   return {
     finish: (chapter, read = project) => finishEditorWorkspace(started, { baseUrl, project: read, chapter, profile,
       fetchImpl, cryptoImpl, readyPartitionId }),
-    abandon: () => { void started.then((start) => { start.database?.close(); }); },
+    abandon: () => started.then((start) => { start.database?.close(); }),
   };
 }
 

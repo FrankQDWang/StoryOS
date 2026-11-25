@@ -337,8 +337,8 @@ test("a reopen fails closed when the list read fails", async () => {
   const chapterId = project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "";
   const fake = exactFake(new Map([
     [`GET /api/v1/projects/${projectId}`, { body: project }],
-    ["GET /api/v1/projects", { status: 503, body: { schema_id: "storyos.problem.v1", code: "service_unavailable",
-      message: "Unavailable." } }],
+    ["GET /api/v1/projects", { status: 503, body: { schema_id: "storyos.problem.v1", code: "project_store_unavailable",
+      message: "The Project store is unavailable." } }],
     [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`, { body: fixture<GetChapterResponse>("get-chapter.json") }],
   ]));
 
