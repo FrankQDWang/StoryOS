@@ -4,8 +4,9 @@ import { test } from "vitest";
 
 import { getAgentRun, getChapter, getProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { USER_A, UUID_V7, archivedTables, assertForeignRefused, createStory, drainLeftoverWork, openProposal,
-  openedProposal, problemOf, rejection, serverForFile, settleOnce,
+import { reviseCandidate } from "../support/acceptance.ts";
+import { USER_A, UUID_V7, archivedTables, assertForeignRefused, createStory, drainLeftoverWork, freshNamespace,
+  openProposal, openedProposal, problemOf, rejection, serverForFile, settleOnce,
 } from "../support/http-harness.ts";
 import type { CommandInput, OpenedProposal } from "../support/http-harness.ts";
 
@@ -94,6 +95,26 @@ test("rejectProposalOperations resolves, replays, refuses, and conflicts", async
     resolution_event_id: effect.resolution_event_refs[0], operation_id: opened.operation_id,
     prior_resolution: "pending", resulting_resolution: "rejected", rejection_receipt_id: receipt.receipt_id,
     author_action_sequence: Number(effect.author_action_sequence) }]);
+});
+
+// The web client sends a rejection with no Proposal read before it (#1900), so the Server refuses an earlier revision.
+test("rejectProposalOperations refuses an earlier Proposal revision and changes no Operation", async () => {
+  await drainLeftoverWork();
+  const story = await createStory(server, { title: "Stale Rejection Novel", assistance: true });
+  const before = (await getChapter({ baseUrl: story.baseUrl, projectId: story.projectId,
+    chapterId: story.chapterIds[0] ?? "", fetchImpl: story.fetchImpl })).chapter;
+  const opened = await openProposal(story);
+  // The writer Editor Session edits the candidate text: the Proposal has a later revision.
+  const { session, revised } = await reviseCandidate(story.baseUrl, story.fetchImpl, story.projectId, opened,
+    freshNamespace());
+  const inspect = async () => (await getProposal({ baseUrl: story.baseUrl, projectId: story.projectId,
+    proposalId: opened.proposal.proposal_id, fetchImpl: story.fetchImpl })).proposal;
+
+  const stale = await story.send("rejectProposalOperations", rejection({ story, before, opened: opened.proposal,
+    chapter: async () => before, inspect, editorSessionId: session.editor_session.editor_session_id }));
+
+  assert.deepEqual(stale.response.effect, { kind: "refused", reason: "stale_proposal_revision" });
+  assert.deepEqual(await inspect(), revised.proposal);
 });
 
 test("an exact retry of a rejection returns its first acknowledgement after a withdrawal and a Server restart", async () => {
