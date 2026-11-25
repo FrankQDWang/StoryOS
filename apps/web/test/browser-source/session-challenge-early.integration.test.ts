@@ -43,19 +43,19 @@ type Entry = { open: number; name: string };
 
 /**
  * A fake Server of one Project whose Current Chapter is Chapter A, an Empty Project, or a Project that is not there. It
- * serves only the requests in `serves` that the state of the Project permits, records each other request, and throws.
+ * serves only the requests of the route list of each open that the state of the Project permits (by default `serves`),
+ * records each other request with its open, and throws.
  * It records, for each open, the start of each request, each response body that the client read, and, in one order,
  * the start and the end of each request. As on the Server, a Challenge has a new nonce, expires 5 minutes after its
  * issue, and counts in the fixed window of the class `shared`: the 11th Challenge of a window gets `429
  * challenge_rate_limited`. A creation needs the nonce of an unused, unexpired Challenge with its idempotency key and
  * the digest of its request, else `422 challenge_invalid`. Each created Editor Session has its own base Snapshot, and
  * its response has the correlation identity of its request. Only the first created Editor Session holds the writer.
- * `serve(names)` replaces `serves` for the next open. `hold(names)` holds the next request of each given name until `releaseOnly`. `failNext(names)` answers the next
- * request of each given name with the 503 problem of an unavailable Project store.
+ * `hold(names)` holds the next request of each given name until `releaseOnly`. `failNext(names)` answers the next request
+ * of each given name with the 503 problem of an unavailable Project store.
  */
-function fakeServer({ serves: initialServes, open: initial = "current_chapter" }:
+function fakeServer({ serves: defaultServes, open: initial = "current_chapter" }:
   { serves: string[]; open?: Open | undefined }) {
-  let serves = initialServes;
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
   let state: Open = initial;
@@ -76,12 +76,13 @@ function fakeServer({ serves: initialServes, open: initial = "current_chapter" }
       snapshot_id: index === 0 ? EDITOR_SNAPSHOT : `018f0000-0000-7001-8000-0000000008${String(index).padStart(2, "0")}` },
     writer: index === 0 ? { kind: "current_writer", writer_generation: "1" }
       : { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" } });
-  const refuse = (name: string): never => {
-    log.unexpected.push(`${name} (${state})`);
+  const refuse = (name: string, open: number): never => {
+    log.unexpected.push(`${name} (open ${open}, ${state})`);
     throw new Error(`unexpected request: ${name}`);
   };
-  const answer = async (name: string, init: RequestInit | undefined): Promise<Response> => {
-    if (!serves.includes(name)) return refuse(name);
+  const answer = async (name: string, init: RequestInit | undefined, open: number, serves: string[]):
+    Promise<Response> => {
+    if (!serves.includes(name)) return refuse(name, open);
     if (failing.delete(name)) {
       return jsonResponse({ schema_id: "storyos.problem.v1", code: "project_store_unavailable",
         message: "The Project store is unavailable." }, 503);
@@ -119,7 +120,7 @@ function fakeServer({ serves: initialServes, open: initial = "current_chapter" }
         canonical_command_digest: { value_hex_lowercase: string }; idempotency_key: string };
       if (body.method !== "POST" || body.route_template !== "/api/v1/projects/{project_id}/editor-sessions"
         || body.command_schema !== "storyos.command.create-editor-session.request.v1") {
-        return refuse(`${name} for ${body.method} ${body.route_template}`);
+        return refuse(`${name} for ${body.method} ${body.route_template}`, open);
       }
       const window = Math.floor(Date.now() / WINDOW_MS);
       if (challenges.filter(({ expiresAt }) =>
@@ -153,16 +154,16 @@ function fakeServer({ serves: initialServes, open: initial = "current_chapter" }
       createdSessions += 1;
       return jsonResponse(created(createdSessions - 1, request.correlation_id));
     }
-    return refuse(name);
+    return refuse(name, open);
   };
-  /** The fetch of the open `open`. */
-  const fetchFor = (open: number): typeof fetch => async (input, init) => {
+  /** The fetch of the open `open`, which serves only the requests of `serves`. */
+  const fetchFor = (open: number, serves = defaultServes): typeof fetch => async (input, init) => {
     const name = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
     log.started.push({ open, name });
     log.events.push(`start ${name}`);
     try {
       if (holding.delete(name)) await new Promise<void>((resolve) => { held.push({ name, resolve }); });
-      const response = await answer(name, init);
+      const response = await answer(name, init, open, serves);
       const text = response.text.bind(response);
       response.text = async () => {
         const body = await text();
@@ -179,7 +180,6 @@ function fakeServer({ serves: initialServes, open: initial = "current_chapter" }
   const server = {
     scenario, log, fetchFor, challenges, creations,
     setOpen(next: Open) { state = next; },
-    serve(names: string[]) { serves = names; },
     hold(names: string[]) { holding = new Set(names); },
     failNext(names: string[]) { for (const name of names) failing.add(name); },
     releaseOnly(names: string[]) {
@@ -229,18 +229,19 @@ afterEach(async () => {
 });
 
 /** Opens the Project in a tab with the session storage of this test, as the open of a new tab. */
-function open(server: ReturnType<typeof fakeServer>, index = 0): Promise<ControlledProjectState> {
+function open(server: ReturnType<typeof fakeServer>, index = 0, serves?: string[]): Promise<ControlledProjectState> {
   const state = openControlledProject({ baseUrl: location.origin, projectId: PROJECT,
-    fetchImpl: server.fetchFor(index), indexedDBImpl: indexedDB, cryptoImpl: crypto });
+    fetchImpl: server.fetchFor(index, serves), indexedDBImpl: indexedDB, cryptoImpl: crypto });
   opens.push(state);
   return state;
 }
 
 /** Reopens the Project from a page whose Project read had the open `opened`. */
 function reopen(server: ReturnType<typeof fakeServer>, opened: GetProjectResponse["project"]["open"],
-  { index = 0, cryptoImpl = crypto }: { index?: number; cryptoImpl?: Crypto } = {}): Promise<ControlledProjectState> {
+  { index = 0, serves, cryptoImpl = crypto }: { index?: number; serves?: string[]; cryptoImpl?: Crypto } = {}):
+  Promise<ControlledProjectState> {
   const { scenario } = server;
-  const state = reopenControlledProject({ baseUrl: location.origin, fetchImpl: server.fetchFor(index),
+  const state = reopenControlledProject({ baseUrl: location.origin, fetchImpl: server.fetchFor(index, serves),
     indexedDBImpl: indexedDB, cryptoImpl,
     opened: { profile: scenario.profile, project: { ...scenario.project,
       project: { ...scenario.project.project, open: opened } } } });
@@ -304,14 +305,13 @@ it.each([
   server.releaseOnly([CHALLENGE, CHAPTER_READ]);
   const failed = await failing;
   await expect.poll(() => server.consumed(CHALLENGE, 0)).toBe(1);
-  server.serve(NEW_TAB);
 
-  const next = await open(server, 1);
+  const next = await open(server, 1, NEW_TAB);
 
   // The Server refuses a creation with the nonce of another Challenge, so the next open is the writer only with its own.
   expect({ failed: failed.kind, next: writerOf(next), challenges: [server.count(CHALLENGE, 0), server.count(CHALLENGE, 1)],
-    creations: server.creations, unexpected: server.log.unexpected }).toEqual({ failed: "project-blocked",
-    next: "current_writer", challenges: [1, 1], unexpected: [],
+    failedCreations: server.count(CREATION, 0), creations: server.creations, unexpected: server.log.unexpected })
+    .toEqual({ failed: "project-blocked", next: "current_writer", challenges: [1, 1], failedCreations: 0, unexpected: [],
     creations: [{ idempotencyKey: server.challenges[1]!.idempotencyKey, nonce: server.challenges[1]!.nonce }] });
 });
 
@@ -353,17 +353,16 @@ it("reopens with the early open and no stored Editor Session, and requests its o
 });
 
 it.each([
-  { path: "the open of a new tab, as the page of an Empty Project does after its first Chapter", serves: NEW_TAB,
-    run: (server: ReturnType<typeof fakeServer>) => open(server, 1) },
-  { path: "a reopen from the page of the Empty Project, which has no early open", serves: REOPEN,
-    run: (server: ReturnType<typeof fakeServer>) => reopen(server, { kind: "empty" }, { index: 1 }) },
+  { path: "the open of a new tab, as the page of an Empty Project does after its first Chapter",
+    run: (server: ReturnType<typeof fakeServer>) => open(server, 1, NEW_TAB) },
+  { path: "a reopen from the page of the Empty Project, which has no early open",
+    run: (server: ReturnType<typeof fakeServer>) => reopen(server, { kind: "empty" }, { index: 1, serves: REOPEN }) },
 ])("opens an Empty Project with no Challenge, and after its first Chapter, with no stored Editor Session, requests one"
-  + " Challenge with the Chapter read by $path", async ({ serves, run }) => {
+  + " Challenge with the Chapter read by $path", async ({ run }) => {
   const server = fakeServer({ serves: EMPTY, open: "empty" });
   const empty = await open(server, 0);
   // The author creates the first Chapter, and the Project names it.
   server.setOpen("current_chapter");
-  server.serve(serves);
   server.hold([CHAPTER_READ]);
   const opening = run(server);
 
