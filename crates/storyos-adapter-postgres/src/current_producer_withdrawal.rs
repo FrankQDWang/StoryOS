@@ -381,6 +381,7 @@ fn challenge_error(error: ProjectCommandChallengeError) -> ProjectCommandError {
     match error {
         ProjectCommandChallengeError::BindingConflict => ProjectCommandError::BindingConflict,
         ProjectCommandChallengeError::InvalidOrExpired
+        | ProjectCommandChallengeError::MissingProject
         | ProjectCommandChallengeError::RateLimited { .. } => ProjectCommandError::InvalidChallenge,
         ProjectCommandChallengeError::Unavailable(source) => {
             ProjectCommandError::Unavailable(source)

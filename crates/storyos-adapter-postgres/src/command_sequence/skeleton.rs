@@ -146,13 +146,14 @@ pub(super) fn replay_problem(fault: ReplayFault) -> ProjectCommandError {
     }
 }
 
-/// Maps an error of the Challenge transaction. Only a Challenge issue applies the rate limit, so a
-/// `RateLimited` error here is a store fault.
+/// Maps an error of the Challenge transaction. Only a Challenge issue applies the rate limit and
+/// proves the Project, so a `RateLimited` or `MissingProject` error here is a store fault.
 pub(super) fn challenge_problem(error: ProjectCommandChallengeError) -> ProjectCommandError {
     match error {
         ProjectCommandChallengeError::BindingConflict => ProjectCommandError::BindingConflict,
         ProjectCommandChallengeError::InvalidOrExpired => ProjectCommandError::InvalidChallenge,
-        ProjectCommandChallengeError::RateLimited { .. }
+        ProjectCommandChallengeError::MissingProject
+        | ProjectCommandChallengeError::RateLimited { .. }
         | ProjectCommandChallengeError::Unavailable(_) => unavailable(error),
     }
 }
