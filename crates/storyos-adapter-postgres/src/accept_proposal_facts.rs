@@ -102,7 +102,7 @@ impl LoadedProposal {
 }
 
 pub(super) async fn load_proposal(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     input: &AcceptProposalInput,
 ) -> Result<Option<LoadedProposal>, ProjectCommandError> {
@@ -224,7 +224,7 @@ pub(super) async fn load_proposal(
 }
 
 async fn load_operations(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     owner_user_id: &str,
     project_id: &str,
     proposal_id: &str,

@@ -211,8 +211,9 @@ async fn serve_certificate(admin_url: &str, name: &str) {
     panic!("PostgreSQL did not load the certificate {name}");
 }
 
-async fn connect_plain(url: &str) -> tokio_postgres::Client {
+async fn connect_plain(url: &str) -> crate::statement_cache::Client {
     let (client, connection) = tokio_postgres::connect(url, NoTls).await.unwrap();
+    let client = crate::statement_cache::Client::new(client);
     tokio::spawn(async move {
         let _connection_result = connection.await;
     });

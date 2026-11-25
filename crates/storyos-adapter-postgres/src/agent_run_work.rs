@@ -43,7 +43,7 @@ impl AgentRunWorkStore for PostgresProjectReader {
 /// A new claim of a parent Run moves the fence of each of its claimed Subruns in its Project scope.
 /// Thus the Subrun work of an earlier claim of the parent stops (ADR 0103 section 3A).
 async fn end_subrun_claims(
-    transaction: &tokio_postgres::Transaction<'_>,
+    transaction: &crate::statement_cache::Transaction<'_>,
     claim: &ClaimedAgentRun,
 ) -> Result<(), ProjectReadError> {
     let scope = &claim.project_scope;
@@ -88,7 +88,7 @@ pub(crate) enum WorkPhase {
 /// only a Run of a dispatched kind or a cancelled Run with a wake-up, and a Run of the author
 /// before background work, so ordinary writing does not wait for a capture (ADR 0094 section 5).
 async fn claim_agent_run_row(
-    transaction: &tokio_postgres::Transaction<'_>,
+    transaction: &crate::statement_cache::Transaction<'_>,
     lease_seconds: i64,
     model_kinds: &[&str],
 ) -> Result<Option<ClaimedAgentRun>, ProjectReadError> {
@@ -220,7 +220,7 @@ impl RunPhaseRow {
 /// work records no response. A cancelled Subrun keeps its claim for the duties of a cancelled Run
 /// (ADR 0103 section 3A).
 pub(crate) async fn load_run_phase(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<RunPhaseRow, CompleteAgentRunError> {
     let Some(row) = client
@@ -397,7 +397,7 @@ pub(crate) fn grant_admitted(run: &RunPhaseRow) -> bool {
 
 /// Refuses a blocked or capability request before dispatch, or admits one new Model Attempt.
 pub(crate) async fn admit_create(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     assistance: Option<&storyos_application::ProjectAssistanceRecord>,
@@ -449,7 +449,7 @@ pub(crate) async fn admit_create(
 /// Settles one work phase of the claimed Run. `checked_step`: the RunStep position at which the
 /// claim already checked the queue of the author.
 pub(crate) async fn settle_one_phase(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     lease_seconds: i64,
     checked_step: Option<u64>,
@@ -642,7 +642,7 @@ pub(crate) async fn settle_one_phase(
 }
 
 pub(crate) async fn complete(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     update_run(
@@ -657,7 +657,7 @@ pub(crate) async fn complete(
 }
 
 pub(crate) async fn update_run(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     status: &str,
     settlement: Option<&serde_json::Value>,

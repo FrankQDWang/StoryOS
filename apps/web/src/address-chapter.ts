@@ -11,8 +11,8 @@ export const ADDRESS_CHAPTER_NOT_FOUND_SENTENCE = "找不到这个章节。";
  * workspace opens the Chapter one time with `open`, the steps of a click in the tree. The Current Chapter sends no
  * command. A Chapter that the tree of this Project does not have (also a value that is not a Chapter identity or a
  * Chapter of another Project), or a workspace that cannot change the Current Chapter, opens nothing and calls
- * `onNotFound`. The result is true while the Conversation of the address must wait: `open` gives true when the
- * workspace mounts again at the Chapter, and that new workspace opens the Conversation.
+ * `onNotFound`. The result is true while the Conversation of the address must wait: the workspace opens the
+ * Conversation after `open` ends, also when the workspace opened again at the Chapter.
  */
 export function useAddressChapter(options: {
   tree: GetManuscriptTreeResponse | undefined;
@@ -40,7 +40,7 @@ export function useAddressChapter(options: {
       release();
       return;
     }
-    void options.open(chapterId).then((reopened) => { if (!reopened) release(); });
+    void options.open(chapterId).then(release);
   }, [tree]);
   return hold;
 }

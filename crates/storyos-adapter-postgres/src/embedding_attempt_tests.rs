@@ -5,6 +5,7 @@
 
 use std::sync::Mutex;
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeEmbeddings;
 use storyos_application::{
@@ -16,7 +17,6 @@ use storyos_core::{
     AGENT_PLAN_EMBEDDING_REGISTRATION, EmbeddingInput, EmbeddingRefusal, EmbeddingRegistration,
     EmbeddingSettlement, HOST_FAKE_EMBEDDING_REGISTRATION,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;

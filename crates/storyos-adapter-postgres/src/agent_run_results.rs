@@ -14,7 +14,7 @@ use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
 /// The results of the Run `run_id` with the status `status`. `closing` is the Decision of its
 /// active RunStep, which gives the final answer text.
 pub(crate) async fn load(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
     status: AgentRunStatus,
@@ -97,7 +97,7 @@ pub(crate) async fn load(
 /// call from its entry, so only a version with the cause kind `author_request` is a write of the
 /// call: `write_memory` is the one writer of that cause (ADR 0091 section 6, #1692).
 async fn memory_writes(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Vec<(RunCallPosition, AgentRunResultInspect)>, CreateAgentRunError> {

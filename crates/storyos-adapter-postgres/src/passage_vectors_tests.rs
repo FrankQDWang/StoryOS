@@ -1,13 +1,13 @@
 //! The passage vectors of a Chapter (ADR 0095 sections 2 and 4) with real PostgreSQL and the fake
 //! embedding destination. Test prefix lead `28`.
 
+use crate::statement_cache::Client;
 use storyos_adapter_fake_destination::FakeEmbeddings;
 use storyos_application::{
     ClaimedPassageIndex, PASSAGE_INDEX_LEASE, PassageIndexStep, PassageVectorStore, ProjectId,
     ProjectScope, UserId, claim_next_passage_index_work, step_passage_index_work,
 };
 use storyos_core::{HOST_FAKE_EMBEDDING_REGISTRATION, TransitionOutcome};
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_structure::titled_chapter;

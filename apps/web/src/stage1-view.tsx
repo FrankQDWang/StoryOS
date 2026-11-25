@@ -1,5 +1,5 @@
 import { LocalRecoveryPanel } from "./local-recovery-panel.tsx";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 
@@ -16,7 +16,7 @@ import type {
   ProjectListItem,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { openControlledProject } from "./boot.ts";
+import { openControlledProject, reopenControlledProject } from "./boot.ts";
 import {
   CHAPTER_SWITCH_WAITING_SENTENCE,
   chapterSwitchRecoveryMessage,
@@ -54,7 +54,8 @@ import {
 import { renameOwnedProject } from "./rename-project.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
-import { navigateProposal, type ProposalFocus, type ProposalNavigation } from "./proposal-navigation.ts";
+import { navigateProposal, type ProposalDestination, type ProposalFocus, type ProposalNavigation }
+  from "./proposal-navigation.ts";
 import { ProjectSettingsLink, ProjectSettingsView } from "./project-settings.tsx";
 import { WritingWorkspace } from "./writing-workspace.tsx";
 import { ADDRESS_CHAPTER_NOT_FOUND_SENTENCE, useAddressChapter } from "./address-chapter.ts";
@@ -79,6 +80,33 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   onProposalOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onReopened: (state: ControlledProjectState) => void;
   onLocalRecoveryContinued: (state: ControlledProjectState) => void;
+  /** Holds a settled rename. It is false when the workspace holds a later revision, and the view keeps its values. */
+  onRenamed: (projectId: string, title: string, revision: string) => boolean;
+}
+
+/** The commands of the editor part that the contents list and the assistant panel start. */
+interface ProjectEditorHandle {
+  selectChapter: (chapterId: string) => Promise<boolean>;
+  removeChapter: (chapterId: string) => void;
+  removeVolume: (volumeId: string) => void;
+  navigateProposal: (destination: ProposalDestination) => void;
+  openedProposal: (locator: ProposalLocator) => void;
+  showRecovery: (sentence: string) => void;
+}
+
+/** The state of the editor part that the contents list and the assistant panel show. */
+interface ProjectEditorStatus {
+  selectedChapterId: string;
+  canSubmit: boolean;
+}
+
+interface ProjectEditorViewProps extends ProjectReadyViewProps {
+  tree: GetManuscriptTreeResponse | undefined;
+  treeRead: "reading" | "settled";
+  /** The number of the last tree read of the workspace. */
+  treeReads: { readonly current: number };
+  handle: { current: ProjectEditorHandle | undefined };
+  onStatus: (status: ProjectEditorStatus) => void;
 }
 
 const INPUT_BOUND_STOP_MESSAGE =
@@ -103,10 +131,136 @@ function editorParagraphs(
     }));
 }
 
-function ProjectReadyView({
+/**
+ * The workspace of one Project. A command opens the Project again and gives a new `state`. The contents list and the
+ * assistant panel stay on the screen, and only the editor part starts again with the new Chapter or base (#1876).
+ */
+function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { editorKey: string }) {
+  const { state, baseUrl, fetchImpl, cryptoImpl, onRenamed } = props;
+  const projectId = state.project.project.project_id;
+  const editor = useRef<ProjectEditorHandle | undefined>(undefined);
+  const [title, setTitle] = useState(state.project.project.title);
+  const [revision, setRevision] = useState(state.revision);
+  const [tree, setTree] = useState<GetManuscriptTreeResponse | undefined>(state.tree);
+  // The statistics wait for the tree read of each open, also when it fails.
+  const [treeRead, setTreeRead] = useState<"reading" | "settled">(state.tree === undefined ? "reading" : "settled");
+  const [status, setStatus] = useState<ProjectEditorStatus>({ selectedChapterId: state.chapter.chapter.chapter_id,
+    canSubmit: false });
+  const [shown, setShown] = useState(state);
+  if (shown !== state) {
+    setShown(state);
+    setTitle(state.project.project.title);
+    setRevision(state.revision);
+    // The new editor part starts with the tree of the new state, or it waits for the tree read of the new state.
+    if (state.tree === undefined) setTreeRead("reading");
+    else setTree(state.tree);
+    setStatus((current) => ({ ...current, selectedChapterId: state.chapter.chapter.chapter_id }));
+  }
+  const currentChapterId = state.project.project.open.kind === "current_chapter"
+    ? state.project.project.open.current_chapter_id
+    : state.chapter.chapter.chapter_id;
+
+  // Only the latest tree read sets the tree, so an earlier response cannot replace a later tree.
+  const treeReads = useRef(0);
+  const readTree = () => {
+    treeReads.current += 1;
+    const sequence = treeReads.current;
+    void readManuscriptTree({ baseUrl, projectId, fetchImpl })
+      .then((next) => { if (sequence === treeReads.current) setTree(next); }).catch(() => {})
+      .finally(() => { if (sequence === treeReads.current) setTreeRead("settled"); });
+  };
+  // The takeover check of the open read the tree already. Until the new tree arrives, the list shows the last tree.
+  useEffect(() => {
+    if (state.tree !== undefined) {
+      treeReads.current += 1;
+      setTree(state.tree);
+      setTreeRead("settled");
+      return;
+    }
+    readTree();
+  }, [baseUrl, fetchImpl, projectId, state]);
+  // A Chapter that the author creates, moves, renames, or removes changes the Chapter part of the draft labels.
+  useEffect(() => {
+    if (tree !== undefined) relabelDraftReferences(state.project.project_scope, tree);
+  }, [tree, state.project.project_scope]);
+
+  const selectChapter = (chapterId: string) => editor.current?.selectChapter(chapterId) ?? Promise.resolve(false);
+  const holdAddressConversation = useAddressChapter({ tree, currentChapterId, open: selectChapter,
+    canChangeCurrentChapter: state.editor.kind === "editor-ready" && state.editor.session.writer.kind === "current_writer",
+    onNotFound: () => editor.current?.showRecovery(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
+  return (
+    <WritingWorkspace
+      writer={state.editor.kind === "editor-ready" ? state.editor.session.writer : state.editor.writer}
+      holdAddressConversation={holdAddressConversation}
+      onNavigateProposal={(destination) => editor.current?.navigateProposal(destination)}
+      onOpenedProposal={(locator) => editor.current?.openedProposal(locator)}
+      assistant={{
+        scope: state.project.project_scope,
+        chapterId: currentChapterId, tree,
+        canSubmit: status.canSubmit,
+        baseUrl, fetchImpl, cryptoImpl,
+      }}
+      tree={(
+        <>
+          <RenameProjectForm
+                title={title}
+                workspace
+                projectId={projectId}
+                revision={revision}
+                baseUrl={baseUrl}
+                fetchImpl={fetchImpl}
+                cryptoImpl={cryptoImpl}
+                onRenamed={(nextTitle, nextRevision) => {
+                  if (!onRenamed(projectId, nextTitle, nextRevision)) return;
+                  setTitle(nextTitle);
+                  setRevision(nextRevision);
+                }}
+              />
+          <ManuscriptSearchPanel
+            chapterTitles={new Map(tree?.volumes.flatMap((volume) => volume.chapters.map((chapter) => [chapter.chapter_id, chapter.title])))}
+            onSelectChapter={selectChapter}
+            projectId={projectId}
+            baseUrl={baseUrl}
+            fetchImpl={fetchImpl}
+          />
+          {tree === undefined ? null : (
+            <ManuscriptTree
+              projectId={projectId}
+              tree={tree}
+              baseUrl={baseUrl}
+              fetchImpl={fetchImpl}
+              cryptoImpl={cryptoImpl}
+              selectedChapterId={status.selectedChapterId}
+              onSelectChapter={selectChapter}
+              onChapterCreated={readTree}
+              onVolumeUpdated={readTree}
+              onRemoveChapter={(chapterId) => editor.current?.removeChapter(chapterId)}
+              onRemoveVolume={(volumeId) => editor.current?.removeVolume(volumeId)}
+            />
+          )}
+          <div className="tree-footer">
+          <ProjectSettingsLink projectId={projectId} />
+          <ManuscriptReadableExportPanel
+            projectId={projectId}
+            baseUrl={baseUrl}
+            fetchImpl={fetchImpl}
+            cryptoImpl={cryptoImpl}
+          />
+          </div>
+        </>
+      )}
+      editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeRead={treeRead} treeReads={treeReads}
+        handle={editor}
+        onStatus={setStatus} />}
+    />
+  );
+}
+
+/** The editor part of the workspace. It starts again with each new Chapter, writer, or base of the Editor Session. */
+function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
-  proposalLocatorStore, writingTimers,
-}: ProjectReadyViewProps) {
+  proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus,
+}: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
   const structureInFlightRef = useRef(false);
@@ -124,9 +278,6 @@ function ProjectReadyView({
   );
   const [editorFailure, setEditorFailure] = useState<string>();
   const [readOnly, setReadOnly] = useState(state.editor.kind !== "editor-ready");
-  const [title, setTitle] = useState(state.project.project.title);
-  const [revision, setRevision] = useState<string>();
-  const [tree, setTree] = useState<GetManuscriptTreeResponse>();
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
   // The Chapter whose switch waits for the Retry-After of a Command Challenge rate limit (#1679).
@@ -135,7 +286,7 @@ function ProjectReadyView({
   const switchWaitRef = useRef<{ wait: ChallengeAdmissionWait; waiting: boolean } | undefined>(undefined);
   useEffect(() => () => { switchWaitRef.current?.wait.cancel(); }, []);
   // A locator of the current AgentRun or of a navigation stays in memory and only causes an earlier list read.
-  // A Chapter change remounts this view, so the store of the Project keeps the locators for the next view.
+  // A Chapter change starts this part again, so the store of the Project keeps the locators for the next part.
   const projectId = state.project.project.project_id;
   const [proposalLocators, setProposalLocators] = useState<ProposalLocator[]>(
     () => proposalLocatorStore.get(projectId) ?? [],
@@ -168,25 +319,21 @@ function ProjectReadyView({
     if (projection.save_state !== "needs_attention") setEditorFailure(undefined);
   }), [writing, currentChapterId]);
 
-  useEffect(() => {
-    void listProjects({ baseUrl, fetchImpl }).then((response) => {
-      const item = response.projects.find((entry) =>
-        entry.project_scope.project_id === state.project.project.project_id);
-      if (item === undefined) return;
-      setRevision(item.revision);
-    }).catch(() => {});
-  }, [baseUrl, fetchImpl, state.project.project.project_id]);
-  useEffect(() => {
-    void readManuscriptTree({
-      baseUrl,
-      projectId: state.project.project.project_id,
-      fetchImpl,
-    }).then(setTree).catch(() => {});
-  }, [baseUrl, fetchImpl, state.project.project.project_id]);
-  // A Chapter that the author creates, moves, renames, or removes changes the Chapter part of the draft labels.
-  useEffect(() => {
-    if (tree !== undefined) relabelDraftReferences(state.project.project_scope, tree);
-  }, [tree, state.project.project_scope]);
+  // A tree read of the workspace that starts during an open can be later than the tree of the open. Then the open gives
+  // no tree, so it cannot replace the later tree, and the workspace reads the tree again (#1876).
+  const treeCheck = () => {
+    const sequence = treeReads.current;
+    return (next: ControlledProjectState): ControlledProjectState =>
+      next.kind !== "project-ready" || treeReads.current === sequence ? next : { ...next, tree: undefined };
+  };
+  const opening = async (open: () => Promise<ControlledProjectState>) => {
+    const checked = treeCheck();
+    return checked(await open());
+  };
+  // A reopen after a settled command of this page reads the Project and the list of Projects, then the Chapter and the
+  // Editor Session. It does not read the protocol profile again.
+  const reopen = () => opening(() => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
+    opened: { profile: state.profile, project: state.project } }));
 
   // A read-only editor has no writing controller and no input to wait for.
   const runWhenQuiet = <Result,>(condition: "journaled" | "settled",
@@ -299,12 +446,7 @@ function ProjectReadyView({
               return;
             }
             reopened = switched.effect.kind === "authoritative_applied";
-            onReopened(await openControlledProject({
-              baseUrl,
-              projectId: state.project.project.project_id,
-              fetchImpl,
-              cryptoImpl,
-            }));
+            onReopened(await reopen());
           });
         }, () => {
           active.waiting = true;
@@ -330,10 +472,6 @@ function ProjectReadyView({
     })();
   };
 
-  const holdAddressConversation = useAddressChapter({ tree, currentChapterId, open: selectChapter,
-    canChangeCurrentChapter: state.editor.kind === "editor-ready" && state.editor.session.writer.kind === "current_writer",
-    onNotFound: () => setSwitchRecovery(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
-
   const removeFromTree = (noun: "章节" | "卷", remove: (expectedTreeRevision: string) => Promise<{
     effect: { kind: string };
   }>) => {
@@ -358,12 +496,7 @@ function ProjectReadyView({
             setSwitchRecovery(`无法删除${noun}。`);
             return;
           }
-          const next = await openControlledProject({
-            baseUrl,
-            projectId: state.project.project.project_id,
-            fetchImpl,
-            cryptoImpl,
-          });
+          const next = await reopen();
           if (generation !== switchGenerationRef.current) return;
           onReopened(next);
         });
@@ -416,215 +549,156 @@ function ProjectReadyView({
     setEditorFailure(error instanceof Error ? error.message : "Manuscript editor failed");
   };
   onEditorFailureRef.current = onEditorFailure;
-  const refreshTree = () => {
-    void readManuscriptTree({
-      baseUrl,
-      projectId: state.project.project.project_id,
-      fetchImpl,
-    }).then(setTree).catch(() => {});
+  const openedProposal = (locator: ProposalLocator) => {
+    rememberLocator(locator);
+    setProposalRefresh((current) => current + 1);
   };
-  return (
-    <WritingWorkspace
-      writer={writer}
-      holdAddressConversation={holdAddressConversation}
-      onNavigateProposal={(destination) => navigateProposal({ state, destination,
+  const own: ProjectEditorHandle = {
+    selectChapter, removeChapter, removeVolume, openedProposal, showRecovery: setSwitchRecovery,
+    navigateProposal: (destination) => {
+      const checked = treeCheck();
+      navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
         onOpened: (next, focus, notice) => {
-          setSwitchRecovery(undefined); onProposalOpened(next, focus, notice);
-        }, onFailure: setSwitchRecovery,
-        onLocator: (locator) => { rememberLocator(locator); setProposalRefresh((current) => current + 1); },
-      })}
-      onOpenedProposal={(locator) => {
-        rememberLocator(locator);
-        setProposalRefresh((current) => current + 1);
-      }}
-      assistant={{
-        scope: state.project.project_scope,
-        chapterId: currentChapterId, tree,
-        canSubmit: selectedChapter.chapter.chapter_id === currentChapterId
-          && saveState === "saved" && !readOnly,
-        baseUrl, fetchImpl, cryptoImpl,
-      }}
-      tree={(
-        <>
-          <RenameProjectForm
-                title={title}
-                workspace
-                projectId={state.project.project.project_id}
-                revision={revision}
-                baseUrl={baseUrl}
-                fetchImpl={fetchImpl}
-                cryptoImpl={cryptoImpl}
-                onRenamed={(nextTitle, nextRevision) => {
-                  setTitle(nextTitle);
-                  setRevision(nextRevision);
-                }}
-              />
-          <ManuscriptSearchPanel
-            chapterTitles={new Map(tree?.volumes.flatMap((volume) => volume.chapters.map((chapter) => [chapter.chapter_id, chapter.title])))}
-            onSelectChapter={selectChapter}
-            projectId={state.project.project.project_id}
-            baseUrl={baseUrl}
-            fetchImpl={fetchImpl}
-          />
-          {tree === undefined ? null : (
-            <ManuscriptTree
-              projectId={state.project.project.project_id}
-              tree={tree}
-              baseUrl={baseUrl}
-              fetchImpl={fetchImpl}
-              cryptoImpl={cryptoImpl}
-              selectedChapterId={selectedChapter.chapter.chapter_id}
-              onSelectChapter={selectChapter}
-              onChapterCreated={refreshTree}
-              onVolumeUpdated={refreshTree}
-              onRemoveChapter={removeChapter}
-              onRemoveVolume={removeVolume}
-            />
-          )}
-          <div className="tree-footer">
-          <ProjectSettingsLink projectId={state.project.project.project_id} />
-          <ManuscriptReadableExportPanel
-            projectId={state.project.project.project_id}
+          setSwitchRecovery(undefined); onProposalOpened(checked(next), focus, notice);
+        }, onFailure: setSwitchRecovery, onLocator: openedProposal,
+      });
+    },
+  };
+  useLayoutEffect(() => {
+    handle.current = own;
+    return () => { if (handle.current === own) handle.current = undefined; };
+  });
+  const selectedChapterId = selectedChapter.chapter.chapter_id;
+  const canSubmit = selectedChapterId === currentChapterId && saveState === "saved" && !readOnly;
+  useEffect(() => { onStatus({ selectedChapterId, canSubmit }); }, [selectedChapterId, canSubmit, onStatus]);
+  return (
+    <>
+      {switchWaiting !== undefined ? <p role="status">{CHAPTER_SWITCH_WAITING_SENTENCE}</p>
+        : (switchRecovery ?? proposalNotice) === undefined ? null : (
+          <p role="alert">{switchRecovery ?? proposalNotice}</p>
+        )}
+      <h2>{selectedChapter.chapter.title}</h2>
+      <BlockProposalDisplay
+        key={selectedChapter.chapter.chapter_id}
+        scope={state.project.project_scope}
+        chapterId={selectedChapter.chapter.chapter_id}
+        authoritativeRevisionId={selectedChapter.chapter.chapter_id === currentChapterId
+          && pending !== null ? pending.authoritative_revision_id
+          : selectedChapter.chapter.current_revision.revision_id}
+        focusProposal={proposalFocus}
+        locators={proposalLocators}
+        refreshKey={proposalRefresh}
+        safeToProject={(state.editor.kind !== "editor-ready" && pending === null)
+          || selectedChapter.chapter.chapter_id !== currentChapterId
+          || saveState === "saved"
+          || (pending !== null
+            && pending.body === selectedChapter.chapter.current_revision.body
+            && JSON.stringify(pending.blocks)
+              === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
+        onAccepted={async (settled) => {
+          // A decision with no settled response opens the Project with each check of the first open.
+          onReopened(await (settled ? reopen() : opening(() => openControlledProject({ baseUrl,
+            projectId: state.project.project.project_id, fetchImpl, cryptoImpl }))));
+        }}
+        onUndoCurrentChapter={(chapterId) => {
+          // An Undo of a chapter switch moves the editor back to the earlier Current Chapter.
+          if (chapterId === currentChapterId) return;
+          void reopen().then(onReopened);
+        }}
+        blocks={editorBlocks}
+        referenceSource={{
+          scope: state.project.project_scope,
+          chapterId: selectedChapter.chapter.chapter_id,
+          revisionId: selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
+            ? pending.authoritative_revision_id : selectedChapter.chapter.current_revision.revision_id,
+          saved: selectedChapter.chapter.chapter_id !== currentChapterId || pending === null
+            || saveState === "saved",
+          tree,
+        }}
+        editable={!readOnly}
+        persistWorkspace={
+          state.editor.kind === "editor-ready"
+            && selectedChapter.chapter.chapter_id === currentChapterId
+            ? state.editor
+            : undefined
+        }
+        writing={selectedChapter.chapter.chapter_id === currentChapterId ? writing : undefined}
+        baseUrl={baseUrl}
+        fetchImpl={fetchImpl}
+        cryptoImpl={cryptoImpl}
+        onFailure={onEditorFailure}
+      />
+      <div className="editor-status">
+      <ManuscriptStatisticsPanel
+        projectId={state.project.project.project_id}
+        baseUrl={baseUrl}
+        fetchImpl={fetchImpl}
+        currentChapterId={currentChapterId}
+        saveState={saveState}
+        treeRevision={tree?.tree_revision}
+        treeRead={treeRead}
+      />
+      <small
+        data-save-state={saveState}
+        data-editor-failure={editorFailure ?? ""}
+        data-unsettled-intent-count={pending?.unsettled_intent_count ?? ""}
+        data-authoritative-revision-id={
+          pending?.authoritative_revision_id
+            ?? selectedChapter.chapter.current_revision.revision_id
+        }
+        data-author-undo-frontier={pending?.author_undo_frontier_sequence ?? ""}
+        data-chapter-switch-waiting={switchWaiting ?? ""}
+      >
+        {saveState === "saved" ? "已保存"
+          : saveState === "saving" ? "保存中"
+          : saveState === "needs_attention" ? "需要处理"
+          : "未保存"}
+      </small>
+      <ProjectActivityStatus
+        workspace={
+          state.editor.kind === "editor-ready"
+            && selectedChapter.chapter.chapter_id === currentChapterId
+            ? state.editor
+            : undefined
+        }
+        baseUrl={baseUrl}
+        fetchImpl={fetchImpl}
+        revisionKey={pending?.authoritative_revision_id ?? ""}
+        onUnavailable={() => {
+          setReadOnly(true);
+          setSaveState("needs_attention");
+          setEditorFailure("活动流无法同步");
+        }}
+      />
+      </div>
+      {state.editor.kind === "editor-ready" ? <LocalRecoveryPanel
+        workspace={state.editor}
+        refreshKey={String(pending?.requires_local_reconfirmation === true)}
+        onContinue={async () => {
+          const next = await openControlledProject({ baseUrl,
+            projectId: state.project.project.project_id, fetchImpl, cryptoImpl });
+          onLocalRecoveryContinued(next);
+        }}
+      /> : null}
+      {writer?.kind === "read_only"
+        ? (
+          <TakeOverWriterButton
+            state={state}
+            writer={writer}
             baseUrl={baseUrl}
             fetchImpl={fetchImpl}
             cryptoImpl={cryptoImpl}
-          />
-          </div>
-        </>
-      )}
-      editor={(
-        <>
-          {switchWaiting !== undefined ? <p role="status">{CHAPTER_SWITCH_WAITING_SENTENCE}</p>
-            : (switchRecovery ?? proposalNotice) === undefined ? null : (
-              <p role="alert">{switchRecovery ?? proposalNotice}</p>
-            )}
-          <h2>{selectedChapter.chapter.title}</h2>
-          <BlockProposalDisplay
-            key={selectedChapter.chapter.chapter_id}
-            scope={state.project.project_scope}
-            chapterId={selectedChapter.chapter.chapter_id}
-            authoritativeRevisionId={selectedChapter.chapter.chapter_id === currentChapterId
-              && pending !== null ? pending.authoritative_revision_id
-              : selectedChapter.chapter.current_revision.revision_id}
-            focusProposal={proposalFocus}
-            locators={proposalLocators}
-            refreshKey={proposalRefresh}
-            safeToProject={(state.editor.kind !== "editor-ready" && pending === null)
-              || selectedChapter.chapter.chapter_id !== currentChapterId
-              || saveState === "saved"
-              || (pending !== null
-                && pending.body === selectedChapter.chapter.current_revision.body
-                && JSON.stringify(pending.blocks)
-                  === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
-            onAccepted={async () => {
-              const next = await openControlledProject({
-                baseUrl,
-                projectId: state.project.project.project_id,
-                fetchImpl,
-                cryptoImpl,
-              });
-              onReopened(next);
-            }}
-            onUndoCurrentChapter={(chapterId) => {
-              // An Undo of a chapter switch moves the editor back to the earlier Current Chapter.
-              if (chapterId === currentChapterId) return;
-              void openControlledProject({ baseUrl, projectId: state.project.project.project_id, fetchImpl, cryptoImpl })
-                .then(onReopened);
-            }}
-            blocks={editorBlocks}
-            referenceSource={{
-              scope: state.project.project_scope,
-              chapterId: selectedChapter.chapter.chapter_id,
-              revisionId: selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
-                ? pending.authoritative_revision_id : selectedChapter.chapter.current_revision.revision_id,
-              saved: selectedChapter.chapter.chapter_id !== currentChapterId || pending === null
-                || saveState === "saved",
-              tree,
-            }}
-            editable={!readOnly}
-            persistWorkspace={
-              state.editor.kind === "editor-ready"
-                && selectedChapter.chapter.chapter_id === currentChapterId
-                ? state.editor
-                : undefined
-            }
-            writing={selectedChapter.chapter.chapter_id === currentChapterId ? writing : undefined}
-            baseUrl={baseUrl}
-            fetchImpl={fetchImpl}
-            cryptoImpl={cryptoImpl}
-            onFailure={onEditorFailure}
-          />
-          <div className="editor-status">
-          <ManuscriptStatisticsPanel
-            projectId={state.project.project.project_id}
-            baseUrl={baseUrl}
-            fetchImpl={fetchImpl}
-            currentChapterId={currentChapterId}
-            saveState={saveState}
-            treeRevision={tree?.tree_revision}
-          />
-          <small
-            data-save-state={saveState}
-            data-editor-failure={editorFailure ?? ""}
-            data-unsettled-intent-count={pending?.unsettled_intent_count ?? ""}
-            data-authoritative-revision-id={
-              pending?.authoritative_revision_id
-                ?? selectedChapter.chapter.current_revision.revision_id
-            }
-            data-author-undo-frontier={pending?.author_undo_frontier_sequence ?? ""}
-            data-chapter-switch-waiting={switchWaiting ?? ""}
-          >
-            {saveState === "saved" ? "已保存"
-              : saveState === "saving" ? "保存中"
-              : saveState === "needs_attention" ? "需要处理"
-              : "未保存"}
-          </small>
-          <ProjectActivityStatus
-            workspace={
-              state.editor.kind === "editor-ready"
-                && selectedChapter.chapter.chapter_id === currentChapterId
-                ? state.editor
-                : undefined
-            }
-            baseUrl={baseUrl}
-            fetchImpl={fetchImpl}
-            revisionKey={pending?.authoritative_revision_id ?? ""}
-            onUnavailable={() => {
-              setReadOnly(true);
-              setSaveState("needs_attention");
-              setEditorFailure("活动流无法同步");
+            inFlightRef={takeOverInFlightRef}
+            reopen={() => reopen()}
+            onReopened={onReopened}
+            onRefused={() => {
+              setSwitchRecovery("无法接管写作。");
             }}
           />
-          </div>
-          {state.editor.kind === "editor-ready" ? <LocalRecoveryPanel
-            workspace={state.editor}
-            refreshKey={String(pending?.requires_local_reconfirmation === true)}
-            onContinue={async () => {
-              const next = await openControlledProject({ baseUrl,
-                projectId: state.project.project.project_id, fetchImpl, cryptoImpl });
-              onLocalRecoveryContinued(next);
-            }}
-          /> : null}
-          {writer?.kind === "read_only"
-            ? (
-              <TakeOverWriterButton
-                state={state}
-                writer={writer}
-                baseUrl={baseUrl}
-                fetchImpl={fetchImpl}
-                cryptoImpl={cryptoImpl}
-                inFlightRef={takeOverInFlightRef}
-                onReopened={onReopened}
-                onRefused={() => {
-                  setSwitchRecovery("无法接管写作。");
-                }}
-              />
-            )
-            : null}
-        </>
-      )}
-    />
+        )
+        : null}
+    </>
   );
 }
 
@@ -695,33 +769,36 @@ function RenameProjectForm({
 
 function EmptyProjectReadyView({
   project,
+  revision: openedRevision,
   tree,
   baseUrl,
   fetchImpl,
   cryptoImpl,
   onVolumeCreated,
   onChapterCreated,
+  onRenamed,
 }: {
   project: GetProjectResponse;
+  revision: string;
   tree: GetManuscriptTreeResponse;
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   onVolumeCreated: () => void;
   onChapterCreated: () => void;
+  onRenamed: (projectId: string, title: string, revision: string) => boolean;
 }) {
   const [title, setTitle] = useState(project.project.title);
-  const [revision, setRevision] = useState<string>();
+  const [revision, setRevision] = useState(openedRevision);
+  // An open that stays on an Empty Project keeps this view, so the view takes the title and the revision of each state.
+  const [shown, setShown] = useState(project);
+  if (shown !== project) {
+    setShown(project);
+    setTitle(project.project.title);
+    setRevision(openedRevision);
+  }
   const [volumeRemoval, setVolumeRemoval] = useState<string>();
   const [addressNotice, setAddressNotice] = useState<string>();
-  useEffect(() => {
-    void listProjects({ baseUrl, fetchImpl }).then((response) => {
-      const item = response.projects.find((entry) =>
-        entry.project_scope.project_id === project.project.project_id);
-      if (item === undefined) return;
-      setRevision(item.revision);
-    }).catch(() => {});
-  }, [baseUrl, fetchImpl, project.project.project_id]);
   // A Project with no Chapter has no Chapter to open from the address.
   const holdAddressConversation = useAddressChapter({ tree, currentChapterId: undefined, canChangeCurrentChapter: false,
     open: async () => false, onNotFound: () => setAddressNotice(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
@@ -744,6 +821,7 @@ function EmptyProjectReadyView({
               fetchImpl={fetchImpl}
               cryptoImpl={cryptoImpl}
               onRenamed={(nextTitle, nextRevision) => {
+                if (!onRenamed(project.project.project_id, nextTitle, nextRevision)) return;
                 setTitle(nextTitle);
                 setRevision(nextRevision);
               }}
@@ -943,10 +1021,39 @@ function ProtectedReadyView({
   );
 }
 
+/** The Project, its title, and its revision of a state that opened a Project. */
+function projectName(state: ControlledProjectState) {
+  return state.kind === "project-ready" || state.kind === "empty-project-ready"
+    ? { projectId: state.project.project.project_id, title: state.project.project.title, revision: state.revision }
+    : undefined;
+}
+
 function Stage1View({
   state, baseUrl, fetchImpl, cryptoImpl, writingTimers, setBootState,
 }: Stage1ViewProps & { setBootState: (kind: string) => void }) {
   const [current, setCurrent] = useState(state);
+  // The Project title and revision that the workspace holds: from the last taken state or a settled rename. Only a
+  // rename changes the revision, by 1, so a state with a lower revision is earlier and keeps the held values (#1888).
+  const held = useRef(projectName(state));
+  const take = (next: ControlledProjectState) => {
+    const name = held.current;
+    // Equal also keeps them: an open takes the title from the Project read and the revision from the list read.
+    if ((next.kind === "project-ready" || next.kind === "empty-project-ready") && name !== undefined
+      && name.projectId === next.project.project.project_id && BigInt(next.revision) <= BigInt(name.revision)) {
+      setCurrent({ ...next, revision: name.revision,
+        project: { ...next.project, project: { ...next.project.project, title: name.title } } });
+      return;
+    }
+    held.current = projectName(next);
+    setCurrent(next);
+  };
+  // A late rename response of an earlier revision, or of another Project, changes nothing.
+  const renamed = (projectId: string, title: string, revision: string) => {
+    const name = held.current;
+    if (name === undefined || name.projectId !== projectId || BigInt(revision) < BigInt(name.revision)) return false;
+    held.current = { projectId, title, revision };
+    return true;
+  };
   const [editorGeneration, setEditorGeneration] = useState(0);
   const [proposalFocus, setProposalFocus] = useState<ProposalFocus>();
   const [proposalNotice, setProposalNotice] = useState<string>();
@@ -954,11 +1061,12 @@ function Stage1View({
   const proposalLocatorStore = useRef(new Map<string, ProposalLocator[]>());
   useEffect(() => { setBootState(current.kind); }, [current, setBootState]);
   if (current.kind === "project-ready") {
-    // Volume removal keeps the current Chapter, so chapter and writer keys
-    // stay put. The new editor base snapshot remounts the tree after honor-deletion.
+    // The workspace stays through each command of one Project. Volume removal keeps the current Chapter, so chapter
+    // and writer keys stay put. The new editor base snapshot starts the editor part again after honor-deletion.
     return (
       <ProjectReadyView
-        key={`${editorGeneration}:${
+        key={current.project.project.project_id}
+        editorKey={`${editorGeneration}:${
           current.project.project.open.kind === "current_chapter"
             ? current.project.project.open.current_chapter_id
             : current.project.project.project_id
@@ -981,9 +1089,10 @@ function Stage1View({
         proposalNotice={proposalNotice}
         proposalLocatorStore={proposalLocatorStore.current}
         writingTimers={writingTimers}
-        onProposalOpened={(next, focus, notice) => { setProposalFocus(focus); setProposalNotice(notice); setCurrent(next); }}
-        onReopened={setCurrent}
-        onLocalRecoveryContinued={(next) => { setCurrent(next); setEditorGeneration((value) => value + 1); }}
+        onProposalOpened={(next, focus, notice) => { setProposalFocus(focus); setProposalNotice(notice); take(next); }}
+        onReopened={take}
+        onLocalRecoveryContinued={(next) => { take(next); setEditorGeneration((value) => value + 1); }}
+        onRenamed={renamed}
       />
     );
   }
@@ -991,6 +1100,7 @@ function Stage1View({
     return (
       <EmptyProjectReadyView
         project={current.project}
+        revision={current.revision}
         tree={current.tree}
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}
@@ -1001,7 +1111,7 @@ function Stage1View({
             projectId: current.project.project.project_id,
             fetchImpl,
             cryptoImpl,
-          }).then(setCurrent);
+          }).then(take);
         }}
         onChapterCreated={() => {
           void openControlledProject({
@@ -1009,8 +1119,9 @@ function Stage1View({
             projectId: current.project.project.project_id,
             fetchImpl,
             cryptoImpl,
-          }).then(setCurrent);
+          }).then(take);
         }}
+        onRenamed={renamed}
       />
     );
   }
@@ -1023,7 +1134,7 @@ function Stage1View({
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}
         cryptoImpl={cryptoImpl}
-        setCurrent={setCurrent}
+        setCurrent={take}
       />
     );
   }

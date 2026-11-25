@@ -20,7 +20,7 @@ pub(crate) enum ObservedFrontier {
 }
 
 pub(crate) async fn load_observed_frontier(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
 ) -> Result<Option<ObservedFrontier>, ProjectCommandError> {
     let row = client
@@ -173,7 +173,7 @@ impl ObservedFrontier {
 /// prior Revision of its source Forward Commit, so the walk goes to that prior Revision and
 /// continues. The walk stops at a Revision that a Forward action or the Chapter creation wrote.
 pub(crate) async fn head_lineage_revision(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     chapter_id: &str,
     head_revision_id: &str,
@@ -184,7 +184,7 @@ pub(crate) async fn head_lineage_revision(
 
 /// The Revisions of the lineage walk of a Chapter Head, from the Head to its lineage Revision.
 async fn head_lineage_path(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     chapter_id: &str,
     head_revision_id: &str,
@@ -238,7 +238,7 @@ async fn head_lineage_path(
 /// Revision of an Acceptance Compensation to the accepted Revision. The walk stops at a Revision
 /// that no recorded Compensation explains.
 pub(crate) async fn proposal_head_restores(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
     proposal_id: &str,
     head_revision_id: &str,
@@ -356,7 +356,7 @@ fn undo_parse_error(error: impl std::error::Error + Send + Sync + 'static) -> Pr
 }
 
 pub(crate) async fn editor_session_chapter(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &UndoRequest,
 ) -> Result<Option<String>, ProjectCommandError> {
     let row = client

@@ -1,5 +1,6 @@
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AgentRunReadStore, AgentRunRecord, ConversationSelection, CreateAgentRunApplied,
     CreateAgentRunCommandError, CreateAgentRunError, CreateAgentRunInput, CreateAgentRunSettlement,
@@ -10,7 +11,6 @@ use storyos_core::{
     AssistanceAdmission, AssistanceAvailability, ChapterAdmission, ConversationAdmission,
     CreateAgentRun as CoreCreateAgentRun, CreateAgentRunRefusal, ProjectPresence, create_agent_run,
 };
-use tokio_postgres::Client;
 
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{

@@ -54,7 +54,8 @@ fn outcome<A: Clone, N: ReasonCode + Clone, C: ReasonCode + Clone, P, Z>(
 async fn rows_for_other_user(scope: &ProjectScope, table: &str) -> i64 {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
-    let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let (runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let mut runtime = crate::statement_cache::Client::new(runtime);
     tokio::spawn(connection);
     let foreign = runtime.transaction().await.unwrap();
     foreign

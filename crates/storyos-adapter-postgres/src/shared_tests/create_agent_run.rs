@@ -11,7 +11,9 @@ use storyos_application::{
     issue_project_command_challenge,
 };
 use storyos_core::{AssistanceAvailability, CreateAgentRunRefusal, TransitionOutcome};
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 
 pub(crate) const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 
@@ -112,6 +114,7 @@ pub(crate) async fn connect_admin() -> (String, Client) {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         admin_connection.await.unwrap();
     });

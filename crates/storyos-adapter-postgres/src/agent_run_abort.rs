@@ -11,7 +11,7 @@ use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_unavailable};
 /// The next committed cancellation of a cancelled Run: a decision or successor Attempt that was
 /// dispatched, has an unknown outcome, and has no recorded Abort yet. Decision Attempts come first.
 pub(crate) async fn pending(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<Option<CommittedCancellation>, CompleteAgentRunError> {
@@ -63,7 +63,7 @@ pub(crate) async fn pending(
 
 /// Commits the Destination Attempt and Outbound Disclosure Event of one Abort request.
 pub(crate) async fn commit(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     request: &AbortRequest,
@@ -138,7 +138,7 @@ pub(crate) async fn commit(
 /// Records the abort result. The aborted Attempt stays OutcomeUnknown; the cancellation only
 /// notes whether the destination confirmed the stop.
 pub(crate) async fn record(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     dispatch: &DispatchClaim,
     request: &AbortRequest,
@@ -180,7 +180,7 @@ pub(crate) async fn record(
 /// Records an Abort that the adapter refused before its dispatch claim. No request left the
 /// Host, so nothing proves that the destination stopped. The other cancellation duties go on.
 pub(crate) async fn record_unsupported(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     request: &AbortRequest,
     refusal: PreDispatchRefusal,

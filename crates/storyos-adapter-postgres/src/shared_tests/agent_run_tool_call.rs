@@ -1,8 +1,8 @@
 //! The shared test support from `agent_run_tool_call_tests.rs`.
 
+use crate::statement_cache::Client;
 use serde_json::json;
 use storyos_core::EXA_TOOL_REGISTRATION;
-use tokio_postgres::Client;
 
 /// A stream that reports `reference`, one complete message, and one complete function call with
 /// `call_id`, and ends with the terminal `status` of the response.

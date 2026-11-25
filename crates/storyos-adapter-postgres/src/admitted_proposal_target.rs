@@ -22,7 +22,7 @@ pub(crate) struct CurrentTarget {
 }
 
 pub(crate) async fn load_admitted_targets(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     chapter_id: &str,
 ) -> Result<Vec<AdmittedTarget>, CompleteAgentRunError> {
@@ -87,7 +87,7 @@ pub(crate) async fn load_admitted_targets(
 }
 
 async fn load_record_targets(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     chapter_id: &str,
     record: &storyos_core::CurrentPassageAssemblyRecord,
@@ -175,7 +175,7 @@ async fn load_record_targets(
 }
 
 pub(crate) async fn load_current_target(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     chapter_id: &str,
     block_id: &str,

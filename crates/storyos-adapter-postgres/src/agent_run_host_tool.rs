@@ -12,7 +12,7 @@ use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve}
 /// ToolCall after each other ToolCall of its response, and `finish` last, so the refusals of the
 /// response are known.
 pub(crate) async fn execute(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     spec: &ToolSpec,

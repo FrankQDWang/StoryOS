@@ -1,8 +1,8 @@
 //! The Admission, Receipt, Project lock, scope counter, and Command Idempotency Fence rows of the
 //! sequence.
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectScope};
-use tokio_postgres::Client;
 
 use super::{ActionDisposition, LockedProject, ReceiptHeads, ReceiptRefs, unavailable};
 

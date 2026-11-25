@@ -23,7 +23,7 @@ pub(crate) const DEPLOYMENT_REGISTRATION: &str =
 /// deployment has an embedding configuration, the vector store is available, and the latest
 /// embedding use binding of the Project has the Embedding Registration of the deployment.
 pub(crate) async fn possible(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<bool, CompleteAgentRunError> {
     Ok(client
@@ -56,7 +56,7 @@ pub(crate) async fn possible(
 /// `registration`, and the database has the vector store. Otherwise `None`, and `execute` refuses
 /// the call.
 pub(crate) async fn question_search(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     row: &ToolCallRow,
     spec: &ToolSpec,
     registration: Option<&'static EmbeddingRegistration>,
@@ -84,7 +84,7 @@ pub(crate) async fn question_search(
 /// has no embedding configuration or the database has no vector store. An admitted call is the
 /// work of `question_search`.
 pub(crate) async fn execute(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
 ) -> Result<(), CompleteAgentRunError> {
@@ -109,7 +109,7 @@ pub(crate) async fn execute(
 /// was not available. A refusal of the admission refuses the call with
 /// `hybrid_search_unavailable`. A call that is not pending changes nothing.
 pub(crate) async fn record(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     search: &QuestionSearch,
     result: EmbeddingResult,
@@ -147,7 +147,9 @@ pub(crate) async fn record(
     resolve(client, claim, &row, Resolution::settled(&result)).await
 }
 
-async fn vector_store(client: &tokio_postgres::Client) -> Result<bool, CompleteAgentRunError> {
+async fn vector_store(
+    client: &crate::statement_cache::Client,
+) -> Result<bool, CompleteAgentRunError> {
     Ok(client
         .query_one(
             "SELECT to_regclass('storyos.passage_vectors') IS NOT NULL",
@@ -159,7 +161,7 @@ async fn vector_store(client: &tokio_postgres::Client) -> Result<bool, CompleteA
 }
 
 async fn settle_refused(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     refusal: HybridSearchRefusal,

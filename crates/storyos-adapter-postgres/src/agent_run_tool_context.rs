@@ -44,7 +44,7 @@ pub(crate) struct ToolContext<'a> {
 /// Commits gates one to six for the ToolCall and returns the Context Assembly Manifest identity.
 /// A missing Run requirement is a damaged Run.
 pub(crate) async fn commit_tool_context(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     context: ToolContext<'_>,
 ) -> Result<String, CompleteAgentRunError> {
@@ -148,7 +148,7 @@ pub(crate) async fn commit_tool_context(
 /// The committed manifests of `manifest_id` when they belong to the ToolCall and record the same
 /// authority evidence, and `None` otherwise.
 pub(crate) async fn committed_tool_context(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     manifest_id: &str,

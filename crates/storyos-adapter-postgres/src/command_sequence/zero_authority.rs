@@ -2,9 +2,9 @@
 
 use std::future::Future;
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use storyos_core::{ReasonCode, ReceiptResult};
-use tokio_postgres::Client;
 
 use super::{
     ActivitySequences, Conflict, LockedProject, NoEffect, ProjectCommand, ReceiptRefs, Refusal,

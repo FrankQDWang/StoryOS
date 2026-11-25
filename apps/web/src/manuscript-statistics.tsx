@@ -28,6 +28,7 @@ export function ManuscriptStatisticsPanel({
   currentChapterId,
   saveState,
   treeRevision,
+  treeRead,
 }: {
   projectId: string;
   baseUrl: string;
@@ -35,11 +36,13 @@ export function ManuscriptStatisticsPanel({
   currentChapterId: string;
   saveState: string;
   treeRevision: string | undefined;
+  treeRead: "reading" | "settled";
 }) {
   const [outcome, setOutcome] = useState<StatisticsOutcome | undefined>(undefined);
 
   useEffect(() => {
-    if (saveState === "saving") return;
+    // One read for one tree revision: the read waits for the first tree read.
+    if (saveState === "saving" || treeRead === "reading") return;
     let cancelled = false;
     void (async () => {
       try {
@@ -57,7 +60,7 @@ export function ManuscriptStatisticsPanel({
     return () => {
       cancelled = true;
     };
-  }, [baseUrl, currentChapterId, fetchImpl, projectId, saveState, treeRevision]);
+  }, [baseUrl, currentChapterId, fetchImpl, projectId, saveState, treeRevision, treeRead]);
 
   if (outcome === undefined) return null;
   if (outcome.kind === "projection_not_ready") {

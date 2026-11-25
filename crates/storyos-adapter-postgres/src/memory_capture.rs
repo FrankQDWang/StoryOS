@@ -2,6 +2,7 @@
 //! Assembly of each RunStep, and the records of the settled output call. A capture is a Run of
 //! the kind `memory_capture` with no Conversation, no Chapter, no author message, and no Receipt. No diagnostic records the input or an observation (ADR 0047).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, MemoryCaptureSource, MemoryCaptureStartRefusal,
     ProjectAssistanceRecord, ProjectReadError, ProjectScope, StartedMemoryCapture,
@@ -11,7 +12,6 @@ use storyos_core::{
     ContextSourceClass, CurrentPassageAssemblyRecord, MemoryCaptureAssembly, MemoryObservation,
     ProjectionMode, ToolResultCandidate,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::damaged;

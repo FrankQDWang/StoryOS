@@ -9,7 +9,9 @@ use storyos_application::{
     WriterTakeover, create_editor_session, issue_project_command_challenge,
 };
 use storyos_core::{TakeOverProjectWriterNoEffect, TransitionOutcome};
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::NoTls;
+
+use crate::statement_cache::Client;
 
 use super::*;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
@@ -75,6 +77,7 @@ fn test_uuid(number: u32) -> String {
 
 async fn connect(database_url: &str) -> Client {
     let (client, connection) = tokio_postgres::connect(database_url, NoTls).await.unwrap();
+    let client = crate::statement_cache::Client::new(client);
     tokio::spawn(async move {
         let _connection_result = connection.await;
     });

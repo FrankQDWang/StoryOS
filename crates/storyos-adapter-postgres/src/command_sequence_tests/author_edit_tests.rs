@@ -1,9 +1,9 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditProposalTarget,
     AuthorEditSettlement, AuthorEditSettlementEffect, EditorSessionId, UndoLatestAuthorActionInput,
 };
 use storyos_core::{AuthorEditConflict, TransitionOutcome};
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

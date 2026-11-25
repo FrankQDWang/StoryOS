@@ -3,6 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_volcengine_responses::AgentPlanExchange;
 use storyos_application::{
@@ -12,7 +13,6 @@ use storyos_application::{
     PreDispatchRefusal, PreparedRequest, ProjectScope, complete_agent_run_with_tools,
 };
 use storyos_core::ModelAdapter;
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_retrieval::{

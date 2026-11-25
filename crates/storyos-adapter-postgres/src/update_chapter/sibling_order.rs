@@ -1,7 +1,7 @@
 use storyos_application::ProjectScope;
 
 pub(crate) async fn write_chapter_order(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     parent_volume_id: &str,
     ids: &[String],

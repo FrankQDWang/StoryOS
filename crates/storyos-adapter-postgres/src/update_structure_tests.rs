@@ -18,7 +18,10 @@ const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const MISSING: &str = "018f0000-0000-7001-8000-00000000ffff";
 
 /// The prior title and prior order that the Activity payload of one update records.
-async fn prior_fields(admin: &tokio_postgres::Client, receipt_id: &str) -> (String, String) {
+async fn prior_fields(
+    admin: &crate::statement_cache::Client,
+    receipt_id: &str,
+) -> (String, String) {
     let row = admin
         .query_one(
             "SELECT payload->>'prior_title', payload->>'prior_order'
@@ -32,7 +35,7 @@ async fn prior_fields(admin: &tokio_postgres::Client, receipt_id: &str) -> (Stri
 }
 
 /// The current Chapter and every Chapter Head of the Project.
-async fn chapter_identity(admin: &tokio_postgres::Client, scope: &ProjectScope) -> String {
+async fn chapter_identity(admin: &crate::statement_cache::Client, scope: &ProjectScope) -> String {
     admin
         .query_one(
             "SELECT current_chapter_id::text || '/' || (

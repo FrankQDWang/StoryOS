@@ -1,5 +1,6 @@
 //! The Update Project Instruction command and the read of the current Revision (ADR 0094 section 2).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ProjectCommandEnvelope, ProjectInstructionRevision, ProjectInstructionSaved, ProjectReadError,
     ProjectScope, RefusableCommandError, UpdateProjectInstructionError,
@@ -10,7 +11,6 @@ use storyos_core::{
     TransitionOutcome, UpdateProjectInstruction as CoreUpdateProjectInstruction,
     update_project_instruction,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::command_replay::{CommandReplay, ReplayFault};
@@ -130,7 +130,7 @@ impl ProjectCommand for UpdateProjectInstructionInput {
 
 /// The current Revision of the Project Instruction in the scope that `client` has set.
 pub(crate) async fn read_current_revision(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
 ) -> Result<Option<ProjectInstructionRevision>, ProjectReadError> {
     let row = client

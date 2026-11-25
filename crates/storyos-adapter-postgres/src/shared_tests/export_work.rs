@@ -121,7 +121,7 @@ pub(crate) fn command_digest(profile: &str, canonical_command_bytes: &[u8]) -> S
     format!("sha256:{profile}:{value}")
 }
 
-pub(crate) async fn remove_export_work_rows(admin: &tokio_postgres::Client) {
+pub(crate) async fn remove_export_work_rows(admin: &crate::statement_cache::Client) {
     admin
         .batch_execute(
             "DELETE FROM storyos.human_readable_manuscript_exports;

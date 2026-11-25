@@ -1,7 +1,7 @@
 //! The JSON reader of the tests of this crate.
 
+use crate::statement_cache::Client;
 use serde_json::Value;
-use tokio_postgres::Client;
 use tokio_postgres::types::ToSql;
 
 /// The first column of the one row of the query `sql` with `params`, read as JSON text.

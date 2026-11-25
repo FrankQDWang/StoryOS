@@ -2,12 +2,12 @@
 
 use std::future::Future;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AdmittedProjectCommand, DiagnosticField as _, DiagnosticId, ProjectCommandChallengeError,
     ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectCommandEnvelope,
     ProjectCommandError, ProjectCommandSettlement,
 };
-use tokio_postgres::Client;
 
 use super::contention::{CommandError, contended};
 use super::unavailable;

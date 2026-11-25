@@ -8,6 +8,7 @@ use crate::shared_tests::command_sequence_support::{
     CommandCall, Route, SequenceError, issued, seed_project,
 };
 use crate::shared_tests::set_current_chapter_authority::seed_two_chapters;
+use crate::statement_cache::Client;
 use storyos_application::{
     CancelAgentRunInput, CancelAgentRunSettlement, ConversationSelection, CreateAgentRunInput,
     CreateAgentRunSettlement, PauseAgentRunInput, PauseAgentRunSettlement, ProjectCommandError,
@@ -15,7 +16,6 @@ use storyos_application::{
 };
 use storyos_contracts::CommandKind;
 use storyos_core::AssistanceAvailability;
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 pub(crate) const PAUSE_AGENT_RUN: Route = Route {

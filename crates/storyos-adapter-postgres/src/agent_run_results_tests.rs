@@ -2,6 +2,7 @@
 //! a refused call, a version of background work, a read of one Model Attempt, a cancel after
 //! a settled write, and a pass that flags an entry of a Run. Test prefixes `a27` and `a28`.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -9,7 +10,6 @@ use storyos_application::{
     NoContractFaults, ProjectScope, complete_agent_run,
 };
 use storyos_contracts::AgentRunResultInspect;
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::complete;

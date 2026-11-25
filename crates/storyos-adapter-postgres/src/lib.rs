@@ -211,6 +211,7 @@ mod selection_references;
 mod set_current_chapter;
 mod skill_package_snapshot;
 mod snapshot;
+mod statement_cache;
 mod steer_agent_run;
 mod storage_activation;
 mod storage_activation_proof;
@@ -565,7 +566,7 @@ impl PostgresProjectReader {
 }
 
 async fn apply_challenge_rate_limit(
-    transaction: &tokio_postgres::Transaction<'_>,
+    transaction: &crate::statement_cache::Transaction<'_>,
     binding: &ProjectCommandChallengeBinding,
     rate_class: ChallengeRateClass,
     clock_unix_seconds: Option<i64>,
@@ -690,7 +691,7 @@ async fn apply_challenge_rate_limit(
 }
 
 async fn set_challenge_scope_on_client(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
 ) -> Result<(), ProjectCommandChallengeError> {
     client
@@ -706,7 +707,7 @@ async fn set_challenge_scope_on_client(
 }
 
 async fn set_challenge_scope(
-    transaction: &tokio_postgres::Transaction<'_>,
+    transaction: &crate::statement_cache::Transaction<'_>,
     scope: &ProjectScope,
 ) -> Result<(), ProjectCommandChallengeError> {
     transaction
@@ -895,8 +896,7 @@ impl ProjectReader for PostgresProjectReader {
         let transaction = client.transaction().await.map_err(read_error)?;
         set_scope(&transaction, scope).await?;
         let assistance =
-            crate::update_project_assistance::read_assistance_record(transaction.client(), scope)
-                .await?;
+            crate::update_project_assistance::read_assistance_record(&transaction, scope).await?;
         transaction.commit().await.map_err(read_error)?;
         Ok(assistance)
     }
@@ -909,15 +909,14 @@ impl ProjectReader for PostgresProjectReader {
         let transaction = client.transaction().await.map_err(read_error)?;
         set_scope(&transaction, scope).await?;
         let instruction =
-            crate::update_project_instruction::read_current_revision(transaction.client(), scope)
-                .await?;
+            crate::update_project_instruction::read_current_revision(&transaction, scope).await?;
         transaction.commit().await.map_err(read_error)?;
         Ok(instruction)
     }
 }
 
 async fn set_scope(
-    client: &impl tokio_postgres::GenericClient,
+    client: &impl crate::statement_cache::GenericClient,
     scope: &ProjectScope,
 ) -> Result<(), ProjectReadError> {
     client

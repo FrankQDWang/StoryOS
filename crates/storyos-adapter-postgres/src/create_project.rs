@@ -65,7 +65,7 @@ impl CreateProjectStore for PostgresProjectReader {
 }
 
 async fn consume_create_project_challenge(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &CreateProjectCommand,
 ) -> Result<ProjectCommandChallengeUse, CreateProjectError> {
     let binding = &command.challenge_binding;
@@ -139,7 +139,7 @@ async fn consume_create_project_challenge(
 }
 
 async fn persist_create_project(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     command: &CreateProjectCommand,
 ) -> Result<CreateProjectSettlement, CreateProjectError> {
     set_challenge_scope_on_client(client, &command.project_scope)

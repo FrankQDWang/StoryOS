@@ -1,10 +1,10 @@
 //! The shared test support from `memory_work_schedule_tests.rs`.
 
 use crate::PostgresProjectReader;
+use crate::statement_cache::Client;
 use storyos_application::{
     MemoryWorkOutcome, MemoryWorkScheduleStore, MemoryWorkSource, ProjectScope,
 };
-use tokio_postgres::Client;
 
 /// Whether the row of the Conversation is due in the quiet time from now: `None` when the
 /// Conversation has no row, `Some(None)` when the due time is empty.

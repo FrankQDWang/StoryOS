@@ -13,7 +13,7 @@ use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
 
 /// The manuscript Tool uses of the Run `run_id`.
 pub(crate) async fn load(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Vec<ManuscriptUse>, CreateAgentRunError> {
@@ -42,7 +42,7 @@ pub(crate) async fn load(
 
 /// The plan of the Run `run_id` from its stored `update_plan` calls (ADR 0103 section 2).
 pub(crate) async fn load_plan(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Option<Vec<storyos_core::PlanStep>>, CreateAgentRunError> {
@@ -71,7 +71,7 @@ pub(crate) struct StoredCall {
 /// The stored ToolCalls of the Run `run_id` with a ToolSpec revision in `revisions`, in the
 /// order of their RunSteps and calls.
 pub(crate) async fn stored_calls(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
     revisions: &[&str],

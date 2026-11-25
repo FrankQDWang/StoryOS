@@ -12,7 +12,7 @@ use super::{CompactionState, complete_unavailable, unavailable};
 /// Conversation holds only completed Runs (ADR 0053), so these messages are the messages that the
 /// summary covers.
 pub(super) async fn load(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<Vec<EarlierAuthorMessage>, CompleteAgentRunError> {
     let rows = client
@@ -63,7 +63,7 @@ pub(super) async fn load(
 /// Records on the staged compaction each earlier author message that the later request `later`
 /// sends.
 pub(super) async fn record(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     staged: &CompactionState,
     later: &CurrentPassageAssemblyRecord,

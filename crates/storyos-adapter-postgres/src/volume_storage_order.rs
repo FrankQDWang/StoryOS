@@ -3,7 +3,7 @@ use storyos_application::ProjectScope;
 const VOLUME_KEY_BATCH_SIZE: usize = 1_000_000;
 
 pub(crate) async fn persist_volume_storage_order(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     ordered_ids: &[String],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

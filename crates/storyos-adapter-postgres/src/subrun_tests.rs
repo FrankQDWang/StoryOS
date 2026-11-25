@@ -1,6 +1,7 @@
 //! The records and the requests of a Subrun at the dispatch seam with the fake destination (ADR
 //! 0103 section 3A). Test prefix lead `67`, and `766` through `769` and `76a` through `76d`.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -8,7 +9,6 @@ use storyos_application::{
     ContractFaultObserver, ContractFaultPoint, NoContractFaults, ProjectScope, complete_agent_run,
 };
 use storyos_core::{DeploymentDestination, ToolCallState, ToolResultProjection};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::agent_run_finish_rule::{complete, conversation_of};

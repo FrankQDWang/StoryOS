@@ -1,10 +1,10 @@
 //! The working text of a Run whose ordinary passage request the Host cannot resolve (ADR 0091),
 //! with the fake model of the tool loop profile.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore};
 use storyos_core::DeploymentDestination;
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_propose_edit::{complete, opened, propose_edit_calls};
 use crate::shared_tests::agent_run_propose_edit_revise::Fixture;

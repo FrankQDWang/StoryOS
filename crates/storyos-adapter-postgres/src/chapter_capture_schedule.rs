@@ -6,12 +6,12 @@
 
 use std::time::SystemTime;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ChapterId, ClaimedAgentRun, CompleteAgentRunError, MemoryCaptureSource, MemoryWorkOutcome,
     ProjectReadError, ProjectScope,
 };
 use storyos_core::{ChapterCaptureFacts, ChapterCaptureSkip, ChapterRowChange};
-use tokio_postgres::Client;
 
 use crate::agent_run_work::complete_unavailable;
 use crate::manuscript_search::{LiveChapterReadExtent, read_live_chapter_blocks};

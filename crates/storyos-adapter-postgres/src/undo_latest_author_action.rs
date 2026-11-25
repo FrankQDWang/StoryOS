@@ -3,6 +3,7 @@
 
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AuthorUndoFrontierPosition, EditorSessionError, ProjectCommandEnvelope, ProjectCommandError,
     UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
@@ -11,7 +12,6 @@ use storyos_core::{
     AuthorUndoFrontier, TransitionOutcome, UndoLatestAuthorAction as CoreUndo,
     UndoLatestAuthorActionUnavailable, undo_latest_author_action as classify_undo,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};

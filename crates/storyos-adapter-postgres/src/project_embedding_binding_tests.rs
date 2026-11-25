@@ -1,10 +1,10 @@
 //! The embedding grant and use binding of `createAgentRun` (ADR 0095 section 3). Test prefix lead
 //! `ab`.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::ProjectScope;
 use storyos_core::HOST_FAKE_EMBEDDING_REGISTRATION;
-use tokio_postgres::Client;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_support::stores;

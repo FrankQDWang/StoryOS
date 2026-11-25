@@ -11,6 +11,7 @@ import type {
   CreateEditorSessionRequest,
   GetChapterResponse,
   GetEditorSessionResponse,
+  GetManuscriptTreeResponse,
   GetProjectResponse,
   ProjectScope,
   Release1ProtocolProfile,
@@ -265,34 +266,103 @@ async function validateSession(
   return session;
 }
 
-export async function openEditorWorkspace({
-  baseUrl, project, chapter, profile, fetchImpl = globalThis.fetch,
+type EditorWorkspaceOptions = {
+  baseUrl: string;
+  project: GetProjectResponse;
+  profile: Release1ProtocolProfile;
+  fetchImpl?: typeof fetch;
+  indexedDBImpl?: IDBFactory;
+  cryptoImpl?: Crypto;
+};
+
+/**
+ * The Editor Session of an open. The read of a stored Session needs only the Project. `finish` creates a Session when
+ * the tab has none, and validates the Session against the Chapter.
+ */
+export interface EditorWorkspaceOpening {
+  finish(chapter: GetChapterResponse): Promise<OpenedEditorWorkspace>;
+  /** Closes the Journal when the open stops before `finish`. It does not wait for the Session read. */
+  abandon(): void;
+}
+
+export interface OpenedEditorWorkspace {
+  editor: EditorState;
+  /** The tree that the takeover check read, when it ran. */
+  tree?: GetManuscriptTreeResponse | undefined;
+}
+
+type EditorSessionStart =
+  | { kind: "started"; database: IDBDatabase; active: string | null | undefined; sessionValue: unknown }
+  | { kind: "failed"; database: IDBDatabase | undefined; error: unknown };
+
+/** Opens the Journal and reads the stored Editor Session at once, so that the read is in flight with the Chapter read. */
+export function startEditorWorkspace({
+  baseUrl, project, profile, fetchImpl = globalThis.fetch,
   indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto,
+}: EditorWorkspaceOptions): EditorWorkspaceOpening {
+  const scope = project.project_scope;
+  const started = (async (): Promise<EditorSessionStart> => {
+    let database: IDBDatabase | undefined;
+    try {
+      database = await openJournalDatabase(indexedDBImpl, scope);
+      const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
+      const active = globalThis.sessionStorage
+        ? globalThis.sessionStorage.getItem(activeSessionKey) : undefined;
+      // A stored Session read changes nothing on the Server, so it runs with the Chapter read; a creation waits (#1884).
+      const sessionValue: unknown = active
+        ? await getEditorSession({ baseUrl, projectId: scope.project_id,
+          editorSessionId: active, fetchImpl })
+        : undefined;
+      return { kind: "started", database, active, sessionValue };
+    } catch (error) {
+      return { kind: "failed", database, error };
+    }
+  })();
+  return {
+    finish: (chapter) => finishEditorWorkspace(started, { baseUrl, project, chapter, profile, fetchImpl, cryptoImpl }),
+    abandon: () => { void started.then((start) => { start.database?.close(); }); },
+  };
+}
+
+export async function openEditorWorkspace(options: EditorWorkspaceOptions & {
+  chapter: GetChapterResponse;
+}): Promise<EditorState> {
+  return (await startEditorWorkspace(options).finish(options.chapter)).editor;
+}
+
+async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
+  baseUrl, project, chapter, profile, fetchImpl, cryptoImpl,
 }: {
   baseUrl: string;
   project: GetProjectResponse;
   chapter: GetChapterResponse;
   profile: Release1ProtocolProfile;
-  fetchImpl?: typeof fetch;
-  indexedDBImpl?: IDBFactory;
-  cryptoImpl?: Crypto;
-}): Promise<EditorState> {
+  fetchImpl: typeof fetch;
+  cryptoImpl: Crypto;
+}): Promise<OpenedEditorWorkspace> {
   const scope = project.project_scope;
-  let database: IDBDatabase | undefined;
+  let start = await started;
+  if (start.kind === "started" && !start.active) {
+    try {
+      start = { ...start, sessionValue: await createSession({ baseUrl, project, profile, fetchImpl, cryptoImpl }) };
+    } catch (error) {
+      start = { kind: "failed", database: start.database, error };
+    }
+  }
+  if (start.kind === "failed") {
+    start.database?.close();
+    // The Journal did not open, for example a Journal of an earlier version (ADR 0099), or the Session request failed.
+    return { editor: { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error: start.error } };
+  }
+  const { database, active, sessionValue } = start;
   try {
-    database = await openJournalDatabase(indexedDBImpl, scope);
     const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
-    const active = globalThis.sessionStorage
-      ? globalThis.sessionStorage.getItem(activeSessionKey) : undefined;
-    const sessionValue: unknown = active
-      ? await getEditorSession({ baseUrl, projectId: scope.project_id,
-        editorSessionId: active, fetchImpl })
-      : await createSession({ baseUrl, project, profile, fetchImpl, cryptoImpl });
     const session = await validateSession(sessionValue, scope, chapter, profile, cryptoImpl);
     const partition = partitionFrom(session, scope, profile);
     const workspace: EditorWorkspace = { database, partition, session, cryptoImpl,
       maxJsonStringUtf8Bytes: profile.max_json_string_utf8_bytes };
     let canonicalSnapshot: SnapshotDescriptor | undefined;
+    let canonicalTree: GetManuscriptTreeResponse | undefined;
     if (session.writer.kind === "current_writer" && BigInt(session.writer.writer_generation) > 1n) {
       const base = session.base_snapshot;
       if (active !== session.editor_session.editor_session_id
@@ -335,6 +405,7 @@ export async function openEditorWorkspace({
         || JSON.stringify({ ...current, correlation_id: session.correlation_id }) !== JSON.stringify(session)) {
         throw new Error("Takeover Session changed during Snapshot validation");
       }
+      canonicalTree = tree;
     }
     const transaction = database.transaction(canonicalSnapshot
       ? ["metadata", "partitions", "payload_chains", "intents", "submission_groups"]
@@ -426,16 +497,12 @@ export async function openEditorWorkspace({
     const pending = await rebuildPendingProjection(workspace);
     if (partition.disposition !== "current_writer_open") {
       database.close();
-      return { kind: "editor-read-only-recovery", code: "editor_session_read_only",
-        editor_session: session.editor_session, writer: session.writer, pending };
+      return { editor: { kind: "editor-read-only-recovery", code: "editor_session_read_only",
+        editor_session: session.editor_session, writer: session.writer, pending } };
     }
-    return { kind: "editor-ready", ...workspace, openedProjection: pending };
+    return { editor: { kind: "editor-ready", ...workspace, openedProjection: pending }, tree: canonicalTree };
   } catch (error) {
-    if (database !== undefined) {
-      database.close();
-      return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error };
-    }
-    // The Journal did not open, for example a Journal of an earlier version (ADR 0099).
-    return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error };
+    database.close();
+    return { editor: { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error } };
   }
 }

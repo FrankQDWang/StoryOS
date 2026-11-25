@@ -1,6 +1,7 @@
 //! The shared test support from `agent_run_retrieval_tests.rs`.
 
 use crate::shared_tests::model_gateway::queued_run_offering;
+use crate::statement_cache::Client;
 use storyos_adapter_volcengine_responses::{AgentPlanExchange, AgentPlanResponses};
 use storyos_application::{
     CredentialReference, CredentialResolver, DestinationRequest, ModelProviderAdapter,
@@ -8,7 +9,6 @@ use storyos_application::{
 };
 use storyos_core::{DeploymentDestination, ModelAdapter, RESEARCH_TOOL_OFFER, ResearchToolOffer};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_postgres::Client;
 
 pub(crate) const ADVISORY: &str = r#"{\"kind\":\"advisory\",\"text\":\"Keep it.\"}"#;
 

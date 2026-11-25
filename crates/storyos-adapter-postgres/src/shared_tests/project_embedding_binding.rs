@@ -3,11 +3,11 @@
 use crate::PostgresProjectReader;
 use crate::shared_tests::model_gateway::{Admission, queued_run_offering};
 use crate::shared_tests::project_research_binding::park_queued_runs;
+use crate::statement_cache::Client;
 use storyos_application::ProjectScope;
 use storyos_core::{
     DeploymentDestination, EmbeddingRegistration, HOST_FAKE_EMBEDDING_REGISTRATION,
 };
-use tokio_postgres::Client;
 
 pub(crate) const FAKE: Option<&EmbeddingRegistration> = Some(&HOST_FAKE_EMBEDDING_REGISTRATION);
 

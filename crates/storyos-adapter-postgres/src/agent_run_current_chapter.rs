@@ -10,7 +10,7 @@ use crate::agent_run_work::complete_unavailable;
 /// Chapter, and drops a reference with no covered text in the head. A reference of a removed
 /// Chapter stays at its base, so the Context Assembly finds it unavailable as before.
 pub(crate) async fn follow(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     retained: &mut CurrentPassageAssemblyRecord,
 ) -> Result<(), CompleteAgentRunError> {
@@ -35,7 +35,7 @@ pub(crate) async fn follow(
 /// Moves each Chapter text reference of a steering input to the head of its Chapter, as
 /// `follow` does for the references of the Run.
 pub(crate) async fn follow_added(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     added: &mut Vec<SelectionReference>,
 ) -> Result<(), CompleteAgentRunError> {
@@ -54,7 +54,7 @@ pub(crate) async fn follow_added(
 /// The place of `reference` in the head of its Chapter. `None` when the reference stays: it is
 /// not a Chapter text reference, its Chapter is removed, or a revision has no readable blocks.
 async fn place(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     reference: &SelectionReference,
 ) -> Result<Option<ChapterHeadPlace>, CompleteAgentRunError> {
@@ -123,7 +123,7 @@ async fn place(
 
 /// The `(block id, text)` pairs of the Revision `revision_id` with the stored `body`, in order.
 async fn revision_blocks(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     chapter_id: &str,
     revision_id: &str,

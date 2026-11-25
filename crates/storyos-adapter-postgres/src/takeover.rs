@@ -1,6 +1,7 @@
 use std::convert::Infallible;
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, TakeOverProjectWriterInput,
     TakeOverProjectWriterSettlement, WriterTakeover,
@@ -9,7 +10,6 @@ use storyos_core::{
     CurrentWriter, TakeOverProjectWriter as CoreTakeOverProjectWriter,
     TakeOverProjectWriterNoEffect, take_over_project_writer,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

@@ -1,7 +1,7 @@
 //! The structure Forward evidence that Author Undo loads under the Project lock.
 
+use crate::statement_cache::Client;
 use storyos_application::ProjectCommandError;
-use tokio_postgres::Client;
 
 use crate::undo_compensation::{StructureCommand, UndoRequest};
 use crate::undo_latest_author_action::undo_database_error;

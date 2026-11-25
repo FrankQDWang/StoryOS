@@ -24,7 +24,7 @@ pub(crate) enum CompactionAdvance {
 
 /// Whether the claimed AgentRun compacted at a RunStep before the active RunStep of `run`.
 async fn compacted_earlier(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<bool, CompleteAgentRunError> {
@@ -50,7 +50,7 @@ async fn compacted_earlier(
 /// Advances the compaction of the active RunStep of the claimed AgentRun before its decision
 /// request. Each RunStep position has at most one compaction (ADR 0093).
 pub(crate) async fn advance_active_compaction(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<CompactionAdvance, CompleteAgentRunError> {
@@ -216,7 +216,7 @@ fn full_input_too_long(run: &RunPhaseRow, prior_response: bool, target_texts: &[
 
 /// The text of each declared target that the decision request of `run` sends.
 async fn declared_target_texts(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<Vec<String>, CompleteAgentRunError> {
@@ -252,7 +252,7 @@ fn request_facts<'a>(
 
 /// Each compaction record of the Run, in RunStep order.
 pub(crate) async fn load_compactions(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Vec<ActiveCompactionInspect>, CreateAgentRunError> {
@@ -293,7 +293,7 @@ struct CompactionState {
 
 /// The compaction record of the RunStep at `decision_position` of the claimed AgentRun.
 async fn load_compaction_state(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     decision_position: &str,
 ) -> Result<Option<CompactionState>, CompleteAgentRunError> {
@@ -334,7 +334,7 @@ struct ChainSource {
 }
 
 async fn load_chain_source(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     model_attempt_id: &str,
 ) -> Result<ChainSource, CompleteAgentRunError> {

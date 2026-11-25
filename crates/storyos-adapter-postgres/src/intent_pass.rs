@@ -4,6 +4,7 @@
 //! Run ends with no settled call. A pass is a Run of the kind `intent_pass` with at most two
 //! RunSteps. No diagnostic records the file, the intent, or a question (ADR 0047).
 
+use crate::statement_cache::Client;
 use serde_json::json;
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, ProjectReadError, ProjectScope, StartedIntentPass,
@@ -13,7 +14,6 @@ use storyos_core::{
     IntentCallSettlement, IntentPassAssembly, IntentPassEntryFacts, IntentPassOutcome,
     IntentPassRead, IntentPassRecord, NeededCharacter, ToolResultCandidate,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};

@@ -2,6 +2,7 @@
 //! Embedding Attempt before I/O, and the record of its observation. An embedding request is not
 //! a Run.
 
+use crate::statement_cache::Client;
 use serde_json::json;
 use storyos_application::{
     CredentialReference, EmbeddingClaim, EmbeddingDispatchStore, EmbeddingProjection,
@@ -11,7 +12,6 @@ use storyos_core::{
     EmbeddingAdmissionFacts, EmbeddingInput, EmbeddingRefusal, EmbeddingRegistration,
     MANUSCRIPT_EMBEDDING_PURPOSE, admit_embedding,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

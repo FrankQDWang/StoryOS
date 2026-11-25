@@ -3,8 +3,8 @@
 
 use std::future::Future;
 
+use crate::statement_cache::Client;
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectScope};
-use tokio_postgres::Client;
 
 use super::{AppliedRecord, AppliedVariant, LockedProject};
 use crate::command_replay::{CommandReplay, ReplayFault};

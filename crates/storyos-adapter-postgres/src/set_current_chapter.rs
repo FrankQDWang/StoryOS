@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use storyos_application::{
     CurrentChapterSelected, ProjectCommandEnvelope, ProjectCommandError, SetCurrentChapterInput,
     SetCurrentChapterSettlement,
@@ -7,7 +8,6 @@ use storyos_core::{
     ChapterJoin, SetCurrentChapter as CoreSetCurrentChapter,
     set_current_chapter as classify_set_current_chapter,
 };
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};

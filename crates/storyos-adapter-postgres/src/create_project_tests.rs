@@ -67,6 +67,7 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
         .await
         .unwrap();
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let admin = crate::statement_cache::Client::new(admin);
     tokio::spawn(async move {
         admin_connection.await.unwrap();
     });
@@ -120,7 +121,8 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
         (1, None, 0, 1, 1, 1, 0, 0)
     );
 
-    let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let (runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    let mut runtime = crate::statement_cache::Client::new(runtime);
     tokio::spawn(async move {
         connection.await.unwrap();
     });

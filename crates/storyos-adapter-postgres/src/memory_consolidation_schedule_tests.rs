@@ -3,6 +3,7 @@
 //! path through `run_once` from two Runs of the author to the entries. The tests move the stored
 //! times with the test administrator connection, and each test completes each Run that it queued.
 
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -10,7 +11,6 @@ use storyos_application::{
     MemoryWorkSource, NoContractFaults, ProjectScope,
 };
 use storyos_core::{ConsolidationSkip, MemoryEntryOrigin};
-use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;

@@ -319,7 +319,7 @@ impl ToolDispatchStore for PostgresProjectReader {
 /// The work phase of a Run whose durable Decision requested ToolCalls: the Tool Gateway while a
 /// ToolCall is unresolved, and then the continuation RunStep with the results.
 pub(crate) async fn advance(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     run: &crate::agent_run_work::RunPhaseRow,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
@@ -342,7 +342,7 @@ impl PostgresProjectReader {
     async fn in_tool_transaction<T>(
         &self,
         claim: &ClaimedAgentRun,
-        body: impl AsyncFnOnce(&tokio_postgres::Client) -> Result<T, CompleteAgentRunError>,
+        body: impl AsyncFnOnce(&crate::statement_cache::Client) -> Result<T, CompleteAgentRunError>,
     ) -> Result<T, CompleteAgentRunError> {
         let transaction = self
             .begin_serializable_project_command_transaction(&claim.project_scope)
@@ -362,7 +362,7 @@ impl PostgresProjectReader {
 }
 
 async fn record_exchange(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     request: &ToolCallRequest,

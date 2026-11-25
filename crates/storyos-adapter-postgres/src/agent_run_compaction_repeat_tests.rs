@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
@@ -7,7 +8,6 @@ use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, ADVISORY_TEXT,
     AgentRunStatus, DeploymentDestination,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_compaction_summary::{
     ADVICE, ChangingFake, finish_events, near_threshold, second_run_on_agent_plan,

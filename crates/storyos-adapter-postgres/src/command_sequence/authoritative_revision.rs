@@ -2,11 +2,11 @@
 //! with its Commit, Author Action, Activity record, writer base, and canonical Snapshot
 //! (ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     AuthorCommandAdmissionIds, AuthoritativeAppliedIds, ProjectCommandEnvelope,
     ProjectCommandError, ProjectScope, RevisionApplied,
 };
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use super::{

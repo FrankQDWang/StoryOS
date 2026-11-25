@@ -1,8 +1,8 @@
 //! The Proposal Revision that one candidate edit appends.
 
+use crate::statement_cache::Client;
 use storyos_application::{AuthorEditError, ProjectScope};
 use storyos_core::{OpenBlockProposal, open_block_proposal};
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use super::ProposalEditContext;

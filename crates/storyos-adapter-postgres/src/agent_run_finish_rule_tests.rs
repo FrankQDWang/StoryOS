@@ -1,3 +1,4 @@
+use crate::statement_cache::Client;
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::{FakeDestination, LIMIT_ANSWER};
 use storyos_application::{
@@ -10,7 +11,6 @@ use storyos_core::{
     FINISH_DOES_NOT_COUNT_RESULT, IntakeRefusal, NativeStreamItem, RESEARCH_TOOL_OFFER,
     StreamItemRole, StreamItemState, ToolChoice,
 };
-use tokio_postgres::Client;
 
 use crate::shared_tests::agent_run_finish_rule::{
     calls, complete, conversation_of, steps, tool_loop_run,

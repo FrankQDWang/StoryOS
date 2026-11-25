@@ -62,7 +62,7 @@ impl ToolCallRow {
 
 /// The first unresolved ToolCall of the Run in Decision and item order, locked.
 pub(crate) async fn next_unresolved(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<Option<ToolCallRow>, CompleteAgentRunError> {
     let row = client
@@ -92,7 +92,7 @@ pub(crate) async fn next_unresolved(
 
 /// The ToolCall `tool_call_id` of the claimed Run in `state`, locked.
 pub(crate) async fn locked(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     tool_call_id: &str,
     state: ToolCallState,
@@ -154,7 +154,7 @@ impl ToolAuthority {
 /// Reads the authority of the ToolCall `row` in the transaction of the caller. A revision without
 /// a lifecycle row is the active constant, because the row appears at the first binding.
 pub(crate) async fn read_authority(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
 ) -> Result<ToolAuthority, CompleteAgentRunError> {
@@ -280,7 +280,7 @@ impl<'a> Resolution<'a> {
 
 /// Writes the resolution of `row` and appends its one `tool_call_settled` Activity Run Event.
 pub(crate) async fn resolve(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     resolution: Resolution<'_>,
@@ -334,7 +334,7 @@ pub(crate) async fn resolve(
 
 /// Writes a refusal before the dispatch claim: no Destination Attempt and no Disclosure Event.
 pub(crate) async fn refuse(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     state: ToolCallState,
@@ -353,7 +353,7 @@ pub(crate) async fn refuse(
 /// appends the `tool_registration_quarantined` event of the Run. A revision that is already
 /// unavailable does not change.
 pub(crate) async fn quarantine(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     differences: &[ContractDifference],
@@ -400,7 +400,7 @@ fn storage_safe(value: Value) -> Value {
 }
 
 pub(crate) async fn append_event(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedAgentRun,
     kind: &str,
     payload: &Value,

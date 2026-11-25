@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 use storyos_contracts::CommandKind;
 
+use crate::statement_cache::Client;
 use storyos_application::{AuthorEditError, EditorSessionId, TakeOverProjectWriterInput};
-use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;

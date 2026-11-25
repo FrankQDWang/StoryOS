@@ -1,10 +1,10 @@
 //! The settlement profile of `applyAuthorEdit` (ADR 0076).
 
+use crate::statement_cache::Client;
 use storyos_application::{
     ActionApplied, AuthorEditError, ProjectCommandEnvelope, ProjectCommandError, ProjectScope,
     RevisionApplied,
 };
-use tokio_postgres::Client;
 
 use super::sequence::AuthorEditPlan;
 use crate::command_replay::{CommandReplay, ReplayFault};

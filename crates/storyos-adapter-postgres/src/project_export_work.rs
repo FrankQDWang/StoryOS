@@ -50,7 +50,7 @@ impl ArchiveExportWorkStore for PostgresProjectReader {
 }
 
 pub(crate) async fn claim_archive_export_row(
-    transaction: &tokio_postgres::Transaction<'_>,
+    transaction: &crate::statement_cache::Transaction<'_>,
     lease_seconds: i64,
 ) -> Result<Option<ClaimedArchiveExport>, ProjectReadError> {
     let claimed = transaction
@@ -108,7 +108,7 @@ pub(crate) async fn claim_archive_export_row(
 }
 
 pub(crate) async fn complete_claimed_export(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedArchiveExport,
 ) -> Result<CompleteArchiveExport, CompleteArchiveExportError> {
     let Some(operation) = client
@@ -236,7 +236,7 @@ pub(crate) async fn complete_claimed_export(
 }
 
 async fn persist_ready_export(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedArchiveExport,
     canonical_command_digest: &str,
     snapshot: &storyos_application::CanonicalSnapshot,
@@ -337,7 +337,7 @@ async fn persist_ready_export(
 }
 
 async fn persist_failed_export(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedArchiveExport,
     canonical_command_digest: &str,
     reason: &str,
@@ -364,7 +364,7 @@ async fn persist_failed_export(
 }
 
 async fn insert_export_receipt(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedArchiveExport,
     canonical_command_digest: &str,
     receipt_id: &str,
@@ -420,7 +420,7 @@ async fn insert_export_receipt(
 }
 
 async fn settle_export_operation(
-    client: &tokio_postgres::Client,
+    client: &crate::statement_cache::Client,
     claim: &ClaimedArchiveExport,
     receipt_id: &str,
     settled_result: Option<&str>,
