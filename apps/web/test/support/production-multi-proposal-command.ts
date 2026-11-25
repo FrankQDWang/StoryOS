@@ -19,6 +19,13 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
   await page.setViewportSize({ width: 1487, height: 1058 });
   page.setDefaultTimeout(10_000);
   let phase = "setup";
+  // TEMPORARY TRACE FOR #1892: each Challenge response of the page.
+  const challenges: string[] = [];
+  page.on('response', (response) => {
+    if (response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/anti-forgery-challenges')) {
+      challenges.push(`${new Date().toISOString()} ${phase} ${response.status()} ${response.headers()['retry-after'] ?? ''}`);
+    }
+  });
   try {
     await page.goto(origin);
     await page.locator('input[name="title"]').fill(`Multi-location ${id()}`);
@@ -83,6 +90,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const completeRun = async (message: string) => {
       admitted = undefined;
       await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
+      challenges.push(`${new Date().toISOString()} reset`);
       await page.locator('[data-assistant-availability="available"]').waitFor();
       await page.locator('[name="assistant-message"]').fill(message);
       await page.locator('.composer button.send-button').click();
@@ -178,6 +186,10 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
       await route.fulfill({ response });
     });
+    const windows = async () => queryStoryOSPostgres(`SELECT coalesce(jsonb_agg(jsonb_build_object('start', window_started_at,
+      'policy', policy_revision, 'generation', client_session_generation, 'issued', issued_count))::text, '[]')
+      FROM storyos.project_command_challenge_rate_windows WHERE project_id='${projectId}'::uuid`);
+    const windowsBefore = await windows();
     mark('click 1'); await page.locator(`[data-proposal-location="${firstOutcome.operation_id}"]`).click();
     await observed; mark('observed');
     assert.ok(locations[2]!.outcome.kind !== 'refused');
@@ -195,7 +207,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     }
     page.off('request', onRequest); page.off('requestfinished', onFinished);
     if (delayMs > 0) await page.unroute(slowRoute, undefined);
-    await writeFile(join(repositoryRoot, `target/1892-trace-${delayMs}.json`), JSON.stringify({ trace, states }, null, 1));
+    await writeFile(join(repositoryRoot, `target/1892-trace-${delayMs}.json`), JSON.stringify({ trace, states, windowsBefore, windowsAfter: await windows(), challenges }, null, 1));
     await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
     await expect(page.locator(`[data-proposal-operation-id="${locations[2]!.outcome.operation_id}"]`)).toHaveAttribute('data-proposal-focused', 'true');
     await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
