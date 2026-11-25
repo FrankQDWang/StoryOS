@@ -1,6 +1,9 @@
 //! PostgreSQL implementation of StoryOS Application ports.
 
 #[cfg(test)]
+#[path = "project_command_challenge_project_proof_tests.rs"]
+mod project_command_challenge_project_proof_tests;
+#[cfg(test)]
 mod shared_tests;
 #[cfg(test)]
 #[path = "project_command_challenge_tests.rs"]
@@ -297,7 +300,14 @@ impl ProjectCommandChallengeStore for PostgresProjectReader {
                   &binding.command_kind, &binding.idempotency_key, &binding.canonical_command_digest],
             )
             .await
-            .map_err(challenge_error)?
+            .map_err(|error| {
+                // The one foreign key of this row is the Project; its check ignores RLS.
+                if error.code() == Some(&tokio_postgres::error::SqlState::FOREIGN_KEY_VIOLATION) {
+                    ProjectCommandChallengeError::MissingProject
+                } else {
+                    challenge_error(error)
+                }
+            })?
             == 1;
         let digest: String = transaction
             .query_one(

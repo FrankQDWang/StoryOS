@@ -474,7 +474,8 @@ fn create_project_challenge_error(error: ProjectCommandChallengeError) -> Create
     match error {
         ProjectCommandChallengeError::BindingConflict => CreateProjectError::BindingConflict,
         ProjectCommandChallengeError::InvalidOrExpired => CreateProjectError::InvalidChallenge,
-        ProjectCommandChallengeError::RateLimited { .. }
+        ProjectCommandChallengeError::MissingProject
+        | ProjectCommandChallengeError::RateLimited { .. }
         | ProjectCommandChallengeError::Unavailable(_) => {
             CreateProjectError::Unavailable(Box::new(error))
         }

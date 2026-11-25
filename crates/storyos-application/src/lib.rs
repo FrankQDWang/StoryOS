@@ -421,7 +421,11 @@ pub enum ProjectCommandChallengeUse {
 pub enum ProjectCommandChallengeError {
     BindingConflict,
     InvalidOrExpired,
-    RateLimited { retry_after_seconds: u64 },
+    /// The issue found no Project of the scope: it is not there, or another User owns it.
+    MissingProject,
+    RateLimited {
+        retry_after_seconds: u64,
+    },
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -432,6 +436,7 @@ impl std::fmt::Display for ProjectCommandChallengeError {
             Self::InvalidOrExpired => {
                 formatter.write_str("The command challenge is invalid or expired")
             }
+            Self::MissingProject => formatter.write_str("The Project is unavailable"),
             Self::RateLimited { .. } => {
                 formatter.write_str("The command challenge rate limit is exceeded")
             }
@@ -446,7 +451,10 @@ impl std::error::Error for ProjectCommandChallengeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict | Self::InvalidOrExpired | Self::RateLimited { .. } => None,
+            Self::BindingConflict
+            | Self::InvalidOrExpired
+            | Self::MissingProject
+            | Self::RateLimited { .. } => None,
         }
     }
 }

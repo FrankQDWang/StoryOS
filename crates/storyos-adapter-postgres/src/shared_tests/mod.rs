@@ -57,6 +57,7 @@ pub(crate) mod memory_consolidation_schedule;
 pub(crate) mod memory_entries;
 pub(crate) mod memory_work_outcome;
 pub(crate) mod memory_work_schedule;
+pub(crate) mod message_counting_proxy;
 pub(crate) mod model_gateway;
 pub(crate) mod model_registration;
 pub(crate) mod passage_index_work;

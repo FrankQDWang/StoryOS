@@ -912,6 +912,7 @@ fn challenge_error(error: ProjectCommandChallengeError) -> ApiError {
             "challenge_invalid",
             "The command challenge is invalid or expired.",
         ),
+        ProjectCommandChallengeError::MissingProject => resource_unavailable(),
         ProjectCommandChallengeError::RateLimited {
             retry_after_seconds,
         } => {
