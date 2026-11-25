@@ -168,12 +168,6 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     assert.ok(locations[2]!.outcome.kind !== 'refused');
     // The second click stops the first navigation before it shows Chapter A, so the heading stays Chapter B and
     // gives no wait. The focus comes after the switch of the second navigation and one more open (#1892).
-    // TEMPORARY VERIFICATION FOR #1892: each API response of the step 600 ms later.
-    const slowRoute = (url: URL) => url.pathname.startsWith('/api/');
-    await page.route(slowRoute, async route => {
-      const response = await route.fetch(); await new Promise(resolve => setTimeout(resolve, 600));
-      await route.fulfill({ response }); });
-    const started = Date.now();
     const switchedToB = page.waitForResponse((response) => response.request().method() === 'PUT'
       && new URL(response.url()).pathname.endsWith('/current-chapter')
       && response.request().postDataJSON().set_current_chapter_input.chapter_id === chapters[1]);
@@ -181,11 +175,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     releaseHeld(); await page.unroute(proposalRoute, undefined);
     assert.ok((await switchedToB).ok());
     await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
-    const switchedAt = Date.now();
     await expect(page.locator(`[data-proposal-operation-id="${locations[2]!.outcome.operation_id}"]`)).toHaveAttribute('data-proposal-focused', 'true');
-    await writeFile(join(repositoryRoot, 'target/1892-verify-600.json'), JSON.stringify({
-      clickToSwitch: switchedAt - started, switchToFocus: Date.now() - switchedAt, clickToFocus: Date.now() - started }));
-    await page.unroute(slowRoute, undefined);
     await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
     phase = "candidate-edit";
     const before = (await getProposal({ ...options, proposalId })).proposal;
