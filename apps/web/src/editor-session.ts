@@ -31,6 +31,7 @@ import {
   stageProjectActivitySnapshot,
   validatedCanonicalSnapshot,
 } from "./project-activity-ingest.ts";
+import { storedActivityStreamCursor } from "./project-activity-sync.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
@@ -333,6 +334,19 @@ export async function openEditorWorkspace(options: EditorWorkspaceOptions & {
   return (await startEditorWorkspace(options).finish(options.chapter)).editor;
 }
 
+// Reads the local part of the proof of a staged takeover Snapshot in one read-only transaction.
+async function journalHoldsStagedSnapshot({ database, partition }: EditorWorkspace): Promise<boolean> {
+  const transaction = database.transaction(["metadata", "partitions"], "readonly");
+  const metadata = transaction.objectStore("metadata");
+  const [stored, activeBase, cursor] = await Promise.all([
+    requestResult(transaction.objectStore("partitions").get(partition.journal_partition_id)),
+    requestResult(metadata.get(`active_base:${partition.journal_partition_id}`)),
+    storedActivityStreamCursor(metadata, partition.project_scope),
+  ]);
+  return JSON.stringify(stored) === JSON.stringify(partition) && activeBase !== undefined
+    && cursor !== undefined;
+}
+
 async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
   baseUrl, project, chapter, profile, fetchImpl, cryptoImpl, readyPartitionId,
 }: {
@@ -368,8 +382,10 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
     let canonicalSnapshot: SnapshotDescriptor | undefined;
     let canonicalTree: GetManuscriptTreeResponse | undefined;
     const takenOver = session.writer.kind === "current_writer" && BigInt(session.writer.writer_generation) > 1n;
-    // A ready open of this page with this partition committed the Snapshot of the takeover already (#1897).
-    const snapshotStaged = takenOver && readyPartitionId === partition.journal_partition_id;
+    // A ready open of this page with this partition committed the Snapshot of the takeover already,
+    // and the Journal still holds its partition, its base, and a stream cursor (#1897).
+    const snapshotStaged = takenOver && readyPartitionId === partition.journal_partition_id
+      && await journalHoldsStagedSnapshot(workspace);
     const base = session.base_snapshot;
     if (takenOver) {
       if (active !== session.editor_session.editor_session_id
@@ -427,6 +443,7 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
       requestResult(metadata.get(activeBaseKey)),
       takenOver ? requestResult(partitions.getAll()) : Promise.resolve([]),
     ]);
+    // The rows can go between the read of journalHoldsStagedSnapshot and this transaction.
     if ((existingPartition && JSON.stringify(existingPartition) !== JSON.stringify(partition))
       || (snapshotStaged && (!existingPartition || !activeBase))) {
       transaction.abort();

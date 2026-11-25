@@ -2,6 +2,7 @@ import {
   activityStream,
   getManuscriptTree,
   StoryOSProtocolError,
+  type ProjectScope,
   type SnapshotDescriptor,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -40,8 +41,7 @@ interface ActivityStreamCursor {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-function cursorKey(workspace: EditorWorkspace): string {
-  const scope = workspace.partition.project_scope;
+function cursorKey(scope: ProjectScope): string {
   return `project_activity_stream:${scope.owner_user_id}:${scope.project_id}`;
 }
 
@@ -95,20 +95,26 @@ function parseSseFrames(body: string): unknown[] {
   });
 }
 
-async function readActivityStreamCursor(workspace: EditorWorkspace): Promise<ActivityStreamCursor> {
-  const transaction = workspace.database.transaction(["metadata"], "readonly");
-  const stored = await requestResult(
-    transaction.objectStore("metadata").get(cursorKey(workspace)),
-  ) as { value?: { snapshot_id?: unknown; last_event_id?: unknown } } | undefined;
+/** Reads the stored stream cursor of the Project in a transaction of the caller, when it is valid. */
+export async function storedActivityStreamCursor(
+  metadata: IDBObjectStore,
+  scope: ProjectScope,
+): Promise<ActivityStreamCursor | undefined> {
+  const stored = await requestResult(metadata.get(cursorKey(scope))) as {
+    value?: { snapshot_id?: unknown; last_event_id?: unknown };
+  } | undefined;
   const snapshotId = stored?.value?.snapshot_id;
   const lastEventId = stored?.value?.last_event_id;
-  if (typeof snapshotId === "string" && UUID.test(snapshotId)) {
-    return {
-      snapshot_id: snapshotId,
-      last_event_id: typeof lastEventId === "string" && lastEventId.length > 0 ? lastEventId : null,
-    };
-  }
+  if (typeof snapshotId !== "string" || !UUID.test(snapshotId)) return undefined;
   return {
+    snapshot_id: snapshotId,
+    last_event_id: typeof lastEventId === "string" && lastEventId.length > 0 ? lastEventId : null,
+  };
+}
+
+async function readActivityStreamCursor(workspace: EditorWorkspace): Promise<ActivityStreamCursor> {
+  const transaction = workspace.database.transaction(["metadata"], "readonly");
+  return await storedActivityStreamCursor(transaction.objectStore("metadata"), workspace.partition.project_scope) ?? {
     snapshot_id: workspace.session.base_snapshot.snapshot_id,
     last_event_id: null,
   };
@@ -119,7 +125,7 @@ async function writeActivityStreamCursor(
   cursor: ActivityStreamCursor,
 ): Promise<void> {
   const transaction = workspace.database.transaction(["metadata"], "readwrite");
-  transaction.objectStore("metadata").put({ key: cursorKey(workspace), value: cursor });
+  transaction.objectStore("metadata").put({ key: cursorKey(workspace.partition.project_scope), value: cursor });
   await transactionResult(transaction);
 }
 

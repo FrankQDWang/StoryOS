@@ -17,6 +17,7 @@ import type { AcceptProposalRequest, GetEditorSessionResponse, RejectProposalOpe
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { openControlledProject } from "../../src/boot.ts";
+import { storedActivityStreamCursor } from "../../src/project-activity-sync.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
 import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import {
@@ -110,7 +111,8 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * `rejection` give the effect of these commands. Before a `conflicted` Rejection, another tab changes the text of
  * Chapter A, and the Operation stays pending. Before a `refused` Rejection, another tab applies the Operation. `other`
  * adds a second open Proposal. As on the Server, only the first created Editor Session holds the writer; a later
- * creation gives a read-only Session. A rename of Chapter A changes its title in the tree and advances the tree revision. A
+ * creation gives a read-only Session. A Session with writer generation above 1 has the Snapshot of its takeover at
+ * position 1. A rename of Chapter A changes its title in the tree and advances the tree revision. A
  * rename of the Project changes its title, advances its revision, and records the expected revision.
  * `renameElsewhere` is a rename of the Project in another tab. `takeOverElsewhere(generation)` is a takeover by the
  * Editor Session of another tab: the Session of this tab is read-only with `superseded_by_takeover`, and the
@@ -128,7 +130,9 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
 }) {
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
-  const state = { current: CHAPTER, writer, snapshot: { id: EDITOR_SNAPSHOT, position: "0" }, accepted: false,
+  const takenOver = writer.kind === "current_writer" && writer.writer_generation !== "1";
+  const state = { current: CHAPTER, writer, snapshot: { id: EDITOR_SNAPSHOT, position: takenOver ? "1" : "0" },
+    accepted: false,
     rejected: false, edited: false, title: "Chapter A", treeRevision: 3, created: 0,
     projectTitle: "Project A", projectRevision: 1, projectRenames: [] as string[],
     superseded: undefined as GetEditorSessionResponse | undefined,
@@ -779,6 +783,12 @@ it("opens the Chapter of a switch with writer generation 2 and sends no read of 
   const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT)],
     writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
   const workspace = await openSecondGeneration(server);
+  // The view took the Activity of the Project, so the Journal holds a stream cursor.
+  const journal = await requestResult(indexedDB.open(server.scenario.journalName)) as IDBDatabase;
+  const cursor = await storedActivityStreamCursor(journal.transaction("metadata").objectStore("metadata"),
+    server.scenario.project.project_scope);
+  journal.close();
+  expect(cursor).toEqual({ snapshot_id: EDITOR_SNAPSHOT, last_event_id: null });
   const before = server.log.started.length;
   // The view reads the tree after the new view. A check of the open waits for this held read.
   server.holdAfter(SWITCH, [TREE]);
@@ -914,9 +924,9 @@ it("refuses the open of a switch with writer generation 2 when the Journal holds
       unexpected: server.log.unexpected }).toEqual({ check: [SESSION_READ], unexpected: [] });
   });
 
-it("refuses the open of a switch with writer generation 2 when the Journal lost the rows of the partition",
+it("runs the takeover check at the open of a switch with writer generation 2 when the Journal lost the partition",
   async () => {
-    const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT)],
+    const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT), snapshotRead(SWITCH_SNAPSHOT)],
       writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
     const workspace = await openSecondGeneration(server);
     // For example, the browser removed the site data while the page stayed open.
@@ -931,10 +941,12 @@ it("refuses the open of a switch with writer generation 2 when the Journal lost 
 
     chapterB(workspace.root)!.click();
 
+    // The open is the open of the base commit: the three reads, then the Snapshot stage and the partition again.
     await expect.poll(() => ({ ...workspace.shown(), inFlight: server.inFlight() }))
-      .toEqual({ title: "Chapter B", save: "needs_attention", failure: "", inFlight: [] });
+      .toEqual({ title: "Chapter B", save: "saved", failure: "", inFlight: [] });
     expect({ check: checkReads(server.log.started.slice(server.log.started.indexOf(SWITCH, before))),
-      unexpected: server.log.unexpected }).toEqual({ check: [SESSION_READ], unexpected: [] });
+      unexpected: server.log.unexpected }).toEqual({ check: [SESSION_READ, TREE, snapshotRead(SWITCH_SNAPSHOT),
+      SESSION_READ], unexpected: [] });
   });
 
 it("reads the statistics one time when the tree read fails", async () => {
