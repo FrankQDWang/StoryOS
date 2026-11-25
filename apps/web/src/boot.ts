@@ -146,7 +146,8 @@ export async function openControlledProject(options: ProjectOpenOptions): Promis
 /**
  * Opens the Project again after a settled command of this page. The page keeps the protocol profile and the editor of
  * its last open: the reopen reads the Project and the list of Projects at the same time, then the Chapter and the
- * Editor Session at the same time. The takeover check runs only when the last open had another Journal partition.
+ * Editor Session at the same time. The takeover check runs when the last open of the page was not ready, or when its
+ * Journal partition is not the partition of the new Editor Session.
  */
 export async function reopenControlledProject(options: Omit<ProjectOpenOptions, "projectId"> & {
   opened: Pick<ProjectReadyState, "profile" | "project"> & Partial<Pick<ProjectReadyState, "editor">>;

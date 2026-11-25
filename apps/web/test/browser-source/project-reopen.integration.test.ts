@@ -110,8 +110,8 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * adds a second open Proposal. As on the Server, only the first created Editor Session holds the writer; a later
  * creation gives a read-only Session. A rename of Chapter A changes its title in the tree and advances the tree revision. A
  * rename of the Project changes its title, advances its revision, and records the expected revision.
- * `renameElsewhere` is a rename of the Project in another tab. `takeOverElsewhere(generation)` is a takeover in
- * another tab with the Editor Session of this tab, for example a duplicated tab: the Session holds that generation. With
+ * `renameElsewhere` is a rename of the Project in another tab. `takeOverElsewhere(generation)` is a takeover by the
+ * Editor Session of another tab: the Session of this tab is read-only with `superseded_by_takeover`. With
  * `proposalResult`, the Run of the Conversation has a Proposal result with a change in Chapter A.
  */
 function fakeServer({ reads, writer = { kind: "current_writer", writer_generation: "1" }, commands = [],
@@ -408,7 +408,9 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     scenario, log, fetchImpl, projectRenames: state.projectRenames,
     answerBeforeHold(names: string[]) { answerFirst = new Set(names); },
     renameElsewhere(title: string) { state.projectTitle = title; state.projectRevision += 1; },
-    takeOverElsewhere(generation: string) { state.writer = { kind: "current_writer", writer_generation: generation }; },
+    takeOverElsewhere(generation: string) {
+      state.writer = { kind: "read_only", observed_writer_generation: generation, reason: "superseded_by_takeover" };
+    },
     holdAfter(trigger: string, names: string[]) { armed = { trigger, names }; },
     hold(names: string[]) { holding = new Set(names); },
     holdEach(on: boolean) { holdEach = on; },
@@ -753,8 +755,8 @@ async function openSecondGeneration(server: ReturnType<typeof fakeServer>) {
 }
 
 /**
- * Holds the second Editor Session read of the check after the read of the Snapshot `snapshotId`. Then another tab with
- * the same Editor Session takes over the writer with `generation`, so the check refuses the open.
+ * Holds the second Editor Session read of the check after the read of the Snapshot `snapshotId`. Then another Editor
+ * Session takes over the writer with `generation`, so this Session is read-only and the check refuses the open.
  */
 async function takeOverDuringCheck(server: ReturnType<typeof fakeServer>, snapshotId: string, generation: string) {
   server.holdAfter(snapshotRead(snapshotId), [SESSION_READ]);
@@ -801,7 +803,9 @@ it("runs the takeover check at the first open after a takeover in this tab, and 
     takeOver()!.click();
     await takenOver();
 
-    await expect.poll(() => workspace.shown().save).toBe("needs_attention");
+    // The refused open has no writer, so the page shows no takeover button.
+    await expect.poll(() => ({ save: workspace.shown().save, takeOver: takeOver(), inFlight: server.inFlight() }))
+      .toEqual({ save: "needs_attention", takeOver: null, inFlight: [] });
     expect({ check: checkReads(server.log.started.slice(before)), unexpected: server.log.unexpected })
       .toEqual({ check: [SESSION_READ, TREE, snapshotRead(TAKEOVER_SNAPSHOT), SESSION_READ], unexpected: [] });
   });
@@ -826,9 +830,9 @@ it("runs the takeover check at a reload with an empty local database, and refuse
     .toEqual({ check: [SESSION_READ, TREE, snapshotRead(EDITOR_SNAPSHOT), SESSION_READ], unexpected: [] });
 });
 
-it("runs the takeover check after a takeover with writer generation 3 in another tab, and refuses a changed Session",
+it("refuses the open after a Chapter switch when another Editor Session took over with writer generation 3",
   async () => {
-    const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT), snapshotRead(SWITCH_SNAPSHOT)],
+    const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT)],
       writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
     const workspace = await openSecondGeneration(server);
     const before = server.log.started.length;
@@ -836,16 +840,45 @@ it("runs the takeover check after a takeover with writer generation 3 in another
 
     chapterB(workspace.root)!.click();
     await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ].sort());
-    // A tab with the Editor Session of this tab takes over the writer after the switch settled.
+    // Another tab takes over the writer after the switch settled, so this Session is read-only.
     server.takeOverElsewhere("3");
-    const takenOver = await takeOverDuringCheck(server, SWITCH_SNAPSHOT, "4");
     server.release();
-    await takenOver();
 
     await expect.poll(() => workspace.shown()).toEqual({ title: "Chapter B", save: "needs_attention", failure: "" });
     expect({ check: checkReads(server.log.started.slice(server.log.started.indexOf(SWITCH, before))),
-      unexpected: server.log.unexpected }).toEqual({
-      check: [SESSION_READ, TREE, snapshotRead(SWITCH_SNAPSHOT), SESSION_READ], unexpected: [] });
+      unexpected: server.log.unexpected }).toEqual({ check: [SESSION_READ], unexpected: [] });
+  });
+
+/** Puts a copy of the stored partition with another owner User into the Journal of the Project. */
+async function storePartitionOfAnotherUser(server: ReturnType<typeof fakeServer>) {
+  const otherUser = "018f0000-0000-7001-8000-000000000838";
+  const journal = await requestResult(indexedDB.open(server.scenario.journalName)) as IDBDatabase;
+  const partitions = journal.transaction("partitions", "readwrite").objectStore("partitions");
+  const [stored] = await requestResult(partitions.getAll()) as { journal_partition_id: string;
+    project_scope: { owner_user_id: string; project_id: string } }[];
+  await requestResult(partitions.put({ ...stored!, project_scope: { ...stored!.project_scope, owner_user_id: otherUser },
+    journal_partition_id: stored!.journal_partition_id.replace(OWNER, otherUser) }));
+  journal.close();
+}
+
+it("runs the takeover check after a takeover when the Journal holds a partition of another User, and refuses",
+  async () => {
+    const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT)],
+      writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
+      commands: [SESSION_CREATE, TAKEOVER] });
+    const workspace = await openWorkspace(server);
+    const takeOver = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
+    await expect.poll(() => takeOver()?.disabled).toBe(false);
+    await storePartitionOfAnotherUser(server);
+    const before = server.log.started.length;
+
+    takeOver()!.click();
+
+    // The refused open has no writer, so the page shows no takeover button.
+    await expect.poll(() => ({ save: workspace.shown().save, takeOver: takeOver(), inFlight: server.inFlight() }))
+      .toEqual({ save: "needs_attention", takeOver: null, inFlight: [] });
+    expect({ check: checkReads(server.log.started.slice(before)), unexpected: server.log.unexpected })
+      .toEqual({ check: [SESSION_READ, TREE, snapshotRead(TAKEOVER_SNAPSHOT), SESSION_READ], unexpected: [] });
   });
 
 it("refuses the open of a switch with writer generation 2 when the Journal holds a partition of another User",
@@ -853,21 +886,15 @@ it("refuses the open of a switch with writer generation 2 when the Journal holds
     const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT)],
       writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
     const workspace = await openSecondGeneration(server);
-    const otherUser = "018f0000-0000-7001-8000-000000000838";
-    const journal = await requestResult(indexedDB.open(server.scenario.journalName)) as IDBDatabase;
-    const partitions = journal.transaction("partitions", "readwrite").objectStore("partitions");
-    const [stored] = await requestResult(partitions.getAll()) as { journal_partition_id: string;
-      project_scope: { owner_user_id: string; project_id: string } }[];
-    await requestResult(partitions.put({ ...stored!, project_scope: { ...stored!.project_scope, owner_user_id: otherUser },
-      journal_partition_id: stored!.journal_partition_id.replace(OWNER, otherUser) }));
-    journal.close();
+    await storePartitionOfAnotherUser(server);
     const before = server.log.started.length;
 
     chapterB(workspace.root)!.click();
 
     await expect.poll(() => workspace.shown()).toEqual({ title: "Chapter B", save: "needs_attention", failure: "" });
     await expect.poll(server.inFlight).toEqual([]);
-    expect(server.log.unexpected).toEqual([]);
+    expect({ check: checkReads(server.log.started.slice(server.log.started.indexOf(SWITCH, before))),
+      unexpected: server.log.unexpected }).toEqual({ check: [SESSION_READ], unexpected: [] });
   });
 
 it("reads the statistics one time when the tree read fails", async () => {
