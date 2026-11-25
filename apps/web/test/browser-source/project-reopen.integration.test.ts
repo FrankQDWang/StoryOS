@@ -759,8 +759,11 @@ async function journalRows(server: ReturnType<typeof fakeServer>) {
   return Object.fromEntries(rows);
 }
 
-it("discards the Chapter read of a switch when the Project read names another Chapter, and shows only that Chapter",
-  async () => {
+it.each([
+  { order: "the early Chapter read and then the early Session read", first: chapterRead(CHAPTER_B), second: SESSION_READ },
+  { order: "the early Session read and then the early Chapter read", first: SESSION_READ, second: chapterRead(CHAPTER_B) },
+])("discards the Chapter read of a switch when the Project read names another Chapter, and shows only that Chapter,"
+  + " after $order", async ({ first, second }) => {
     const server = fakeServer({ reads: [...SWITCH_READS, chapterRead(CHAPTER), SESSION_READ],
       commands: [SESSION_CREATE, SWITCH] });
     const workspace = await openWorkspace(server);
@@ -771,17 +774,29 @@ it("discards the Chapter read of a switch when the Project read names another Ch
       `"project_activity_stream:${OWNER}:${PROJECT}"`);
     const journal = await journalRows(server);
     const before = server.log.started.length;
-    // The observer records the title and the text of the editor at each change of the page. It also records each
-    // text of the title or the editor that a change replaced, because a later render in the same task replaces a
-    // render before the observer reads the page.
+    // The observer records the title and the text of the editor at each change of the page. A render that a later
+    // render in the same task replaces is gone before the observer reads the page. Thus for each mutation record, the
+    // observer also examines the target, the old value, and each added and each removed node: a heading with the title
+    // of Chapter B, and the text of Chapter B anywhere.
     const shownChapters = new Set<string>();
-    const replaced = new Set<string>();
-    const inShownChapter = (node: Node) => (node instanceof Element ? node : node.parentElement)
-      ?.closest(".editor-panel h2, [data-manuscript-editor]") != null;
+    const discardedShown = new Set<string>();
+    const examine = (node: Node, text: string | null) => {
+      if (text?.includes(CHAPTER_B_BODY)) discardedShown.add(CHAPTER_B_BODY);
+      const heading = (node instanceof Element ? node : node.parentElement)?.closest("h2");
+      if (heading != null && text === "Chapter B") discardedShown.add("Chapter B");
+      if (node instanceof Element && [...node.querySelectorAll("h2")].some((title) => title.textContent === "Chapter B")) {
+        discardedShown.add("Chapter B");
+      }
+    };
     const observer = new MutationObserver((records) => {
-      for (const record of records.filter(({ target }) => inShownChapter(target))) {
-        if (record.oldValue !== null) replaced.add(record.oldValue);
-        for (const node of record.removedNodes) replaced.add(node.textContent ?? "");
+      for (const record of records) {
+        examine(record.target, record.target.textContent);
+        examine(record.target, record.oldValue);
+        for (const node of [...record.addedNodes, ...record.removedNodes]) {
+          examine(node, node.textContent);
+          // A removed text node of a heading has no parent: the target is the heading.
+          examine(record.target, node.textContent);
+        }
       }
       shownChapters.add(JSON.stringify([workspace.root.querySelector(".editor-panel h2")?.textContent,
         workspace.root.querySelector("[data-manuscript-editor]")?.textContent]));
@@ -797,16 +812,16 @@ it("discards the Chapter read of a switch when the Project read names another Ch
     server.hold([chapterRead(CHAPTER)]);
     const consumedBefore = server.log.consumed.length;
     const consumed = (names: string[]) => names.every((name) => server.log.consumed.slice(consumedBefore).includes(name));
-    // The discarded open ends before its replacement starts: the fake answers the early Chapter read and then the
-    // early Session read, each after the Project read. After the client read a response body, the steps that follow
-    // it in the client end before the next poll, so a request that they start is in flight at the check.
+    // The discarded open ends before its replacement starts: the fake answers the two early reads one by one, each
+    // after the Project read. After the client read a response body, the steps that follow it in the client end before
+    // the next poll, so a request that they start is in flight at the check.
     server.releaseOnly([PROJECT_READ, LIST]);
     await expect.poll(() => consumed([PROJECT_READ, LIST])).toBe(true);
     expect(server.inFlight()).toEqual([chapterRead(CHAPTER_B), SESSION_READ].sort());
-    server.releaseOnly([chapterRead(CHAPTER_B)]);
-    await expect.poll(() => consumed([chapterRead(CHAPTER_B)])).toBe(true);
-    expect(server.inFlight()).toEqual([SESSION_READ]);
-    server.releaseOnly([SESSION_READ]);
+    server.releaseOnly([first]);
+    await expect.poll(() => consumed([first])).toBe(true);
+    expect(server.inFlight()).toEqual([second]);
+    server.releaseOnly([second]);
     await expect.poll(server.inFlight).toEqual([chapterRead(CHAPTER)]);
     // The discarded reads ended and wrote nothing to the Journal.
     const discarded = await journalRows(server);
@@ -816,12 +831,10 @@ it("discards the Chapter read of a switch when the Project read names another Ch
       .toEqual({ title: "Chapter A", save: "saved", failure: "", inFlight: [] });
     observer.disconnect();
     const later = server.log.started.slice(server.log.started.indexOf(SWITCH, before));
-    expect({ shown: [...shownChapters],
-      replaced: [...replaced].filter((text) => text.includes("Chapter B") || text.includes(CHAPTER_B_BODY)),
-      journal: discarded,
+    expect({ shown: [...shownChapters], discardedShown: [...discardedShown], journal: discarded,
       chapters: later.filter((name) => name.startsWith(`GET ${P}/chapters/`) && !name.endsWith("/open-proposals")),
       unexpected: server.log.unexpected }).toEqual({
-      shown: [JSON.stringify(["Chapter A", "Base"])], replaced: [], journal,
+      shown: [JSON.stringify(["Chapter A", "Base"])], discardedShown: [], journal,
       chapters: [chapterRead(CHAPTER_B), chapterRead(CHAPTER)], unexpected: [] });
   });
 
