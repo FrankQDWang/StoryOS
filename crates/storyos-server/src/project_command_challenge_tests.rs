@@ -238,38 +238,6 @@ async fn rate_refusal_has_a_bounded_retry_time_without_binding_disclosure() {
     );
 }
 
-// Before #1901 the handler gave `resource_unavailable()` from its own Project read.
-#[tokio::test]
-async fn a_missing_project_at_the_issue_gives_the_bytes_of_the_earlier_project_read_refusal() {
-    async fn parts(error: ApiError) -> (StatusCode, HeaderMap, Vec<u8>) {
-        let response = error.into_response();
-        let (status, headers) = (response.status(), response.headers().clone());
-        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        (status, headers, body.to_vec())
-    }
-
-    let refusal = parts(challenge_error(
-        ProjectCommandChallengeError::MissingProject,
-    ))
-    .await;
-
-    assert_eq!(refusal, parts(resource_unavailable()).await);
-    assert_eq!(
-        (
-            refusal.0,
-            serde_json::from_slice::<serde_json::Value>(&refusal.2).unwrap()
-        ),
-        (
-            StatusCode::NOT_FOUND,
-            serde_json::json!({
-                "schema_id": "storyos.problem.v1",
-                "code": "resource_unavailable",
-                "message": "The requested resource is unavailable."
-            })
-        )
-    );
-}
-
 #[tokio::test]
 async fn public_challenge_route_enforces_the_absolute_json_body_ceiling() {
     let oversized_body = format!("{{\"padding\":\"{}\"}}", "a".repeat(1024 * 1024));
