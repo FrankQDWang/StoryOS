@@ -279,11 +279,12 @@ type EditorWorkspaceOptions = {
 };
 
 /**
- * The Editor Session of an open. The read of a stored Session needs only the Project. `finish` creates a Session when
- * the tab has none, and validates the Session against the Chapter.
+ * The Editor Session of an open. The read of a stored Session needs only the Scope of the Project. `finish` creates a
+ * Session when the tab has none, and validates the Session against the Chapter and `project`, by default the Project of
+ * the start.
  */
 export interface EditorWorkspaceOpening {
-  finish(chapter: GetChapterResponse): Promise<OpenedEditorWorkspace>;
+  finish(chapter: GetChapterResponse, project?: GetProjectResponse): Promise<OpenedEditorWorkspace>;
   /** Closes the Journal when the open stops before `finish`. It does not wait for the Session read. */
   abandon(): void;
 }
@@ -322,8 +323,8 @@ export function startEditorWorkspace({
     }
   })();
   return {
-    finish: (chapter) => finishEditorWorkspace(started, { baseUrl, project, chapter, profile, fetchImpl, cryptoImpl,
-      readyPartitionId }),
+    finish: (chapter, read = project) => finishEditorWorkspace(started, { baseUrl, project: read, chapter, profile,
+      fetchImpl, cryptoImpl, readyPartitionId }),
     abandon: () => { void started.then((start) => { start.database?.close(); }); },
   };
 }

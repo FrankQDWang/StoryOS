@@ -273,11 +273,14 @@ test("a reopen fails closed when the Project read has another Scope", async () =
   const project = fixture<GetProjectResponse>("get-project.json");
   const listed = fixture<ListProjectsResponse>("list-projects.json");
   const projectId = project.project.project_id;
+  const chapterId = project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "";
   const foreign = { ...project, project_scope: { ...project.project_scope,
     owner_user_id: "018f0000-0000-7001-8000-000000000101" } };
+  // The reopen reads the Current Chapter of the page with the Project read (#1898).
   const fake = exactFake(new Map([
     [`GET /api/v1/projects/${projectId}`, { body: foreign }],
     ["GET /api/v1/projects", { body: listed }],
+    [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`, { body: fixture<GetChapterResponse>("get-chapter.json") }],
   ]));
 
   const state = await reopenControlledProject({ baseUrl: "http://storyos.test", opened: { profile, project },
@@ -285,7 +288,8 @@ test("a reopen fails closed when the Project read has another Scope", async () =
 
   assert.deepEqual({ state, requests: fake.requests.sort(), unexpected: fake.unexpected }, {
     state: PROJECT_BLOCKED,
-    requests: ["GET /api/v1/projects", `GET /api/v1/projects/${projectId}`].sort(),
+    requests: ["GET /api/v1/projects", `GET /api/v1/projects/${projectId}`,
+      `GET /api/v1/projects/${projectId}/chapters/${chapterId}`].sort(),
     unexpected: [],
   });
 });
@@ -313,15 +317,15 @@ test("a reopen opens the Current Chapter of the Project read with the revision o
     kind: state.kind,
     title: state.kind === "project-ready" ? state.project.project.title : "",
     revision: state.kind === "project-ready" ? state.revision : "",
-    requests: fake.requests.slice(0, 2).sort(),
-    later: fake.requests.slice(2),
+    requests: fake.requests.sort(),
     unexpected: fake.unexpected,
   }, {
     kind: "project-ready",
     title: "Renamed",
     revision: "7",
-    requests: ["GET /api/v1/projects", `GET /api/v1/projects/${projectId}`].sort(),
-    later: [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`],
+    // The Chapter read goes with the Project read and the list read (#1898).
+    requests: ["GET /api/v1/projects", `GET /api/v1/projects/${projectId}`,
+      `GET /api/v1/projects/${projectId}/chapters/${chapterId}`].sort(),
     unexpected: [],
   });
 });
@@ -330,10 +334,12 @@ test("a reopen fails closed when the list read fails", async () => {
   const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
   const project = fixture<GetProjectResponse>("get-project.json");
   const projectId = project.project.project_id;
+  const chapterId = project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "";
   const fake = exactFake(new Map([
     [`GET /api/v1/projects/${projectId}`, { body: project }],
     ["GET /api/v1/projects", { status: 503, body: { schema_id: "storyos.problem.v1", code: "service_unavailable",
       message: "Unavailable." } }],
+    [`GET /api/v1/projects/${projectId}/chapters/${chapterId}`, { body: fixture<GetChapterResponse>("get-chapter.json") }],
   ]));
 
   const state = await reopenControlledProject({ baseUrl: "http://storyos.test", opened: { profile, project },
