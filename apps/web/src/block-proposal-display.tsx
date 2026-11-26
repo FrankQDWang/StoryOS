@@ -80,11 +80,12 @@ export function BlockProposalDisplay({
   /** Starts a read of the open suggestions. The returned function receives the Proposals of a complete list. */
   startSuggestionRead?: (() => (proposalIds: readonly string[] | undefined) => void) | undefined;
   /**
-   * The text that the editor part shows during the switch to an Arriving Chapter (ADR 0105). With `input` it accepts
-   * Arrival Input, and it is read-only with no `input`. The editor and the Proposal states of this Chapter end. The
-   * reads and the state of this display stay for a switch that fails.
+   * The text that the editor part shows during the switch to an Arriving Chapter (ADR 0105). Its input goes to `input`
+   * while `editable` is true. The editor and the Proposal states of this Chapter end. The reads and the state of this
+   * display stay for a switch that fails.
    */
-  arriving?: { key: string; blocks: ManuscriptEditorProps["blocks"]; input?: ArrivalSink | undefined } | undefined;
+  arriving?: { key: string; blocks: ManuscriptEditorProps["blocks"]; editable?: boolean; input?: ArrivalSink }
+    | undefined;
   persistWorkspace: EditorReadyState | undefined;
   onFailure: (error: unknown) => void;
   baseUrl: string;
@@ -723,7 +724,7 @@ export function BlockProposalDisplay({
   };
 
   if (arriving !== undefined) {
-    return <ManuscriptEditor key={arriving.key} blocks={arriving.blocks} editable={arriving.input !== undefined}
+    return <ManuscriptEditor key={arriving.key} blocks={arriving.blocks} editable={arriving.editable === true}
       arrival={arriving.input} />;
   }
   return (

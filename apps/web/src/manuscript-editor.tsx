@@ -67,7 +67,10 @@ export interface ManuscriptEditorProps {
   onCopyProposal?: (proposalId: string) => void;
   /** The source of the references that the author adds from a selection. */
   referenceSource?: EditorReferenceSource | undefined;
-  /** With no `writing`, the input of an Arriving Chapter goes here (ADR 0105). */
+  /**
+   * With no `writing`, the input of an Arriving Chapter goes here (ADR 0105). The sink stays through each change of
+   * `editable`, so a composition that ends while the editor is read-only ends in the sink.
+   */
   arrival?: ArrivalSink | undefined;
 }
 

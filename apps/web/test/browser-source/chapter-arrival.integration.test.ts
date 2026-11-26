@@ -6,7 +6,7 @@ import { loadStoryOSWebState } from "../../src/app.ts";
 import { POINTER_STAY_MS, createChapterCopies } from "../../src/chapter-copies.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
 import { CHAPTER_SWITCH_WAITING_SENTENCE } from "../../src/chapter-navigation.ts";
-import { applyTrustedInput, updateClipboardPermission } from "../support/browser-command-client.ts";
+import { applyImeComposition, applyTrustedInput, updateClipboardPermission } from "../support/browser-command-client.ts";
 import { focusManuscriptEnd, manuscriptBody, manuscriptEditor, manuscriptIsEditable } from "../support/manuscript-surface.ts";
 import {
   CHAPTER, OWNER, PROJECT, REVISION, SESSION, chapterRevision, closeTrackedDatabases, createAppliedActivityEvent,
@@ -160,8 +160,9 @@ function arrivalServer() {
       return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
     }
     if (name === SWITCH && server.effect !== undefined) {
+      const effect = server.effect as { kind: string };
       return jsonResponse({ ...setCurrentChapterFixture, project: { ...setCurrentChapterFixture.project, open: open() },
-        effect: server.effect });
+        effect, receipt: { ...setCurrentChapterFixture.receipt, result: effect.kind } });
     }
     if (name === SWITCH) {
       current = (JSON.parse(String(init?.body)) as { set_current_chapter_input: { chapter_id: string } })
@@ -296,6 +297,8 @@ async function openWorkspace(prepare: (server: ReturnType<typeof arrivalServer>[
       underTitle: element.previousElementSibling?.matches(".editor-panel h2") === true };
   };
   const saveState = () => root.querySelector("[data-save-state]")?.getAttribute("data-save-state");
+  /** The text of each notice, in order. */
+  const noticeTexts = () => [...root.querySelectorAll("[data-arrival-notice-text]")].map((text) => text.textContent);
   /**
    * Types `text` with trusted input: at the end of the shown editor when it is editable. A read-only editor cannot have
    * the focus, so then the key goes to the Chapter button in the contents, which has the focus after a click.
@@ -305,7 +308,8 @@ async function openWorkspace(prepare: (server: ReturnType<typeof arrivalServer>[
     else button(chapterId).focus();
     await applyTrustedInput({ operation: "insert_text", text });
   };
-  return { server, root, button, editor, shown, ready, fact, pointer, stay, stays, stayTimers, copy, notice, saveState,
+  return { server, root, button, editor, shown, ready, fact, pointer, stay, stays, stayTimers, copy, notice, noticeTexts,
+    saveState,
     typeAtEnd, waits, journal: scenario.journalName };
 }
 
@@ -706,8 +710,9 @@ it.each([
     shown: { title: "Chapter A", body: "Base", editable: true, alert: "无法打开这一章。" } },
   { end: "the Chapter read fails", refuse: READ_B, hold: READ_B, steps: [READ_B], panels: [],
     shown: { title: "Chapter A", body: "Base", editable: true, alert: "无法打开这一章：快照已过期。" } },
-  // A tab with no writer reads no Activity.
-  { end: "the tab loses the writer", lostWriter: true, hold: READ_B, steps: [...SWITCH_STEPS, ...REOPEN_STEPS],
+  // The Server applies the switch also for a tab that lost the writer, so the switch of today reaches the editor of the
+  // Chapter, read-only. A tab with no writer reads no Activity.
+  { end: "the reopen finds that another tab holds the writer", lostWriter: true, hold: READ_B, steps: [...SWITCH_STEPS, ...REOPEN_STEPS],
     panels: PANEL_READS,
     shown: { title: "Chapter B", body: "Beta", editable: false, alert: undefined } },
   // No hand-over exists yet, so the Arrival Input also goes to the notice when the editor of the Chapter is ready.
@@ -766,6 +771,11 @@ it("accepts no input in an Arriving Chapter whose copy does not have the fact of
   workspace.button(CHAPTER_B).click();
   await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
   await workspace.typeAtEnd("?");
+  // A cut event in a selection of the read-only text changes nothing.
+  getSelection()!.selectAllChildren(workspace.editor());
+  await expect.poll(() => getSelection()!.toString()).toBe("Beta");
+  workspace.editor().dispatchEvent(new ClipboardEvent("cut", { bubbles: true, cancelable: true,
+    clipboardData: new DataTransfer() }));
   const typed = { ...workspace.shown(), fact: workspace.fact(), save: workspace.saveState() };
   workspace.server.release(READ_B);
 
@@ -910,3 +920,73 @@ it("copies the text of the notice with each paragraph, and the notice closes onl
     await expectRequests(workspace.server, before, [READ_B], []);
     expect(copied).toBe("Beta?\nZ");
   });
+
+it.each([
+  { first: READ_B, second: SESSION_READ },
+  { first: SESSION_READ, second: READ_B },
+])("keeps the notice on the failure screen when the reopen fails, when $first answers first", async ({ first, second }) => {
+  const workspace = await openWorkspace();
+  await workspace.copy(CHAPTER_B);
+  workspace.server.hold(CHALLENGE);
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(CHALLENGE)).toBe(true);
+  await workspace.typeAtEnd("?");
+  // The Chapter read of the reopen fails, so the open of today shows its failure screen.
+  workspace.server.refuse.add(READ_B);
+  workspace.server.hold(READ_B);
+  workspace.server.hold(SESSION_READ);
+
+  workspace.server.release(CHALLENGE);
+  await expect.poll(() => [READ_B, SESSION_READ].every((name) => workspace.server.isHeld(name))).toBe(true);
+  workspace.server.release(first);
+  workspace.server.release(second);
+
+  await expect.poll(() => ({ heading: workspace.root.querySelector('section[role="alert"] h1')?.textContent,
+    notices: workspace.noticeTexts() })).toEqual({ heading: "StoryOS 无法打开项目", notices: ["Beta?"] });
+  await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], []);
+});
+
+it("keeps the notice of each end until the author closes it", async () => {
+  const workspace = await openWorkspace();
+  await workspace.copy(CHAPTER_B);
+  workspace.server.refuse.add(READ_B);
+  const before = workspace.server.requests.length;
+  for (const [index, text] of ["?", "!"].entries()) {
+    workspace.server.hold(READ_B);
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+    await workspace.typeAtEnd(text);
+    workspace.server.release(READ_B);
+    await expect.poll(() => ({ title: workspace.shown().title, notices: workspace.noticeTexts().length }))
+      .toEqual({ title: "Chapter A", notices: index + 1 });
+  }
+  const both = workspace.noticeTexts();
+
+  workspace.root.querySelector<HTMLButtonElement>("[data-arrival-notice-close]")!.click();
+
+  await expect.poll(() => ({ ...workspace.shown(), notices: workspace.noticeTexts() })).toEqual({ title: "Chapter A",
+    body: "Base", editable: true, alert: "无法打开这一章：快照已过期。", notices: ["Beta!"] });
+  await expectRequests(workspace.server, before, [READ_B, READ_B], []);
+  expect(both).toEqual(["Beta?", "Beta!"]);
+});
+
+it("shows the text of an IME composition that is open when the switch ends in the notice", async () => {
+  const workspace = await openWorkspace();
+  await workspace.copy(CHAPTER_B);
+  workspace.server.refuse.add(READ_B);
+  workspace.server.hold(READ_B);
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  focusManuscriptEnd(workspace.editor(), window);
+  await applyImeComposition({ text: "中", replacementStart: 4, replacementEnd: 4, selectionStart: 1, selectionEnd: 1 });
+  await expect.poll(() => ({ body: manuscriptBody(workspace.editor()), save: workspace.saveState() }))
+    .toEqual({ body: "Beta中", save: "saving" });
+
+  workspace.server.release(READ_B);
+
+  await expect.poll(() => ({ ...workspace.shown(), notices: workspace.noticeTexts() })).toEqual({ title: "Chapter A",
+    body: "Base", editable: true, alert: "无法打开这一章：快照已过期。", notices: ["Beta中"] });
+  await expectRequests(workspace.server, before, [READ_B], []);
+});

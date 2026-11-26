@@ -31,7 +31,9 @@ export interface ArrivalInput extends ArrivalSink {
   readonly title: string;
   readonly revisionId: string;
   held(): readonly HeldEdit[];
-  /** The text that the Arriving Chapter shows: the copy with each held edit. */
+  /** True when the author typed: a held edit, or an IME composition that is open. */
+  hasInput(): boolean;
+  /** The text that the Arriving Chapter shows: the copy with each held edit and the open composition. */
   blocks(): readonly ManuscriptParagraph[];
   /** True after a stop. The input then accepts no more edit. */
   stopped(): boolean;
@@ -44,6 +46,8 @@ export interface ArrivalInput extends ArrivalSink {
 export function createArrivalInput(chapterId: string, copy: ChapterText): ArrivalInput {
   const held: HeldEdit[] = [];
   let shown = copy.blocks;
+  // The text with an open IME composition, which is not a held edit until the composition ends.
+  let composed: readonly ManuscriptParagraph[] | undefined;
   let halted = false;
   let version = 0;
   const listeners = new Set<() => void>();
@@ -61,16 +65,27 @@ export function createArrivalInput(chapterId: string, copy: ChapterText): Arriva
       if (!input.accepts(origin)) return;
       held.push({ edit, origin, blocks: blocks ?? shown });
       shown = blocks ?? shown;
+      composed = undefined;
       changed();
     },
     // An Arriving Chapter shows no suggestion, so it has no candidate input and no Author Undo.
     canAcceptInput: () => false,
     abandonUndo: () => {},
-    setComposing: () => {},
-    showSaving: () => {},
+    // The end of a composition gives its edit to `capture`, or no edit when the author cancelled it.
+    setComposing(composing) {
+      if (composing || composed === undefined) return;
+      composed = undefined;
+      changed();
+    },
+    showSaving(blocks) {
+      if (blocks === undefined) return;
+      composed = blocks;
+      changed();
+    },
     fail: () => { input.stop(); },
     held: () => held,
-    blocks: () => shown,
+    hasInput: () => held.length > 0 || composed !== undefined,
+    blocks: () => composed ?? shown,
     stopped: () => halted,
     stop() {
       if (halted) return;
