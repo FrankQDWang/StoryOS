@@ -507,19 +507,21 @@ function ProjectEditorView({
   // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026). The result is true
   // when the command changed the Current Chapter and the workspace opens again at the Chapter.
   const selectChapter = (chapterId: string, contents = false): Promise<boolean> => {
-    // The latest click of the author wins: a click ends the wait of an earlier switch (#1679).
+    // The latest click of the author wins: with no Arrival Input, a click ends the wait of an earlier switch (#1679).
     const earlier = switchWaitRef.current;
     if (structureInFlightRef.current && earlier?.waiting !== true) {
       // With no Arrival Input, a selection during a switch in the contents replaces the Arriving Chapter at once. The
       // switch then goes on to the newest selection (ADR 0105, section 6).
       // With Arrival Input, the selection waits until the switch ended.
-      if (contents && newestRef.current !== undefined && arrivalInputExists()) {
-        return waitFor({ chapterId, contents }, newestRef.current);
-      }
-      if (contents && newestRef.current !== undefined && newestRef.current !== chapterId) {
-        newestRef.current = chapterId;
-        proposalNavigation.sequence += 1;
-        setArrival(chapterId);
+      if (contents && newestRef.current !== undefined) {
+        if (arrivalInputExists()) return waitFor({ chapterId, contents }, newestRef.current);
+        // A later selection replaces a waiting selection, also when the input of that time is no longer there.
+        waitingStore.current = undefined;
+        if (newestRef.current !== chapterId) {
+          newestRef.current = chapterId;
+          proposalNavigation.sequence += 1;
+          setArrival(chapterId);
+        }
       }
       return Promise.resolve(false);
     }
@@ -534,6 +536,7 @@ function ProjectEditorView({
     }
     // A selection waits until the hand-over ended (ADR 0105, section 6).
     if (handOverRef.current !== undefined) return waitFor({ chapterId, contents }, selectedChapterIdRef.current);
+    waitingStore.current = undefined;
     // After a command had an effect, a selection of the Chapter of the editor opens it again on the new base.
     if (chapterId === selectedChapterIdRef.current && !movedRef.current) {
       return Promise.resolve(false);
@@ -560,7 +563,9 @@ function ProjectEditorView({
     return (async () => {
       let reopened = false;
       let cancelled = false;
-      // True when the switch gave a state to the workspace. Then the next editor part runs the waiting selection.
+      // True when the switch gave a state to the workspace. Then the next editor part runs the waiting selection. A
+      // state with no workspace (for example a Project with no Current Chapter) has no contents, so the waiting
+      // selection ends with the workspace.
       let handedOff = false;
       // A repeat uses the Chapter of the first read, so the command and its idempotency key stay the same.
       const targets = new Map<string, GetChapterResponse>();
@@ -695,9 +700,11 @@ function ProjectEditorView({
   };
 
   const arrivalInputExists = () => inputRef.current?.hasInput() === true || inputRef.current?.composing() === true;
-  // A later selection replaces a waiting selection. A selection of the Chapter that the tab goes to ends it.
+  // A later selection replaces a waiting selection. A selection of the Chapter that the tab goes to ends it. The
+  // selection is the latest choice of the author, so an earlier Proposal navigation opens no Chapter after it.
   const waitFor = (selection: WaitingSelection, goesTo: string | undefined) => {
     waitingStore.current = selection.chapterId === goesTo ? undefined : selection;
+    proposalNavigation.sequence += 1;
     return Promise.resolve(false);
   };
   // The waiting selection runs as a new selection, so its quiet step waits for the save of the Arrival Input.
