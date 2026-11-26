@@ -557,6 +557,9 @@ input:focus-visible {
 }
 .editor-recovery button:hover:not(:disabled) { border-bottom-color: #8b867e; color: #26241f; }
 .editor-recovery button:disabled { opacity: .5; cursor: default; }
+.arrival-notice { flex: none; margin-bottom: 18px; }
+.arrival-notice h3 { margin: 0; font-family: "Noto Serif SC", "Songti SC", serif; font-size: 17px; line-height: 1.55; font-weight: 600; color: #302e29; }
+.arrival-notice pre { max-height: 12em; overflow-y: auto; }
 
 .manuscript-editor .block-proposal button, [data-proposal-decision] button { border: 0; background: transparent; display: inline-flex; align-items: center; gap: 7px; padding: 5px 4px; color: #5b5953; cursor: pointer; font: 12px "PingFang SC", sans-serif; }
 .manuscript-editor .block-proposal button:hover:not(:disabled), [data-proposal-decision] button:hover:not(:disabled) { color: #171612; }

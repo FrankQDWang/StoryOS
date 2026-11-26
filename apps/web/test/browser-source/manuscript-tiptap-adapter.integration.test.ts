@@ -5,6 +5,7 @@ import {
   manuscriptJson,
   readManuscriptParagraphs,
 } from "../../src/manuscript-doc.ts";
+import { createArrivalInput } from "../../src/arrival-input.ts";
 import {
   storyosManuscriptExtensions,
   storyosEditorProps,
@@ -98,4 +99,28 @@ it("deletes a nonempty selection then splits on Enter", () => {
   expect(editor.state.doc.firstChild?.attrs.id).toBe(BLOCK_ID);
   expect(editor.state.doc.firstChild?.textContent).toBe("Hello");
   expect(editor.state.doc.lastChild?.textContent).toBe("");
+});
+
+it("refuses a block move, a block retype, a cut, and a drop in an Arriving Chapter, and accepts text", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const input = createArrivalInput("018f0000-0000-7001-8000-000000000803", { title: "Chapter B",
+    revisionId: "018f0000-0000-7001-8000-000000000805", blocks: [{ manuscript_block_id: BLOCK_ID, text: "Hello" }] });
+  const arriving = new Editor({
+    element: host,
+    extensions: storyosManuscriptExtensions(BLOCK_ID, undefined, undefined, undefined, input.accepts),
+    content: manuscriptJson(BLOCK_ID, "Hello"),
+    injectCSS: false,
+  });
+  editor = arriving;
+
+  // The test gives each origin to a text change, so no shortcut of a block move or a block retype is pressed.
+  const texts = ["move_block", "retype_block", "cut", "drop", "typing", "paste"].map((origin) => {
+    const transaction = arriving.state.tr.insertText("!", 1);
+    transaction.setMeta("storyos.origin", origin);
+    arriving.view.dispatch(transaction);
+    return readManuscriptParagraphs(arriving.state.doc)?.map((block) => block.text).join();
+  });
+
+  expect(texts).toEqual(["Hello", "Hello", "Hello", "Hello", "!Hello", "!!Hello"]);
 });
