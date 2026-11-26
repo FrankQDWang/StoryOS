@@ -750,8 +750,9 @@ export function BlockProposalDisplay({
   return (
     <>
       <ManuscriptEditor key="editor" {...editorProps}
+        // While a hand-over waits, the input goes to the Arrival Input, and the hand-over waits for the input check.
         editable={editorProps.editable && journalAccepts
-          && (inputChecked || (locators.length === 0
+          && (editorProps.arrival !== undefined || inputChecked || (locators.length === 0
             && recoveredProposalIds.length === 0 && writing?.projection.unsettled_intent_count === 0))}
         proposals={projections}
         onCandidateSettled={(proposalId) => {

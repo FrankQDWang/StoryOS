@@ -386,30 +386,30 @@ function ProjectEditorView({
       unsavedNotice.show({ chapterId: typed.chapterId, blocks: typed.blocks() });
     }
   };
-  // The latest answer of the read of the open suggestions of this editor decides the hand-over, after an open IME
+  // The answer of the read of the open suggestions of this editor decides the hand-over, after an open IME
   // composition ended. A complete list with no Proposal gives the input to the writing controller. A Proposal, an
-  // incomplete list, a failed read, or a Local Edit Journal that stops input sends the input to the notice.
-  const listedRef = useRef<{ heads: readonly string[] | undefined }>(undefined);
-  // A new selection, a Proposal navigation, or a removal from the contents ends a hand-over that waits, and the notice
-  // shows its input. So no Author Edit of it comes after the quiet step of that command, and the notice has one owner.
-  const cancelHandOver = () => {
-    const typed = handOverRef.current;
-    if (typed === undefined) return;
-    endHandOver(typed, false);
-    setHandOver(undefined);
-  };
+  // incomplete list, a failed read, a Local Edit Journal that stops input, or a refusal sends the input to the notice.
+  const refusedRef = useRef(false);
   const decideHandOver = (heads: readonly string[] | undefined) => {
     const typed = handOverRef.current;
     if (typed === undefined) return;
-    const waiting = listedRef.current !== undefined;
-    listedRef.current = { heads };
-    if (waiting) return;
     void compositionEnded(typed).then(() => {
       if (handOverRef.current !== typed) return;
-      endHandOver(typed, listedRef.current?.heads?.length === 0);
+      endHandOver(typed, !refusedRef.current && heads?.length === 0);
       flushSync(() => { setHandOver(undefined); });
     });
   };
+  // A command with a quiet step, or a Proposal that opens, refuses a hand-over that waits: the notice shows its input
+  // after an open IME composition ended, and no earlier answer of the list gives it to the writing controller. So no
+  // Author Edit of it comes after the quiet step of the command, and the notice has one owner.
+  const refuseHandOver = () => {
+    if (handOverRef.current === undefined) return;
+    refusedRef.current = true;
+    decideHandOver(undefined);
+  };
+  // The quiet step refuses a command during an IME composition of normal input. The writing controller does not have
+  // the composition of a hand-over that waits, so the command refuses here.
+  const handOverComposing = () => handOverRef.current?.composing() === true;
   useEffect(() => writing?.subscribe(() => {
     if (selectedChapterIdRef.current !== currentChapterId) return;
     const { projection, local } = writing.snapshot();
@@ -502,7 +502,11 @@ function ProjectEditorView({
       structureInFlightRef.current = false;
     }
     if (chapterId === selectedChapterIdRef.current) return Promise.resolve(false);
-    cancelHandOver();
+    if (handOverComposing()) {
+      setSwitchRecovery(chapterSwitchRecoveryMessage("incomplete_semantic_intent"));
+      return Promise.resolve(false);
+    }
+    refuseHandOver();
     if (state.editor.kind !== "editor-ready" || writing === undefined) {
       browseChapter(chapterId);
       return Promise.resolve(false);
@@ -617,8 +621,12 @@ function ProjectEditorView({
   }>) => {
     if (tree === undefined) return;
     if (structureInFlightRef.current) return;
+    if (handOverComposing()) {
+      setSwitchRecovery(`无法删除${noun}：请先完成当前输入。`);
+      return;
+    }
     structureInFlightRef.current = true;
-    cancelHandOver();
+    refuseHandOver();
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
     void (async () => {
@@ -688,6 +696,7 @@ function ProjectEditorView({
   };
   onEditorFailureRef.current = onEditorFailure;
   const openedProposal = (locator: ProposalLocator) => {
+    refuseHandOver();
     copies.proposalsChanged();
     rememberLocator(locator);
     setProposalRefresh((current) => current + 1);
@@ -695,7 +704,11 @@ function ProjectEditorView({
   const own: ProjectEditorHandle = {
     selectChapter, removeChapter, removeVolume, openedProposal, showRecovery: setSwitchRecovery,
     navigateProposal: (destination) => {
-      cancelHandOver();
+      if (handOverComposing()) {
+        setSwitchRecovery("请先完成当前输入。");
+        return;
+      }
+      refuseHandOver();
       const checked = treeCheck();
       navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,

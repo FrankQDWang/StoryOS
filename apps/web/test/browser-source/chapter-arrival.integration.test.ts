@@ -874,7 +874,15 @@ const SAVE_B: (string[] | AnyOrder)[] = [[CHALLENGE, AUTHOR_EDITS, SESSION_READ]
 
 const READY = { title: "Chapter B", body: "Beta", editable: true, alert: undefined };
 
+type Workspace = Awaited<ReturnType<typeof openWorkspace>>;
+
 const RUN = "018f0000-0000-7001-8000-000000000c81";
+// A change location of a Run in Chapter C. Its result then has a return to Chapter C.
+const RETURN_C = { chapter_id: CHAPTER_C, manuscript_block_id: BLOCK,
+  base_authoritative_revision_id: "018f0000-0000-7001-8000-000000000806", candidate_text: "Gamma two.",
+  explanation: "Keep the voice.", current: null, outcome: { kind: "opened", proposal_id: PROPOSAL,
+    operation_id: "018f0000-0000-7001-8000-000000000c85", revision_id: "018f0000-0000-7001-8000-000000000c86",
+    validation_receipt_id: "018f0000-0000-7001-8000-000000000c87" } };
 
 /** Stores an assistant request of this tab whose completed Run from `chapterId` opened a Proposal at `locations`. */
 function seedRun(server: ReturnType<typeof arrivalServer>["server"], chapterId: string, locations: object[]) {
@@ -1115,7 +1123,7 @@ it("hands the Arrival Input over only after an IME composition in the editor of 
   expect(waiting).toEqual({ ...READY, body: "Beta?zhong", arriving: "true", save: "saving" });
 });
 
-it("decides the hand-over with the latest list, when an assistant Run opens a Proposal before the composition ends",
+it("shows the Arrival Input in a notice when an assistant Run opens a Proposal while the hand-over waits for a composition",
   async () => {
     // The assistant request of this tab has a Run that opened a Proposal in Chapter B. Its read answers while the
     // hand-over waits for the end of a composition.
@@ -1139,16 +1147,17 @@ it("decides the hand-over with the latest list, when an assistant Run opens a Pr
     await expect.poll(() => manuscriptBody(workspace.editor())).toBe("Beta?zhong");
     workspace.server.release(openProposals(CHAPTER_B));
     await expect.poll(() => workspace.server.answered.includes(openProposals(CHAPTER_B))).toBe(true);
-    // The first list has no Proposal. Then the Run opens one, and the next list has it.
+    // The first list has no Proposal. Then the Run opens one, and the composition ends while the next list waits.
     workspace.server.lists[CHAPTER_B] = workspace.server.texts[CHAPTER_B]!.revision;
+    workspace.server.hold(openProposals(CHAPTER_B));
     workspace.server.release(run);
-    await expect.poll(() => workspace.server.answered.filter((name) => name === openProposals(CHAPTER_B)).length)
-      .toBe(2);
+    await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
 
     await applyTrustedInput({ operation: "insert_text", text: "中" });
 
     await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice()?.text }))
       .toEqual({ ...READY, save: "saved", notice: "Beta?中" });
+    workspace.server.release(openProposals(CHAPTER_B));
     // The read of the Proposal fails, and the tests are not about it. No Author Edit goes out.
     await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
       { anyOrder: [openProposals(CHAPTER_B), `GET ${P}/proposals/${PROPOSAL}`, `${run}/research-sources`] });
@@ -1186,11 +1195,7 @@ it("shows the Arrival Input in a notice when the author removes a Chapter while 
 it("shows the Arrival Input in a notice when a Proposal navigation starts while the hand-over waits", async () => {
   // The Run of the assistant request came from Chapter C, and its result has a return to Chapter C.
   const workspace = await openWorkspace((server) => {
-    seedRun(server, CHAPTER_C, [{ chapter_id: CHAPTER_C, manuscript_block_id: BLOCK,
-      base_authoritative_revision_id: server.texts[CHAPTER_C]!.revision, candidate_text: "Gamma two.",
-      explanation: "Keep the voice.", current: null, outcome: { kind: "opened", proposal_id: PROPOSAL,
-        operation_id: "018f0000-0000-7001-8000-000000000c85", revision_id: "018f0000-0000-7001-8000-000000000c86",
-        validation_receipt_id: "018f0000-0000-7001-8000-000000000c87" } }]);
+    seedRun(server, CHAPTER_C, [RETURN_C]);
   });
   await expect.poll(() => workspace.root.querySelector("[data-proposal-return]")?.tagName).toBe("BUTTON");
   await workspace.copy(CHAPTER_B);
@@ -1227,6 +1232,61 @@ it("shows the Arrival Input in a notice when a Proposal navigation starts while 
     [READ_C, ...open, READ_B, SESSION_READ, CHALLENGE, SWITCH, ...open, READ_C, SESSION_READ],
     { anyOrder: [openProposals(CHAPTER_C), proposal, `GET ${P}/manuscript/tree`, `GET ${P}/manuscript/statistics`,
       ACTIVITY] });
+});
+
+it.each([
+  { command: "a selection of Chapter C", alert: "无法切换章节：请先完成当前输入。",
+    start: (workspace: Workspace) => { workspace.button(CHAPTER_C).click(); } },
+  { command: "a removal of Chapter C", alert: "无法删除章节：请先完成当前输入。", start: async (workspace: Workspace) => {
+    await beginTreeAction(workspace.root, `li[data-chapter-id="${CHAPTER_C}"]`, "[data-delete-chapter]");
+    workspace.root.querySelector<HTMLButtonElement>(`[data-delete-chapter="${CHAPTER_C}"]`)!.click();
+    await expect.poll(() => workspace.root.querySelector(`[data-confirm-delete-chapter="${CHAPTER_C}"]`)?.tagName)
+      .toBe("BUTTON");
+    workspace.root.querySelector<HTMLButtonElement>(`[data-confirm-delete-chapter="${CHAPTER_C}"]`)!.click();
+  } },
+  { command: "a Proposal navigation to Chapter C", alert: "请先完成当前输入。", run: true,
+    start: (workspace: Workspace) => {
+      workspace.root.querySelector<HTMLButtonElement>("[data-proposal-return]")!.click();
+    } },
+])("refuses $command while the hand-over has an open IME composition, as the quiet step does", async ({ alert, start,
+  run }) => {
+  // The Run of a stored assistant request came from Chapter C, and its result has a return to Chapter C. Each read of
+  // the list then also reads its Proposal.
+  const workspace = await openWorkspace((server) => { if (run === true) seedRun(server, CHAPTER_C, [RETURN_C]); });
+  const proposal = run === true ? [`GET ${P}/proposals/${PROPOSAL}`] : [];
+  if (run === true) {
+    await expect.poll(() => workspace.root.querySelector("[data-proposal-return]")?.tagName).toBe("BUTTON");
+  }
+  await workspace.copy(CHAPTER_B);
+  workspace.stopIdle();
+  workspace.server.hold(READ_B);
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+  workspace.server.hold(openProposals(CHAPTER_B));
+  workspace.server.release(READ_B);
+  await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
+  await applyImeComposition({ text: "zhong", replacementStart: 5, replacementEnd: 5, selectionStart: 5,
+    selectionEnd: 5 });
+  await expect.poll(() => manuscriptBody(workspace.editor())).toBe("Beta?zhong");
+
+  await start(workspace);
+  await expect.poll(() => workspace.ready().alert).toBe(alert);
+  const refused = { ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() };
+  // The composition ends, and the hand-over gives the input to the writing controller.
+  workspace.server.release(openProposals(CHAPTER_B));
+  await expect.poll(() => workspace.server.answered.includes(openProposals(CHAPTER_B))).toBe(true);
+  workspace.server.acceptEdits = true;
+  await applyTrustedInput({ operation: "insert_text", text: "中" });
+
+  await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+    .toEqual({ ...READY, body: "Beta?中", alert, save: "saved", notice: undefined });
+  await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS],
+    [...PANEL_READS, ACTIVITY, ...proposal], [CHALLENGE, AUTHOR_EDITS, SESSION_READ],
+    { anyOrder: [openProposals(CHAPTER_B), ...proposal, ACTIVITY, CHALLENGE, AUTHOR_EDITS, SESSION_READ,
+      openProposals(CHAPTER_B), ...proposal, ACTIVITY, `GET ${P}/manuscript/statistics`] });
+  expect(refused).toEqual({ ...READY, body: "Beta?zhong", arriving: "true", alert, save: "saving", notice: undefined });
 });
 
 it("shows the Arrival Input in a notice when the author selects another Chapter while the hand-over waits", async () => {
