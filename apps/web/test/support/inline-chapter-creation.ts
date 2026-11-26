@@ -1,4 +1,5 @@
 import { expect } from "vitest";
+import { MANUSCRIPT_EDITOR_SELECTOR } from "./manuscript-surface.ts";
 
 export async function beginInlineChapterCreation(root: ParentNode | null | undefined, volumeId?: string) {
   if (root?.querySelector("form[data-create-chapter]")) return;
@@ -29,9 +30,26 @@ export async function beginTreeAction(root: ParentNode | null | undefined, rowSe
   await expect.poll(() => row?.querySelector<HTMLButtonElement>(action)?.disabled).toBe(false);
 }
 
-/** Selects a Chapter in the outline. A chapter switch loads the outline again, so the click waits for the Chapter. */
-export async function selectTreeChapter(root: ParentNode | null | undefined, chapterId: string) {
+/**
+ * Selects a Chapter in the outline. A chapter switch loads the outline again, so the click waits for the Chapter.
+ *
+ * An Arriving Chapter can be editable before the switch ends (ADR 0105), so an editable editor is not the end of the
+ * switch. After the click, the helper waits for the end of the arrival: the outline marks the Chapter, no Arriving
+ * Chapter is on the screen, and an editor is on the screen. With `{ arrival: "in-progress" }`, the helper returns
+ * after the click, so that a journey can examine the arrival.
+ */
+export async function selectTreeChapter(
+  root: ParentNode | null | undefined,
+  chapterId: string,
+  { arrival = "ended" }: { arrival?: "ended" | "in-progress" } = {},
+) {
   const selector = `nav[aria-label="稿件目录"] button[data-chapter-id="${chapterId}"]`;
   await expect.poll(() => root?.querySelector(selector)?.tagName).toBe("BUTTON");
   root?.querySelector<HTMLButtonElement>(selector)?.click();
+  if (arrival === "in-progress") return;
+  await expect.poll(() => ({
+    marked: root?.querySelector(selector)?.getAttribute("aria-current"),
+    arriving: root?.querySelector("[data-arrival-no-open-suggestion]")?.getAttribute("data-arrival-no-open-suggestion"),
+    editor: root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR) != null,
+  }), { timeout: 15_000 }).toEqual({ marked: "true", arriving: "", editor: true });
 }

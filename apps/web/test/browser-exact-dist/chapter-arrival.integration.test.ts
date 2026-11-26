@@ -65,7 +65,7 @@ it("stores the input of the earlier Chapter that was not saved at the selection,
     await expect.poll(() => manuscriptBody(editorA)).toBe("Alpha one");
     // A click of the author on a button of the contents moves the focus to that button.
     chapterButton(root(), "Chapter B")?.focus();
-    await selectTreeChapter(root(), b);
+    await selectTreeChapter(root(), b, { arrival: "in-progress" });
     const earlier = () => ({ ...shown(manuscriptEditor(root(), win)), earlierEditor: editorA.isConnected,
       focusInEditor: editorA.ownerDocument.activeElement?.closest("[data-manuscript-editor]") != null });
     await expect.poll(earlier).toEqual({ title: "Chapter A", body: "Alpha one", editable: false,
@@ -83,7 +83,7 @@ it("stores the input of the earlier Chapter that was not saved at the selection,
     focusManuscriptEnd(editorB, win);
     await applyTrustedInput({ operation: "insert_text", text: "Beta" });
     await expect.poll(() => manuscriptBody(editorB)).toBe("Beta");
-    await selectTreeChapter(root(), a);
+    await selectTreeChapter(root(), a, { arrival: "in-progress" });
     const arriving = () => ({ ...shown(manuscriptEditor(root(), win)), earlier: editorB.isConnected });
     await expect.poll(arriving).toEqual({ title: "Chapter A", body: "Alpha one", editable: false, earlier: false });
     await updateAuthorEditSubmissionHold({ action: "release" });
