@@ -90,9 +90,10 @@ export function BlockProposalDisplay({
    * Each answer of the read of the open suggestions of this Chapter: the Proposal heads of a complete list, or
    * `undefined` for an incomplete list, a failed read, or a Local Edit Journal that stops input. It comes after the
    * input check of the Local Edit Journal, and it uses the input rule of the editor, so input that the answer starts
-   * does not stop the editor. The hand-over of Arrival Input waits for it (ADR 0105).
+   * does not stop the editor. The hand-over of Arrival Input waits for it (ADR 0105). `refreshKey` is the key of the
+   * read that gave the answer.
    */
-  onSuggestionList?: ((heads: readonly string[] | undefined) => void) | undefined;
+  onSuggestionList?: ((heads: readonly string[] | undefined, refreshKey: number) => void) | undefined;
   persistWorkspace: EditorReadyState | undefined;
   onFailure: (error: unknown) => void;
   baseUrl: string;
@@ -202,7 +203,7 @@ export function BlockProposalDisplay({
   startSuggestionReadRef.current = startSuggestionRead;
   const onSuggestionListRef = useRef(onSuggestionList);
   onSuggestionListRef.current = onSuggestionList;
-  const [suggestionList, setSuggestionList] = useState<{ heads: readonly string[] | undefined }>();
+  const [suggestionList, setSuggestionList] = useState<{ heads: readonly string[] | undefined; refreshKey: number }>();
   useEffect(() => {
     let active = true;
     const record = startSuggestionReadRef.current?.();
@@ -210,7 +211,7 @@ export function BlockProposalDisplay({
       if (!active) return;
       setOpenList((current) => canonical(current) === canonical(next) ? current : next);
       if (next.kind === "listed") record?.(next.complete ? next.heads : undefined);
-      setSuggestionList({ heads: next.kind === "listed" && next.complete ? next.heads : undefined });
+      setSuggestionList({ heads: next.kind === "listed" && next.complete ? next.heads : undefined, refreshKey });
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, refreshKey, settlementRefresh, settlements,
@@ -223,7 +224,7 @@ export function BlockProposalDisplay({
     && pendingAcceptances.length === 0;
   useEffect(() => {
     if (suggestionList === undefined || !inputChecked) return;
-    onSuggestionListRef.current?.(journalAccepts ? suggestionList.heads : undefined);
+    onSuggestionListRef.current?.(journalAccepts ? suggestionList.heads : undefined, suggestionList.refreshKey);
   }, [suggestionList, inputChecked]);
 
   useEffect(() => {

@@ -389,24 +389,21 @@ function ProjectEditorView({
   // The answer of the read of the open suggestions of this editor decides the hand-over, after an open IME
   // composition ended. A complete list with no Proposal gives the input to the writing controller. A Proposal, an
   // incomplete list, a failed read, a Local Edit Journal that stops input, or a refusal sends the input to the notice.
-  const refusedRef = useRef(false);
-  const decideHandOver = (heads: readonly string[] | undefined) => {
+  // The report of a Proposal starts a new read of the list, and an answer of an earlier read does not decide.
+  const reportedRef = useRef(0);
+  const decideHandOver = (heads: readonly string[] | undefined, refreshKey = reportedRef.current) => {
     const typed = handOverRef.current;
-    if (typed === undefined) return;
+    if (typed === undefined || refreshKey < reportedRef.current) return;
     void compositionEnded(typed).then(() => {
-      if (handOverRef.current !== typed) return;
-      endHandOver(typed, !refusedRef.current && heads?.length === 0);
+      if (handOverRef.current !== typed || refreshKey < reportedRef.current) return;
+      endHandOver(typed, heads?.length === 0);
       flushSync(() => { setHandOver(undefined); });
     });
   };
-  // A command with a quiet step, or a Proposal that opens, refuses a hand-over that waits: the notice shows its input
-  // after an open IME composition ended, and no earlier answer of the list gives it to the writing controller. So no
-  // Author Edit of it comes after the quiet step of the command, and the notice has one owner.
-  const refuseHandOver = () => {
-    if (handOverRef.current === undefined) return;
-    refusedRef.current = true;
-    decideHandOver(undefined);
-  };
+  // A command with a quiet step refuses a hand-over that waits and has no open IME composition. The notice shows its
+  // input in the next microtask, before an answer of the list can come. So no Author Edit of it comes after the quiet
+  // step of the command, and the notice has one owner.
+  const refuseHandOver = () => { decideHandOver(undefined); };
   // The quiet step refuses a command during an IME composition of normal input. The writing controller does not have
   // the composition of a hand-over that waits, so the command refuses here.
   const handOverComposing = () => handOverRef.current?.composing() === true;
@@ -507,6 +504,8 @@ function ProjectEditorView({
       return Promise.resolve(false);
     }
     refuseHandOver();
+    // The selection is the latest choice of the author, so an earlier Proposal navigation opens no Chapter after it.
+    proposalNavigation.sequence += 1;
     if (state.editor.kind !== "editor-ready" || writing === undefined) {
       browseChapter(chapterId);
       return Promise.resolve(false);
@@ -696,10 +695,10 @@ function ProjectEditorView({
   };
   onEditorFailureRef.current = onEditorFailure;
   const openedProposal = (locator: ProposalLocator) => {
-    refuseHandOver();
     copies.proposalsChanged();
     rememberLocator(locator);
-    setProposalRefresh((current) => current + 1);
+    reportedRef.current += 1;
+    setProposalRefresh(reportedRef.current);
   };
   const own: ProjectEditorHandle = {
     selectChapter, removeChapter, removeVolume, openedProposal, showRecovery: setSwitchRecovery,

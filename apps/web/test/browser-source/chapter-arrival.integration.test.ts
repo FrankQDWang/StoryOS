@@ -1123,45 +1123,65 @@ it("hands the Arrival Input over only after an IME composition in the editor of 
   expect(waiting).toEqual({ ...READY, body: "Beta?zhong", arriving: "true", save: "saving" });
 });
 
-it("shows the Arrival Input in a notice when an assistant Run opens a Proposal while the hand-over waits for a composition",
-  async () => {
-    // The assistant request of this tab has a Run that opened a Proposal in Chapter B. Its read answers while the
-    // hand-over waits for the end of a composition.
-    const run = `GET ${P}/agent-runs/${RUN}`;
-    const workspace = await openWorkspace((server) => {
-      seedRun(server, CHAPTER_B, []);
-      server.hold(run);
-    });
-    await workspace.copy(CHAPTER_B);
-    workspace.stopIdle();
-    workspace.server.hold(READ_B);
-    const before = workspace.server.requests.length;
-    workspace.button(CHAPTER_B).click();
-    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
-    await workspace.typeAtEnd("?");
-    workspace.server.hold(openProposals(CHAPTER_B));
-    workspace.server.release(READ_B);
-    await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
-    await applyImeComposition({ text: "zhong", replacementStart: 5, replacementEnd: 5, selectionStart: 5,
-      selectionEnd: 5 });
-    await expect.poll(() => manuscriptBody(workspace.editor())).toBe("Beta?zhong");
-    workspace.server.release(openProposals(CHAPTER_B));
-    await expect.poll(() => workspace.server.answered.includes(openProposals(CHAPTER_B))).toBe(true);
-    // The first list has no Proposal. Then the Run opens one, and the composition ends while the next list waits.
-    workspace.server.lists[CHAPTER_B] = workspace.server.texts[CHAPTER_B]!.revision;
-    workspace.server.hold(openProposals(CHAPTER_B));
-    workspace.server.release(run);
-    await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
-
-    await applyTrustedInput({ operation: "insert_text", text: "中" });
-
-    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice()?.text }))
-      .toEqual({ ...READY, save: "saved", notice: "Beta?中" });
-    workspace.server.release(openProposals(CHAPTER_B));
-    // The read of the Proposal fails, and the tests are not about it. No Author Edit goes out.
-    await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
-      { anyOrder: [openProposals(CHAPTER_B), `GET ${P}/proposals/${PROPOSAL}`, `${run}/research-sources`] });
+it.each([
+  { report: "a Proposal in Chapter B", locations: [], listed: true, end: { ...READY, save: "saved", notice: "Beta?中" },
+    saved: false },
+  { report: "a Proposal in Chapter C", locations: [RETURN_C], listed: false,
+    end: { ...READY, body: "Beta?中", save: "saved", notice: undefined }, saved: true },
+  // The second change location of the same Proposal reports it one more time.
+  { report: "a known Proposal again", locations: [RETURN_C, { ...RETURN_C, outcome: { ...RETURN_C.outcome,
+    operation_id: "018f0000-0000-7001-8000-000000000c88" } }], listed: false,
+    end: { ...READY, body: "Beta?中", save: "saved", notice: undefined }, saved: true },
+])("decides the hand-over with the next list when an assistant Run reports $report during a composition", async ({
+  locations, listed, end, saved }) => {
+  // The assistant request of this tab has a Run that opened a Proposal. Its read answers while the hand-over waits for
+  // the end of a composition.
+  const run = `GET ${P}/agent-runs/${RUN}`;
+  const workspace = await openWorkspace((server) => {
+    seedRun(server, CHAPTER_B, locations);
+    server.hold(run);
   });
+  await workspace.copy(CHAPTER_B);
+  workspace.stopIdle();
+  workspace.server.hold(READ_B);
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+  workspace.server.hold(openProposals(CHAPTER_B));
+  workspace.server.release(READ_B);
+  await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
+  await applyImeComposition({ text: "zhong", replacementStart: 5, replacementEnd: 5, selectionStart: 5,
+    selectionEnd: 5 });
+  await expect.poll(() => manuscriptBody(workspace.editor())).toBe("Beta?zhong");
+  workspace.server.release(openProposals(CHAPTER_B));
+  await expect.poll(() => workspace.server.answered.includes(openProposals(CHAPTER_B))).toBe(true);
+  // The first list has no Proposal. Then the Run reports its Proposal, and the composition ends while the next list
+  // waits. The earlier list does not decide.
+  if (listed) workspace.server.lists[CHAPTER_B] = workspace.server.texts[CHAPTER_B]!.revision;
+  workspace.server.hold(openProposals(CHAPTER_B));
+  workspace.server.release(run);
+  await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
+  await applyTrustedInput({ operation: "insert_text", text: "中" });
+  await expect.poll(() => manuscriptBody(workspace.editor())).toBe("Beta?中");
+  const waiting = { ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice()?.text };
+  workspace.server.acceptEdits = true;
+
+  workspace.server.release(openProposals(CHAPTER_B));
+
+  await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice()?.text }))
+    .toEqual(end);
+  // The read of the Proposal fails, and the tests are not about it. The typed key and the composition are two Author
+  // Edits, and the reads after the first save come with no order to the second save.
+  const proposal = `GET ${P}/proposals/${PROPOSAL}`;
+  await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
+    { anyOrder: [openProposals(CHAPTER_B), proposal, `${run}/research-sources`] },
+    ...(saved ? [[CHALLENGE, AUTHOR_EDITS, SESSION_READ], { anyOrder: [openProposals(CHAPTER_B), proposal, ACTIVITY,
+      CHALLENGE, AUTHOR_EDITS, SESSION_READ, openProposals(CHAPTER_B), proposal, ACTIVITY,
+      `GET ${P}/manuscript/statistics`] }] : []));
+  // The report of a Proposal ends the fact "no open suggestion" of each copy.
+  expect(waiting).toEqual({ ...READY, body: "Beta?中", arriving: "false", save: "saving", notice: undefined });
+});
 
 it("shows the Arrival Input in a notice when the author removes a Chapter while the hand-over waits", async () => {
   const workspace = await openWorkspace();
@@ -1190,6 +1210,41 @@ it("shows the Arrival Input in a notice when the author removes a Chapter while 
   // The owned command sends the refused removal one more time. No Author Edit goes out.
   await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
     [`GET ${P}/manuscript/tree`, CHALLENGE, remove, remove]);
+});
+
+it("opens no Chapter for a Proposal navigation that started before a selection, and hands the input over", async () => {
+  const workspace = await openWorkspace((server) => { seedRun(server, CHAPTER_C, [RETURN_C]); });
+  await expect.poll(() => workspace.root.querySelector("[data-proposal-return]")?.tagName).toBe("BUTTON");
+  await workspace.copy(CHAPTER_B);
+  workspace.stopIdle();
+  // The navigation to Chapter C waits for its Chapter read when the author selects Chapter B.
+  workspace.server.hold(READ_C);
+  const before = workspace.server.requests.length;
+  workspace.root.querySelector<HTMLButtonElement>("[data-proposal-return]")!.click();
+  await expect.poll(() => workspace.server.isHeld(READ_C)).toBe(true);
+  workspace.server.hold(READ_B);
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+  workspace.server.acceptEdits = true;
+  workspace.server.release(READ_B);
+  await expect.poll(workspace.runIdle).toBe(true);
+  await expect.poll(workspace.saveState).toBe("saved");
+
+  workspace.server.release(READ_C);
+  await expect.poll(() => workspace.server.answered.includes(READ_C)).toBe(true);
+  // A save after the read: the navigation sends no request after its read.
+  await workspace.typeAtEnd("!");
+  await expect.poll(workspace.runIdle).toBe(true);
+
+  await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+    .toEqual({ ...READY, body: "Beta?!", save: "saved", notice: undefined });
+  // Each read of the list also reads the Proposal of the Run, and that read fails. The tests are not about it.
+  const proposal = `GET ${P}/proposals/${PROPOSAL}`;
+  const save: (string[] | AnyOrder)[] = [[CHALLENGE, AUTHOR_EDITS, SESSION_READ],
+    { anyOrder: [openProposals(CHAPTER_B), proposal, `GET ${P}/manuscript/statistics`, ACTIVITY] }];
+  await expectRequests(workspace.server, before, [READ_C, ...SWITCH_STEPS, ...REOPEN_STEPS],
+    [...PANEL_READS, ACTIVITY, proposal], ...save, ...save);
 });
 
 it("shows the Arrival Input in a notice when a Proposal navigation starts while the hand-over waits", async () => {
