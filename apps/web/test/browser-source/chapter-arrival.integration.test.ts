@@ -1276,7 +1276,8 @@ it("opens no Chapter for a Proposal navigation that started before a selection, 
     [...PANEL_READS, ACTIVITY, proposal], ...save, ...save);
 });
 
-it("shows the Arrival Input in a notice when a Proposal navigation starts while the hand-over waits", async () => {
+it("shows the Arrival Input in a notice and ends a waiting selection when a Proposal navigation starts while the hand-over waits",
+  async () => {
   // The Run of the assistant request came from Chapter C, and its result has a return to Chapter C.
   const workspace = await openWorkspace((server) => {
     seedRun(server, CHAPTER_C, [RETURN_C]);
@@ -1294,6 +1295,8 @@ it("shows the Arrival Input in a notice when a Proposal navigation starts while 
   await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
 
   workspace.server.hold(READ_C);
+  // The selection of Chapter A waits for the hand-over. The navigation is a later choice, so Chapter A does not open.
+  workspace.button(CHAPTER).click();
 
   workspace.root.querySelector<HTMLButtonElement>("[data-proposal-return]")!.click();
   // The list of Chapter B answers after the quiet step of the navigation, and no part of the input goes to the writing
@@ -1457,7 +1460,16 @@ it.each([
       stored: "Beta?", switches });
   });
 
-it("runs a waiting selection after a switch that ended with the Arrival Input in a notice", async () => {
+it.each([
+  { later: "no later selection", chapters: [CHAPTER_C],
+    shown: { ...ARRIVING_C, arriving: undefined }, steps: [READ_C, CHALLENGE, SWITCH, ...reopenSteps(CHAPTER_C)],
+    panels: panelReads(CHAPTER_C), switches: [[CHAPTER, CHAPTER_C]] },
+  // A selection of the Arriving Chapter ends the waiting selection, so the failed switch is not sent again.
+  { later: "a later selection of the Arriving Chapter", chapters: [CHAPTER_C, CHAPTER_B],
+    shown: { title: "Chapter A", body: "Base", editable: true, alert: "无法打开这一章：快照已过期。" }, steps: [],
+    panels: [], switches: [] },
+])("runs a waiting selection after a switch that ended with the Arrival Input in a notice, with $later", async ({
+  chapters, shown, steps, panels, switches }) => {
   const workspace = await openWorkspace();
   await workspace.copy(CHAPTER_B);
   await workspace.copy(CHAPTER_C);
@@ -1468,17 +1480,16 @@ it("runs a waiting selection after a switch that ended with the Arrival Input in
   await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
   await workspace.typeAtEnd("?");
 
-  workspace.button(CHAPTER_C).click();
+  for (const chapter of chapters) workspace.button(chapter).click();
   const waiting = { ...workspace.ready(), notice: workspace.notice() };
   workspace.server.release(READ_B);
 
   // The notice stays through the switch of the waiting selection.
   await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notices: workspace.noticeTexts() }))
-    .toEqual({ ...ARRIVING_C, arriving: undefined, save: "saved", notices: ["Beta?"] });
-  await expectRequests(workspace.server, before, [READ_B, READ_C, CHALLENGE, SWITCH, ...reopenSteps(CHAPTER_C)],
-    panelReads(CHAPTER_C));
+    .toEqual({ ...shown, save: "saved", notices: ["Beta?"] });
+  await expectRequests(workspace.server, before, [READ_B, ...steps], panels);
   expect({ waiting, switches: workspace.server.switches }).toEqual({
-    waiting: { ...READY, body: "Beta?", arriving: "true", notice: undefined }, switches: [[CHAPTER, CHAPTER_C]] });
+    waiting: { ...READY, body: "Beta?", arriving: "true", notice: undefined }, switches });
 });
 
 it("sends no Author Edit of the Arrival Input when the Local Edit Journal cannot give the input check of the editor",
