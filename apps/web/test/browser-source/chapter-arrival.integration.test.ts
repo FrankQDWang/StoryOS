@@ -27,6 +27,7 @@ const SEARCH = `POST ${P}/queries/manuscript-search`;
 const SESSION_READ = `GET ${P}/editor-sessions/${SESSION}`;
 const UNDO = `POST ${P}/author-actions/undo`;
 const openProposals = (chapterId: string) => `GET ${P}/chapters/${chapterId}/open-proposals`;
+const PROPOSAL = "018f0000-0000-7001-8000-000000000471";
 
 type Text = { revision: string; title: string; body: string };
 type Timer = { callback: () => void; cleared: boolean; fired: boolean };
@@ -42,7 +43,8 @@ async function sha256(body: string): Promise<string> {
  * `release(name)`. `refuse` answers each request of the given names with a refusal. A switch settles a new Snapshot,
  * which the Editor Session base and the switch response name. `activity` is the frame of the Activity read. With
  * `assistance`, the writing assistant is available. With `undo`, the Editor Session has an Author Action to undo, and
- * the Server refuses the Undo.
+ * the Server refuses the Undo. `lists` gives, for a Chapter, the Revision of the one open Proposal `PROPOSAL` in its
+ * list. The Server does not find the Proposal itself.
  */
 function arrivalServer() {
   const scenario = createBrowserScenario();
@@ -59,7 +61,7 @@ function arrivalServer() {
   // The idempotency keys of the Author Edit commands that the network refused.
   const editKeys = new Set<string>();
   const server = { requests: [] as string[], unexpected: [] as string[], texts, refuse: new Set<string>(),
-    activity: undefined as unknown, assistance: false, undo: false, editKeys,
+    activity: undefined as unknown, assistance: false, undo: false, editKeys, lists: {} as Record<string, string>,
     hold(name: string) { holding.add(name); },
     isHeld(name: string) { return held.has(name); },
     release(name: string) { held.get(name)?.(); held.delete(name); } };
@@ -95,7 +97,12 @@ function arrivalServer() {
     if (listed !== undefined) {
       return jsonResponse({ schema_id: "storyos.query.chapter-open-proposals.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000c71", project_scope: scope, chapter_id: listed,
-        completeness: "complete", proposals: [] });
+        completeness: "complete", proposals: server.lists[listed] === undefined ? [] : [{ kind: "block_edit",
+          proposal_id: PROPOSAL, revision_id: server.lists[listed], source: { kind: "agent_run_decision",
+            run_id: "018f0000-0000-7001-8000-000000000472", decision_id: "018f0000-0000-7001-8000-000000000473" } }] });
+    }
+    if (name === `GET ${P}/proposals/${PROPOSAL}` && Object.keys(server.lists).length > 0) {
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
     }
     if (name === `GET ${P}/manuscript/tree`) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
@@ -327,8 +334,10 @@ it.each([
 });
 
 it.each([
-  { source: "contents", during: { title: "Chapter B", body: "Beta", editable: false, alert: undefined } },
-  { source: "a search result", during: { title: "Chapter A", body: "Base", editable: true, alert: undefined } },
+  // From a selection in the contents, no editable editor element of the earlier Chapter is in the document.
+  { source: "contents", during: { title: "Chapter B", body: "Beta", editable: false, alert: undefined, editors: 0 } },
+  { source: "a search result", during: { title: "Chapter A", body: "Base", editable: true, alert: undefined,
+    editors: 1 } },
 ])("shows the selection from $source, and sends the requests of a switch of today in the same order", async ({
   source, during }) => {
   const workspace = await openWorkspace();
@@ -346,7 +355,8 @@ it.each([
   (source === "contents" ? workspace.button(CHAPTER_B)
     : workspace.root.querySelector<HTMLButtonElement>("[data-search-match] button")!).click();
   await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
-  await expect.poll(workspace.shown).toEqual(during);
+  await expect.poll(() => ({ ...workspace.shown(),
+    editors: document.querySelectorAll('[contenteditable="true"]').length })).toEqual(during);
   workspace.server.release(READ_B);
 
   await expect.poll(workspace.shown).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
@@ -448,6 +458,7 @@ it("keeps the earlier editor during an Author Undo, so a switch that does not re
   focusManuscriptEnd(editor, window);
   await applyTrustedInput({ operation: "undo_latest_author_action" });
   await expect.poll(() => workspace.server.isHeld(SESSION_READ)).toBe(true);
+  const selected = workspace.server.requests.length;
 
   workspace.button(CHAPTER_B).click();
 
@@ -455,12 +466,14 @@ it("keeps the earlier editor during an Author Undo, so a switch that does not re
     alert: "无法打开这一章：快照已过期。" });
   const connected = editor.isConnected;
   const before = workspace.server.requests.length;
+  const switchSteps = workspace.server.requests.slice(selected);
   workspace.server.release(SESSION_READ);
-  // The Undo continues after the end of the switch: it sends its Challenge and its command. The command of today sends
-  // its request again one time after the refusal, and the failure reads the statistics again.
+  // From the selection to the end, the switch sends the requests of today. The Undo continues after the end of the
+  // switch: it sends its Challenge and its command. The command of today sends its request again one time after the
+  // refusal, and the failure reads the statistics again.
   await expect.poll(() => workspace.server.requests.slice(before)).toEqual([CHALLENGE, UNDO, UNDO,
     `GET ${P}/manuscript/statistics`]);
-  expect(connected).toBe(true);
+  expect({ connected, switchSteps }).toEqual({ connected: true, switchSteps: [READ_B] });
 });
 
 it("sends no message to the assistant during the arrival", async () => {
@@ -529,6 +542,29 @@ it("keeps the fact of no open suggestion from the settled display of the Chapter
   await expect.poll(() => workspace.server.isHeld(`GET ${P}/chapters/${CHAPTER}`)).toBe(true);
   workspace.server.release(`GET ${P}/chapters/${CHAPTER}`);
   await expect.poll(workspace.shown).toEqual({ title: "Chapter A", body: "Base", editable: true, alert: undefined });
+});
+
+it("removes the fact of no open suggestion when a list of the same Proposal has a new Proposal Revision", async () => {
+  const workspace = await openWorkspace((server) => {
+    server.lists[CHAPTER_C] = "018f0000-0000-7001-8000-000000000474";
+  });
+  await workspace.copy(CHAPTER_C);
+  await workspace.copy(CHAPTER_B);
+  // Another tab edits the candidate text of the Proposal in Chapter C. The display of Chapter C reads the list again.
+  workspace.server.lists[CHAPTER_C] = "018f0000-0000-7001-8000-000000000475";
+  workspace.button(CHAPTER_C).click();
+  await expect.poll(() => ({ title: workspace.shown().title, listed: workspace.server.requests
+    .filter((name) => name === openProposals(CHAPTER_C)).length })).toEqual({ title: "Chapter C", listed: 2 });
+  await expect.poll(() => workspace.root.querySelector("[data-save-state]")?.getAttribute("data-save-state"))
+    .toBe("saved");
+  workspace.server.hold(READ_B);
+
+  workspace.button(CHAPTER_B).click();
+
+  await expect.poll(() => ({ fact: workspace.fact(), held: workspace.server.isHeld(READ_B) }))
+    .toEqual({ fact: "false", held: true });
+  workspace.server.release(READ_B);
+  await expect.poll(() => workspace.shown().title).toBe("Chapter B");
 });
 
 /** An `agent_run_created` event at stream position 1. */

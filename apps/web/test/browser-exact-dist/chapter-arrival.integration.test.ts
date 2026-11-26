@@ -70,8 +70,9 @@ it("stores the input of the earlier Chapter that was not saved at the selection,
       focusInEditor: editorA.ownerDocument.activeElement?.closest("[data-manuscript-editor]") != null });
     await expect.poll(earlier).toEqual({ title: "Chapter A", body: "Alpha one", editable: false,
       earlierEditor: false, focusInEditor: false });
-    // A key after the selection, while the save waits, changes no text of Chapter A.
-    await applyTrustedInput({ operation: "insert_text", text: "Z" });
+    // A key press after the selection, while the save waits, goes where the focus is. It changes no text of Chapter A:
+    // in the editor of Chapter A, a Backspace removes the last character.
+    await applyTrustedInput({ operation: "backspace" });
     const atSelection = earlier();
     await updateAuthorEditSubmissionHold({ action: "release" });
     await switched("Chapter B", "");

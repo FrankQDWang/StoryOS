@@ -150,7 +150,12 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   const [copies] = useState(() => createChapterCopies({ scope: state.project.project_scope, baseUrl, fetchImpl,
     timers: props.writingTimers }));
   useEffect(() => () => { copies.close(); }, [copies]);
-  useEffect(() => { copies.write(state.chapter.chapter.chapter_id, chapterText(state.chapter)); }, [copies, state]);
+  // The start of the read of an open is not known here, so the open writes only a copy that does not exist.
+  useEffect(() => {
+    if (copies.get(state.chapter.chapter.chapter_id) === undefined) {
+      copies.write(state.chapter.chapter.chapter_id, chapterText(state.chapter));
+    }
+  }, [copies, state]);
   const [shown, setShown] = useState(state);
   if (shown !== state) {
     setShown(state);
@@ -366,6 +371,7 @@ function ProjectEditorView({
         setSwitchRecovery(chapterSwitchRecoveryMessage(quiet.reason));
         return;
       }
+      const write = copies.chapterRead(chapterId);
       const opened = await openSelectedChapter({
         baseUrl,
         projectId: state.project.project.project_id,
@@ -374,7 +380,7 @@ function ProjectEditorView({
         fetchImpl,
       });
       // The copy is not authority, so the read of a later selection does not discard it.
-      if (opened.kind === "opened") copies.write(opened.chapter.chapter.chapter_id, chapterText(opened.chapter));
+      if (opened.kind === "opened") write(chapterText(opened.chapter));
       if (generation !== switchGenerationRef.current) return;
       if (opened.kind !== "opened") {
         setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
@@ -438,6 +444,7 @@ function ProjectEditorView({
             copies.write(currentChapterId, { title: selectedChapter.chapter.title,
               revisionId: settled.authoritative_revision_id, blocks: pendingParagraphs(settled) });
             if (target === undefined) {
+              const write = copies.chapterRead(chapterId);
               const opened = await openSelectedChapter({
                 baseUrl,
                 projectId: state.project.project.project_id,
@@ -446,7 +453,7 @@ function ProjectEditorView({
                 fetchImpl,
               });
               // A newer Revision in the read replaces the copy and the shown text.
-              if (opened.kind === "opened") copies.write(chapterId, chapterText(opened.chapter));
+              if (opened.kind === "opened") write(chapterText(opened.chapter));
               if (generation !== switchGenerationRef.current) return;
               if (opened.kind !== "opened") {
                 setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));

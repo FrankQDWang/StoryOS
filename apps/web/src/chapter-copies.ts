@@ -26,14 +26,19 @@ export interface ChapterCopy extends ChapterText {
 /** The copies of the Chapters of one open Project. They are in memory only and end with the view of the Project. */
 export interface ChapterCopies {
   get(chapterId: string): ChapterCopy | undefined;
-  /** Writes the copy from a Chapter read response, or from the settled base of the Chapter that the tab leaves. */
+  /** Writes the copy now, for example from the settled base of the Chapter that the tab leaves. */
   write(chapterId: string, text: ChapterText): void;
   /**
-   * Starts a read of the open suggestions of a Chapter. The returned function records the Proposals of a complete
-   * list, or `undefined` for a list that is not complete. A list that is not the last list of the Chapter is a change.
-   * The function records nothing when the tab learned of a new or changed Proposal after the start.
+   * Starts a Chapter read. The returned function writes the copy from the read response, only when no other write of
+   * that copy started after the read started (ADR 0105).
    */
-  suggestionRead(chapterId: string): (proposalIds: readonly string[] | undefined) => void;
+  chapterRead(chapterId: string): (text: ChapterText) => void;
+  /**
+   * Starts a read of the open suggestions of a Chapter. The returned function records the Proposal heads of a
+   * complete list, or `undefined` for a list that is not complete. A list that is not the last list of the Chapter is
+   * a change. The function records nothing when the tab learned of a new or changed Proposal after the start.
+   */
+  suggestionRead(chapterId: string): (heads: readonly string[] | undefined) => void;
   /** The tab learned of a new or changed Proposal of the Project. */
   proposalsChanged(): void;
   /** The Project Activity events that the tab consumed. A Run can make Proposals, so a new Run event is a change. */
@@ -78,6 +83,9 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
     clearTimeoutImpl = (timer) => globalThis.clearTimeout(timer),
   } = timers;
   const texts = new Map<string, ChapterText>();
+  // The last write that started for each copy.
+  let writes = 0;
+  const lastWrite = new Map<string, number>();
   const noSuggestion = new Set<string>();
   // The Proposals of the last complete list of each Chapter.
   const lists = new Map<string, string>();
@@ -99,14 +107,23 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
       return text === undefined ? undefined : { ...text, noOpenSuggestion: noSuggestion.has(chapterId) };
     },
     write(chapterId, text) {
-      texts.set(chapterId, text);
-      changed();
+      copies.chapterRead(chapterId)(text);
+    },
+    chapterRead(chapterId) {
+      writes += 1;
+      const own = writes;
+      lastWrite.set(chapterId, own);
+      return (text) => {
+        if (closed || lastWrite.get(chapterId) !== own) return;
+        texts.set(chapterId, text);
+        changed();
+      };
     },
     suggestionRead(chapterId) {
       const started = epoch;
-      return (proposalIds) => {
+      return (heads) => {
         if (closed || started !== epoch) return;
-        const list = proposalIds === undefined ? undefined : [...proposalIds].sort().join("|");
+        const list = heads === undefined ? undefined : [...heads].sort().join("|");
         // A Proposal can have a target in more than one Chapter, so a new list removes the fact from each copy.
         if (list === undefined || list !== (lists.get(chapterId) ?? "")) copies.proposalsChanged();
         if (list === undefined) lists.delete(chapterId);
@@ -141,19 +158,14 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
         reading.add(chapterId);
         // Two reads and no command (ADR 0105). Each read writes its result when it answers.
         const record = copies.suggestionRead(chapterId);
+        const write = copies.chapterRead(chapterId);
         const chapter = openSelectedChapter({ baseUrl, projectId: scope.project_id, chapterId, expectedScope: scope,
           fetchImpl });
         const list = readOpenProposalList(scope, chapterId, baseUrl, fetchImpl);
         void Promise.all([
-          chapter.then((opened) => {
-            // A read of the switch can be later than this read, so this read does not replace a copy.
-            if (!closed && opened.kind === "opened" && !texts.has(chapterId)) {
-              copies.write(chapterId, chapterText(opened.chapter));
-            }
-          }),
+          chapter.then((opened) => { if (opened.kind === "opened") write(chapterText(opened.chapter)); }),
           list.then((listed) => {
-            if (listed.kind !== "listed") return;
-            record(listed.complete ? listed.locators.map((item) => item.proposalId) : undefined);
+            if (listed.kind === "listed") record(listed.complete ? listed.heads : undefined);
           }),
         ]).finally(() => { reading.delete(chapterId); });
       }, POINTER_STAY_MS));

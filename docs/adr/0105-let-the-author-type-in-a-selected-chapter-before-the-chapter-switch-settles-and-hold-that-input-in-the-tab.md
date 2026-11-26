@@ -25,14 +25,14 @@ The input cannot go to the Server or to the Local Edit Journal before the switch
 
 ### 1. Copies of Chapter text in the tab
 
-- For each Chapter of the open Project, the tab keeps in memory a copy of the title, the Revision identity, and the blocks. Two events write the copy: a Chapter read response in the tab, and a switch, which writes the settled base of the Chapter that the tab leaves.
+- For each Chapter of the open Project, the tab keeps in memory a copy of the title, the Revision identity, and the blocks. Three events write the copy: the Chapter read of a selection in the tab, the read at the pointer, and a switch, which writes the settled base of the Chapter that the tab leaves. Another Chapter read can write the copy, but this is not a requirement. A read response writes the copy only when no other write of that copy started after the read started.
 - A copy can also hold the fact "this Chapter has no open suggestion". The fact comes from a read of the open suggestions of the Chapter, or from the settled display of the Chapter that the tab leaves. The tab removes the fact from each copy when it learns of a new or changed Proposal of the Project.
 - A copy is not authority. Its only use is the display of an Arriving Chapter. The copies end when the tab leaves the Project or loads again.
 - When the pointer is on a Chapter of the contents that has no copy, the tab reads that Chapter and its open suggestions one time. These reads send no command.
 
 ### 2. The selection
 
-This section applies when the author selects another Chapter in the contents and the switch of today is permitted: the tab holds the writer and its editor is ready.
+This section applies when the author selects another Chapter in the contents and the switch of today is permitted: the tab holds the writer and its editor is ready. It does not apply while an Author Undo of the tab is in flight or an IME composition is open in the editor: the selection then keeps the path of today.
 
 - The tab shows the Arriving Chapter at once from its copy. With no copy, the tab shows it when the Chapter read answers.
 - The switch of today runs with no change: the quiet step of the earlier Chapter, the Chapter read, the Command Challenge, the Set Current Chapter command, and the reopen. The Server receives the same requests in the same order.

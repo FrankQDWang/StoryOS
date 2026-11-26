@@ -33,7 +33,11 @@ export type ProposalLocator = {
 
 // The Server list is the source of the open Proposals of a Chapter. A failed or truncated list leaves Proposal heads unknown.
 type OpenProposalList = { kind: "reading" } | { kind: "failed" }
-  | { kind: "listed"; complete: boolean; locators: ProposalLocator[] };
+  | {
+    kind: "listed"; complete: boolean; locators: ProposalLocator[];
+    /** The Proposal and its Revision of each entry, as `{proposal_id}@{revision_id}`. */
+    heads: string[];
+  };
 
 export async function readOpenProposalList(scope: ProjectScope, chapterId: string, baseUrl: string,
   fetchImpl: typeof fetch): Promise<OpenProposalList> {
@@ -46,7 +50,8 @@ export async function readOpenProposalList(scope: ProjectScope, chapterId: strin
     return { kind: "listed", complete: response.completeness === "complete",
       locators: response.proposals.map(({ proposal_id, source }) => source.kind === "agent_run_decision"
         ? { proposalId: proposal_id, runId: source.run_id, decisionId: source.decision_id }
-        : { proposalId: proposal_id, runId: "", decisionId: "" }) };
+        : { proposalId: proposal_id, runId: "", decisionId: "" }),
+      heads: response.proposals.map(({ proposal_id, revision_id }) => `${proposal_id}@${revision_id}`) };
   } catch {
     return { kind: "failed" };
   }
@@ -191,7 +196,7 @@ export function BlockProposalDisplay({
     void readOpenProposalList(scope, chapterId, editorProps.baseUrl, editorProps.fetchImpl).then((next) => {
       if (!active) return;
       setOpenList((current) => canonical(current) === canonical(next) ? current : next);
-      if (next.kind === "listed") record?.(next.complete ? next.locators.map((item) => item.proposalId) : undefined);
+      if (next.kind === "listed") record?.(next.complete ? next.heads : undefined);
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, refreshKey, settlementRefresh, settlements,
@@ -291,6 +296,8 @@ export function BlockProposalDisplay({
       if (active && !acceptingRef.current && result === "applied_not_shown"
         && !refreshedAcceptance.current.has(proposal.proposal_id)) {
         refreshedAcceptance.current.add(proposal.proposal_id);
+        // The applied Acceptance changed a Proposal of the Project, as the end of a decision does (ADR 0105).
+        onDecisionEndRef.current?.();
         await onAccepted(true);
       }
       return result === "pending" || result === "applied" || result === "applied_not_shown"
