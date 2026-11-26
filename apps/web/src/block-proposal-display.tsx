@@ -699,7 +699,7 @@ export function BlockProposalDisplay({
   return (
     <>
       <ManuscriptEditor {...editorProps}
-        editable={editorProps.editable && !recoveryUnavailable
+        editable={editorProps.arrival !== undefined ? editorProps.editable : editorProps.editable && !recoveryUnavailable
           && journalPendingIds.length === 0
           && (acceptanceChecked || journalProposalsChecked || (locators.length === 0
             && recoveredProposalIds.length === 0 && writing?.projection.unsettled_intent_count === 0))

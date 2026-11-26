@@ -60,7 +60,41 @@ async function focusedApplicationFrame(context: BrowserCommandContext) {
   throw new Error("the privileged input target must be inside the application frame");
 }
 
+// ICS-01 prototype: holds the Set Current Chapter command of the application frame until the release.
+let icsCurrentChapterHold: { release: () => void; handler: (route: Route, request: Request) => Promise<void> } | undefined;
+const ICS_CURRENT_CHAPTER_PATH = /\/api\/v1\/projects\/[^/]+\/current-chapter$/u;
+
 export const storyOSBrowserCommands = {
+  // ICS-01 prototype: a composition at the caret of the focused application frame, through the DevTools protocol.
+  storyosIcsImeAtCaret: defineBrowserCommand<[request: unknown]>(async (context, value) => {
+    const { text } = value as { text: string };
+    await focusedApplicationFrame(context);
+    const session = await context.context.newCDPSession(context.page);
+    try {
+      await session.send("Input.imeSetComposition", { text, selectionStart: text.length, selectionEnd: text.length });
+    } finally {
+      await session.detach();
+    }
+    return { kind: "ime" };
+  }),
+  storyosIcsCurrentChapterHold: defineBrowserCommand<[request: unknown]>(async (context, value) => {
+    const action = (value as { action: string }).action;
+    if (action === "hold") {
+      let release = (): void => undefined;
+      const released = new Promise<void>((resolve) => { release = resolve; });
+      const handler = async (route: Route, held: Request): Promise<void> => {
+        if (held.method() === "PUT") await released;
+        await route.continue().catch(() => undefined);
+      };
+      icsCurrentChapterHold = { release, handler };
+      await context.page.route((url) => ICS_CURRENT_CHAPTER_PATH.test(url.pathname), handler);
+      return { kind: "held" };
+    }
+    const hold = icsCurrentChapterHold;
+    icsCurrentChapterHold = undefined;
+    hold?.release();
+    return { kind: "released" };
+  }),
   [storyOSBrowserCommandNames.authorEditSubmissionHold]: defineBrowserCommand<[request: unknown]>(
     async (context, value) => {
       const request = parseAuthorEditSubmissionHoldRequest(value);

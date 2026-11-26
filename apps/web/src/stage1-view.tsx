@@ -60,6 +60,38 @@ import { ProjectSettingsLink, ProjectSettingsView } from "./project-settings.tsx
 import { WritingWorkspace } from "./writing-workspace.tsx";
 import { ADDRESS_CHAPTER_NOT_FOUND_SENTENCE, useAddressChapter } from "./address-chapter.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
+import type { ArrivalSink } from "./manuscript-editor.tsx";
+import { captureManuscriptChange, type CapturedManuscriptEdit, type ManuscriptParagraph } from "./manuscript-doc.ts";
+import type { InputOrigin } from "./editor-types.ts";
+
+/** ICS-01 prototype: the Arrival Input of one Arriving Chapter, kept in the tab across the remount. */
+interface ArrivalHandOver {
+  chapterId: string;
+  revisionId: string;
+  baseBlocks: ManuscriptParagraph[];
+  held: { edit: CapturedManuscriptEdit; origin: InputOrigin; blocks: ManuscriptParagraph[] }[];
+  blocks: ManuscriptParagraph[];
+  composing: boolean;
+  compositionEnded: (() => void) | undefined;
+  selection: { anchor: number; head: number } | undefined;
+  stopped: boolean;
+  sink: ArrivalSink;
+}
+
+/** ICS-01 prototype: the input origin that a captured difference has as normal input. */
+function diffOrigin(edit: CapturedManuscriptEdit): InputOrigin {
+  if (edit.kind === "split_block" || edit.kind === "join_blocks" || edit.kind === "move_block"
+    || edit.kind === "retype_block") return edit.kind;
+  if (edit.kind === "contiguous_replacement") return "paste";
+  if (edit.text.length === 0 && edit.to > edit.from) return "deletion";
+  return edit.to > edit.from ? "selection_replacement" : "typing";
+}
+
+function icsLog(name: string, detail: unknown): void {
+  const log = (Reflect.get(globalThis, "__icsLog") as unknown[] | undefined) ?? [];
+  log.push({ name, at: performance.now(), detail });
+  Reflect.set(globalThis, "__icsLog", log);
+}
 
 interface Stage1ViewProps {
   state: ControlledProjectState;
@@ -107,6 +139,8 @@ interface ProjectEditorViewProps extends ProjectReadyViewProps {
   treeReads: { readonly current: number };
   handle: { current: ProjectEditorHandle | undefined };
   onStatus: (status: ProjectEditorStatus) => void;
+  arrivalStore: { current: ArrivalHandOver | undefined };
+  copies: Map<string, GetChapterResponse>;
 }
 
 const INPUT_BOUND_STOP_MESSAGE =
@@ -139,6 +173,9 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   const { state, baseUrl, fetchImpl, cryptoImpl, onRenamed } = props;
   const projectId = state.project.project.project_id;
   const editor = useRef<ProjectEditorHandle | undefined>(undefined);
+  const arrivalStore = useRef<ArrivalHandOver | undefined>(undefined);
+  const copies = useRef<Map<string, GetChapterResponse>>(undefined as unknown as Map<string, GetChapterResponse>);
+  if (copies.current === undefined) copies.current = new Map([[state.chapter.chapter.chapter_id, state.chapter]]);
   const [title, setTitle] = useState(state.project.project.title);
   const [revision, setRevision] = useState(state.revision);
   const [tree, setTree] = useState<GetManuscriptTreeResponse | undefined>(state.tree);
@@ -149,6 +186,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   const [shown, setShown] = useState(state);
   if (shown !== state) {
     setShown(state);
+    copies.current.set(state.chapter.chapter.chapter_id, state.chapter);
     setTitle(state.project.project.title);
     setRevision(state.revision);
     // The new editor part starts with the tree of the new state, or it waits for the tree read of the new state.
@@ -250,7 +288,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
         </>
       )}
       editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeRead={treeRead} treeReads={treeReads}
-        handle={editor}
+        handle={editor} arrivalStore={arrivalStore} copies={copies.current}
         onStatus={setStatus} />}
     />
   );
@@ -259,7 +297,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 /** The editor part of the workspace. It starts again with each new Chapter, writer, or base of the Editor Session. */
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
-  proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus,
+  proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus, arrivalStore, copies,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -268,14 +306,51 @@ function ProjectEditorView({
   const currentChapterId = state.project.project.open.kind === "current_chapter"
     ? state.project.project.open.current_chapter_id
     : state.chapter.chapter.chapter_id;
+  const onEditorFailureRef = useRef<(error: unknown) => void>(() => {});
+  const editorState = state.editor;
+  // ICS-01 prototype: the hand-over of the Arrival Input of this Chapter, read one time at the mount.
+  const adoptedRef = useRef<{ handOver: ArrivalHandOver | undefined; adopted: boolean } | undefined>(undefined);
+  if (adoptedRef.current === undefined) {
+    const handOver = arrivalStore.current?.chapterId === currentChapterId ? arrivalStore.current : undefined;
+    const adopted = handOver !== undefined && editorState.kind === "editor-ready"
+      && state.chapter.chapter.chapter_id === currentChapterId && !handOver.stopped
+      && editorState.openedProjection.authoritative_revision_id === handOver.revisionId
+      && editorState.openedProjection.unsettled_intent_count === 0;
+    adoptedRef.current = { handOver, adopted };
+    if (handOver !== undefined) arrivalStore.current = undefined;
+    icsLog("mount", { chapterId: currentChapterId, handOver: handOver !== undefined, adopted,
+      held: handOver?.held.length ?? 0 });
+  }
+  // One writing controller owns the Pending Edit Projection of this Editor Session (ADR 0046).
+  const writing = useMemo(() => {
+    if (editorState.kind !== "editor-ready") return undefined;
+    const controller = createEditorSessionWritingController({ workspace: editorState, baseUrl, fetchImpl, cryptoImpl,
+      ...writingTimers, onFailure: (error) => { onEditorFailureRef.current(error); } });
+    const adoption = adoptedRef.current;
+    if (adoption?.adopted === true && adoption.handOver !== undefined) {
+      const { handOver } = adoption;
+      if (Reflect.get(globalThis, "__icsEntry") === "diff") {
+        const edit = captureManuscriptChange(handOver.baseBlocks, handOver.blocks);
+        icsLog("handover-diff", { kind: edit?.kind });
+        if (edit !== undefined) controller.capture(edit, diffOrigin(edit), handOver.blocks);
+      } else {
+        for (const item of handOver.held) controller.capture(item.edit, item.origin, item.blocks);
+        icsLog("handover-each", { count: handOver.held.length, origins: handOver.held.map((item) => item.origin) });
+      }
+    }
+    return controller;
+  }, [editorState, baseUrl, fetchImpl, cryptoImpl, writingTimers]);
   const [pending, setPending] = useState<PendingEditProjection | null>(
-    state.editor.kind === "editor-ready" ? state.editor.openedProjection : null,
+    writing?.snapshot().projection ?? (state.editor.kind === "editor-ready" ? state.editor.openedProjection : null),
   );
   const [saveState, setSaveState] = useState<
     PendingEditProjection["save_state"] | "pending"
   >(
-    state.editor.kind === "editor-ready" ? state.editor.openedProjection.save_state : "needs_attention",
+    writing?.snapshot().projection.save_state
+      ?? (state.editor.kind === "editor-ready" ? state.editor.openedProjection.save_state : "needs_attention"),
   );
+  const [arrival, setArrival] = useState<ArrivalHandOver>();
+  const [arrivalBlocks, setArrivalBlocks] = useState<ManuscriptParagraph[]>();
   const [editorFailure, setEditorFailure] = useState<string>();
   const [readOnly, setReadOnly] = useState(state.editor.kind !== "editor-ready");
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
@@ -298,13 +373,6 @@ function ProjectEditorView({
     setProposalLocators(next);
   };
   const [proposalRefresh, setProposalRefresh] = useState(0);
-  const onEditorFailureRef = useRef<(error: unknown) => void>(() => {});
-  const editorState = state.editor;
-  // One writing controller owns the Pending Edit Projection of this Editor Session (ADR 0046).
-  const writing = useMemo(() => editorState.kind === "editor-ready"
-    ? createEditorSessionWritingController({ workspace: editorState, baseUrl, fetchImpl, cryptoImpl, ...writingTimers,
-      onFailure: (error) => { onEditorFailureRef.current(error); } })
-    : undefined, [editorState, baseUrl, fetchImpl, cryptoImpl, writingTimers]);
   useEffect(() => () => { writing?.close(); }, [writing]);
   useEffect(() => writing?.subscribe(() => {
     if (selectedChapterIdRef.current !== currentChapterId) return;
@@ -381,6 +449,39 @@ function ProjectEditorView({
     })();
   };
 
+  // ICS-01 prototype: shows the Arriving Chapter from a copy and holds its input in the tab.
+  const startArrival = (chapter: GetChapterResponse) => {
+    const blocks = editorParagraphs(chapter.chapter.current_revision.blocks);
+    const handOver: ArrivalHandOver = { chapterId: chapter.chapter.chapter_id,
+      revisionId: chapter.chapter.current_revision.revision_id, baseBlocks: blocks, held: [], blocks,
+      composing: false, compositionEnded: undefined, selection: undefined, stopped: false,
+      sink: {
+        capture(edit, origin, next) {
+          if (handOver.stopped) return;
+          handOver.held.push({ edit, origin, blocks: next });
+          handOver.blocks = next;
+          icsLog("arrival-capture", { kind: edit.kind, origin });
+          setArrivalBlocks(next);
+        },
+        setComposing(value) {
+          handOver.composing = value;
+          icsLog("arrival-composing", value);
+          if (value) return;
+          const ended = handOver.compositionEnded;
+          handOver.compositionEnded = undefined;
+          ended?.();
+        },
+      } };
+    arrivalStore.current = handOver;
+    selectedChapterIdRef.current = handOver.chapterId;
+    icsLog("arrival-start", { chapterId: handOver.chapterId });
+    setSwitchRecovery(undefined);
+    setSelectedChapter(chapter);
+    setArrival(handOver);
+    setArrivalBlocks(blocks);
+    setReadOnly(false);
+  };
+
   // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026). The result is true
   // when the command changed the Current Chapter and the workspace opens again at the Chapter.
   const selectChapter = (chapterId: string): Promise<boolean> => {
@@ -399,6 +500,9 @@ function ProjectEditorView({
       return Promise.resolve(false);
     }
     structureInFlightRef.current = true;
+    icsLog("select", { chapterId, copy: copies.has(chapterId) });
+    const copy = copies.get(chapterId);
+    if (copy !== undefined && Reflect.get(globalThis, "__icsNoArrival") !== true) startArrival(copy);
     const editorSessionId = state.editor.session.editor_session.editor_session_id;
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
@@ -413,8 +517,14 @@ function ProjectEditorView({
         const quiet = await active.wait.retry(() => {
           active.waiting = false;
           setSwitchWaiting(undefined);
-          return writing.runAfterQuiesce("settled", async () => {
+          return writing.runAfterQuiesce("settled", async (projection) => {
             if (generation !== switchGenerationRef.current) return;
+            // ICS-01 prototype: the settled base of the Chapter that the tab leaves.
+            copies.set(currentChapterId, { ...state.chapter, chapter: { ...state.chapter.chapter,
+              current_revision: { ...state.chapter.chapter.current_revision,
+                revision_id: projection.authoritative_revision_id, body: projection.body,
+                blocks: projection.blocks as typeof state.chapter.chapter.current_revision.blocks } } });
+            icsLog("quiet", { revision: projection.authoritative_revision_id });
             if (target === undefined) {
               const opened = await openSelectedChapter({
                 baseUrl,
@@ -429,6 +539,16 @@ function ProjectEditorView({
                 return;
               }
               target = opened.chapter;
+              copies.set(chapterId, opened.chapter);
+              const shown = arrivalStore.current;
+              icsLog("chapter-read", { revision: opened.chapter.chapter.current_revision.revision_id });
+              if (Reflect.get(globalThis, "__icsNoArrival") !== true) {
+                if (shown?.chapterId !== chapterId) startArrival(opened.chapter);
+                else if (shown.revisionId !== opened.chapter.chapter.current_revision.revision_id) {
+                  if (shown.held.length === 0) startArrival(opened.chapter);
+                  else shown.stopped = true;
+                }
+              }
             }
             // A Challenge rate limit propagates to the wait.
             const switched = await setOwnedCurrentChapter({
@@ -447,8 +567,20 @@ function ProjectEditorView({
               return;
             }
             reopened = switched.effect.kind === "authoritative_applied";
-            onReopened(await reopen(switched.effect.kind === "authoritative_applied"
-              ? switched.effect.current_chapter_id : undefined));
+            icsLog("switched", { kind: switched.effect.kind });
+            const next = await reopen(switched.effect.kind === "authoritative_applied"
+              ? switched.effect.current_chapter_id : undefined);
+            icsLog("reopened", { kind: next.kind });
+            const handOver = arrivalStore.current;
+            if (handOver?.chapterId === chapterId) {
+              if (handOver.composing && Reflect.get(globalThis, "__icsSwapDuringComposition") !== true) {
+                icsLog("handover-waits-for-composition", {});
+                await new Promise<void>((resolve) => { handOver.compositionEnded = resolve; });
+              }
+              handOver.selection = handOver.sink.readSelection?.();
+              icsLog("handover-selection", handOver.selection);
+            }
+            onReopened(next);
           });
         }, () => {
           active.waiting = true;
@@ -529,7 +661,10 @@ function ProjectEditorView({
   const writer = state.editor.kind === "editor-ready"
     ? state.editor.session.writer
     : state.editor.writer;
-  const editorBlocks = selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
+  const arriving = arrival !== undefined && selectedChapter.chapter.chapter_id === arrival.chapterId
+    && selectedChapter.chapter.chapter_id !== currentChapterId;
+  const editorBlocks = arriving && arrivalBlocks !== undefined ? arrivalBlocks
+    : selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
     ? pending.blocks.map((block) => ({
       manuscript_block_id: block.manuscript_block_id,
       block_kind: block.block_kind === "heading" ? "heading" as const : "paragraph" as const,
@@ -609,6 +744,8 @@ function ProjectEditorView({
           void reopen(chapterId).then(onReopened);
         }}
         blocks={editorBlocks}
+        arrival={arriving ? arrival.sink : undefined}
+        initialSelection={adoptedRef.current?.adopted === true ? adoptedRef.current.handOver?.selection : undefined}
         referenceSource={{
           scope: state.project.project_scope,
           chapterId: selectedChapter.chapter.chapter_id,
