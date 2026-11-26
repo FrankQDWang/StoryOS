@@ -72,6 +72,8 @@ export interface EditorSessionWritingController {
     : Promise<{ kind: "ran"; result: Result } | { kind: "refused"; reason: QuietRefusal }>;
   /** True during an IME composition, and while captured input waits outside the Journal. */
   hasIncompleteInput(): boolean;
+  /** True from the start of an Author Undo to its end. A closed editor abandons it (ADR 0038). */
+  undoInProgress(): boolean;
   canAcceptInput(hardBoundary: boolean, candidate?: { proposalId: string; operationId: string }): boolean;
   /** An IME composition holds submission until it ends. */
   setComposing(composing: boolean): void;
@@ -544,6 +546,7 @@ export function createEditorSessionWritingController({
       return { kind: "ran", result: await command(projection) };
     },
     hasIncompleteInput,
+    undoInProgress: () => abandonUndo !== undefined,
     canAcceptInput(hardBoundary, candidate) {
       if (stopped || failed || attention
         || (journal.author_edit_unsettled_intent_count ?? journal.unsettled_intent_count)

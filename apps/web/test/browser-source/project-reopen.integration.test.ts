@@ -18,6 +18,8 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/sto
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { openControlledProject } from "../../src/boot.ts";
 import { storedActivityStreamCursor } from "../../src/project-activity-sync.ts";
+import { POINTER_STAY_MS } from "../../src/chapter-copies.ts";
+import type { ChallengeAdmissionTimers } from "../../src/challenge-admission-wait.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
 import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import {
@@ -43,6 +45,8 @@ const ACCEPTANCE_COMMIT = "018f0000-0000-7001-8000-000000000835";
 const EDITED_REVISION = "018f0000-0000-7001-8000-000000000807";
 const EDIT_SNAPSHOT = "018f0000-0000-7001-8000-000000000836";
 const CHAPTER_B_BODY = "Text of Chapter B";
+const CHAPTER_C = "018f0000-0000-7001-8000-000000000816";
+const EARLIER_REVISION_B = "018f0000-0000-7001-8000-000000000817";
 // The SHA-256 digest of CHAPTER_B_BODY.
 const CHAPTER_B_BODY_DIGEST = "d845fc2318f60d01dc1be9c5076aa60b964a0a43ade6d5c017a6134f1813c564";
 // The SHA-256 of the candidate text of the Proposal, which an applied Acceptance makes the body of Chapter A.
@@ -56,6 +60,7 @@ const SESSION_CREATE = `POST ${P}/editor-sessions`;
 const CHALLENGE = `POST ${P}/anti-forgery-challenges`;
 const TREE = `GET ${P}/manuscript/tree`;
 const STATISTICS = `GET ${P}/manuscript/statistics`;
+const ACTIVITY_READ = `GET ${P}/activity`;
 const SWITCH = `PUT ${P}/current-chapter`;
 const TAKEOVER = `POST ${P}/editor-sessions/${SESSION}/takeovers`;
 const PROPOSAL = { ...proposalFixture.proposal, chapter_id: CHAPTER, manuscript_block_id: BLOCK,
@@ -130,16 +135,17 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * takeover settles a new Snapshot. `switchElsewhere` is a switch to Chapter A in a duplicated tab with the same Editor
  * Session, so the Session base follows the switch. `failNext(names)` answers the next request of each given name with a
  * 503 problem. `releaseOnly(names)` releases only the held requests of the given names. With
- * `proposalResult`, the Run of the Conversation has a Proposal result with a change in Chapter A.
+ * `proposalResult`, the Run of the Conversation has a Proposal result with a change in Chapter A. With `third`, the
+ * Project also has Chapter C. After `earlierChapterB(true)`, a Chapter B read gives the text of an earlier Revision.
  */
 function fakeServer({ reads, writer = { kind: "current_writer", writer_generation: "1" }, commands = [],
   proposals = false, acceptance = "refused", takeoverAfterAcceptance = false, assistant, unavailable = [], lost = [],
-  takeover = "applied", rejection = "resolved", other = false, proposalResult = false }: {
+  takeover = "applied", rejection = "resolved", other = false, proposalResult = false, third = false }: {
   reads: string[]; writer?: Writer; commands?: string[]; proposals?: boolean;
   acceptance?: "refused" | "applied" | "late"; takeoverAfterAcceptance?: boolean;
   assistant?: "available" | "unavailable"; unavailable?: string[]; lost?: string[];
   takeover?: "applied" | "compare_failed"; rejection?: "resolved" | "conflicted" | "refused"; other?: boolean;
-  proposalResult?: boolean;
+  proposalResult?: boolean; third?: boolean;
 }) {
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
@@ -149,7 +155,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
     rejected: false, revised: false, edited: false, title: "Chapter A", treeRevision: 3, created: 0,
     projectTitle: "Project A", projectRevision: 1, projectRenames: [] as string[],
     superseded: undefined as GetEditorSessionResponse | undefined,
-    late: undefined as { chapter: boolean; session: boolean } | undefined };
+    late: undefined as { chapter: boolean; session: boolean } | undefined, earlierB: false };
   const project = () => ({ ...scenario.project.project, title: state.projectTitle, open: open() });
   const revisionA = () => state.accepted ? chapterRevision(ACCEPTED_REVISION, PROPOSAL.candidate_text)
     : state.edited ? chapterRevision(EDITED_REVISION, PROPOSAL.candidate_text) : chapterRevision(REVISION, "Base");
@@ -212,7 +218,15 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
       if (state.late !== undefined) state.late.chapter = true;
       return jsonResponse(chapter(CHAPTER));
     }
+    if (name === chapterRead(CHAPTER_B) && state.earlierB) {
+      return jsonResponse({ ...chapter(CHAPTER_B), chapter: { chapter_id: CHAPTER_B, title: "Chapter B",
+        current_revision: chapterRevision(EARLIER_REVISION_B, "Earlier text of Chapter B") } });
+    }
     if (name === chapterRead(CHAPTER_B)) return jsonResponse(chapter(CHAPTER_B));
+    if (name === chapterRead(CHAPTER_C)) {
+      return jsonResponse({ ...scenario.chapter, project_activity_position: state.snapshot.position, chapter: {
+        chapter_id: CHAPTER_C, title: "Chapter C", current_revision: chapterRevision(ACCEPTED_REVISION, "Gamma") } });
+    }
     if (name === CHALLENGE) {
       const route = JSON.parse(String(init?.body)) as { method?: string; route_template?: string };
       const command = CHALLENGE_ROUTES[`${route.method} ${route.route_template}`];
@@ -240,7 +254,8 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         tree_revision: String(state.treeRevision),
         snapshot: canonical(), volumes: [{ volume_id: "018f0000-0000-7001-8000-000000000815", title: "Volume A",
           order: "1", chapters: [{ chapter_id: CHAPTER, title: state.title, order: "1" },
-            { chapter_id: CHAPTER_B, title: "Chapter B", order: "2" }] }] });
+            { chapter_id: CHAPTER_B, title: "Chapter B", order: "2" },
+            ...(third ? [{ chapter_id: CHAPTER_C, title: "Chapter C", order: "3" }] : [])] }] });
     }
     if (name === snapshotRead(state.snapshot.id)) {
       return jsonResponse({ schema_id: "storyos.query.snapshot.response.v1",
@@ -281,6 +296,13 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         completeness: "complete", proposals: [...(proposals && !state.accepted && !state.rejected ? [current()] : []),
           ...(other ? [OTHER] : [])].map(({ proposal_id, revision_id, kind,
           source }) => ({ proposal_id, revision_id, kind, source })) });
+    }
+    // Chapters B and C have no open suggestion.
+    const listed = [CHAPTER_B, CHAPTER_C].find((id) => name === openProposalsRead(id));
+    if (listed !== undefined) {
+      return jsonResponse({ schema_id: "storyos.query.chapter-open-proposals.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-000000000c72", project_scope: scope, chapter_id: listed,
+        completeness: "complete", proposals: [] });
     }
     if (name === PROPOSAL_READ && state.late?.chapter === true && state.late.session) {
       state.late = undefined;
@@ -463,6 +485,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
       settle(ELSEWHERE_SWITCH_SNAPSHOT);
     },
     failNext(names: string[]) { for (const name of names) failing.add(name); },
+    earlierChapterB(on: boolean) { state.earlierB = on; },
     holdAfter(trigger: string, names: string[]) { armed = { trigger, names }; },
     hold(names: string[]) { holding = new Set(names); },
     holdEach(on: boolean) { holdEach = on; },
@@ -511,14 +534,15 @@ afterEach(async () => {
 });
 
 /** Opens the workspace at the address with the query `search`, for example the Conversation of the address. */
-async function openWorkspace(server: ReturnType<typeof fakeServer>, search = "") {
+async function openWorkspace(server: ReturnType<typeof fakeServer>, search = "",
+  writingTimers?: ChallengeAdmissionTimers) {
   await deleteJournal(server.scenario.journalName);
   history.replaceState(null, "", `${location.pathname}${search}`);
   document.body.innerHTML = '<main id="app"></main>';
   const loaded = await loadStoryOSWebState({ documentImpl: document,
     locationImpl: { origin: location.origin, pathname: `/projects/${PROJECT}` },
     fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
-  const view = mountStage1View(loaded.root, loaded);
+  const view = mountStage1View(loaded.root, { ...loaded, writingTimers });
   unmounts.push(() => view.unmount());
   // A writable workspace shows the saved state. A read-only recovery shows "needs_attention".
   const shown = () => ({ title: loaded.root.querySelector(".editor-panel h2")?.textContent,
@@ -749,35 +773,30 @@ it.each([
       `"project_activity_stream:${OWNER}:${PROJECT}"`);
     const journal = await journalRows(server);
     const before = server.log.started.length;
-    // The observer records the title and the text of the editor at each change of the page. A render that a later
-    // render in the same task replaces is gone before the observer reads the page. Thus for each mutation record, the
-    // observer also examines the target, the old value, and each added and each removed node: a heading with the title
-    // of Chapter B, and the text of Chapter B anywhere.
+    // The observer records the title, the text, and the Revision of the editor at each change of the page. The
+    // selection shows the Arriving Chapter B read-only from the Chapter read of the switch (ADR 0105). An editor of the
+    // discarded read has the Revision of Chapter B. A render that a later render in the same task replaces is gone
+    // before the observer reads the page. Thus for each mutation record, the observer also examines the target, the
+    // old value, and each added and each removed node: the Revision of Chapter B anywhere.
     const shownChapters = new Set<string>();
     const discardedShown = new Set<string>();
-    const examine = (node: Node, text: string | null) => {
-      if (text?.includes(CHAPTER_B_BODY)) discardedShown.add(CHAPTER_B_BODY);
-      const heading = (node instanceof Element ? node : node.parentElement)?.closest("h2");
-      if (heading != null && text === "Chapter B") discardedShown.add("Chapter B");
-      if (node instanceof Element && [...node.querySelectorAll("h2")].some((title) => title.textContent === "Chapter B")) {
-        discardedShown.add("Chapter B");
-      }
+    const revision = "data-authoritative-revision-id";
+    const examine = (node: Node, value: string | null) => {
+      if (value === REVISION_B) discardedShown.add(REVISION_B);
+      if (node instanceof Element && [node, ...node.querySelectorAll(`[${revision}]`)]
+        .some((element) => element.getAttribute(revision) === REVISION_B)) discardedShown.add(REVISION_B);
     };
     const observer = new MutationObserver((records) => {
       for (const record of records) {
-        examine(record.target, record.target.textContent);
         examine(record.target, record.oldValue);
-        for (const node of [...record.addedNodes, ...record.removedNodes]) {
-          examine(node, node.textContent);
-          // A removed text node of a heading has no parent: the target is the heading.
-          examine(record.target, node.textContent);
-        }
+        for (const node of [...record.addedNodes, ...record.removedNodes]) examine(node, null);
       }
       shownChapters.add(JSON.stringify([workspace.root.querySelector(".editor-panel h2")?.textContent,
-        workspace.root.querySelector("[data-manuscript-editor]")?.textContent]));
+        workspace.root.querySelector("[data-manuscript-editor]")?.textContent,
+        workspace.root.querySelector(`[${revision}]`)?.getAttribute(revision)]));
     });
-    observer.observe(workspace.root, { subtree: true, childList: true, characterData: true,
-      characterDataOldValue: true });
+    observer.observe(workspace.root, { subtree: true, childList: true, characterData: true, attributes: true,
+      attributeFilter: [revision], attributeOldValue: true });
     server.holdAfter(SWITCH, reopenReads(CHAPTER_B));
 
     chapterB(workspace.root)!.click();
@@ -805,12 +824,17 @@ it.each([
     await expect.poll(() => ({ ...workspace.shown(), inFlight: server.inFlight() }))
       .toEqual({ title: "Chapter A", save: "saved", failure: "", inFlight: [] });
     observer.disconnect();
-    const later = server.log.started.slice(server.log.started.indexOf(SWITCH, before));
+    const later = server.log.started.slice(before);
     expect({ shown: [...shownChapters], discardedShown: [...discardedShown], journal: discarded,
-      chapters: later.filter((name) => name.startsWith(`GET ${P}/chapters/`) && !name.endsWith("/open-proposals")),
+      // The four reads of each open start at the same time. The panels of the editor part read with no order.
+      later: [...later.slice(0, 3), later.slice(3, 7).sort(), ...later.slice(7, 9), later.slice(9).sort()],
       unexpected: server.log.unexpected }).toEqual({
-      shown: [JSON.stringify(["Chapter A", "Base"])], discardedShown: [], journal,
-      chapters: [chapterRead(CHAPTER_B), chapterRead(CHAPTER)], unexpected: [] });
+      // With no copy, the editor part shows the earlier text read-only until the Chapter read of the switch answers.
+      shown: [JSON.stringify(["Chapter A", "Base", REVISION]), JSON.stringify(["Chapter B", CHAPTER_B_BODY, REVISION])],
+      discardedShown: [], journal,
+      later: [chapterRead(CHAPTER_B), CHALLENGE, SWITCH, reopenReads(CHAPTER_B).sort(), chapterRead(CHAPTER), SESSION_READ,
+        [openProposalsRead(CHAPTER), TREE, `GET ${P}/activity`, STATISTICS].sort()],
+      unexpected: [] });
   });
 
 it.each([
@@ -1737,3 +1761,204 @@ it("opens the Project again when a reload read the Chapter before the Server app
     unexpected: server.log.unexpected }).toEqual({ open: [PROTOCOL, LIST, LIST, PROJECT_READ, PROJECT_READ].sort(),
     revision: ACCEPTED_REVISION, unexpected: [] });
 });
+
+it.each([
+  { event: "no Proposal change", fact: "true" },
+  { event: "a new Proposal of a Run", fact: "false" },
+  // A refused decision does not change the list of Chapter A, but another tab can have changed a Proposal.
+  { event: "a refused decision", fact: "false" },
+])("keeps the fact of no open suggestion in the copy of Chapter B only with $event (ADR 0105)", async ({ event, fact }) => {
+  const decision = event === "a refused decision";
+  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, PROPOSAL_READ, CONVERSATION_READ, RUN_READ,
+    SOURCES_READ, chapterRead(CHAPTER_B), openProposalsRead(CHAPTER_B)],
+  commands: [SESSION_CREATE, SWITCH, ...(decision ? [ACCEPTANCE] : [])], proposals: decision, acceptance: "refused",
+  assistant: "available", proposalResult: event === "a new Proposal of a Run" });
+  // The stay timer of the pointer waits until the test runs it. Each other timer is a real timer.
+  const stays: { callback: () => void; cleared: boolean; fired?: boolean }[] = [];
+  const timers: ChallengeAdmissionTimers = {
+    setTimeoutImpl: (callback, timeout) => timeout === POINTER_STAY_MS
+      ? -stays.push({ callback, cleared: false }) : globalThis.setTimeout(callback, timeout),
+    clearTimeoutImpl: (timer) => {
+      if (typeof timer === "number" && timer < 0) stays[-timer - 1]!.cleared = true;
+      else globalThis.clearTimeout(timer);
+    },
+  };
+  server.hold([RUN_READ]);
+  const workspace = await openWorkspace(server, decision ? "" : `?conversation=${CONVERSATION}`, timers);
+  const chapterB = () => workspace.root.querySelector<HTMLButtonElement>(`.tree-panel button[data-chapter-id="${CHAPTER_B}"]`)!;
+  const pointer = (type: "pointerover" | "pointerout") => chapterB().dispatchEvent(new PointerEvent(type, { bubbles: true }));
+  // The contents read Chapter B at the pointer only in a tab with a ready editor that holds the writer. A new stay
+  // stops the stay before it.
+  const waiting = () => stays.filter((timer) => !timer.cleared && timer.fired !== true);
+  await expect.poll(() => {
+    if (chapterB() !== null) pointer("pointerover");
+    return waiting().length;
+  }).toBe(1);
+  stays.at(-1)!.fired = true;
+  stays.at(-1)!.callback();
+  pointer("pointerout");
+  // A Chapter with a copy starts no stay timer.
+  await expect.poll(() => {
+    pointer("pointerover");
+    const started = stays.filter((timer) => !timer.cleared && timer.fired !== true).length;
+    pointer("pointerout");
+    return started;
+  }).toBe(0);
+
+  if (decision) {
+    const accept = () => workspace.root.querySelector<HTMLButtonElement>(
+      `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
+    await expect.poll(() => accept()?.disabled).toBe(false);
+    accept()!.click();
+    await expect.poll(() => server.count(ACCEPTANCE) === 1 && accept()?.disabled === false
+      && server.inFlight().length === 0).toBe(true);
+  } else {
+    server.release();
+    // The editor reads the Proposal after the assistant panel gives it.
+    await expect.poll(() => server.count(event === "no Proposal change" ? RUN_READ : PROPOSAL_READ) === 1
+      && server.inFlight().length === 0).toBe(true);
+  }
+  server.hold([chapterRead(CHAPTER_B)]);
+  const activityReads = server.count(ACTIVITY_READ);
+  chapterB().click();
+
+  await expect.poll(() => workspace.root.querySelector("[data-arrival-no-open-suggestion]")
+    ?.getAttribute("data-arrival-no-open-suggestion")).toBe(fact);
+  await expect.poll(() => server.held()).toBe(1);
+  server.release();
+  await expect.poll(workspace.shown).toEqual({ title: "Chapter B", save: "saved", failure: "" });
+  // The Activity read of the new editor part starts after its Journal read, so the next test has the Journal alone.
+  await expect.poll(() => server.count(ACTIVITY_READ) > activityReads && server.inFlight().length === 0).toBe(true);
+  expect(server.log.unexpected).toEqual([]);
+});
+
+it("writes a copy from each Chapter read of a tab without the writer, also from a read that a later selection discards",
+  async () => {
+    const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT),
+      chapterRead(CHAPTER_B), openProposalsRead(CHAPTER_B), chapterRead(CHAPTER_C), openProposalsRead(CHAPTER_C)],
+    writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
+    commands: [SESSION_CREATE, TAKEOVER, SWITCH], third: true });
+    const workspace = await openWorkspace(server);
+    const takeOver = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
+    const chapterC = () => workspace.root.querySelector<HTMLButtonElement>(`.tree-panel button[data-chapter-id="${CHAPTER_C}"]`);
+    await expect.poll(() => [chapterB(workspace.root)?.disabled, chapterC()?.disabled]).toEqual([false, false]);
+    // The read of Chapter B answers after the selection of Chapter C, so the view discards it.
+    server.hold([chapterRead(CHAPTER_B)]);
+    chapterB(workspace.root)!.click();
+    await expect.poll(() => server.held()).toBe(1);
+    chapterC()!.click();
+    await expect.poll(() => workspace.shown().title).toBe("Chapter C");
+    server.release();
+    await expect.poll(() => server.log.consumed.includes(chapterRead(CHAPTER_B))).toBe(true);
+    await expect.poll(() => [workspace.shown().title, server.inFlight()]).toEqual(["Chapter C", []]);
+    await expect.poll(takeOver).not.toBeNull();
+    takeOver()!.click();
+    await expect.poll(() => ({ ...workspace.shown(), takeOver: takeOver() }))
+      .toEqual({ title: "Chapter A", save: "saved", failure: "", takeOver: null });
+    server.hold([chapterRead(CHAPTER_B)]);
+    const activityReads = server.count(ACTIVITY_READ);
+
+    chapterB(workspace.root)!.click();
+
+    await expect.poll(() => [workspace.root.querySelector(".editor-panel h2")?.textContent,
+      workspace.root.querySelector("[data-manuscript-editor]")?.textContent]).toEqual(["Chapter B", CHAPTER_B_BODY]);
+    await expect.poll(() => server.held()).toBe(1);
+    server.release();
+    await expect.poll(workspace.shown).toEqual({ title: "Chapter B", save: "saved", failure: "" });
+    await expect.poll(() => server.count(ACTIVITY_READ) > activityReads && server.inFlight().length === 0).toBe(true);
+    expect(server.log.unexpected).toEqual([]);
+  });
+
+it("writes no copy from a Chapter read that answers after a later read of the same Chapter started (ADR 0105)",
+  async () => {
+    const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT),
+      chapterRead(CHAPTER_B), openProposalsRead(CHAPTER_B), chapterRead(CHAPTER_C), openProposalsRead(CHAPTER_C)],
+    writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
+    commands: [SESSION_CREATE, TAKEOVER, SWITCH], third: true });
+    const workspace = await openWorkspace(server);
+    const takeOver = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
+    const chapterC = () => workspace.root.querySelector<HTMLButtonElement>(`.tree-panel button[data-chapter-id="${CHAPTER_C}"]`);
+    const screen = () => [workspace.root.querySelector(".editor-panel h2")?.textContent,
+      workspace.root.querySelector("[data-manuscript-editor]")?.textContent];
+    await expect.poll(() => [chapterB(workspace.root)?.disabled, chapterC()?.disabled]).toEqual([false, false]);
+    // The first read of Chapter B has the text of an earlier Revision. It answers after a later read of Chapter B.
+    server.earlierChapterB(true);
+    server.answerBeforeHold([chapterRead(CHAPTER_B)]);
+    server.hold([chapterRead(CHAPTER_B)]);
+    chapterB(workspace.root)!.click();
+    await expect.poll(() => server.held()).toBe(1);
+    server.earlierChapterB(false);
+    chapterC()!.click();
+    await expect.poll(() => workspace.shown().title).toBe("Chapter C");
+    chapterB(workspace.root)!.click();
+    await expect.poll(screen).toEqual(["Chapter B", CHAPTER_B_BODY]);
+    server.release();
+    await expect.poll(() => [server.log.consumed.filter((name) => name === chapterRead(CHAPTER_B)).length,
+      server.inFlight()]).toEqual([2, []]);
+    takeOver()!.click();
+    await expect.poll(() => ({ ...workspace.shown(), takeOver: takeOver() }))
+      .toEqual({ title: "Chapter A", save: "saved", failure: "", takeOver: null });
+    server.hold([chapterRead(CHAPTER_B)]);
+    const activityReads = server.count(ACTIVITY_READ);
+
+    chapterB(workspace.root)!.click();
+
+    await expect.poll(() => [...screen(), server.held()]).toEqual(["Chapter B", CHAPTER_B_BODY, 1]);
+    server.release();
+    await expect.poll(workspace.shown).toEqual({ title: "Chapter B", save: "saved", failure: "" });
+    await expect.poll(() => server.count(ACTIVITY_READ) > activityReads && server.inFlight().length === 0).toBe(true);
+    expect(server.log.unexpected).toEqual([]);
+  });
+
+
+
+it("removes the fact of no open suggestion when a reload finds an applied Acceptance that the editor does not show",
+  async () => {
+    const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ, chapterRead(CHAPTER_B),
+      openProposalsRead(CHAPTER_B)], commands: [SESSION_CREATE, ACCEPTANCE], proposals: true,
+    acceptance: "late", lost: [ACCEPTANCE] });
+    const workspace = await openWorkspace(server);
+    const accept = () => workspace.root.querySelector<HTMLButtonElement>(
+      `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
+    await expect.poll(() => accept()?.disabled).toBe(false);
+    accept()!.click();
+    await expect.poll(() => workspace.root.querySelector(`[data-proposal-decision="${PROPOSAL.proposal_id}"]`)
+      ?.textContent).toBe("接受结果暂不可确认。请刷新检查，或重试同一操作。重试接受");
+    await expect.poll(server.inFlight).toEqual([]);
+    // The reload waits for its Proposal read until the copy of Chapter B has the fact. The Server applies the
+    // Acceptance at that read, and the list of Chapter A answers after it: the list is empty before and after the
+    // reopen, so only the recovery of the Acceptance can remove the fact.
+    server.hold([PROPOSAL_READ, openProposalsRead(CHAPTER)]);
+    const reloaded = await reloadWorkspace(server);
+    const button = () => reloaded.querySelector<HTMLButtonElement>(`.tree-panel button[data-chapter-id="${CHAPTER_B}"]`);
+    await expect.poll(() => [button()?.disabled, server.inFlight()])
+      .toEqual([false, [PROPOSAL_READ, openProposalsRead(CHAPTER)].sort()]);
+    // The stay timer of the pointer is a real timer here.
+    button()!.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    await expect.poll(() => server.log.consumed.includes(openProposalsRead(CHAPTER_B))
+      && server.log.consumed.includes(chapterRead(CHAPTER_B))).toBe(true);
+    button()!.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
+    server.releaseOnly([PROPOSAL_READ]);
+    const revision = () => reloaded.querySelector("[data-authoritative-revision-id]")
+      ?.getAttribute("data-authoritative-revision-id");
+    await expect.poll(revision).toBe(ACCEPTED_REVISION);
+    server.release();
+    await journalChecked(reloaded, server);
+    // The Acceptance waits for a retry, so the quiet step of a selection refuses. Until then the screen shows the
+    // Arriving Chapter B and its fact.
+    const facts: string[] = [];
+    const observer = new MutationObserver(() => {
+      const fact = reloaded.querySelector("[data-arrival-no-open-suggestion]")
+        ?.getAttribute("data-arrival-no-open-suggestion") ?? "";
+      if (fact !== "" && facts.at(-1) !== fact) facts.push(fact);
+    });
+    observer.observe(reloaded, { subtree: true, childList: true, attributes: true });
+
+    button()!.click();
+
+    await expect.poll(() => reloaded.querySelector('.editor-panel [role="alert"]')?.textContent)
+      .toBe("无法切换章节：请先完成当前输入。");
+    observer.disconnect();
+    expect({ facts, inFlight: server.inFlight() }).toEqual({ facts: ["false"], inFlight: [] });
+    expect(server.log.unexpected).toEqual([]);
+  });
