@@ -564,7 +564,7 @@ it("removes the fact of no open suggestion when a list of the same Proposal has 
   await expect.poll(() => ({ fact: workspace.fact(), held: workspace.server.isHeld(READ_B) }))
     .toEqual({ fact: "false", held: true });
   workspace.server.release(READ_B);
-  await expect.poll(() => workspace.shown().title).toBe("Chapter B");
+  await expect.poll(workspace.shown).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
 });
 
 /** An `agent_run_created` event at stream position 1. */
