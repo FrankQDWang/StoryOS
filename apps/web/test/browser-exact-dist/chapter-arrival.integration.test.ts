@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
-  applyTrustedInput, updateAuthorEditSubmissionHold, updateClientSessionCookie, updateClipboardPermission,
+  applyTrustedInput, assertPageProjectReceipts, updateAuthorEditSubmissionHold, updateClientSessionCookie, updateClipboardPermission,
 } from "../support/browser-command-client.ts";
 import { selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import {
@@ -152,4 +152,7 @@ it("stores the input of the earlier Chapter at the selection, and stores the key
       afterLoad: "Alpha one twoGammaDelta\nEpsilon Zeta",
       last: { title: "Chapter C", body: "", editable: true },
       storedA: ["Alpha one twoGammaDelta", "Epsilon Zeta"], storedB: ["Beta"], storedC: [""] });
+    // The Server stores a Receipt for each Set Current Chapter command, also for a conflict. The journey sends four:
+    // A to B and B to A, then A to B and B to C. A stale command or a command of a replaced selection is a fifth one.
+    await assertPageProjectReceipts({ projectId, kinds: "listed", receipts: { setCurrentChapter: 4 } });
   });

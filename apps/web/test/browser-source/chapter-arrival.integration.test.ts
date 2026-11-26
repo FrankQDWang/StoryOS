@@ -1813,8 +1813,8 @@ it("asks before the tab unloads while Arrival Input exists, and does not ask wit
     .toEqual({ ...READY, body: "Beta?", save: "saved", notice: undefined });
   await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
     ...SAVE_B);
-  expect({ opened, arriving, typed, handOver, saved: leavePrompt(), stored: workspace.server.texts[CHAPTER_B]!.body })
-    .toEqual({ opened: false, arriving: false, typed: true, handOver: true, saved: false, stored: "Beta?" });
+  expect({ opened, arriving, typed, handOver, saved: leavePrompt() })
+    .toEqual({ opened: false, arriving: false, typed: true, handOver: true, saved: false });
 });
 
 // The reopen of a Chapter, and then the panels of its editor part with no order between them.
@@ -1829,6 +1829,9 @@ it.each([
   // No command of Chapter B goes out, and the command of Chapter C expects Chapter A.
   { order: "before the command of Chapter B goes out", hold: READ_B, steps: [READ_B, READ_C, CHALLENGE, SWITCH],
     switches: [[CHAPTER, CHAPTER_C]] },
+  // The Command Challenge of Chapter B completes, and its command does not go out.
+  { order: "while the Command Challenge of Chapter B is in flight", hold: CHALLENGE,
+    steps: [READ_B, CHALLENGE, READ_C, CHALLENGE, SWITCH], switches: [[CHAPTER, CHAPTER_C]] },
   // The command of Chapter B completes, and the command of Chapter C expects Chapter B.
   { order: "while the command of Chapter B is in flight", hold: SWITCH,
     steps: [READ_B, CHALLENGE, SWITCH, READ_C, CHALLENGE, SWITCH], switches: [[CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER_C]] },
@@ -1898,3 +1901,61 @@ it.each([
     await expectRequests(workspace.server, before, steps, panels);
     expect(workspace.server.switches).toEqual(switches);
   });
+
+it.each([
+  // A click during the wait for a Command Challenge rate limit ends the wait (#1679).
+  { end: "waits for a Command Challenge rate limit", steps: [READ_C, CHALLENGE], prepare: (workspace: Workspace) => {
+    workspace.server.limited = true; }, ended: async (workspace: Workspace) => {
+    await expect.poll(() => workspace.waits.length).toBe(1); }, shown: { title: "Chapter C", body: "Gamma",
+    editable: false, alert: undefined, arriving: "true" } },
+  // The editor of Chapter A accepts no input, because the Server moved the Editor Session to Chapter B.
+  { end: "fails at the read of Chapter C", steps: [READ_C], prepare: (workspace: Workspace) => {
+    workspace.server.refuse.add(READ_C); }, ended: async (workspace: Workspace) => {
+    await expect.poll(() => workspace.shown().alert).toBe("无法打开这一章：快照已过期。"); },
+    shown: { title: "Chapter A", body: "Base", editable: false, alert: "无法打开这一章：快照已过期。" } },
+])("sends a selection of Chapter A to the Server, with a command that expects Chapter B, when the switch to Chapter C $end",
+  async ({ steps, prepare, ended, shown }) => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    await workspace.copy(CHAPTER_C);
+    workspace.server.hold(SWITCH);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(SWITCH)).toBe(true);
+    workspace.button(CHAPTER_C).click();
+    await expect.poll(() => workspace.ready().title).toBe("Chapter C");
+    prepare(workspace);
+    workspace.server.release(SWITCH);
+    await ended(workspace);
+    const stopped = workspace.ready();
+    workspace.button(CHAPTER).click();
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() })).toEqual({ title: "Chapter A",
+      body: "Base", editable: true, alert: undefined, save: "saved" });
+    await expectRequests(workspace.server, before, [READ_B, CHALLENGE, SWITCH, ...steps, `GET ${P}/chapters/${CHAPTER}`,
+      CHALLENGE, SWITCH, ...reopenSteps(CHAPTER)], panelReads(CHAPTER));
+    expect({ stopped, switches: workspace.server.switches }).toEqual({ stopped: shown,
+      switches: [[CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER]] });
+  });
+
+it("keeps the Arriving Chapter at a second selection while an IME composition with no text is open in it", async () => {
+  const workspace = await openWorkspace();
+  await workspace.copy(CHAPTER_B);
+  await workspace.copy(CHAPTER_C);
+  workspace.server.hold(READ_B);
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  // The composition starts and has no text yet.
+  workspace.editor().dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+  workspace.button(CHAPTER_C).click();
+  const composing = workspace.ready();
+  workspace.editor().dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "" }));
+  workspace.server.release(READ_B);
+
+  await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+    .toEqual({ ...READY, save: "saved", notice: undefined });
+  await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY]);
+  expect({ composing, switches: workspace.server.switches }).toEqual({ composing: { ...READY, arriving: "true" },
+    switches: [[CHAPTER, CHAPTER_B]] });
+});

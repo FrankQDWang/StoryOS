@@ -8,6 +8,9 @@ import { type CommandFlight, endsWithoutRetry, sendOwnedCommand } from "./owned-
 
 const inFlight = new Map<string, CommandFlight>();
 
+/** The caller replaced a Set Current Chapter command after its Command Challenge and before the command went out. */
+export class SkippedCurrentChapterError extends Error {}
+
 function currentChapterIdentity(options: {
   projectId: string;
   chapterId: string;
@@ -26,6 +29,8 @@ export async function setOwnedCurrentChapter(options: {
   expectedCurrentChapterId: string;
   expectedTargetRevisionId: string;
   editorSessionId: string;
+  /** False when the caller replaced the command. It is read after the Command Challenge, before the command goes out. */
+  proceed?: () => boolean;
 }): Promise<SetCurrentChapterResponse> {
   return sendOwnedCommand({
     ...options,
@@ -45,9 +50,14 @@ export async function setOwnedCurrentChapter(options: {
       },
     }),
     digest: digestSetCurrentChapter,
-    send: setCurrentChapter,
+    send: (command) => {
+      if (options.proceed?.() !== false) return setCurrentChapter(command);
+      // The command did not go out, so a later intent gets a new Command Challenge.
+      inFlight.delete(currentChapterIdentity(options));
+      return Promise.reject(new SkippedCurrentChapterError("the Set Current Chapter command was replaced"));
+    },
     // The caller waits for the Retry-After of a Challenge rate limit and repeats with the same key (#1679).
-    endsCommand: (error) => endsWithoutRetry(error)
+    endsCommand: (error) => error instanceof SkippedCurrentChapterError || endsWithoutRetry(error)
       || (error instanceof StoryOSProtocolError && error.status === 429),
   });
 }

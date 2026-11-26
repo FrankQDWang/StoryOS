@@ -55,7 +55,7 @@ import {
   historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
 import { renameOwnedProject } from "./rename-project.ts";
-import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
+import { SkippedCurrentChapterError, setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
 import { navigateProposal, type ProposalDestination, type ProposalFocus, type ProposalNavigation }
   from "./proposal-navigation.ts";
@@ -499,7 +499,7 @@ function ProjectEditorView({
       // switch then goes on to the newest selection (ADR 0105, section 6).
       const typed = inputRef.current;
       if (contents && newestRef.current !== undefined && newestRef.current !== chapterId
-        && typed?.hasInput() !== true) {
+        && typed?.hasInput() !== true && typed?.composing() !== true) {
         newestRef.current = chapterId;
         proposalNavigation.sequence += 1;
         setArrival(chapterId);
@@ -513,7 +513,10 @@ function ProjectEditorView({
       endArrival();
       structureInFlightRef.current = false;
     }
-    if (chapterId === selectedChapterIdRef.current) return Promise.resolve(false);
+    // After a command had an effect, a selection of the Chapter of the editor sends the switch back.
+    if (chapterId === selectedChapterIdRef.current && serverChapterRef.current === currentChapterId) {
+      return Promise.resolve(false);
+    }
     if (handOverComposing()) {
       setSwitchRecovery(chapterSwitchRecoveryMessage("incomplete_semantic_intent"));
       return Promise.resolve(false);
@@ -584,7 +587,8 @@ function ProjectEditorView({
                   target = opened.chapter;
                   targets.set(chapter, target);
                 }
-                // A Challenge rate limit propagates to the wait.
+                // A Command Challenge rate limit propagates to the wait. A newer selection after the Command Challenge
+                // replaces the command before it goes out.
                 const switched = await setOwnedCurrentChapter({
                   baseUrl,
                   fetchImpl,
@@ -594,7 +598,12 @@ function ProjectEditorView({
                   expectedCurrentChapterId: serverChapterRef.current,
                   expectedTargetRevisionId: target.chapter.current_revision.revision_id,
                   editorSessionId,
+                  proceed: () => chapter === goal(),
+                }).catch((error: unknown) => {
+                  if (error instanceof SkippedCurrentChapterError) return undefined;
+                  throw error;
                 });
+                if (switched === undefined) continue;
                 if (switched.effect.kind !== "authoritative_applied"
                   && switched.effect.kind !== "no_effect") {
                   setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
@@ -654,6 +663,8 @@ function ProjectEditorView({
         if (!cancelled && generation === switchGenerationRef.current) {
           endArrival();
           newestRef.current = undefined;
+          // The Server moved the Editor Session to another Chapter, so the editor of this Chapter accepts no input.
+          if (serverChapterRef.current !== currentChapterId) setReadOnly(true);
         }
         if (switchWaitRef.current === active) switchWaitRef.current = undefined;
       }
