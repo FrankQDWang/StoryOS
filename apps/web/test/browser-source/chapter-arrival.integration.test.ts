@@ -24,6 +24,8 @@ const SWITCH = `PUT ${P}/current-chapter`;
 const AUTHOR_EDITS = `POST ${P}/manuscript/author-edits`;
 const ACTIVITY = `GET ${P}/activity`;
 const SEARCH = `POST ${P}/queries/manuscript-search`;
+const SESSION_READ = `GET ${P}/editor-sessions/${SESSION}`;
+const UNDO = `POST ${P}/author-actions/undo`;
 const openProposals = (chapterId: string) => `GET ${P}/chapters/${chapterId}/open-proposals`;
 
 type Text = { revision: string; title: string; body: string };
@@ -39,7 +41,8 @@ async function sha256(body: string): Promise<string> {
  * with no filter, and throws on each other request. `hold(name)` holds the next request of that name until
  * `release(name)`. `refuse` answers each request of the given names with a refusal. A switch settles a new Snapshot,
  * which the Editor Session base and the switch response name. `activity` is the frame of the Activity read. With
- * `assistance`, the writing assistant is available.
+ * `assistance`, the writing assistant is available. With `undo`, the Editor Session has an Author Action to undo, and
+ * the Server refuses the Undo.
  */
 function arrivalServer() {
   const scenario = createBrowserScenario();
@@ -56,7 +59,7 @@ function arrivalServer() {
   // The idempotency keys of the Author Edit commands that the network refused.
   const editKeys = new Set<string>();
   const server = { requests: [] as string[], unexpected: [] as string[], texts, refuse: new Set<string>(),
-    activity: undefined as unknown, assistance: false, editKeys,
+    activity: undefined as unknown, assistance: false, undo: false, editKeys,
     hold(name: string) { holding.add(name); },
     isHeld(name: string) { return held.has(name); },
     release(name: string) { held.get(name)?.(); held.delete(name); } };
@@ -66,7 +69,7 @@ function arrivalServer() {
       target_refs: [`manuscript:${current}`], materialized_revision: chapterRevision(text.revision, text.body),
       materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
         value_hex_lowercase: await sha256(text.body) } };
-    return { ...scenario.session,
+    return { ...scenario.session, ...(server.undo ? { author_undo_frontier_sequence: "1" } : {}),
       base_snapshot: { ...base, snapshot_id: snapshot.id, project_activity_position: snapshot.position } };
   };
   const open = () => ({ kind: "current_chapter" as const, current_chapter_id: current });
@@ -106,7 +109,10 @@ function arrivalServer() {
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
     if (name === `POST ${P}/editor-sessions`) return jsonResponse(await session());
-    if (name === `GET ${P}/editor-sessions/${SESSION}`) {
+    if (name === UNDO && server.undo) {
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
+    }
+    if (name === SESSION_READ) {
       return jsonResponse({ ...await session(), schema_id: "storyos.query.editor-session.response.v1" });
     }
     if (name === ACTIVITY) {
@@ -431,6 +437,30 @@ it("keeps the earlier editor during an IME composition, and the quiet step refus
   workspace.button(CHAPTER_B).click();
   await expect.poll(workspace.shown).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
   expect(during).toEqual({ connected: true, steps: [] });
+});
+
+it("keeps the earlier editor during an Author Undo, so a switch that does not reach the editor keeps the Undo", async () => {
+  const workspace = await openWorkspace((server) => { server.undo = true; });
+  await workspace.copy(CHAPTER_B);
+  const editor = workspace.editor();
+  workspace.server.refuse.add(READ_B);
+  workspace.server.hold(SESSION_READ);
+  focusManuscriptEnd(editor, window);
+  await applyTrustedInput({ operation: "undo_latest_author_action" });
+  await expect.poll(() => workspace.server.isHeld(SESSION_READ)).toBe(true);
+
+  workspace.button(CHAPTER_B).click();
+
+  await expect.poll(workspace.shown).toEqual({ title: "Chapter A", body: "Base", editable: true,
+    alert: "无法打开这一章：快照已过期。" });
+  const connected = editor.isConnected;
+  const before = workspace.server.requests.length;
+  workspace.server.release(SESSION_READ);
+  // The Undo continues after the end of the switch: it sends its Challenge and its command. The command of today sends
+  // its request again one time after the refusal, and the failure reads the statistics again.
+  await expect.poll(() => workspace.server.requests.slice(before)).toEqual([CHALLENGE, UNDO, UNDO,
+    `GET ${P}/manuscript/statistics`]);
+  expect(connected).toBe(true);
 });
 
 it("sends no message to the assistant during the arrival", async () => {

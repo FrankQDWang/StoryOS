@@ -59,7 +59,7 @@ type ProposalRead = {
 
 export function BlockProposalDisplay({
   scope, chapterId, authoritativeRevisionId, locators, refreshKey, safeToProject,
-  onAccepted, startSuggestionRead, arriving, ...editorProps
+  onAccepted, onDecisionEnd, startSuggestionRead, arriving, ...editorProps
 }: ManuscriptEditorProps & {
   scope: ProjectScope;
   chapterId: string;
@@ -69,6 +69,8 @@ export function BlockProposalDisplay({
   safeToProject: boolean;
   /** Opens the Project again after a decision. `settled` is true when the decision has a settled response. */
   onAccepted: (settled: boolean) => Promise<void>;
+  /** Each end of a decision of this display. A decision can change a Proposal of the Project (ADR 0105). */
+  onDecisionEnd?: (() => void) | undefined;
   /** Starts a read of the open suggestions. The returned function receives the Proposals of a complete list. */
   startSuggestionRead?: (() => (proposalIds: readonly string[] | undefined) => void) | undefined;
   /**
@@ -148,7 +150,10 @@ export function BlockProposalDisplay({
     const refusal = acceptanceRefusals[proposalId];
     return refusal != null && refusal.revisionId === proposal?.revision_id ? refusal : undefined;
   };
+  const onDecisionEndRef = useRef(onDecisionEnd);
+  onDecisionEndRef.current = onDecisionEnd;
   const finishDecision = () => {
+    onDecisionEndRef.current?.();
     acceptingRef.current = false;
     setAccepting(undefined);
     setDecisionGeneration((value) => value + 1);

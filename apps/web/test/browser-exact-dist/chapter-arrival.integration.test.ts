@@ -30,7 +30,7 @@ async function storedText(win: Window & typeof globalThis, projectId: string, ch
   return read.chapter.current_revision.blocks.map((block) => block.text);
 }
 
-it("stores the input of the earlier Chapter that was not saved at the selection, and ends its editor there",
+it("stores the input of the earlier Chapter that was not saved at the selection, and a later key changes no text",
   async () => {
     const frame = await openApplicationFrame("Chapter arrival");
     await submitProjectForm(frame, "Chapter arrival");
@@ -63,12 +63,15 @@ it("stores the input of the earlier Chapter that was not saved at the selection,
     focusManuscriptEnd(editorA, win);
     await applyTrustedInput({ operation: "insert_text", text: " one" });
     await expect.poll(() => manuscriptBody(editorA)).toBe("Alpha one");
+    // A click of the author on a button of the contents moves the focus to that button.
+    chapterButton(root(), "Chapter B")?.focus();
     await selectTreeChapter(root(), b);
     const earlier = () => ({ ...shown(manuscriptEditor(root(), win)), earlierEditor: editorA.isConnected,
       focusInEditor: editorA.ownerDocument.activeElement?.closest("[data-manuscript-editor]") != null });
     await expect.poll(earlier).toEqual({ title: "Chapter A", body: "Alpha one", editable: false,
       earlierEditor: false, focusInEditor: false });
-    // From the selection, a key has no editor of Chapter A to reach.
+    // A key after the selection, while the save waits, changes no text of Chapter A.
+    await applyTrustedInput({ operation: "insert_text", text: "Z" });
     const atSelection = earlier();
     await updateAuthorEditSubmissionHold({ action: "release" });
     await switched("Chapter B", "");

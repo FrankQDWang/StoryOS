@@ -373,13 +373,14 @@ function ProjectEditorView({
         expectedScope: state.project.project_scope,
         fetchImpl,
       });
+      // The copy is not authority, so the read of a later selection does not discard it.
+      if (opened.kind === "opened") copies.write(opened.chapter.chapter.chapter_id, chapterText(opened.chapter));
       if (generation !== switchGenerationRef.current) return;
       if (opened.kind !== "opened") {
         setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
         return;
       }
       setSwitchRecovery(undefined);
-      copies.write(opened.chapter.chapter.chapter_id, chapterText(opened.chapter));
       const surface = selectedChapterSurface({
         selectedChapterId: opened.chapter.chapter.chapter_id,
         currentChapterId,
@@ -419,8 +420,9 @@ function ProjectEditorView({
     switchGenerationRef.current = generation;
     const active = { wait: createChallengeAdmissionWait(writingTimers), waiting: false };
     switchWaitRef.current = active;
-    // During an IME composition the quiet step refuses, so the earlier editor stays for the composition to end.
-    if (contents && !writing.hasIncompleteInput()) setArrival(chapterId);
+    // The arrival ends the earlier editor. During an IME composition the quiet step refuses, and an Author Undo ends
+    // with its editor, so then the earlier editor stays as today.
+    if (contents && !writing.hasIncompleteInput() && !writing.undoInProgress()) setArrival(chapterId);
     return (async () => {
       let reopened = false;
       let cancelled = false;
@@ -443,14 +445,14 @@ function ProjectEditorView({
                 expectedScope: state.project.project_scope,
                 fetchImpl,
               });
+              // A newer Revision in the read replaces the copy and the shown text.
+              if (opened.kind === "opened") copies.write(chapterId, chapterText(opened.chapter));
               if (generation !== switchGenerationRef.current) return;
               if (opened.kind !== "opened") {
                 setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
                 return;
               }
               target = opened.chapter;
-              // A newer Revision in the read replaces the copy and the shown text.
-              copies.write(chapterId, chapterText(opened.chapter));
             }
             // A Challenge rate limit propagates to the wait.
             const switched = await setOwnedCurrentChapter({
@@ -625,8 +627,8 @@ function ProjectEditorView({
             && pending.body === selectedChapter.chapter.current_revision.body
             && JSON.stringify(pending.blocks)
               === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
+        onDecisionEnd={copies.proposalsChanged}
         onAccepted={async (settled) => {
-          copies.proposalsChanged();
           // A decision with no settled response opens the Project with each check of the first open.
           onReopened(await (settled ? reopen() : opening(() => openControlledProject({ baseUrl,
             projectId: state.project.project.project_id, fetchImpl, cryptoImpl }))));
