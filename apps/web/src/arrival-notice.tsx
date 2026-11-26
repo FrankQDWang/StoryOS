@@ -9,18 +9,17 @@ export interface UnsavedArrival {
 }
 
 /**
- * The notices of text that is not saved. They live above the views of one Project open, so a reopen or a failed reopen
- * keeps them, and each one stays until the author closes it (ADR 0105, section 4).
+ * The one notice of the tab for text that is not saved. It belongs to the open Project, so a later switch, a reopen,
+ * and a failed reopen keep it. It stays until the author closes it or the tab leaves the Project (ADR 0105, section 4).
  */
 export interface ArrivalNotices {
-  readonly list: readonly (UnsavedArrival & { readonly id: number })[];
-  add(unsaved: UnsavedArrival): void;
-  close(id: number): void;
+  readonly current: UnsavedArrival | undefined;
+  show(unsaved: UnsavedArrival): void;
+  close(): void;
 }
 
-export function ArrivalNoticeList({ notices }: { notices: ArrivalNotices }) {
-  return notices.list.map((unsaved) => <ArrivalNotice key={unsaved.id} unsaved={unsaved}
-    onClose={() => { notices.close(unsaved.id); }} />);
+export function ArrivalNoticeSlot({ notices }: { notices: ArrivalNotices }) {
+  return notices.current === undefined ? null : <ArrivalNotice unsaved={notices.current} onClose={notices.close} />;
 }
 
 function ArrivalNotice({ unsaved, onClose }: { unsaved: UnsavedArrival; onClose: () => void }) {

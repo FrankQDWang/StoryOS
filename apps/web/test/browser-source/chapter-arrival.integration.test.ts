@@ -47,7 +47,8 @@ async function sha256(body: string): Promise<string> {
  * the Server refuses the Undo. `lists` gives, for a Chapter, the Revision of the one open Proposal `PROPOSAL` in its
  * list. The Server does not find the Proposal itself. `effect` is the effect of each switch, which then changes nothing.
  * With `lostWriter`, the Editor Session after a switch names another writer. With `limited`, the Server refuses the next
- * Challenge with a Challenge rate limit.
+ * Challenge with a Challenge rate limit. With `emptyAfterSwitch`, the Project has no Current Chapter after a switch.
+ * `answered` has each request whose response is complete.
  */
 function arrivalServer() {
   const scenario = createBrowserScenario();
@@ -65,7 +66,8 @@ function arrivalServer() {
   const editKeys = new Set<string>();
   const server = { requests: [] as string[], unexpected: [] as string[], texts, refuse: new Set<string>(),
     activity: undefined as unknown, assistance: false, undo: false, editKeys, lists: {} as Record<string, string>,
-    effect: undefined as unknown, lostWriter: false, limited: false,
+    effect: undefined as unknown, lostWriter: false, limited: false, emptyAfterSwitch: false,
+    answered: [] as string[],
     hold(name: string) { holding.add(name); },
     isHeld(name: string) { return held.has(name); },
     release(name: string) { held.get(name)?.(); held.delete(name); } };
@@ -80,7 +82,8 @@ function arrivalServer() {
         ? { writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" } } : {}),
       base_snapshot: { ...base, snapshot_id: snapshot.id, project_activity_position: snapshot.position } };
   };
-  const open = () => ({ kind: "current_chapter" as const, current_chapter_id: current });
+  const open = () => server.emptyAfterSwitch && current !== CHAPTER ? { kind: "empty" as const }
+    : { kind: "current_chapter" as const, current_chapter_id: current };
   const answer = async (name: string, init: RequestInit | undefined): Promise<Response> => {
     if (name === "GET /api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
     if (name === "GET /api/v1/projects") {
@@ -188,7 +191,9 @@ function arrivalServer() {
     const name = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
     server.requests.push(name);
     if (holding.delete(name)) await new Promise<void>((resolve) => { held.set(name, resolve); });
-    return answer(name, init);
+    const response = await answer(name, init);
+    server.answered.push(name);
+    return response;
   };
   return { scenario, server, fetchImpl };
 }
@@ -939,7 +944,9 @@ it.each([
 
   workspace.server.release(CHALLENGE);
   await expect.poll(() => [READ_B, SESSION_READ].every((name) => workspace.server.isHeld(name))).toBe(true);
+  const answered = workspace.server.answered.length;
   workspace.server.release(first);
+  await expect.poll(() => workspace.server.answered.slice(answered)).toEqual([first]);
   workspace.server.release(second);
 
   await expect.poll(() => ({ heading: workspace.root.querySelector('section[role="alert"] h1')?.textContent,
@@ -947,28 +954,39 @@ it.each([
   await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], []);
 });
 
-it("keeps the notice of each end until the author closes it", async () => {
+it("accepts no input while a notice is open, and keeps the one notice through a later switch", async () => {
   const workspace = await openWorkspace();
   await workspace.copy(CHAPTER_B);
   workspace.server.refuse.add(READ_B);
   const before = workspace.server.requests.length;
-  for (const [index, text] of ["?", "!"].entries()) {
+  const arrive = async (text: string) => {
     workspace.server.hold(READ_B);
     workspace.button(CHAPTER_B).click();
     await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
     await workspace.typeAtEnd(text);
+    const during = { ...workspace.shown(), save: workspace.saveState() };
     workspace.server.release(READ_B);
-    await expect.poll(() => ({ title: workspace.shown().title, notices: workspace.noticeTexts().length }))
-      .toEqual({ title: "Chapter A", notices: index + 1 });
-  }
-  const both = workspace.noticeTexts();
+    await expect.poll(() => workspace.server.answered.filter((name) => name === READ_B).length)
+      .toBe(workspace.server.requests.slice(before).length);
+    await expect.poll(workspace.shown).toEqual({ title: "Chapter A", body: "Base", editable: true,
+      alert: "无法打开这一章：快照已过期。" });
+    return during;
+  };
+  await arrive("?");
 
+  const blocked = await arrive("!");
+  const kept = workspace.noticeTexts();
   workspace.root.querySelector<HTMLButtonElement>("[data-arrival-notice-close]")!.click();
+  await expect.poll(workspace.noticeTexts).toEqual([]);
+  const again = await arrive("!");
 
-  await expect.poll(() => ({ ...workspace.shown(), notices: workspace.noticeTexts() })).toEqual({ title: "Chapter A",
-    body: "Base", editable: true, alert: "无法打开这一章：快照已过期。", notices: ["Beta!"] });
-  await expectRequests(workspace.server, before, [READ_B, READ_B], []);
-  expect(both).toEqual(["Beta?", "Beta!"]);
+  await expectRequests(workspace.server, before, [READ_B, READ_B, READ_B], []);
+  expect({ blocked, kept, again, notices: workspace.noticeTexts() }).toEqual({
+    blocked: { title: "Chapter B", body: "Beta", editable: false, alert: "无法打开这一章：快照已过期。", save: "saved" },
+    kept: ["Beta?"],
+    // The sentence of the earlier end stays until the next end, as today.
+    again: { title: "Chapter B", body: "Beta!", editable: true, alert: "无法打开这一章：快照已过期。", save: "saving" },
+    notices: ["Beta!"] });
 });
 
 it("shows the text of an IME composition that is open when the switch ends in the notice", async () => {
@@ -989,4 +1007,49 @@ it("shows the text of an IME composition that is open when the switch ends in th
   await expect.poll(() => ({ ...workspace.shown(), notices: workspace.noticeTexts() })).toEqual({ title: "Chapter A",
     body: "Base", editable: true, alert: "无法打开这一章：快照已过期。", notices: ["Beta中"] });
   await expectRequests(workspace.server, before, [READ_B], []);
+});
+
+it("keeps the text of an IME composition that ends after another Revision in the switch read stopped the input",
+  async () => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    workspace.server.texts[CHAPTER_B] = { revision: "018f0000-0000-7001-8000-000000000809", title: "Chapter B",
+      body: "Beta two" };
+    workspace.server.hold(READ_B);
+    workspace.server.hold(CHALLENGE);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+    focusManuscriptEnd(workspace.editor(), window);
+    await applyImeComposition({ text: "中", replacementStart: 4, replacementEnd: 4, selectionStart: 1,
+      selectionEnd: 1 });
+    await expect.poll(() => manuscriptBody(workspace.editor())).toBe("Beta中");
+
+    workspace.server.release(READ_B);
+    await expect.poll(() => workspace.server.isHeld(CHALLENGE)).toBe(true);
+    // The stop makes the editor read-only, and the browser ends the composition.
+    await expect.poll(() => workspace.shown().editable).toBe(false);
+    workspace.server.release(CHALLENGE);
+
+    await expect.poll(() => ({ ...workspace.ready(), notices: workspace.noticeTexts() })).toEqual({ ...READY,
+      body: "Beta two", notices: ["Beta中"] });
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY]);
+  });
+
+it("keeps the notice when the reopen after the switch finds a Project with no Current Chapter", async () => {
+  const workspace = await openWorkspace((server) => { server.emptyAfterSwitch = true; });
+  await workspace.copy(CHAPTER_B);
+  workspace.server.hold(READ_B);
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+
+  workspace.server.release(READ_B);
+
+  await expect.poll(() => ({ editor: workspace.root.querySelector("[data-manuscript-editor]"),
+    notices: workspace.noticeTexts() })).toEqual({ editor: null, notices: ["Beta?"] });
+  // The open of a Project with no Current Chapter reads with no order between the reads.
+  await expectRequests(workspace.server, before, [...SWITCH_STEPS], [READ_B, `GET ${P}`, "GET /api/v1/projects",
+    SESSION_READ, `GET ${P}/manuscript/tree`, `GET ${P}/assistance`, `GET ${P}/skills`]);
 });

@@ -23,7 +23,7 @@ import {
   openSelectedChapter,
   selectedChapterSurface,
 } from "./chapter-navigation.ts";
-import { ArrivalNoticeList, type ArrivalNotices, type UnsavedArrival } from "./arrival-notice.tsx";
+import { ArrivalNoticeSlot, type ArrivalNotices, type UnsavedArrival } from "./arrival-notice.tsx";
 import { createArrivalInput, type ArrivalInput } from "./arrival-input.ts";
 import { chapterText, createChapterCopies, editorParagraphs, type ChapterCopies } from "./chapter-copies.ts";
 import { deleteOwnedChapter } from "./delete-chapter.ts";
@@ -312,7 +312,7 @@ function ProjectEditorView({
   const showUnsaved = () => {
     const ended = inputRef.current;
     inputRef.current = undefined;
-    if (ended?.hasInput() === true) notices.add({ chapterId: ended.chapterId, blocks: ended.blocks() });
+    if (ended?.hasInput() === true) notices.show({ chapterId: ended.chapterId, blocks: ended.blocks() });
   };
   const endArrival = () => {
     showUnsaved();
@@ -633,10 +633,10 @@ function ProjectEditorView({
   }
   inputRef.current = input;
   useSyncExternalStore(input?.subscribe ?? noChanges, () => input?.version());
-  // The Arriving Chapter accepts input only when its copy has the fact "no open suggestion" and no wait for a Challenge
-  // rate limit is active (ADR 0105, section 3).
+  // The Arriving Chapter accepts input only when its copy has the fact "no open suggestion", no wait for a Challenge
+  // rate limit is active, and no notice is open (ADR 0105, section 3).
   const accepting = input !== undefined && arriving?.noOpenSuggestion === true && switchWaiting === undefined
-    && !input.stopped();
+    && notices.current === undefined && !input.stopped();
   // While Arrival Input exists, the state line shows the saving state.
   const shownSaveState = input?.hasInput() === true ? "saving" : saveState;
   const selectedChapterId = selectedChapter.chapter.chapter_id;
@@ -654,7 +654,7 @@ function ProjectEditorView({
           <p role="alert">{switchRecovery ?? proposalNotice}</p>
         )}
       <h2>{arriving?.title ?? selectedChapter.chapter.title}</h2>
-      <ArrivalNoticeList notices={notices} />
+      <ArrivalNoticeSlot notices={notices} />
       <BlockProposalDisplay
         key={selectedChapter.chapter.chapter_id}
         arriving={arrival === undefined ? undefined
@@ -861,6 +861,7 @@ function EmptyProjectReadyView({
   onVolumeCreated,
   onChapterCreated,
   onRenamed,
+  notices,
 }: {
   project: GetProjectResponse;
   revision: string;
@@ -871,6 +872,7 @@ function EmptyProjectReadyView({
   onVolumeCreated: () => void;
   onChapterCreated: () => void;
   onRenamed: (projectId: string, title: string, revision: string) => boolean;
+  notices: ArrivalNotices;
 }) {
   const [title, setTitle] = useState(project.project.title);
   const [revision, setRevision] = useState(openedRevision);
@@ -915,6 +917,7 @@ function EmptyProjectReadyView({
           {(volumeRemoval ?? addressNotice) === undefined ? null : (
             <p role="alert">{volumeRemoval ?? addressNotice}</p>
           )}
+          <ArrivalNoticeSlot notices={notices} />
           <ManuscriptTree
             projectId={project.project.project_id}
             tree={tree}
@@ -1139,14 +1142,9 @@ function Stage1View({
     return true;
   };
   const [editorGeneration, setEditorGeneration] = useState(0);
-  const [unsaved, setUnsaved] = useState<ArrivalNotices["list"]>([]);
-  const nextNotice = useRef(0);
-  const [noticeActions] = useState(() => ({
-    add: (text: UnsavedArrival) => { nextNotice.current += 1; const id = nextNotice.current;
-      setUnsaved((list) => [...list, { ...text, id }]); },
-    close: (id: number) => { setUnsaved((list) => list.filter((notice) => notice.id !== id)); },
-  }));
-  const notices: ArrivalNotices = { list: unsaved, ...noticeActions };
+  const [unsaved, setUnsaved] = useState<UnsavedArrival>();
+  const [noticeActions] = useState(() => ({ show: setUnsaved, close: () => { setUnsaved(undefined); } }));
+  const notices: ArrivalNotices = { current: unsaved, ...noticeActions };
   const [proposalFocus, setProposalFocus] = useState<ProposalFocus>();
   const [proposalNotice, setProposalNotice] = useState<string>();
   const proposalNavigation = useRef<ProposalNavigation>({ sequence: 0, queue: Promise.resolve() });
@@ -1215,6 +1213,7 @@ function Stage1View({
           }).then(take);
         }}
         onRenamed={renamed}
+        notices={notices}
       />
     );
   }
@@ -1236,7 +1235,7 @@ function Stage1View({
       <h1>{current.heading}</h1>
       <p>{current.message}</p>
       <pre>{JSON.stringify({ code: current.code, details: current.details }, null, 2)}</pre>
-      <ArrivalNoticeList notices={notices} />
+      <ArrivalNoticeSlot notices={notices} />
     </section>
   );
 }

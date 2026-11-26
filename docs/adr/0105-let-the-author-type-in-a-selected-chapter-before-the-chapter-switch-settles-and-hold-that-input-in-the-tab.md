@@ -40,7 +40,7 @@ This section applies when the author selects another Chapter in the contents and
 
 ### 3. Arrival Input
 
-- The Arriving Chapter accepts input when its copy has the fact "this Chapter has no open suggestion", no end of sections 4 to 7 stopped the input, and no wait for a Challenge rate limit is active. In each other case the Arriving Chapter is read-only until the editor of today is ready.
+- The Arriving Chapter accepts input when its copy has the fact "this Chapter has no open suggestion", no end of sections 4 to 7 stopped the input, and no wait for a Challenge rate limit is active. In each other case the Arriving Chapter is read-only until the editor of today is ready. While a notice of section 4 is open, an Arriving Chapter accepts no input.
 - The permitted input is text, a deletion, a new paragraph, an IME composition, and a paste of plain text. Author Undo, a block move, a block retype, a selection reference, each Proposal control, and a message to the assistant are not available in an Arriving Chapter.
 - While Arrival Input exists, the state line shows the saving state, and the browser asks the author before the tab unloads.
 - Arrival Input has the bound of the in-memory queue of [ADR 0038](0038-separate-author-edit-challenge-admission-from-shared-command-admission.md): 240 operations. At the bound, the Arriving Chapter accepts no more input until the hand-over.

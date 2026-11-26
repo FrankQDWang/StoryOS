@@ -31,7 +31,7 @@ export interface ArrivalInput extends ArrivalSink {
   readonly title: string;
   readonly revisionId: string;
   held(): readonly HeldEdit[];
-  /** True when the author typed: a held edit, or an IME composition that is open. */
+  /** True when the author typed: a held edit, or the text of an IME composition. */
   hasInput(): boolean;
   /** The text that the Arriving Chapter shows: the copy with each held edit and the open composition. */
   blocks(): readonly ManuscriptParagraph[];
@@ -71,9 +71,11 @@ export function createArrivalInput(chapterId: string, copy: ChapterText): Arriva
     // An Arriving Chapter shows no suggestion, so it has no candidate input and no Author Undo.
     canAcceptInput: () => false,
     abandonUndo: () => {},
-    // The end of a composition gives its edit to `capture`, or no edit when the author cancelled it.
+    // The end of a composition gives its edit to `capture`, or no edit when the author cancelled it. After a stop,
+    // `capture` accepts no edit, so the text of the composition stays in the shown text for the notice.
     setComposing(composing) {
       if (composing || composed === undefined) return;
+      if (halted) shown = composed;
       composed = undefined;
       changed();
     },
@@ -84,7 +86,7 @@ export function createArrivalInput(chapterId: string, copy: ChapterText): Arriva
     },
     fail: () => { input.stop(); },
     held: () => held,
-    hasInput: () => held.length > 0 || composed !== undefined,
+    hasInput: () => held.length > 0 || composed !== undefined || shown !== copy.blocks,
     blocks: () => composed ?? shown,
     stopped: () => halted,
     stop() {
