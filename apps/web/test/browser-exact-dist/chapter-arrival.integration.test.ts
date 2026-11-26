@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
-  applyTrustedInput, updateAuthorEditSubmissionHold, updateClientSessionCookie, updateClipboardPermission,
+  applyTrustedInput, assertPageProjectReceipts, updateAuthorEditSubmissionHold, updateClientSessionCookie, updateClipboardPermission,
 } from "../support/browser-command-client.ts";
 import { selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import {
@@ -49,16 +49,16 @@ it("stores the input of the earlier Chapter at the selection, and stores the key
     await submitProjectForm(frame, "Chapter arrival");
     await submitVolumeForm(frame, "Volume A");
     await openFirstChapterForm(frame);
-    for (const name of ["Chapter A", "Chapter B"] as const) {
+    for (const name of ["Chapter A", "Chapter B", "Chapter C"] as const) {
       await submitChapterForm(frame, name);
       await waitLastChapter(frame, name);
     }
     const root = () => appRoot(frame);
     const win = applicationWindow(frame);
     const projectId = root().querySelector("[data-project-id]")?.getAttribute("data-project-id") ?? "";
-    const [a = "", b = ""] = ["Chapter A", "Chapter B"].map((title) => chapterButton(root(), title)
+    const [a = "", b = "", c = ""] = ["Chapter A", "Chapter B", "Chapter C"].map((title) => chapterButton(root(), title)
       ?.getAttribute("data-chapter-id") ?? "");
-    expect([projectId, a, b].every((value) => value.length > 0)).toBe(true);
+    expect([projectId, a, b, c].every((value) => value.length > 0)).toBe(true);
     await typeIntoCurrent(frame, "Alpha");
     const shown = (editor: HTMLElement) => ({ title: root().querySelector("h2")?.textContent,
       body: manuscriptBody(editor), editable: manuscriptIsEditable(editor) });
@@ -66,7 +66,7 @@ it("stores the input of the earlier Chapter at the selection, and stores the key
      * Waits with no new click until the switch of the selection has the editor of the Chapter `title`. An Arriving
      * Chapter can be editable, so the wait also needs the end of the arrival.
      */
-    const switched = async (title: string, body: string) => {
+    const switched = async (title: string, body: string, win = applicationWindow(frame)) => {
       const alert = () => root().querySelector('.editor-panel [role="alert"]')?.textContent;
       const arriving = () => root().querySelector("[data-arrival-no-open-suggestion]")
         ?.getAttribute("data-arrival-no-open-suggestion");
@@ -128,10 +128,36 @@ it("stores the input of the earlier Chapter at the selection, and stores the key
 
     const reloaded = await reloadProject(frame, projectId);
     const loaded = applicationWindow(frame);
-    expect({ atSelection, shown: manuscriptBody(manuscriptEditor(reloaded, loaded)),
-      storedA: await storedText(loaded, projectId, a), storedB: await storedText(loaded, projectId, b) }).toEqual({
+    const afterLoad = manuscriptBody(manuscriptEditor(reloaded, loaded));
+
+    // Three fast selections with no Arrival Input: Chapter B, Chapter A, and Chapter C. The command of Chapter B is in
+    // flight at the second and the third selection, so the command of Chapter C expects Chapter B. A command that
+    // expects another Chapter gets the conflict `stale_current_chapter` and opens no Chapter C.
+    await updateAuthorEditSubmissionHold({ action: "hold_set_current_chapter" });
+    await selectTreeChapter(root(), b, { arrival: "in-progress" });
+    await expect.poll(() => loaded.document.documentElement.dataset.storyosHeldRequests, { timeout: 15_000 }).toBe("1");
+    await selectTreeChapter(root(), a, { arrival: "in-progress" });
+    await selectTreeChapter(root(), c, { arrival: "in-progress" });
+    // The contents mark the newest selection while the command of Chapter B waits.
+    await expect.poll(() => chapterButton(root(), "Chapter C")?.getAttribute("aria-current")).toBe("true");
+    await updateAuthorEditSubmissionHold({ action: "release" });
+    await switched("Chapter C", "", loaded);
+    const lastLoad = await reloadProject(frame, projectId);
+    const last = applicationWindow(frame);
+    expect({ atSelection, afterLoad, last: shown(manuscriptEditor(lastLoad, last)),
+      storedA: await storedText(last, projectId, a), storedB: await storedText(last, projectId, b),
+      storedC: await storedText(last, projectId, c) }).toEqual({
       atSelection: { title: "Chapter A", body: "Alpha one", editable: false, earlierEditor: false,
         focusInEditor: false },
-      shown: "Alpha one twoGammaDelta\nEpsilon Zeta",
-      storedA: ["Alpha one twoGammaDelta", "Epsilon Zeta"], storedB: ["Beta"] });
+      afterLoad: "Alpha one twoGammaDelta\nEpsilon Zeta",
+      last: { title: "Chapter C", body: "", editable: true },
+      storedA: ["Alpha one twoGammaDelta", "Epsilon Zeta"], storedB: ["Beta"], storedC: [""] });
+    // The Server stores a Receipt for each Set Current Chapter command, also for a conflict. The journey sends four:
+    // A to B and B to A, then A to B and B to C. A stale command or a command of a replaced selection is a fifth one.
+    // The heads of a Receipt are the Revision of its Chapter, so the last two Receipts show A to B and B to C, applied.
+    const head = async (chapterId: string) => (await getChapter({ baseUrl: last.location.origin, projectId, chapterId,
+      fetchImpl: last.fetch.bind(last) })).chapter.current_revision.revision_id;
+    await assertPageProjectReceipts({ projectId, kinds: "listed", receipts: { setCurrentChapter: 4 },
+      lastResults: [{ result: "authoritative_applied", heads: [await head(b)] },
+        { result: "authoritative_applied", heads: [await head(c)] }] });
   });
