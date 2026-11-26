@@ -1972,15 +1972,19 @@ it("runs a waiting selection from the Current Chapter of the Server when the reo
     workspace.server.hold(READ_C);
 
     workspace.server.release(SWITCH);
-    await expect.poll(() => workspace.server.isHeld(READ_C)).toBe(true);
+    // The failed reopen ends before its read of the Editor Session can go out, so that read has no order to the read
+    // of Chapter C.
+    await expect.poll(() => ({ held: workspace.server.isHeld(READ_C),
+      session: workspace.server.requests.slice(before).filter((name) => name === SESSION_READ).length }))
+      .toEqual({ held: true, session: 1 });
     // The editor part shows the failure sentence while the waiting selection reads Chapter C.
     const failed = { ...workspace.ready(), notices: workspace.noticeTexts() };
     workspace.server.release(READ_C);
 
     await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notices: workspace.noticeTexts() }))
       .toEqual({ ...ARRIVING_C, arriving: undefined, save: "saved", notices: ["Beta?"] });
-    await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS, READ_C, CHALLENGE, SWITCH,
-      ...reopenSteps(CHAPTER_C)], panelReads(CHAPTER_C));
+    await expectRequests(workspace.server, before, SWITCH_STEPS, [...REOPEN_STEPS, READ_C],
+      [CHALLENGE, SWITCH, ...reopenSteps(CHAPTER_C)], { anyOrder: panelReads(CHAPTER_C) });
     expect({ failed, switches: workspace.server.switches }).toEqual({ failed: { ...ARRIVING_C, editable: false,
       alert: "无法打开这一章。", notices: ["Beta?"] }, switches: [[CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER_C]] });
   });
