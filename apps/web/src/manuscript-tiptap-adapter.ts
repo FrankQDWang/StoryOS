@@ -224,6 +224,8 @@ export function storyosManuscriptExtensions(
   onAuthorUndo?: () => boolean,
   canAcceptCandidateInput?: (hardBoundary: boolean, candidate?: { proposalId: string; operationId: string }) => boolean,
   hasCrossingComposition?: () => boolean,
+  /** False for an input that the editor does not accept, from the origin of its transaction (ADR 0105). */
+  acceptsInput?: (origin: unknown) => boolean,
 ) {
   return [
     Document.extend({ content: "(paragraph | heading | blockProposal)+" }),
@@ -297,6 +299,7 @@ export function storyosManuscriptExtensions(
               }
               const edit = captureManuscriptChange(previous, next);
               if (edit !== undefined) {
+                if (acceptsInput?.(transaction.getMeta(STORYOS_ORIGIN)) === false) return false;
                 transaction.setMeta(STORYOS_CAPTURED_EDIT, edit);
                 return true;
               }

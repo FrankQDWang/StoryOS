@@ -5,7 +5,8 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/sto
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { POINTER_STAY_MS, createChapterCopies } from "../../src/chapter-copies.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
-import { applyTrustedInput } from "../support/browser-command-client.ts";
+import { CHAPTER_SWITCH_WAITING_SENTENCE } from "../../src/chapter-navigation.ts";
+import { applyTrustedInput, updateClipboardPermission } from "../support/browser-command-client.ts";
 import { focusManuscriptEnd, manuscriptBody, manuscriptEditor, manuscriptIsEditable } from "../support/manuscript-surface.ts";
 import {
   CHAPTER, OWNER, PROJECT, REVISION, SESSION, chapterRevision, closeTrackedDatabases, createAppliedActivityEvent,
@@ -44,7 +45,9 @@ async function sha256(body: string): Promise<string> {
  * which the Editor Session base and the switch response name. `activity` is the frame of the Activity read. With
  * `assistance`, the writing assistant is available. With `undo`, the Editor Session has an Author Action to undo, and
  * the Server refuses the Undo. `lists` gives, for a Chapter, the Revision of the one open Proposal `PROPOSAL` in its
- * list. The Server does not find the Proposal itself.
+ * list. The Server does not find the Proposal itself. `effect` is the effect of each switch, which then changes nothing.
+ * With `lostWriter`, the Editor Session after a switch names another writer. With `limited`, the Server refuses the next
+ * Challenge with a Challenge rate limit.
  */
 function arrivalServer() {
   const scenario = createBrowserScenario();
@@ -62,6 +65,7 @@ function arrivalServer() {
   const editKeys = new Set<string>();
   const server = { requests: [] as string[], unexpected: [] as string[], texts, refuse: new Set<string>(),
     activity: undefined as unknown, assistance: false, undo: false, editKeys, lists: {} as Record<string, string>,
+    effect: undefined as unknown, lostWriter: false, limited: false,
     hold(name: string) { holding.add(name); },
     isHeld(name: string) { return held.has(name); },
     release(name: string) { held.get(name)?.(); held.delete(name); } };
@@ -72,6 +76,8 @@ function arrivalServer() {
       materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
         value_hex_lowercase: await sha256(text.body) } };
     return { ...scenario.session, ...(server.undo ? { author_undo_frontier_sequence: "1" } : {}),
+      ...(server.lostWriter && current !== CHAPTER
+        ? { writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" } } : {}),
       base_snapshot: { ...base, snapshot_id: snapshot.id, project_activity_position: snapshot.position } };
   };
   const open = () => ({ kind: "current_chapter" as const, current_chapter_id: current });
@@ -111,6 +117,12 @@ function arrivalServer() {
         volumes: [{ volume_id: VOLUME, title: "Volume A", order: "1", chapters: [CHAPTER, CHAPTER_B, CHAPTER_C]
           .map((id, index) => ({ chapter_id: id, title: texts[id]!.title, order: String(index + 1) })) }] });
     }
+    if (name === CHALLENGE && server.limited) {
+      server.limited = false;
+      return new Response(JSON.stringify({ schema_id: "storyos.problem.v1", code: "challenge_rate_limited",
+        message: "The command challenge rate limit is exceeded." }),
+      { status: 429, headers: { "content-type": "application/json", "retry-after": "7" } });
+    }
     if (name === CHALLENGE) {
       return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-09-12T00:00:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
@@ -146,6 +158,10 @@ function arrivalServer() {
     }
     if (name === SWITCH && server.refuse.has(name)) {
       return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
+    }
+    if (name === SWITCH && server.effect !== undefined) {
+      return jsonResponse({ ...setCurrentChapterFixture, project: { ...setCurrentChapterFixture.project, open: open() },
+        effect: server.effect });
     }
     if (name === SWITCH) {
       current = (JSON.parse(String(init?.body)) as { set_current_chapter_input: { chapter_id: string } })
@@ -215,12 +231,16 @@ async function openWorkspace(prepare: (server: ReturnType<typeof arrivalServer>[
     locationImpl: { origin: location.origin, pathname: `/projects/${PROJECT}` },
     fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
   const stays: Timer[] = [];
+  // The wait for the Retry-After of a Challenge rate limit, which the test ends.
+  const waits: (() => void)[] = [];
   const view = mountStage1View(loaded.root, { ...loaded, writingTimers: {
     setTimeoutImpl: (callback, timeout) => timeout === POINTER_STAY_MS
-      ? -stays.push({ callback, cleared: false, fired: false }) : globalThis.setTimeout(callback, timeout),
+      ? -stays.push({ callback, cleared: false, fired: false })
+      : timeout === 7_000 ? -1_000 - waits.push(callback) : globalThis.setTimeout(callback, timeout),
+    // A cleared wait stays in `waits`, and the test does not run it.
     clearTimeoutImpl: (timer) => {
-      if (typeof timer === "number" && timer < 0) stays[-timer - 1]!.cleared = true;
-      else globalThis.clearTimeout(timer);
+      if (typeof timer !== "number" || timer >= 0) globalThis.clearTimeout(timer);
+      else if (timer > -1_000) stays[-timer - 1]!.cleared = true;
     },
   } });
   unmounts.push(() => view.unmount());
@@ -232,6 +252,14 @@ async function openWorkspace(prepare: (server: ReturnType<typeof arrivalServer>[
   const editor = () => manuscriptEditor(root, window);
   const shown = () => ({ title: root.querySelector(".editor-panel h2")?.textContent, body: manuscriptBody(editor()),
     editable: manuscriptIsEditable(editor()), alert: root.querySelector('.editor-panel [role="alert"]')?.textContent });
+  /**
+   * The screen when no arrival is in progress. An Arriving Chapter can be editable, so during an arrival the result has
+   * one more key, `arriving`, and is not equal to the screen of a ready editor.
+   */
+  const ready = () => {
+    const arriving = root.querySelector("[data-arrival-no-open-suggestion]")?.getAttribute("data-arrival-no-open-suggestion");
+    return { ...shown(), ...(arriving === "" ? {} : { arriving }) };
+  };
   /** The fact "no open suggestion" of the Arriving Chapter on the screen. */
   const fact = () => root.querySelector("[data-arrival-no-open-suggestion]")?.getAttribute("data-arrival-no-open-suggestion");
   const pointer = (chapterId: string, inside: boolean) => button(chapterId)
@@ -258,7 +286,27 @@ async function openWorkspace(prepare: (server: ReturnType<typeof arrivalServer>[
   };
   // The page reads each panel of the open before a test starts.
   await expect.poll(() => server.requests.includes(openProposals(CHAPTER))).toBe(true);
-  return { server, root, button, editor, shown, fact, pointer, stay, stays, stayTimers, copy };
+  /** The notice of Arrival Input that is not saved, and whether it is directly under the Chapter title. */
+  const notice = () => {
+    const element = root.querySelector("[data-arrival-notice]");
+    return element === null ? undefined : { role: element.getAttribute("role"),
+      chapter: element.getAttribute("data-arrival-notice"), heading: element.querySelector("h3")?.textContent,
+      sentence: element.querySelector("h3 + p")?.textContent,
+      text: element.querySelector("[data-arrival-notice-text]")?.textContent,
+      underTitle: element.previousElementSibling?.matches(".editor-panel h2") === true };
+  };
+  const saveState = () => root.querySelector("[data-save-state]")?.getAttribute("data-save-state");
+  /**
+   * Types `text` with trusted input: at the end of the shown editor when it is editable. A read-only editor cannot have
+   * the focus, so then the key goes to the Chapter button in the contents, which has the focus after a click.
+   */
+  const typeAtEnd = async (text: string, chapterId = CHAPTER_B) => {
+    if (manuscriptIsEditable(editor())) focusManuscriptEnd(editor(), window);
+    else button(chapterId).focus();
+    await applyTrustedInput({ operation: "insert_text", text });
+  };
+  return { server, root, button, editor, shown, ready, fact, pointer, stay, stays, stayTimers, copy, notice, saveState,
+    typeAtEnd, waits, journal: scenario.journalName };
 }
 
 /** Each title that the editor part showed, in order. The observer sees each change of the page. */
@@ -327,15 +375,15 @@ it.each([
   workspace.button(CHAPTER_B).click();
 
   await expect.poll(() => ({ ...workspace.shown(), fact: workspace.fact() })).toEqual({ title: "Chapter B", body: "Beta",
-    editable: false, alert: undefined, fact: "true" });
+    editable: true, alert: undefined, fact: "true" });
   await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
   workspace.server.release(READ_B);
-  await expect.poll(workspace.shown).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
+  await expect.poll(workspace.ready).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
 });
 
 it.each([
-  // From a selection in the contents, no editable editor element of the earlier Chapter is in the document.
-  { source: "contents", during: { title: "Chapter B", body: "Beta", editable: false, alert: undefined, editors: 0 } },
+  // From a selection in the contents, the one editable editor element is the editor of the Arriving Chapter.
+  { source: "contents", during: { title: "Chapter B", body: "Beta", editable: true, alert: undefined, editors: 1 } },
   { source: "a search result", during: { title: "Chapter A", body: "Base", editable: true, alert: undefined,
     editors: 1 } },
 ])("shows the selection from $source, and sends the requests of a switch of today in the same order", async ({
@@ -359,7 +407,7 @@ it.each([
     editors: document.querySelectorAll('[contenteditable="true"]').length })).toEqual(during);
   workspace.server.release(READ_B);
 
-  await expect.poll(workspace.shown).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
+  await expect.poll(workspace.ready).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
   // The reopen reads the Chapter, the Project, the list, and the Editor Session at the same time. Then the panels of
   // the new editor part read with no order between them: the Activity read starts after a read of the Journal.
   const steps = () => workspace.server.requests.slice(before);
@@ -392,9 +440,9 @@ it("replaces the shown text and the copy when the Chapter read of the switch giv
     alert: "无法打开这一章。" });
 
   expect({ replaced, again }).toEqual({
-    replaced: { title: "Chapter B", body: "Beta two", editable: false, alert: undefined },
+    replaced: { title: "Chapter B", body: "Beta two", editable: true, alert: undefined },
     // The sentence of the earlier end stays until the next end, as today.
-    again: { title: "Chapter B", body: "Beta two", editable: false, alert: "无法打开这一章。" },
+    again: { title: "Chapter B", body: "Beta two", editable: true, alert: "无法打开这一章。" },
   });
 });
 
@@ -445,7 +493,7 @@ it("keeps the earlier editor during an IME composition, and the quiet step refus
   // The composition ends in the earlier editor, and then a selection switches as today.
   editor.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "" }));
   workspace.button(CHAPTER_B).click();
-  await expect.poll(workspace.shown).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
+  await expect.poll(workspace.ready).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
   expect(during).toEqual({ connected: true, steps: [] });
 });
 
@@ -526,22 +574,22 @@ it.each([
       await expect.poll(workspace.fact).toBe(facts[1]);
     }
     workspace.server.release(READ_B);
-    await expect.poll(workspace.shown).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
+    await expect.poll(workspace.ready).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
   });
 
 it("keeps the fact of no open suggestion from the settled display of the Chapter that the tab leaves", async () => {
   const workspace = await openWorkspace();
   workspace.button(CHAPTER_B).click();
-  await expect.poll(workspace.shown).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
+  await expect.poll(workspace.ready).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
   workspace.server.hold(`GET ${P}/chapters/${CHAPTER}`);
 
   workspace.button(CHAPTER).click();
 
-  await expect.poll(() => ({ ...workspace.shown(), fact: workspace.fact() })).toEqual({ title: "Chapter A", body: "Base", editable: false,
+  await expect.poll(() => ({ ...workspace.shown(), fact: workspace.fact() })).toEqual({ title: "Chapter A", body: "Base", editable: true,
     alert: undefined, fact: "true" });
   await expect.poll(() => workspace.server.isHeld(`GET ${P}/chapters/${CHAPTER}`)).toBe(true);
   workspace.server.release(`GET ${P}/chapters/${CHAPTER}`);
-  await expect.poll(workspace.shown).toEqual({ title: "Chapter A", body: "Base", editable: true, alert: undefined });
+  await expect.poll(workspace.ready).toEqual({ title: "Chapter A", body: "Base", editable: true, alert: undefined });
 });
 
 it("removes the fact of no open suggestion when a list of the same Proposal has a new Proposal Revision", async () => {
@@ -564,7 +612,7 @@ it("removes the fact of no open suggestion when a list of the same Proposal has 
   await expect.poll(() => ({ fact: workspace.fact(), held: workspace.server.isHeld(READ_B) }))
     .toEqual({ fact: "false", held: true });
   workspace.server.release(READ_B);
-  await expect.poll(workspace.shown).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
+  await expect.poll(workspace.ready).toEqual({ title: "Chapter B", body: "Beta", editable: true, alert: undefined });
 });
 
 /** An `agent_run_created` event at stream position 1. */
@@ -618,3 +666,247 @@ it("removes the fact of no open suggestion from each copy at a Proposal change, 
     after: [false, false], firstRun: [false, false], seen: [true, false], newList: [false, false],
     sameList: [true, false], incomplete: [false, false] });
 });
+
+/** Each record of each store of the Local Edit Journal. */
+async function journalRecords(name: string) {
+  const database = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(name);
+    request.onsuccess = () => { resolve(request.result); };
+    request.onerror = () => { reject(request.error ?? new Error("no Journal")); };
+  });
+  try {
+    const stores = [...database.objectStoreNames];
+    const transaction = database.transaction(stores, "readonly");
+    return Object.fromEntries(await Promise.all(stores.map((store) => new Promise<[string, unknown[]]>((resolve) => {
+      const request = transaction.objectStore(store).getAll();
+      request.onsuccess = () => { resolve([store, request.result]); };
+    }))));
+  } finally {
+    database.close();
+  }
+}
+
+const SWITCH_STEPS = [READ_B, CHALLENGE, SWITCH];
+// The reopen reads the Chapter, the Project, the list, and the Editor Session at the same time. Then the panels of the
+// new editor part read with no order between them.
+const REOPEN_STEPS = [READ_B, `GET ${P}`, "GET /api/v1/projects", SESSION_READ];
+const PANEL_READS = [openProposals(CHAPTER_B), `GET ${P}/manuscript/tree`, `GET ${P}/manuscript/statistics`];
+const UNSAVED_HEADING = "这段文字没有保存";
+const UNSAVED_SENTENCE = "切换章节时输入的文字没有保存到这一章。请复制这段文字，再粘贴到需要的位置。";
+
+it.each([
+  // The quiet step reads the outcome of the Author Edit that the network refused, and the test types while it waits.
+  { end: "the quiet step refuses", hold: "outcome", steps: ["outcome"], panels: [],
+    shown: { title: "Chapter A", body: "Base!", editable: true, alert: "无法切换章节：请先完成当前输入。" } },
+  { end: "the switch is refused", effect: { kind: "refused", reason: "invalid_chapter_join" }, hold: READ_B,
+    steps: SWITCH_STEPS, panels: [],
+    shown: { title: "Chapter A", body: "Base", editable: true, alert: "无法打开这一章。" } },
+  { end: "the switch has a conflict", effect: { kind: "conflicted", reason: "wrong_target_head" }, hold: READ_B,
+    steps: SWITCH_STEPS, panels: [],
+    shown: { title: "Chapter A", body: "Base", editable: true, alert: "无法打开这一章。" } },
+  { end: "the Chapter read fails", refuse: READ_B, hold: READ_B, steps: [READ_B], panels: [],
+    shown: { title: "Chapter A", body: "Base", editable: true, alert: "无法打开这一章：快照已过期。" } },
+  // A tab with no writer reads no Activity.
+  { end: "the tab loses the writer", lostWriter: true, hold: READ_B, steps: [...SWITCH_STEPS, ...REOPEN_STEPS],
+    panels: PANEL_READS,
+    shown: { title: "Chapter B", body: "Beta", editable: false, alert: undefined } },
+  // No hand-over exists yet, so the Arrival Input also goes to the notice when the editor of the Chapter is ready.
+  { end: "the editor is ready", hold: READ_B, steps: [...SWITCH_STEPS, ...REOPEN_STEPS],
+    panels: [...PANEL_READS, ACTIVITY],
+    shown: { title: "Chapter B", body: "Beta", editable: true, alert: undefined } },
+])("sends no Author Edit of the Arrival Input and shows it in a notice that stays when $end", async ({
+  hold, effect, refuse, lostWriter, steps, panels, shown }) => {
+  const workspace = await openWorkspace((server) => {
+    server.effect = effect;
+    server.lostWriter = lostWriter === true;
+  });
+  await workspace.copy(CHAPTER_B);
+  if (hold === "outcome") {
+    workspace.server.refuse.add(AUTHOR_EDITS);
+    await workspace.typeAtEnd("!");
+    await expect.poll(() => workspace.server.requests.includes(AUTHOR_EDITS)).toBe(true);
+  }
+  if (refuse !== undefined) workspace.server.refuse.add(refuse);
+  const held = hold !== "outcome" ? hold
+    : `GET ${P}/manuscript/author-edit-outcomes/${[...workspace.server.editKeys].join()}`;
+  workspace.server.hold(held);
+  const before = workspace.server.requests.length;
+
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(held)).toBe(true);
+  await workspace.typeAtEnd("?");
+  const typed = { ...workspace.shown(), save: workspace.saveState() };
+  workspace.server.release(held);
+
+  await expect.poll(() => ({ ...workspace.ready(), notice: workspace.notice() })).toEqual({ ...shown, notice: {
+    role: "status", chapter: CHAPTER_B, heading: UNSAVED_HEADING, sentence: UNSAVED_SENTENCE, text: "Beta?",
+    underTitle: true } });
+  await expectRequests(workspace.server, before, steps.map((step) => step !== "outcome" ? step : held), panels);
+  expect(typed).toEqual({ title: "Chapter B", body: "Beta?", editable: true, alert: undefined, save: "saving" });
+});
+
+/** Each request from `before`: the steps in their order, and then the panels of the new editor part with no order. */
+async function expectRequests(server: { requests: string[] }, before: number, steps: string[], panels: string[]) {
+  await expect.poll(() => {
+    const sent = server.requests.slice(before);
+    return [...sent.slice(0, steps.length), ...sent.slice(steps.length).sort()];
+  }).toEqual([...steps, ...[...panels].sort()]);
+}
+
+const READY = { title: "Chapter B", body: "Beta", editable: true, alert: undefined };
+
+it("accepts no input in an Arriving Chapter whose copy does not have the fact of no open suggestion", async () => {
+  const workspace = await openWorkspace((server) => {
+    server.lists[CHAPTER_B] = "018f0000-0000-7001-8000-000000000474";
+  });
+  await workspace.copy(CHAPTER_B);
+  workspace.server.hold(READ_B);
+  const before = workspace.server.requests.length;
+
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+  const typed = { ...workspace.shown(), fact: workspace.fact(), save: workspace.saveState() };
+  workspace.server.release(READ_B);
+
+  await expect.poll(() => ({ ...workspace.ready(), notice: workspace.notice() })).toEqual({ ...READY,
+    notice: undefined });
+  await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS],
+    [...PANEL_READS, ACTIVITY, `GET ${P}/proposals/${PROPOSAL}`]);
+  expect(typed).toEqual({ ...READY, editable: false, fact: "false", save: "saved" });
+});
+
+it("accepts no new input while the switch waits for a Challenge rate limit", async () => {
+  const workspace = await openWorkspace();
+  await workspace.copy(CHAPTER_B);
+  workspace.server.limited = true;
+  const before = workspace.server.requests.length;
+
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.waits.length).toBe(1);
+  await workspace.typeAtEnd("?");
+  const waiting = { ...workspace.shown(), save: workspace.saveState(),
+    status: workspace.root.querySelector('.editor-panel > [role="status"]')?.textContent };
+  workspace.waits[0]!();
+
+  await expect.poll(() => ({ ...workspace.ready(), notice: workspace.notice() })).toEqual({ ...READY,
+    notice: undefined });
+  await expectRequests(workspace.server, before, [READ_B, CHALLENGE, CHALLENGE, SWITCH, ...REOPEN_STEPS],
+    [...PANEL_READS, ACTIVITY]);
+  expect(waiting).toEqual({ ...READY, editable: false, save: "saved", status: CHAPTER_SWITCH_WAITING_SENTENCE });
+});
+
+it("shows the Arrival Input from before a wait for a Challenge rate limit in the notice when the author clicks the earlier Chapter",
+  async () => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    workspace.server.limited = true;
+    workspace.server.hold(CHALLENGE);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(CHALLENGE)).toBe(true);
+    await workspace.typeAtEnd("?");
+    workspace.server.release(CHALLENGE);
+    await expect.poll(() => workspace.waits.length).toBe(1);
+
+    workspace.button(CHAPTER).click();
+
+    await expect.poll(() => ({ ...workspace.shown(), notice: workspace.notice()?.text })).toEqual({
+      title: "Chapter A", body: "Base", editable: true, alert: undefined, notice: "Beta?" });
+    await expectRequests(workspace.server, before, [READ_B, CHALLENGE], []);
+  });
+
+it("accepts no more input when the Chapter read of the switch gives another Revision", async () => {
+  const workspace = await openWorkspace();
+  await workspace.copy(CHAPTER_B);
+  // The tab keeps the flight of a switch command for each target Revision, so this test has a Revision of its own.
+  workspace.server.texts[CHAPTER_B] = { revision: "018f0000-0000-7001-8000-000000000808", title: "Chapter B",
+    body: "Beta two" };
+  workspace.server.hold(READ_B);
+  workspace.server.hold(CHALLENGE);
+  const before = workspace.server.requests.length;
+
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+  workspace.server.release(READ_B);
+  await expect.poll(() => workspace.server.isHeld(CHALLENGE)).toBe(true);
+  await workspace.typeAtEnd("!");
+  // The text of the Arrival Input stays on the screen.
+  const stopped = { ...workspace.shown(), save: workspace.saveState() };
+  workspace.server.release(CHALLENGE);
+
+  await expect.poll(() => ({ ...workspace.ready(), notice: workspace.notice()?.text })).toEqual({ ...READY,
+    body: "Beta two", notice: "Beta?" });
+  await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY]);
+  expect(stopped).toEqual({ ...READY, body: "Beta?", editable: false, save: "saving" });
+});
+
+it("accepts 240 operations of Arrival Input, refuses the next one, and writes none to the Local Edit Journal",
+  async () => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    workspace.server.hold(READ_B);
+    const journal = await journalRecords(workspace.journal);
+    const before = workspace.server.requests.length;
+
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+    focusManuscriptEnd(workspace.editor(), window);
+    for (let key = 0; key < 241; key += 1) await applyTrustedInput({ operation: "insert_text", text: "x" });
+    const bounded = { body: manuscriptBody(workspace.editor()), journal: await journalRecords(workspace.journal) };
+    workspace.server.release(READ_B);
+
+    await expect.poll(() => ({ ...workspace.ready(), notice: workspace.notice()?.text })).toEqual({ ...READY,
+      notice: `Beta${"x".repeat(240)}` });
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY]);
+    expect(bounded).toEqual({ body: `Beta${"x".repeat(240)}`, journal });
+  });
+
+it("marks the Arriving Chapter in the contents, and marks the earlier Chapter again when the switch ends with no editor",
+  async () => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    workspace.server.refuse.add(READ_B);
+    workspace.server.hold(READ_B);
+    const marked = () => [CHAPTER, CHAPTER_B].map((id) => workspace.button(id).getAttribute("aria-current"));
+    const before = workspace.server.requests.length;
+
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+    const during = marked();
+    workspace.server.release(READ_B);
+
+    await expect.poll(workspace.shown).toEqual({ title: "Chapter A", body: "Base", editable: true,
+      alert: "无法打开这一章：快照已过期。" });
+    await expectRequests(workspace.server, before, [READ_B], []);
+    expect({ during, after: marked() }).toEqual({ during: ["false", "true"], after: ["true", "false"] });
+  });
+
+it("copies the text of the notice with each paragraph, and the notice closes only when the author closes it",
+  async () => {
+    await updateClipboardPermission({ action: "grant" });
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    workspace.server.refuse.add(READ_B);
+    workspace.server.hold(READ_B);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+    await workspace.typeAtEnd("?");
+    await applyTrustedInput({ operation: "enter" });
+    await applyTrustedInput({ operation: "insert_text", text: "Z" });
+    workspace.server.release(READ_B);
+    await expect.poll(() => workspace.notice()?.text).toBe("Beta?\nZ");
+    const action = (name: string) => workspace.root.querySelector<HTMLButtonElement>(`[data-arrival-notice-${name}]`)!;
+
+    action("copy").click();
+    await expect.poll(() => action("copy").textContent).toBe("已复制");
+    const copied = await navigator.clipboard.readText();
+    action("close").click();
+
+    await expect.poll(() => ({ ...workspace.shown(), notice: workspace.notice() })).toEqual({ title: "Chapter A",
+      body: "Base", editable: true, alert: "无法打开这一章：快照已过期。", notice: undefined });
+    await expectRequests(workspace.server, before, [READ_B], []);
+    expect(copied).toBe("Beta?\nZ");
+  });

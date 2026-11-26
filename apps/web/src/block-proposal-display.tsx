@@ -4,6 +4,7 @@ import { getProposal, listChapterOpenProposals } from "../../../generated/typesc
 import type {
   BlockProposalInspect, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { ArrivalSink } from "./arrival-input.ts";
 import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-editor.tsx";
 import type { EditorReadyState } from "./editor-types.ts";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
@@ -79,10 +80,11 @@ export function BlockProposalDisplay({
   /** Starts a read of the open suggestions. The returned function receives the Proposals of a complete list. */
   startSuggestionRead?: (() => (proposalIds: readonly string[] | undefined) => void) | undefined;
   /**
-   * The read-only text that the editor part shows during the switch to an Arriving Chapter (ADR 0105). The editor and
-   * the Proposal states of this Chapter end. The reads and the state of this display stay for a switch that fails.
+   * The text that the editor part shows during the switch to an Arriving Chapter (ADR 0105). With `input` it accepts
+   * Arrival Input, and it is read-only with no `input`. The editor and the Proposal states of this Chapter end. The
+   * reads and the state of this display stay for a switch that fails.
    */
-  arriving?: { key: string; blocks: ManuscriptEditorProps["blocks"] } | undefined;
+  arriving?: { key: string; blocks: ManuscriptEditorProps["blocks"]; input?: ArrivalSink | undefined } | undefined;
   persistWorkspace: EditorReadyState | undefined;
   onFailure: (error: unknown) => void;
   baseUrl: string;
@@ -720,7 +722,10 @@ export function BlockProposalDisplay({
     });
   };
 
-  if (arriving !== undefined) return <ManuscriptEditor key={arriving.key} blocks={arriving.blocks} editable={false} />;
+  if (arriving !== undefined) {
+    return <ManuscriptEditor key={arriving.key} blocks={arriving.blocks} editable={arriving.input !== undefined}
+      arrival={arriving.input} />;
+  }
   return (
     <>
       <ManuscriptEditor key="editor" {...editorProps}
