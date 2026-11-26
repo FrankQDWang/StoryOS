@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { EditorReadyState } from "./editor-types.ts";
+import type { EditorReadyState, ProjectActivityEvent } from "./editor-types.ts";
 import {
   consumeOwnedProjectActivity,
   type ProjectActivitySyncResult,
@@ -12,15 +12,20 @@ export function ProjectActivityStatus({
   fetchImpl,
   revisionKey,
   onUnavailable,
+  onEvents,
 }: {
   workspace: EditorReadyState | undefined;
   baseUrl: string;
   fetchImpl: typeof fetch;
   revisionKey: string;
   onUnavailable: () => void;
+  /** Receives the events of each consumed result. */
+  onEvents?: ((events: readonly ProjectActivityEvent[]) => void) | undefined;
 }) {
   const onUnavailableRef = useRef(onUnavailable);
   onUnavailableRef.current = onUnavailable;
+  const onEventsRef = useRef(onEvents);
+  onEventsRef.current = onEvents;
   const [result, setResult] = useState<ProjectActivitySyncResult>();
   useEffect(() => {
     if (workspace === undefined) return;
@@ -31,6 +36,7 @@ export function ProjectActivityStatus({
       if (controller.signal.aborted) return;
       setResult(next);
       if (next.kind === "unavailable") onUnavailableRef.current();
+      else onEventsRef.current?.(next.ingest.events);
     }).catch(() => {
       if (!controller.signal.aborted) onUnavailableRef.current();
     });

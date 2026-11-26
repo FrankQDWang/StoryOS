@@ -23,6 +23,8 @@ import {
   openSelectedChapter,
   selectedChapterSurface,
 } from "./chapter-navigation.ts";
+import { chapterText, createChapterCopies, editorParagraphs, type ChapterCopies, type ChapterCopy }
+  from "./chapter-copies.ts";
 import { deleteOwnedChapter } from "./delete-chapter.ts";
 import { deleteOwnedVolume } from "./delete-volume.ts";
 import type {
@@ -44,6 +46,7 @@ import { ManuscriptSearchPanel } from "./manuscript-search.tsx";
 import { ManuscriptStatisticsPanel } from "./manuscript-statistics.tsx";
 import { ManuscriptReadableExportPanel } from "./manuscript-readable-export.tsx";
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
+import { ManuscriptEditor } from "./manuscript-editor.tsx";
 import { ManuscriptTree } from "./manuscript-tree.tsx";
 import { readManuscriptTree } from "./manuscript-tree-read.ts";
 import { relabelDraftReferences } from "./selection-reference-draft.ts";
@@ -86,7 +89,8 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
 
 /** The commands of the editor part that the contents list and the assistant panel start. */
 interface ProjectEditorHandle {
-  selectChapter: (chapterId: string) => Promise<boolean>;
+  /** `contents` is true for a selection in the contents: the selected Chapter is on the screen at once (ADR 0105). */
+  selectChapter: (chapterId: string, contents?: boolean) => Promise<boolean>;
   removeChapter: (chapterId: string) => void;
   removeVolume: (volumeId: string) => void;
   navigateProposal: (destination: ProposalDestination) => void;
@@ -107,6 +111,7 @@ interface ProjectEditorViewProps extends ProjectReadyViewProps {
   treeReads: { readonly current: number };
   handle: { current: ProjectEditorHandle | undefined };
   onStatus: (status: ProjectEditorStatus) => void;
+  copies: ChapterCopies;
 }
 
 const INPUT_BOUND_STOP_MESSAGE =
@@ -119,16 +124,13 @@ const AUTHOR_UNDO_UNAVAILABLE_MESSAGES: Record<AuthorUndoUnavailableError["reaso
   source_unavailable: "无法撤销：这个操作的记录已不可用。",
 };
 
-function editorParagraphs(
-  blocks: ProjectReadyViewProps["state"]["chapter"]["chapter"]["current_revision"]["blocks"],
-): { manuscript_block_id: string; text: string; block_kind: "paragraph" | "heading" }[] {
-  return blocks
-    .filter((block) => block.block_kind === "paragraph" || block.block_kind === "heading")
-    .map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      block_kind: block.block_kind,
-      text: block.text,
-    }));
+/** The blocks of a Pending Edit Projection, as the editor shows them. */
+function pendingParagraphs(pending: PendingEditProjection) {
+  return pending.blocks.map((block) => ({
+    manuscript_block_id: block.manuscript_block_id,
+    block_kind: block.block_kind === "heading" ? "heading" as const : "paragraph" as const,
+    text: block.text,
+  }));
 }
 
 /**
@@ -146,6 +148,11 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   const [treeRead, setTreeRead] = useState<"reading" | "settled">(state.tree === undefined ? "reading" : "settled");
   const [status, setStatus] = useState<ProjectEditorStatus>({ selectedChapterId: state.chapter.chapter.chapter_id,
     canSubmit: false });
+  // The copies of Chapter text of this Project (ADR 0105). They end when the tab leaves the Project.
+  const [copies] = useState(() => createChapterCopies({ scope: state.project.project_scope, baseUrl, fetchImpl,
+    timers: props.writingTimers }));
+  useEffect(() => () => { copies.close(); }, [copies]);
+  useEffect(() => { copies.write(state.chapter.chapter.chapter_id, chapterText(state.chapter)); }, [copies, state]);
   const [shown, setShown] = useState(state);
   if (shown !== state) {
     setShown(state);
@@ -185,8 +192,10 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   }, [tree, state.project.project_scope]);
 
   const selectChapter = (chapterId: string) => editor.current?.selectChapter(chapterId) ?? Promise.resolve(false);
+  const canChangeCurrentChapter = state.editor.kind === "editor-ready"
+    && state.editor.session.writer.kind === "current_writer";
   const holdAddressConversation = useAddressChapter({ tree, currentChapterId, open: selectChapter,
-    canChangeCurrentChapter: state.editor.kind === "editor-ready" && state.editor.session.writer.kind === "current_writer",
+    canChangeCurrentChapter,
     onNotFound: () => editor.current?.showRecovery(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
   return (
     <WritingWorkspace
@@ -231,7 +240,8 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
               fetchImpl={fetchImpl}
               cryptoImpl={cryptoImpl}
               selectedChapterId={status.selectedChapterId}
-              onSelectChapter={selectChapter}
+              onSelectChapter={(chapterId) => { void editor.current?.selectChapter(chapterId, true); }}
+              onChapterPointer={canChangeCurrentChapter ? copies.pointer : undefined}
               onChapterCreated={readTree}
               onVolumeUpdated={readTree}
               onRemoveChapter={(chapterId) => editor.current?.removeChapter(chapterId)}
@@ -251,6 +261,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
       )}
       editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeRead={treeRead} treeReads={treeReads}
         handle={editor}
+        copies={copies}
         onStatus={setStatus} />}
     />
   );
@@ -259,7 +270,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 /** The editor part of the workspace. It starts again with each new Chapter, writer, or base of the Editor Session. */
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
-  proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus,
+  proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus, copies,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -282,6 +293,9 @@ function ProjectEditorView({
   const [switchRecovery, setSwitchRecovery] = useState<string>();
   // The Chapter whose switch waits for the Retry-After of a Command Challenge rate limit (#1679).
   const [switchWaiting, setSwitchWaiting] = useState<string>();
+  // The Arriving Chapter of a selection in the contents, from the selection to the end of its switch. With a copy, the
+  // editor part shows the copy read-only, and the editor of the earlier Chapter ends (ADR 0105).
+  const [arrival, setArrival] = useState<{ chapterId: string; copy: ChapterCopy | undefined }>();
   // The wait of the current switch, from the click to its end. Closing the view ends it.
   const switchWaitRef = useRef<{ wait: ChallengeAdmissionWait; waiting: boolean } | undefined>(undefined);
   useEffect(() => () => { switchWaitRef.current?.wait.cancel(); }, []);
@@ -383,7 +397,7 @@ function ProjectEditorView({
 
   // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026). The result is true
   // when the command changed the Current Chapter and the workspace opens again at the Chapter.
-  const selectChapter = (chapterId: string): Promise<boolean> => {
+  const selectChapter = (chapterId: string, contents = false): Promise<boolean> => {
     // The latest click of the author wins: a click ends the wait of an earlier switch (#1679).
     const earlier = switchWaitRef.current;
     if (structureInFlightRef.current && earlier?.waiting !== true) return Promise.resolve(false);
@@ -391,6 +405,7 @@ function ProjectEditorView({
       earlier.wait.cancel();
       switchWaitRef.current = undefined;
       setSwitchWaiting(undefined);
+      setArrival(undefined);
       structureInFlightRef.current = false;
     }
     if (chapterId === selectedChapterIdRef.current) return Promise.resolve(false);
@@ -404,6 +419,10 @@ function ProjectEditorView({
     switchGenerationRef.current = generation;
     const active = { wait: createChallengeAdmissionWait(writingTimers), waiting: false };
     switchWaitRef.current = active;
+    const arrive = () => {
+      if (contents && generation === switchGenerationRef.current) setArrival({ chapterId, copy: copies.get(chapterId) });
+    };
+    arrive();
     return (async () => {
       let reopened = false;
       let cancelled = false;
@@ -413,8 +432,11 @@ function ProjectEditorView({
         const quiet = await active.wait.retry(() => {
           active.waiting = false;
           setSwitchWaiting(undefined);
-          return writing.runAfterQuiesce("settled", async () => {
+          return writing.runAfterQuiesce("settled", async (settled) => {
             if (generation !== switchGenerationRef.current) return;
+            // The switch writes the settled base of the Chapter that the tab leaves.
+            copies.write(currentChapterId, { title: selectedChapter.chapter.title,
+              revisionId: settled.authoritative_revision_id, blocks: pendingParagraphs(settled) });
             if (target === undefined) {
               const opened = await openSelectedChapter({
                 baseUrl,
@@ -429,6 +451,9 @@ function ProjectEditorView({
                 return;
               }
               target = opened.chapter;
+              // A newer Revision in the read replaces the copy and the shown text.
+              copies.write(chapterId, chapterText(opened.chapter));
+              arrive();
             }
             // A Challenge rate limit propagates to the wait.
             const switched = await setOwnedCurrentChapter({
@@ -468,6 +493,8 @@ function ProjectEditorView({
       } finally {
         // A cancelled wait belongs to an earlier click or to a view that closed.
         if (!cancelled) structureInFlightRef.current = false;
+        // A switch that reached the editor starts this part again. Each other end shows the earlier Chapter again.
+        if (!cancelled && generation === switchGenerationRef.current) setArrival(undefined);
         if (switchWaitRef.current === active) switchWaitRef.current = undefined;
       }
       return reopened;
@@ -530,11 +557,7 @@ function ProjectEditorView({
     ? state.editor.session.writer
     : state.editor.writer;
   const editorBlocks = selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
-    ? pending.blocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      block_kind: block.block_kind === "heading" ? "heading" as const : "paragraph" as const,
-      text: block.text,
-    }))
+    ? pendingParagraphs(pending)
     : editorParagraphs(selectedChapter.chapter.current_revision.blocks);
   const onEditorFailure = (error: unknown) => {
     if (historicalAcknowledgementUnavailable(error)) {
@@ -552,6 +575,7 @@ function ProjectEditorView({
   };
   onEditorFailureRef.current = onEditorFailure;
   const openedProposal = (locator: ProposalLocator) => {
+    copies.proposalsChanged();
     rememberLocator(locator);
     setProposalRefresh((current) => current + 1);
   };
@@ -571,6 +595,7 @@ function ProjectEditorView({
     handle.current = own;
     return () => { if (handle.current === own) handle.current = undefined; };
   });
+  const arriving = arrival?.copy;
   const selectedChapterId = selectedChapter.chapter.chapter_id;
   const canSubmit = selectedChapterId === currentChapterId && saveState === "saved" && !readOnly;
   useEffect(() => { onStatus({ selectedChapterId, canSubmit }); }, [selectedChapterId, canSubmit, onStatus]);
@@ -580,8 +605,10 @@ function ProjectEditorView({
         : (switchRecovery ?? proposalNotice) === undefined ? null : (
           <p role="alert">{switchRecovery ?? proposalNotice}</p>
         )}
-      <h2>{selectedChapter.chapter.title}</h2>
-      <BlockProposalDisplay
+      <h2>{arriving?.title ?? selectedChapter.chapter.title}</h2>
+      {arriving !== undefined && arrival !== undefined
+        ? <ManuscriptEditor key={`${arrival.chapterId}:${arriving.revisionId}`} blocks={arriving.blocks} editable={false} />
+        : <BlockProposalDisplay
         key={selectedChapter.chapter.chapter_id}
         scope={state.project.project_scope}
         chapterId={selectedChapter.chapter.chapter_id}
@@ -599,6 +626,7 @@ function ProjectEditorView({
             && JSON.stringify(pending.blocks)
               === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
         onAccepted={async (settled) => {
+          copies.proposalsChanged();
           // A decision with no settled response opens the Project with each check of the first open.
           onReopened(await (settled ? reopen() : opening(() => openControlledProject({ baseUrl,
             projectId: state.project.project.project_id, fetchImpl, cryptoImpl }))));
@@ -618,7 +646,9 @@ function ProjectEditorView({
             || saveState === "saved",
           tree,
         }}
-        editable={!readOnly}
+        editable={!readOnly && arrival === undefined}
+        startSuggestionRead={selectedChapter.chapter.chapter_id === currentChapterId
+          ? () => copies.suggestionRead(currentChapterId) : undefined}
         persistWorkspace={
           state.editor.kind === "editor-ready"
             && selectedChapter.chapter.chapter_id === currentChapterId
@@ -630,7 +660,7 @@ function ProjectEditorView({
         fetchImpl={fetchImpl}
         cryptoImpl={cryptoImpl}
         onFailure={onEditorFailure}
-      />
+      />}
       <div className="editor-status">
       <ManuscriptStatisticsPanel
         projectId={state.project.project.project_id}
@@ -651,6 +681,7 @@ function ProjectEditorView({
         }
         data-author-undo-frontier={pending?.author_undo_frontier_sequence ?? ""}
         data-chapter-switch-waiting={switchWaiting ?? ""}
+        data-arrival-no-open-suggestion={arriving === undefined ? "" : String(arriving.noOpenSuggestion)}
       >
         {saveState === "saved" ? "已保存"
           : saveState === "saving" ? "保存中"
@@ -667,6 +698,7 @@ function ProjectEditorView({
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}
         revisionKey={pending?.authoritative_revision_id ?? ""}
+        onEvents={copies.activity}
         onUnavailable={() => {
           setReadOnly(true);
           setSaveState("needs_attention");

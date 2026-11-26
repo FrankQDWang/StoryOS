@@ -35,7 +35,7 @@ export type ProposalLocator = {
 type OpenProposalList = { kind: "reading" } | { kind: "failed" }
   | { kind: "listed"; complete: boolean; locators: ProposalLocator[] };
 
-async function readOpenProposalList(scope: ProjectScope, chapterId: string, baseUrl: string,
+export async function readOpenProposalList(scope: ProjectScope, chapterId: string, baseUrl: string,
   fetchImpl: typeof fetch): Promise<OpenProposalList> {
   try {
     const response = await listChapterOpenProposals({ baseUrl, fetchImpl, projectId: scope.project_id, chapterId });
@@ -59,7 +59,7 @@ type ProposalRead = {
 
 export function BlockProposalDisplay({
   scope, chapterId, authoritativeRevisionId, locators, refreshKey, safeToProject,
-  onAccepted, ...editorProps
+  onAccepted, startSuggestionRead, ...editorProps
 }: ManuscriptEditorProps & {
   scope: ProjectScope;
   chapterId: string;
@@ -69,6 +69,8 @@ export function BlockProposalDisplay({
   safeToProject: boolean;
   /** Opens the Project again after a decision. `settled` is true when the decision has a settled response. */
   onAccepted: (settled: boolean) => Promise<void>;
+  /** Starts a read of the open suggestions. The returned function receives true when the Chapter has none (ADR 0105). */
+  startSuggestionRead?: (() => (none: boolean) => void) | undefined;
   persistWorkspace: EditorReadyState | undefined;
   onFailure: (error: unknown) => void;
   baseUrl: string;
@@ -171,10 +173,15 @@ export function BlockProposalDisplay({
     return () => { active = false; };
   }, [editorProps.persistWorkspace, settlementRefresh, settlements, decisionGeneration]);
 
+  const startSuggestionReadRef = useRef(startSuggestionRead);
+  startSuggestionReadRef.current = startSuggestionRead;
   useEffect(() => {
     let active = true;
+    const record = startSuggestionReadRef.current?.();
     void readOpenProposalList(scope, chapterId, editorProps.baseUrl, editorProps.fetchImpl).then((next) => {
-      if (active) setOpenList((current) => canonical(current) === canonical(next) ? current : next);
+      if (!active) return;
+      setOpenList((current) => canonical(current) === canonical(next) ? current : next);
+      if (next.kind === "listed") record?.(next.complete && next.locators.length === 0);
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, refreshKey, settlementRefresh, settlements,

@@ -18,6 +18,8 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/sto
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { openControlledProject } from "../../src/boot.ts";
 import { storedActivityStreamCursor } from "../../src/project-activity-sync.ts";
+import { POINTER_STAY_MS } from "../../src/chapter-copies.ts";
+import type { ChallengeAdmissionTimers } from "../../src/challenge-admission-wait.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
 import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import {
@@ -282,6 +284,12 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
           ...(other ? [OTHER] : [])].map(({ proposal_id, revision_id, kind,
           source }) => ({ proposal_id, revision_id, kind, source })) });
     }
+    // Chapter B has no open suggestion.
+    if (name === openProposalsRead(CHAPTER_B)) {
+      return jsonResponse({ schema_id: "storyos.query.chapter-open-proposals.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-000000000c72", project_scope: scope, chapter_id: CHAPTER_B,
+        completeness: "complete", proposals: [] });
+    }
     if (name === PROPOSAL_READ && state.late?.chapter === true && state.late.session) {
       state.late = undefined;
       state.accepted = true;
@@ -511,14 +519,15 @@ afterEach(async () => {
 });
 
 /** Opens the workspace at the address with the query `search`, for example the Conversation of the address. */
-async function openWorkspace(server: ReturnType<typeof fakeServer>, search = "") {
+async function openWorkspace(server: ReturnType<typeof fakeServer>, search = "",
+  writingTimers?: ChallengeAdmissionTimers) {
   await deleteJournal(server.scenario.journalName);
   history.replaceState(null, "", `${location.pathname}${search}`);
   document.body.innerHTML = '<main id="app"></main>';
   const loaded = await loadStoryOSWebState({ documentImpl: document,
     locationImpl: { origin: location.origin, pathname: `/projects/${PROJECT}` },
     fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
-  const view = mountStage1View(loaded.root, loaded);
+  const view = mountStage1View(loaded.root, { ...loaded, writingTimers });
   unmounts.push(() => view.unmount());
   // A writable workspace shows the saved state. A read-only recovery shows "needs_attention".
   const shown = () => ({ title: loaded.root.querySelector(".editor-panel h2")?.textContent,
@@ -749,35 +758,30 @@ it.each([
       `"project_activity_stream:${OWNER}:${PROJECT}"`);
     const journal = await journalRows(server);
     const before = server.log.started.length;
-    // The observer records the title and the text of the editor at each change of the page. A render that a later
-    // render in the same task replaces is gone before the observer reads the page. Thus for each mutation record, the
-    // observer also examines the target, the old value, and each added and each removed node: a heading with the title
-    // of Chapter B, and the text of Chapter B anywhere.
+    // The observer records the title, the text, and the Revision of the editor at each change of the page. The
+    // selection shows the Arriving Chapter B read-only from the Chapter read of the switch (ADR 0105). An editor of the
+    // discarded read has the Revision of Chapter B. A render that a later render in the same task replaces is gone
+    // before the observer reads the page. Thus for each mutation record, the observer also examines the target, the
+    // old value, and each added and each removed node: the Revision of Chapter B anywhere.
     const shownChapters = new Set<string>();
     const discardedShown = new Set<string>();
-    const examine = (node: Node, text: string | null) => {
-      if (text?.includes(CHAPTER_B_BODY)) discardedShown.add(CHAPTER_B_BODY);
-      const heading = (node instanceof Element ? node : node.parentElement)?.closest("h2");
-      if (heading != null && text === "Chapter B") discardedShown.add("Chapter B");
-      if (node instanceof Element && [...node.querySelectorAll("h2")].some((title) => title.textContent === "Chapter B")) {
-        discardedShown.add("Chapter B");
-      }
+    const revision = "data-authoritative-revision-id";
+    const examine = (node: Node, value: string | null) => {
+      if (value === REVISION_B) discardedShown.add(REVISION_B);
+      if (node instanceof Element && [node, ...node.querySelectorAll(`[${revision}]`)]
+        .some((element) => element.getAttribute(revision) === REVISION_B)) discardedShown.add(REVISION_B);
     };
     const observer = new MutationObserver((records) => {
       for (const record of records) {
-        examine(record.target, record.target.textContent);
         examine(record.target, record.oldValue);
-        for (const node of [...record.addedNodes, ...record.removedNodes]) {
-          examine(node, node.textContent);
-          // A removed text node of a heading has no parent: the target is the heading.
-          examine(record.target, node.textContent);
-        }
+        for (const node of [...record.addedNodes, ...record.removedNodes]) examine(node, null);
       }
       shownChapters.add(JSON.stringify([workspace.root.querySelector(".editor-panel h2")?.textContent,
-        workspace.root.querySelector("[data-manuscript-editor]")?.textContent]));
+        workspace.root.querySelector("[data-manuscript-editor]")?.textContent,
+        workspace.root.querySelector(`[${revision}]`)?.getAttribute(revision)]));
     });
-    observer.observe(workspace.root, { subtree: true, childList: true, characterData: true,
-      characterDataOldValue: true });
+    observer.observe(workspace.root, { subtree: true, childList: true, characterData: true, attributes: true,
+      attributeFilter: [revision], attributeOldValue: true });
     server.holdAfter(SWITCH, reopenReads(CHAPTER_B));
 
     chapterB(workspace.root)!.click();
@@ -809,7 +813,8 @@ it.each([
     expect({ shown: [...shownChapters], discardedShown: [...discardedShown], journal: discarded,
       chapters: later.filter((name) => name.startsWith(`GET ${P}/chapters/`) && !name.endsWith("/open-proposals")),
       unexpected: server.log.unexpected }).toEqual({
-      shown: [JSON.stringify(["Chapter A", "Base"])], discardedShown: [], journal,
+      shown: [JSON.stringify(["Chapter B", CHAPTER_B_BODY, REVISION]), JSON.stringify(["Chapter A", "Base", REVISION])],
+      discardedShown: [], journal,
       chapters: [chapterRead(CHAPTER_B), chapterRead(CHAPTER)], unexpected: [] });
   });
 
@@ -1736,4 +1741,65 @@ it("opens the Project again when a reload read the Chapter before the Server app
     // the editor does not show, so the page reopens the Project after it.
     unexpected: server.log.unexpected }).toEqual({ open: [PROTOCOL, LIST, LIST, PROJECT_READ, PROJECT_READ].sort(),
     revision: ACCEPTED_REVISION, unexpected: [] });
+});
+
+it.each([
+  { event: "no Proposal change", fact: "true" },
+  { event: "a new Proposal of a Run", fact: "false" },
+  { event: "a decision", fact: "false" },
+])("keeps the fact of no open suggestion in the copy of Chapter B only with $event (ADR 0105)", async ({ event, fact }) => {
+  const decision = event === "a decision";
+  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, PROPOSAL_READ, CONVERSATION_READ, RUN_READ,
+    SOURCES_READ, chapterRead(CHAPTER_B), openProposalsRead(CHAPTER_B)],
+  commands: [SESSION_CREATE, SWITCH, ...(decision ? [ACCEPTANCE] : [])], proposals: decision, acceptance: "applied",
+  assistant: "available", proposalResult: event === "a new Proposal of a Run" });
+  // The stay timer of the pointer waits until the test runs it. Each other timer is a real timer.
+  const stays: { callback: () => void; cleared: boolean; fired?: boolean }[] = [];
+  const timers: ChallengeAdmissionTimers = {
+    setTimeoutImpl: (callback, timeout) => timeout === POINTER_STAY_MS
+      ? -stays.push({ callback, cleared: false }) : globalThis.setTimeout(callback, timeout),
+    clearTimeoutImpl: (timer) => {
+      if (typeof timer === "number" && timer < 0) stays[-timer - 1]!.cleared = true;
+      else globalThis.clearTimeout(timer);
+    },
+  };
+  server.hold([RUN_READ]);
+  const workspace = await openWorkspace(server, decision ? "" : `?conversation=${CONVERSATION}`, timers);
+  const chapterB = () => workspace.root.querySelector<HTMLButtonElement>(`.tree-panel button[data-chapter-id="${CHAPTER_B}"]`)!;
+  const pointer = (type: "pointerover" | "pointerout") => chapterB().dispatchEvent(new PointerEvent(type, { bubbles: true }));
+  await expect.poll(() => chapterB()).not.toBeNull();
+  pointer("pointerover");
+  stays.at(-1)!.fired = true;
+  stays.at(-1)!.callback();
+  pointer("pointerout");
+  // A Chapter with a copy starts no stay timer.
+  await expect.poll(() => {
+    pointer("pointerover");
+    const started = stays.filter((timer) => !timer.cleared && timer.fired !== true).length;
+    pointer("pointerout");
+    return started;
+  }).toBe(0);
+
+  if (decision) {
+    const accept = () => workspace.root.querySelector<HTMLButtonElement>(
+      `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
+    await expect.poll(() => accept()?.disabled).toBe(false);
+    accept()!.click();
+    await expect.poll(() => server.count(ACCEPTANCE) === 1 && workspace.root.querySelector(".block-proposal") === null
+      && server.inFlight().length === 0).toBe(true);
+  } else {
+    server.release();
+    // The editor reads the Proposal after the assistant panel gives it.
+    await expect.poll(() => server.count(event === "no Proposal change" ? RUN_READ : PROPOSAL_READ) === 1
+      && server.inFlight().length === 0).toBe(true);
+  }
+  server.hold([chapterRead(CHAPTER_B)]);
+  chapterB().click();
+
+  await expect.poll(() => workspace.root.querySelector("[data-arrival-no-open-suggestion]")
+    ?.getAttribute("data-arrival-no-open-suggestion")).toBe(fact);
+  await expect.poll(() => server.held()).toBe(1);
+  server.release();
+  await expect.poll(workspace.shown).toEqual({ title: "Chapter B", save: "saved", failure: "" });
+  expect(server.log.unexpected).toEqual([]);
 });

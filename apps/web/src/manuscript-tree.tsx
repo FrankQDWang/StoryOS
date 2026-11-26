@@ -79,6 +79,7 @@ export function ManuscriptTree({
   cryptoImpl,
   selectedChapterId,
   onSelectChapter,
+  onChapterPointer,
   onChapterCreated,
   onVolumeUpdated,
   onRemoveChapter,
@@ -91,6 +92,7 @@ export function ManuscriptTree({
   cryptoImpl: Crypto;
   selectedChapterId?: string;
   onSelectChapter?: (chapterId: string) => void;
+  onChapterPointer?: ((chapterId: string, inside: boolean) => void) | undefined;
   onChapterCreated: () => void;
   onVolumeUpdated: () => void;
   onRemoveChapter?: (chapterId: string) => void;
@@ -187,6 +189,7 @@ export function ManuscriptTree({
                     expectedTreeRevision={tree.tree_revision}
                     selectedChapterId={selectedChapterId}
                     onSelectChapter={onSelectChapter}
+                    onChapterPointer={onChapterPointer}
                     onRemove={onRemoveChapter}
                     baseUrl={baseUrl}
                     fetchImpl={fetchImpl}

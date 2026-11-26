@@ -203,7 +203,8 @@ it("keeps the switch in progress through a Challenge rate limit and opens the Ch
     // The repeat does not read Chapter B again, so its Revision and the idempotency key stay the same.
     chapterB: opened.server.requests.filter((entry) => entry.endsWith(`/chapters/${CHAPTER_B}`)).length,
     sessions: opened.server.requests.filter((entry) => entry.endsWith("/editor-sessions")).length }).toEqual({
-    waited: { title: "Chapter A", save: "saved", failure: "", alert: undefined, status: WAITING, waiting: CHAPTER_B },
+    // The Chapter read of the switch answers before the Challenge, so the Arriving Chapter B is on the screen (ADR 0105).
+    waited: { title: "Chapter B", save: "saved", failure: "", alert: undefined, status: WAITING, waiting: CHAPTER_B },
     switchesBefore: 0,
     switches: 1,
     challenges: 2,
@@ -229,6 +230,16 @@ it("ends the wait of a switch when the author clicks another Chapter, and opens 
   });
 });
 
+it("ends the wait of a switch and shows the earlier Chapter again when the author clicks the earlier Chapter", async () => {
+  const opened = await clickWhileLimited(SET_CURRENT_CHAPTER);
+
+  opened.click(CHAPTER);
+
+  await expect.poll(opened.shown).toEqual({ title: "Chapter A", save: "saved", failure: "", alert: undefined, status: undefined, waiting: "" });
+  expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared, switches: opened.switches() })
+    .toEqual({ cleared: true, switches: 0 });
+});
+
 it("shows the sentence of the wait only while the later switch also waits", async () => {
   const opened = await clickWhileLimited(SET_CURRENT_CHAPTER, false, [CHAPTER_B, CHAPTER_C]);
 
@@ -239,7 +250,7 @@ it("shows the sentence of the wait only while the later switch also waits", asyn
   opened.timers.filter((timer) => timer.timeout === 7_000 && !timer.cleared).at(-1)!.callback();
 
   await expect.poll(opened.shown).toEqual({ title: "Chapter C", save: "saved", failure: "", alert: undefined, status: undefined, waiting: "" });
-  expect(laterWait).toEqual({ title: "Chapter A", save: "saved", failure: "", alert: undefined, status: WAITING, waiting: CHAPTER_C });
+  expect(laterWait).toEqual({ title: "Chapter C", save: "saved", failure: "", alert: undefined, status: WAITING, waiting: CHAPTER_C });
 });
 
 it("ends the sentence of the wait when the repeat gets a refusal that is not a rate limit", async () => {
