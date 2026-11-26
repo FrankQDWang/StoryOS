@@ -3,7 +3,7 @@ import { getProposal } from "../../../generated/typescript/storyos-public-releas
 import { openControlledProject } from "./boot.ts";
 import { openSelectedChapter } from "./chapter-navigation.ts";
 import type { EditorSessionWritingController } from "./editor-session-writing.ts";
-import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
+import { setOwnedCurrentChapter, SkippedCurrentChapterError } from "./set-current-chapter.ts";
 import type { ProjectReadyState, ControlledProjectState } from "./editor-types.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 
@@ -71,8 +71,13 @@ export function navigateProposal(options: {
       const switched = await setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId: scope.project_id,
         chapterId: destination.chapterId, expectedCurrentChapterId: current.project.project.open.current_chapter_id,
         expectedTargetRevisionId: opened.chapter.chapter.current_revision.revision_id,
-        editorSessionId: current.editor.session.editor_session.editor_session_id });
-      if (!latest()) return;
+        editorSessionId: current.editor.session.editor_session.editor_session_id,
+        // A later choice of the author after the Command Challenge replaces the command before it goes out.
+        proceed: latest }).catch((error: unknown) => {
+        if (error instanceof SkippedCurrentChapterError) return undefined;
+        throw error;
+      });
+      if (switched === undefined || !latest()) return;
       if (switched.effect.kind !== "authoritative_applied" && switched.effect.kind !== "no_effect") {
         throw new Error("无法打开写作会话。");
       }

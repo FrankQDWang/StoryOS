@@ -1322,6 +1322,45 @@ it.each([
     stored: "Beta?", switches: [[CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER]] });
 });
 
+it("sends no command of a Proposal navigation whose Command Challenge answers after a waiting selection", async () => {
+  const workspace = await openWorkspace((server) => { seedRun(server, CHAPTER_C, [RETURN_C]); });
+  await expect.poll(() => workspace.root.querySelector("[data-proposal-return]")?.tagName).toBe("BUTTON");
+  await workspace.copy(CHAPTER_B);
+  workspace.stopIdle();
+  workspace.server.hold(READ_B);
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+  // The navigation to Chapter C starts during the switch, and its Command Challenge waits.
+  workspace.server.hold(CHALLENGE);
+  workspace.root.querySelector<HTMLButtonElement>("[data-proposal-return]")!.click();
+  await expect.poll(() => workspace.server.isHeld(CHALLENGE)).toBe(true);
+  workspace.server.hold(openProposals(CHAPTER_B));
+  workspace.server.release(READ_B);
+  await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
+
+  workspace.button(CHAPTER).click();
+  workspace.server.release(CHALLENGE);
+  await expect.poll(() => workspace.server.answered.filter((name) => name === CHALLENGE).length).toBe(2);
+  workspace.server.acceptEdits = true;
+  workspace.server.release(openProposals(CHAPTER_B));
+
+  await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+    .toEqual({ title: "Chapter A", body: "Base", editable: true, alert: undefined, save: "saved", notice: undefined });
+  // The navigation reads Chapter C and opens the Project, and its Command Challenge answers with no command after it.
+  // Each read of the list also reads the Proposal of the Run, and that read fails. The tests are not about it.
+  const proposal = `GET ${P}/proposals/${PROPOSAL}`;
+  await expectRequests(workspace.server, before, [READ_B, READ_C, "GET /api/v1/protocol", `GET ${P}`,
+    "GET /api/v1/projects", `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, CHALLENGE, SWITCH,
+    ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY, proposal], [CHALLENGE, AUTHOR_EDITS, SESSION_READ],
+    { anyOrder: [openProposals(CHAPTER_B), proposal, `GET ${P}/manuscript/statistics`, ACTIVITY] },
+    [`GET ${P}/chapters/${CHAPTER}`, CHALLENGE, SWITCH, ...reopenSteps(CHAPTER)],
+    { anyOrder: [...panelReads(CHAPTER), proposal] });
+  expect({ stored: workspace.server.texts[CHAPTER_B]!.body, switches: workspace.server.switches }).toEqual({
+    stored: "Beta?", switches: [[CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER]] });
+});
+
 it("shows the Arrival Input in a notice and ends a waiting selection when a Proposal navigation starts while the hand-over waits",
   async () => {
   // The Run of the assistant request came from Chapter C, and its result has a return to Chapter C.
@@ -1930,14 +1969,20 @@ it("runs a waiting selection from the Current Chapter of the Server when the reo
     workspace.button(CHAPTER_C).click();
     // The reopen reads Chapter B again, and that read fails.
     workspace.server.refuse.add(READ_B);
+    workspace.server.hold(READ_C);
 
     workspace.server.release(SWITCH);
+    await expect.poll(() => workspace.server.isHeld(READ_C)).toBe(true);
+    // The editor part shows the failure sentence while the waiting selection reads Chapter C.
+    const failed = { ...workspace.ready(), notices: workspace.noticeTexts() };
+    workspace.server.release(READ_C);
 
     await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notices: workspace.noticeTexts() }))
       .toEqual({ ...ARRIVING_C, arriving: undefined, save: "saved", notices: ["Beta?"] });
     await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS, READ_C, CHALLENGE, SWITCH,
       ...reopenSteps(CHAPTER_C)], panelReads(CHAPTER_C));
-    expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER_C]]);
+    expect({ failed, switches: workspace.server.switches }).toEqual({ failed: { ...ARRIVING_C, editable: false,
+      alert: "无法打开这一章。", notices: ["Beta?"] }, switches: [[CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER_C]] });
   });
 
 /** True when the page asks before the tab unloads, for a reload or a close of the tab. */

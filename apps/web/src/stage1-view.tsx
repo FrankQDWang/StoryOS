@@ -649,10 +649,11 @@ function ProjectEditorView({
               const next = await reopen(reopenAt);
               // No editor mounts for a Chapter that a later selection replaced.
               if (chapter !== goal()) continue;
-              // A failed reopen gives a screen with no workspace and no way back to it. So when a selection waits,
-              // the switch ends in this editor part, and the waiting selection runs from the Current Chapter of the
-              // Server. Its reopen gives the next state.
-              if (next.kind === "project-blocked" && waitingStore.current !== undefined) return;
+              // The failure screen has no way back to the workspace, so a waiting selection runs from this editor part.
+              if (next.kind === "project-blocked" && waitingStore.current !== undefined) {
+                setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
+                return;
+              }
               // Arrival Input on the base of the new editor goes to it. The editor changes only after an open IME
               // composition ended, so the composition is not cut (ADR 0105, section 4).
               const typed = inputRef.current;
