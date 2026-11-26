@@ -4,6 +4,7 @@ import setCurrentChapterFixture from "../../../../generated/golden-wire/storyos-
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { POINTER_STAY_MS, createChapterCopies } from "../../src/chapter-copies.ts";
+import { AUTHOR_EDIT_BATCH_IDLE_MS } from "../../src/local-edit-journal.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
 import { CHAPTER_SWITCH_WAITING_SENTENCE } from "../../src/chapter-navigation.ts";
 import { applyImeComposition, applyTrustedInput, updateClipboardPermission } from "../support/browser-command-client.ts";
@@ -244,13 +245,31 @@ async function openWorkspace(prepare: (server: ReturnType<typeof arrivalServer>[
   const stays: Timer[] = [];
   // The wait for the Retry-After of a Challenge rate limit, which the test ends.
   const waits: (() => void)[] = [];
+  // After `stopIdle()`, an idle timer of the Author Edit batch runs only when the test calls `runIdle()`. Then the
+  // writing controller reads the outcome of a refused Author Edit no second time while a test examines the requests of
+  // the quiet step.
+  let idleStopped = false;
+  const idles: { callback: () => void; cleared: boolean }[] = [];
+  const stopIdle = () => { idleStopped = true; };
+  /** Runs each idle timer that is not cleared, and gives false when no idle timer waits. */
+  const runIdle = () => {
+    const live = idles.filter((idle) => !idle.cleared);
+    for (const idle of live) {
+      idle.cleared = true;
+      idle.callback();
+    }
+    return live.length > 0;
+  };
   const view = mountStage1View(loaded.root, { ...loaded, writingTimers: {
     setTimeoutImpl: (callback, timeout) => timeout === POINTER_STAY_MS
       ? -stays.push({ callback, cleared: false, fired: false })
-      : timeout === 7_000 ? -1_000 - waits.push(callback) : globalThis.setTimeout(callback, timeout),
+      : timeout === 7_000 ? -1_000 - waits.push(callback)
+      : idleStopped && timeout === AUTHOR_EDIT_BATCH_IDLE_MS ? -100_000 - idles.push({ callback, cleared: false })
+      : globalThis.setTimeout(callback, timeout),
     // A cleared wait stays in `waits`, and the test does not run it.
     clearTimeoutImpl: (timer) => {
       if (typeof timer !== "number" || timer >= 0) globalThis.clearTimeout(timer);
+      else if (timer <= -100_000) idles[-timer - 100_001]!.cleared = true;
       else if (timer > -1_000) stays[-timer - 1]!.cleared = true;
     },
   } });
@@ -324,7 +343,7 @@ async function openWorkspace(prepare: (server: ReturnType<typeof arrivalServer>[
   };
   return { server, root, button, editor, shown, ready, fact, pointer, stay, stays, stayTimers, copy, notice, noticeTexts,
     saveState,
-    typeAtEnd, waits, journal: scenario.journalName };
+    typeAtEnd, waits, stopIdle, runIdle, journal: scenario.journalName };
 }
 
 /** Each title that the editor part showed, in order. The observer sees each change of the page. */
@@ -478,8 +497,10 @@ it.each([
   await workspace.copy(CHAPTER_B);
   workspace.server.refuse.add(refuse);
   if (refuse === AUTHOR_EDITS) {
+    workspace.stopIdle();
     focusManuscriptEnd(workspace.editor(), window);
     await applyTrustedInput({ operation: "insert_text", text: "!" });
+    await expect.poll(workspace.runIdle).toBe(true);
     await expect.poll(() => workspace.server.requests.includes(AUTHOR_EDITS)).toBe(true);
   }
   const watch = watchTitles(workspace.root);
@@ -742,7 +763,9 @@ it.each([
   await workspace.copy(CHAPTER_B);
   if (hold === "outcome") {
     workspace.server.refuse.add(AUTHOR_EDITS);
+    workspace.stopIdle();
     await workspace.typeAtEnd("!");
+    await expect.poll(workspace.runIdle).toBe(true);
     await expect.poll(() => workspace.server.requests.includes(AUTHOR_EDITS)).toBe(true);
   }
   if (refuse !== undefined) workspace.server.refuse.add(refuse);
