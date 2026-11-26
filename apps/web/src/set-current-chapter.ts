@@ -7,6 +7,9 @@ import type { SetCurrentChapterResponse } from "../../../generated/typescript/st
 import { type CommandFlight, endsWithoutRetry, sendOwnedCommand } from "./owned-command.ts";
 
 const inFlight = new Map<string, CommandFlight>();
+// The idempotency key of each command that went out and has no response yet. A flight can exist with no command that
+// went out, for example after a Command Challenge rate limit.
+const sent = new Set<string>();
 
 /** The caller replaced a Set Current Chapter command after its Command Challenge and before the command went out. */
 export class SkippedCurrentChapterError extends Error {}
@@ -30,13 +33,12 @@ export async function setOwnedCurrentChapter(options: {
   expectedTargetRevisionId: string;
   editorSessionId: string;
   /**
-   * False when the caller replaced the command. It is read after the Command Challenge, before the first attempt of the
-   * command goes out. A command that has an earlier attempt goes out again with its key.
+   * False when the caller replaced the command. It is read after the Command Challenge, until the command first goes
+   * out. A command that went out goes out again with its key.
    */
   proceed?: () => boolean;
 }): Promise<SetCurrentChapterResponse> {
   const identity = currentChapterIdentity(options);
-  let attempted = inFlight.has(identity);
   return sendOwnedCommand({
     ...options,
     flights: inFlight,
@@ -56,9 +58,12 @@ export async function setOwnedCurrentChapter(options: {
     }),
     digest: digestSetCurrentChapter,
     send: (command) => {
-      if (attempted || options.proceed?.() !== false) {
-        attempted = true;
-        return setCurrentChapter(command);
+      if (sent.has(command.idempotencyKey) || options.proceed?.() !== false) {
+        sent.add(command.idempotencyKey);
+        return setCurrentChapter(command).then((response) => {
+          sent.delete(command.idempotencyKey);
+          return response;
+        });
       }
       // The command did not go out, so a later intent gets a new Command Challenge.
       inFlight.delete(identity);

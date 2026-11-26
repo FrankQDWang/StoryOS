@@ -1998,3 +1998,56 @@ it("keeps the Arriving Chapter at a second selection while an IME composition wi
   expect({ composing, switches: workspace.server.switches }).toEqual({ composing: { ...READY, arriving: "true" },
     switches: [[CHAPTER, CHAPTER_B]] });
 });
+
+it("skips a replaced command whose repeated Command Challenge waits after a rate limit, and sends no command", async () => {
+  const workspace = await openWorkspace();
+  await workspace.copy(CHAPTER_B);
+  workspace.server.limited = true;
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.waits.length).toBe(1);
+  workspace.server.hold(CHALLENGE);
+  workspace.waits[0]!();
+  await expect.poll(() => workspace.server.isHeld(CHALLENGE)).toBe(true);
+  // The flight of the command of Chapter B exists, but its command did not go out.
+  workspace.button(CHAPTER).click();
+  await expect.poll(() => workspace.ready().title).toBe("Chapter A");
+  workspace.server.release(CHALLENGE);
+
+  await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() })).toEqual({ title: "Chapter A",
+    body: "Base", editable: true, alert: undefined, save: "saved" });
+  await expectRequests(workspace.server, before, [READ_B, CHALLENGE, CHALLENGE], []);
+  expect(workspace.server.switches).toEqual([]);
+});
+
+it("keeps the editor of Chapter A read-only when the command back to it applied and the switch to Chapter C failed, and reopens it",
+  async () => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    await workspace.copy(CHAPTER_C);
+    workspace.server.hold(SWITCH);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(SWITCH)).toBe(true);
+    workspace.button(CHAPTER).click();
+    await expect.poll(() => workspace.ready().title).toBe("Chapter A");
+    workspace.server.hold(SWITCH);
+    workspace.server.release(SWITCH);
+    // The command from Chapter B back to Chapter A is in flight.
+    await expect.poll(() => workspace.server.isHeld(SWITCH)).toBe(true);
+    workspace.button(CHAPTER_C).click();
+    await expect.poll(() => workspace.ready().title).toBe("Chapter C");
+    workspace.server.refuse.add(READ_C);
+    workspace.server.release(SWITCH);
+    await expect.poll(() => workspace.shown().alert).toBe("无法打开这一章：快照已过期。");
+    const stopped = workspace.ready();
+    workspace.button(CHAPTER).click();
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() })).toEqual({ title: "Chapter A",
+      body: "Base", editable: true, alert: undefined, save: "saved" });
+    // The Server is at Chapter A with a new base, so the selection opens it with no command.
+    await expectRequests(workspace.server, before, [READ_B, CHALLENGE, SWITCH, `GET ${P}/chapters/${CHAPTER}`, CHALLENGE,
+      SWITCH, READ_C, ...reopenSteps(CHAPTER)], panelReads(CHAPTER));
+    expect({ stopped, switches: workspace.server.switches }).toEqual({ stopped: { title: "Chapter A", body: "Base",
+      editable: false, alert: "无法打开这一章：快照已过期。" }, switches: [[CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER]] });
+  });

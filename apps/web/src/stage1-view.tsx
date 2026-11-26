@@ -359,6 +359,9 @@ function ProjectEditorView({
   const newestRef = useRef<string | undefined>(undefined);
   // The Current Chapter of the Server as this tab knows it. Each Set Current Chapter command expects it.
   const serverChapterRef = useRef(currentChapterId);
+  // True after a command of this editor part had an effect. The Server then gave the Editor Session a new base, also
+  // when the Current Chapter is again the Chapter of this editor.
+  const movedRef = useRef(false);
   // A locator of the current AgentRun or of a navigation stays in memory and only causes an earlier list read.
   // A Chapter change starts this part again, so the store of the Project keeps the locators for the next part.
   const projectId = state.project.project.project_id;
@@ -513,8 +516,8 @@ function ProjectEditorView({
       endArrival();
       structureInFlightRef.current = false;
     }
-    // After a command had an effect, a selection of the Chapter of the editor sends the switch back.
-    if (chapterId === selectedChapterIdRef.current && serverChapterRef.current === currentChapterId) {
+    // After a command had an effect, a selection of the Chapter of the editor opens it again on the new base.
+    if (chapterId === selectedChapterIdRef.current && !movedRef.current) {
       return Promise.resolve(false);
     }
     if (handOverComposing()) {
@@ -548,7 +551,7 @@ function ProjectEditorView({
       const targets = new Map<string, GetChapterResponse>();
       // The Current Chapter of the last command that had an effect, which the reopen opens. When an earlier switch moved
       // the Editor Session of this editor, it is at first the Current Chapter of the Server.
-      let reopenAt = serverChapterRef.current !== currentChapterId ? serverChapterRef.current : undefined;
+      let reopenAt = movedRef.current ? serverChapterRef.current : undefined;
       let changed = reopenAt !== undefined;
       try {
         const quiet = await active.wait.retry(() => {
@@ -614,6 +617,7 @@ function ProjectEditorView({
                 if (switched.effect.kind === "authoritative_applied") {
                   reopened = true;
                   serverChapterRef.current = switched.effect.current_chapter_id;
+                  movedRef.current = true;
                   reopenAt = switched.effect.current_chapter_id;
                 }
                 if (generation !== switchGenerationRef.current) return;
@@ -664,8 +668,8 @@ function ProjectEditorView({
         if (!cancelled && generation === switchGenerationRef.current) {
           endArrival();
           newestRef.current = undefined;
-          // The Server moved the Editor Session to another Chapter, so the editor of this Chapter accepts no input.
-          if (serverChapterRef.current !== currentChapterId) setReadOnly(true);
+          // The Server gave the Editor Session a new base, so this editor accepts no input until a reopen.
+          if (movedRef.current) setReadOnly(true);
         }
         if (switchWaitRef.current === active) switchWaitRef.current = undefined;
       }
