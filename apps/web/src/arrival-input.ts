@@ -12,6 +12,14 @@ export interface ArrivalSink extends Pick<EditorSessionWritingController,
   "capture" | "setComposing" | "fail" | "canAcceptInput" | "abandonUndo" | "showSaving"> {
   /** True when the Arriving Chapter accepts an input of the transaction origin `origin`. */
   accepts(origin: unknown): boolean;
+  /** The editor gives each selection, so the editor of the hand-over can keep the caret. */
+  select(selection: EditorSelection): void;
+}
+
+/** A selection in the editor document, as ProseMirror positions. */
+export interface EditorSelection {
+  readonly anchor: number;
+  readonly head: number;
 }
 
 /** One captured edit of Arrival Input, with its origin and the blocks after it. */
@@ -37,6 +45,10 @@ export interface ArrivalInput extends ArrivalSink {
   blocks(): readonly ManuscriptParagraph[];
   /** True after a stop. The input then accepts no more edit. */
   stopped(): boolean;
+  /** True while an IME composition is open. The hand-over waits for its end (ADR 0105, section 4). */
+  composing(): boolean;
+  /** The last selection in the Arriving Chapter. */
+  selection(): EditorSelection | undefined;
   stop(): void;
   subscribe(listener: () => void): () => void;
   /** A number that each change makes larger. */
@@ -49,6 +61,8 @@ export function createArrivalInput(chapterId: string, copy: ChapterText): Arriva
   // The text with an open IME composition, which is not a held edit until the composition ends.
   let composed: readonly ManuscriptParagraph[] | undefined;
   let halted = false;
+  let composition = false;
+  let selected: EditorSelection | undefined;
   let version = 0;
   const listeners = new Set<() => void>();
   const changed = () => {
@@ -74,11 +88,13 @@ export function createArrivalInput(chapterId: string, copy: ChapterText): Arriva
     // The end of a composition gives its edit to `capture`, or no edit when the author cancelled it. After a stop,
     // `capture` accepts no edit, so the text of the composition stays in the shown text for the notice.
     setComposing(composing) {
-      if (composing || composed === undefined) return;
-      if (halted) shown = composed;
+      composition = composing;
+      if (composing) return;
+      if (halted && composed !== undefined) shown = composed;
       composed = undefined;
       changed();
     },
+    select(selection) { selected = selection; },
     showSaving(blocks) {
       if (blocks === undefined) return;
       composed = blocks;
@@ -89,6 +105,8 @@ export function createArrivalInput(chapterId: string, copy: ChapterText): Arriva
     hasInput: () => held.length > 0 || composed !== undefined || shown !== copy.blocks,
     blocks: () => composed ?? shown,
     stopped: () => halted,
+    composing: () => composition,
+    selection: () => selected,
     stop() {
       if (halted) return;
       halted = true;

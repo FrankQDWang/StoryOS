@@ -113,9 +113,27 @@ interface ProjectEditorViewProps extends ProjectReadyViewProps {
   handle: { current: ProjectEditorHandle | undefined };
   onStatus: (status: ProjectEditorStatus) => void;
   copies: ChapterCopies;
+  /** The Arrival Input that a switch gives to the next editor part for its hand-over (ADR 0105, section 4). */
+  handOverStore: { current: ArrivalInput | undefined };
 }
 
 const noChanges = () => () => {};
+
+/** Resolves when no IME composition is open in the Arrival Input `typed`, after the capture of its end. */
+function compositionEnded(typed: ArrivalInput): Promise<void> {
+  return new Promise((resolve) => {
+    if (!typed.composing()) {
+      resolve();
+      return;
+    }
+    const stop = typed.subscribe(() => {
+      if (typed.composing()) return;
+      stop();
+      // The editor captures the confirmed text after it reports the end of the composition, in the same event.
+      void Promise.resolve().then(resolve);
+    });
+  });
+}
 
 const INPUT_BOUND_STOP_MESSAGE =
   "等待保存时输入过多，编辑器已停止输入。已写入本机的输入会在刷新页面后继续保存，最后几次输入可能没有保存。请先复制需要保留的文字，再刷新页面。";
@@ -155,6 +173,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   const [copies] = useState(() => createChapterCopies({ scope: state.project.project_scope, baseUrl, fetchImpl,
     timers: props.writingTimers }));
   useEffect(() => () => { copies.close(); }, [copies]);
+  const handOverStore = useRef<ArrivalInput | undefined>(undefined);
   // The start of the read of an open is not known here, so the open writes only a copy that does not exist.
   useEffect(() => {
     if (copies.get(state.chapter.chapter.chapter_id) === undefined) {
@@ -270,6 +289,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
       editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeRead={treeRead} treeReads={treeReads}
         handle={editor}
         copies={copies}
+        handOverStore={handOverStore}
         onStatus={setStatus} />}
     />
   );
@@ -279,6 +299,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
   proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus, copies, unsavedNotice,
+  handOverStore,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -308,11 +329,22 @@ function ProjectEditorView({
   useSyncExternalStore(copies.subscribe, copies.version);
   // The Arrival Input of the Arriving Chapter. It starts on the copy, and a newer copy replaces it while it is empty.
   const inputRef = useRef<ArrivalInput | undefined>(undefined);
-  // No Arrival Input goes to the writing controller yet, so each end of an arrival shows it as text that is not saved.
+  // The Arrival Input that the switch gave to this editor part. It goes to the writing controller when the read of the
+  // open suggestions of this editor finds none, after an open IME composition ended (ADR 0105, section 4).
+  const [handOver, setHandOver] = useState(() => {
+    const given = handOverStore.current;
+    handOverStore.current = undefined;
+    return given;
+  });
+  const handOverRef = useRef(handOver);
+  useSyncExternalStore(handOver?.subscribe ?? noChanges, () => handOver?.version());
+  // Each end of an arrival with no hand-over shows the Arrival Input as text that is not saved.
   const showUnsaved = () => {
-    const ended = inputRef.current;
+    for (const ended of [inputRef.current, handOverRef.current]) {
+      if (ended?.hasInput() === true) unsavedNotice.show({ chapterId: ended.chapterId, blocks: ended.blocks() });
+    }
     inputRef.current = undefined;
-    if (ended?.hasInput() === true) unsavedNotice.show({ chapterId: ended.chapterId, blocks: ended.blocks() });
+    handOverRef.current = undefined;
   };
   const endArrival = () => {
     showUnsaved();
@@ -344,6 +376,37 @@ function ProjectEditorView({
       onFailure: (error) => { onEditorFailureRef.current(error); } })
     : undefined, [editorState, baseUrl, fetchImpl, cryptoImpl, writingTimers]);
   useEffect(() => () => { writing?.close(); }, [writing]);
+  // Ends the hand-over: each held edit goes to the normal capture entry in its order, or the notice shows the input.
+  const endHandOver = (typed: ArrivalInput, capture: boolean) => {
+    handOverRef.current = undefined;
+    typed.stop();
+    if (capture && writing !== undefined) {
+      for (const item of typed.held()) writing.capture(item.edit, item.origin, item.blocks);
+    } else if (typed.hasInput()) {
+      unsavedNotice.show({ chapterId: typed.chapterId, blocks: typed.blocks() });
+    }
+  };
+  // The answer of the read of the open suggestions of this editor decides the hand-over, after an open IME
+  // composition ended. A complete list with no Proposal gives the input to the writing controller. A Proposal, an
+  // incomplete list, a failed read, a Local Edit Journal that stops input, or a refusal sends the input to the notice.
+  // The report of a Proposal starts a new read of the list, and an answer of an earlier read does not decide.
+  const reportedRef = useRef(0);
+  const decideHandOver = (heads: readonly string[] | undefined, refreshKey = reportedRef.current) => {
+    const typed = handOverRef.current;
+    if (typed === undefined || refreshKey < reportedRef.current) return;
+    void compositionEnded(typed).then(() => {
+      if (handOverRef.current !== typed || refreshKey < reportedRef.current) return;
+      endHandOver(typed, heads?.length === 0);
+      flushSync(() => { setHandOver(undefined); });
+    });
+  };
+  // A command with a quiet step refuses a hand-over that waits and has no open IME composition. The notice shows its
+  // input in the next microtask, before an answer of the list can come. So no Author Edit of it comes after the quiet
+  // step of the command, and the notice has one owner.
+  const refuseHandOver = () => { decideHandOver(undefined); };
+  // The quiet step refuses a command during an IME composition of normal input. The writing controller does not have
+  // the composition of a hand-over that waits, so the command refuses here.
+  const handOverComposing = () => handOverRef.current?.composing() === true;
   useEffect(() => writing?.subscribe(() => {
     if (selectedChapterIdRef.current !== currentChapterId) return;
     const { projection, local } = writing.snapshot();
@@ -436,6 +499,13 @@ function ProjectEditorView({
       structureInFlightRef.current = false;
     }
     if (chapterId === selectedChapterIdRef.current) return Promise.resolve(false);
+    if (handOverComposing()) {
+      setSwitchRecovery(chapterSwitchRecoveryMessage("incomplete_semantic_intent"));
+      return Promise.resolve(false);
+    }
+    refuseHandOver();
+    // The selection is the latest choice of the author, so an earlier Proposal navigation opens no Chapter after it.
+    proposalNavigation.sequence += 1;
     if (state.editor.kind !== "editor-ready" || writing === undefined) {
       browseChapter(chapterId);
       return Promise.resolve(false);
@@ -502,8 +572,22 @@ function ProjectEditorView({
               return;
             }
             reopened = switched.effect.kind === "authoritative_applied";
-            onReopened(await reopen(switched.effect.kind === "authoritative_applied"
-              ? switched.effect.current_chapter_id : undefined));
+            const next = await reopen(switched.effect.kind === "authoritative_applied"
+              ? switched.effect.current_chapter_id : undefined);
+            // Arrival Input on the base of the new editor goes to it. The editor changes only after an open IME
+            // composition ended, so the composition is not cut (ADR 0105, section 4).
+            const typed = inputRef.current;
+            if (typed !== undefined && next.kind === "project-ready" && next.editor.kind === "editor-ready") {
+              await compositionEnded(typed);
+              // A ready editor has the writer. A Revision is of one Chapter, and a stop of the input comes from another
+              // Revision, so the base check also refuses an editor of another Chapter and a stopped input. The base
+              // has no unsettled input: the quiet step settled the Local Edit Journal of the Editor Session.
+              if (typed.hasInput() && next.editor.openedProjection.authoritative_revision_id === typed.revisionId) {
+                inputRef.current = undefined;
+                handOverStore.current = typed;
+              }
+            }
+            onReopened(next);
           });
         }, () => {
           active.waiting = true;
@@ -536,7 +620,12 @@ function ProjectEditorView({
   }>) => {
     if (tree === undefined) return;
     if (structureInFlightRef.current) return;
+    if (handOverComposing()) {
+      setSwitchRecovery(`无法删除${noun}：请先完成当前输入。`);
+      return;
+    }
     structureInFlightRef.current = true;
+    refuseHandOver();
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
     void (async () => {
@@ -586,7 +675,8 @@ function ProjectEditorView({
   const writer = state.editor.kind === "editor-ready"
     ? state.editor.session.writer
     : state.editor.writer;
-  const editorBlocks = selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
+  const editorBlocks = handOver !== undefined ? handOver.blocks()
+    : selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
     ? pendingParagraphs(pending)
     : editorParagraphs(selectedChapter.chapter.current_revision.blocks);
   const onEditorFailure = (error: unknown) => {
@@ -607,11 +697,17 @@ function ProjectEditorView({
   const openedProposal = (locator: ProposalLocator) => {
     copies.proposalsChanged();
     rememberLocator(locator);
-    setProposalRefresh((current) => current + 1);
+    reportedRef.current += 1;
+    setProposalRefresh(reportedRef.current);
   };
   const own: ProjectEditorHandle = {
     selectChapter, removeChapter, removeVolume, openedProposal, showRecovery: setSwitchRecovery,
     navigateProposal: (destination) => {
+      if (handOverComposing()) {
+        setSwitchRecovery("请先完成当前输入。");
+        return;
+      }
+      refuseHandOver();
       const checked = treeCheck();
       navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
@@ -638,11 +734,11 @@ function ProjectEditorView({
   const accepting = input !== undefined && arriving?.noOpenSuggestion === true && switchWaiting === undefined
     && unsavedNotice.current === undefined && !input.stopped();
   // While Arrival Input exists, the state line shows the saving state.
-  const shownSaveState = input?.hasInput() === true ? "saving" : saveState;
+  const shownSaveState = input?.hasInput() === true || handOver !== undefined ? "saving" : saveState;
   const selectedChapterId = selectedChapter.chapter.chapter_id;
   // A message to the assistant targets the Current Chapter, so the author cannot send one during the arrival.
   const canSubmit = selectedChapterId === currentChapterId && saveState === "saved" && !readOnly
-    && arrival === undefined;
+    && arrival === undefined && handOver === undefined;
   // From the selection, the contents mark the Arriving Chapter as the selected Chapter.
   const markedChapterId = arrival ?? selectedChapterId;
   useEffect(() => { onStatus({ selectedChapterId: markedChapterId, canSubmit }); }, [markedChapterId, canSubmit,
@@ -687,7 +783,11 @@ function ProjectEditorView({
           void reopen(chapterId).then(onReopened);
         }}
         blocks={editorBlocks}
-        referenceSource={{
+        arrival={handOver}
+        initialSelection={handOver?.selection()}
+        onSuggestionList={handOver === undefined ? undefined : decideHandOver}
+        // A Selection Reference needs saved text, so none is available while the hand-over waits.
+        referenceSource={handOver !== undefined ? undefined : {
           scope: state.project.project_scope,
           chapterId: selectedChapter.chapter.chapter_id,
           revisionId: selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
@@ -731,7 +831,8 @@ function ProjectEditorView({
         }
         data-author-undo-frontier={pending?.author_undo_frontier_sequence ?? ""}
         data-chapter-switch-waiting={switchWaiting ?? ""}
-        data-arrival-no-open-suggestion={arriving === undefined ? "" : String(arriving.noOpenSuggestion)}
+        data-arrival-no-open-suggestion={arriving !== undefined ? String(arriving.noOpenSuggestion)
+          : handOver === undefined ? "" : String(copies.get(currentChapterId)?.noOpenSuggestion === true)}
       >
         {shownSaveState === "saved" ? "已保存"
           : shownSaveState === "saving" ? "保存中"

@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
-  applyTrustedInput, updateAuthorEditSubmissionHold, updateClientSessionCookie,
+  applyTrustedInput, updateAuthorEditSubmissionHold, updateClientSessionCookie, updateClipboardPermission,
 } from "../support/browser-command-client.ts";
 import { selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import {
@@ -30,7 +30,20 @@ async function storedText(win: Window & typeof globalThis, projectId: string, ch
   return read.chapter.current_revision.blocks.map((block) => block.text);
 }
 
-it("stores the input of the earlier Chapter that was not saved at the selection, and a later key changes no text",
+/** Puts the caret at the start of the paragraph `index` of `editor`. */
+function caretAtStart(editor: HTMLElement, index: number, realm: Window & typeof globalThis): void {
+  const paragraph = editor.querySelectorAll(":scope > p")[index];
+  const selection = realm.getSelection();
+  if (paragraph === undefined || selection === null) throw new Error("the paragraph or the selection is missing");
+  editor.focus();
+  const range = editor.ownerDocument.createRange();
+  range.setStart(paragraph, 0);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+it("stores the input of the earlier Chapter at the selection, and stores the keys in the Arriving Chapter one time after the hand-over",
   async () => {
     const frame = await openApplicationFrame("Chapter arrival");
     await submitProjectForm(frame, "Chapter arrival");
@@ -92,8 +105,26 @@ it("stores the input of the earlier Chapter that was not saved at the selection,
     await selectTreeChapter(root(), a, { arrival: "in-progress" });
     const arriving = () => ({ ...shown(manuscriptEditor(root(), win)), earlier: editorB.isConnected });
     await expect.poll(arriving).toEqual({ title: "Chapter A", body: "Alpha one", editable: true, earlier: false });
+    // Keys at once in the Arriving Chapter, while the quiet step of Chapter B waits for its save: text, a new
+    // paragraph, a deletion that joins two paragraphs, and a paste of plain text of two paragraphs.
+    const arrivingA = manuscriptEditor(root(), win);
+    focusManuscriptEnd(arrivingA, win);
+    await applyTrustedInput({ operation: "insert_text", text: " two" });
+    await applyTrustedInput({ operation: "enter" });
+    await applyTrustedInput({ operation: "insert_text", text: "Gamma" });
+    await expect.poll(() => manuscriptBody(arrivingA)).toBe("Alpha one two\nGamma");
+    caretAtStart(arrivingA, 1, win);
+    await applyTrustedInput({ operation: "backspace" });
+    await expect.poll(() => manuscriptBody(arrivingA)).toBe("Alpha one twoGamma");
+    await updateClipboardPermission({ action: "grant" });
+    await win.navigator.clipboard.writeText("Delta\nEpsilon");
+    focusManuscriptEnd(arrivingA, win);
+    await applyTrustedInput({ operation: "paste" });
+    await expect.poll(() => manuscriptBody(arrivingA)).toBe("Alpha one twoGammaDelta\nEpsilon");
     await updateAuthorEditSubmissionHold({ action: "release" });
-    await switched("Chapter A", "Alpha one");
+    // The hand-over gives the Arrival Input to the editor of Chapter A, and input after it is normal input.
+    await switched("Chapter A", "Alpha one twoGammaDelta\nEpsilon");
+    await typeIntoCurrent(frame, " Zeta", "Alpha one twoGammaDelta\nEpsilon Zeta");
 
     const reloaded = await reloadProject(frame, projectId);
     const loaded = applicationWindow(frame);
@@ -101,6 +132,6 @@ it("stores the input of the earlier Chapter that was not saved at the selection,
       storedA: await storedText(loaded, projectId, a), storedB: await storedText(loaded, projectId, b) }).toEqual({
       atSelection: { title: "Chapter A", body: "Alpha one", editable: false, earlierEditor: false,
         focusInEditor: false },
-      shown: "Alpha one",
-      storedA: ["Alpha one"], storedB: ["Beta"] });
+      shown: "Alpha one twoGammaDelta\nEpsilon Zeta",
+      storedA: ["Alpha one twoGammaDelta", "Epsilon Zeta"], storedB: ["Beta"] });
   });

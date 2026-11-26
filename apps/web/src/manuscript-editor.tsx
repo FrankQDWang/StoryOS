@@ -5,7 +5,7 @@ import { TextSelection } from "@tiptap/pm/state";
 
 import { firstOwnerRange } from "./first-owner-range.ts";
 
-import type { ArrivalSink } from "./arrival-input.ts";
+import type { ArrivalSink, EditorSelection } from "./arrival-input.ts";
 import type { EditorSessionWritingController } from "./editor-session-writing.ts";
 import {
   captureManuscriptChange,
@@ -68,10 +68,12 @@ export interface ManuscriptEditorProps {
   /** The source of the references that the author adds from a selection. */
   referenceSource?: EditorReferenceSource | undefined;
   /**
-   * With no `writing`, the input of an Arriving Chapter goes here (ADR 0105). The sink stays through each change of
-   * `editable`, so a composition that ends while the editor is read-only ends in the sink.
+   * The input of an Arriving Chapter goes here (ADR 0105), also when `writing` exists and the hand-over waits. The sink
+   * stays through each change of `editable`, so a composition that ends while the editor is read-only ends in the sink.
    */
   arrival?: ArrivalSink | undefined;
+  /** The selection that the editor takes, with the focus, when it starts: the caret of the hand-over. */
+  initialSelection?: EditorSelection | undefined;
 }
 
 const ignoreChanges = () => () => {};
@@ -106,6 +108,7 @@ export function ManuscriptEditor({
   onCopyProposal,
   referenceSource,
   arrival,
+  initialSelection,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const capturedInputRef = useRef(0);
@@ -121,9 +124,9 @@ export function ManuscriptEditor({
   writingRef.current = writing;
   const arrivalRef = useRef(arrival);
   arrivalRef.current = arrival;
-  // The receiver of the input: the writing controller, or the Arrival Input of an Arriving Chapter.
-  const inputRef = useRef<ArrivalSink | EditorSessionWritingController | undefined>(writing ?? arrival);
-  inputRef.current = writing ?? arrival;
+  // The receiver of the input: the Arrival Input of an Arriving Chapter until its hand-over, or the writing controller.
+  const inputRef = useRef<ArrivalSink | EditorSessionWritingController | undefined>(arrival ?? writing);
+  inputRef.current = arrival ?? writing;
   const onCandidateSettledRef = useRef(onCandidateSettled);
   const onUndoCurrentChapterRef = useRef(onUndoCurrentChapter);
   const proposalsRef = useRef(proposals);
@@ -171,6 +174,7 @@ export function ManuscriptEditor({
       syncManuscriptSurface(created.view.dom, observedBlocksRef.current);
     },
     onTransaction({ editor: current, transaction }) {
+      arrivalRef.current?.select({ anchor: current.state.selection.anchor, head: current.state.selection.head });
       const nextBlocks = readManuscriptParagraphs(current.state.doc);
       if (nextBlocks === undefined) return;
       const source = referenceSourceRef.current;
@@ -247,7 +251,8 @@ export function ManuscriptEditor({
 
   onAuthorUndoRef.current = () => {
     const current = writingRef.current;
-    if (editor === null || current === undefined) return true;
+    // An Arriving Chapter has no Author Undo, also while its hand-over waits (ADR 0105, section 3).
+    if (editor === null || current === undefined || arrivalRef.current !== undefined) return true;
     void current.undo().then((outcome) => {
       if (outcome !== undefined) onCandidateSettledRef.current?.(outcome.proposalId);
       if (outcome?.currentChapterId !== undefined) onUndoCurrentChapterRef.current?.(outcome.currentChapterId);
@@ -258,6 +263,17 @@ export function ManuscriptEditor({
   useEffect(() => {
     editor?.setEditable(editable);
   }, [editable, editor]);
+
+  // The editor of a hand-over starts with the caret of the Arriving Chapter.
+  useEffect(() => {
+    if (editor === null || initialSelection === undefined) return;
+    const size = editor.state.doc.content.size;
+    const clamp = (position: number) => Math.max(0, Math.min(position, size));
+    const { doc } = editor.state;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(doc.resolve(clamp(initialSelection.anchor)),
+      doc.resolve(clamp(initialSelection.head)))));
+    editor.view.focus();
+  }, [editor]);
 
   useEffect(() => {
     if (referenceSource === undefined) return;
@@ -351,7 +367,7 @@ export function ManuscriptEditor({
     written?.projection.save_state, editor]);
 
   useEffect(() => {
-    const sink = writing ?? arrival;
+    const sink = arrival ?? writing;
     if (editor === null || sink === undefined) return;
     const { dom } = editor.view;
     const onCompositionStart = (): void => {
