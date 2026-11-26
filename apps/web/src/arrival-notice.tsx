@@ -12,17 +12,17 @@ export interface UnsavedArrival {
  * The one notice of the tab for text that is not saved. It belongs to the open Project, so a later switch, a reopen,
  * and a failed reopen keep it. It stays until the author closes it or the tab leaves the Project (ADR 0105, section 4).
  */
-export interface ArrivalNotices {
+export interface ArrivalNotice {
   readonly current: UnsavedArrival | undefined;
   show(unsaved: UnsavedArrival): void;
   close(): void;
 }
 
-export function ArrivalNoticeSlot({ notices }: { notices: ArrivalNotices }) {
-  return notices.current === undefined ? null : <ArrivalNotice unsaved={notices.current} onClose={notices.close} />;
+export function ArrivalNoticeSlot({ notice }: { notice: ArrivalNotice }) {
+  return notice.current === undefined ? null : <ArrivalNoticeView unsaved={notice.current} onClose={notice.close} />;
 }
 
-function ArrivalNotice({ unsaved, onClose }: { unsaved: UnsavedArrival; onClose: () => void }) {
+function ArrivalNoticeView({ unsaved, onClose }: { unsaved: UnsavedArrival; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const text = unsaved.blocks.map((block) => block.text).join("\n");
   const copy = () => {

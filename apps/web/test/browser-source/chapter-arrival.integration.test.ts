@@ -47,7 +47,8 @@ async function sha256(body: string): Promise<string> {
  * the Server refuses the Undo. `lists` gives, for a Chapter, the Revision of the one open Proposal `PROPOSAL` in its
  * list. The Server does not find the Proposal itself. `effect` is the effect of each switch, which then changes nothing.
  * With `lostWriter`, the Editor Session after a switch names another writer. With `limited`, the Server refuses the next
- * Challenge with a Challenge rate limit. With `emptyAfterSwitch`, the Project has no Current Chapter after a switch.
+ * Challenge with a Challenge rate limit. With `emptyAfterSwitch`, the switch response names its Chapter, and each later
+ * read of the Project gives a Project with no Current Chapter.
  * `answered` has each request whose response is complete.
  */
 function arrivalServer() {
@@ -82,7 +83,9 @@ function arrivalServer() {
         ? { writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" } } : {}),
       base_snapshot: { ...base, snapshot_id: snapshot.id, project_activity_position: snapshot.position } };
   };
-  const open = () => server.emptyAfterSwitch && current !== CHAPTER ? { kind: "empty" as const }
+  // With `emptyAfterSwitch`, the Project becomes empty after the response of the switch.
+  let empty = false;
+  const open = () => empty ? { kind: "empty" as const }
     : { kind: "current_chapter" as const, current_chapter_id: current };
   const answer = async (name: string, init: RequestInit | undefined): Promise<Response> => {
     if (name === "GET /api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
@@ -173,12 +176,14 @@ function arrivalServer() {
       const position = Number(snapshot.position) + 1;
       snapshot = { id: `018f0000-0000-7001-8000-00000000094${position}`, position: String(position) };
       const revision = texts[current]!.revision;
-      return jsonResponse({ ...setCurrentChapterFixture,
+      const response = jsonResponse({ ...setCurrentChapterFixture,
         project: { ...setCurrentChapterFixture.project, open: open() },
         effect: { ...setCurrentChapterFixture.effect, base_snapshot_id: snapshot.id, current_chapter_id: current,
           project_activity_position: snapshot.position },
         receipt: { ...setCurrentChapterFixture.receipt, expected_heads: [revision], prior_heads: [revision],
           resulting_heads: [revision] } });
+      empty = server.emptyAfterSwitch;
+      return response;
     }
     // The tests are not about these panels.
     if ([`GET ${P}/manuscript/statistics`, `GET ${P}/assistance`, `GET ${P}/skills`].includes(name)) {
@@ -960,14 +965,15 @@ it("accepts no input while a notice is open, and keeps the one notice through a 
   workspace.server.refuse.add(READ_B);
   const before = workspace.server.requests.length;
   const arrive = async (text: string) => {
+    const start = workspace.server.answered.length;
     workspace.server.hold(READ_B);
     workspace.button(CHAPTER_B).click();
     await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
     await workspace.typeAtEnd(text);
     const during = { ...workspace.shown(), save: workspace.saveState() };
     workspace.server.release(READ_B);
-    await expect.poll(() => workspace.server.answered.filter((name) => name === READ_B).length)
-      .toBe(workspace.server.requests.slice(before).length);
+    // The one Chapter read of this switch answered.
+    await expect.poll(() => workspace.server.answered.slice(start)).toEqual([READ_B]);
     await expect.poll(workspace.shown).toEqual({ title: "Chapter A", body: "Base", editable: true,
       alert: "无法打开这一章：快照已过期。" });
     return during;
@@ -1020,15 +1026,19 @@ it("keeps the text of an IME composition that ends after another Revision in the
     const before = workspace.server.requests.length;
     workspace.button(CHAPTER_B).click();
     await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
-    focusManuscriptEnd(workspace.editor(), window);
+    const editor = workspace.editor();
+    const ends: string[] = [];
+    editor.addEventListener("compositionend", (event) => { ends.push(event.data); });
+    focusManuscriptEnd(editor, window);
     await applyImeComposition({ text: "中", replacementStart: 4, replacementEnd: 4, selectionStart: 1,
       selectionEnd: 1 });
-    await expect.poll(() => manuscriptBody(workspace.editor())).toBe("Beta中");
+    await expect.poll(() => manuscriptBody(editor)).toBe("Beta中");
 
     workspace.server.release(READ_B);
     await expect.poll(() => workspace.server.isHeld(CHALLENGE)).toBe(true);
-    // The stop makes the editor read-only, and the browser ends the composition.
-    await expect.poll(() => workspace.shown().editable).toBe(false);
+    // The stop makes the editor read-only, and the browser ends the composition in the editor.
+    await expect.poll(() => ({ editable: workspace.shown().editable, ends })).toEqual({ editable: false,
+      ends: ["中"] });
     workspace.server.release(CHALLENGE);
 
     await expect.poll(() => ({ ...workspace.ready(), notices: workspace.noticeTexts() })).toEqual({ ...READY,
