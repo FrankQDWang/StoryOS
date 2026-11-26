@@ -32,6 +32,8 @@ export function navigateProposal(options: {
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
+  /** The command of the navigation had an effect, also when a later choice of the author made the navigation stale. */
+  onMoved: (currentChapterId: string) => void;
   onOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onLocator: (locator: ProposalLocator) => void;
   onFailure: (message: string) => void;
@@ -77,6 +79,7 @@ export function navigateProposal(options: {
         if (error instanceof SkippedCurrentChapterError) return undefined;
         throw error;
       });
+      if (switched?.effect.kind === "authoritative_applied") options.onMoved(switched.effect.current_chapter_id);
       if (switched === undefined || !latest()) return;
       if (switched.effect.kind !== "authoritative_applied" && switched.effect.kind !== "no_effect") {
         throw new Error("无法打开写作会话。");
