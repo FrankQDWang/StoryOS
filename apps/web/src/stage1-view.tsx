@@ -115,7 +115,12 @@ interface ProjectEditorViewProps extends ProjectReadyViewProps {
   copies: ChapterCopies;
   /** The Arrival Input that a switch gives to the next editor part for its hand-over (ADR 0105, section 4). */
   handOverStore: { current: ArrivalInput | undefined };
+  /** The waiting selection. It stays through the change of the editor part (ADR 0105, section 6). */
+  waitingStore: { current: WaitingSelection | undefined };
 }
+
+/** A selection that waits until the switch or the hand-over of Arrival Input ended. */
+type WaitingSelection = { chapterId: string; contents: boolean };
 
 const noChanges = () => () => {};
 
@@ -174,6 +179,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
     timers: props.writingTimers }));
   useEffect(() => () => { copies.close(); }, [copies]);
   const handOverStore = useRef<ArrivalInput | undefined>(undefined);
+  const waitingStore = useRef<WaitingSelection | undefined>(undefined);
   // The start of the read of an open is not known here, so the open writes only a copy that does not exist.
   useEffect(() => {
     if (copies.get(state.chapter.chapter.chapter_id) === undefined) {
@@ -290,6 +296,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
         handle={editor}
         copies={copies}
         handOverStore={handOverStore}
+        waitingStore={waitingStore}
         onStatus={setStatus} />}
     />
   );
@@ -299,7 +306,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
   proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus, copies, unsavedNotice,
-  handOverStore,
+  handOverStore, waitingStore,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -405,12 +412,17 @@ function ProjectEditorView({
       if (handOverRef.current !== typed || refreshKey < reportedRef.current) return;
       endHandOver(typed, heads?.length === 0);
       flushSync(() => { setHandOver(undefined); });
+      runWaiting();
     });
   };
   // A command with a quiet step refuses a hand-over that waits and has no open IME composition. The notice shows its
   // input in the next microtask, before an answer of the list can come. So no Author Edit of it comes after the quiet
-  // step of the command, and the notice has one owner.
-  const refuseHandOver = () => { decideHandOver(undefined); };
+  // step of the command, and the notice has one owner. The command is a later choice of the author than a waiting
+  // selection, so the waiting selection ends.
+  const refuseHandOver = () => {
+    waitingStore.current = undefined;
+    decideHandOver(undefined);
+  };
   // The quiet step refuses a command during an IME composition of normal input. The writing controller does not have
   // the composition of a hand-over that waits, so the command refuses here.
   const handOverComposing = () => handOverRef.current?.composing() === true;
@@ -500,15 +512,19 @@ function ProjectEditorView({
     if (structureInFlightRef.current && earlier?.waiting !== true) {
       // With no Arrival Input, a selection during a switch in the contents replaces the Arriving Chapter at once. The
       // switch then goes on to the newest selection (ADR 0105, section 6).
-      const typed = inputRef.current;
-      if (contents && newestRef.current !== undefined && newestRef.current !== chapterId
-        && typed?.hasInput() !== true && typed?.composing() !== true) {
+      // With Arrival Input, the selection waits until the switch ended.
+      if (contents && newestRef.current !== undefined && arrivalInputExists()) {
+        return waitFor({ chapterId, contents }, newestRef.current);
+      }
+      if (contents && newestRef.current !== undefined && newestRef.current !== chapterId) {
         newestRef.current = chapterId;
         proposalNavigation.sequence += 1;
         setArrival(chapterId);
       }
       return Promise.resolve(false);
     }
+    // Arrival Input from before the wait for a rate limit stays until the switch ends (ADR 0105, section 7).
+    if (earlier?.waiting === true && arrivalInputExists()) return waitFor({ chapterId, contents }, newestRef.current);
     if (earlier?.waiting === true) {
       earlier.wait.cancel();
       switchWaitRef.current = undefined;
@@ -516,15 +532,12 @@ function ProjectEditorView({
       endArrival();
       structureInFlightRef.current = false;
     }
+    // A selection waits until the hand-over ended (ADR 0105, section 6).
+    if (handOverRef.current !== undefined) return waitFor({ chapterId, contents }, selectedChapterIdRef.current);
     // After a command had an effect, a selection of the Chapter of the editor opens it again on the new base.
     if (chapterId === selectedChapterIdRef.current && !movedRef.current) {
       return Promise.resolve(false);
     }
-    if (handOverComposing()) {
-      setSwitchRecovery(chapterSwitchRecoveryMessage("incomplete_semantic_intent"));
-      return Promise.resolve(false);
-    }
-    refuseHandOver();
     // The selection is the latest choice of the author, so an earlier Proposal navigation opens no Chapter after it.
     proposalNavigation.sequence += 1;
     if (state.editor.kind !== "editor-ready" || writing === undefined) {
@@ -547,6 +560,8 @@ function ProjectEditorView({
     return (async () => {
       let reopened = false;
       let cancelled = false;
+      // True when the switch gave a state to the workspace. Then the next editor part runs the waiting selection.
+      let handedOff = false;
       // A repeat uses the Chapter of the first read, so the command and its idempotency key stay the same.
       const targets = new Map<string, GetChapterResponse>();
       // The Current Chapter of the last command that had an effect, which the reopen opens. When an earlier switch moved
@@ -642,6 +657,7 @@ function ProjectEditorView({
                   handOverStore.current = typed;
                 }
               }
+              handedOff = true;
               onReopened(next);
               return;
             }
@@ -672,10 +688,26 @@ function ProjectEditorView({
           if (movedRef.current) setReadOnly(true);
         }
         if (switchWaitRef.current === active) switchWaitRef.current = undefined;
+        if (!cancelled && generation === switchGenerationRef.current && !handedOff) runWaiting();
       }
       return reopened;
     })();
   };
+
+  const arrivalInputExists = () => inputRef.current?.hasInput() === true || inputRef.current?.composing() === true;
+  // A later selection replaces a waiting selection. A selection of the Chapter that the tab goes to ends it.
+  const waitFor = (selection: WaitingSelection, goesTo: string | undefined) => {
+    waitingStore.current = selection.chapterId === goesTo ? undefined : selection;
+    return Promise.resolve(false);
+  };
+  // The waiting selection runs as a new selection, so its quiet step waits for the save of the Arrival Input.
+  const runWaiting = () => {
+    const waiting = waitingStore.current;
+    waitingStore.current = undefined;
+    if (waiting !== undefined) void selectChapter(waiting.chapterId, waiting.contents);
+  };
+  // A switch that gave no Arrival Input to this editor part ended, so the waiting selection runs.
+  useEffect(() => { if (handOverRef.current === undefined) runWaiting(); }, []);
 
   const removeFromTree = (noun: "章节" | "卷", remove: (expectedTreeRevision: string) => Promise<{
     effect: { kind: string };
