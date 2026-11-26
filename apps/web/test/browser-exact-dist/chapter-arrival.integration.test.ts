@@ -24,6 +24,11 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
+// The journey sends 11 Shared Command Challenges: 5 for the Project, the Volume, and the Chapters, and 6 for Set Current
+// Chapter. The Server gives 10 in one minute, so a switch can wait for the Retry-After, at most 61 s (#1679). Each
+// wait for a switch, and the time limit of the journey, permit that wait.
+const SWITCH_WAIT = 75_000;
+
 /** The text of each block of the Chapter as the Server stores it. */
 async function storedText(win: Window & typeof globalThis, projectId: string, chapterId: string): Promise<string[]> {
   const read = await getChapter({ baseUrl: win.location.origin, projectId, chapterId, fetchImpl: win.fetch.bind(win) });
@@ -77,8 +82,8 @@ it("stores the input of the earlier Chapter at the selection, stores the keys in
       const arriving = () => root().querySelector("[data-arrival-no-open-suggestion]")
         ?.getAttribute("data-arrival-no-open-suggestion");
       await expect.poll(() => ({ ...shown(manuscriptEditor(root(), win)), alert: alert(), arriving: arriving() }),
-        { timeout: 15_000 }).toEqual({ title, body, editable: true, alert: undefined, arriving: "" });
-      await waitSaved(root(), undefined, { timeout: 15_000 });
+        { timeout: SWITCH_WAIT }).toEqual({ title, body, editable: true, alert: undefined, arriving: "" });
+      await waitSaved(root(), undefined, { timeout: SWITCH_WAIT });
     };
 
     // Chapter B has no copy: the editor of Chapter A ends with its focus, and the earlier text stays read-only.
@@ -141,7 +146,8 @@ it("stores the input of the earlier Chapter at the selection, stores the keys in
     // expects another Chapter gets the conflict `stale_current_chapter` and opens no Chapter C.
     await updateAuthorEditSubmissionHold({ action: "hold_set_current_chapter" });
     await selectTreeChapter(root(), b, { arrival: "in-progress" });
-    await expect.poll(() => loaded.document.documentElement.dataset.storyosHeldRequests, { timeout: 15_000 }).toBe("1");
+    await expect.poll(() => loaded.document.documentElement.dataset.storyosHeldRequests, { timeout: SWITCH_WAIT })
+      .toBe("1");
     await selectTreeChapter(root(), a, { arrival: "in-progress" });
     await selectTreeChapter(root(), c, { arrival: "in-progress" });
     // The contents mark the newest selection while the command of Chapter B waits.
@@ -155,7 +161,9 @@ it("stores the input of the earlier Chapter at the selection, stores the keys in
     const headA = await revisionOf(loaded, projectId, a);
     await updateAuthorEditSubmissionHold({ action: "hold_set_current_chapter" });
     await selectTreeChapter(root(), a, { arrival: "in-progress" });
-    await expect.poll(() => loaded.document.documentElement.dataset.storyosHeldRequests, { timeout: 15_000 }).toBe("1");
+    // The count of held requests of this page includes the command of Chapter B above.
+    await expect.poll(() => loaded.document.documentElement.dataset.storyosHeldRequests, { timeout: SWITCH_WAIT })
+      .toBe("2");
     await expect.poll(() => shown(manuscriptEditor(root(), loaded))).toEqual({ title: "Chapter A",
       body: "Alpha one twoGammaDelta\nEpsilon Zeta", editable: true });
     focusManuscriptEnd(manuscriptEditor(root(), loaded), loaded);
@@ -184,4 +192,4 @@ it("stores the input of the earlier Chapter at the selection, stores the keys in
     await assertPageProjectReceipts({ projectId, kinds: "listed", receipts: { setCurrentChapter: 6 },
       lastResults: [{ result: "authoritative_applied", heads: [headA] },
         { result: "authoritative_applied", heads: [await revisionOf(last, projectId, b)] }] });
-  });
+  }, 240_000);
