@@ -23,6 +23,10 @@ const WAITING = "操作有些频繁，稍等片刻会自动打开这一章。";
 
 type Timer = { callback: () => void; timeout: number; cleared: boolean };
 
+const PROJECT_PATH = `/api/v1/projects/${PROJECT}`;
+const CHALLENGE = `POST ${PROJECT_PATH}/anti-forgery-challenges`;
+const readChapter = (chapterId: string) => `GET ${PROJECT_PATH}/chapters/${chapterId}`;
+
 const LIMITED_BODY = JSON.stringify({ schema_id: "storyos.problem.v1", code: "challenge_rate_limited",
   message: "The command challenge rate limit is exceeded." });
 
@@ -177,6 +181,7 @@ async function clickWhileLimited(limited: string, held = false, chapters = [CHAP
   await expect.poll(() => loaded.root.querySelector(`button[data-chapter-id="${CHAPTER_B}"]`)).not.toBeNull();
   server.limited = limited;
   server.held = held;
+  const start = server.requests.length;
   click(CHAPTER_B);
   await expect.poll(() => timers.filter((timer) => timer.timeout === 7_000).length).toBe(1);
   // A writable workspace shows the saved state. A read-only recovery shows "needs_attention" and a failure.
@@ -187,7 +192,9 @@ async function clickWhileLimited(limited: string, held = false, chapters = [CHAP
     status: loaded.root.querySelector('.editor-panel > [role="status"]')?.textContent,
     waiting: loaded.root.querySelector("[data-chapter-switch-waiting]")?.getAttribute("data-chapter-switch-waiting") });
   return { server, timers, view, click, shown, waited: shown(), switches: () =>
-    server.requests.filter((entry) => entry === CURRENT_CHAPTER).length };
+    server.requests.filter((entry) => entry === CURRENT_CHAPTER).length,
+    /** Each request from the click of Chapter B, with no filter. */
+    sent: () => server.requests.slice(start) };
 }
 
 // The workspace that opens again after the switch reads its stored Editor Session, so it needs no Challenge.
@@ -222,10 +229,16 @@ it("ends the wait of a switch when the author clicks another Chapter, and opens 
   opened.timers.find((timer) => timer.timeout === 7_000)!.callback();
   await drainMicrotasks();
 
-  expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared, switches: opened.switches(),
-    chapterB: opened.server.requests.filter((entry) => entry.endsWith(`/chapters/${CHAPTER_B}`)).length,
-    shown: opened.shown() }).toEqual({
-    cleared: true, switches: 1, chapterB: 1,
+  const sent = opened.sent();
+  expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared, sent: sent.slice(0, 9),
+    // The panels of the editor part of Chapter C read with no order between them.
+    panels: sent.slice(9).sort(), shown: opened.shown() }).toEqual({
+    cleared: true,
+    // The switch to Chapter B ends at the refused Challenge. The switch to Chapter C then reopens the workspace.
+    sent: [readChapter(CHAPTER_B), CHALLENGE, readChapter(CHAPTER_C), CHALLENGE, CURRENT_CHAPTER, readChapter(CHAPTER_C),
+      `GET ${PROJECT_PATH}`, "GET /api/v1/projects", `GET ${PROJECT_PATH}/editor-sessions/${SESSION}`],
+    panels: [`GET ${PROJECT_PATH}/activity`, `GET ${PROJECT_PATH}/chapters/${CHAPTER_C}/open-proposals`,
+      `GET ${PROJECT_PATH}/manuscript/statistics`, `GET ${PROJECT_PATH}/manuscript/tree`],
     shown: { title: "Chapter C", save: "saved", failure: "", alert: undefined, status: undefined, waiting: "" },
   });
 });
@@ -236,8 +249,9 @@ it("ends the wait of a switch and shows the earlier Chapter again when the autho
   opened.click(CHAPTER);
 
   await expect.poll(opened.shown).toEqual({ title: "Chapter A", save: "saved", failure: "", alert: undefined, status: undefined, waiting: "" });
-  expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared, switches: opened.switches() })
-    .toEqual({ cleared: true, switches: 0 });
+  await drainMicrotasks();
+  expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared, sent: opened.sent() })
+    .toEqual({ cleared: true, sent: [readChapter(CHAPTER_B), CHALLENGE] });
 });
 
 it("shows the sentence of the wait only while the later switch also waits", async () => {
