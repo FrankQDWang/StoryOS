@@ -11,7 +11,8 @@ import { applyImeComposition, applyTrustedInput, updateClipboardPermission } fro
 import { focusManuscriptEnd, manuscriptBody, manuscriptEditor, manuscriptIsEditable } from "../support/manuscript-surface.ts";
 import {
   CHAPTER, OWNER, PROJECT, REVISION, SESSION, chapterRevision, closeTrackedDatabases, createAppliedActivityEvent,
-  createBrowserScenario, deleteJournal, jsonResponse, trackDatabase,
+  createAppliedAuthorEditResponse, createBrowserScenario, deleteJournal, jsonResponse, requestHeaders, requireDigestValue,
+  trackDatabase,
 } from "./scenario.ts";
 
 // The Arriving Chapter of a selection in the contents (ADR 0105, sections 1 and 2).
@@ -49,8 +50,11 @@ async function sha256(body: string): Promise<string> {
  * list. The Server does not find the Proposal itself. `effect` is the effect of each switch, which then changes nothing.
  * With `lostWriter`, the Editor Session after a switch names another writer. With `limited`, the Server refuses the next
  * Challenge with a Challenge rate limit. With `emptyAfterSwitch`, the switch response names its Chapter, and each later
- * read of the Project gives a Project with no Current Chapter.
- * `answered` has each request whose response is complete.
+ * read of the Project gives a Project with no Current Chapter. With `truncated`, each list of open suggestions is not
+ * complete.
+ * `answered` has each request whose response is complete. Each Author Edit applies with the next text of `edits` as the
+ * body of the new Revision of the Current Chapter, and `editRequests` has its request. A name in `refuse` of the open
+ * suggestions of a Chapter fails its read. `moveTo` changes the Current Chapter as another tab does.
  */
 function arrivalServer() {
   const scenario = createBrowserScenario();
@@ -66,11 +70,15 @@ function arrivalServer() {
   const held = new Map<string, () => void>();
   // The idempotency keys of the Author Edit commands that the network refused.
   const editKeys = new Set<string>();
+  // The command digest that the Challenge of the next Author Edit names.
+  let editDigest: ReturnType<typeof requireDigestValue> | undefined;
   const server = { requests: [] as string[], unexpected: [] as string[], texts, refuse: new Set<string>(),
     activity: undefined as unknown, assistance: false, undo: false, editKeys, lists: {} as Record<string, string>,
     effect: undefined as unknown, lostWriter: false, limited: false, emptyAfterSwitch: false,
-    answered: [] as string[],
+    answered: [] as string[], edits: [] as string[], editRequests: [] as Record<string, unknown>[], truncated: false,
     hold(name: string) { holding.add(name); },
+    /** Another tab makes `chapterId` the Current Chapter. */
+    moveTo(chapterId: string) { current = chapterId; },
     isHeld(name: string) { return held.has(name); },
     release(name: string) { held.get(name)?.(); held.delete(name); } };
   const session = async () => {
@@ -107,10 +115,13 @@ function arrivalServer() {
         chapter: { chapter_id: chapterId, title: text.title, current_revision: chapterRevision(text.revision, text.body) } });
     }
     const listed = Object.keys(texts).find((id) => name === openProposals(id));
+    if (listed !== undefined && server.refuse.has(name)) {
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
+    }
     if (listed !== undefined) {
       return jsonResponse({ schema_id: "storyos.query.chapter-open-proposals.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000c71", project_scope: scope, chapter_id: listed,
-        completeness: "complete", proposals: server.lists[listed] === undefined ? [] : [{ kind: "block_edit",
+        completeness: server.truncated ? "truncated" : "complete", proposals: server.lists[listed] === undefined ? [] : [{ kind: "block_edit",
           proposal_id: PROPOSAL, revision_id: server.lists[listed], source: { kind: "agent_run_decision",
             run_id: "018f0000-0000-7001-8000-000000000472", decision_id: "018f0000-0000-7001-8000-000000000473" } }] });
     }
@@ -131,6 +142,10 @@ function arrivalServer() {
       { status: 429, headers: { "content-type": "application/json", "retry-after": "7" } });
     }
     if (name === CHALLENGE) {
+      const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if (request.command_schema === "storyos.command.apply-author-edit.request.v1") {
+        editDigest = requireDigestValue(request.canonical_command_digest, "command digest");
+      }
       return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-09-12T00:00:00.000Z",
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
@@ -159,6 +174,20 @@ function arrivalServer() {
     }
     if ([...editKeys].some((key) => name === `GET ${P}/manuscript/author-edit-outcomes/${key}`)) {
       throw new TypeError("Failed to fetch");
+    }
+    const body = name === AUTHOR_EDITS ? server.edits.shift() : undefined;
+    if (body !== undefined) {
+      const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      server.editRequests.push(request);
+      const prior = texts[current]!.revision;
+      const revision = `018f0000-0000-7001-8000-00000000096${server.editRequests.length}`;
+      texts[current] = { ...texts[current]!, revision, body };
+      const position = Number(snapshot.position) + 1;
+      snapshot = { id: `018f0000-0000-7001-8000-00000000095${position}`, position: String(position) };
+      return jsonResponse(createAppliedAuthorEditResponse({ request, body, priorRevisionId: prior,
+        authoritativeRevisionId: revision, projectActivityPosition: snapshot.position,
+        commandDigest: editDigest!,
+        idempotencyKey: requestHeaders(init).get("idempotency-key") ?? "" }));
     }
     if (name === `GET ${P}/assistance` && server.assistance) {
       return jsonResponse({ ...assistanceFixture, project_scope: scope });
@@ -725,6 +754,12 @@ async function journalRecords(name: string) {
   }
 }
 
+/** The records of the Journal without the Editor Session base, which the open of an editor writes. */
+function withoutBase(records: Record<string, unknown[]>) {
+  return { ...records, metadata: records.metadata!.filter((record) =>
+    !String((record as { key: string }).key).startsWith("active_base:")) };
+}
+
 const SWITCH_STEPS = [READ_B, CHALLENGE, SWITCH];
 // The reopen reads the Chapter, the Project, the list, and the Editor Session at the same time. Then the panels of the
 // new editor part read with no order between them.
@@ -750,10 +785,6 @@ it.each([
   { end: "the reopen finds that another tab holds the writer", lostWriter: true, hold: READ_B, steps: [...SWITCH_STEPS, ...REOPEN_STEPS],
     panels: PANEL_READS,
     shown: { title: "Chapter B", body: "Beta", editable: false, alert: undefined } },
-  // No hand-over exists yet, so the Arrival Input also goes to the notice when the editor of the Chapter is ready.
-  { end: "the editor is ready", hold: READ_B, steps: [...SWITCH_STEPS, ...REOPEN_STEPS],
-    panels: [...PANEL_READS, ACTIVITY],
-    shown: { title: "Chapter B", body: "Beta", editable: true, alert: undefined } },
 ])("sends no Author Edit of the Arrival Input and shows it in a notice that stays when $end", async ({
   hold, effect, refuse, lostWriter, steps, panels, shown }) => {
   const workspace = await openWorkspace((server) => {
@@ -787,15 +818,284 @@ it.each([
   expect(typed).toEqual({ title: "Chapter B", body: "Beta?", editable: true, alert: undefined, save: "saving" });
 });
 
-/** Each request from `before`: the steps in their order, and then the panels of the new editor part with no order. */
-async function expectRequests(server: { requests: string[] }, before: number, steps: string[], panels: string[]) {
+/** A group of requests with no order between them. */
+type AnyOrder = { anyOrder: string[] };
+
+/**
+ * Each request from `before`: the steps in their order, then the panels of the new editor part with no order, and then
+ * each group of `after`, in its order or with no order.
+ */
+async function expectRequests(server: { requests: string[] }, before: number, steps: string[], panels: string[],
+  ...after: (string[] | AnyOrder)[]) {
+  const groups = [steps, { anyOrder: panels }, ...after];
   await expect.poll(() => {
-    const sent = server.requests.slice(before);
-    return [...sent.slice(0, steps.length), ...sent.slice(steps.length).sort()];
-  }).toEqual([...steps, ...[...panels].sort()]);
+    let start = before;
+    return groups.flatMap((group) => {
+      const names = Array.isArray(group) ? group : group.anyOrder;
+      const sent = server.requests.slice(start, start += names.length);
+      return Array.isArray(group) ? sent : sent.sort();
+    }).concat(server.requests.slice(start));
+  }).toEqual(groups.flatMap((group) => Array.isArray(group) ? group : [...group.anyOrder].sort()));
 }
 
+// The save of an Author Edit of Chapter B: the command, the read of the Editor Session, and then reads with no order.
+const SAVE_B: (string[] | AnyOrder)[] = [[CHALLENGE, AUTHOR_EDITS, SESSION_READ],
+  { anyOrder: [openProposals(CHAPTER_B), `GET ${P}/manuscript/statistics`, ACTIVITY] }];
+
 const READY = { title: "Chapter B", body: "Beta", editable: true, alert: undefined };
+
+/** Puts the caret at `offset` in the text of the first paragraph of the editor, which has the focus. */
+function caretAt(editor: HTMLElement, offset: number) {
+  focusManuscriptEnd(editor, window);
+  getSelection()!.collapse(editor.querySelector("p")!.firstChild!, offset);
+  document.dispatchEvent(new Event("selectionchange"));
+}
+
+it.each([
+  { first: openProposals(CHAPTER_B), second: ACTIVITY },
+  { first: ACTIVITY, second: openProposals(CHAPTER_B) },
+])("hands the Arrival Input over to the editor of the Chapter after the read of its open suggestions, when $first answers first",
+  async ({ first, second }) => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    workspace.stopIdle();
+    workspace.server.hold(READ_B);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+    await workspace.typeAtEnd("?");
+    caretAt(workspace.editor(), 2);
+    await applyTrustedInput({ operation: "insert_text", text: "-" });
+    workspace.server.hold(openProposals(CHAPTER_B));
+    workspace.server.hold(ACTIVITY);
+    workspace.server.release(READ_B);
+    await expect.poll(() => [first, second].every((name) => workspace.server.isHeld(name))).toBe(true);
+    // The editor of the Chapter shows the Arrival Input. It has the caret of the Arriving Chapter, and the key goes to
+    // the Arrival Input.
+    await applyTrustedInput({ operation: "insert_text", text: "+" });
+    const waiting = { ...workspace.ready(), save: workspace.saveState(),
+      sent: workspace.server.requests.includes(AUTHOR_EDITS) };
+    workspace.server.edits.push("Be-+ta?", "Be-+xta?");
+    const answered = workspace.server.answered.length;
+    workspace.server.release(first);
+    await expect.poll(() => workspace.server.answered.slice(answered)).toEqual([first]);
+    workspace.server.release(second);
+    await expect.poll(workspace.runIdle).toBe(true);
+    await expect.poll(workspace.saveState).toBe("saved");
+    // Input after the hand-over is normal input.
+    await applyTrustedInput({ operation: "insert_text", text: "x" });
+    await expect.poll(workspace.runIdle).toBe(true);
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+      .toEqual({ ...READY, body: "Be-+xta?", save: "saved", notice: undefined });
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
+      ...SAVE_B, ...SAVE_B);
+    expect({ waiting, stored: workspace.server.texts[CHAPTER_B]!.body }).toEqual({
+      waiting: { ...READY, body: "Be-+ta?", arriving: "true", save: "saving", sent: false }, stored: "Be-+xta?" });
+  });
+
+it.each([
+  { end: "the list has a Proposal", panels: [...PANEL_READS, ACTIVITY, `GET ${P}/proposals/${PROPOSAL}`],
+    prepare: (server: ReturnType<typeof arrivalServer>["server"]) => {
+      server.lists[CHAPTER_B] = "018f0000-0000-7001-8000-000000000475"; } },
+  { end: "the list is not complete", panels: [...PANEL_READS, ACTIVITY],
+    prepare: (server: ReturnType<typeof arrivalServer>["server"]) => { server.truncated = true; } },
+  { end: "the read of the list fails", panels: [...PANEL_READS, ACTIVITY],
+    prepare: (server: ReturnType<typeof arrivalServer>["server"]) => { server.refuse.add(openProposals(CHAPTER_B)); } },
+])("sends no Author Edit of the Arrival Input, shows the text of the Server, and shows the input in a notice when $end",
+  async ({ panels, prepare }) => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    prepare(workspace.server);
+    workspace.server.hold(READ_B);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+    await workspace.typeAtEnd("?");
+
+    workspace.server.release(READ_B);
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+      .toEqual({ ...READY, save: "saved", notice: { role: "status", chapter: CHAPTER_B, heading: UNSAVED_HEADING,
+        sentence: UNSAVED_SENTENCE, text: "Beta?", underTitle: true } });
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], panels);
+  });
+
+it("sends no Author Edit of the Arrival Input when the base Revision of the editor is not the Revision of the copy",
+  async () => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    workspace.server.hold(CHALLENGE);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(CHALLENGE)).toBe(true);
+    await workspace.typeAtEnd("?");
+    // The Chapter changes after the Chapter read of the switch, so the reopen reads a newer Revision.
+    workspace.server.texts[CHAPTER_B] = { revision: "018f0000-0000-7001-8000-000000000810", title: "Chapter B",
+      body: "Beta three" };
+
+    workspace.server.release(CHALLENGE);
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice()?.text }))
+      .toEqual({ ...READY, body: "Beta three", save: "saved", notice: "Beta?" });
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY]);
+  });
+
+it("hands the Arrival Input over only after an IME composition that is open when the editor of the Chapter is ready ends",
+  async () => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    workspace.stopIdle();
+    workspace.server.hold(READ_B);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+    const arriving = workspace.editor();
+    focusManuscriptEnd(arriving, window);
+    await applyImeComposition({ text: "zhong", replacementStart: 4, replacementEnd: 4, selectionStart: 5,
+      selectionEnd: 5 });
+    await expect.poll(() => manuscriptBody(arriving)).toBe("Betazhong");
+    const answered = workspace.server.answered.length;
+
+    workspace.server.release(READ_B);
+    // The reads of the reopen answered. The editor of the Chapter waits for the end of the composition.
+    await expect.poll(() => workspace.server.answered.slice(answered).filter((name) => name === SESSION_READ))
+      .toEqual([SESSION_READ]);
+    await applyImeComposition({ text: "zhongw", replacementStart: 4, replacementEnd: 9, selectionStart: 6,
+      selectionEnd: 6 });
+    const waiting = { same: workspace.editor() === arriving, body: manuscriptBody(arriving), save: workspace.saveState(),
+      listed: workspace.server.requests.slice(before).includes(openProposals(CHAPTER_B)) };
+    workspace.server.edits.push("Beta中", "Beta中!");
+    // The end of the composition saves the input with no idle timer.
+    await applyTrustedInput({ operation: "insert_text", text: "中" });
+    await expect.poll(workspace.saveState).toBe("saved");
+    await applyTrustedInput({ operation: "insert_text", text: "!" });
+    await expect.poll(workspace.runIdle).toBe(true);
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+      .toEqual({ ...READY, body: "Beta中!", save: "saved", notice: undefined });
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
+      ...SAVE_B, ...SAVE_B);
+    expect({ waiting, replaced: workspace.editor() !== arriving, stored: workspace.server.texts[CHAPTER_B]!.body })
+      .toEqual({ waiting: { same: true, body: "Betazhongw", save: "saving", listed: false }, replaced: true,
+        stored: "Beta中!" });
+  });
+
+it("runs no Author Undo and sends no message to the assistant while the hand-over waits", async () => {
+  const workspace = await openWorkspace((server) => {
+    server.undo = true;
+    server.assistance = true;
+  });
+  await workspace.copy(CHAPTER_B);
+  workspace.stopIdle();
+  const message = workspace.root.querySelector<HTMLTextAreaElement>('textarea[name="assistant-message"]')!;
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(message, "Help.");
+  message.dispatchEvent(new Event("input", { bubbles: true }));
+  const send = () => workspace.root.querySelector<HTMLButtonElement>("button.send-button")?.disabled;
+  await expect.poll(send).toBe(false);
+  workspace.server.hold(READ_B);
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+  workspace.server.hold(openProposals(CHAPTER_B));
+  workspace.server.release(READ_B);
+  await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
+
+  // The Editor Session has an Author Action to undo. The undo key while the hand-over waits sends no request.
+  await applyTrustedInput({ operation: "undo_latest_author_action" });
+  await applyTrustedInput({ operation: "insert_text", text: "!" });
+  const waiting = { ...workspace.ready(), disabled: send() };
+  workspace.server.edits.push("Beta?!");
+  workspace.server.release(openProposals(CHAPTER_B));
+  await expect.poll(workspace.runIdle).toBe(true);
+
+  await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), disabled: send() }))
+    .toEqual({ ...READY, body: "Beta?!", save: "saved", disabled: false });
+  await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
+    ...SAVE_B);
+  expect(waiting).toEqual({ ...READY, body: "Beta?!", arriving: "true", disabled: true });
+});
+
+it("hands the Arrival Input over only after an IME composition in the editor of the Chapter ends", async () => {
+  const workspace = await openWorkspace();
+  await workspace.copy(CHAPTER_B);
+  workspace.stopIdle();
+  workspace.server.hold(READ_B);
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+  workspace.server.hold(openProposals(CHAPTER_B));
+  workspace.server.release(READ_B);
+  await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
+  await applyImeComposition({ text: "zhong", replacementStart: 5, replacementEnd: 5, selectionStart: 5,
+    selectionEnd: 5 });
+  await expect.poll(() => manuscriptBody(workspace.editor())).toBe("Beta?zhong");
+  const answered = workspace.server.answered.length;
+
+  workspace.server.release(openProposals(CHAPTER_B));
+  await expect.poll(() => workspace.server.answered.slice(answered)).toEqual([openProposals(CHAPTER_B)]);
+  // The list has no suggestion, and the hand-over waits for the end of the composition.
+  const waiting = { ...workspace.ready(), save: workspace.saveState() };
+  // The end of a composition starts a new group, so the typed key and the composition are two Author Edits.
+  workspace.server.edits.push("Beta?", "Beta?中");
+  await applyTrustedInput({ operation: "insert_text", text: "中" });
+
+  await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+    .toEqual({ ...READY, body: "Beta?中", save: "saved", notice: undefined });
+  // The reads after the first save come with no order to the second save. The state line changes to "saved" one time,
+  // so the statistics read one time.
+  await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
+    [CHALLENGE, AUTHOR_EDITS, SESSION_READ], { anyOrder: [openProposals(CHAPTER_B), ACTIVITY, CHALLENGE, AUTHOR_EDITS,
+      SESSION_READ, openProposals(CHAPTER_B), ACTIVITY, `GET ${P}/manuscript/statistics`] });
+  expect(waiting).toEqual({ ...READY, body: "Beta?zhong", arriving: "true", save: "saving" });
+});
+
+it("shows the Arrival Input in a notice when the author selects another Chapter while the hand-over waits", async () => {
+  const workspace = await openWorkspace();
+  await workspace.copy(CHAPTER_B);
+  workspace.server.hold(READ_B);
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+  workspace.server.hold(openProposals(CHAPTER_B));
+  workspace.server.release(READ_B);
+  await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
+
+  workspace.button(CHAPTER_C).click();
+
+  await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice()?.text }))
+    .toEqual({ title: "Chapter C", body: "Gamma", editable: true, alert: undefined, save: "saved", notice: "Beta?" });
+  workspace.server.release(openProposals(CHAPTER_B));
+  await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
+    [READ_C, CHALLENGE, SWITCH, READ_C, `GET ${P}`, "GET /api/v1/projects", SESSION_READ],
+    { anyOrder: [openProposals(CHAPTER_C), `GET ${P}/manuscript/tree`, `GET ${P}/manuscript/statistics`, ACTIVITY] });
+});
+
+it("sends no Author Edit of the Arrival Input when another tab changes the Current Chapter before the reopen", async () => {
+  const workspace = await openWorkspace();
+  await workspace.copy(CHAPTER_B);
+  workspace.server.hold(READ_B);
+  const before = workspace.server.requests.length;
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+  workspace.server.hold(`GET ${P}`);
+  workspace.server.release(READ_B);
+  await expect.poll(() => workspace.server.isHeld(`GET ${P}`)).toBe(true);
+
+  workspace.server.moveTo(CHAPTER_C);
+  workspace.server.release(`GET ${P}`);
+
+  await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notices: workspace.noticeTexts() }))
+    .toEqual({ title: "Chapter C", body: "Gamma", editable: true, alert: undefined, save: "saved",
+      notices: ["Beta?"] });
+  // The reopen finds Chapter C in the Project, and reads it and the Editor Session again.
+  await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS, READ_C, SESSION_READ],
+    [openProposals(CHAPTER_C), `GET ${P}/manuscript/tree`, `GET ${P}/manuscript/statistics`, ACTIVITY]);
+});
 
 it("accepts no input in an Arriving Chapter whose copy does not have the fact of no open suggestion", async () => {
   const workspace = await openWorkspace((server) => {
@@ -834,13 +1134,20 @@ it("accepts no new input while the switch waits for a Challenge rate limit", asy
   await workspace.typeAtEnd("?");
   const waiting = { ...workspace.shown(), save: workspace.saveState(),
     status: workspace.root.querySelector('.editor-panel > [role="status"]')?.textContent };
+  workspace.server.hold(openProposals(CHAPTER_B));
   workspace.waits[0]!();
+  // With no Arrival Input, no hand-over waits for the read of the open suggestions of the editor.
+  await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
+  const listing = { ...workspace.ready(), save: workspace.saveState() };
+  workspace.server.release(openProposals(CHAPTER_B));
 
   await expect.poll(() => ({ ...workspace.ready(), notice: workspace.notice() })).toEqual({ ...READY,
     notice: undefined });
   await expectRequests(workspace.server, before, [READ_B, CHALLENGE, CHALLENGE, SWITCH, ...REOPEN_STEPS],
     [...PANEL_READS, ACTIVITY]);
-  expect(waiting).toEqual({ ...READY, editable: false, save: "saved", status: CHAPTER_SWITCH_WAITING_SENTENCE });
+  expect({ waiting, listing }).toEqual({
+    waiting: { ...READY, editable: false, save: "saved", status: CHAPTER_SWITCH_WAITING_SENTENCE },
+    listing: { ...READY, save: "saved" } });
 });
 
 it("shows the Arrival Input from before a wait for a Challenge rate limit in the notice when the author clicks the earlier Chapter",
@@ -889,25 +1196,41 @@ it("accepts no more input when the Chapter read of the switch gives another Revi
   expect(stopped).toEqual({ ...READY, body: "Beta?", editable: false, save: "saving" });
 });
 
-it("accepts 240 operations of Arrival Input, refuses the next one, and writes none to the Local Edit Journal",
+it("accepts 240 operations of Arrival Input, refuses the next one, writes none to the Local Edit Journal before the hand-over, and saves them after it",
   async () => {
     const workspace = await openWorkspace();
     await workspace.copy(CHAPTER_B);
+    workspace.stopIdle();
     workspace.server.hold(READ_B);
-    const journal = await journalRecords(workspace.journal);
+    workspace.server.hold(openProposals(CHAPTER_B));
+    workspace.server.edits.push(`Beta${"x".repeat(240)}`, `Beta${"x".repeat(240)}y`);
+    const journal = withoutBase(await journalRecords(workspace.journal));
     const before = workspace.server.requests.length;
 
     workspace.button(CHAPTER_B).click();
     await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
     focusManuscriptEnd(workspace.editor(), window);
     for (let key = 0; key < 241; key += 1) await applyTrustedInput({ operation: "insert_text", text: "x" });
-    const bounded = { body: manuscriptBody(workspace.editor()), journal: await journalRecords(workspace.journal) };
+    const bounded = manuscriptBody(workspace.editor());
     workspace.server.release(READ_B);
+    // The editor of the Chapter is ready, and the hand-over waits for the read of its open suggestions.
+    await expect.poll(() => workspace.server.isHeld(openProposals(CHAPTER_B))).toBe(true);
+    const waiting = { body: manuscriptBody(workspace.editor()),
+      journal: withoutBase(await journalRecords(workspace.journal)) };
+    workspace.server.release(openProposals(CHAPTER_B));
+    // The 240 operations fill the group, so the writing controller submits it with no idle timer. The 240 writes to
+    // the Local Edit Journal take some seconds.
+    await expect.poll(workspace.saveState, { timeout: 15_000 }).toBe("saved");
+    await applyTrustedInput({ operation: "insert_text", text: "y" });
+    await expect.poll(workspace.runIdle).toBe(true);
 
-    await expect.poll(() => ({ ...workspace.ready(), notice: workspace.notice()?.text })).toEqual({ ...READY,
-      notice: `Beta${"x".repeat(240)}` });
-    await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY]);
-    expect(bounded).toEqual({ body: `Beta${"x".repeat(240)}`, journal });
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+      .toEqual({ ...READY, body: `Beta${"x".repeat(240)}y`, save: "saved", notice: undefined });
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
+      ...SAVE_B, ...SAVE_B);
+    expect({ bounded, waiting, stored: workspace.server.texts[CHAPTER_B]!.body }).toEqual({
+      bounded: `Beta${"x".repeat(240)}`, waiting: { body: `Beta${"x".repeat(240)}`, journal },
+      stored: `Beta${"x".repeat(240)}y` });
   });
 
 it("marks the Arriving Chapter in the contents, and marks the earlier Chapter again when the switch ends with no editor",

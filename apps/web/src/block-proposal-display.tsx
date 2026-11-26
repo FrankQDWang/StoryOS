@@ -65,7 +65,7 @@ type ProposalRead = {
 
 export function BlockProposalDisplay({
   scope, chapterId, authoritativeRevisionId, locators, refreshKey, safeToProject,
-  onAccepted, onDecisionEnd, startSuggestionRead, arriving, ...editorProps
+  onAccepted, onDecisionEnd, startSuggestionRead, onSuggestionList, arriving, ...editorProps
 }: ManuscriptEditorProps & {
   scope: ProjectScope;
   chapterId: string;
@@ -86,6 +86,13 @@ export function BlockProposalDisplay({
    */
   arriving?: { key: string; blocks: ManuscriptEditorProps["blocks"]; editable?: boolean; input?: ArrivalSink }
     | undefined;
+  /**
+   * Each answer of the read of the open suggestions of this Chapter: the Proposal heads of a complete list, or
+   * `undefined` for an incomplete list, a failed read, or a Local Edit Journal that stops input. It comes after the
+   * input check of the Local Edit Journal, so input that the answer starts does not stop the editor. The hand-over of
+   * Arrival Input waits for it (ADR 0105).
+   */
+  onSuggestionList?: ((heads: readonly string[] | undefined) => void) | undefined;
   persistWorkspace: EditorReadyState | undefined;
   onFailure: (error: unknown) => void;
   baseUrl: string;
@@ -193,6 +200,9 @@ export function BlockProposalDisplay({
 
   const startSuggestionReadRef = useRef(startSuggestionRead);
   startSuggestionReadRef.current = startSuggestionRead;
+  const onSuggestionListRef = useRef(onSuggestionList);
+  onSuggestionListRef.current = onSuggestionList;
+  const [suggestionList, setSuggestionList] = useState<{ heads: readonly string[] | undefined }>();
   useEffect(() => {
     let active = true;
     const record = startSuggestionReadRef.current?.();
@@ -200,11 +210,18 @@ export function BlockProposalDisplay({
       if (!active) return;
       setOpenList((current) => canonical(current) === canonical(next) ? current : next);
       if (next.kind === "listed") record?.(next.complete ? next.heads : undefined);
+      setSuggestionList({ heads: next.kind === "listed" && next.complete ? next.heads : undefined });
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, refreshKey, settlementRefresh, settlements,
     decisionGeneration, locators.map((locator) => locator.proposalId).join("|"),
     editorProps.baseUrl, editorProps.fetchImpl]);
+  const inputChecked = acceptanceChecked || journalProposalsChecked;
+  useEffect(() => {
+    if (suggestionList === undefined || !inputChecked) return;
+    onSuggestionListRef.current?.(!recoveryUnavailable && journalPendingIds.length === 0
+      && pendingAcceptances.length === 0 ? suggestionList.heads : undefined);
+  }, [suggestionList, inputChecked]);
 
   useEffect(() => {
     let active = true;
