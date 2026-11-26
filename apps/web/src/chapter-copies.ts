@@ -29,10 +29,11 @@ export interface ChapterCopies {
   /** Writes the copy from a Chapter read response, or from the settled base of the Chapter that the tab leaves. */
   write(chapterId: string, text: ChapterText): void;
   /**
-   * Starts a read of the open suggestions of a Chapter. The returned function records the result of that read. It
-   * records nothing when the tab learned of a new or changed Proposal after the start.
+   * Starts a read of the open suggestions of a Chapter. The returned function records the Proposals of a complete
+   * list, or `undefined` for a list that is not complete. A list that is not the last list of the Chapter is a change.
+   * The function records nothing when the tab learned of a new or changed Proposal after the start.
    */
-  suggestionRead(chapterId: string): (none: boolean) => void;
+  suggestionRead(chapterId: string): (proposalIds: readonly string[] | undefined) => void;
   /** The tab learned of a new or changed Proposal of the Project. */
   proposalsChanged(): void;
   /** The Project Activity events that the tab consumed. A Run can make Proposals, so a new Run event is a change. */
@@ -41,6 +42,10 @@ export interface ChapterCopies {
   pointer(chapterId: string, inside: boolean): void;
   /** Stops the stay timers and the records of the reads in flight. */
   close(): void;
+  /** Calls `listener` after each change of a copy or of a fact. */
+  subscribe(listener: () => void): () => void;
+  /** A number that each change of a copy or of a fact makes larger. */
+  version(): number;
 }
 
 /** The paragraphs and headings of a Chapter Revision, as the editor shows them. */
@@ -74,6 +79,14 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
   } = timers;
   const texts = new Map<string, ChapterText>();
   const noSuggestion = new Set<string>();
+  // The Proposals of the last complete list of each Chapter.
+  const lists = new Map<string, string>();
+  const listeners = new Set<() => void>();
+  let version = 0;
+  const changed = () => {
+    version += 1;
+    for (const listener of listeners) listener();
+  };
   const seenRunEvents = new Set<string>();
   const stays = new Map<string, TimerHandle>();
   const reading = new Set<string>();
@@ -87,18 +100,25 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
     },
     write(chapterId, text) {
       texts.set(chapterId, text);
+      changed();
     },
     suggestionRead(chapterId) {
       const started = epoch;
-      return (none) => {
+      return (proposalIds) => {
         if (closed || started !== epoch) return;
-        if (none) noSuggestion.add(chapterId);
-        else noSuggestion.delete(chapterId);
+        const list = proposalIds === undefined ? undefined : [...proposalIds].sort().join("|");
+        // A Proposal can have a target in more than one Chapter, so a new list removes the fact from each copy.
+        if (list === undefined || list !== (lists.get(chapterId) ?? "")) copies.proposalsChanged();
+        if (list === undefined) lists.delete(chapterId);
+        else lists.set(chapterId, list);
+        if (list === "") noSuggestion.add(chapterId);
+        changed();
       };
     },
     proposalsChanged() {
       epoch += 1;
       noSuggestion.clear();
+      changed();
     },
     activity(events) {
       const runs = events.filter((event) => event.event_kind.startsWith("agent_run_")
@@ -117,20 +137,25 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
       if (!inside || closed || texts.has(chapterId)) return;
       stays.set(chapterId, setTimeoutImpl(() => {
         stays.delete(chapterId);
-        // A Chapter has at most one such read in flight.
         if (closed || texts.has(chapterId) || reading.has(chapterId)) return;
         reading.add(chapterId);
-        // Two reads and no command (ADR 0105).
+        // Two reads and no command (ADR 0105). Each read writes its result when it answers.
         const record = copies.suggestionRead(chapterId);
+        const chapter = openSelectedChapter({ baseUrl, projectId: scope.project_id, chapterId, expectedScope: scope,
+          fetchImpl });
+        const list = readOpenProposalList(scope, chapterId, baseUrl, fetchImpl);
         void Promise.all([
-          openSelectedChapter({ baseUrl, projectId: scope.project_id, chapterId, expectedScope: scope, fetchImpl }),
-          readOpenProposalList(scope, chapterId, baseUrl, fetchImpl),
-        ]).then(([opened, list]) => {
-          if (closed) return;
-          // A read of the switch can be later than this read, so this read does not replace a copy.
-          if (opened.kind === "opened" && !texts.has(chapterId)) texts.set(chapterId, chapterText(opened.chapter));
-          if (list.kind === "listed") record(list.complete && list.locators.length === 0);
-        }).finally(() => { reading.delete(chapterId); });
+          chapter.then((opened) => {
+            // A read of the switch can be later than this read, so this read does not replace a copy.
+            if (!closed && opened.kind === "opened" && !texts.has(chapterId)) {
+              copies.write(chapterId, chapterText(opened.chapter));
+            }
+          }),
+          list.then((listed) => {
+            if (listed.kind !== "listed") return;
+            record(listed.complete ? listed.locators.map((item) => item.proposalId) : undefined);
+          }),
+        ]).finally(() => { reading.delete(chapterId); });
       }, POINTER_STAY_MS));
     },
     close() {
@@ -138,6 +163,11 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
       for (const stay of stays.values()) clearTimeoutImpl(stay);
       stays.clear();
     },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    version: () => version,
   };
   return copies;
 }

@@ -59,7 +59,7 @@ type ProposalRead = {
 
 export function BlockProposalDisplay({
   scope, chapterId, authoritativeRevisionId, locators, refreshKey, safeToProject,
-  onAccepted, startSuggestionRead, ...editorProps
+  onAccepted, startSuggestionRead, arriving, ...editorProps
 }: ManuscriptEditorProps & {
   scope: ProjectScope;
   chapterId: string;
@@ -69,8 +69,13 @@ export function BlockProposalDisplay({
   safeToProject: boolean;
   /** Opens the Project again after a decision. `settled` is true when the decision has a settled response. */
   onAccepted: (settled: boolean) => Promise<void>;
-  /** Starts a read of the open suggestions. The returned function receives true when the Chapter has none (ADR 0105). */
-  startSuggestionRead?: (() => (none: boolean) => void) | undefined;
+  /** Starts a read of the open suggestions. The returned function receives the Proposals of a complete list. */
+  startSuggestionRead?: (() => (proposalIds: readonly string[] | undefined) => void) | undefined;
+  /**
+   * The read-only text that the editor part shows during the switch to an Arriving Chapter (ADR 0105). The editor and
+   * the Proposal states of this Chapter end. The reads and the state of this display stay for a switch that fails.
+   */
+  arriving?: { key: string; blocks: ManuscriptEditorProps["blocks"] } | undefined;
   persistWorkspace: EditorReadyState | undefined;
   onFailure: (error: unknown) => void;
   baseUrl: string;
@@ -181,7 +186,7 @@ export function BlockProposalDisplay({
     void readOpenProposalList(scope, chapterId, editorProps.baseUrl, editorProps.fetchImpl).then((next) => {
       if (!active) return;
       setOpenList((current) => canonical(current) === canonical(next) ? current : next);
-      if (next.kind === "listed") record?.(next.complete && next.locators.length === 0);
+      if (next.kind === "listed") record?.(next.complete ? next.locators.map((item) => item.proposalId) : undefined);
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, refreshKey, settlementRefresh, settlements,
@@ -703,9 +708,10 @@ export function BlockProposalDisplay({
     });
   };
 
+  if (arriving !== undefined) return <ManuscriptEditor key={arriving.key} blocks={arriving.blocks} editable={false} />;
   return (
     <>
-      <ManuscriptEditor {...editorProps}
+      <ManuscriptEditor key="editor" {...editorProps}
         editable={editorProps.editable && !recoveryUnavailable
           && journalPendingIds.length === 0
           && (acceptanceChecked || journalProposalsChecked || (locators.length === 0

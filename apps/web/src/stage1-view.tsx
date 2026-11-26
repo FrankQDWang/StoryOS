@@ -1,5 +1,5 @@
 import { LocalRecoveryPanel } from "./local-recovery-panel.tsx";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 
@@ -23,8 +23,7 @@ import {
   openSelectedChapter,
   selectedChapterSurface,
 } from "./chapter-navigation.ts";
-import { chapterText, createChapterCopies, editorParagraphs, type ChapterCopies, type ChapterCopy }
-  from "./chapter-copies.ts";
+import { chapterText, createChapterCopies, editorParagraphs, type ChapterCopies } from "./chapter-copies.ts";
 import { deleteOwnedChapter } from "./delete-chapter.ts";
 import { deleteOwnedVolume } from "./delete-volume.ts";
 import type {
@@ -46,7 +45,6 @@ import { ManuscriptSearchPanel } from "./manuscript-search.tsx";
 import { ManuscriptStatisticsPanel } from "./manuscript-statistics.tsx";
 import { ManuscriptReadableExportPanel } from "./manuscript-readable-export.tsx";
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
-import { ManuscriptEditor } from "./manuscript-editor.tsx";
 import { ManuscriptTree } from "./manuscript-tree.tsx";
 import { readManuscriptTree } from "./manuscript-tree-read.ts";
 import { relabelDraftReferences } from "./selection-reference-draft.ts";
@@ -293,9 +291,10 @@ function ProjectEditorView({
   const [switchRecovery, setSwitchRecovery] = useState<string>();
   // The Chapter whose switch waits for the Retry-After of a Command Challenge rate limit (#1679).
   const [switchWaiting, setSwitchWaiting] = useState<string>();
-  // The Arriving Chapter of a selection in the contents, from the selection to the end of its switch. With a copy, the
-  // editor part shows the copy read-only, and the editor of the earlier Chapter ends (ADR 0105).
-  const [arrival, setArrival] = useState<{ chapterId: string; copy: ChapterCopy | undefined }>();
+  // The Arriving Chapter of a selection in the contents, from the selection to the end of its switch. The editor of the
+  // earlier Chapter ends. The editor part shows the copy read-only, or the earlier text until a copy exists (ADR 0105).
+  const [arrival, setArrival] = useState<string>();
+  useSyncExternalStore(copies.subscribe, copies.version);
   // The wait of the current switch, from the click to its end. Closing the view ends it.
   const switchWaitRef = useRef<{ wait: ChallengeAdmissionWait; waiting: boolean } | undefined>(undefined);
   useEffect(() => () => { switchWaitRef.current?.wait.cancel(); }, []);
@@ -380,6 +379,7 @@ function ProjectEditorView({
         return;
       }
       setSwitchRecovery(undefined);
+      copies.write(opened.chapter.chapter.chapter_id, chapterText(opened.chapter));
       const surface = selectedChapterSurface({
         selectedChapterId: opened.chapter.chapter.chapter_id,
         currentChapterId,
@@ -419,10 +419,8 @@ function ProjectEditorView({
     switchGenerationRef.current = generation;
     const active = { wait: createChallengeAdmissionWait(writingTimers), waiting: false };
     switchWaitRef.current = active;
-    const arrive = () => {
-      if (contents && generation === switchGenerationRef.current) setArrival({ chapterId, copy: copies.get(chapterId) });
-    };
-    arrive();
+    // During an IME composition the quiet step refuses, so the earlier editor stays for the composition to end.
+    if (contents && !writing.hasIncompleteInput()) setArrival(chapterId);
     return (async () => {
       let reopened = false;
       let cancelled = false;
@@ -453,7 +451,6 @@ function ProjectEditorView({
               target = opened.chapter;
               // A newer Revision in the read replaces the copy and the shown text.
               copies.write(chapterId, chapterText(opened.chapter));
-              arrive();
             }
             // A Challenge rate limit propagates to the wait.
             const switched = await setOwnedCurrentChapter({
@@ -595,9 +592,11 @@ function ProjectEditorView({
     handle.current = own;
     return () => { if (handle.current === own) handle.current = undefined; };
   });
-  const arriving = arrival?.copy;
+  const arriving = arrival === undefined ? undefined : copies.get(arrival);
   const selectedChapterId = selectedChapter.chapter.chapter_id;
-  const canSubmit = selectedChapterId === currentChapterId && saveState === "saved" && !readOnly;
+  // A message to the assistant targets the Current Chapter, so the author cannot send one during the arrival.
+  const canSubmit = selectedChapterId === currentChapterId && saveState === "saved" && !readOnly
+    && arrival === undefined;
   useEffect(() => { onStatus({ selectedChapterId, canSubmit }); }, [selectedChapterId, canSubmit, onStatus]);
   return (
     <>
@@ -606,10 +605,11 @@ function ProjectEditorView({
           <p role="alert">{switchRecovery ?? proposalNotice}</p>
         )}
       <h2>{arriving?.title ?? selectedChapter.chapter.title}</h2>
-      {arriving !== undefined && arrival !== undefined
-        ? <ManuscriptEditor key={`${arrival.chapterId}:${arriving.revisionId}`} blocks={arriving.blocks} editable={false} />
-        : <BlockProposalDisplay
+      <BlockProposalDisplay
         key={selectedChapter.chapter.chapter_id}
+        arriving={arrival === undefined ? undefined
+          : arriving === undefined ? { key: "earlier", blocks: editorBlocks }
+          : { key: `${arrival}:${arriving.revisionId}`, blocks: arriving.blocks }}
         scope={state.project.project_scope}
         chapterId={selectedChapter.chapter.chapter_id}
         authoritativeRevisionId={selectedChapter.chapter.chapter_id === currentChapterId
@@ -646,7 +646,7 @@ function ProjectEditorView({
             || saveState === "saved",
           tree,
         }}
-        editable={!readOnly && arrival === undefined}
+        editable={!readOnly}
         startSuggestionRead={selectedChapter.chapter.chapter_id === currentChapterId
           ? () => copies.suggestionRead(currentChapterId) : undefined}
         persistWorkspace={
@@ -660,7 +660,7 @@ function ProjectEditorView({
         fetchImpl={fetchImpl}
         cryptoImpl={cryptoImpl}
         onFailure={onEditorFailure}
-      />}
+      />
       <div className="editor-status">
       <ManuscriptStatisticsPanel
         projectId={state.project.project.project_id}
