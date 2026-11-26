@@ -58,7 +58,7 @@ When the Chapter read of the switch answers with a Revision that is not the Revi
 
 ### 5. A switch that does not reach the editor
 
-When the quiet step refuses, or the switch ends with a refusal, a conflict, a failed read, or a lost writer, the tab shows what the switch of today shows: the earlier Chapter and the sentence of today. Arrival Input goes to the notice of section 4.
+When the quiet step refuses, or the switch ends with a refusal, a conflict, or a failed read, the tab shows what the switch of today shows: the earlier Chapter and the sentence of today. When the reopen finds that the tab lost the writer, the tab shows what the switch of today shows: the selected Chapter, read-only. In each of these cases, Arrival Input goes to the notice of section 4.
 
 ### 6. A second selection
 
