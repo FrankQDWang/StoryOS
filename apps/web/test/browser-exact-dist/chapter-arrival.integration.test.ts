@@ -49,11 +49,16 @@ it("stores the input of the earlier Chapter that was not saved at the selection,
     await typeIntoCurrent(frame, "Alpha");
     const shown = (editor: HTMLElement) => ({ title: root().querySelector("h2")?.textContent,
       body: manuscriptBody(editor), editable: manuscriptIsEditable(editor) });
-    /** Waits with no new click until the switch of the selection has the editor of the Chapter `title`. */
+    /**
+     * Waits with no new click until the switch of the selection has the editor of the Chapter `title`. An Arriving
+     * Chapter can be editable, so the wait also needs the end of the arrival.
+     */
     const switched = async (title: string, body: string) => {
       const alert = () => root().querySelector('.editor-panel [role="alert"]')?.textContent;
-      await expect.poll(() => ({ ...shown(manuscriptEditor(root(), win)), alert: alert() }), { timeout: 15_000 })
-        .toEqual({ title, body, editable: true, alert: undefined });
+      const arriving = () => root().querySelector("[data-arrival-no-open-suggestion]")
+        ?.getAttribute("data-arrival-no-open-suggestion");
+      await expect.poll(() => ({ ...shown(manuscriptEditor(root(), win)), alert: alert(), arriving: arriving() }),
+        { timeout: 15_000 }).toEqual({ title, body, editable: true, alert: undefined, arriving: "" });
       await waitSaved(root(), undefined, { timeout: 15_000 });
     };
 
@@ -77,7 +82,8 @@ it("stores the input of the earlier Chapter that was not saved at the selection,
     await updateAuthorEditSubmissionHold({ action: "release" });
     await switched("Chapter B", "");
 
-    // Chapter A has the copy of its settled base: it is on the screen at once, and the editor of Chapter B ends.
+    // Chapter A has the copy of its settled base: it is on the screen at once, and the editor of Chapter B ends. The
+    // copy has the fact "no open suggestion", so the Arriving Chapter is editable (ADR 0105, section 3).
     const editorB = manuscriptEditor(root(), win);
     await updateAuthorEditSubmissionHold({ action: "hold" });
     focusManuscriptEnd(editorB, win);
@@ -85,7 +91,7 @@ it("stores the input of the earlier Chapter that was not saved at the selection,
     await expect.poll(() => manuscriptBody(editorB)).toBe("Beta");
     await selectTreeChapter(root(), a, { arrival: "in-progress" });
     const arriving = () => ({ ...shown(manuscriptEditor(root(), win)), earlier: editorB.isConnected });
-    await expect.poll(arriving).toEqual({ title: "Chapter A", body: "Alpha one", editable: false, earlier: false });
+    await expect.poll(arriving).toEqual({ title: "Chapter A", body: "Alpha one", editable: true, earlier: false });
     await updateAuthorEditSubmissionHold({ action: "release" });
     await switched("Chapter A", "Alpha one");
 
