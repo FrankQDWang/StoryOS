@@ -89,8 +89,8 @@ export function BlockProposalDisplay({
   /**
    * Each answer of the read of the open suggestions of this Chapter: the Proposal heads of a complete list, or
    * `undefined` for an incomplete list, a failed read, or a Local Edit Journal that stops input. It comes after the
-   * input check of the Local Edit Journal, so input that the answer starts does not stop the editor. The hand-over of
-   * Arrival Input waits for it (ADR 0105).
+   * input check of the Local Edit Journal, and it uses the input rule of the editor, so input that the answer starts
+   * does not stop the editor. The hand-over of Arrival Input waits for it (ADR 0105).
    */
   onSuggestionList?: ((heads: readonly string[] | undefined) => void) | undefined;
   persistWorkspace: EditorReadyState | undefined;
@@ -217,10 +217,13 @@ export function BlockProposalDisplay({
     decisionGeneration, locators.map((locator) => locator.proposalId).join("|"),
     editorProps.baseUrl, editorProps.fetchImpl]);
   const inputChecked = acceptanceChecked || journalProposalsChecked;
+  // The Local Edit Journal lets the editor accept input: the part of the input rule of the editor below that does not
+  // depend on the input itself.
+  const journalAccepts = !recoveryUnavailable && journalPendingIds.length === 0 && accepting === undefined
+    && pendingAcceptances.length === 0;
   useEffect(() => {
     if (suggestionList === undefined || !inputChecked) return;
-    onSuggestionListRef.current?.(!recoveryUnavailable && journalPendingIds.length === 0
-      && pendingAcceptances.length === 0 ? suggestionList.heads : undefined);
+    onSuggestionListRef.current?.(journalAccepts ? suggestionList.heads : undefined);
   }, [suggestionList, inputChecked]);
 
   useEffect(() => {
@@ -747,12 +750,9 @@ export function BlockProposalDisplay({
   return (
     <>
       <ManuscriptEditor key="editor" {...editorProps}
-        editable={editorProps.editable && !recoveryUnavailable
-          && journalPendingIds.length === 0
-          && (acceptanceChecked || journalProposalsChecked || (locators.length === 0
-            && recoveredProposalIds.length === 0 && writing?.projection.unsettled_intent_count === 0))
-          && accepting === undefined
-          && pendingAcceptances.length === 0}
+        editable={editorProps.editable && journalAccepts
+          && (inputChecked || (locators.length === 0
+            && recoveredProposalIds.length === 0 && writing?.projection.unsettled_intent_count === 0))}
         proposals={projections}
         onCandidateSettled={(proposalId) => {
           if (typeof proposalId === "string" && proposalId.length > 0) {

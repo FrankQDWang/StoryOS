@@ -376,20 +376,37 @@ function ProjectEditorView({
       onFailure: (error) => { onEditorFailureRef.current(error); } })
     : undefined, [editorState, baseUrl, fetchImpl, cryptoImpl, writingTimers]);
   useEffect(() => () => { writing?.close(); }, [writing]);
-  // The answer of the read of the open suggestions of this editor decides the hand-over. Each held edit goes to the
-  // normal capture entry in its order. A suggestion in the Chapter or a failed read sends the input to a notice.
+  // Ends the hand-over: each held edit goes to the normal capture entry in its order, or the notice shows the input.
+  const endHandOver = (typed: ArrivalInput, capture: boolean) => {
+    handOverRef.current = undefined;
+    typed.stop();
+    if (capture && writing !== undefined) {
+      for (const item of typed.held()) writing.capture(item.edit, item.origin, item.blocks);
+    } else if (typed.hasInput()) {
+      unsavedNotice.show({ chapterId: typed.chapterId, blocks: typed.blocks() });
+    }
+  };
+  // The latest answer of the read of the open suggestions of this editor decides the hand-over, after an open IME
+  // composition ended. A complete list with no Proposal gives the input to the writing controller. A Proposal, an
+  // incomplete list, a failed read, or a Local Edit Journal that stops input sends the input to the notice.
+  const listedRef = useRef<{ heads: readonly string[] | undefined }>(undefined);
+  // A new selection, a Proposal navigation, or a removal from the contents ends a hand-over that waits, and the notice
+  // shows its input. So no Author Edit of it comes after the quiet step of that command, and the notice has one owner.
+  const cancelHandOver = () => {
+    const typed = handOverRef.current;
+    if (typed === undefined) return;
+    endHandOver(typed, false);
+    setHandOver(undefined);
+  };
   const decideHandOver = (heads: readonly string[] | undefined) => {
     const typed = handOverRef.current;
     if (typed === undefined) return;
+    const waiting = listedRef.current !== undefined;
+    listedRef.current = { heads };
+    if (waiting) return;
     void compositionEnded(typed).then(() => {
       if (handOverRef.current !== typed) return;
-      handOverRef.current = undefined;
-      typed.stop();
-      if (heads?.length === 0 && writing !== undefined) {
-        for (const item of typed.held()) writing.capture(item.edit, item.origin, item.blocks);
-      } else if (typed.hasInput()) {
-        unsavedNotice.show({ chapterId: typed.chapterId, blocks: typed.blocks() });
-      }
+      endHandOver(typed, listedRef.current?.heads?.length === 0);
       flushSync(() => { setHandOver(undefined); });
     });
   };
@@ -485,6 +502,7 @@ function ProjectEditorView({
       structureInFlightRef.current = false;
     }
     if (chapterId === selectedChapterIdRef.current) return Promise.resolve(false);
+    cancelHandOver();
     if (state.editor.kind !== "editor-ready" || writing === undefined) {
       browseChapter(chapterId);
       return Promise.resolve(false);
@@ -559,10 +577,9 @@ function ProjectEditorView({
             if (typed !== undefined && next.kind === "project-ready" && next.editor.kind === "editor-ready") {
               await compositionEnded(typed);
               // A ready editor has the writer. A Revision is of one Chapter, and a stop of the input comes from another
-              // Revision, so the base check also refuses an editor of another Chapter and a stopped input.
-              const base = next.editor.openedProjection;
-              if (typed.hasInput() && base.authoritative_revision_id === typed.revisionId
-                && base.unsettled_intent_count === 0) {
+              // Revision, so the base check also refuses an editor of another Chapter and a stopped input. The base
+              // has no unsettled input: the quiet step settled the Local Edit Journal of the Editor Session.
+              if (typed.hasInput() && next.editor.openedProjection.authoritative_revision_id === typed.revisionId) {
                 inputRef.current = undefined;
                 handOverStore.current = typed;
               }
@@ -601,6 +618,7 @@ function ProjectEditorView({
     if (tree === undefined) return;
     if (structureInFlightRef.current) return;
     structureInFlightRef.current = true;
+    cancelHandOver();
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
     void (async () => {
@@ -677,6 +695,7 @@ function ProjectEditorView({
   const own: ProjectEditorHandle = {
     selectChapter, removeChapter, removeVolume, openedProposal, showRecovery: setSwitchRecovery,
     navigateProposal: (destination) => {
+      cancelHandOver();
       const checked = treeCheck();
       navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
@@ -755,7 +774,8 @@ function ProjectEditorView({
         arrival={handOver}
         initialSelection={handOver?.selection()}
         onSuggestionList={handOver === undefined ? undefined : decideHandOver}
-        referenceSource={{
+        // A Selection Reference needs saved text, so none is available while the hand-over waits.
+        referenceSource={handOver !== undefined ? undefined : {
           scope: state.project.project_scope,
           chapterId: selectedChapter.chapter.chapter_id,
           revisionId: selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
