@@ -546,9 +546,10 @@ function ProjectEditorView({
       let cancelled = false;
       // A repeat uses the Chapter of the first read, so the command and its idempotency key stay the same.
       const targets = new Map<string, GetChapterResponse>();
-      // The Current Chapter of the last command that had an effect, which the reopen opens.
-      let reopenAt: string | undefined;
-      let changed = false;
+      // The Current Chapter of the last command that had an effect, which the reopen opens. When an earlier switch moved
+      // the Editor Session of this editor, it is at first the Current Chapter of the Server.
+      let reopenAt = serverChapterRef.current !== currentChapterId ? serverChapterRef.current : undefined;
+      let changed = reopenAt !== undefined;
       try {
         const quiet = await active.wait.retry(() => {
           active.waiting = false;

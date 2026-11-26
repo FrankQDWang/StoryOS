@@ -130,6 +130,7 @@ export const storyOSBrowserCommands = {
         receipts: request.receipts,
         kinds: request.kinds,
         ...(request.authorActions === undefined ? {} : { authorActions: request.authorActions }),
+        ...(request.lastResults === undefined ? {} : { lastResults: request.lastResults }),
       });
       return { kind: "project_receipts_verified" } as const;
     },

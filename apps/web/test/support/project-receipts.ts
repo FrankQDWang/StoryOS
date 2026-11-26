@@ -13,6 +13,8 @@ type ProjectReceiptExpectation = Readonly<{
   /** `listed` counts only the command kinds of `receipts`. The default `all` counts each kind. */
   kinds?: "all" | "listed";
   authorActions?: number;
+  /** The result kind and the resulting heads of the last Receipts of the one listed command kind, in their order. */
+  lastResults?: readonly Readonly<{ result: string; heads: readonly string[] }>[];
 }>;
 
 /** Asserts the Project count and the Receipts of the Projects that one journey made, so that a changed count names that journey. */
@@ -42,4 +44,15 @@ export async function assertProjectReceipts(
     receipts: Object.fromEntries(kinds.map((kind) => [kind, observed.receipts[kind] ?? 0])),
     authorActions: expected.authorActions === undefined ? undefined : observed.author_actions,
   }, { projects: expected.projects, receipts: expected.receipts, authorActions: expected.authorActions });
+  if (expected.lastResults !== undefined) {
+    const kind = Object.keys(expected.receipts)[0]!;
+    assert.match(kind, /^[A-Za-z]+$/u);
+    const last = JSON.parse(await queryStoryOSPostgres(`
+      SELECT coalesce(json_agg(json_build_object('result', result_kind, 'heads', resulting_heads) ORDER BY created_at),
+        '[]')::text
+      FROM (SELECT result_kind, resulting_heads, created_at FROM storyos.domain_receipts
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id IN (${projects}) AND command_kind = '${kind}'
+        ORDER BY created_at DESC LIMIT ${expected.lastResults.length}) AS last`)) as unknown;
+    assert.deepEqual(last, expected.lastResults);
+  }
 }

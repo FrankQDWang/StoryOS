@@ -29,13 +29,18 @@ export async function setOwnedCurrentChapter(options: {
   expectedCurrentChapterId: string;
   expectedTargetRevisionId: string;
   editorSessionId: string;
-  /** False when the caller replaced the command. It is read after the Command Challenge, before the command goes out. */
+  /**
+   * False when the caller replaced the command. It is read after the Command Challenge, before the first attempt of the
+   * command goes out. A command that has an earlier attempt goes out again with its key.
+   */
   proceed?: () => boolean;
 }): Promise<SetCurrentChapterResponse> {
+  const identity = currentChapterIdentity(options);
+  let attempted = inFlight.has(identity);
   return sendOwnedCommand({
     ...options,
     flights: inFlight,
-    identity: currentChapterIdentity(options),
+    identity,
     method: "PUT",
     routeTemplate: "/api/v1/projects/{project_id}/current-chapter",
     name: "Set Current Chapter",
@@ -51,9 +56,12 @@ export async function setOwnedCurrentChapter(options: {
     }),
     digest: digestSetCurrentChapter,
     send: (command) => {
-      if (options.proceed?.() !== false) return setCurrentChapter(command);
+      if (attempted || options.proceed?.() !== false) {
+        attempted = true;
+        return setCurrentChapter(command);
+      }
       // The command did not go out, so a later intent gets a new Command Challenge.
-      inFlight.delete(currentChapterIdentity(options));
+      inFlight.delete(identity);
       return Promise.reject(new SkippedCurrentChapterError("the Set Current Chapter command was replaced"));
     },
     // The caller waits for the Retry-After of a Challenge rate limit and repeats with the same key (#1679).

@@ -53,6 +53,8 @@ export type ProjectReceiptsRequest = Readonly<{
   receipts: Readonly<Record<string, number>>;
   kinds: "all" | "listed";
   authorActions?: number;
+  /** The result kind and the resulting heads of the last Receipts of the one listed command kind, in their order. */
+  lastResults?: readonly Readonly<{ result: string; heads: readonly string[] }>[];
 }>;
 type CommandChallengeRateWindowsRequest = Readonly<{ action: "reset" }>;
 export type CommandChallengeRateWindowsResult = Readonly<{
@@ -273,10 +275,10 @@ export function parseSettleWorkerOnceResult(value: unknown): Readonly<{ kind: "w
 }
 
 export function parseProjectReceiptsRequest(value: unknown): ProjectReceiptsRequest {
-  const withAuthorActions = typeof value === "object" && value !== null && "authorActions" in value;
-  const request = exactObject(value, withAuthorActions
-    ? ["projectId", "receipts", "kinds", "authorActions"]
-    : ["projectId", "receipts", "kinds"], "Project Receipt request");
+  const optional = ["authorActions", "lastResults"]
+    .filter((key) => typeof value === "object" && value !== null && key in value);
+  const withAuthorActions = optional.includes("authorActions");
+  const request = exactObject(value, ["projectId", "receipts", "kinds", ...optional], "Project Receipt request");
   const projectId = boundedText(property(request, "projectId"), "Project ID");
   const kinds = property(request, "kinds");
   if (kinds !== "all" && kinds !== "listed") throw new TypeError("Project Receipt kinds must be all or listed");
@@ -298,9 +300,26 @@ export function parseProjectReceiptsRequest(value: unknown): ProjectReceiptsRequ
     }
     receipts[kind] = count;
   }
-  return authorActions === undefined
-    ? { projectId, receipts, kinds }
-    : { projectId, receipts, kinds, authorActions };
+  const lastResults = optional.includes("lastResults") ? parseLastResults(property(request, "lastResults"), receipts)
+    : undefined;
+  return { projectId, receipts, kinds, ...(authorActions === undefined ? {} : { authorActions }),
+    ...(lastResults === undefined ? {} : { lastResults }) };
+}
+
+/** The last results of one command kind. The kind is a name of letters, because the query names it. */
+function parseLastResults(value: unknown, receipts: Record<string, number>) {
+  const kinds = Object.keys(receipts);
+  if (kinds.length !== 1 || !/^[A-Za-z]+$/u.test(kinds[0]!)) {
+    throw new TypeError("Project Receipt last results need one listed command kind");
+  }
+  if (!Array.isArray(value) || value.length === 0) throw new TypeError("Project Receipt last results must be a list");
+  return value.map((item: unknown) => {
+    const entry = exactObject(item, ["result", "heads"], "Project Receipt result");
+    const result = boundedText(property(entry, "result"), "Receipt result");
+    const heads = property(entry, "heads");
+    if (!Array.isArray(heads)) throw new TypeError("Receipt heads must be a list");
+    return { result, heads: heads.map((head: unknown) => boundedText(head, "Receipt head")) };
+  });
 }
 
 export function parseProjectReceiptsResult(

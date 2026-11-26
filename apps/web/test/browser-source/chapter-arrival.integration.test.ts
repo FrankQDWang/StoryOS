@@ -59,7 +59,9 @@ async function sha256(body: string): Promise<string> {
  * its units, in their order, to the text of the Current Chapter, and `editRequests` has its request. A name in `refuse` of the open
  * suggestions of a Chapter fails its read. `moveTo` changes the Current Chapter as another tab does. `switches` has the
  * expected and the new Current Chapter of each Set Current Chapter command. As the Server does, the fake refuses a command
- * whose expected Current Chapter is not the Current Chapter with the conflict `stale_current_chapter`.
+ * whose expected Current Chapter is not the Current Chapter with the conflict `stale_current_chapter`. With
+ * `lostSwitch`, the next switch applies and its response does not arrive. A repeat with the same idempotency key gets
+ * the response of the first one.
  */
 function arrivalServer() {
   const scenario = createBrowserScenario();
@@ -77,11 +79,14 @@ function arrivalServer() {
   const editKeys = new Set<string>();
   // The command digest that the Challenge of the next Author Edit names.
   let editDigest: ReturnType<typeof requireDigestValue> | undefined;
+  // The response of each applied switch, by its idempotency key.
+  const switchReplies = new Map<string, unknown>();
   const server = { requests: [] as string[], unexpected: [] as string[], texts, refuse: new Set<string>(),
     activity: undefined as unknown, assistance: false, undo: false, editKeys, lists: {} as Record<string, string>,
     effect: undefined as unknown, lostWriter: false, limited: false, emptyAfterSwitch: false,
     answered: [] as string[], acceptEdits: false, editRequests: [] as Record<string, unknown>[], truncated: false,
     run: undefined as ({ run_id: string } & Record<string, unknown>) | undefined, switches: [] as string[][],
+    lostSwitch: false,
     hold(name: string) { holding.add(name); },
     /** Another tab makes `chapterId` the Current Chapter. */
     moveTo(chapterId: string) { current = chapterId; },
@@ -212,6 +217,8 @@ function arrivalServer() {
     const switchInput = name !== SWITCH ? undefined : (JSON.parse(String(init?.body)) as {
       set_current_chapter_input: { chapter_id: string; expected_current_chapter_id: string } }).set_current_chapter_input;
     if (switchInput !== undefined) server.switches.push([switchInput.expected_current_chapter_id, switchInput.chapter_id]);
+    const replied = switchReplies.get(requestHeaders(init).get("idempotency-key") ?? "");
+    if (switchInput !== undefined && replied !== undefined) return jsonResponse(replied);
     if (switchInput !== undefined && server.effect === undefined && switchInput.expected_current_chapter_id !== current) {
       return jsonResponse({ ...setCurrentChapterFixture, project: { ...setCurrentChapterFixture.project, open: open() },
         effect: { kind: "conflicted", reason: "stale_current_chapter" },
@@ -231,14 +238,19 @@ function arrivalServer() {
       const position = Number(snapshot.position) + 1;
       snapshot = { id: `018f0000-0000-7001-8000-00000000094${position}`, position: String(position) };
       const revision = texts[current]!.revision;
-      const response = jsonResponse({ ...setCurrentChapterFixture,
+      const reply = { ...setCurrentChapterFixture,
         project: { ...setCurrentChapterFixture.project, open: open() },
         effect: { ...setCurrentChapterFixture.effect, base_snapshot_id: snapshot.id, current_chapter_id: current,
           project_activity_position: snapshot.position },
         receipt: { ...setCurrentChapterFixture.receipt, expected_heads: [revision], prior_heads: [revision],
-          resulting_heads: [revision] } });
+          resulting_heads: [revision] } };
+      switchReplies.set(requestHeaders(init).get("idempotency-key") ?? "", reply);
       empty = server.emptyAfterSwitch;
-      return response;
+      if (server.lostSwitch) {
+        server.lostSwitch = false;
+        throw new TypeError("Failed to fetch");
+      }
+      return jsonResponse(reply);
     }
     // The tests are not about these panels.
     if ([`GET ${P}/manuscript/statistics`, `GET ${P}/assistance`, `GET ${P}/skills`].includes(name)) {
@@ -1913,8 +1925,15 @@ it.each([
     workspace.server.refuse.add(READ_C); }, ended: async (workspace: Workspace) => {
     await expect.poll(() => workspace.shown().alert).toBe("无法打开这一章：快照已过期。"); },
     shown: { title: "Chapter A", body: "Base", editable: false, alert: "无法打开这一章：快照已过期。" } },
-])("sends a selection of Chapter A to the Server, with a command that expects Chapter B, when the switch to Chapter C $end",
-  async ({ steps, prepare, ended, shown }) => {
+].flatMap((row) => [
+  // A command back to Chapter A expects Chapter B.
+  { ...row, last: CHAPTER, name: "Chapter A", after: [`GET ${P}/chapters/${CHAPTER}`, CHALLENGE, SWITCH, ...reopenSteps(CHAPTER)],
+    switches: [[CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER]], ready: { title: "Chapter A", body: "Base" } },
+  // Chapter B is the Current Chapter of the Server, so its editor opens with no command.
+  { ...row, last: CHAPTER_B, name: "Chapter B", after: reopenSteps(CHAPTER_B), switches: [[CHAPTER, CHAPTER_B]],
+    ready: { title: "Chapter B", body: "Beta" } },
+]))("opens the selection of $name with the Current Chapter of the Server, Chapter B, when the switch to Chapter C $end",
+  async ({ steps, prepare, ended, shown, last, after, switches, ready }) => {
     const workspace = await openWorkspace();
     await workspace.copy(CHAPTER_B);
     await workspace.copy(CHAPTER_C);
@@ -1928,14 +1947,34 @@ it.each([
     workspace.server.release(SWITCH);
     await ended(workspace);
     const stopped = workspace.ready();
-    workspace.button(CHAPTER).click();
+    workspace.button(last).click();
 
-    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() })).toEqual({ title: "Chapter A",
-      body: "Base", editable: true, alert: undefined, save: "saved" });
-    await expectRequests(workspace.server, before, [READ_B, CHALLENGE, SWITCH, ...steps, `GET ${P}/chapters/${CHAPTER}`,
-      CHALLENGE, SWITCH, ...reopenSteps(CHAPTER)], panelReads(CHAPTER));
-    expect({ stopped, switches: workspace.server.switches }).toEqual({ stopped: shown,
-      switches: [[CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER]] });
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() })).toEqual({ ...ready,
+      editable: true, alert: undefined, save: "saved" });
+    await expectRequests(workspace.server, before, [READ_B, CHALLENGE, SWITCH, ...steps, ...after], panelReads(last));
+    expect({ stopped, switches: workspace.server.switches }).toEqual({ stopped: shown, switches });
+  });
+
+it("repeats a command whose response did not arrive with its key after a newer selection, and goes on from its result",
+  async () => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    await workspace.copy(CHAPTER_C);
+    workspace.server.hold(SWITCH);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(SWITCH)).toBe(true);
+    workspace.button(CHAPTER_C).click();
+    await expect.poll(() => workspace.ready().title).toBe("Chapter C");
+    workspace.server.lostSwitch = true;
+    workspace.server.release(SWITCH);
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() })).toEqual({ title: "Chapter C",
+      body: "Gamma", editable: true, alert: undefined, save: "saved" });
+    // The repeat of the command of Chapter B gets the response of the Server, so the command of Chapter C expects B.
+    await expectRequests(workspace.server, before, [READ_B, CHALLENGE, SWITCH, SWITCH, READ_C, CHALLENGE, SWITCH,
+      ...reopenSteps(CHAPTER_C)], panelReads(CHAPTER_C));
+    expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_B], [CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER_C]]);
   });
 
 it("keeps the Arriving Chapter at a second selection while an IME composition with no text is open in it", async () => {

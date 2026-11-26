@@ -154,5 +154,10 @@ it("stores the input of the earlier Chapter at the selection, and stores the key
       storedA: ["Alpha one twoGammaDelta", "Epsilon Zeta"], storedB: ["Beta"], storedC: [""] });
     // The Server stores a Receipt for each Set Current Chapter command, also for a conflict. The journey sends four:
     // A to B and B to A, then A to B and B to C. A stale command or a command of a replaced selection is a fifth one.
-    await assertPageProjectReceipts({ projectId, kinds: "listed", receipts: { setCurrentChapter: 4 } });
+    // The heads of a Receipt are the Revision of its Chapter, so the last two Receipts show A to B and B to C, applied.
+    const head = async (chapterId: string) => (await getChapter({ baseUrl: last.location.origin, projectId, chapterId,
+      fetchImpl: last.fetch.bind(last) })).chapter.current_revision.revision_id;
+    await assertPageProjectReceipts({ projectId, kinds: "listed", receipts: { setCurrentChapter: 4 },
+      lastResults: [{ result: "authoritative_applied", heads: [await head(b)] },
+        { result: "authoritative_applied", heads: [await head(c)] }] });
   });
