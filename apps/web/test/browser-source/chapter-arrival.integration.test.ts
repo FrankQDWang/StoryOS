@@ -295,8 +295,12 @@ async function openWorkspace(prepare: (server: ReturnType<typeof arrivalServer>[
     pointer(chapterId, false);
     await expect.poll(() => stayTimers(chapterId)).toBe(0);
   };
-  // The page reads each panel of the open before a test starts.
-  await expect.poll(() => server.requests.includes(openProposals(CHAPTER))).toBe(true);
+  // Each read of the open answered before a test starts, so no read of the open comes after `requests.length`. A read
+  // that the test holds in `prepare` waits until the test releases it.
+  const openReads = [openProposals(CHAPTER), `GET ${P}/assistance`, `GET ${P}/skills`, `GET ${P}/manuscript/tree`,
+    ACTIVITY, `GET ${P}/manuscript/statistics`];
+  await expect.poll(() => openReads.filter((name) => !server.answered.includes(name) && !server.isHeld(name)))
+    .toEqual([]);
   /** The notice of Arrival Input that is not saved, and whether it is directly under the Chapter title. */
   const notice = () => {
     const element = root.querySelector("[data-arrival-notice]");
