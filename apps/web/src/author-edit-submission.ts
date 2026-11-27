@@ -44,6 +44,7 @@ import {
 } from "./protected-transport-capsule.ts";
 import { uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
+import { hasVersion5Request } from "./journal-version-5-upgrade.ts";
 
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -85,7 +86,7 @@ async function validateFrozenGroup(
     || group.api_major !== 1
     || group.method !== "POST"
     || group.route_template !== "/api/v1/projects/{project_id}/manuscript/author-edits"
-    || group.command_schema !== "storyos.command.apply-author-edit.request.v2"
+    || (group.command_schema !== "storyos.command.apply-author-edit.request.v2" && !hasVersion5Request(group))
     || group.command_kind !== "applyAuthorEdit"
     || group.digest_profile !== "storyos.command.applyAuthorEdit.jcs.v1"
     || !UUID.test(group.idempotency_key ?? "")

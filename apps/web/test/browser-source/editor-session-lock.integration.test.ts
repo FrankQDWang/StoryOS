@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 
+import { editorSessionLock } from "../../src/editor-session-lock.ts";
 import { openEditorWorkspace } from "../../src/editor-session.ts";
 import {
   OWNER, PROJECT, SESSION, closeTrackedDatabases, createBrowserScenario, deleteJournal, jsonResponse,
@@ -47,7 +48,7 @@ it("creates a new Editor Session when another page writes with the stored one", 
   let endOtherPage = () => {};
   const otherPage = new Promise<void>((resolve) => { endOtherPage = resolve; });
   const held = new Promise<void>((taken) => {
-    void navigator.locks.request(`storyos-editor-session:${SESSION}`, () => {
+    void navigator.locks.request(editorSessionLock(SESSION), () => {
       taken();
       return otherPage;
     });

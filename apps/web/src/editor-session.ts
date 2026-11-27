@@ -32,7 +32,12 @@ import { blocksOnCurrent, stepsOnCurrent, type EarlierBaseText } from "./earlier
 import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
+import { lockEditorSession, releaseEarlierEditorSessions } from "./editor-session-lock.ts";
 import { recoveryPrefix } from "./local-recovery-record.ts";
+import {
+  claimVersion5Session, freezeUnsentVersion5Groups, releaseVersion5Session, retainVersion5PartitionText,
+  upgradeVersion5Journal, type Version5Session,
+} from "./journal-version-5-upgrade.ts";
 
 export {
   freezeOneIntentSubmission,
@@ -48,14 +53,17 @@ const boundedU64 = (value: unknown): value is string => typeof value === "string
 async function openJournalDatabase(
   indexedDBImpl: IDBFactory | undefined,
   scope: ProjectScope,
+  cryptoImpl: Crypto,
+  maxJsonStringUtf8Bytes: number,
 ): Promise<IDBDatabase> {
   if (!indexedDBImpl) throw new Error("IndexedDB is unavailable");
   const name = `storyos-local-edit-journal:${scope.owner_user_id}:${scope.project_id}`;
   const request = indexedDBImpl.open(name, JOURNAL_DATABASE_VERSION);
   request.onupgradeneeded = (event) => {
-    // A version 5 Journal keeps each row. Its partition identifiers have the writer generation of before ADR 0107, so
-    // no version 6 partition has them, and no reader reads them or sends their records.
+    // A version 5 Journal has the writer fields of before ADR 0107. The upgrade removes them from each row, also from
+    // the partition row, and keeps the frozen requests.
     if (event.oldVersion === 5) {
+      upgradeVersion5Journal(request.transaction!);
       request.transaction!.objectStore("metadata").put({ key: "schema", version: JOURNAL_DATABASE_VERSION });
       return;
     }
@@ -119,6 +127,13 @@ async function openJournalDatabase(
   if (schema?.version !== JOURNAL_DATABASE_VERSION) {
     database.close();
     throw new Error("Local Edit Journal schema is incompatible");
+  }
+  try {
+    await freezeUnsentVersion5Groups(database, cryptoImpl);
+    await retainVersion5PartitionText(database, cryptoImpl, maxJsonStringUtf8Bytes);
+  } catch (error) {
+    database.close();
+    throw error;
   }
   return database;
 }
@@ -307,74 +322,63 @@ export interface OpenedEditorWorkspace {
 
 type EditorSessionStart =
   | { kind: "started"; database: IDBDatabase; active: string | null | undefined; sessionValue: unknown;
-    creation: SessionCreation | undefined }
-  | { kind: "failed"; database: IDBDatabase | undefined; error: unknown };
-
-// The Editor Sessions whose lock this page holds, and the end of each lock.
-const heldSessions = new Map<string, () => void>();
-
-/**
- * Takes the lock of an Editor Session for this page. It is false when another page holds the lock: the browser command
- * "Duplicate tab" copies `sessionStorage`, and two pages of one Editor Session would freeze and settle the Journal
- * records of each other.
- */
-async function lockEditorSession(editorSessionId: string): Promise<boolean> {
-  const locks = globalThis.navigator?.locks;
-  if (heldSessions.has(editorSessionId) || locks === undefined) return true;
-  return new Promise<boolean>((resolve, reject) => {
-    locks.request(`storyos-editor-session:${editorSessionId}`, { ifAvailable: true }, (lock) => {
-      if (lock === null) {
-        resolve(false);
-        return undefined;
-      }
-      return new Promise<void>((release) => {
-        heldSessions.set(editorSessionId, release);
-        resolve(true);
-      });
-    }).catch(reject);
-  });
-}
-
-/** Ends the lock of each Editor Session of this page other than `editorSessionId`, after `sessionStorage` names it. */
-function releaseEarlierEditorSessions(editorSessionId: string): void {
-  for (const [held, release] of heldSessions) {
-    if (held === editorSessionId) continue;
-    heldSessions.delete(held);
-    release();
-  }
-}
+    creation: SessionCreation | undefined; claimed?: Version5Session }
+  | { kind: "failed"; database: IDBDatabase | undefined; error: unknown; claimed?: Version5Session };
 
 /** Opens the Journal and reads the stored Editor Session at once, so that the read is in flight with the Chapter read. */
-export function startEditorWorkspace({
-  baseUrl, project, profile, fetchImpl = globalThis.fetch,
-  indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto, earlyChallenge = true,
-}: EditorWorkspaceOptions): EditorWorkspaceOpening {
+export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWorkspaceOpening {
+  const {
+    baseUrl, project, profile, fetchImpl = globalThis.fetch,
+    indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto, earlyChallenge = true,
+  } = options;
   const scope = project.project_scope;
   const started = (async (): Promise<EditorSessionStart> => {
     let database: IDBDatabase | undefined;
+    let claimed: Version5Session | undefined;
     try {
       const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
       const stored = globalThis.sessionStorage
         ? globalThis.sessionStorage.getItem(activeSessionKey) : undefined;
-      // A Session that another page writes with is not this page's Session, so the open creates one.
-      const active = stored && !await lockEditorSession(stored) ? null : stored;
       // The creation waits for the Chapter read (#1884), and its Challenge starts with that read (#1899).
-      const creation = !active && earlyChallenge
+      const creation = !stored && earlyChallenge
         ? prepareSessionCreation({ baseUrl, project, profile, fetchImpl, cryptoImpl }) : undefined;
-      database = await openJournalDatabase(indexedDBImpl, scope);
+      database = await openJournalDatabase(indexedDBImpl, scope, cryptoImpl, profile.max_json_string_utf8_bytes);
+      // A tab with no stored Editor Session opens a Session of the rows of an upgraded version 5 Journal.
+      const choice = await claimVersion5Session(database, stored);
+      claimed = choice.claimed;
+      // A Session that another page writes with is not this page's Session, so the open creates one.
+      const active = choice.active && !await lockEditorSession(choice.active) ? null : choice.active;
       // A stored Session read changes nothing on the Server, so it runs with the Chapter read.
       const sessionValue: unknown = active
         ? await getEditorSession({ baseUrl, projectId: scope.project_id,
           editorSessionId: active, fetchImpl })
         : undefined;
-      return { kind: "started", database, active, sessionValue, creation };
+      return { kind: "started", database, active, sessionValue, creation, ...(claimed ? { claimed } : {}) };
     } catch (error) {
-      return { kind: "failed", database, error };
+      return { kind: "failed", database, error, ...(claimed ? { claimed } : {}) };
     }
   })();
   return {
-    finish: (chapter, read = project, shown) => finishEditorWorkspace(started, { baseUrl, project: read, chapter,
-      profile, fetchImpl, cryptoImpl, shown }),
+    finish: async (chapter, read = project, shown) => {
+      const opened = await finishEditorWorkspace(started, { baseUrl, project: read, chapter, profile, fetchImpl,
+        cryptoImpl, shown });
+      const { claimed } = await started;
+      if (claimed === undefined || opened.editor.kind === "editor-ready") return opened;
+      // The claimed Session of the version 5 rows did not open. Its text goes to local recovery, and the tab opens a
+      // new Session.
+      try {
+        const database = await openJournalDatabase(indexedDBImpl, scope, cryptoImpl,
+          profile.max_json_string_utf8_bytes);
+        try {
+          await releaseVersion5Session(database, claimed, cryptoImpl, profile.max_json_string_utf8_bytes);
+        } finally {
+          database.close();
+        }
+      } catch {
+        return opened;
+      }
+      return startEditorWorkspace(options).finish(chapter, read, shown);
+    },
     abandon: () => started.then((start) => { start.database?.close(); }),
   };
 }
