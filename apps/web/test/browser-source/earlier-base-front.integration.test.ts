@@ -31,6 +31,7 @@ const AUTHOR_EDIT = `POST /api/v1/projects/${PROJECT}/manuscript/author-edits`;
 const CHAPTER_READ = `GET /api/v1/projects/${PROJECT}/chapters/${CHAPTER}`;
 const PROJECT_READ = `GET /api/v1/projects/${PROJECT}`;
 const CHAPTER_B_READ = `GET /api/v1/projects/${PROJECT}/chapters/${CHAPTER_B}`;
+const CREATION = `POST /api/v1/projects/${PROJECT}/editor-sessions`;
 const scenario = createBrowserScenario();
 
 const APPLIED_REVISION = "018f0000-0000-7001-8000-000000000a66";
@@ -68,15 +69,15 @@ function gate() {
  * Revision of another tab. An Author Edit on an earlier Revision gets `stale_authoritative_head`. With `applies`, an
  * Author Edit on the current Revision applies and gives that Revision; without it, it gets no response, so the test sees
  * that it went out. The first creation gives the Editor Session on the base, the second one a new Editor Session on the
- * current Revision. A Chapter read waits for `gates.chapter`, a Project read for `gates.project`, and an Author Edit on
- * the base for `gates.edit`, when the test gives them. It records each request, and it records and throws on each
+ * current Revision. A Chapter read waits for `gates.chapter`, a Project read for `gates.project`, an Author Edit on
+ * the base for `gates.edit`, and a creation after the first for `gates.creation`, when the test gives them. It records each request, and it records and throws on each
  * request that it does not serve.
  */
 function fakeServer(applies?: Revision) {
   const requests: string[] = [];
   const unexpected: string[] = [];
   const switches: unknown[] = [];
-  const gates: { chapter?: Promise<void>; project?: Promise<void>; edit?: Promise<void> } = {};
+  const gates: { chapter?: Promise<void>; project?: Promise<void>; edit?: Promise<void>; creation?: Promise<void> } = {};
   // The head of the Chapter and the base of the stored Editor Session, with their activity positions.
   const world = { head: BASE, position: 0, stored: BASE, storedPosition: 0, current: CHAPTER };
   // One Editor Session response for each Editor Session and base, so a read gives the response of the creation.
@@ -140,8 +141,9 @@ function fakeServer(applies?: Revision) {
       return jsonResponse({ nonce: "a".repeat(64), expires_at: new Date(Date.now() + 60_000).toISOString(),
         limit_profile_revision: scenario.profile.limit_profile_revision });
     }
-    if (route === `POST ${project}/editor-sessions`) {
+    if (route === CREATION) {
       creations += 1;
+      if (creations > 1) await gates.creation;
       return jsonResponse(creations === 1 ? await session(SESSION, BASE, 0)
         : world.current === CHAPTER_B ? await session(NEW_SESSION, IN_B, world.position, CHAPTER_B)
           : await session(NEW_SESSION, world.head, world.position));
@@ -237,13 +239,8 @@ function manualTimers() {
   return { timers, fire };
 }
 
-/**
- * Mounts the view on the base Revision, runs `act`, and unmounts the view. A reopen opens the Journal again in the view,
- * so the cleanup closes each connection, and the deletion of the Journal is not blocked.
- */
-async function withView(server: ReturnType<typeof fakeServer>, act: (root: HTMLElement) => Promise<void>,
-  writingTimers = heldTimers, reload = false) {
-  if (!reload) sessionStorage.removeItem(ACTIVE_KEY);
+/** Records each Journal connection that the page opens, so the test can close them as a page close does. */
+function trackOpens() {
   const databases = new Set<IDBDatabase>();
   const open = IDBFactory.prototype.open;
   const openSpy = vi.spyOn(indexedDB, "open").mockImplementation((name, version) => {
@@ -251,11 +248,38 @@ async function withView(server: ReturnType<typeof fakeServer>, act: (root: HTMLE
     request.addEventListener("success", () => trackDatabase(request.result, databases));
     return request;
   });
+  return { databases, openSpy };
+}
+
+const load = (server: ReturnType<typeof fakeServer>) => {
   document.body.innerHTML = '<main id="app"></main>';
+  return loadStoryOSWebState({ documentImpl: document,
+    locationImpl: { origin: location.origin, pathname: `/projects/${PROJECT}` },
+    fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
+};
+
+/** Starts a load with the stored Editor Session, and closes the page when `stopped` is true. */
+async function closeDuringLoad(server: ReturnType<typeof fakeServer>, stopped: () => boolean) {
+  const { databases, openSpy } = trackOpens();
   try {
-    const loaded = await loadStoryOSWebState({ documentImpl: document,
-      locationImpl: { origin: location.origin, pathname: `/projects/${PROJECT}` },
-      fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
+    void load(server).catch(() => undefined);
+    await expect.poll(stopped).toBe(true);
+  } finally {
+    closeTrackedDatabases(databases);
+    openSpy.mockRestore();
+  }
+}
+
+/**
+ * Mounts the view on the base Revision, runs `act`, and unmounts the view. A reopen opens the Journal again in the view,
+ * so the cleanup closes each connection, and the deletion of the Journal is not blocked.
+ */
+async function withView(server: ReturnType<typeof fakeServer>, act: (root: HTMLElement) => Promise<void>,
+  writingTimers = heldTimers, reload = false) {
+  if (!reload) sessionStorage.removeItem(ACTIVE_KEY);
+  const { databases, openSpy } = trackOpens();
+  try {
+    const loaded = await load(server);
     const view = mountStage1View(loaded.root, { ...loaded, writingTimers });
     try {
       await expect.poll(() => loaded.root.querySelector("[contenteditable='true']") !== null).toBe(true);
@@ -449,6 +473,28 @@ it("sets its Chapter current again at a load and keeps its unsent text when anot
         expected_current_chapter_id: CHAPTER_B, expected_target_revision_id: LATER_REVISION,
         editor_session_id: SESSION }], unexpected: [] });
     }, heldTimers, true);
+  });
+
+it("continues the catch-up with the unsent text at the next load when the page closed after Set Current Chapter",
+  async () => {
+    const server = fakeServer();
+    await leaveTextAndSetB(server, "无人");
+    // The page closes after Set Current Chapter moved the base of the stored Editor Session and before the copy.
+    server.gates.creation = new Promise(() => {});
+    await closeDuringLoad(server, () => count(server, CREATION) === 1);
+    expect(server.switches).toHaveLength(1);
+    delete server.gates.creation;
+    server.requests.length = 0;
+
+    const { timers, fire } = manualTimers();
+    await withView(server, async (root) => {
+      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜，风起。\n渡口。无人", editable: true,
+        save: "saving", failure: "", stored: NEW_SESSION });
+      // The save of the text goes out, and the fake gives it no response.
+      fire();
+      await expect.poll(() => count(server, AUTHOR_EDIT)).toBe(1);
+      expect({ switches: server.switches.length, unexpected: server.unexpected }).toEqual({ switches: 1, unexpected: [] });
+    }, timers, true);
   });
 
 it("opens the Chapter that another tab set current at a load when the tab has no text to send", async () => {

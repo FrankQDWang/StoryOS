@@ -182,10 +182,22 @@ editor, and the author can delete again. The tab shows no sentence and no
 button.
 
 When another tab set another Chapter current and the stored Editor Session has
-text that can catch up on the Chapter of its base, the open (a load or a
-reopen) sets that Chapter current again with that Editor Session, and then
-catches up on it. The later action wins, as for a block. With no such text, the
-open opens the Chapter that the other tab set current.
+text that can catch up on the Chapter of its base, a load or a reopen sets that
+Chapter current again with that Editor Session, and then catches up on it. The
+later action wins, as for a block. With no such text, a load or a reopen opens
+the Chapter that the other tab set current. A tab that comes to the front keeps
+its Chapter: when its front read finds a later Revision, the reopen sets that
+Chapter current again, with or without input, and does not read the other
+Chapter. When the front read finds no later Revision, the tab sends nothing and
+stays writable.
+
+Set Current Chapter moves the base of the named Editor Session to the head of
+the Chapter at a later position. When the page closes after that and before the
+copy of step 3, the records still bind the earlier base. The next load decides
+on the catch-up with the base that the Journal binds, so it catches up on the
+current Revision and does not reject the Journal. When a group is not settled,
+the load keeps the stored Editor Session with the base of its Journal, and shows
+its recovery state.
 
 The catch-up does not run when the stored partition has a group that went out
 with no known result, a refused Author Edit, an Author Edit that conflicted for
@@ -1689,6 +1701,7 @@ attempt with a new Admission.
 | payload collected before reload | reconstruct from the recorded durable successor and retained collection fence; never from missing bytes |
 | reload while another Editor Session of the Project is open | the editor accepts input as soon as it shows the Chapter; no other Editor Session makes it read-only (ADR 0107) |
 | reload of a stored Editor Session with an earlier base and unsent Author Edit text | a new Editor Session shows the current Chapter with the text of the tab on it (section 2.2.1) |
+| reload after Set Current Chapter of a catch-up and before the copy | the load uses the base of the Journal and catches up on the current Revision (section 2.2.1) |
 
 Server or PostgreSQL process interruption uses this same section 10 matrix. It
 does not create a different first browser action.
