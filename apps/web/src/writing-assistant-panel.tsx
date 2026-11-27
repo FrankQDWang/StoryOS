@@ -71,6 +71,10 @@ type OpeningConversation = {
   runs: Record<string, GetAgentRunResponse>;
 };
 
+/** The exchange that the panel shows as the current one, with its Run when the panel read it. */
+type CurrentExchange = Pick<RequestReference, "message" | "chapterId" | "runId" | "conversationId" | "referenceLabels"
+  | "skillNames" | "guidance"> & { run?: GetAgentRunResponse };
+
 /** The labels and the references that one retained steering input added (ADR 0062). */
 type GuidanceReferences = { steeringInputId: string; labels: string[]; references: SelectionReference[] };
 
@@ -419,15 +423,15 @@ export function WritingAssistantPanel({
   };
 
   /**
-   * Gives each Proposal of the Run to the editor. Gives false and no locator when the request record changed during a
-   * read, or when `selected` became false. The Proposal reads go together, and the locators go in their order in one
-   * step, so the editor refreshes one time.
+   * Gives each Proposal of the Run to the editor. Gives false and no locator when the request record changed, or the
+   * author selected a Conversation, during a read. The Proposal reads go together, and the locators go in their order
+   * in one step, so the editor refreshes one time.
    */
-  const showProposals = async (current: RequestReference, result: GetAgentRunResponse,
-    selected: () => boolean = () => true): Promise<boolean> => {
+  const showProposals = async (current: RequestReference, result: GetAgentRunResponse): Promise<boolean> => {
     if (context === undefined) return false;
-    const stillCurrent = () =>
-      selected() && readReference(current.scope)?.correlationId === current.correlationId;
+    const selection = openSequence.current;
+    const stillCurrent = () => selection === openSequence.current
+      && readReference(current.scope)?.correlationId === current.correlationId;
     const shown = shownProposals(result);
     const reads = shown.map((proposal) => proposal.locations.map((location) => location.outcome.kind !== "revised"
       ? undefined : getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
@@ -514,8 +518,8 @@ export function WritingAssistantPanel({
   /**
    * Opens a Conversation of the Project from the Host (ADR 0094 section 10). From the selection, the panel shows the
    * exchanges of no other Conversation: the author messages come with the Conversation read, and the result of each
-   * earlier Run with its Run read. The Run reads go together. When all answered, the newest Run becomes the current
-   * exchange with its result.
+   * Run with its Run read. The Run reads go together. The newest Run is the current exchange. When all Run reads
+   * answered, the panel records the Conversation as the current request.
    * A failure shows the panel as it was before the selection. The answers of an earlier selection change nothing.
    */
   const openConversation = async (conversationId: string, failure: string) => {
@@ -558,7 +562,7 @@ export function WritingAssistantPanel({
       setOpening(undefined);
       setReference(next);
       setRun(newest.run);
-      void showProposals(next, newest.run, latest).catch(() => {});
+      void showProposals(next, newest.run).catch(() => {});
     } catch {
       if (!latest()) return;
       setOpening(undefined);
@@ -748,13 +752,22 @@ export function WritingAssistantPanel({
   const opened = opening === undefined ? reference?.opened : opening.read?.opened;
   const earlierHidden = (runId: string | undefined) => opened?.truncated && runId === opened.firstRunId
     ? <p className="assistant-status" data-assistant-earlier-hidden="">更早的消息没有显示。</p> : null;
-  // A Conversation that opens is in place of the current one, with each of its Runs as an earlier exchange. The newest
-  // Run shows its result when it becomes the current exchange, so that its controls are made one time.
+  // A Conversation that opens is in place of the current one. Its newest Run is the current exchange from the start,
+  // so that the controls of that Run stay when the open ends.
   const shownHistory = opening !== undefined
-    ? (opening.read?.rows ?? []).map((row, index, rows) => openedExchange(row, opening.conversationId,
-      index === rows.length - 1 ? undefined : opening.runs[row.run_id]))
+    ? (opening.read?.rows ?? []).slice(0, -1).map((row) => openedExchange(row, opening.conversationId,
+      opening.runs[row.run_id]))
     : reference === undefined ? []
       : (reference.history ?? []).map((exchange) => ({ ...exchange, chapterId: exchange.chapterId ?? reference.chapterId }));
+  const newestRow = opening?.read?.rows.at(-1);
+  const newestRun = newestRow === undefined ? undefined : opening?.runs[newestRow.run_id];
+  const current: CurrentExchange | undefined = opening !== undefined
+    ? newestRow === undefined ? undefined : { message: newestRow.author_message, chapterId: newestRow.chapter_id,
+      runId: newestRow.run_id, conversationId: opening.conversationId,
+      ...(newestRun === undefined ? {} : { run: newestRun, ...selectedSkillNames(newestRun) }) }
+    : reference === undefined ? undefined : { ...reference, ...(run === undefined ? {} : { run }) };
+  const currentRun = current?.run;
+  const currentTerminal = currentRun !== undefined && settledRun(currentRun);
   const busy = sending || opening !== undefined;
 
   const useResearch = <button type="button" data-assistant-use-research="" disabled={busy || unresolved}
@@ -821,32 +834,36 @@ export function WritingAssistantPanel({
                 </>}
             </section>
           ))}
-          {reference === undefined || opening !== undefined ? null : (
+          {current === undefined ? null : (
             <section className="assistant-exchange" data-assistant-current-run="">
-              {earlierHidden(reference.runId)}
-              {(reference.history?.length ?? 0) > 0
-                && reference.history?.at(-1)?.conversationId !== reference.conversationId
+              {earlierHidden(current.runId)}
+              {shownHistory.length > 0 && shownHistory.at(-1)?.conversationId !== current.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
-              <AuthorMessages message={reference.message} labels={reference.referenceLabels}
-                skills={reference.skillNames} run={run} guidance={reference.guidance} />
-              {!terminal ? <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p> : null}
+              <AuthorMessages message={current.message} labels={current.referenceLabels}
+                skills={current.skillNames} run={currentRun} guidance={current.guidance} />
+              {currentTerminal ? null : opening !== undefined && currentRun === undefined
+                ? <p className="assistant-status" data-assistant-result-loading="">{RESULT_LOADING_SENTENCE}</p>
+                : <p data-assistant-run-status="">{currentRun === undefined ? "请求结果待确认" : runLabels[currentRun.status]}</p>}
               {/* The plan and the Subruns are below the status line while the Run works, and above the first result
                 after it ends (ADR 0103). */}
-              {run === undefined ? null : <RunPlanList run={run} />}
-              {run === undefined ? null : <SubrunList run={run} context={context} scheduleRefresh={scheduleRefresh} />}
-              {run === undefined ? null : runResults(run) !== undefined
-                ? <RunResultList run={run} results={runResults(run)!} context={context} history={false} tree={context?.tree}
-                  sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal}>{useResearch}</RunResultList>
-                : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
-                  <SkillUseList run={run} />
-                  <ManuscriptUseList run={run} />
-                  {context === undefined ? null : <ResearchTurn context={context} run={run}>{useResearch}</ResearchTurn>}
-                  {run.decision.kind !== "prose_change" ? null : <ProposalLocationLinks locations={run.decision.locations ?? []}
-                    tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} />}</>}
-              {!terminal ? <button type="button" data-assistant-inspect="" onClick={() => {
-                void inspectResult();
-              }}>检查结果</button> : null}
-              {resultUnavailable ? <p role="status">请求结果暂不可读取，请稍后检查。</p> : null}
+              {currentRun === undefined ? null : <RunPlanList run={currentRun} />}
+              {currentRun === undefined ? null
+                : <SubrunList run={currentRun} context={context} scheduleRefresh={scheduleRefresh} />}
+              {currentRun === undefined ? null : runResults(currentRun) !== undefined
+                ? <RunResultList run={currentRun} results={runResults(currentRun)!} context={context} history={false}
+                  tree={context?.tree} sourceChapterId={current.chapterId} onNavigate={onNavigateProposal}>
+                  {useResearch}</RunResultList>
+                : <><p className="assistant-result" data-assistant-result="">{resultText(currentRun) ?? "结果尚未生成。"}</p>
+                  <SkillUseList run={currentRun} />
+                  <ManuscriptUseList run={currentRun} />
+                  {context === undefined ? null
+                    : <ResearchTurn context={context} run={currentRun}>{useResearch}</ResearchTurn>}
+                  {currentRun.decision.kind !== "prose_change" ? null
+                    : <ProposalLocationLinks locations={currentRun.decision.locations ?? []} tree={context?.tree}
+                      sourceChapterId={current.chapterId} onNavigate={onNavigateProposal} />}</>}
+              {currentTerminal || opening !== undefined ? null : <button type="button" data-assistant-inspect=""
+                onClick={() => { void inspectResult(); }}>检查结果</button>}
+              {resultUnavailable && opening === undefined ? <p role="status">请求结果暂不可读取，请稍后检查。</p> : null}
             </section>
           )}
           {reference?.conversationChoice === "new" && opening === undefined

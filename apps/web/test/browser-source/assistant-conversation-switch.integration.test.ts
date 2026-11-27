@@ -34,9 +34,13 @@ const revised = (proposalId: string, suffix: string) => ({
 const PROSE = { ...run("e6a", P, "P first"), decision: { kind: "prose_change", decision_id: id("e6b"), selected: true,
   text: "Two changes.", producer_input: "[]", locations: [revised(PROPOSAL_1, "3"), revised(PROPOSAL_2, "4")],
   continuation: { kind: "absent" }, authoritative: false, opened_proposal: { kind: "absent" } } };
+// A reloaded Run of Conversation B with one revised Proposal.
+const STORED_PROSE = { ...run("e60", B, "B first"), decision: { ...PROSE.decision, locations: [revised(PROPOSAL_1, "5")] } };
 const ALL_RUNS = [STORED, ...RUNS, PROSE];
 const runRoute = (stored: StoredRun) => `GET /agent-runs/${stored.runId}`;
 const [A1, A2, A3, C1] = RUNS.map(runRoute) as [string, string, string, string];
+const A3_SOURCES = `${A3}/research-sources`;
+const A_READ = `GET /conversations/${A}`;
 const [PROPOSAL_READ_1, PROPOSAL_READ_2] = [PROPOSAL_1, PROPOSAL_2]
   .map((proposalId) => `GET /proposals/${proposalId}`) as [string, string];
 
@@ -49,13 +53,23 @@ afterEach(async () => {
 /** One request to the fake Server. It is answered when the panel read the whole response body. */
 type Request = { request: string; held: boolean; answered: boolean };
 
+type Setup = {
+  conversations: readonly string[];
+  /** A changed answer of a route, or `null` for a route that the test does not send. */
+  answers?: Record<string, (() => Response) | null>;
+  /** The Run of Conversation B that the browser session holds. */
+  stored?: StoredRun;
+  /** The routes that are held from the start. */
+  held?: readonly string[];
+};
+
 /**
- * Opens the panel on the Run of Conversation B on a fake Server. The fake serves only the requests of the panel and of
+ * Opens the panel on a Run of Conversation B on a fake Server. The fake serves only the requests of the panel and of
  * `conversations`, with the Project in the path. A held request answers only after `release`.
  */
-async function openPanel(conversations: readonly string[], answers: Record<string, () => Response> = {}) {
-  seedProseRequest({ scope, message: STORED.message, chapterId: CHAPTER, correlationId: id("e6c"),
-    idempotencyKey: id("e6d"), snapshotId: id("e6e"), runId: STORED.runId, conversationId: B });
+async function openPanel({ conversations, answers = {}, stored: storedRun = STORED, held: heldAtStart = [] }: Setup) {
+  seedProseRequest({ scope, message: storedRun.message, chapterId: CHAPTER, correlationId: id("e6c"),
+    idempotencyKey: id("e6d"), snapshotId: id("e6e"), runId: storedRun.runId, conversationId: B });
   const runRead = (stored: StoredRun) => jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: stored.runId,
     conversation_id: stored.conversationId, status: "completed", results: [],
     decision: stored.decision ?? { kind: "advisory", decision_id: id("e6f"), selected: true,
@@ -71,10 +85,10 @@ async function openPanel(conversations: readonly string[], answers: Record<strin
   // The current exchange reads its research sources, as today.
   const current = (stored: StoredRun): [string, () => Response][] => [[runRoute(stored), () => runRead(stored)],
     [`${runRoute(stored)}/research-sources`, () => jsonResponse({ code: "not_found" }, 404)]];
-  const routes: Record<string, () => Response> = {
+  const served: Record<string, (() => Response) | null> = {
     "GET /assistance": () => jsonResponse({ ...assistanceFixture, project_scope: scope }),
     "GET /skills": () => jsonResponse({ ...skillsFixture, project_scope: scope, skills: [] }),
-    ...Object.fromEntries(current(STORED)),
+    ...Object.fromEntries(current(storedRun)),
     "GET /conversations": () => jsonResponse({ ...listFixture, project_scope: scope, completeness: "complete",
       conversations: conversations.map((conversationId) => ({ conversation_id: conversationId, label: conversationId,
         first_run_created_at: "2026-11-27T09:00:00.000Z", newest_run_created_at: "2026-11-27T09:00:00.000Z",
@@ -86,11 +100,22 @@ async function openPanel(conversations: readonly string[], answers: Record<strin
     })),
     ...Object.fromEntries(conversations.includes(P) ? [PROPOSAL_1, PROPOSAL_2].map((proposalId) =>
       [`GET /proposals/${proposalId}`, () => proposalRead(proposalId)]) : []),
+    ...storedRun === STORED_PROSE ? { [PROPOSAL_READ_1]: () => proposalRead(PROPOSAL_1) } : {},
     ...answers,
   };
+  const routes = Object.fromEntries(Object.entries(served).flatMap(([route, answer]) =>
+    answer === null ? [] : [[route, answer]]));
   const unexpected: string[] = [];
   const requests: Request[] = [];
   const holds = new Map<string, { promise: Promise<void>; release: () => void }>();
+  const hold = (...held: string[]) => {
+    for (const request of held) {
+      let release = () => {};
+      const promise = new Promise<void>((resolve) => { release = resolve; });
+      holds.set(request, { promise, release });
+    }
+  };
+  hold(...heldAtStart);
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const request = `${init?.method ?? "GET"} ${path.startsWith(`${PREFIX}/`) ? path.slice(PREFIX.length) : path}`;
@@ -99,10 +124,10 @@ async function openPanel(conversations: readonly string[], answers: Record<strin
       unexpected.push(request);
       throw new Error(`Unexpected request ${request}`);
     }
-    const hold = holds.get(request);
-    const entry: Request = { request, held: hold !== undefined, answered: false };
+    const holding = holds.get(request);
+    const entry: Request = { request, held: holding !== undefined, answered: false };
     requests.push(entry);
-    await hold?.promise;
+    await holding?.promise;
     const response = answer();
     const text = response.text.bind(response);
     response.text = async () => {
@@ -139,16 +164,11 @@ async function openPanel(conversations: readonly string[], answers: Record<strin
   };
   const button = (selector: string) => host.querySelector<HTMLButtonElement>(selector)!;
   return {
-    unexpected, opened,
+    unexpected, opened, hold,
+    /** Each route that the fake serves and the panel did not request. */
+    unused: () => Object.keys(routes).filter((route) => !requests.some((entry) => entry.request === route)),
     /** Each request that has no answer yet, also a second request of the same route. */
     inFlight: () => requests.filter((entry) => !entry.answered).map((entry) => entry.request).sort(),
-    hold: (...held: string[]) => {
-      for (const request of held) {
-        let release = () => {};
-        const promise = new Promise<void>((resolve) => { release = resolve; });
-        holds.set(request, { promise, release });
-      }
-    },
     release: async (...held: string[]) => {
       for (const request of held) {
         holds.get(request)!.release();
@@ -167,6 +187,7 @@ async function openPanel(conversations: readonly string[], answers: Record<strin
       await settle();
     },
     /** Each exchange as its author message, its result, and its line of a result that loads. */
+    currentSection: () => host.querySelector("[data-assistant-current-run]"),
     exchanges: () => [...host.querySelectorAll("[data-assistant-history-run], [data-assistant-current-run]")]
       .map((section) => [...section.querySelectorAll(".assistant-author-message, .assistant-result, "
         + "[data-assistant-result-loading]")].map((line) => line.textContent)),
@@ -182,59 +203,64 @@ async function openPanel(conversations: readonly string[], answers: Record<strin
 const B_SHOWN = [["B first", "Answer to B first"]];
 const A_SHOWN = [["A first", "Answer to A first"], ["A second", "Answer to A second"], ["A third", "Answer to A third"]];
 const C_SHOWN = [["C first", "Answer to C first"]];
+const SERVICE_UNAVAILABLE = () => jsonResponse({ code: "service_unavailable" }, 503);
 
 it("shows the author messages of the selected Conversation before its Runs answer, and no part of the earlier one",
   async () => {
-    const panel = await openPanel([A]);
+    const panel = await openPanel({ conversations: [A] });
     const before = panel.exchanges();
     await panel.type("Next request");
-    panel.hold(`GET /conversations/${A}`, A1, A2, A3);
+    panel.hold(A_READ, A1, A2, A3);
     await panel.select(A);
     const selected = { exchanges: panel.exchanges(), runId: panel.shownRunId() };
-    await panel.release(`GET /conversations/${A}`);
+    await panel.release(A_READ);
     const messages = { exchanges: panel.exchanges(), controls: panel.controls() };
     await panel.release(A2);
     const second = panel.exchanges();
     await panel.release(A3);
-    const newest = panel.exchanges();
+    const newest = { exchanges: panel.exchanges(), section: panel.currentSection() };
     await panel.release(A1);
 
-    expect({ before, selected, messages, second, newest, opened: panel.exchanges(), runId: panel.shownRunId(),
-      controls: panel.controls(), unexpected: panel.unexpected }).toEqual({
+    expect({ before, selected, messages, second, newest: newest.exchanges, opened: panel.exchanges(),
+      runId: panel.shownRunId(), sameSection: panel.currentSection() === newest.section, controls: panel.controls(),
+      unexpected: panel.unexpected, unused: panel.unused() }).toEqual({
       before: B_SHOWN,
       selected: { exchanges: [], runId: null },
       // The composer and `新对话` wait for the Runs, and the list stays usable for another selection.
       messages: { exchanges: [["A first", LOADING], ["A second", LOADING], ["A third", LOADING]],
         controls: { send: false, newConversation: false, history: true } },
       second: [["A first", LOADING], ["A second", "Answer to A second"], ["A third", LOADING]],
-      // The newest Run shows its result when it becomes the current exchange.
-      newest: [["A first", LOADING], ["A second", "Answer to A second"], ["A third", LOADING]],
+      newest: [["A first", LOADING], ["A second", "Answer to A second"], ["A third", "Answer to A third"]],
       opened: A_SHOWN,
       runId: RUNS[2]!.runId,
+      // The end of the open keeps the current exchange and its controls.
+      sameSection: true,
       controls: { send: true, newConversation: true, history: true },
       unexpected: [],
+      unused: [],
     });
   });
 
 it("starts the reads of the three Runs of a Conversation at the same time", async () => {
-  const panel = await openPanel([A]);
+  const panel = await openPanel({ conversations: [A] });
   panel.hold(A1, A2, A3);
   await panel.select(A);
   const inFlight = panel.inFlight();
   await panel.release(A1, A2, A3);
 
-  expect({ inFlight, opened: panel.exchanges(), unexpected: panel.unexpected })
-    .toEqual({ inFlight: [A1, A2, A3].sort(), opened: A_SHOWN, unexpected: [] });
+  expect({ inFlight, opened: panel.exchanges(), unexpected: panel.unexpected, unused: panel.unused() })
+    .toEqual({ inFlight: [A1, A2, A3].sort(), opened: A_SHOWN, unexpected: [], unused: [] });
 });
 
 it.each([
-  ["its Conversation read", "the earlier selection", [`GET /conversations/${A}`]],
-  ["its Conversation read", "the later selection", [`GET /conversations/${A}`]],
-  ["its Run reads", "the earlier selection", [A1, A2, A3]],
-  ["its Run reads", "the later selection", [A1, A2, A3]],
+  ["its Conversation read", "the earlier selection", [A_READ], [A1, A2, A3, A3_SOURCES]],
+  ["its Conversation read", "the later selection", [A_READ], [A1, A2, A3, A3_SOURCES]],
+  ["its Run reads", "the earlier selection", [A1, A2, A3], [A3_SOURCES]],
+  ["its Run reads", "the later selection", [A1, A2, A3], [A3_SOURCES]],
 ] as const)("keeps a later selection when the earlier one answers late at %s, and %s answers first",
-  async (_, first, earlier) => {
-    const panel = await openPanel([A, C]);
+  async (_, first, earlier, notSent) => {
+    const panel = await openPanel({ conversations: [A, C],
+      answers: Object.fromEntries(notSent.map((route) => [route, null])) });
     panel.hold(...earlier, C1);
     await panel.select(A);
     await panel.select(C);
@@ -245,43 +271,54 @@ it.each([
     if (first === "the earlier selection") await panel.release(C1);
     else await panel.release(...earlier);
 
-    expect({ selected, afterFirst, shown: panel.exchanges(), runId: panel.shownRunId(), unexpected: panel.unexpected })
-      .toEqual({ selected: [["C first", LOADING]],
-        afterFirst: first === "the earlier selection" ? [["C first", LOADING]] : C_SHOWN,
-        shown: C_SHOWN, runId: RUNS[3]!.runId, unexpected: [] });
-  });
-
-it.each(["the Proposal reads", "the later selection"] as const)(
-  "gives no Proposal of an earlier selection to the editor after a later selection, with the answers of %s first",
-  async (first) => {
-    const panel = await openPanel([P, A]);
-    panel.hold(PROPOSAL_READ_1, PROPOSAL_READ_2, `GET /conversations/${A}`);
-    await panel.select(P);
-    await panel.select(A);
-    if (first === "the Proposal reads") await panel.release(PROPOSAL_READ_1, PROPOSAL_READ_2);
-    else await panel.release(`GET /conversations/${A}`);
-    const afterFirst = [...panel.opened];
-    if (first === "the Proposal reads") await panel.release(`GET /conversations/${A}`);
-    else await panel.release(PROPOSAL_READ_1, PROPOSAL_READ_2);
-
-    expect({ afterFirst, opened: panel.opened, shown: panel.exchanges(), unexpected: panel.unexpected })
-      .toEqual({ afterFirst: [], opened: [], shown: A_SHOWN, unexpected: [] });
+    expect({ selected, afterFirst, shown: panel.exchanges(), runId: panel.shownRunId(), unexpected: panel.unexpected,
+      unused: panel.unused() }).toEqual({ selected: [["C first", LOADING]],
+      afterFirst: first === "the earlier selection" ? [["C first", LOADING]] : C_SHOWN,
+      shown: C_SHOWN, runId: RUNS[3]!.runId, unexpected: [], unused: [] });
   });
 
 it.each([
-  ["a failed Conversation read", { [`GET /conversations/${A}`]: () => jsonResponse({ code: "service_unavailable" }, 503) }],
-  ["a failed Run read", { [A2]: () => jsonResponse({ code: "service_unavailable" }, 503) }],
+  ["an opened Conversation", "the Proposal reads"],
+  ["an opened Conversation", "the later selection"],
+  ["the reloaded request", "the Proposal reads"],
+  ["the reloaded request", "the later selection"],
+] as const)("gives no Proposal of the Run of %s to the editor after a selection, with the answers of %s first",
+  async (source, first) => {
+    const reads = source === "an opened Conversation" ? [PROPOSAL_READ_1, PROPOSAL_READ_2] : [PROPOSAL_READ_1];
+    const panel = source === "an opened Conversation" ? await openPanel({ conversations: [P, A] })
+      : await openPanel({ conversations: [A], stored: STORED_PROSE, held: reads });
+    if (source === "an opened Conversation") panel.hold(...reads);
+    panel.hold(A_READ);
+    if (source === "an opened Conversation") await panel.select(P);
+    await panel.select(A);
+    if (first === "the Proposal reads") await panel.release(...reads);
+    else await panel.release(A_READ);
+    const afterFirst = [...panel.opened];
+    if (first === "the Proposal reads") await panel.release(A_READ);
+    else await panel.release(...reads);
+
+    expect({ afterFirst, opened: panel.opened, shown: panel.exchanges(), unexpected: panel.unexpected,
+      unused: panel.unused() }).toEqual({ afterFirst: [], opened: [], shown: A_SHOWN, unexpected: [], unused: [] });
+  });
+
+it.each([
+  ["a failed Conversation read", { [A_READ]: SERVICE_UNAVAILABLE, [A1]: null, [A2]: null, [A3]: null, [A3_SOURCES]: null }],
+  ["a failed Run read", { [A2]: SERVICE_UNAVAILABLE, [A3_SOURCES]: null }],
   ["a Run read of another Conversation", { [A2]: () => jsonResponse({ ...agentRunFixture, project_scope: scope,
-    run_id: RUNS[1]!.runId, conversation_id: B, status: "completed", results: [] }) }],
+    run_id: RUNS[1]!.runId, conversation_id: B, status: "completed", results: [] }), [A3_SOURCES]: null }],
 ])("gives the sentence of today for %s, and the panel shows the Conversation of before the selection",
   async (_, answers) => {
-    const panel = await openPanel([A], answers);
+    const panel = await openPanel({ conversations: [A], answers });
     await panel.type("Next request");
+    // The newest Run answers after the failure, so the panel never shows it.
+    panel.hold(A3);
     await panel.select(A);
+    await panel.release(A3);
 
     expect({ status: panel.status(), shown: panel.exchanges(), runId: panel.shownRunId(), controls: panel.controls(),
-      unexpected: panel.unexpected }).toEqual({ status: OPEN_FAILED, shown: B_SHOWN, runId: STORED.runId,
-      controls: { send: true, newConversation: true, history: true }, unexpected: [] });
+      unexpected: panel.unexpected, unused: panel.unused() }).toEqual({
+      status: OPEN_FAILED, shown: B_SHOWN, runId: STORED.runId,
+      controls: { send: true, newConversation: true, history: true }, unexpected: [], unused: [] });
   });
 
 it.each([
@@ -289,7 +326,7 @@ it.each([
   ["the second Proposal read", PROPOSAL_READ_2, PROPOSAL_READ_1],
 ])("reads the Proposals of the opened Run together, and gives them in their order after the reads, when %s answers first",
   async (_, first, second) => {
-    const panel = await openPanel([P]);
+    const panel = await openPanel({ conversations: [P] });
     panel.hold(first, second);
     await panel.select(P);
     const inFlight = panel.inFlight();
@@ -297,7 +334,7 @@ it.each([
     const afterFirst = [...panel.opened];
     await panel.release(second);
 
-    expect({ inFlight, afterFirst, opened: panel.opened, unexpected: panel.unexpected }).toEqual({
-      inFlight: [PROPOSAL_READ_1, PROPOSAL_READ_2].sort(), afterFirst: [], opened: [PROPOSAL_1, PROPOSAL_2],
-      unexpected: [] });
+    expect({ inFlight, afterFirst, opened: panel.opened, unexpected: panel.unexpected, unused: panel.unused() })
+      .toEqual({ inFlight: [PROPOSAL_READ_1, PROPOSAL_READ_2].sort(), afterFirst: [], opened: [PROPOSAL_1, PROPOSAL_2],
+        unexpected: [], unused: [] });
   });
