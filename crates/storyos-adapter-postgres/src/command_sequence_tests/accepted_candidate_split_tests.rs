@@ -1,7 +1,9 @@
 //! An Acceptance splits its candidate at each line feed into Blocks (ADR 0106, section 2).
 
 use storyos_application::{AcceptProposalInput, ProjectScope};
-use storyos_core::{AcceptanceTargetResolution, TransitionOutcome};
+use storyos_core::{
+    AcceptanceTargetResolution, TransitionOutcome, UndoLatestAuthorActionUnavailable,
+};
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
@@ -357,6 +359,65 @@ async fn author_undo_of_a_split_acceptance_restores_the_blocks_and_reopens_the_p
                 "pending".to_owned(),
                 "One.\nTwo.".to_owned()
             )],
+        )
+    );
+}
+
+/// A Reversal Proposal cannot remove the Blocks that a split added. When a later edit moved the
+/// Chapter Head after a split Acceptance, Author Undo of that Acceptance is unavailable and keeps
+/// the Chapter.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn author_undo_of_a_split_acceptance_after_a_later_edit_is_unavailable() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let (store, admin) = stores().await;
+    let fixture = split_fixture(&store, &admin, 0xe7f0, "One.\nTwo.").await;
+    edit_in_chapter_of(
+        &admin,
+        fixture.input.editor_session_id.as_ref(),
+        &fixture.input.expected_authoritative_revision_id,
+    )
+    .await;
+    let (_, accepted) = accept_and_read(&store, &fixture, 0xe7f9).await;
+    let edited: Vec<(String, String)> = accepted
+        .iter()
+        .map(|(id, text)| (id.clone(), format!("{text} Later.")))
+        .collect();
+    let head = advance_chapter_head(
+        &admin,
+        &chapter_head(&admin, &fixture.chapter_id).await,
+        &edited,
+    )
+    .await;
+    let call = undo_call(
+        &store,
+        &admin,
+        &fixture.scope,
+        fixture.input.editor_session_id.as_ref(),
+        &head,
+        /*suffix*/ 0xe7fa,
+    )
+    .await;
+    let settled = undo(&store, &call).await.unwrap();
+
+    assert_eq!(
+        (
+            settled.outcome,
+            chapter_blocks(&store, &fixture.scope, &fixture.chapter_id).await,
+            admin
+                .query_one(
+                    "SELECT count(*) FROM storyos.proposals
+                      WHERE project_id = $1::text::uuid AND kind = 'reversal'",
+                    &[&fixture.scope.project_id.as_ref()],
+                )
+                .await
+                .unwrap()
+                .get::<_, i64>(/*idx*/ 0),
+        ),
+        (
+            TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::SourceUnavailable),
+            edited,
+            0,
         )
     );
 }

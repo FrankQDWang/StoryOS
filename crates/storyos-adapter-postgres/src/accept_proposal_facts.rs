@@ -1,7 +1,7 @@
 //! The Proposal, Operation, and Chapter facts that one Acceptance classifies.
 
 use storyos_application::{AcceptProposalInput, ProjectCommandError, ProjectScope};
-use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
+use storyos_core::{ManuscriptBlock, split_accepted_candidate};
 
 use crate::command_sequence::unavailable;
 
@@ -101,7 +101,11 @@ impl LoadedProposal {
         let mut blocks = Vec::with_capacity(self.chapter_blocks.len());
         for block in &self.chapter_blocks {
             match candidates.get(block.manuscript_block_id.as_str()) {
-                Some(candidate) => blocks.extend(split_candidate(block, candidate)),
+                Some(candidate) => {
+                    blocks.extend(split_accepted_candidate(block, candidate, || {
+                        uuid::Uuid::now_v7().to_string()
+                    }))
+                }
                 None => blocks.push(block.clone()),
             }
         }
@@ -118,24 +122,6 @@ pub(super) struct AcceptedChapter {
     pub(super) payload: String,
     /// `None` keeps the Block members of the expected Chapter Head.
     pub(super) split_blocks: Option<Vec<ManuscriptBlock>>,
-}
-
-/// The target Block with the first part of `candidate`, and then a new paragraph Block for each
-/// next part. A line feed ends a part, and an empty part makes no Block. When no part has text,
-/// the target Block has empty text.
-fn split_candidate(target: &ManuscriptBlock, candidate: &str) -> Vec<ManuscriptBlock> {
-    let mut parts = candidate.split('\n').filter(|part| !part.is_empty());
-    let first = ManuscriptBlock {
-        text: parts.next().unwrap_or_default().to_owned(),
-        ..target.clone()
-    };
-    std::iter::once(first)
-        .chain(parts.map(|text| ManuscriptBlock {
-            manuscript_block_id: uuid::Uuid::now_v7().to_string(),
-            block_kind: ManuscriptBlockKind::Paragraph,
-            text: text.to_owned(),
-        }))
-        .collect()
 }
 
 pub(super) async fn load_proposal(
