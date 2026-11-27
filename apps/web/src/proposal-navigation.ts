@@ -1,15 +1,18 @@
 import type { GetProposalResponse, ProjectScope, SetCurrentChapterResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { getProposal, StoryOSProtocolError } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { getProposal } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { openControlledProject } from "./boot.ts";
 import { openSelectedChapter } from "./chapter-navigation.ts";
 import type { EditorSessionWritingController } from "./editor-session-writing.ts";
-import { setOwnedCurrentChapter, SkippedCurrentChapterError } from "./set-current-chapter.ts";
+import { setOwnedCurrentChapter, SkippedCurrentChapterError, UnknownCurrentChapterResultError }
+  from "./set-current-chapter.ts";
 import type { ProjectReadyState, ControlledProjectState } from "./editor-types.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 
 export type ProposalFocus = { proposalId: string; operationId: string; revisionId: string; blockId: string };
 export type ProposalDestination = { chapterId: string; focus?: ProposalFocus };
 export type ProposalNavigation = { sequence: number; queue: Promise<void> };
+/** The end of the command of a navigation: it moved the Editor Session base, it did not, or its result is not known. */
+export type NavigationCommandEnd = { kind: "moved"; currentChapterId: string } | { kind: "not_moved" } | { kind: "unknown" };
 
 function matchesDestination(response: GetProposalResponse, scope: ProjectScope,
   destination: ProposalDestination): boolean {
@@ -35,11 +38,9 @@ export function navigateProposal(options: {
   /** The command of the navigation went out. Until its answer, the Server can move the Editor Session base. */
   onCommandSent: () => void;
   /**
-   * The command of the navigation ended, also when a later choice of the author made the navigation stale. The value is
-   * the new Current Chapter when the command had an effect, and null when the command and its repeat ended with no answer
-   * of the Server.
+   * The command of the navigation ended, also when a later choice of the author made the navigation stale.
    */
-  onCommandEnded: (currentChapterId: string | undefined | null) => void;
+  onCommandEnded: (end: NavigationCommandEnd) => void;
   onOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onLocator: (locator: ProposalLocator) => void;
   onFailure: (message: string) => void;
@@ -92,13 +93,13 @@ export function navigateProposal(options: {
             return true;
           } }).catch((error: unknown) => {
           if (error instanceof SkippedCurrentChapterError) return undefined;
-          unknown = !(error instanceof StoryOSProtocolError);
-          throw error;
+          unknown = error instanceof UnknownCurrentChapterResultError;
+          throw unknown ? new Error("无法打开写作会话。") : error;
         });
       } finally {
         if (sent) {
-          options.onCommandEnded(unknown ? null : switched?.effect.kind === "authoritative_applied"
-            ? switched.effect.current_chapter_id : undefined);
+          options.onCommandEnded(unknown ? { kind: "unknown" } : switched?.effect.kind === "authoritative_applied"
+            ? { kind: "moved", currentChapterId: switched.effect.current_chapter_id } : { kind: "not_moved" });
         }
       }
       if (switched === undefined || !latest()) return;

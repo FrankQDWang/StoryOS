@@ -15,6 +15,9 @@ const sent = new Set<string>();
 /** The caller replaced a Set Current Chapter command after its Command Challenge and before the command went out. */
 export class SkippedCurrentChapterError extends Error {}
 
+/** The command and its repeat went out and got no answer of the Server, so the result of the command is not known. */
+export class UnknownCurrentChapterResultError extends Error {}
+
 function currentChapterIdentity(options: {
   projectId: string;
   chapterId: string;
@@ -73,11 +76,11 @@ export async function setOwnedCurrentChapter(options: {
           if (error instanceof StoryOSProtocolError && (retried || endsCommand(error))) {
             sent.delete(command.idempotencyKey);
           }
-          // With no answer after the retry, the result is not known. The caller reads the Current Chapter of the Server,
-          // so a later intent gets a new key, and a replay of this key cannot give an earlier result.
           if (!(error instanceof StoryOSProtocolError) && retried) {
+            // The caller reads the result, so a replay of this key must not give it again to a later intent.
             sent.delete(command.idempotencyKey);
             inFlight.delete(identity);
+            throw new UnknownCurrentChapterResultError("the Set Current Chapter command got no answer");
           }
           throw error;
         });

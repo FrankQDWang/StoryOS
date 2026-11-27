@@ -8,7 +8,6 @@ import {
   createProjectChallenge,
   getManuscriptTree,
   listProjects,
-  StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   GetChapterResponse,
@@ -56,7 +55,8 @@ import {
   historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
 import { renameOwnedProject } from "./rename-project.ts";
-import { SkippedCurrentChapterError, setOwnedCurrentChapter } from "./set-current-chapter.ts";
+import { SkippedCurrentChapterError, UnknownCurrentChapterResultError, setOwnedCurrentChapter }
+  from "./set-current-chapter.ts";
 import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
 import { navigateProposal, type ProposalDestination, type ProposalFocus, type ProposalNavigation }
   from "./proposal-navigation.ts";
@@ -348,7 +348,7 @@ function ProjectEditorView({
     resultUnknownRef.current = value;
     setResultUnknownState(value);
   };
-  const [selectedChapter, setSelectedChapter] =useState<GetChapterResponse>(state.chapter);
+  const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
   // The Chapter whose switch waits for the Retry-After of a Command Challenge rate limit (#1679).
   const [switchWaiting, setSwitchWaiting] = useState<string>();
@@ -620,25 +620,37 @@ function ProjectEditorView({
               if (resultUnknownRef.current) {
                 const next = await reopen(chapter);
                 if (generation !== switchGenerationRef.current) return;
-                const open = next.kind === "project-ready" ? next.project.project.open : undefined;
-                if (open?.kind !== "current_chapter") {
+                if (next.kind !== "project-ready" && next.kind !== "empty-project-ready") {
                   setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
                   return;
                 }
                 setResultUnknown(false);
-                if (open.current_chapter_id !== serverChapterRef.current) {
+                const open = next.project.project.open;
+                const current = next.kind === "project-ready" && open.kind === "current_chapter"
+                  ? open.current_chapter_id : undefined;
+                const noEffect = current === serverChapterRef.current && chapter === unknownChapter && chapter === goal();
+                if (current !== undefined && current !== serverChapterRef.current) {
                   // The command had an effect, so the Editor Session has a new base.
                   reopened = true;
                   changed = true;
-                  serverChapterRef.current = open.current_chapter_id;
+                  serverChapterRef.current = current;
                   movedRef.current = true;
-                  reopenAt = open.current_chapter_id;
-                } else if (chapter === unknownChapter && chapter === goal()) {
-                  // The command had no effect, so the earlier editor accepts input again.
+                  reopenAt = current;
+                }
+                // With no effect, this editor accepts input again only when the read gives its editor with the writer.
+                // Else the tab shows the Project as the read gives it.
+                const same = !movedRef.current && next.kind === "project-ready" && next.editor.kind === "editor-ready"
+                  && next.editor.session.writer.kind === "current_writer";
+                if (current === undefined || (noEffect && !same)) {
+                  handedOff = true;
+                  onReopened(next);
+                  return;
+                }
+                if (noEffect) {
                   setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
                   return;
                 }
-                if (open.current_chapter_id === goal()) learned = next;
+                if (current === goal()) learned = next;
                 continue;
               }
               if (chapter !== serverChapterRef.current) {
@@ -679,11 +691,11 @@ function ProjectEditorView({
                   expectedCurrentChapterId: serverChapterRef.current,
                   expectedTargetRevisionId: target.chapter.current_revision.revision_id,
                   editorSessionId,
-                  proceed: () => chapter === goal(),
+                  // An unknown result of a Proposal navigation during the Command Challenge also replaces the command.
+                  proceed: () => chapter === goal() && !resultUnknownRef.current,
                 }).catch((error: unknown) => {
                   if (error instanceof SkippedCurrentChapterError) return undefined;
-                  // With no answer of the Server to the command and its repeat, the result is not known.
-                  if (error instanceof StoryOSProtocolError) throw error;
+                  if (!(error instanceof UnknownCurrentChapterResultError)) throw error;
                   unknownChapter = chapter;
                   setResultUnknown(true);
                   return undefined;
@@ -900,10 +912,10 @@ function ProjectEditorView({
         onCommandSent: () => { setNavigationCommand(true); },
         // After an effect, the Editor Session has a new base, so this editor accepts no input until a reopen, and the
         // next selection expects the new Current Chapter.
-        onCommandEnded: (chapterId) => {
-          if (chapterId === null) setResultUnknown(true);
-          else if (chapterId !== undefined) {
-            serverChapterRef.current = chapterId;
+        onCommandEnded: (end) => {
+          if (end.kind === "unknown") setResultUnknown(true);
+          if (end.kind === "moved") {
+            serverChapterRef.current = end.currentChapterId;
             movedRef.current = true;
             setReadOnly(true);
           }
@@ -931,7 +943,7 @@ function ProjectEditorView({
   // The Arriving Chapter accepts input only when its copy has the fact "no open suggestion", no wait for a Challenge
   // rate limit is active, and no notice is open (ADR 0105, section 3).
   const accepting = input !== undefined && arriving?.noOpenSuggestion === true && switchWaiting === undefined
-    && unsavedNotice.current === undefined && !input.stopped();
+    && unsavedNotice.current === undefined && !input.stopped() && !resultUnknown;
   // While Arrival Input exists, the state line shows the saving state, and the tab asks before it unloads.
   const hasArrivalInput = input?.hasInput() === true || handOver !== undefined;
   const shownSaveState = hasArrivalInput ? "saving" : saveState;
