@@ -145,7 +145,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     );
     assert_eq!(
         profile.release_identity.generated_client_revision,
-        "storyos.typescript-client.release-1.v32"
+        "storyos.typescript-client.release-1.v33"
     );
     let schema: serde_json::Value = serde_json::from_slice(
         &generated["generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json"],
@@ -277,7 +277,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     )
     .expect("generated client is UTF-8");
     assert!(generated_client.contains(
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v32\";"
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v33\";"
     ));
     assert!(
         generated["generated/json-schema/storyos-public-release-1/chapter-response.schema.json"]
@@ -511,9 +511,6 @@ fn every_registered_operation_matches_its_generated_wire() {
                     "{id}"
                 );
             }
-            crate::release1_operation_registry::ContractGraphEntry::Absent(_) => {
-                assert!(graph_entry.is_none(), "{id}");
-            }
         }
     }
     for positions in [client_positions, declaration_positions] {
@@ -525,7 +522,7 @@ fn every_registered_operation_matches_its_generated_wire() {
     }
     assert_outcome_documents(&generated);
     assert_activity_frame_documents(&generated);
-    assert_takeover_documents(&generated);
+    assert_writer_free_documents(&generated);
     assert_project_assistance_documents(&generated);
     assert_receipt_sequence_documents(&generated);
 }
@@ -727,7 +724,6 @@ fn assert_receipt_sequence_documents(generated: &GeneratedFiles) {
             "pause-agent-run",
             "set-current-chapter",
             "steer-agent-run",
-            "take-over-project-writer",
             "update-chapter",
             // The sort order of the fixture paths puts this file before `update-project.json`.
             "update-project-assistance",
@@ -738,70 +734,30 @@ fn assert_receipt_sequence_documents(generated: &GeneratedFiles) {
     );
 }
 
-fn assert_takeover_documents(generated: &GeneratedFiles) {
-    let request = generated_validator(generated, "take-over-project-writer-request.schema.json");
-    let valid_request = serde_json::json!({
-        "command_schema": "storyos.command.take-over-project-writer.request.v1",
-        "client_contract_revision": "storyos.web-client.release-1.v3",
-        "security_policy_revision": "storyos.web-security-policy.release-1.v1",
-        "correlation_id": "018f0000-0000-7001-8000-000000000038",
-        "editor_session_id": "018f0000-0000-7001-8000-000000000040",
-        "observed_writer_generation": "1",
-        "editor_contract_revision": "storyos.editor-contract.release-1.v3"
-    });
-    assert!(request.is_valid(&valid_request));
-    assert_each_present_field_is_required(&request, &valid_request, "");
-    let mut with_writer_generation = valid_request.clone();
-    with_writer_generation["writer_generation"] = serde_json::json!("1");
-    for invalid in [
-        with_writer_generation,
-        with_value(
-            &valid_request,
-            "/observed_writer_generation",
-            serde_json::json!(1),
+/// No request or Editor Session read carries a writer state (ADR 0107 section 1).
+fn assert_writer_free_documents(generated: &GeneratedFiles) {
+    let request: serde_json::Value = serde_json::from_slice(
+        &generated[format!("{SCHEMA_DIRECTORY}/apply-author-edit-request.schema.json").as_str()],
+    )
+    .expect("generated schema must be JSON");
+    assert_eq!(request["additionalProperties"], false);
+    assert!(request["properties"].get("writer_generation").is_none());
+    for (operation_id, file) in [
+        (
+            "createEditorSession",
+            "editor-session-create-response.schema.json",
+        ),
+        (
+            "getEditorSession",
+            "editor-session-get-response.schema.json",
         ),
     ] {
-        assert!(!request.is_valid(&invalid), "{invalid}");
-    }
-
-    let response = generated_validator(generated, "take-over-project-writer-response.schema.json");
-    let applied = golden_wire(generated, "takeOverProjectWriter");
-    assert!(response.is_valid(&applied));
-    assert_each_present_field_is_required(&response, &applied, "");
-    assert_each_present_field_is_required(&response, &applied, "/result");
-    let compare_failed = with_value(
-        &applied,
-        "/result",
-        serde_json::json!({
-            "kind": "takeover_compare_failed",
-            "observed_writer_generation": "1",
-            "current_writer_generation": "2",
-            "current_writer_projection": {"kind": "current_writer", "writer_generation": "2"},
-            "current_snapshot_id": "018f0000-0000-7001-8000-000000000032",
-            "current_snapshot_activity_position": "1",
-            "current_heads": ["018f0000-0000-7001-8000-000000000004"],
-            "reason": "writer_generation_advanced_after_admission"
-        }),
-    );
-    assert!(response.is_valid(&compare_failed));
-    assert_each_present_field_is_required(&response, &compare_failed, "/result");
-    for invalid in [
-        with_value(
-            &applied,
-            "/result/resulting_writer_generation",
-            serde_json::json!(2),
-        ),
-        with_value(
-            &applied,
-            "/result/kind",
-            serde_json::json!("takeover_refused"),
-        ),
-        with_value(
-            &compare_failed,
-            "/result/reason",
-            serde_json::json!("writer_released"),
-        ),
-    ] {
-        assert!(!response.is_valid(&invalid), "{invalid}");
+        let response = generated_validator(generated, file);
+        let read = golden_wire(generated, operation_id);
+        assert!(response.is_valid(&read), "{operation_id}");
+        let mut with_writer = read.clone();
+        with_writer["writer"] =
+            serde_json::json!({"kind": "current_writer", "writer_generation": "1"});
+        assert!(!response.is_valid(&with_writer), "{operation_id}");
     }
 }

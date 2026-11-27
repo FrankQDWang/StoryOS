@@ -8,7 +8,7 @@ use storyos_application::{
 };
 
 use super::structural_records::{
-    StructuralInput, StructuralRecords, StructureCommit, WriterBaseRebind,
+    SessionBaseRebind, StructuralInput, StructuralRecords, StructureCommit,
     persist_structural_records,
 };
 use super::{SettlementProfile, SingleRecordSet};
@@ -34,8 +34,8 @@ pub(crate) enum CurrentChapterChange {
     Clear,
 }
 
-/// Whether the current writer base Snapshot moves to the new canonical Snapshot.
-pub(crate) enum WriterBase {
+/// Whether the Editor Session base Snapshots move to the new canonical Snapshot.
+pub(crate) enum SessionBase {
     Keep,
     RebindToCurrentChapter,
 }
@@ -46,7 +46,7 @@ pub(crate) struct StructureWrite<E> {
     pub(crate) resulting_tree_revision: u64,
     pub(crate) identity: StructureIdentity,
     pub(crate) current_chapter: CurrentChapterChange,
-    pub(crate) writer_base: WriterBase,
+    pub(crate) session_base: SessionBase,
     /// The command fields of the Activity payload. The profile adds `kind` and `tree_revision`.
     pub(crate) activity: serde_json::Value,
 }
@@ -104,12 +104,12 @@ impl SettlementProfile for Structural {
                 Some(revision_id.clone()),
             ),
         };
-        let writer_base = match (&write.writer_base, resulting_current) {
-            (WriterBase::RebindToCurrentChapter, Some(chapter_id)) => {
-                WriterBaseRebind::CurrentWriter { chapter_id }
+        let session_base = match (&write.session_base, resulting_current) {
+            (SessionBase::RebindToCurrentChapter, Some(chapter_id)) => {
+                SessionBaseRebind::EachSession { chapter_id }
             }
-            (WriterBase::Keep, _) | (WriterBase::RebindToCurrentChapter, None) => {
-                WriterBaseRebind::Keep
+            (SessionBase::Keep, _) | (SessionBase::RebindToCurrentChapter, None) => {
+                SessionBaseRebind::Keep
             }
         };
         persist_structural_records(
@@ -133,7 +133,7 @@ impl SettlementProfile for Structural {
                         identity,
                     },
                 }),
-                writer_base,
+                session_base,
             },
         )
         .await?;

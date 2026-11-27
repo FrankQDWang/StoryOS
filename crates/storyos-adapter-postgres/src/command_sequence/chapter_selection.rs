@@ -8,7 +8,7 @@ use storyos_application::{
 };
 
 use super::structural_records::{
-    StructuralInput, StructuralRecords, WriterBaseRebind, persist_structural_records,
+    SessionBaseRebind, StructuralInput, StructuralRecords, persist_structural_records,
 };
 use super::{SettlementProfile, SingleRecordSet};
 use crate::command_replay::{CommandReplay, ReplayFault};
@@ -19,7 +19,7 @@ use crate::structural_authority_settlement::{
 /// The applied writes of one Current Chapter change. The profile writes every authority record.
 pub(crate) struct ChapterSelectionWrite<E> {
     pub(crate) effect: E,
-    /// The writer Editor Session whose base Snapshot moves to the selected Chapter.
+    /// The Editor Session whose base Snapshot moves to the selected Chapter.
     pub(crate) editor_session_id: String,
     pub(crate) prior_chapter_id: String,
     pub(crate) chapter_id: String,
@@ -28,7 +28,7 @@ pub(crate) struct ChapterSelectionWrite<E> {
 }
 
 /// The Current Chapter update, Activity record, Forward Author Action, canonical Snapshot, and
-/// writer base rebind of one applied Current Chapter change.
+/// session base rebind of one applied Current Chapter change.
 pub(crate) struct ChapterSelection;
 
 impl SingleRecordSet for ChapterSelection {
@@ -78,7 +78,7 @@ impl SettlementProfile for ChapterSelection {
                 }),
                 activity_field: ("base_snapshot_id", sequences.snapshot_id.clone()),
                 commit: None,
-                writer_base: WriterBaseRebind::Session {
+                session_base: SessionBaseRebind::Session {
                     editor_session_id: &write.editor_session_id,
                     chapter_id: &write.chapter_id,
                     revision_id: &write.chapter_revision_id,

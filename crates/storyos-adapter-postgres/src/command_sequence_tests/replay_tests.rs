@@ -23,8 +23,7 @@ use crate::shared_tests::command_sequence_agent_run::{
 };
 use crate::shared_tests::command_sequence_memory_entry::{DELETE_MEMORY_ENTRY, seed_memory_entry};
 use crate::shared_tests::command_sequence_project_session::{
-    TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE,
-    UPDATE_PROJECT_INSTRUCTION, take_over_project_writer, take_over_project_writer_call,
+    UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE, UPDATE_PROJECT_INSTRUCTION,
 };
 use crate::shared_tests::command_sequence_proposal_decision::{
     REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL, move_head_away, pending_proposal,
@@ -317,10 +316,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         observed.push((DELETE_MEMORY_ENTRY.kind, outcome));
     }
 
-    let call = take_over_project_writer_call(&store, /*base*/ 0x5da0).await;
-    let outcome = replayed_outcome(&store, &admin, &call, take_over_project_writer).await;
-    observed.push((TAKE_OVER_PROJECT_WRITER.kind, outcome));
-
     let mut rejection_records = Vec::new();
     let (scope, pending) = pending_proposal(&store, &admin, /*base*/ 0x7b00).await;
     let stale = RejectProposalOperationsInput {
@@ -480,7 +475,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let operations_resolved = ("proposal_operations_resolved", [1, 1, 0, 0, 0]);
     let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
     let invalid = ("invalid", [1, 0, 0, 0, 0]);
-    let writer_takeover = ("no_effect", [1, 0, 1, 0, 1]);
     let steering_retained = ("no_effect", [1, 0, 1, 0, 0]);
     let conflicted = ("conflicted", [1, 0, 0, 0, 0]);
     let refused = ("refused", [1, 0, 0, 0, 0]);
@@ -530,7 +524,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             (CommandKind::DeleteMemoryEntry, conflicted),
             (CommandKind::DeleteMemoryEntry, activity_applied),
             (CommandKind::DeleteMemoryEntry, no_effect),
-            (CommandKind::TakeOverProjectWriter, writer_takeover),
             (CommandKind::RejectProposalOperations, operations_resolved),
             (CommandKind::RejectProposalOperations, refused),
             (CommandKind::RejectProposalOperations, refused),

@@ -156,7 +156,7 @@ export function openedChapterRoute(scenario: Scenario, treeRevision: string, cha
     if (path === `/api/v1/projects/${PROJECT}/editor-sessions/${SESSION}` && method === "GET") {
       return jsonResponse({
         ...scenario.session,
-        schema_id: "storyos.query.editor-session.response.v1",
+        schema_id: "storyos.query.editor-session.response.v2",
         ...sessionRead,
       });
     }

@@ -11,7 +11,7 @@ function refusalText(refusal: AcceptanceRefusalStatus): string {
 }
 
 export function ProposalDecisionStatus({
-  proposalId, proposal, problem, rejectionResult, writerOpen, sessionBlocked,
+  proposalId, proposal, problem, rejectionResult, sessionOpen, sessionBlocked,
   pendingRejection, pendingWithdraw, pendingAcceptance, decisionMessage, acceptanceRefusal,
   acceptanceChecked, retryDisabled, onRetryPending, onRetryRejection, onRetryWithdraw,
 }: {
@@ -19,7 +19,7 @@ export function ProposalDecisionStatus({
   proposal: BlockProposalInspect | undefined;
   problem: { status: number; code: string; message: string } | undefined;
   rejectionResult: "resolved" | "conflicted" | "refused" | undefined;
-  writerOpen: boolean;
+  sessionOpen: boolean;
   sessionBlocked: boolean;
   pendingRejection: boolean;
   pendingWithdraw: boolean;
@@ -33,7 +33,7 @@ export function ProposalDecisionStatus({
   onRetryRejection: () => void;
   onRetryWithdraw: () => void;
 }) {
-  const posture: SessionPosture = !writerOpen ? "closed" : sessionBlocked ? "blocked" : "current";
+  const posture: SessionPosture = !sessionOpen ? "closed" : sessionBlocked ? "blocked" : "current";
   const message = pendingRejection
     ? "拒绝结果尚未确认。请重试同一操作。"
     : rejectionResult === "conflicted" ? "正文已变化，拒绝结果请检查。"

@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use storyos_contracts::CommandKind;
 
 use crate::statement_cache::Client;
-use storyos_application::{AuthorEditError, EditorSessionId, TakeOverProjectWriterInput};
+use storyos_application::AuthorEditError;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
@@ -11,7 +11,6 @@ use crate::command_sequence::{
     CommandError, ProjectCommand, admit_and_settle, settle_project_command,
 };
 use crate::shared_tests::create_volume_authority::{NamedEdit, named_edit_command};
-use crate::shared_tests::set_current_chapter_authority::open_session;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_acceptance::{
@@ -21,7 +20,6 @@ use crate::shared_tests::command_sequence_agent_run::{
     cancel_agent_run_call, create_agent_run_call, pause_agent_run_call,
 };
 use crate::shared_tests::command_sequence_project_session::{
-    TAKE_OVER_PROJECT_WRITER, take_over_project_writer, take_over_project_writer_call,
     update_project_assistance_call, update_project_call,
 };
 use crate::shared_tests::command_sequence_proposal_decision::{
@@ -35,9 +33,7 @@ use crate::shared_tests::command_sequence_structure::{
     create_chapter_call, create_volume_call, delete_chapter_call, delete_volume_call,
     set_current_chapter_call, update_chapter_call, update_volume_call,
 };
-use crate::shared_tests::command_sequence_support::{
-    CommandCall, issued, stores, two_chapter_writer,
-};
+use crate::shared_tests::command_sequence_support::{CommandCall, stores, two_chapter_writer};
 use crate::shared_tests::command_sequence_undo::{
     Case as UndoCase, session_chapter_head, undo_call,
 };
@@ -97,21 +93,12 @@ fn database_code(source: &(dyn std::error::Error + Send + Sync + 'static)) -> Op
         .map(|code| code.code().to_owned())
 }
 
-/// The writer state of the Editor Session of an unadmitted Author Edit.
-#[derive(Clone, Copy)]
-enum Writer {
-    Current,
-    /// A takeover by a second Editor Session replaced the writer.
-    Replaced,
-}
-
 /// Settles one Author Edit through its admit step and its settle step with a serialization
 /// failure after its classify step. Then settles a second Author Edit of the same Editor Session
 /// with an Admission insert that writes no row. Returns the command kind and both errors.
 async fn author_edit_declared_errors(
     store: &PostgresProjectReader,
     admin: &Client,
-    writer: Writer,
     base: u16,
 ) -> (CommandKind, DeclaredErrors) {
     let (scope, chapter_a, _chapter_b, _revision_b, editor_session_id) =
@@ -144,16 +131,6 @@ async fn author_edit_declared_errors(
     else {
         panic!("a contended Author Edit must fail");
     };
-    if let Writer::Replaced = writer {
-        let observer = open_session(store, &scope, &format!("{:04x}", base + 5)).await;
-        let input = TakeOverProjectWriterInput {
-            editor_session_id: EditorSessionId::new(observer),
-            observed_writer_generation: 1,
-            editor_contract_revision: storyos_contracts::EDITOR_CONTRACT_REVISION.to_owned(),
-        };
-        let takeover = issued(store, &scope, base + 10, &TAKE_OVER_PROJECT_WRITER, input).await;
-        take_over_project_writer(store, &takeover).await.unwrap();
-    }
     let Err(missing_admission) = admit_and_settle(
         store,
         &author_edit_envelope(&unadmitted),
@@ -172,7 +149,6 @@ async fn author_edit_declared_errors(
         AuthorEditError::Unavailable(source) => database_code(source.as_ref()),
         AuthorEditError::BindingConflict
         | AuthorEditError::InvalidChallenge
-        | AuthorEditError::StaleWriter
         | AuthorEditError::AdmissionExpired => None,
     };
     (
@@ -205,11 +181,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
         declared_errors(
             &store,
             &update_project_assistance_call(&store, /*base*/ 0x9390).await,
-        )
-        .await,
-        declared_errors(
-            &store,
-            &take_over_project_writer_call(&store, /*base*/ 0x93a0).await,
         )
         .await,
         declared_errors(
@@ -269,8 +240,7 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
             .await,
         )
         .await,
-        author_edit_declared_errors(&store, &admin, Writer::Current, /*base*/ 0x8c10).await,
-        author_edit_declared_errors(&store, &admin, Writer::Replaced, /*base*/ 0x8c20).await,
+        author_edit_declared_errors(&store, &admin, /*base*/ 0x8c10).await,
     ];
     let expected = [
         (CommandKind::CreateVolume, None, "invalid_challenge"),
@@ -286,7 +256,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
             None,
             "invalid_challenge",
         ),
-        (CommandKind::TakeOverProjectWriter, None, "binding_conflict"),
         (
             CommandKind::RejectProposalOperations,
             None,
@@ -306,15 +275,14 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
             "invalid_challenge",
         ),
         (CommandKind::SteerAgentRun, None, "invalid_challenge"),
-        (CommandKind::AcceptProposal, None, "stale_writer"),
-        (CommandKind::AcceptProposal, None, "stale_writer"),
+        (CommandKind::AcceptProposal, None, "invalid_challenge"),
+        (CommandKind::AcceptProposal, None, "invalid_challenge"),
         (
             CommandKind::UndoLatestAuthorAction,
             None,
             "invalid_challenge",
         ),
         (CommandKind::ApplyAuthorEdit, None, "binding_conflict"),
-        (CommandKind::ApplyAuthorEdit, None, "stale_writer"),
     ]
     .map(|(kind, contention_refusal, missing_admission)| {
         let contention = contention_refusal.map_or_else(

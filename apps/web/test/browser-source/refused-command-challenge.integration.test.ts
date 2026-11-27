@@ -8,7 +8,6 @@ import {
   digestExportHumanReadableManuscript,
   digestRejectProposalOperations,
   digestSetCurrentChapter,
-  digestTakeOverProjectWriter,
   digestUndoLatestAuthorAction,
   digestUpdateChapter,
   digestUpdateProject,
@@ -28,7 +27,6 @@ import { rebuildPendingProjection } from "../../src/local-edit-journal.ts";
 import { rejectDisplayedBlockProposal } from "../../src/reject-block-proposal.ts";
 import { renameOwnedProject } from "../../src/rename-project.ts";
 import { setOwnedCurrentChapter } from "../../src/set-current-chapter.ts";
-import { takeOverOwnedProjectWriter } from "../../src/take-over-writer.ts";
 import { undoOwnedLatestAuthorAction } from "../../src/undo-latest-author-action.ts";
 import { updateOwnedChapter } from "../../src/update-chapter.ts";
 import { updateOwnedVolume } from "../../src/update-volume.ts";
@@ -195,9 +193,6 @@ const COMMANDS: Record<string, (projectId: string, fetchImpl: typeof fetch) => C
   "set-current-chapter": (projectId, fetchImpl) => ({ digest: digestSetCurrentChapter,
     send: () => setOwnedCurrentChapter({ ...connection(projectId, fetchImpl), chapterId: CHAPTER,
       expectedCurrentChapterId: VOLUME, expectedTargetRevisionId: REVISION, editorSessionId: SESSION }) }),
-  "take-over-writer": (projectId, fetchImpl) => ({ digest: digestTakeOverProjectWriter,
-    send: () => takeOverOwnedProjectWriter({ ...connection(projectId, fetchImpl), editorSessionId: SESSION,
-      observedWriterGeneration: "1" }) }),
   "export-human-readable": (projectId, fetchImpl) => ({ digest: digestExportHumanReadableManuscript,
     send: () => requestOwnedHumanReadableExport(connection(projectId, fetchImpl)) }),
   "undo-latest-author-action": undoCommand,

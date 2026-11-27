@@ -1,27 +1,12 @@
 //! The shared test support from `command_sequence_tests/project_session_tests.rs`.
 
 use crate::PostgresProjectReader;
-use crate::shared_tests::command_sequence_support::{
-    CommandCall, Route, issued, seed_project, two_chapter_writer,
-};
-use crate::shared_tests::set_current_chapter_authority::open_session;
-use storyos_application::EditorSessionId;
+use crate::shared_tests::command_sequence_support::{CommandCall, Route, issued, seed_project};
 use storyos_application::{
-    ProjectCommandError, UpdateProjectAssistanceInput, UpdateProjectInput,
-    UpdateProjectInstructionInput,
+    UpdateProjectAssistanceInput, UpdateProjectInput, UpdateProjectInstructionInput,
 };
-use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
 use storyos_contracts::CommandKind;
 use storyos_core::AssistanceAvailability;
-
-pub(crate) async fn take_over_project_writer(
-    store: &PostgresProjectReader,
-    call: &CommandCall<TakeOverProjectWriterInput>,
-) -> Result<TakeOverProjectWriterSettlement, ProjectCommandError> {
-    store
-        .take_over_project_writer(&call.envelope, &call.input)
-        .await
-}
 
 pub(crate) const UPDATE_PROJECT_ASSISTANCE: Route = Route {
     kind: CommandKind::UpdateProjectAssistance,
@@ -37,34 +22,12 @@ pub(crate) const UPDATE_PROJECT_INSTRUCTION: Route = Route {
     schema: storyos_contracts::UPDATE_PROJECT_INSTRUCTION_REQUEST_SCHEMA_ID,
 };
 
-pub(crate) const TAKE_OVER_PROJECT_WRITER: Route = Route {
-    kind: CommandKind::TakeOverProjectWriter,
-    method: storyos_contracts::TAKE_OVER_PROJECT_WRITER_METHOD,
-    path: storyos_contracts::TAKE_OVER_PROJECT_WRITER_PATH,
-    schema: storyos_contracts::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
-};
-
 pub(crate) const UPDATE_PROJECT: Route = Route {
     kind: CommandKind::UpdateProject,
     method: storyos_contracts::UPDATE_PROJECT_METHOD,
     path: storyos_contracts::UPDATE_PROJECT_PATH,
     schema: storyos_contracts::UPDATE_PROJECT_REQUEST_SCHEMA_ID,
 };
-
-/// One applicable writer takeover by a second Editor Session in a new Project.
-pub(crate) async fn take_over_project_writer_call(
-    store: &PostgresProjectReader,
-    base: u16,
-) -> CommandCall<TakeOverProjectWriterInput> {
-    let (scope, ..) = two_chapter_writer(store, base).await;
-    let observer = open_session(store, &scope, &format!("{:04x}", base + 5)).await;
-    let input = TakeOverProjectWriterInput {
-        editor_session_id: EditorSessionId::new(observer),
-        observed_writer_generation: 1,
-        editor_contract_revision: storyos_contracts::EDITOR_CONTRACT_REVISION.to_owned(),
-    };
-    issued(store, &scope, base + 9, &TAKE_OVER_PROJECT_WRITER, input).await
-}
 
 /// One applicable first Update Project Assistance in a new Project.
 pub(crate) async fn update_project_assistance_call(

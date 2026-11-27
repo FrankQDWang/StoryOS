@@ -37,7 +37,7 @@ pub(super) const APPLY_AUTHOR_EDIT_ROW: OperationRow = OperationRow {
             "strict_origin",
             "protected_client_session_binding",
             "project_command_challenge",
-            "editor_session_writer_generation",
+            "session_scope_join",
             "expected_authoritative_head",
         ],
         OperationCatalog::new(
@@ -46,7 +46,7 @@ pub(super) const APPLY_AUTHOR_EDIT_ROW: OperationRow = OperationRow {
             Binding {
                 action_class: ActionClass::DirectEditorAction,
                 admission: Admission::AuthorCommand,
-                editor: EditorRule::CurrentWriter,
+                editor: EditorRule::Required,
                 idempotency: Idempotency::HeaderAndAdmissionRecord,
                 settlement: Settlement::CommittedOrReconfirmation,
                 error_profile: ErrorProfile::EditorCommand,
@@ -154,7 +154,7 @@ pub(super) const UNDO_LATEST_AUTHOR_ACTION_ROW: OperationRow = OperationRow {
         &[
             "server_derived_project_scope",
             "project_active",
-            "editor_session_writer_generation",
+            "session_scope_join",
             "author_undo_frontier_exact",
             "expected_authoritative_head",
         ],
@@ -269,7 +269,7 @@ pub(super) const GET_APPLY_AUTHOR_EDIT_OUTCOME_ROW: OperationRow = OperationRow 
             Binding {
                 action_class: ActionClass::None,
                 admission: Admission::Query,
-                editor: EditorRule::BoundToOriginalAdmission,
+                editor: EditorRule::Required,
                 idempotency: Idempotency::None,
                 settlement: Settlement::Read,
                 error_profile: ErrorProfile::QueryCanonical,
@@ -390,13 +390,7 @@ fn get_apply_author_edit_outcome_client_source() -> String {
     )
 }
 
-const APPLY_AUTHOR_EDIT_REQUEST: &[Patch] = &[Patch(
-    U64,
-    &[
-        "/properties/local_intent_sequence",
-        "/properties/writer_generation",
-    ],
-)];
+const APPLY_AUTHOR_EDIT_REQUEST: &[Patch] = &[Patch(U64, &["/properties/local_intent_sequence"])];
 
 const APPLY_AUTHOR_EDIT_RESPONSE: &[Patch] = &[Patch(
     U64,

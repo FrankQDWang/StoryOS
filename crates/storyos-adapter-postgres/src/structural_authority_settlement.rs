@@ -201,15 +201,12 @@ fn parse_counter(value: String) -> Result<u64, Box<dyn std::error::Error + Send 
     Ok(value.parse()?)
 }
 
-/// Moves the writer base Snapshot to a new canonical Snapshot of the Chapter Revision
-/// `revision_id`, and gives the number of moved bases.
-///
-/// The base moves only for the current writer Editor Session. With `editor_session_id`, it moves
-/// only when that session is the current writer.
-pub(crate) async fn update_writer_base(
+/// Moves the base Snapshot of the Editor Session `editor_session_id` to the Snapshot `snapshot_id`
+/// of the Chapter Revision `revision_id`, and gives the number of moved bases.
+pub(crate) async fn update_session_base(
     client: &Client,
     scope: &ProjectScope,
-    editor_session_id: Option<&str>,
+    editor_session_id: &str,
     chapter_id: &str,
     revision_id: &str,
     snapshot_id: &str,
@@ -223,20 +220,9 @@ pub(crate) async fn update_writer_base(
                     authoritative_revision_id = $6::text::uuid,
                     project_activity_position = $7::text::numeric,
                     created_at = clock_timestamp()
-               FROM storyos.project_writer_generations AS writer
               WHERE snapshot.owner_user_id = $1::text::uuid
                 AND snapshot.project_id = $2::text::uuid
-                AND ($3::text IS NULL OR snapshot.editor_session_id = $3::text::uuid)
-                AND (writer.owner_user_id, writer.project_id,
-                     writer.current_editor_session_id) =
-                    (snapshot.owner_user_id, snapshot.project_id,
-                     snapshot.editor_session_id)
-                AND writer.writer_generation = (
-                  SELECT max(current_writer.writer_generation)
-                    FROM storyos.project_writer_generations AS current_writer
-                   WHERE current_writer.owner_user_id = snapshot.owner_user_id
-                     AND current_writer.project_id = snapshot.project_id
-                )",
+                AND snapshot.editor_session_id = $3::text::uuid",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -249,4 +235,49 @@ pub(crate) async fn update_writer_base(
         )
         .await
         .map_err(unavailable)
+}
+
+/// Moves the base Snapshot of each Editor Session of the Project to the Chapter Revision
+/// `revision_id` (ADR 0107: each Editor Session writes). Each base gets a new canonical Snapshot of
+/// its own at `project_activity_position`, because the Snapshot ID is the key of a base row and a
+/// browser with no stored Activity cursor starts the Activity stream from its base Snapshot.
+pub(crate) async fn update_each_session_base(
+    client: &Client,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    revision_id: &str,
+    project_activity_position: u64,
+) -> Result<(), ProjectCommandError> {
+    let sessions = client
+        .query(
+            "SELECT editor_session_id::text FROM storyos.editor_session_base_snapshots
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+              ORDER BY editor_session_id",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .map_err(unavailable)?;
+    for session in sessions {
+        let editor_session_id: String = session.get(/*idx*/ 0);
+        let snapshot_id = Uuid::now_v7().to_string();
+        crate::snapshot::persist_canonical_snapshot(
+            client,
+            scope,
+            &snapshot_id,
+            project_activity_position,
+        )
+        .await
+        .map_err(unavailable)?;
+        update_session_base(
+            client,
+            scope,
+            &editor_session_id,
+            chapter_id,
+            revision_id,
+            &snapshot_id,
+            project_activity_position,
+        )
+        .await?;
+    }
+    Ok(())
 }

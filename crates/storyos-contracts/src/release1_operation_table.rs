@@ -348,7 +348,6 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &memory_entries_rows::DELETE_MEMORY_ENTRY_ROW,
     &editor_session_rows::CREATE_EDITOR_SESSION_ROW,
     &editor_session_rows::GET_EDITOR_SESSION_ROW,
-    &editor_session_rows::TAKE_OVER_PROJECT_WRITER_ROW,
     &volume_rows::CREATE_VOLUME_ROW,
     &volume_rows::UPDATE_VOLUME_ROW,
     &volume_rows::DELETE_VOLUME_ROW,

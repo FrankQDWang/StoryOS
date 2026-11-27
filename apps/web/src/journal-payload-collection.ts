@@ -2,8 +2,6 @@ import {
   JOURNAL_DATABASE_VERSION,
 } from "./local-edit-journal.ts";
 import { MAX_WORKING_JOURNAL_ITEMS } from "./journal-working-set.ts";
-import type { EditorWriterProjection }
-  from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   EditorWorkspace,
   JournalIntentRecord,
@@ -22,28 +20,6 @@ type AppliedSubmissionGroup = JournalSubmissionGroup & { settlement: AppliedSett
 
 function fencesKey(partitionId: string) {
   return `collection_fences:${partitionId}`;
-}
-
-function partitionAllowsCollection(
-  workspace: EditorWorkspace,
-  group: JournalSubmissionGroup,
-) {
-  const partition = workspace.partition;
-  if (group.writer_generation !== partition.writer_generation) return false;
-  if (partition.disposition === "current_writer_open") {
-    return workspace.session.writer?.kind === "current_writer"
-      && workspace.session.writer.writer_generation === partition.writer_generation;
-  }
-  const writer = workspace.session.writer as
-    (EditorWriterProjection & { observed_writer_generation?: string }) | undefined;
-  const resulting = writer?.observed_writer_generation;
-  return partition.disposition === "read_only_observer"
-    && writer?.kind === "read_only"
-    && writer.reason === "superseded_by_takeover"
-    && typeof resulting === "string"
-    && /^(?:0|[1-9][0-9]{0,19})$/.test(resulting)
-    && BigInt(resulting) <= 18446744073709551615n
-    && BigInt(resulting) > BigInt(partition.writer_generation);
 }
 
 function appliedSuccessor(
@@ -139,8 +115,7 @@ export async function collectEligibleJournalPayload(workspace: EditorWorkspace) 
   const covered = new Set(durableGroups.flatMap((group) =>
     (group.ordered_coverage ?? []).map((item) => item.local_intent_sequence)));
   const eligible = durableGroups.filter((group) =>
-    appliedSuccessor(group, activeBase?.value, workspace)
-      && partitionAllowsCollection(workspace, group)) as AppliedSubmissionGroup[];
+    appliedSuccessor(group, activeBase?.value, workspace)) as AppliedSubmissionGroup[];
   for (const group of eligible) {
     const settlement = group.settlement;
     const successor = settlement.installed_base_snapshot;
@@ -157,13 +132,6 @@ export async function collectEligibleJournalPayload(workspace: EditorWorkspace) 
       collection_fence_id: collectionFenceId,
       journal_partition_id: partitionId,
       project_scope: workspace.partition.project_scope,
-      writer_generation: workspace.partition.writer_generation,
-      partition_disposition: workspace.partition.disposition,
-      ...(workspace.partition.disposition === "read_only_observer"
-        ? { resulting_writer_generation:
-          (workspace.session.writer as Extract<EditorWriterProjection, { kind: "read_only" }>)
-            .observed_writer_generation }
-        : {}),
       collected_groups: [{
         journal_submission_group_id: group.journal_submission_group_id,
         covered_sequence_range: group.covered_sequence_range,

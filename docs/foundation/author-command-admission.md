@@ -68,8 +68,9 @@ One `AuthorCommandAdmission` binds all of these fields:
 - the exact opaque Client Session Binding record identity and
   `session_generation`;
 - the accepted `client_contract_revision` and `security_policy_revision`;
-- `editor_session_id` and the exact Project `writer_generation` when the
-  command is editor-bound, otherwise explicit not-applicable values;
+- `editor_session_id` when the command is editor-bound, otherwise an explicit
+  not-applicable value. No Admission names a Project writer generation
+  (ADR 0107);
 - one closed `author_action_class`;
 - `api_major`, method, `route_template`, `command_schema`, and exact
   `command_kind`;
@@ -207,7 +208,7 @@ nonce, Command, Admission, and eventual Receipt.
 Before a first Core invocation, the Server revalidates exact equality of every
 binding that can drift: requester User and Project Scope, Client Session
 Binding and generation, accepted client-contract and security-policy
-revisions, applicable Editor Session and writer generation, action class,
+revisions, applicable Editor Session, action class,
 request contract, canonical digest/profile and every digest-covered field,
 targets, expected Heads or Revisions, idempotency record and key, and
 nonce-consumption record.
@@ -236,7 +237,7 @@ creates no Recovery Draft, and the outcome carries no draft reference
 ([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)). The old Admission stays terminal. A later
 author-confirmed edit is a new command with a new Admission. The Web Editor
 Session owner defines journal, projection, local recovery presentation,
-takeover, and local garbage collection; it cannot weaken these invocation
+and local garbage collection; it cannot weaken these invocation
 rules.
 
 ## 6. Admission flow
@@ -244,13 +245,13 @@ rules.
 1. The Web Client forms one semantic command from the current visible editor
    or project state.
 2. It submits through its browser-held session handle and supplies the Editor
-   Session and writer generation when applicable, action class, Project target,
+   Session when applicable, action class, Project target,
    expected Heads, idempotency key, anti-forgery challenge, and exact typed
    command.
 3. The Server resolves the Client Session Binding, derives User and Project
    Scope, validates client and security policy identities, recomputes the
    canonical digest, and validates the nonce, idempotency record, target,
-   expected Heads, writer generation, and action class.
+   expected Heads, and action class.
 4. The Server commits one `AuthorCommandAdmission`, revalidates the invocation
    boundary, and invokes the owning Core command with its identity.
 5. Core appends one typed Receipt and atomically links it through
@@ -312,12 +313,11 @@ Deterministic verification covers:
   generation;
 - exact client-contract and security-policy revisions;
 - request contract, action class, digest/profile, target, expected-Head,
-  nonce-record, idempotency-record, Editor Session, and writer-generation
-  binding;
+  nonce-record, idempotency-record, and Editor Session binding;
 - issued/expiry boundary behavior under a controlled Server clock;
 - direct and explicit action classes;
 - duplicate, reordered, expired, stale-session, stale-policy, stale-contract,
-  stale-Head, and stale-writer requests;
+  and stale-Head requests;
 - crash cuts before and after admission, before first Core invocation, during
   Core, after terminal settlement, and before acknowledgement, including the
   direct-versus-explicit and changed-binding branches;

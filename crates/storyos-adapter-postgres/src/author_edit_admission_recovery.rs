@@ -58,7 +58,7 @@ impl PostgresProjectReader {
                 )
                 .await
             }
-            Err(AuthorEditError::StaleWriter | AuthorEditError::BindingConflict) => {
+            Err(AuthorEditError::BindingConflict) => {
                 if let Ok(reconfirmation) = self
                     .read_requires_reconfirmation(
                         query,
@@ -293,7 +293,6 @@ fn reconstruct_command(
             receipt_id: Uuid::now_v7().to_string(),
         },
         editor_session_id: EditorSessionId::new(required_string(&payload, "editor_session_id")?),
-        writer_generation: parse_u64(required_string(&payload, "writer_generation")?).ok()?,
         chapter_id: required_string(&payload, "chapter_id")?,
         expected_authoritative_revision_id: required_string(
             &payload,

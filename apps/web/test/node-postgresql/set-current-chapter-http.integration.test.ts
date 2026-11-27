@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { getChapter, getEditorSession, getManuscriptTree, getProject,
+import { activityStream, getChapter, getEditorSession, getManuscriptTree, getProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { UUID_V7, assertForeignRefused, createStory, deleteChapterInput, problemOf, serverForFile,
 } from "../support/http-harness.ts";
@@ -110,8 +110,9 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
   const { baseUrl, projectId, fetchImpl } = story;
   const [chapterAId = "", chapterBId = "", chapterCId = ""] = story.chapterIds;
   const session = await story.openEditorSession();
-  assert.equal(session.writer.kind, "current_writer");
   assert.equal(session.base_snapshot.chapter_id, chapterAId);
+  // A second Editor Session of the Project (ADR 0107). A deletion that changes the Current Chapter moves each base.
+  const other = await story.openEditorSession();
 
   const removedB = (await story.send("deleteChapter", deleteChapterInput(story, chapterBId, "5"))).response;
   assert.equal(removedB.effect.kind, "authoritative_applied");
@@ -133,6 +134,17 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
   assert.equal(removedA.project.open.kind, "current_chapter");
   if (removedA.project.open.kind === "current_chapter") {
     assert.equal(removedA.project.open.current_chapter_id, chapterCId);
+  }
+  const headC = (await getChapter({ baseUrl, projectId, chapterId: chapterCId, fetchImpl })).chapter.current_revision;
+  const bases = await Promise.all([session, other].map(async (opened) => (await getEditorSession({ baseUrl, projectId,
+    editorSessionId: opened.editor_session.editor_session_id, fetchImpl })).base_snapshot));
+  assert.deepEqual(bases.map((base) => [base.chapter_id, base.authoritative_head_revision_id]),
+    [[chapterCId, headC.revision_id], [chapterCId, headC.revision_id]]);
+  assert.notEqual(bases[0]?.snapshot_id, bases[1]?.snapshot_id);
+  // Each base names a canonical Snapshot, so a browser with no stored Activity cursor starts the stream from it.
+  for (const base of bases) {
+    assert.equal(await activityStream({ baseUrl, projectId, snapshotId: base.snapshot_id,
+      protocolRelease: "storyos.public.release.1", fetchImpl }), "");
   }
 
   const removedC = (await story.send("deleteChapter", deleteChapterInput(story, chapterCId, "7"))).response;

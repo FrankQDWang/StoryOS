@@ -87,14 +87,12 @@ pub(super) enum ClientOverride {
 
 pub(super) enum ContractGraphEntry {
     Preconditions(&'static [&'static str]),
-    /// The reviewed contract graph has no entry for this operation; the route catalog lists these preconditions.
-    Absent(&'static [&'static str]),
 }
 
 impl ContractGraphEntry {
     pub(super) fn preconditions(&self) -> &'static [&'static str] {
         match self {
-            Self::Preconditions(preconditions) | Self::Absent(preconditions) => preconditions,
+            Self::Preconditions(preconditions) => preconditions,
         }
     }
 }

@@ -180,7 +180,7 @@ pub fn require_delivered_families(
 }
 
 /// The tables that each Project Export Archive must carry.
-pub const PROJECT_EXPORT_TABLES: [&str; 75] = [
+pub const PROJECT_EXPORT_TABLES: [&str; 74] = [
     "acceptance_receipts",
     "acceptance_refusals",
     "agent_run_events",
@@ -228,7 +228,6 @@ pub const PROJECT_EXPORT_TABLES: [&str; 75] = [
     "project_instruction_revisions",
     "project_memory_heads",
     "project_policy_revisions",
-    "project_writer_generations",
     "projects",
     "proposal_generation_heads",
     "proposal_generations",

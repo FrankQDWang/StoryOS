@@ -14,8 +14,8 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     AppliedVariant, Classification, CommandResponse, CommandSpec, CommandWrite,
-    CurrentChapterChange, LockedProject, ProjectCommand, ReplayEffect, Structural,
-    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
+    CurrentChapterChange, LockedProject, ProjectCommand, ReplayEffect, SessionBase, Structural,
+    StructureIdentity, StructureWrite, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 use crate::undo_compensation::{ForwardCommand, StructureCommand};
@@ -160,7 +160,7 @@ impl ProjectCommand for DeleteVolumeInput {
                 resulting_tree_revision: applied.tree_revision,
                 identity: StructureIdentity::Volume(self.volume_id.as_ref().to_owned()),
                 current_chapter: CurrentChapterChange::Preserve,
-                writer_base: WriterBase::RebindToCurrentChapter,
+                session_base: SessionBase::RebindToCurrentChapter,
                 activity: serde_json::json!({ "volume_id": self.volume_id.as_ref() }),
                 effect: VolumeDeleted {
                     volume_id: self.volume_id.as_ref().to_owned(),

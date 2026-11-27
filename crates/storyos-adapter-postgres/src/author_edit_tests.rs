@@ -473,14 +473,6 @@ async fn a_cut_after_the_commit_resolves_through_the_outcome_query_and_keeps_the
     }
     cleanup
         .execute(
-            "DELETE FROM storyos.project_writer_generations
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&USER, &PROJECT],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
             "DELETE FROM storyos.editor_sessions
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND editor_session_id = $3::text::uuid",

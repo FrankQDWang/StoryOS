@@ -1,4 +1,3 @@
-use storyos_application::TakeOverProjectWriterInput;
 use storyos_application::{DeleteVolumeInput, SetCurrentChapterInput, UpdateProjectInput};
 use storyos_application::{EditorSessionId, VolumeId};
 use storyos_core::ReceiptResult;
@@ -13,8 +12,7 @@ use crate::shared_tests::command_sequence_agent_run::{
 };
 use crate::shared_tests::command_sequence_memory_entry::delete_memory_entry_call;
 use crate::shared_tests::command_sequence_project_session::{
-    TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, take_over_project_writer,
-    take_over_project_writer_call, update_project_assistance_call, update_project_call,
+    UPDATE_PROJECT, update_project_assistance_call, update_project_call,
     update_project_instruction_call,
 };
 use crate::shared_tests::command_sequence_proposal_decision::{
@@ -107,12 +105,6 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
-            &take_over_project_writer_call(&store, /*base*/ 0x5ea0).await,
-        )
-        .await,
-        in_progress_retry(
-            &store,
-            &admin,
             &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7b20).await,
         )
         .await,
@@ -153,7 +145,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         )
         .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 19]);
+    assert_eq!(observed, vec![(true, [0; 5]); 18]);
 }
 
 #[tokio::test]
@@ -259,21 +251,6 @@ async fn an_exact_retry_returns_the_uppercase_client_identities_of_the_first_use
         selection,
     )
     .await;
-    let (scope, ..) = two_chapter_writer(&store, /*base*/ 0xa420).await;
-    let observer = open_session(&store, &scope, "a425").await;
-    let takeover = TakeOverProjectWriterInput {
-        editor_session_id: EditorSessionId::new(observer.to_uppercase()),
-        observed_writer_generation: 1,
-        editor_contract_revision: storyos_contracts::EDITOR_CONTRACT_REVISION.to_owned(),
-    };
-    let takeover = issued(
-        &store,
-        &scope,
-        /*suffix*/ 0xa429,
-        &TAKE_OVER_PROJECT_WRITER,
-        takeover,
-    )
-    .await;
     let observed = vec![
         replayed_outcome(&store, &admin, &deletion, delete_volume)
             .await
@@ -288,16 +265,12 @@ async fn an_exact_retry_returns_the_uppercase_client_identities_of_the_first_use
         )
         .await
         .0,
-        replayed_outcome(&store, &admin, &takeover, take_over_project_writer)
-            .await
-            .0,
     ];
     assert_eq!(
         observed,
         vec![
             ReceiptResult::AuthoritativeApplied.code().to_owned(),
             ReceiptResult::AuthoritativeApplied.code().to_owned(),
-            ReceiptResult::NoEffect.code().to_owned(),
         ]
     );
 }

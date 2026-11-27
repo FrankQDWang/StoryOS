@@ -70,7 +70,7 @@ async function undoWith(effect: Record<string, unknown>) {
     if (path.endsWith(`/editor-sessions/${SESSION}`)) {
       return jsonResponse({
         ...scenario.session,
-        schema_id: "storyos.query.editor-session.response.v1",
+        schema_id: "storyos.query.editor-session.response.v2",
         author_undo_frontier_sequence: "1",
       });
     }

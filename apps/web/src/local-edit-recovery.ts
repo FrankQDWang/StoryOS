@@ -9,8 +9,7 @@ const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.s
 export async function retainLocalRecovery(workspace: EditorWorkspace, groupId: string): Promise<void> {
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const group = snapshot.groups.find((item) => item.journal_submission_group_id === groupId);
-  if (workspace.partition.disposition !== "current_writer_open"
-    || !group || group.settlement.kind !== "outcome_query_requires_reconfirmation"
+  if (!group || group.settlement.kind !== "outcome_query_requires_reconfirmation"
     || snapshot.groups.some((item) => item.settlement.kind === "unsettled")
     || snapshot.records.some((record) => !snapshot.covered.has(record.local_intent_sequence))) {
     throw new Error("Only a closed Author Edit can be kept for manual re-entry");

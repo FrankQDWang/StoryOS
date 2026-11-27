@@ -4,7 +4,7 @@ import type { BrowserContext, Page } from "playwright";
 import { getChapter, getProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, BlockProposalInspect }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { alignWriterBase } from "./acceptance.ts";
+import { alignLatestSessionBase } from "./acceptance.ts";
 import { queryStoryOSPostgres, sessionFetch } from "./node-integration";
 import { uuidV7 } from "../../src/client-identity.ts";
 
@@ -66,47 +66,15 @@ export async function verifyConflictedProposalRecovery(input: {
   await page.reload();
   await candidate.locator("button[data-proposal-accept]").waitFor();
 
-  let releaseStaleAccept = (): void => {};
-  const staleAcceptHeld = new Promise<void>((resolve) => { releaseStaleAccept = resolve; });
-  let noteStaleAccept = (): void => {};
-  const staleAcceptPosted = new Promise<void>((resolve) => { noteStaleAccept = resolve; });
-  await page.route((url) => url.pathname.endsWith("/acceptances"), async (route) => {
-    if (route.request().method() !== "POST") { await route.continue(); return; }
-    noteStaleAccept();
-    await staleAcceptHeld;
-    await route.fulfill({ response: await route.fetch() });
-  });
-  const writerAcceptances = watchAcceptances(page);
-  await page.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-accept]`).click();
-  await Promise.race([staleAcceptPosted, new Promise((_, reject) => {
-    setTimeout(() => reject(new Error("stale accept was not posted")), 10_000);
-  })]);
+  const firstPageAcceptances = watchAcceptances(page);
   const observer = await context.newPage();
   const observerAcceptances = watchAcceptances(observer);
   observer.setDefaultTimeout(10_000);
   try {
     assert.equal((await observer.goto(`${origin}/projects/${projectId}`))?.status(), 200);
-    // The observer tab has no locator of its own. It gets the Proposal from the open Proposal list.
-    await observer.locator("[data-manuscript-editor][contenteditable='false']").waitFor();
-    await observer.locator("[data-take-over-writer]").click();
+    // A second page of the Project writes with no click (ADR 0107). It has no locator of its own, and it gets the
+    // Proposal from the open Proposal list.
     await observer.locator("[data-manuscript-editor][contenteditable='true']").waitFor();
-    releaseStaleAccept();
-    await page.getByText("上次接受因编辑会话失效而被拒绝，候选文字仍保留。").waitFor();
-    const refused = (await getProposal(read)).proposal;
-    assert.equal(refused.validation, "valid");
-    assert.equal(refused.candidate_text, proposal.candidate_text);
-    assert.equal(refused.latest_acceptance_refusal.kind, "present");
-    if (refused.latest_acceptance_refusal.kind === "present") {
-      assert.ok(refused.latest_acceptance_refusal.reason === "stale_writer"
-        || refused.latest_acceptance_refusal.reason === "session_changed");
-    }
-    assert.equal(await prose(), originalProse);
-    await page.reload();
-    await page.locator(`[data-proposal-id="${proposalId}"][data-proposal-session="ineligible"]`).waitFor();
-    assert.equal(await page.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-accept]`).count(), 0);
-    assert.equal(await prose(), originalProse);
-    assert.equal(writerAcceptances.length, 1);
-
     const restored = observer.locator(`[data-proposal-id="${proposalId}"][data-proposal-session="eligible"]`);
     await restored.locator("button[data-proposal-accept]").waitFor();
     assert.equal(observerAcceptances.length, 0);
@@ -122,7 +90,7 @@ export async function verifyConflictedProposalRecovery(input: {
       WHERE project_id = '${projectId}'::uuid AND revision_id = '${input.chapterRevisionId}'::uuid;
       UPDATE storyos.authoritative_heads SET current_revision_id = '${nextRevision}'::uuid
       WHERE project_id = '${projectId}'::uuid AND manuscript_object_id = '${chapterId}'::uuid`);
-    await alignWriterBase(projectId, chapterId, nextRevision, uuidV7());
+    await alignLatestSessionBase(projectId, chapterId, nextRevision, uuidV7());
     // The observer reads the moved Chapter Head, so its Acceptance expects that Head.
     await observer.reload();
     await observer.locator("[data-manuscript-editor][contenteditable='true']").waitFor();
@@ -137,8 +105,7 @@ export async function verifyConflictedProposalRecovery(input: {
       .filter({ hasText: proposal.candidate_text }).waitFor();
     assert.equal(await prose(), expectedProse);
     assert.equal(observerAcceptances.length, 1);
-    assert.notEqual(observerAcceptances[0]?.key, writerAcceptances[0]?.key);
-    assert.notEqual(observerAcceptances[0]?.correlation, writerAcceptances[0]?.correlation);
+    assert.equal(firstPageAcceptances.length, 0);
     await observer.locator("[data-manuscript-editor][contenteditable='true']").waitFor();
     const paragraph = observer.locator(
       `[data-manuscript-editor] p:not([data-id="${proposal.manuscript_block_id}"])`,
@@ -151,8 +118,6 @@ export async function verifyConflictedProposalRecovery(input: {
     assert.equal(written.includes(proposal.candidate_text), true);
     assert.equal((await getProposal(read)).proposal.candidate_text, proposal.candidate_text);
   } finally {
-    releaseStaleAccept();
-    await page.unrouteAll();
     await observer.close();
   }
 }

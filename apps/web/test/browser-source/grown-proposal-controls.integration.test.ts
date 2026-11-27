@@ -30,7 +30,7 @@ async function openTwoBlockWorkspace() {
     }
     if (path.endsWith("/editor-sessions")) return jsonResponse(scenario.session);
     if (path.endsWith(`/editor-sessions/${SESSION}`)) {
-      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     }
     throw new Error(`Unexpected request ${path}`);
   };

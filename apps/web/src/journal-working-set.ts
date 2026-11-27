@@ -63,11 +63,9 @@ export async function readJournalWorkingBoundary(
     || group?.journal_submission_group_id !== boundary.journal_submission_group_id
     || record?.journal_partition_id !== partitionId
     || record?.editor_session_id !== workspace.partition.editor_session_id
-    || record?.writer_generation !== workspace.partition.writer_generation
     || !equal(record?.project_scope, workspace.partition.project_scope)
     || group?.payload_collection?.collection_fence_id !== boundary.collection_fence_id
     || group?.journal_partition_id !== partitionId
-    || group?.writer_generation !== workspace.partition.writer_generation
     || group?.editor_session_id !== workspace.partition.editor_session_id
     || !equal(group?.project_scope, workspace.partition.project_scope)
     || !equal(group?.ordered_coverage?.at(-1), {
@@ -91,11 +89,8 @@ function collectionProofMatches(group: Partial<JournalSubmissionGroup>, fence: u
     || !Array.isArray(group.ordered_coverage)) return false;
   const settlement = group.settlement;
   const successor = settlement.installed_base_snapshot;
-  return Reflect.get(fence, "partition_disposition") === "current_writer_open"
-    && Reflect.get(fence, "resulting_writer_generation") === undefined
-    && Reflect.get(fence, "collection_fence_id") === group.payload_collection.collection_fence_id
+  return Reflect.get(fence, "collection_fence_id") === group.payload_collection.collection_fence_id
     && Reflect.get(fence, "journal_partition_id") === group.journal_partition_id
-    && Reflect.get(fence, "writer_generation") === group.writer_generation
     && equal(Reflect.get(fence, "project_scope"), group.project_scope)
     && equal(Reflect.get(fence, "collected_groups"), [{
       journal_submission_group_id: group.journal_submission_group_id,
@@ -128,11 +123,6 @@ export type ClosedJournalGroup = (group: JournalSubmissionGroup, later: readonly
 export async function retireCollectedJournalPrefix(
   workspace: EditorWorkspace, snapshot: ValidatedJournalSnapshot, closed: ClosedJournalGroup,
 ): Promise<boolean> {
-  if (workspace.partition.disposition !== "current_writer_open"
-    || workspace.session.writer.kind !== "current_writer"
-    || workspace.session.writer.writer_generation !== workspace.partition.writer_generation) {
-    return false;
-  }
   const fences = new Map(snapshot.fences.map((fence) => [
     fence !== null && typeof fence === "object" ? Reflect.get(fence, "collection_fence_id") : undefined,
     fence,

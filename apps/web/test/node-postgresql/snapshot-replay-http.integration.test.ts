@@ -39,17 +39,15 @@ function hasProblem(error: unknown, status: number, code: string): boolean {
 }
 
 async function ensureCurrentWriter(baseUrl: string): Promise<GetEditorSessionResponse> {
-  const existing = await queryPostgres(`SELECT current_editor_session_id::text
-    FROM storyos.project_writer_generations
-    WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid`);
+  const existing = await queryPostgres(`SELECT editor_session_id::text
+    FROM storyos.editor_sessions
+    WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
+    ORDER BY opened_at DESC, editor_session_id DESC LIMIT 1`);
   if (existing) {
     const session = await getEditorSession({
       baseUrl, projectId: PROJECT_A, editorSessionId: existing,
       fetchImpl: browserFetch(baseUrl, "session-a"),
     });
-    if (session.writer.kind !== "current_writer") {
-      throw new Error("the fixture did not expose the current writer");
-    }
     return session;
   }
   const request = {
@@ -66,9 +64,6 @@ async function ensureCurrentWriter(baseUrl: string): Promise<GetEditorSessionRes
       idempotencyKey: "018f0000-0000-7001-8000-000000000202",
       antiForgery, fetchImpl: browserFetch(baseUrl, "session-a"),
     }));
-  if (session.writer.kind !== "current_writer") {
-    throw new Error("the fixture did not create the current writer");
-  }
   return session;
 }
 
@@ -240,12 +235,11 @@ test("Editor Sessions capture nonzero Activity and preserve legacy Snapshot evid
         value_hex_lowercase: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
       created_at: base.created_at,
     });
-    assert.deepEqual(first.session.writer, { kind: "current_writer", writer_generation: "1" });
     assert.deepEqual((await first.command.send()).response, first.session);
     const canonicalInput = { baseUrl, projectId, fetchImpl, snapshotId: base.snapshot_id };
     assert.equal((await getSnapshot(canonicalInput)).snapshot.project_activity_position, "3");
 
-    // Reproduce the old writer's stamp after the public commands have proven position 3.
+    // Reproduce the old stamp of the first session after the public commands have proven position 3.
     await queryPostgres(`UPDATE storyos.editor_session_base_snapshots SET project_activity_position = 0
       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
         AND snapshot_id = '${base.snapshot_id}'::uuid;
@@ -268,8 +262,6 @@ test("Editor Sessions capture nonzero Activity and preserve legacy Snapshot evid
         WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid))::text`;
     const retained = JSON.parse(await queryPostgres(retainedQuery));
     const next = await openSession();
-    assert.deepEqual(next.session.writer,
-      { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" });
     assert.deepEqual(next.session.base_snapshot, { ...base,
       snapshot_id: next.session.base_snapshot.snapshot_id,
       created_at: next.session.base_snapshot.created_at });

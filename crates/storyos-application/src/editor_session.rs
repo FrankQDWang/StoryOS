@@ -43,24 +43,6 @@ pub struct EditorSessionLookup {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum EditorReadOnlyReason {
-    SecondarySession,
-    SupersededByTakeover,
-    BindingInvalid,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum EditorWriterState {
-    CurrentWriter {
-        writer_generation: u64,
-    },
-    ReadOnly {
-        observed_writer_generation: u64,
-        reason: EditorReadOnlyReason,
-    },
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EditorSessionSnapshot {
     pub snapshot_id: String,
     pub chapter_id: String,
@@ -77,7 +59,6 @@ pub struct EditorSession {
     pub editor_session_id: EditorSessionId,
     pub client_binding: EditorClientBinding,
     pub opened_at: String,
-    pub writer: EditorWriterState,
     pub base_snapshot: EditorSessionSnapshot,
     pub author_undo_frontier_sequence: Option<u64>,
 }

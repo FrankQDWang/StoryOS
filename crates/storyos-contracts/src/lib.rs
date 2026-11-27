@@ -44,7 +44,6 @@ mod release1_set_current_chapter;
 mod release1_skill_use;
 mod release1_snapshot;
 mod release1_subrun;
-mod release1_takeover;
 mod release1_undo_latest_author_action;
 mod release1_update_chapter;
 mod release1_update_project;
@@ -68,12 +67,12 @@ pub use release1::{
     CREATE_PROJECT_COMMAND_CHALLENGE_PATH, ControlledProject, CreateEditorSessionRequest,
     CreateEditorSessionResponse, CreateProjectCommandChallengeRequest,
     CreateProjectCommandChallengeResponse, CurrentChapter, DigestAlgorithm, DigestValue,
-    EDITOR_CONTRACT_REVISION, EditorBaseSnapshot, EditorReadOnlyReason, EditorSessionBinding,
-    EditorWriterProjection, GET_CHAPTER_METHOD, GET_CHAPTER_PATH, GET_EDITOR_SESSION_METHOD,
-    GET_EDITOR_SESSION_PATH, GET_PROJECT_METHOD, GET_PROJECT_PATH, GET_PROTOCOL_PROFILE_METHOD,
-    GET_PROTOCOL_PROFILE_PATH, GetChapterResponse, GetEditorSessionResponse, GetProjectResponse,
-    LIMIT_PROFILE_REVISION, ManuscriptBlock, ManuscriptBlockKind, PUBLIC_PROTOCOL_RELEASE,
-    ProjectOpenState, ProjectScope, Release1ProtocolProfile, StoryOSProblem, project_command_kind,
+    EDITOR_CONTRACT_REVISION, EditorBaseSnapshot, EditorSessionBinding, GET_CHAPTER_METHOD,
+    GET_CHAPTER_PATH, GET_EDITOR_SESSION_METHOD, GET_EDITOR_SESSION_PATH, GET_PROJECT_METHOD,
+    GET_PROJECT_PATH, GET_PROTOCOL_PROFILE_METHOD, GET_PROTOCOL_PROFILE_PATH, GetChapterResponse,
+    GetEditorSessionResponse, GetProjectResponse, LIMIT_PROFILE_REVISION, ManuscriptBlock,
+    ManuscriptBlockKind, PUBLIC_PROTOCOL_RELEASE, ProjectOpenState, ProjectScope,
+    Release1ProtocolProfile, StoryOSProblem, project_command_kind,
 };
 pub use release1_accept_proposal::{
     ACCEPT_PROPOSAL_DIGEST_PROFILE, ACCEPT_PROPOSAL_METHOD, ACCEPT_PROPOSAL_PATH,
@@ -296,11 +295,6 @@ pub use release1_snapshot::{
 pub use release1_subrun::{
     GET_SUBRUN_METHOD, GET_SUBRUN_PATH, GET_SUBRUN_RESPONSE_SCHEMA_ID, GetSubrunResponse,
     SubrunEntryInspect, SubrunStateInspect, SubrunStepInspect,
-};
-pub use release1_takeover::{
-    TAKE_OVER_PROJECT_WRITER_METHOD, TAKE_OVER_PROJECT_WRITER_PATH,
-    TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID, TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID,
-    TakeOverProjectWriterRequest, TakeOverProjectWriterResponse, TakeOverProjectWriterResult,
 };
 pub use release1_undo_latest_author_action::{
     UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE, UNDO_LATEST_AUTHOR_ACTION_METHOD,

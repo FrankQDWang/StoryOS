@@ -4,8 +4,8 @@ use storyos_application::{
 use storyos_core::{TransitionOutcome, UpdateProjectInstructionRefusal};
 
 use super::command_admission::{
-    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
-    SettledReceipt, TargetValidation, admit, controlled_project,
+    BodyValidation, ProjectCommandRoute, SettledReceipt, TargetValidation, admit,
+    controlled_project,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -51,11 +51,8 @@ const UPDATE_PROJECT_INSTRUCTION: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::UPDATE_PROJECT_INSTRUCTION_PATH,
     schema_id: contracts::UPDATE_PROJECT_INSTRUCTION_REQUEST_SCHEMA_ID,
     digest_profile: contracts::UPDATE_PROJECT_INSTRUCTION_DIGEST_PROFILE,
-    revision_mismatch: RevisionMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
     target_validation: TargetValidation::BeforeContentType,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn update_project_instruction(

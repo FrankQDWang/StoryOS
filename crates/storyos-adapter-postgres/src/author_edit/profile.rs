@@ -131,7 +131,6 @@ pub(super) fn project_error(error: AuthorEditError) -> ProjectCommandError {
     match error {
         AuthorEditError::BindingConflict => ProjectCommandError::BindingConflict,
         AuthorEditError::InvalidChallenge => ProjectCommandError::InvalidChallenge,
-        AuthorEditError::StaleWriter => ProjectCommandError::WriterIneligible,
         AuthorEditError::AdmissionExpired => unavailable(error),
         AuthorEditError::Unavailable(source) => ProjectCommandError::Unavailable(source),
     }

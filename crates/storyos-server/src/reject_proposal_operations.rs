@@ -2,8 +2,7 @@ use storyos_application::{EditorSessionId, RejectProposalOperationsInput, Reject
 use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
-    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
-    TargetValidation, admit, controlled_project,
+    BodyValidation, ProjectCommandRoute, TargetValidation, admit, controlled_project,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -15,11 +14,8 @@ const REJECT_PROPOSAL_OPERATIONS: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::REJECT_PROPOSAL_OPERATIONS_PATH,
     schema_id: contracts::REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID,
     digest_profile: contracts::REJECT_PROPOSAL_OPERATIONS_DIGEST_PROFILE,
-    revision_mismatch: RevisionMismatch::InvalidRequest,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
     target_validation: TargetValidation::AfterContentType,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn reject_proposal_operations(

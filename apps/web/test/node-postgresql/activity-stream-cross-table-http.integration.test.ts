@@ -42,18 +42,15 @@ function nextPosition(position: string, delta: bigint): string {
 }
 
 async function loadCurrentWriter(baseUrl: string): Promise<GetEditorSessionResponse> {
-  const existing = await queryPostgres(`SELECT current_editor_session_id::text
-    FROM storyos.project_writer_generations
+  const existing = await queryPostgres(`SELECT editor_session_id::text
+    FROM storyos.editor_sessions
     WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
-    ORDER BY writer_generation DESC LIMIT 1`);
+    ORDER BY opened_at DESC, editor_session_id DESC LIMIT 1`);
   if (existing) {
     const session = await getEditorSession({
       baseUrl, projectId: PROJECT_A, editorSessionId: existing,
       fetchImpl: browserFetch(baseUrl, "session-a"),
     });
-    if (session.writer.kind !== "current_writer") {
-      throw new Error("the fixture did not expose the current writer");
-    }
     return session;
   }
   const request = {
@@ -70,9 +67,6 @@ async function loadCurrentWriter(baseUrl: string): Promise<GetEditorSessionRespo
       idempotencyKey: "018f0000-0000-7001-8000-000000000e57",
       antiForgery, fetchImpl: browserFetch(baseUrl, "session-a"),
     }));
-  if (session.writer.kind !== "current_writer") {
-    throw new Error("the fixture did not create the current writer");
-  }
   return session;
 }
 
@@ -104,9 +98,6 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
   const { baseUrl, server } = await startServer();
   try {
     const writer = await loadCurrentWriter(baseUrl);
-    if (writer.writer.kind !== "current_writer") {
-      throw new Error("the Activity fixture lost current-writer status");
-    }
     const snapshotId = writer.base_snapshot.snapshot_id;
     const snapshotPosition = writer.base_snapshot.project_activity_position;
     const volumePosition = nextPosition(snapshotPosition, 1n);
@@ -121,12 +112,11 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
     assert.equal(volume.effect.project_activity_position, volumePosition);
     const from = writer.base_snapshot.materialized_revision.body.length;
     const authorEditRequest: ApplyAuthorEditRequest = {
-      command_schema: "storyos.command.apply-author-edit.request.v1",
+      command_schema: "storyos.command.apply-author-edit.request.v2",
       client_contract_revision: "storyos.web-client.release-1.v3",
       security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: EDIT_CORRELATION,
       editor_session_id: writer.editor_session.editor_session_id,
-      writer_generation: writer.writer.writer_generation,
       chapter_id: writer.base_snapshot.chapter_id,
       expected_authoritative_revision_id: writer.base_snapshot.authoritative_head_revision_id,
       expected_proposal_head_revision_ids: writer.base_snapshot.proposal_head_revision_ids,

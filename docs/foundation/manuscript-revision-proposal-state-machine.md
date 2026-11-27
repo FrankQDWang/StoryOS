@@ -441,7 +441,7 @@ produce one immutable Receipt.
 Every submitted Author Edit uses this command kind; the client cannot choose an
 authoritative or Proposal write endpoint. The Core contract owns the semantic
 submission boundary. The Web Editor Session contract owns journal persistence,
-dispatch, projection, acknowledgement ordering, and takeover, but may not alter
+dispatch, projection, and acknowledgement ordering, but may not alter
 this boundary.
 
 ```text
@@ -449,7 +449,6 @@ ApplyAuthorEdit {
   command_schema_version
   project_scope
   editor_session_id
-  writer_generation
   chapter_object_id
   author_edit_units
   proposal_target: absent | {
@@ -526,8 +525,8 @@ The coalescing boundary must freeze and compare every pre-issuance input that
 [Author Command Admission section 3](author-command-admission.md#3-exact-admission-bindings)
 will resolve, validate, allocate, or bind: authenticated requester User; Project
 Scope and scope kind; Client Session Binding record and generation; accepted
-client-contract and security-policy revisions; applicable Editor Session and
-writer generation or explicit not-applicable values; the
+client-contract and security-policy revisions; applicable Editor Session or
+an explicit not-applicable value; the
 `direct_editor_action` class; exact API major, method, route template, command
 schema, and command kind; digest profile; every target and expected Head or
 Revision; the pre-domain idempotency record and key resolved from the submitted
@@ -634,7 +633,7 @@ roll-forward through the existing `getEditorSession`,
 `createProjectCommandChallenge`, and `applyAuthorEdit` operations. This policy
 does not authorize Proposal or mixed-ownership settlement,
 `RequiresReconfirmation`, acknowledgement-loss handling, reload, restart,
-recovery, writer or replay-generation change, Snapshot resync, late-result
+recovery, replay-generation change, Snapshot resync, late-result
 handling, or Local Edit Journal garbage collection. Those successor behaviors
 remain with [Reconcile Acknowledgement Loss without Duplicate Authority](https://github.com/FrankQDWang/StoryOS/issues/109),
 [Recover Settled and Unsettled Edits across Reload and Restart](https://github.com/FrankQDWang/StoryOS/issues/110),
@@ -672,7 +671,7 @@ One command is never split or partially applied. Core selects exactly one result
 in this order:
 
 1. Validate these facts against the current facts: the exact expected
-   Authoritative and Proposal Heads, writer generation, and editor contract.
+   Authoritative and Proposal Heads and editor contract.
    Also validate the current retained/open Proposal eligibility, target
    Revisions, reservations, and observed ownership precondition. Any stale, mismatched, missing, or failed exact proof returns
    `Conflicted`; it appends no Authoritative or Proposal Revision and allocates
@@ -774,7 +773,6 @@ PauseProposalGeneration {
   projection_checkpoint_id
   editor_input_fence_id
   editor_session_id
-  writer_generation
   local_intent_range
   idempotency_key
 }
@@ -1482,7 +1480,7 @@ and sequence checks provide correctness.
 Native undo/redo, UniqueID repair, paste, cut, drop, drag, deletion, and IME
 output all re-enter the same ownership classifier. Agent batches remain outside
 ProseMirror history. Immediate browser display, IndexedDB journal continuity,
-writer generation, acknowledgement/Event convergence, and resynchronization
+acknowledgement/Event convergence, and resynchronization
 are owned by
 [Web Editor Session, Synchronization, and Recovery Semantics](web-editor-session-synchronization-and-recovery-semantics.md).
 
@@ -1535,7 +1533,7 @@ settlement, or recovery lifecycle.
 This recovery flow creates no Draft Artifact. StoryOS has no Host-created
 Recovery Draft ([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)). A later Retry
 uses a new Admission unless the automatic same-Admission row above still
-applies. Journal mechanics, Snapshot transport, writer takeover, local
+applies. Journal mechanics, Snapshot transport, local
 projection, and garbage collection remain owned by the Web Editor Session
 contract.
 

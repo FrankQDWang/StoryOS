@@ -30,8 +30,8 @@ import {
   trackDatabase,
 } from "./scenario.ts";
 
-// A Journal of an earlier version has no upgrade path (ADR 0099). The page opens the Server text read-only, and the
-// Journal stays as it is.
+// A Journal of version 3 or 4 has no upgrade path (ADR 0099). The page opens the Server text read-only, and the
+// Journal stays as it is. A version 5 Journal upgrades to version 6 and keeps each row (ADR 0107).
 const VOLUME = "018f0000-0000-7001-8000-000000000816";
 const FIXTURE_PROJECT = exportedFixture.project_scope.project_id;
 const forProject = <T,>(value: T): T => JSON.parse(JSON.stringify(value).replaceAll(FIXTURE_PROJECT, PROJECT)) as T;
@@ -124,7 +124,7 @@ function journalServer(scenario: ReturnType<typeof createBrowserScenario>) {
     }
     if (route === `POST /api/v1/projects/${PROJECT}/editor-sessions`) return jsonResponse(scenario.session);
     if (route === `GET /api/v1/projects/${PROJECT}/editor-sessions/${SESSION}`) {
-      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (route === `GET /api/v1/projects/${PROJECT}/activity`) return emptyActivityStream();
     // The page reads the open Proposals of the Chapter and the assistance settings. This Project has none of them.
@@ -215,6 +215,70 @@ it.each([3, 4] as const)("shows the Server text read-only for a version %i Journ
     } finally {
       closeTrackedDatabases(openDatabases);
       document.body.replaceChildren();
+      sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+      await deleteJournal(scenario.journalName);
+    }
+  });
+
+it("upgrades a version 5 Journal, opens the editor, and keeps the earlier rows unread and unsent", async () => {
+  const scenario = createBrowserScenario();
+  const server = journalServer(scenario);
+  const options = { baseUrl: location.origin, project: scenario.project, chapter: scenario.chapter,
+    profile: scenario.profile, fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto };
+  const openDatabases = new Set<IDBDatabase>();
+  await deleteJournal(scenario.journalName);
+  try {
+    const writing = await openEditorWorkspace(options);
+    requireEditorReady(writing);
+    trackDatabase(writing.database, openDatabases);
+    await appendAuthorEdit(writing, FIRST_APPEND_EDIT);
+    const rows = await restoreJournalVersion(writing.database, 5);
+
+    const upgraded = await openEditorWorkspace(options);
+    requireEditorReady(upgraded);
+    trackDatabase(upgraded.database, openDatabases);
+    // The editor shows the Server text and not the text of the earlier partition ("Base!").
+    expect({ body: upgraded.openedProjection.body, unsettled: upgraded.openedProjection.unsettled_intent_count })
+      .toEqual({ body: "Base", unsettled: 0 });
+    upgraded.database.close();
+    const kept = await journalRows(scenario.journalName, openDatabases);
+    expect({ version: kept.version, intents: kept.rows.intents }).toEqual({ version: 6, intents: rows.intents });
+    expect(server.unserved).toEqual([]);
+  } finally {
+    closeTrackedDatabases(openDatabases);
+    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+    await deleteJournal(scenario.journalName);
+  }
+});
+
+it("enters local recovery while a page of version 5 keeps the Journal open, and upgrades after that page closes",
+  async () => {
+    const scenario = createBrowserScenario();
+    const server = journalServer(scenario);
+    const options = { baseUrl: location.origin, project: scenario.project, chapter: scenario.chapter,
+      profile: scenario.profile, fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto };
+    const openDatabases = new Set<IDBDatabase>();
+    await deleteJournal(scenario.journalName);
+    try {
+      const writing = await openEditorWorkspace(options);
+      requireEditorReady(writing);
+      trackDatabase(writing.database, openDatabases);
+      await restoreJournalVersion(writing.database, 5);
+      // The page of version 5 keeps its connection and does not close it at a version change.
+      const earlier = await requestResult(indexedDB.open(scenario.journalName, 5));
+      trackDatabase(earlier, openDatabases);
+
+      expect(await openEditorWorkspace(options)).toMatchObject({ kind: "editor-read-only-recovery",
+        code: "local_journal_unavailable" });
+      earlier.close();
+      await expect.poll(async () => (await indexedDB.databases())
+        .find((database) => database.name === scenario.journalName)?.version).toBe(6);
+      const upgraded = await openEditorWorkspace(options);
+      requireEditorReady(upgraded);
+      trackDatabase(upgraded.database, openDatabases);
+      expect(server.unserved).toEqual([]);
+    } finally {
+      closeTrackedDatabases(openDatabases);
       sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
       await deleteJournal(scenario.journalName);
     }

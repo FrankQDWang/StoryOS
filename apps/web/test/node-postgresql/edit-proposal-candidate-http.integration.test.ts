@@ -116,13 +116,11 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
         request: sessionRequest,
       }),
     );
-    if (session.writer.kind !== "current_writer") throw new Error("expected current writer");
     const editRequest: ApplyAuthorEditRequest = {
-      command_schema: "storyos.command.apply-author-edit.request.v1",
+      command_schema: "storyos.command.apply-author-edit.request.v2",
       ...BINDING,
       correlation_id: id("c843"),
       editor_session_id: session.editor_session.editor_session_id,
-      writer_generation: session.writer.writer_generation,
       chapter_id: session.base_snapshot.chapter_id,
       expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
       expected_proposal_head_revision_ids: [opened.proposal.revision_id],
@@ -404,12 +402,10 @@ test("a long shared prefix keeps an exact comparison after a candidate edit and 
       "/api/v1/projects/{project_id}/editor-sessions", sessionRequest.command_schema,
       await digestCreateEditorSession(sessionRequest), id("cc32"), (antiForgery) => createEditorSession({
         baseUrl: started.baseUrl, projectId, fetchImpl, idempotencyKey: id("cc32"), antiForgery, request: sessionRequest }));
-    if (session.writer.kind !== "current_writer") throw new Error("expected current writer");
-    const writer = session.writer;
     async function authorEdit(ns: string, fields: Partial<ApplyAuthorEditRequest>, from: number, to: number, text: string) {
       const request: ApplyAuthorEditRequest = {
-        command_schema: "storyos.command.apply-author-edit.request.v1", ...BINDING, correlation_id: id(`${ns}1`),
-        editor_session_id: session.editor_session.editor_session_id, writer_generation: writer.writer_generation,
+        command_schema: "storyos.command.apply-author-edit.request.v2", ...BINDING, correlation_id: id(`${ns}1`),
+        editor_session_id: session.editor_session.editor_session_id,
         chapter_id: chapterId, expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
         expected_proposal_head_revision_ids: [], target_refs: session.base_snapshot.target_refs,
         observed_ownership_partition: "authoritative", editor_contract_revision: "storyos.editor-contract.release-1.v3",

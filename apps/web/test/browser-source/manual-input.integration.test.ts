@@ -17,12 +17,12 @@ import {
 } from "./scenario.ts";
 
 it.each([
-  { label: "validated stale refusal", schema: "storyos.problem.v1", fenced: true, earlier: "none" },
-  { label: "unrecognized Problem", schema: "unknown.problem.v1", fenced: false, earlier: "none" },
-  { label: "an earlier challenge observation", schema: "storyos.problem.v1", fenced: true, earlier: "challenge" },
-  { label: "an earlier admission observation", schema: "storyos.problem.v1", fenced: true, earlier: "admission" },
-  { label: "an earlier terminal observation", schema: "storyos.problem.v1", fenced: true, earlier: "rejected" },
-])("preserves input and outcome evidence after $label", async ({ schema, fenced, earlier }) => {
+  { label: "an unavailable store", schema: "storyos.problem.v1", earlier: "none" },
+  { label: "unrecognized Problem", schema: "unknown.problem.v1", earlier: "none" },
+  { label: "an earlier challenge observation", schema: "storyos.problem.v1", earlier: "challenge" },
+  { label: "an earlier admission observation", schema: "storyos.problem.v1", earlier: "admission" },
+  { label: "an earlier terminal observation", schema: "storyos.problem.v1", earlier: "rejected" },
+])("preserves input and outcome evidence after $label", async ({ schema, earlier }) => {
   const scenario = createBrowserScenario();
   let releaseOutcome!: () => void;
   let observeOutcome!: () => void;
@@ -42,14 +42,15 @@ it.each([
     }
     if (path.endsWith("/editor-sessions")) return jsonResponse(scenario.session);
     if (path.endsWith(`/editor-sessions/${SESSION}`)) {
-      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (path.endsWith("/manuscript/author-edits")) {
       counts.commands += 1;
       observeCommand();
       await heldCommand;
-      return jsonResponse({ schema_id: schema, code: "editor_writer_stale",
-        message: "The Editor Session is not the current writer." }, 412);
+      // The problem of a Server whose Project store is unavailable (`project_reader` of `storyos-server`).
+      return jsonResponse({ schema_id: schema, code: "project_store_unavailable",
+        message: "The Project store is unavailable." }, 503);
     }
     if (path.includes("/manuscript/author-edit-outcomes/")) {
       counts.outcomes += 1;
@@ -107,10 +108,9 @@ it.each([
     }
     releaseCommand();
     await Promise.race([outcomeStarted, submission]);
-    // The editor accepts no more input while the submission is unresolved or the writer is fenced.
+    // The editor accepts no more input while the submission is unresolved.
     expect(controller.canAcceptInput(false)).toBe(false);
-    expect(workspace.partition).toEqual(fenced
-      ? { ...oldPartition, disposition: "read_only_observer" } : oldPartition);
+    expect(workspace.partition).toEqual(oldPartition);
     expect(await requestResult(workspace.database.transaction("partitions")
       .objectStore("partitions").get(oldPartition.journal_partition_id)))
       .toEqual(workspace.partition);
@@ -119,7 +119,6 @@ it.each([
     expect(controller.snapshot().projection.body).toBe("Base retained");
     releaseOutcome();
     await submission;
-    if (fenced) await controller.flush();
     const after = await readJournalSnapshot(workspace);
     expect({ ...after, groups: [] }).toEqual(retained);
     expect(after.groups).toEqual(earlierGroups ?? [{ ...frozen[0], reconciliation: {
@@ -128,7 +127,9 @@ it.each([
     } }]);
     expect(counts).toEqual({ commands: 1,
       outcomes: earlier === "none" || earlier === "rejected" ? 1 : 2 });
-    expect(failures).toHaveLength(fenced ? 1 : 0);
+    // Only the terminal rejection of the earlier reader needs the attention of the author.
+    expect(failures.map((failure) => (failure as Error).message))
+      .toEqual(earlier === "rejected" ? ["Author Edit requires attention"] : []);
   } finally {
     releaseCommand();
     releaseOutcome();

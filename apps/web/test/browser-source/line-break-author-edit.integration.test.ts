@@ -71,7 +71,7 @@ it.each([
     }
     if (request === `POST ${projectPath}/editor-sessions`) return jsonResponse(scenario.session);
     if (request === `GET ${projectPath}/editor-sessions/${SESSION}`) {
-      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (request === `POST ${projectPath}/manuscript/author-edits`) {
       sent.push(JSON.parse(String(init?.body)));

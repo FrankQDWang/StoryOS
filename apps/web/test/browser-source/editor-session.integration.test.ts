@@ -72,7 +72,7 @@ it.each(["changed_head", "legacy_editor_contract"] as const)("preserves the comp
     requests.push(`${init?.method ?? "GET"} ${path}`);
     if (path === `/api/v1/projects/${PROJECT}/editor-sessions/${SESSION}`
       && (init?.method ?? "GET") === "GET") {
-      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     }
     throw new Error(`unexpected request: ${path}`);
   };
@@ -273,7 +273,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
   const scenario = createBrowserScenario();
   const freshSession: GetEditorSessionResponse = {
     ...scenario.session,
-    schema_id: "storyos.query.editor-session.response.v1",
+    schema_id: "storyos.query.editor-session.response.v2",
     correlation_id: "018f0000-0000-7001-8000-000000000037",
     base_snapshot: {
       ...scenario.session.base_snapshot,
@@ -317,7 +317,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
   let authorEditDigest: DigestValue | undefined;
   let canonicalSession: GetEditorSessionResponse = {
     ...scenario.session,
-    schema_id: "storyos.query.editor-session.response.v1",
+    schema_id: "storyos.query.editor-session.response.v2",
   };
   let nextZeroAuthorityResult: ZeroAuthorityResult | undefined;
   const zeroIds: Record<ZeroAuthorityResult, readonly [string, string, string]> = {
@@ -343,7 +343,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
     if (path.endsWith("/anti-forgery-challenges")) {
       const request = requireRequestBody(init);
       challengeRequests.push(request);
-      if (request.command_schema === "storyos.command.apply-author-edit.request.v1") {
+      if (request.command_schema === "storyos.command.apply-author-edit.request.v2") {
         authorEditDigest = requireDigestValue(request.canonical_command_digest, "command digest");
         if (failAuthorEditChallenge) {
           failAuthorEditChallenge = false;
@@ -690,7 +690,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       replaceBlockUnit(5, 5, "?"),
     ]);
     const editChallenges = challengeRequests.filter(
-      (request) => request.command_schema === "storyos.command.apply-author-edit.request.v1",
+      (request) => request.command_schema === "storyos.command.apply-author-edit.request.v2",
     );
     expect(editChallenges).toHaveLength(2);
     expect(editChallenges[0]?.idempotency_key).toBe(editChallenges[1]?.idempotency_key);
@@ -746,7 +746,6 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       working_set_partition_id: workspace.partition.journal_partition_id,
       project_scope: scenario.project.project_scope,
       editor_session_id: SESSION,
-      writer_generation: "1",
       limit_profile_revision: "storyos.foundation.absolute.v1",
       batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
       input_origin: options.origin,
@@ -897,7 +896,6 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         working_set_partition_id: workspace.partition.journal_partition_id,
         project_scope: scenario.project.project_scope,
         editor_session_id: SESSION,
-        writer_generation: "1",
         batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
         ordered_coverage: records.map((record) => ({
           local_intent_sequence: record.local_intent_sequence,
@@ -912,17 +910,16 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         api_major: 1,
         method: "POST",
         route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
-        command_schema: "storyos.command.apply-author-edit.request.v1",
+        command_schema: "storyos.command.apply-author-edit.request.v2",
         command_kind: "applyAuthorEdit",
         digest_profile: "storyos.command.applyAuthorEdit.jcs.v1",
         idempotency_key: group.idempotency_key,
         frozen_request_body: {
-          command_schema: "storyos.command.apply-author-edit.request.v1",
+          command_schema: "storyos.command.apply-author-edit.request.v2",
           client_contract_revision: "storyos.web-client.release-1.v3",
           security_policy_revision: "storyos.web-security-policy.release-1.v1",
           correlation_id: group.frozen_request_body.correlation_id,
           editor_session_id: SESSION,
-          writer_generation: "1",
           chapter_id: CHAPTER,
           expected_authoritative_revision_id: expectedHead,
           expected_proposal_head_revision_ids: [],
@@ -1039,15 +1036,6 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       text: "?",
       resultingBody: "x".repeat(1_048_577),
     })).rejects.toThrow(/limit failed/);
-    expect(await intentCount(workspace.database)).toBe(3);
-    workspace.partition.disposition = "read_only_observer";
-    await expect(appendAuthorEdit(workspace, {
-      from: 5,
-      to: 5,
-      text: "?",
-      resultingBody: "Base!?",
-    })).rejects.toThrow(/read only/);
-    workspace.partition.disposition = "current_writer_open";
     expect(await intentCount(workspace.database)).toBe(3);
 
     projection = await appendAuthorEdit(workspace, {

@@ -31,7 +31,6 @@ export async function beginAcceptanceAttempt(workspace: EditorReadyState,
   if ((schema as { version?: number } | undefined)?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(stored) !== JSON.stringify(flight)
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
-    || workspace.partition.disposition !== "current_writer_open"
     || (group as { settlement?: { kind?: string } })?.settlement?.kind !== "unsettled"
     || JSON.stringify((group as { frozen_request_body?: unknown })?.frozen_request_body)
       !== JSON.stringify(flight.request)

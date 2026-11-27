@@ -9,6 +9,10 @@ use tokio_postgres::NoTls;
 
 use crate::statement_cache::Client;
 
+/// The command kinds that the domain keeps for the rows of the past, although no route sends them
+/// now. ADR 0107 removed the takeover command, and its past Admissions and Receipts stay.
+const HISTORY_COMMAND_KINDS: &[&str] = &["takeOverProjectWriter"];
+
 async fn domain_members(client: &Client, domain: &str) -> BTreeSet<String> {
     let definition: String = client
         .query_one(
@@ -61,7 +65,10 @@ async fn the_command_and_event_kind_domains_equal_the_route_catalog() {
                     .iter()
                     .filter(|operation| operation["kind"] == "command"),
                 "operation_id",
-            ),
+            )
+            .into_iter()
+            .chain(HISTORY_COMMAND_KINDS.iter().map(|kind| (*kind).to_owned()))
+            .collect::<BTreeSet<_>>(),
             catalog_strings(catalog["events"].as_array().unwrap().iter(), "event_kind"),
         )
     );

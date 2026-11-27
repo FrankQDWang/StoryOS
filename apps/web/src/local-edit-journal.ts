@@ -31,7 +31,7 @@ import {
 import { uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
-export const JOURNAL_DATABASE_VERSION = 5;
+export const JOURNAL_DATABASE_VERSION = 6;
 export const JOURNAL_OBJECT_STORES = Object.freeze([
   "metadata",
   "partitions",
@@ -106,7 +106,6 @@ export function mayAppendJournalSubmissionRecord(
     && elapsed <= AUTHOR_EDIT_BATCH_IDLE_MS
     && first.journal_partition_id === next.journal_partition_id
     && first.editor_session_id === next.editor_session_id
-    && first.writer_generation === next.writer_generation
     && first.chapter_object_id === next.chapter_object_id
     && first.base_snapshot_id === next.base_snapshot_id
     && first.base_activity_position === next.base_activity_position
@@ -653,12 +652,11 @@ async function validateCoverage(
     if (!UUID.test(group.journal_submission_group_id ?? "")
       || JSON.stringify(group.project_scope) !== JSON.stringify(workspace.partition.project_scope)
       || group.editor_session_id !== workspace.partition.editor_session_id
-      || group.writer_generation !== workspace.partition.writer_generation
       || group.action_class !== "direct_editor_action"
       || group.api_major !== 1
       || group.method !== "POST"
       || group.route_template !== "/api/v1/projects/{project_id}/manuscript/author-edits"
-      || group.command_schema !== "storyos.command.apply-author-edit.request.v1"
+      || group.command_schema !== "storyos.command.apply-author-edit.request.v2"
       || group.command_kind !== "applyAuthorEdit"
       || group.digest_profile !== "storyos.command.applyAuthorEdit.jcs.v1"
       || !UUID.test(group.idempotency_key ?? "")
@@ -666,7 +664,6 @@ async function validateCoverage(
       || request?.client_contract_revision !== workspace.partition.client_contract_revision
       || request?.security_policy_revision !== workspace.partition.security_policy_revision
       || request?.editor_session_id !== workspace.partition.editor_session_id
-      || request?.writer_generation !== workspace.partition.writer_generation
       || request?.chapter_id !== firstRecord?.chapter_object_id
       || request?.expected_authoritative_revision_id
         !== firstRecord?.expected_authoritative_heads[0]
@@ -720,7 +717,6 @@ export async function validateJournalSnapshot(
   for (const record of records) {
     if (record.journal_partition_id !== workspace.partition.journal_partition_id
       || record.editor_session_id !== workspace.partition.editor_session_id
-      || record.writer_generation !== workspace.partition.writer_generation
       || record.limit_profile_revision !== workspace.partition.limit_profile_revision
       || JSON.stringify(record.project_scope) !== JSON.stringify(workspace.partition.project_scope)
       || !Number.isSafeInteger(record.local_intent_sequence)
@@ -973,6 +969,24 @@ function closedJournalGroup(snapshot: ValidatedJournalSnapshot, base: EditorBase
   };
 }
 
+/**
+ * Tells if the partition of `workspace` has Author Edit work that the Server does not have, by the rule of the working
+ * set (ADR 0036): a group that has no payload collection and is not closed, or a record that no other group covers. A
+ * load keeps the stored Editor Session when its partition has such work (ADR 0107).
+ */
+export async function journalHasOpenWork(workspace: EditorWorkspace): Promise<boolean> {
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const closed = closedJournalGroup(snapshot, workspace.session.base_snapshot);
+  const covered = new Set<number>();
+  for (const group of snapshot.groups) {
+    const later = snapshot.records.filter((record) =>
+      record.local_intent_sequence > group.covered_sequence_range.last);
+    if (group.payload_collection === undefined && !closed(group, later)) return true;
+    for (const item of group.ordered_coverage) covered.add(item.local_intent_sequence);
+  }
+  return snapshot.records.some((record) => !covered.has(record.local_intent_sequence));
+}
+
 async function prepareJournalAppend(workspace: EditorWorkspace) {
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   if (await retireCollectedJournalPrefix(workspace, snapshot,
@@ -1194,9 +1208,6 @@ async function persistAuthorEditUnit(
   },
   cryptoImpl: Crypto,
 ): Promise<PendingEditProjection> {
-  if (workspace.partition.disposition !== "current_writer_open") {
-    throw new Error("Editor Session is read only");
-  }
   const createdAt = edit.createdAt ?? new Date().toISOString();
   const inputOrigin = edit.inputOrigin;
   const undoGroupId = edit.undoGroupId ?? uuidV7(cryptoImpl);
@@ -1412,7 +1423,6 @@ async function persistAuthorEditUnit(
     journal_partition_id: partitionId,
     project_scope: workspace.partition.project_scope,
     editor_session_id: workspace.partition.editor_session_id,
-    writer_generation: workspace.partition.writer_generation,
     limit_profile_revision: workspace.partition.limit_profile_revision,
     batch_policy_revision: AUTHOR_EDIT_BATCH_POLICY_REVISION,
     input_origin: inputOrigin,

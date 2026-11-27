@@ -36,7 +36,7 @@ The two complementary deterministic gates for an Author Edit. Browser integratio
 _Avoid_: UI-only authority proof, server-only input-continuity proof, raw editor event as command truth
 
 **Author Command Admission**:
-The immutable Operational Record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session and writer generation, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; post-admission uncertainty remains nonterminal `outcome_unknown`, recovery may invoke only the same unexpired fully matching direct edit, and an explicit, expired, changed, or unrecoverable command requires author reconfirmation. `outcome_unknown` is a reported condition, never a settlement. Missing response never proves non-commit.
+The immutable Operational Record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; post-admission uncertainty remains nonterminal `outcome_unknown`, recovery may invoke only the same unexpired fully matching direct edit, and an explicit, expired, changed, or unrecoverable command requires author reconfirmation. `outcome_unknown` is a reported condition, never a settlement. Missing response never proves non-commit.
 _Avoid_: Physical-human attestation, client-supplied actor, session role as authority, Approval, reusable authorization token, missing response as failure
 
 **Pre-Admission Refusal Record**:
@@ -44,11 +44,11 @@ An immutable, bounded, sanitized Operational Record created when StoryOS refuses
 _Avoid_: Author Command Admission, rejected request copy, foreign-object audit oracle
 
 **Editor Session**:
-One browser editing session for an exact User and Project Scope, identified by `EditorSessionId` and governed by the current Project writer generation. It owns local continuity and projection state while StoryOS Core and PostgreSQL retain authority. Its base snapshot is a persisted Canonical Query Snapshot with the same identity ([ADR 0060](../adr/0060-use-one-snapshot-identity-for-the-editor-session-base-and-its-canonical-query-snapshot.md)).
+One browser editing session for an exact User and Project Scope, identified by `EditorSessionId`. Each open Editor Session of the owner writes ([ADR 0107](../adr/0107-let-each-tab-of-a-project-write-and-remove-the-project-writer-lock.md)). It owns local continuity and projection state while StoryOS Core and PostgreSQL retain authority. Its base snapshot is a persisted Canonical Query Snapshot with the same identity ([ADR 0060](../adr/0060-use-one-snapshot-identity-for-the-editor-session-base-and-its-canonical-query-snapshot.md)).
 _Avoid_: Browser tab as authority, Project identity, server transaction
 
 **Local Edit Journal**:
-The Project Scope-bound IndexedDB record of ordered, unsettled author editor intents for one Editor Session and writer generation. It preserves reload and crash continuity while remaining a non-authoritative input to Author Command Admission and Core settlement. Input during a Challenge wait enters it at once, as records that follow the unsettled group (ADR 0065). A Journal of an earlier version does not open, and it stays unchanged ([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)).
+The Project Scope-bound IndexedDB record of ordered, unsettled author editor intents for one Editor Session. It preserves reload and crash continuity while remaining a non-authoritative input to Author Command Admission and Core settlement. Input during a Challenge wait enters it at once, as records that follow the unsettled group (ADR 0065). A Journal of an earlier version does not open, and it stays unchanged ([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)).
 _Avoid_: Autosaved Authoritative State, server event log, ProseMirror history as truth
 
 **Pending Edit Projection**:
@@ -56,7 +56,7 @@ The immediate author-facing editor view composed from one durable Server Snapsho
 _Avoid_: Optimistic authority, hidden pending state, network acknowledgement as domain truth
 
 **Arriving Chapter**:
-The Chapter that the author selected in a tab that holds the writer, from the selection until the tab has the editor of that Chapter on its Editor Session base, or until the switch ends with another result. The tab shows it at once from a copy that the tab keeps in memory ([ADR 0105](../adr/0105-let-the-author-type-in-a-selected-chapter-before-the-chapter-switch-settles-and-hold-that-input-in-the-tab.md)).
+The Chapter that the author selected in a tab, from the selection until the tab has the editor of that Chapter on its Editor Session base, or until the switch ends with another result. The tab shows it at once from a copy that the tab keeps in memory ([ADR 0105](../adr/0105-let-the-author-type-in-a-selected-chapter-before-the-chapter-switch-settles-and-hold-that-input-in-the-tab.md)).
 _Avoid_: Current Chapter, provisional Chapter, preview Chapter
 
 **Arrival Input**:

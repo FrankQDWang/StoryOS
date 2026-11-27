@@ -111,16 +111,6 @@ const CAPABILITIES: &[Capability] = &[
         operation_actions: &[],
     },
     Capability {
-        id: "editor_session_takeover",
-        journey: "Editor Session and writer-generation takeover",
-        required_operations: &[
-            "createEditorSession",
-            "getEditorSession",
-            "takeOverProjectWriter",
-        ],
-        operation_actions: &[],
-    },
-    Capability {
         id: "snapshot_resync",
         journey: "Snapshot and replay-generation resynchronization",
         required_operations: &["getSnapshot", "activityStream"],

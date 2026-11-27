@@ -264,9 +264,7 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
       "unavailable");
     await expect(page.locator('[data-assistant-availability="unavailable"] .assistant-status').first())
       .toHaveText(EMPTY_LINE);
-    // The editor session of the first Server still holds the writer lease, because that Server stopped before the page
-    // released it. So the author takes over the writing, as after each other end of a session.
-    await page.locator("[data-take-over-writer]").click();
+    // The Editor Session of the first Server still writes after the restart, with no click (ADR 0107).
     await page.locator(EDITOR).waitFor();
     await typeInChapter(setup.chapterId, ["雨停了，林舟把船推下了水。"]);
     await expect.poll(() => chapterText(setup.chapterId), { timeout: 10_000 }).toContain("林舟把船推下了水");
@@ -287,11 +285,10 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
           AND status IN ('queued', 'claimed', 'waiting', 'paused')))::text`), "0");
     // The editor can send the typed lines of one Chapter in one or more Author Edits, so the count of that kind is not
     // a fixed number: each typed Chapter added at least one. Each other kind has its exact count: the two Chapter
-    // selections, the takeover of step 5, and the two Runs.
+    // selections and the two Runs.
     const edits = await authorEdits();
     await assertProjectReceipts([project], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,
-      createVolume: 1, createChapter: 2, setCurrentChapter: 2, applyAuthorEdit: edits, createAgentRun: 2,
-      takeOverProjectWriter: 1 } });
+      createVolume: 1, createChapter: 2, setCurrentChapter: 2, applyAuthorEdit: edits, createAgentRun: 2 } });
   } finally {
     for (const close of started.reverse()) await close();
   }

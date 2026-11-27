@@ -43,7 +43,6 @@ pub struct ApplyAuthorEditRequest {
     pub security_policy_revision: String,
     pub correlation_id: String,
     pub editor_session_id: String,
-    pub writer_generation: String,
     pub chapter_id: String,
     pub expected_authoritative_revision_id: String,
     pub expected_proposal_head_revision_ids: Vec<String>,
@@ -127,6 +126,7 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "applyAuthorEdit")]
     #[ts(rename = "applyAuthorEdit")]
     ApplyAuthorEdit,
+    // A history kind: the Receipt of a writer takeover from before ADR 0107. No command makes it now.
     #[serde(rename = "takeOverProjectWriter")]
     #[ts(rename = "takeOverProjectWriter")]
     TakeOverProjectWriter,

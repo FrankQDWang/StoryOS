@@ -4,8 +4,7 @@ use storyos_application::{
 use storyos_core::{TransitionOutcome, UndoLatestAuthorActionConflict};
 
 use super::command_admission::{
-    Admitted, BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch,
-    SchemaMismatch, TargetValidation, admit, controlled_project,
+    Admitted, BodyValidation, ProjectCommandRoute, TargetValidation, admit, controlled_project,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -17,11 +16,8 @@ const UNDO_LATEST_AUTHOR_ACTION: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::UNDO_LATEST_AUTHOR_ACTION_PATH,
     schema_id: contracts::UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID,
     digest_profile: contracts::UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE,
-    revision_mismatch: RevisionMismatch::InvalidRequest,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
     target_validation: TargetValidation::AfterContentType,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn undo_latest_author_action(

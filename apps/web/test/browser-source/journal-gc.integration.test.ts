@@ -44,9 +44,8 @@ it("collects Journal payload only after settlement and a durable successor", asy
   const scenario = createBrowserScenario();
   const freshSession: GetEditorSessionResponse = {
     ...scenario.session,
-    schema_id: "storyos.query.editor-session.response.v1",
+    schema_id: "storyos.query.editor-session.response.v2",
     correlation_id: "018f0000-0000-7001-8000-000000000091",
-    writer: { kind: "current_writer", writer_generation: "1" },
     base_snapshot: {
       ...scenario.session.base_snapshot,
       snapshot_id: NEXT_SNAPSHOT,
@@ -62,14 +61,14 @@ it("collects Journal payload only after settlement and a durable successor", asy
   let lastIdempotencyKey: string | undefined;
   let canonicalSession: GetEditorSessionResponse = {
     ...scenario.session,
-    schema_id: "storyos.query.editor-session.response.v1",
+    schema_id: "storyos.query.editor-session.response.v2",
   };
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     expect(path).not.toMatch(/draft/i);
     if (path.endsWith("/anti-forgery-challenges")) {
       const request = requireRequestBody(init);
-      if (request.command_schema === "storyos.command.apply-author-edit.request.v1") {
+      if (request.command_schema === "storyos.command.apply-author-edit.request.v2") {
         commandDigest = requireDigestValue(request.canonical_command_digest, "command digest");
       }
       return jsonResponse({
@@ -153,8 +152,6 @@ it("collects Journal payload only after settlement and a durable successor", asy
       collection_fence_id: fenceId,
       journal_partition_id: workspace.partition.journal_partition_id,
       project_scope: scenario.project.project_scope,
-      writer_generation: "1",
-      partition_disposition: "current_writer_open",
       collected_groups: [{
         journal_submission_group_id: group.journal_submission_group_id,
         covered_sequence_range: { first: 1, last: 1 },

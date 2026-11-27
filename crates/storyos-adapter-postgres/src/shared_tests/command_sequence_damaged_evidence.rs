@@ -17,7 +17,6 @@ pub(crate) enum ReplayError {
     HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
-    WriterIneligible,
     Unavailable,
 }
 
@@ -63,7 +62,6 @@ impl From<ProjectCommandError> for ReplayError {
             }
             ProjectCommandError::InvalidChallenge => Self::InvalidChallenge,
             ProjectCommandError::MissingProject => Self::MissingProject,
-            ProjectCommandError::WriterIneligible => Self::WriterIneligible,
             ProjectCommandError::Unavailable(_) => Self::Unavailable,
         }
     }

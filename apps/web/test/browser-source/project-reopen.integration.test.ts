@@ -7,7 +7,6 @@ import rejectionFixture from "../../../../generated/golden-wire/storyos-public-r
 import setCurrentChapterFixture from "../../../../generated/golden-wire/storyos-public-release-1/set-current-chapter.json";
 import sourcesFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-research-sources.json";
 import skillsFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-skills.json";
-import takeoverFixture from "../../../../generated/golden-wire/storyos-public-release-1/take-over-project-writer.json";
 import updateChapterFixture from "../../../../generated/golden-wire/storyos-public-release-1/update-chapter.json";
 import updateProjectFixture from "../../../../generated/golden-wire/storyos-public-release-1/update-project.json";
 import { digestAcceptProposal, digestRejectProposalOperations }
@@ -17,7 +16,6 @@ import type { AcceptProposalRequest, GetEditorSessionResponse, RejectProposalOpe
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { openControlledProject } from "../../src/boot.ts";
-import { storedActivityStreamCursor } from "../../src/project-activity-sync.ts";
 import { POINTER_STAY_MS } from "../../src/chapter-copies.ts";
 import type { ChallengeAdmissionTimers } from "../../src/challenge-admission-wait.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
@@ -32,13 +30,11 @@ const P = `/api/v1/projects/${PROJECT}`;
 const CHAPTER_B = setCurrentChapterFixture.project.open.current_chapter_id;
 const REVISION_B = "018f0000-0000-7001-8000-000000000805";
 const SWITCH_SNAPSHOT = "018f0000-0000-7001-8000-000000000831";
-const TAKEOVER_SNAPSHOT = "018f0000-0000-7001-8000-000000000832";
-const PRIOR_SESSION = "018f0000-0000-7001-8000-000000000833";
-const SECOND_SESSION = "018f0000-0000-7001-8000-000000000837";
-// The Snapshot of a takeover by another Editor Session.
-const ELSEWHERE_SNAPSHOT = "018f0000-0000-7001-8000-000000000839";
+// The Snapshot of a switch in another tab.
 const ELSEWHERE_SWITCH_SNAPSHOT = "018f0000-0000-7001-8000-000000000840";
 const ACCEPTANCE_SNAPSHOT = "018f0000-0000-7001-8000-000000000834";
+// The Editor Session that a reload creates when the stored Editor Session has an earlier base (ADR 0107).
+const LATER_SESSION = "018f0000-0000-7001-8000-000000000841";
 const ACCEPTED_REVISION = "018f0000-0000-7001-8000-000000000806";
 const ACCEPTANCE_COMMIT = "018f0000-0000-7001-8000-000000000835";
 // The Chapter A revision and the Snapshot of an edit in another tab, which writes the candidate text by hand.
@@ -62,7 +58,6 @@ const TREE = `GET ${P}/manuscript/tree`;
 const STATISTICS = `GET ${P}/manuscript/statistics`;
 const ACTIVITY_READ = `GET ${P}/activity`;
 const SWITCH = `PUT ${P}/current-chapter`;
-const TAKEOVER = `POST ${P}/editor-sessions/${SESSION}/takeovers`;
 const PROPOSAL = { ...proposalFixture.proposal, chapter_id: CHAPTER, manuscript_block_id: BLOCK,
   base_authoritative_revision_id: REVISION, operations: proposalFixture.proposal.operations
     .map((operation) => ({ ...operation, manuscript_block_id: BLOCK })) };
@@ -94,13 +89,10 @@ const OPEN_READS = [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER), openProp
 const ACCEPTANCE = `POST ${P}/proposals/${PROPOSAL.proposal_id}/acceptances`;
 const REJECTION = `POST ${P}/proposals/${PROPOSAL.proposal_id}/rejections`;
 
-type Writer = GetEditorSessionResponse["writer"];
-
 /** The command of each route template that a Challenge names. */
 const CHALLENGE_ROUTES: Record<string, string> = {
   "POST /api/v1/projects/{project_id}/editor-sessions": SESSION_CREATE,
   "PUT /api/v1/projects/{project_id}/current-chapter": SWITCH,
-  "POST /api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers": TAKEOVER,
   "POST /api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances": ACCEPTANCE,
   "POST /api/v1/projects/{project_id}/proposals/{proposal_id}/rejections": REJECTION,
   "PATCH /api/v1/projects/{project_id}/chapters/{chapter_id}": RENAME,
@@ -110,52 +102,46 @@ const CHALLENGE_ROUTES: Record<string, string> = {
 /**
  * A fake Server of one Project with Chapters A (current) and B. It serves only the `reads` and the `commands` of the
  * test (the creation of an Editor Session too), and a Challenge for one of these commands. It records each other
- * request and throws. It records the start and the end of each request, and each response body that the client read. A switch, a takeover, and an applied Acceptance
- * settle a new Snapshot, which the Editor Session base, the Chapter read, and the tree name. `acceptance` gives the
- * effect of an Acceptance. `takeoverAfterAcceptance` makes another tab take over the writer and switch to Chapter B
- * after the Acceptance settles: the Editor Session of this page keeps its base. A Rejection removes the suggestion from
- * the open suggestions. `assistant` gives the availability of the assistance read and serves the Skills; with no
- * `assistant`, both reads answer a 503 problem. `holdAfter` holds the next request of each given name after the
- * trigger request ends, until `release`. After `answerBeforeHold(names)`, a held request of these names has the answer
- * of the Server at its start. `holdEach` holds each request until `release`. `unavailable` answers the given
- * requests with a 503 problem. `lost` applies the given requests and then loses their response. A `late` Acceptance
- * applies at the first Proposal read after the next Chapter A read and Editor Session read. `takeover` and
- * `rejection` give the effect of these commands. Before a `conflicted` Rejection, another tab changes the text of
- * Chapter A, and the Operation stays pending. Before a `refused` Rejection, another tab applies the Operation.
- * `decideElsewhere` is a change of the Proposal in another tab: a new Proposal revision, or a rejection of its
- * Operation. As on the Server (`reject_proposal_operations.rs`), a Rejection of an earlier Proposal revision gets
- * `refused stale_proposal_revision`, and a Rejection of an Operation that is not pending gets `refused
- * operation_not_pending`; these refusals change nothing. `other`
- * adds a second open Proposal. As on the Server, only the first created Editor Session holds the writer; a later
- * creation gives a read-only Session. A Session with writer generation above 1 has the Snapshot of its takeover at
- * position 1. A rename of Chapter A changes its title in the tree and advances the tree revision. A
- * rename of the Project changes its title, advances its revision, and records the expected revision.
- * `renameElsewhere` is a rename of the Project in another tab. `takeOverElsewhere(generation)` is a takeover by the
- * Editor Session of another tab: the Session of this tab is read-only with `superseded_by_takeover`, and the
- * takeover settles a new Snapshot. `switchElsewhere` is a switch to Chapter A in a duplicated tab with the same Editor
- * Session, so the Session base follows the switch. `failNext(names)` answers the next request of each given name with a
- * 503 problem. `releaseOnly(names)` releases only the held requests of the given names. With
- * `proposalResult`, the Run of the Conversation has a Proposal result with a change in Chapter A. With `third`, the
- * Project also has Chapter C. After `earlierChapterB(true)`, a Chapter B read gives the text of an earlier Revision.
+ * request and throws. It records the start and the end of each request, and each response body that the client read.
+ * A switch and an applied Acceptance settle a new Snapshot, which the Editor Session base, the Chapter read, and the
+ * tree name. `acceptance` gives the effect of an Acceptance. `switchAfterAcceptance` makes another tab switch to
+ * Chapter B after the Acceptance settles. As on the Server, that switch moves only the base of the Editor Session of
+ * the other tab: the read of the Editor Session of this page keeps its base, and a new creation has the base of the
+ * switch. A Rejection removes the suggestion from the open suggestions. `assistant` gives the availability of
+ * the assistance read and serves the Skills; with no `assistant`, both reads answer a 503 problem. `holdAfter` holds
+ * the next request of each given name after the trigger request ends, until `release`. After
+ * `answerBeforeHold(names)`, a held request of these names has the answer of the Server at its start. `holdEach` holds
+ * each request until `release`. `unavailable` answers the given requests with a 503 problem. `lost` applies the given
+ * requests and then loses their response. A `late` Acceptance applies at the first Proposal read after the next
+ * Chapter A read and Editor Session read. `rejection` gives the effect of a Rejection. Before a `conflicted` Rejection,
+ * another tab changes the text of Chapter A, and the Operation stays pending. Before a `refused` Rejection, another tab
+ * applies the Operation. `decideElsewhere` is a change of the Proposal in another tab: a new Proposal revision, or a
+ * rejection of its Operation. As on the Server (`reject_proposal_operations.rs`), a Rejection of an earlier Proposal
+ * revision gets `refused stale_proposal_revision`, and a Rejection of an Operation that is not pending gets `refused
+ * operation_not_pending`; these refusals change nothing. `other` adds a second open Proposal. Each created Editor
+ * Session is an open Session that can write (ADR 0107). A rename of Chapter A changes its title in the tree and advances
+ * the tree revision. A rename of the Project changes its title, advances its revision, and records the expected
+ * revision. `renameElsewhere` is a rename of the Project in another tab. `switchElsewhere` is a switch to Chapter A in
+ * another tab, so the Session base follows the switch. `failNext(names)` answers the next request of each given name
+ * with a 503 problem. `releaseOnly(names)` releases only the held requests of the given names. With `proposalResult`,
+ * the Run of the Conversation has a Proposal result with a change in Chapter A. With `third`, the Project also has
+ * Chapter C. After `earlierChapterB(true)`, a Chapter B read gives the text of an earlier Revision.
  */
-function fakeServer({ reads, writer = { kind: "current_writer", writer_generation: "1" }, commands = [],
-  proposals = false, acceptance = "refused", takeoverAfterAcceptance = false, assistant, unavailable = [], lost = [],
-  takeover = "applied", rejection = "resolved", other = false, proposalResult = false, third = false }: {
-  reads: string[]; writer?: Writer; commands?: string[]; proposals?: boolean;
-  acceptance?: "refused" | "applied" | "late"; takeoverAfterAcceptance?: boolean;
+function fakeServer({ reads, commands = [], proposals = false, acceptance = "refused", switchAfterAcceptance = false,
+  assistant, unavailable = [], lost = [], rejection = "resolved", other = false, proposalResult = false,
+  third = false }: {
+  reads: string[]; commands?: string[]; proposals?: boolean;
+  acceptance?: "refused" | "applied" | "late"; switchAfterAcceptance?: boolean;
   assistant?: "available" | "unavailable"; unavailable?: string[]; lost?: string[];
-  takeover?: "applied" | "compare_failed"; rejection?: "resolved" | "conflicted" | "refused"; other?: boolean;
-  proposalResult?: boolean; third?: boolean;
+  rejection?: "resolved" | "conflicted" | "refused"; other?: boolean; proposalResult?: boolean; third?: boolean;
 }) {
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
-  const takenOver = writer.kind === "current_writer" && writer.writer_generation !== "1";
-  const state = { current: CHAPTER, writer, snapshot: { id: EDITOR_SNAPSHOT, position: takenOver ? "1" : "0" },
-    accepted: false,
-    rejected: false, revised: false, edited: false, title: "Chapter A", treeRevision: 3, created: 0,
+  const state = { current: CHAPTER, snapshot: { id: EDITOR_SNAPSHOT, position: "0" }, accepted: false,
+    rejected: false, revised: false, edited: false, title: "Chapter A", treeRevision: 3,
     projectTitle: "Project A", projectRevision: 1, projectRenames: [] as string[],
-    superseded: undefined as GetEditorSessionResponse | undefined,
-    late: undefined as { chapter: boolean; session: boolean } | undefined, earlierB: false };
+    late: undefined as { chapter: boolean; session: boolean } | undefined, earlierB: false,
+    storedBase: undefined as GetEditorSessionResponse | undefined };
   const project = () => ({ ...scenario.project.project, title: state.projectTitle, open: open() });
   const revisionA = () => state.accepted ? chapterRevision(ACCEPTED_REVISION, PROPOSAL.candidate_text)
     : state.edited ? chapterRevision(EDITED_REVISION, PROPOSAL.candidate_text) : chapterRevision(REVISION, "Base");
@@ -170,7 +156,6 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   const open = () => ({ kind: "current_chapter" as const, current_chapter_id: state.current });
   const current = () => state.revised ? REVISED_PROPOSAL : PROPOSAL;
   const session = (): GetEditorSessionResponse => {
-    if (state.superseded !== undefined) return state.superseded;
     const base = state.current === CHAPTER ? { ...scenario.session.base_snapshot,
       authoritative_head_revision_id: revisionA().revision_id, materialized_revision: revisionA(),
       materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
@@ -181,7 +166,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
       materialized_revision: chapterRevision(REVISION_B, CHAPTER_B_BODY),
       materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
         value_hex_lowercase: CHAPTER_B_BODY_DIGEST } };
-    return { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1", writer: state.writer,
+    return { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2",
       base_snapshot: { ...base, snapshot_id: state.snapshot.id, project_activity_position: state.snapshot.position } };
   };
   const chapter = (chapterId: string) => chapterId === CHAPTER
@@ -238,15 +223,13 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         limit_profile_revision: scenario.profile.limit_profile_revision });
     }
     if (name === SESSION_CREATE) {
-      state.created += 1;
-      return jsonResponse(state.created === 1 ? { ...session(), schema_id: scenario.session.schema_id }
-        : { ...session(), schema_id: scenario.session.schema_id,
-          editor_session: { ...scenario.session.editor_session, editor_session_id: SECOND_SESSION },
-          writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" } });
+      // After the switch of another tab, a creation gives a new Editor Session with the base of that switch.
+      return jsonResponse({ ...session(), schema_id: scenario.session.schema_id, editor_session:
+        { ...scenario.session.editor_session, editor_session_id: state.storedBase ? LATER_SESSION : SESSION } });
     }
     if (name === SESSION_READ) {
       if (state.late !== undefined) state.late.session = true;
-      return jsonResponse(session());
+      return jsonResponse(state.storedBase ?? session());
     }
     if (name === TREE) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
@@ -346,26 +329,6 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         receipt: { ...setCurrentChapterFixture.receipt, expected_heads: [REVISION_B], prior_heads: [REVISION_B],
           resulting_heads: [REVISION_B] } });
     }
-    if (name === TAKEOVER && takeover === "compare_failed") {
-      // Another tab took the writer after the admission of this takeover, so the Server changes nothing.
-      return jsonResponse({ ...takeoverFixture,
-        receipt: { ...takeoverFixture.receipt, expected_heads: [REVISION], prior_heads: [REVISION],
-          resulting_heads: [REVISION] },
-        result: { kind: "takeover_compare_failed", observed_writer_generation: "1", current_writer_generation: "2",
-          current_writer_projection: { kind: "read_only", observed_writer_generation: "2", reason: "secondary_session" },
-          current_snapshot_id: state.snapshot.id, current_snapshot_activity_position: state.snapshot.position,
-          current_heads: [REVISION], reason: "writer_generation_advanced_after_admission" } });
-    }
-    if (name === TAKEOVER) {
-      state.writer = { kind: "current_writer", writer_generation: "2" };
-      settle(TAKEOVER_SNAPSHOT);
-      return jsonResponse({ ...takeoverFixture,
-        receipt: { ...takeoverFixture.receipt, expected_heads: [REVISION], prior_heads: [REVISION],
-          resulting_heads: [REVISION] },
-        result: { ...takeoverFixture.result, prior_editor_session_id: PRIOR_SESSION,
-          resulting_editor_session_id: SESSION, resulting_heads: [REVISION], resulting_snapshot_id: TAKEOVER_SNAPSHOT,
-          resulting_snapshot_activity_position: state.snapshot.position } });
-    }
     if (name === ACCEPTANCE) {
       // A refused Acceptance changes no head, so the Server keeps its Snapshot. An applied one settles a Snapshot.
       const request = JSON.parse(String(init?.body)) as AcceptProposalRequest;
@@ -379,12 +342,12 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         settle(ACCEPTANCE_SNAPSHOT);
       }
       const settled = project();
-      if (takeoverAfterAcceptance) {
-        // The Server keeps the base of the Editor Session of this page, and the Session is read-only now.
-        state.superseded = { ...session(), writer: { kind: "read_only", observed_writer_generation: "2",
-          reason: "superseded_by_takeover" } };
+      if (switchAfterAcceptance) {
+        // Another tab switches to Chapter B. As on the Server, the switch moves only the base of the Editor Session
+        // of the other tab, so the Editor Session of this page keeps its base on Chapter A.
+        state.storedBase = session();
         state.current = CHAPTER_B;
-        settle(TAKEOVER_SNAPSHOT);
+        settle(ELSEWHERE_SWITCH_SNAPSHOT);
       }
       return jsonResponse({ schema_id: "storyos.command.accept-proposal.response.v1",
         correlation_id: input.correlation_id, project_scope: scope, command_id: "018f0000-0000-7001-8000-000000000e05",
@@ -474,12 +437,6 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
       else state.rejected = true;
     },
     renameElsewhere(title: string) { state.projectTitle = title; state.projectRevision += 1; },
-    takeOverElsewhere(generation: string) {
-      // The Server keeps the base of this Session, and the takeover settles a new Snapshot.
-      state.superseded = { ...session(), writer: { kind: "read_only", observed_writer_generation: generation,
-        reason: "superseded_by_takeover" } };
-      settle(ELSEWHERE_SNAPSHOT);
-    },
     switchElsewhere() {
       state.current = CHAPTER;
       settle(ELSEWHERE_SWITCH_SNAPSHOT);
@@ -599,7 +556,7 @@ it("opens a Project with its stored Editor Session with the independent reads in
     unexpected: server.log.unexpected }).toEqual({ kind: "project-ready", editor: "editor-ready", unexpected: [] });
 });
 
-it("creates no Editor Session when the Chapter read of a new tab fails, and the next open is the writer", async () => {
+it("creates no Editor Session when the Chapter read of a new tab fails, and the next open creates one", async () => {
   const unavailable = [chapterRead(CHAPTER)];
   const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER)], commands: [SESSION_CREATE],
     unavailable });
@@ -616,12 +573,10 @@ it("creates no Editor Session when the Chapter read of a new tab fails, and the 
 
   const opened = await open();
 
-  // Only the first created Session holds the writer, so an earlier creation would make this open read-only.
   expect({ failed: failed.kind, created, retry: server.log.started.slice(retry)
     .filter((name) => name === SESSION_CREATE).length, kind: opened.kind,
-    writer: opened.kind === "project-ready" && opened.editor.kind === "editor-ready"
-      ? opened.editor.session.writer.kind : "none", unexpected: server.log.unexpected }).toEqual({
-    failed: "project-blocked", created: 0, retry: 1, kind: "project-ready", writer: "current_writer", unexpected: [] });
+    editor: opened.kind === "project-ready" ? opened.editor.kind : "none", unexpected: server.log.unexpected }).toEqual({
+    failed: "project-blocked", created: 0, retry: 1, kind: "project-ready", editor: "editor-ready", unexpected: [] });
 });
 
 it("reopens after a Chapter switch with the Project, the list, the Chapter, and the Editor Session reads together",
@@ -695,38 +650,11 @@ it("reopens after an applied acceptance with the Project, the list, the Chapter,
       .toEqual({ decisions: 1, open: [LIST, PROJECT_READ].sort(), unexpected: [] });
   });
 
-it("reopens after a takeover with the Project, the list, the Chapter, and the Editor Session reads together",
-  async () => {
-    const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT)],
-      writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-      commands: [SESSION_CREATE, TAKEOVER] });
-    const workspace = await openWorkspace(server);
-    const takeOver = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
-    await expect.poll(takeOver).not.toBeNull();
-    const before = server.log.started.length;
-    const steps = await expectReopenSteps(server, TAKEOVER, CHAPTER);
-
-    takeOver()!.click();
-    await steps();
-
-    await expect.poll(() => ({ ...workspace.shown(), takeOver: takeOver() }))
-      .toEqual({ title: "Chapter A", save: "saved", failure: "", takeOver: null });
-    const later = server.log.started.slice(server.log.started.indexOf(TAKEOVER, before));
-    // The takeover check of the Journal keeps its three reads in their order, and the view uses its tree.
-    const reads = later.filter((name) => ![CHALLENGE, STATISTICS, `GET ${P}/activity`, `GET ${P}/assistance`,
-      `GET ${P}/skills`, openProposalsRead(CHAPTER)].includes(name));
-    expect({ reads: [reads[0], reads.slice(1, 5).sort(), ...reads.slice(5)],
-      unexpected: server.log.unexpected }).toEqual({
-      reads: [TAKEOVER, reopenReads(CHAPTER).sort(), TREE, snapshotRead(TAKEOVER_SNAPSHOT), SESSION_READ],
-      unexpected: [],
-    });
-  });
-
-it("opens the Current Chapter of the Project read after another tab took over the writer and switched the Chapter",
+it("opens the Current Chapter of the Project read after another tab switched the Chapter during an Acceptance",
   async () => {
     const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ, chapterRead(CHAPTER_B),
       openProposalsRead(CHAPTER_B)], commands: [SESSION_CREATE, ACCEPTANCE], proposals: true,
-      takeoverAfterAcceptance: true });
+      switchAfterAcceptance: true });
     const workspace = await openWorkspace(server);
     const control = () => workspace.root.querySelector<HTMLButtonElement>(
       `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
@@ -736,13 +664,21 @@ it("opens the Current Chapter of the Project read after another tab took over th
     control()!.click();
 
     // The response of the refused Acceptance names Chapter A, but the Project read names Chapter B. The reopen read
-    // Chapter A with the Project read, discards it, and reads Chapter B (#1898).
+    // Chapter A with the Project read, discards it, and reads Chapter B (#1898). The stored Editor Session has its base
+    // on Chapter A, so the reopen creates a new Editor Session on Chapter B.
     await expect.poll(() => workspace.shown().title).toBe("Chapter B");
     const later = server.log.started.slice(server.log.started.indexOf(ACCEPTANCE, before));
     expect({ open: openReads(later).sort(), chapters: later.filter((name) => name.startsWith(`GET ${P}/chapters/`)
-      && !name.endsWith("/open-proposals")), unexpected: server.log.unexpected }).toEqual({
-      open: [LIST, PROJECT_READ].sort(), chapters: [chapterRead(CHAPTER), chapterRead(CHAPTER_B)], unexpected: [] });
+      && !name.endsWith("/open-proposals")), creations: later.filter((name) => name === SESSION_CREATE).length,
+    stored: sessionStorage.getItem(`active_session:${OWNER}:${PROJECT}`), unexpected: server.log.unexpected })
+      .toEqual({ open: [LIST, PROJECT_READ].sort(), chapters: [chapterRead(CHAPTER), chapterRead(CHAPTER_B)],
+        creations: 1, stored: LATER_SESSION, unexpected: [] });
   });
+
+/** The button of Chapter B in the contents. */
+const chapterB = (root: HTMLElement) => root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`);
+/** The reads of the open of Chapter A, and of a switch to Chapter B. */
+const SWITCH_READS = [...OPEN_READS, SESSION_READ, chapterRead(CHAPTER_B), openProposalsRead(CHAPTER_B)];
 
 /** Each row of each store of the Local Edit Journal of the Project, with its key. */
 async function journalRows(server: ReturnType<typeof fakeServer>) {
@@ -877,220 +813,6 @@ it("reads the list of Projects, the tree, and the statistics one time for one op
     title: "Chapter A", save: "saved", failure: "", list: 1, tree: 1, statistics: 1, unexpected: [] });
 });
 
-it("reads the tree one time for one open with a writer generation above 1", async () => {
-  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(EDITOR_SNAPSHOT)],
-    writer: { kind: "current_writer", writer_generation: "2" } });
-  sessionStorage.setItem(`active_session:${OWNER}:${PROJECT}`, SESSION);
-  const workspace = await openWorkspace(server);
-
-  await expect.poll(() => server.count(STATISTICS)).toBe(1);
-  await expect.poll(() => workspace.root.querySelector(`button[data-chapter-id="${CHAPTER_B}"]`)).not.toBeNull();
-  expect({ ...workspace.shown(), list: server.count(LIST), tree: server.count(TREE),
-    unexpected: server.log.unexpected }).toEqual({
-    title: "Chapter A", save: "saved", failure: "", list: 1, tree: 1, unexpected: [] });
-});
-
-// The takeover check runs only when this page did not do its work for the Editor Session and the writer generation
-// (#1897). Its reads are the tree, the Snapshot of the tree, and a second Editor Session read.
-/** The Editor Session, tree, and Snapshot reads in `requests` up to the last Editor Session read. */
-const checkReads = (requests: string[]) => requests.slice(0, requests.lastIndexOf(SESSION_READ) + 1)
-  .filter((name) => name === TREE || name === SESSION_READ || name.startsWith(`GET ${P}/snapshots/`));
-const chapterB = (root: HTMLElement) => root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`);
-
-/** Opens the workspace with the Editor Session of this tab, which holds writer generation 2. */
-async function openSecondGeneration(server: ReturnType<typeof fakeServer>) {
-  sessionStorage.setItem(`active_session:${OWNER}:${PROJECT}`, SESSION);
-  const workspace = await openWorkspace(server);
-  await expect.poll(() => chapterB(workspace.root)?.disabled).toBe(false);
-  await expect.poll(server.inFlight).toEqual([]);
-  return workspace;
-}
-
-/**
- * Holds the second Editor Session read of the check after the read of the Snapshot `snapshotId`. Then another Editor
- * Session takes over the writer with `generation`, so this Session is read-only and the check refuses the open.
- */
-async function takeOverDuringCheck(server: ReturnType<typeof fakeServer>, snapshotId: string, generation: string) {
-  server.holdAfter(snapshotRead(snapshotId), [SESSION_READ]);
-  return async () => {
-    await expect.poll(server.inFlight).toEqual([SESSION_READ]);
-    server.takeOverElsewhere(generation);
-    server.release();
-  };
-}
-
-const SWITCH_READS = [...OPEN_READS, SESSION_READ, chapterRead(CHAPTER_B), openProposalsRead(CHAPTER_B)];
-
-it("opens the Chapter of a switch with writer generation 2 and sends no read of the takeover check", async () => {
-  const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT)],
-    writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
-  const workspace = await openSecondGeneration(server);
-  // The view took the Activity of the Project, so the Journal holds a stream cursor.
-  const journal = await requestResult(indexedDB.open(server.scenario.journalName)) as IDBDatabase;
-  const cursor = await storedActivityStreamCursor(journal.transaction("metadata").objectStore("metadata"),
-    server.scenario.project.project_scope);
-  journal.close();
-  expect(cursor).toEqual({ snapshot_id: EDITOR_SNAPSHOT, last_event_id: null });
-  const before = server.log.started.length;
-  // The view reads the tree after the new view. A check of the open waits for this held read.
-  server.holdAfter(SWITCH, [TREE]);
-
-  chapterB(workspace.root)!.click();
-
-  await expect.poll(() => ({ ...workspace.shown(), held: server.inFlight().includes(TREE) }))
-    .toEqual({ title: "Chapter B", save: "saved", failure: "", held: true });
-  server.release();
-  await expect.poll(server.inFlight).toEqual([]);
-  const later = server.log.started.slice(server.log.started.indexOf(SWITCH, before));
-  expect({ first: checkReads(server.log.started.slice(0, before)), later: checkReads(later),
-    unexpected: server.log.unexpected }).toEqual({ first: [SESSION_READ, TREE, snapshotRead(EDITOR_SNAPSHOT),
-    SESSION_READ], later: [SESSION_READ], unexpected: [] });
-});
-
-it("runs the takeover check at the first open after a takeover in this tab, and refuses a changed Session",
-  async () => {
-    const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT)],
-      writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-      commands: [SESSION_CREATE, TAKEOVER] });
-    const workspace = await openWorkspace(server);
-    const takeOver = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
-    await expect.poll(() => takeOver()?.disabled).toBe(false);
-    const before = server.log.started.length;
-    const takenOver = await takeOverDuringCheck(server, TAKEOVER_SNAPSHOT, "3");
-
-    takeOver()!.click();
-    await takenOver();
-
-    // The refused open has no writer, so the page shows no takeover button.
-    await expect.poll(() => ({ save: workspace.shown().save, takeOver: takeOver(), inFlight: server.inFlight() }))
-      .toEqual({ save: "needs_attention", takeOver: null, inFlight: [] });
-    expect({ check: checkReads(server.log.started.slice(before)), unexpected: server.log.unexpected })
-      .toEqual({ check: [SESSION_READ, TREE, snapshotRead(TAKEOVER_SNAPSHOT), SESSION_READ], unexpected: [] });
-  });
-
-it("runs the takeover check at a reload with an empty local database, and refuses a changed Session", async () => {
-  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(EDITOR_SNAPSHOT)],
-    writer: { kind: "current_writer", writer_generation: "2" } });
-  await openSecondGeneration(server);
-  for (const unmount of unmounts.splice(0)) unmount();
-  closeTrackedDatabases(openDatabases);
-  await deleteJournal(server.scenario.journalName);
-  const before = server.log.started.length;
-  const takenOver = await takeOverDuringCheck(server, EDITOR_SNAPSHOT, "3");
-
-  const reloaded = reloadWorkspace(server);
-  await takenOver();
-  const root = await reloaded;
-
-  await expect.poll(() => root.querySelector("[data-save-state]")?.getAttribute("data-save-state"))
-    .toBe("needs_attention");
-  expect({ check: checkReads(server.log.started.slice(before)), unexpected: server.log.unexpected })
-    .toEqual({ check: [SESSION_READ, TREE, snapshotRead(EDITOR_SNAPSHOT), SESSION_READ], unexpected: [] });
-});
-
-it("refuses the open after a Chapter switch when another Editor Session took over with writer generation 3",
-  async () => {
-    const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT)],
-      writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
-    const workspace = await openSecondGeneration(server);
-    const before = server.log.started.length;
-    server.holdAfter(SWITCH, reopenReads(CHAPTER_B));
-
-    chapterB(workspace.root)!.click();
-    await expect.poll(server.inFlight).toEqual(reopenReads(CHAPTER_B).sort());
-    // Another tab takes over the writer after the switch settled, so this Session is read-only.
-    server.takeOverElsewhere("3");
-    server.release();
-
-    // The open refuses the Session, so the workspace shows no writer.
-    await expect.poll(() => ({ ...workspace.shown(), inFlight: server.inFlight(),
-      writer: workspace.root.querySelector("[data-writer-kind]")?.getAttribute("data-writer-kind") }))
-      .toEqual({ title: "Chapter B", save: "needs_attention", failure: "", inFlight: [], writer: undefined });
-    expect({ check: checkReads(server.log.started.slice(server.log.started.indexOf(SWITCH, before))),
-      unexpected: server.log.unexpected }).toEqual({ check: [SESSION_READ], unexpected: [] });
-  });
-
-/**
- * Puts a copy of the stored partition and of its active base into the Journal of the Project, with another owner User.
- * The base is older than the base of the next open, so only the comparison of the User can refuse the copy.
- */
-async function storePartitionOfAnotherUser(server: ReturnType<typeof fakeServer>) {
-  const otherUser = "018f0000-0000-7001-8000-000000000838";
-  const journal = await requestResult(indexedDB.open(server.scenario.journalName)) as IDBDatabase;
-  const transaction = journal.transaction(["partitions", "metadata"], "readwrite");
-  const partitions = transaction.objectStore("partitions");
-  const metadata = transaction.objectStore("metadata");
-  const [stored] = await requestResult(partitions.getAll()) as { journal_partition_id: string;
-    project_scope: { owner_user_id: string; project_id: string } }[];
-  const copyId = stored!.journal_partition_id.replace(OWNER, otherUser);
-  const base = await requestResult(metadata.get(`active_base:${stored!.journal_partition_id}`)) as { value: unknown };
-  await requestResult(partitions.put({ ...stored!, project_scope: { ...stored!.project_scope, owner_user_id: otherUser },
-    journal_partition_id: copyId }));
-  await requestResult(metadata.put({ key: `active_base:${copyId}`, value: base.value }));
-  journal.close();
-}
-
-it("runs the takeover check after a takeover when the Journal holds a partition of another User, and refuses",
-  async () => {
-    const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT)],
-      writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-      commands: [SESSION_CREATE, TAKEOVER] });
-    const workspace = await openWorkspace(server);
-    const takeOver = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
-    await expect.poll(() => takeOver()?.disabled).toBe(false);
-    await storePartitionOfAnotherUser(server);
-    const before = server.log.started.length;
-
-    takeOver()!.click();
-
-    // The refused open has no writer, so the page shows no takeover button.
-    await expect.poll(() => ({ save: workspace.shown().save, takeOver: takeOver(), inFlight: server.inFlight() }))
-      .toEqual({ save: "needs_attention", takeOver: null, inFlight: [] });
-    expect({ check: checkReads(server.log.started.slice(before)), unexpected: server.log.unexpected })
-      .toEqual({ check: [SESSION_READ, TREE, snapshotRead(TAKEOVER_SNAPSHOT), SESSION_READ], unexpected: [] });
-  });
-
-it("refuses the open of a switch with writer generation 2 when the Journal holds a partition of another User",
-  async () => {
-    const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT)],
-      writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
-    const workspace = await openSecondGeneration(server);
-    await storePartitionOfAnotherUser(server);
-    const before = server.log.started.length;
-
-    chapterB(workspace.root)!.click();
-
-    await expect.poll(() => workspace.shown()).toEqual({ title: "Chapter B", save: "needs_attention", failure: "" });
-    await expect.poll(server.inFlight).toEqual([]);
-    expect({ check: checkReads(server.log.started.slice(server.log.started.indexOf(SWITCH, before))),
-      unexpected: server.log.unexpected }).toEqual({ check: [SESSION_READ], unexpected: [] });
-  });
-
-it("runs the takeover check at the open of a switch with writer generation 2 when the Journal lost the partition",
-  async () => {
-    const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT), snapshotRead(SWITCH_SNAPSHOT)],
-      writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
-    const workspace = await openSecondGeneration(server);
-    // For example, the browser removed the site data while the page stayed open.
-    const journal = await requestResult(indexedDB.open(server.scenario.journalName)) as IDBDatabase;
-    const transaction = journal.transaction(["partitions", "metadata"], "readwrite");
-    const [stored] = await requestResult(transaction.objectStore("partitions").getAll()) as
-      { journal_partition_id: string }[];
-    await requestResult(transaction.objectStore("partitions").delete(stored!.journal_partition_id));
-    await requestResult(transaction.objectStore("metadata").delete(`active_base:${stored!.journal_partition_id}`));
-    journal.close();
-    const before = server.log.started.length;
-
-    chapterB(workspace.root)!.click();
-
-    // The open is the open of the base commit: the three reads, then the Snapshot stage and the partition again.
-    await expect.poll(() => ({ ...workspace.shown(), inFlight: server.inFlight() }))
-      .toEqual({ title: "Chapter B", save: "saved", failure: "", inFlight: [] });
-    expect({ check: checkReads(server.log.started.slice(server.log.started.indexOf(SWITCH, before))),
-      unexpected: server.log.unexpected }).toEqual({ check: [SESSION_READ, TREE, snapshotRead(SWITCH_SNAPSHOT),
-      SESSION_READ], unexpected: [] });
-  });
-
 it("reads the statistics one time when the tree read fails", async () => {
   const server = fakeServer({ reads: OPEN_READS, commands: [SESSION_CREATE], unavailable: [TREE] });
   await openWorkspace(server);
@@ -1153,16 +875,12 @@ it.each([
   { command: "a Chapter switch", name: SWITCH, title: "Chapter B", revision: REVISION_B },
   { command: "an applied acceptance", name: ACCEPTANCE, title: "Chapter A", revision: ACCEPTED_REVISION },
   { command: "a rejection", name: REJECTION, title: "Chapter A", revision: REVISION },
-  { command: "a takeover", name: TAKEOVER, title: "Chapter A", revision: REVISION },
 ])("keeps the contents list and the assistant panel on the screen through $command", async ({ name, title,
   revision }) => {
-  const takeover = name === TAKEOVER;
   const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, PROPOSAL_READ, chapterRead(CHAPTER_B),
-    openProposalsRead(CHAPTER_B), snapshotRead(TAKEOVER_SNAPSHOT), CONVERSATION_READ, RUN_READ, SOURCES_READ],
+    openProposalsRead(CHAPTER_B), CONVERSATION_READ, RUN_READ, SOURCES_READ],
   commands: [SESSION_CREATE, name], proposals: name === ACCEPTANCE || name === REJECTION, acceptance: "applied",
-  assistant: "available",
-  ...(takeover ? { writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" } }
-    : {}) });
+  assistant: "available" });
   // The address opens a Conversation in the assistant panel.
   const workspace = await openWorkspace(server, `?conversation=${CONVERSATION}`);
   const parts = workspaceParts(workspace.root);
@@ -1173,7 +891,7 @@ it.each([
     chapters: parts.chapters(), conversation: conversation() }))
     .toEqual({ availability: "available", chapters: 2, conversation: opened });
   const control = () => workspace.root.querySelector<HTMLButtonElement>(name === SWITCH
-    ? `button[data-chapter-id="${CHAPTER_B}"]` : takeover ? "button[data-take-over-writer]"
+    ? `button[data-chapter-id="${CHAPTER_B}"]`
     : `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[${name === ACCEPTANCE
       ? "data-proposal-accept" : "data-proposal-reject"}]`);
   await expect.poll(() => control()?.disabled).toBe(false);
@@ -1185,8 +903,7 @@ it.each([
   const shownRevision = () => workspace.root.querySelector("[data-authoritative-revision-id]")
     ?.getAttribute("data-authoritative-revision-id");
   const done = () => workspace.shown().title === title && shownRevision() === revision
-    && workspace.root.querySelector(".block-proposal") === null
-    && workspace.root.querySelector("button[data-take-over-writer]") === null;
+    && workspace.root.querySelector(".block-proposal") === null;
   // The fake holds each request from the click to the new view, so the observer sees the page at each step.
   server.holdEach(true);
 
@@ -1225,35 +942,6 @@ it.each([
   expect({ before, unexpected: server.log.unexpected }).toEqual({ before: false, unexpected: [] });
 });
 
-it("keeps the tree of a rename that the author makes while a takeover opens the Project again", async () => {
-  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT)],
-    writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-    commands: [SESSION_CREATE, TAKEOVER, RENAME] });
-  const workspace = await openWorkspace(server);
-  const button = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
-  const title = () => workspace.root.querySelector(`.tree-panel button[data-chapter-id="${CHAPTER}"]`)?.textContent;
-  await expect.poll(() => button()?.disabled).toBe(false);
-  // The reopen read the tree. It waits for its Snapshot read, before its last Editor Session read.
-  server.holdAfter(TAKEOVER, [snapshotRead(TAKEOVER_SNAPSHOT)]);
-  button()!.click();
-  await expect.poll(server.inFlight).toEqual([snapshotRead(TAKEOVER_SNAPSHOT)]);
-
-  await beginTreeAction(workspace.root, `li[data-chapter-id="${CHAPTER}"]`, "[data-begin-rename-chapter]");
-  workspace.root.querySelector<HTMLButtonElement>("[data-begin-rename-chapter]")!.click();
-  await expect.poll(() => workspace.root.querySelector(`form[data-rename-chapter="${CHAPTER}"] input`)).not.toBeNull();
-  const input = workspace.root.querySelector<HTMLInputElement>(`form[data-rename-chapter="${CHAPTER}"] input`)!;
-  input.value = "Chapter A, renamed";
-  input.form!.requestSubmit();
-  await expect.poll(title).toBe("Chapter A, renamed");
-  server.release();
-
-  await expect.poll(() => ({ ...workspace.shown(), button: button() }))
-    .toEqual({ title: "Chapter A", save: "saved", failure: "", button: null });
-  await expect.poll(server.inFlight).toEqual([]);
-  expect({ title: title(), unexpected: server.log.unexpected })
-    .toEqual({ title: "Chapter A, renamed", unexpected: [] });
-});
-
 const projectHeading = (root: HTMLElement) => root.querySelector(".project-heading h1")?.textContent;
 
 /** Sends a rename of the Project from the workspace heading. */
@@ -1272,48 +960,20 @@ async function renameProject(root: HTMLElement, title: string) {
   await expect.poll(() => projectHeading(root)).toBe(title);
 }
 
-it("keeps the title and the revision of a Project rename that settles while a takeover opens the Project again",
-  async () => {
-    const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT)],
-      writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-      commands: [SESSION_CREATE, TAKEOVER, PROJECT_RENAME] });
-    const workspace = await openWorkspace(server);
-    const button = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
-    await expect.poll(() => button()?.disabled).toBe(false);
-    // The Project read and the list read of the reopen have the answer from before the rename.
-    server.answerBeforeHold([PROJECT_READ, LIST]);
-    server.holdAfter(TAKEOVER, [PROJECT_READ, LIST]);
-    button()!.click();
-    await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ].sort());
-
-    await renameProject(workspace.root, "Project A, renamed");
-    server.release();
-    await expect.poll(() => ({ ...workspace.shown(), button: button() }))
-      .toEqual({ title: "Chapter A", save: "saved", failure: "", button: null });
-    const shown = projectHeading(workspace.root);
-    await renameProject(workspace.root, "Project A, renamed again");
-
-    expect({ shown, revisions: server.projectRenames, unexpected: server.log.unexpected })
-      .toEqual({ shown: "Project A, renamed", revisions: ["1", "2"], unexpected: [] });
-  });
-
 it("keeps the title of a Project rename when a reopen brings the earlier title with the new revision", async () => {
-  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT)],
-    writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-    commands: [SESSION_CREATE, TAKEOVER, PROJECT_RENAME] });
+  const server = fakeServer({ reads: SWITCH_READS, commands: [SESSION_CREATE, SWITCH, PROJECT_RENAME] });
   const workspace = await openWorkspace(server);
-  const button = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
-  await expect.poll(() => button()?.disabled).toBe(false);
-  // The Project read of the reopen has the title from before the rename, and its list read has the new revision.
+  await expect.poll(() => chapterB(workspace.root)?.disabled).toBe(false);
+  // The Project read of the reopen after the switch has the title from before the rename, and its list read has the
+  // new revision.
   server.answerBeforeHold([PROJECT_READ]);
-  server.holdAfter(TAKEOVER, [PROJECT_READ, LIST]);
-  button()!.click();
+  server.holdAfter(SWITCH, [PROJECT_READ, LIST]);
+  chapterB(workspace.root)!.click();
   await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ].sort());
 
   await renameProject(workspace.root, "Project A, renamed");
   server.release();
-  await expect.poll(() => ({ ...workspace.shown(), button: button() }))
-    .toEqual({ title: "Chapter A", save: "saved", failure: "", button: null });
+  await expect.poll(workspace.shown).toEqual({ title: "Chapter B", save: "saved", failure: "" });
   const shown = projectHeading(workspace.root);
   await renameProject(workspace.root, "Project A, renamed again");
 
@@ -1420,24 +1080,18 @@ it("reads the statistics one time for the new view of a Chapter switch with no c
   });
 
 it("keeps the tree of a rename that the author makes while a Proposal link opens the Chapter", async () => {
-  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT),
-    snapshotRead(SWITCH_SNAPSHOT), PROPOSAL_READ, CONVERSATION_READ, RUN_READ, SOURCES_READ],
-  writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-  commands: [SESSION_CREATE, TAKEOVER, SWITCH, RENAME], assistant: "available", proposalResult: true });
+  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(SWITCH_SNAPSHOT), PROPOSAL_READ,
+    CONVERSATION_READ, RUN_READ, SOURCES_READ], commands: [SESSION_CREATE, SWITCH, RENAME], assistant: "available",
+  proposalResult: true });
   const workspace = await openWorkspace(server, `?conversation=${CONVERSATION}`);
   const link = () => workspace.root.querySelector<HTMLButtonElement>("button[data-proposal-location]");
   const title = () => workspace.root.querySelector(`.tree-panel button[data-chapter-id="${CHAPTER}"]`)?.textContent;
-  // A takeover gives writer generation 2, so each open reads the tree in its takeover check.
-  await expect.poll(() => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]")?.disabled)
-    .toBe(false);
-  workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]")!.click();
-  await expect.poll(() => ({ ...workspace.shown(), link: link()?.disabled }))
-    .toEqual({ title: "Chapter A", save: "saved", failure: "", link: false });
+  await expect.poll(() => link()?.disabled).toBe(false);
   await expect.poll(server.inFlight).toEqual([]);
-  // The open after the switch read the tree. It waits for its Snapshot read, before its last Editor Session read.
-  server.holdAfter(SWITCH, [snapshotRead(SWITCH_SNAPSHOT)]);
+  // The reopen after the switch of the link waits for its Project read.
+  server.holdAfter(SWITCH, [PROJECT_READ]);
   link()!.click();
-  await expect.poll(server.inFlight).toEqual([snapshotRead(SWITCH_SNAPSHOT)]);
+  await expect.poll(server.inFlight).toEqual([PROJECT_READ]);
 
   await beginTreeAction(workspace.root, `li[data-chapter-id="${CHAPTER}"]`, "[data-begin-rename-chapter]");
   workspace.root.querySelector<HTMLButtonElement>("[data-begin-rename-chapter]")!.click();
@@ -1454,46 +1108,6 @@ it("keeps the tree of a rename that the author makes while a Proposal link opens
   await expect.poll(server.inFlight).toEqual([]);
   expect({ ...workspace.shown(), tree: title(), unexpected: server.log.unexpected })
     .toEqual({ title: "Chapter A", save: "saved", failure: "", tree: "Chapter A, renamed", unexpected: [] });
-});
-
-it("shows that the takeover runs, and sends one takeover for two clicks", async () => {
-  const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT)],
-    writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-    commands: [SESSION_CREATE, TAKEOVER] });
-  const workspace = await openWorkspace(server);
-  const button = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
-  await expect.poll(() => button()?.disabled).toBe(false);
-  server.hold([TAKEOVER]);
-
-  button()!.click();
-  await expect.poll(() => ({ disabled: button()?.disabled, text: button()?.textContent }))
-    .toEqual({ disabled: true, text: "正在接管写作…" });
-  await expect.poll(server.inFlight).toEqual([TAKEOVER]);
-  button()!.click();
-  expect(server.count(TAKEOVER)).toBe(1);
-  server.release();
-
-  await expect.poll(() => ({ ...workspace.shown(), button: button() }))
-    .toEqual({ title: "Chapter A", save: "saved", failure: "", button: null });
-  expect({ takeovers: server.count(TAKEOVER), unexpected: server.log.unexpected })
-    .toEqual({ takeovers: 1, unexpected: [] });
-});
-
-it("shows the sentence of a refused takeover and makes the button usable again", async () => {
-  const server = fakeServer({ reads: OPEN_READS,
-    writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-    commands: [SESSION_CREATE, TAKEOVER], takeover: "compare_failed" });
-  const workspace = await openWorkspace(server);
-  const button = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
-  await expect.poll(() => button()?.disabled).toBe(false);
-
-  // The Server refuses the takeover: another tab took the writer after the admission.
-  button()!.click();
-
-  await expect.poll(() => ({ alert: workspace.root.querySelector('.editor-panel [role="alert"]')?.textContent,
-    disabled: button()?.disabled, text: button()?.textContent }))
-    .toEqual({ alert: "无法接管写作。", disabled: false, text: "接管写作" });
-  expect(server.log.unexpected).toEqual([]);
 });
 
 it("reads only the suggestions after a rejection", async () => {
@@ -1791,8 +1405,7 @@ it.each([
   const workspace = await openWorkspace(server, decision ? "" : `?conversation=${CONVERSATION}`, timers);
   const chapterB = () => workspace.root.querySelector<HTMLButtonElement>(`.tree-panel button[data-chapter-id="${CHAPTER_B}"]`)!;
   const pointer = (type: "pointerover" | "pointerout") => chapterB().dispatchEvent(new PointerEvent(type, { bubbles: true }));
-  // The contents read Chapter B at the pointer only in a tab with a ready editor that holds the writer. A new stay
-  // stops the stay before it.
+  // The contents read Chapter B at the pointer only in a tab with a ready editor. A new stay stops the stay before it.
   const waiting = () => stays.filter((timer) => !timer.cleared && timer.fired !== true);
   await expect.poll(() => {
     if (chapterB() !== null) pointer("pointerover");
@@ -1835,86 +1448,6 @@ it.each([
   await expect.poll(() => server.count(ACTIVITY_READ) > activityReads && server.inFlight().length === 0).toBe(true);
   expect(server.log.unexpected).toEqual([]);
 });
-
-it("writes a copy from each Chapter read of a tab without the writer, also from a read that a later selection discards",
-  async () => {
-    const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT),
-      chapterRead(CHAPTER_B), openProposalsRead(CHAPTER_B), chapterRead(CHAPTER_C), openProposalsRead(CHAPTER_C)],
-    writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-    commands: [SESSION_CREATE, TAKEOVER, SWITCH], third: true });
-    const workspace = await openWorkspace(server);
-    const takeOver = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
-    const chapterC = () => workspace.root.querySelector<HTMLButtonElement>(`.tree-panel button[data-chapter-id="${CHAPTER_C}"]`);
-    await expect.poll(() => [chapterB(workspace.root)?.disabled, chapterC()?.disabled]).toEqual([false, false]);
-    // The read of Chapter B answers after the selection of Chapter C, so the view discards it.
-    server.hold([chapterRead(CHAPTER_B)]);
-    chapterB(workspace.root)!.click();
-    await expect.poll(() => server.held()).toBe(1);
-    chapterC()!.click();
-    await expect.poll(() => workspace.shown().title).toBe("Chapter C");
-    server.release();
-    await expect.poll(() => server.log.consumed.includes(chapterRead(CHAPTER_B))).toBe(true);
-    await expect.poll(() => [workspace.shown().title, server.inFlight()]).toEqual(["Chapter C", []]);
-    await expect.poll(takeOver).not.toBeNull();
-    takeOver()!.click();
-    await expect.poll(() => ({ ...workspace.shown(), takeOver: takeOver() }))
-      .toEqual({ title: "Chapter A", save: "saved", failure: "", takeOver: null });
-    server.hold([chapterRead(CHAPTER_B)]);
-    const activityReads = server.count(ACTIVITY_READ);
-
-    chapterB(workspace.root)!.click();
-
-    await expect.poll(() => [workspace.root.querySelector(".editor-panel h2")?.textContent,
-      workspace.root.querySelector("[data-manuscript-editor]")?.textContent]).toEqual(["Chapter B", CHAPTER_B_BODY]);
-    await expect.poll(() => server.held()).toBe(1);
-    server.release();
-    await expect.poll(workspace.shown).toEqual({ title: "Chapter B", save: "saved", failure: "" });
-    await expect.poll(() => server.count(ACTIVITY_READ) > activityReads && server.inFlight().length === 0).toBe(true);
-    expect(server.log.unexpected).toEqual([]);
-  });
-
-it("writes no copy from a Chapter read that answers after a later read of the same Chapter started (ADR 0105)",
-  async () => {
-    const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(TAKEOVER_SNAPSHOT),
-      chapterRead(CHAPTER_B), openProposalsRead(CHAPTER_B), chapterRead(CHAPTER_C), openProposalsRead(CHAPTER_C)],
-    writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-    commands: [SESSION_CREATE, TAKEOVER, SWITCH], third: true });
-    const workspace = await openWorkspace(server);
-    const takeOver = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
-    const chapterC = () => workspace.root.querySelector<HTMLButtonElement>(`.tree-panel button[data-chapter-id="${CHAPTER_C}"]`);
-    const screen = () => [workspace.root.querySelector(".editor-panel h2")?.textContent,
-      workspace.root.querySelector("[data-manuscript-editor]")?.textContent];
-    await expect.poll(() => [chapterB(workspace.root)?.disabled, chapterC()?.disabled]).toEqual([false, false]);
-    // The first read of Chapter B has the text of an earlier Revision. It answers after a later read of Chapter B.
-    server.earlierChapterB(true);
-    server.answerBeforeHold([chapterRead(CHAPTER_B)]);
-    server.hold([chapterRead(CHAPTER_B)]);
-    chapterB(workspace.root)!.click();
-    await expect.poll(() => server.held()).toBe(1);
-    server.earlierChapterB(false);
-    chapterC()!.click();
-    await expect.poll(() => workspace.shown().title).toBe("Chapter C");
-    chapterB(workspace.root)!.click();
-    await expect.poll(screen).toEqual(["Chapter B", CHAPTER_B_BODY]);
-    server.release();
-    await expect.poll(() => [server.log.consumed.filter((name) => name === chapterRead(CHAPTER_B)).length,
-      server.inFlight()]).toEqual([2, []]);
-    takeOver()!.click();
-    await expect.poll(() => ({ ...workspace.shown(), takeOver: takeOver() }))
-      .toEqual({ title: "Chapter A", save: "saved", failure: "", takeOver: null });
-    server.hold([chapterRead(CHAPTER_B)]);
-    const activityReads = server.count(ACTIVITY_READ);
-
-    chapterB(workspace.root)!.click();
-
-    await expect.poll(() => [...screen(), server.held()]).toEqual(["Chapter B", CHAPTER_B_BODY, 1]);
-    server.release();
-    await expect.poll(workspace.shown).toEqual({ title: "Chapter B", save: "saved", failure: "" });
-    await expect.poll(() => server.count(ACTIVITY_READ) > activityReads && server.inFlight().length === 0).toBe(true);
-    expect(server.log.unexpected).toEqual([]);
-  });
-
-
 
 it("removes the fact of no open suggestion when a reload finds an applied Acceptance that the editor does not show",
   async () => {
