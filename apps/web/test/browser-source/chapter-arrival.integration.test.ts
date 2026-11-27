@@ -534,6 +534,24 @@ it("reads only the open suggestions at the pointer when a copy has text and no l
   expect(workspace.server.requests.slice(before)).toEqual([openProposals(CHAPTER_B)]);
 });
 
+// A list of the open suggestions from before a Proposal change does not give the fact again (#1934).
+it("reads the open suggestions again at the pointer when a Proposal change came after the list of the copy", async () => {
+  const workspace = await openWorkspace((server) => { server.hold(ACTIVITY); });
+  await workspace.copy(CHAPTER_B);
+  workspace.server.activity = await runEvent();
+  workspace.server.release(ACTIVITY);
+  await expect.poll(() => workspace.root.querySelector("[data-activity-processed-through]")
+    ?.getAttribute("data-activity-processed-through")).toBe("1");
+  const before = workspace.server.requests.length;
+
+  workspace.pointer(CHAPTER_B, true);
+  expect(workspace.stay()).toBe(1);
+  workspace.pointer(CHAPTER_B, false);
+
+  await expect.poll(() => workspace.stayTimers(CHAPTER_B)).toBe(0);
+  expect(workspace.server.requests.slice(before)).toEqual([openProposals(CHAPTER_B)]);
+});
+
 it.each([
   { first: READ_B, second: openProposals(CHAPTER_B) },
   { first: openProposals(CHAPTER_B), second: READ_B },
