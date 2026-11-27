@@ -93,8 +93,9 @@ export function blocksOnCurrent(text: EarlierBaseText, current: readonly Manuscr
 /**
  * Gives the edits from the current blocks to `result` in the form that the editor captures. The Journal records them
  * as one replacement of the author, so they go in one Author Edit with one Revision and one Author Undo. A changed block
- * with the blocks after it that the result adds or removes is one replacement, as a paste is. The result is
- * `undefined` when a change has no Author Edit form, or when the edits are more than one Author Edit can have.
+ * with the blocks after it that the result adds or removes is one replacement, as a paste is, and so is a run of new
+ * blocks. The result is `undefined` when a change has no Author Edit form, or when the edits are more than one Author
+ * Edit can have.
  */
 export function stepsOnCurrent(current: readonly ManuscriptParagraph[], result: readonly ManuscriptParagraph[])
   : CapturedManuscriptEdit[] | undefined {
@@ -124,22 +125,11 @@ export function stepsOnCurrent(current: readonly ManuscriptParagraph[], result: 
       ...result.slice(index + 1, index + 1 + added).map((item) => paragraph(item.manuscript_block_id, item.text)),
       ...now.slice(at + 1 + removed)]);
   }
-  for (const removed of now.filter((block) => !kept.has(block.manuscript_block_id))) {
-    let at = indexOf(removed.manuscript_block_id);
-    // A block joins the block before it, so the first block moves after the second block first.
-    if (at === 0) {
-      if (now.length < 2 || !step([now[1]!, now[0]!, ...now.slice(2)])) return undefined;
-      at = 1;
-    }
-    if (now[at]!.text !== "" && !step(now.map((item, position) => position === at ? { ...item, text: "" } : item))) {
-      return undefined;
-    }
-    if (!step(now.filter((_, position) => position !== at))) return undefined;
-  }
-  // The blocks before `index` are the blocks of the result.
+  // The blocks before `index` are the blocks of the result. The blocks that leave stay after them.
   for (const [index, block] of result.entries()) {
     let at = indexOf(block.manuscript_block_id);
-    if (at === -1) {
+    const inserted = at === -1;
+    if (inserted) {
       // As the editor does: a split at the end of the earlier block gives an empty paragraph. At the start, the split
       // is at the end of the first block, and the new block then moves to the start.
       const after = Math.max(index - 1, 0);
@@ -152,6 +142,15 @@ export function stepsOnCurrent(current: readonly ManuscriptParagraph[], result: 
       next.splice(index, 0, ...next.splice(at, 1));
       if (!step(next)) return undefined;
     }
+    // The new blocks after an inserted block go in with their text as one replacement, as a paste does.
+    let added = 0;
+    while (inserted && index + 1 + added < result.length
+      && indexOf(result[index + 1 + added]!.manuscript_block_id) === -1) added += 1;
+    if (added > 0 && block.text !== "") {
+      step([...now.slice(0, index), { ...now[index]!, text: block.text },
+        ...result.slice(index + 1, index + 1 + added).map((item) => paragraph(item.manuscript_block_id, item.text)),
+        ...now.slice(index + 1)]);
+    }
     if (now[index]!.text !== block.text
       && !step(now.map((item, position) => position === index ? { ...item, text: block.text } : item))) {
       return undefined;
@@ -160,6 +159,14 @@ export function stepsOnCurrent(current: readonly ManuscriptParagraph[], result: 
       && !step(now.map((item, position) => position === index ? { ...item, block_kind: kind(block) } : item))) {
       return undefined;
     }
+  }
+  // Each block that leaves is after the blocks of the result: its text goes, and it joins the block before it.
+  while (now.length > result.length) {
+    const at = now.length - 1;
+    if (now[at]!.text !== "" && !step(now.map((item, position) => position === at ? { ...item, text: "" } : item))) {
+      return undefined;
+    }
+    if (!step(now.slice(0, at))) return undefined;
   }
   if (!paragraphsEqual(now, result) || steps.length > AUTHOR_EDIT_MAX_UNITS || steps.some((edit) =>
     edit.kind === "contiguous_replacement" && edit.primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES)) {

@@ -97,8 +97,18 @@ test("a join of the tab applies when the other tab moved the joined block to the
     shown: [block(A, "雨夜。渡口。"), block(C, "天亮了。")] }, current, mint);
 
   assert.deepEqual(result, [block(A, "雨夜。渡口。"), block(C, "天亮了。")]);
-  assert.deepEqual(applySteps(current, result), { kinds: ["move_block", "replace_block_selection", "join_blocks",
-    "replace_block_selection"], blocks: result });
+  assert.deepEqual(applySteps(current, result), { kinds: ["move_block", "replace_block_selection", "move_block",
+    "replace_block_selection", "join_blocks"], blocks: result });
+});
+
+test("a block that the other tab deleted replaces the only current block when the tab joined into it", () => {
+  const current = [block(A, "雨夜。")];
+  const result = blocksOnCurrent({ base: [block(A, "雨夜。"), block(B, "渡口。")],
+    shown: [block(B, "渡口。雨夜。")] }, current, mint);
+
+  assert.deepEqual(result, [block(MINTED, "渡口。雨夜。")]);
+  assert.deepEqual(applySteps(current, result), { kinds: ["split_block", "move_block", "replace_block_selection",
+    "replace_block_selection", "join_blocks"], blocks: result });
 });
 
 test("a paste of many paragraphs is one replacement", () => {
@@ -109,6 +119,17 @@ test("a paste of many paragraphs is one replacement", () => {
 
   assert.deepEqual(result, [block(A, "雨夜。船来了。"), ...pasted, block(B, "渡口，风起。")]);
   assert.deepEqual(applySteps(current, result), { kinds: ["contiguous_replacement"], blocks: result });
+});
+
+test("a paste of many paragraphs is one replacement also when the other tab deleted the block of the paste", () => {
+  const pasted = Array.from({ length: 121 }, (_, index) => block(many(index), `第${index}段。`));
+  const current = [block(B, "渡口。")];
+  const result = blocksOnCurrent({ base: [block(A, "雨夜。"), block(B, "渡口。")],
+    shown: [block(A, "雨夜。船来了。"), ...pasted, block(B, "渡口。")] }, current, mint);
+
+  assert.deepEqual(result, [block(MINTED, "雨夜。船来了。"), ...pasted, block(B, "渡口。")]);
+  assert.deepEqual(applySteps(current, result),
+    { kinds: ["split_block", "move_block", "contiguous_replacement"], blocks: result });
 });
 
 test("edits that are more than one Author Edit can have give no steps", () => {

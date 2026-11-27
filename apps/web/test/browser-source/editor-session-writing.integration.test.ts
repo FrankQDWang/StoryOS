@@ -280,6 +280,33 @@ it("runs a journaled command after captured input enters the Journal, without a 
   }
 });
 
+it("ends input for a catch-up only after an open IME composition ends, and its confirmed text enters the Journal",
+  async () => {
+    const session = await openWriting();
+    try {
+      const order: string[] = [];
+      session.writing.setComposing(true);
+      const composed = session.writing.whenComposed().then(() => {
+        order.push("composed");
+        session.writing.endInput();
+      });
+      // An IndexedDB read ends while the composition is open.
+      await readJournalSnapshot(session.workspace);
+      const open = [...order];
+      // The editor captures the confirmed text right after the end of the composition.
+      session.writing.setComposing(false);
+      session.writing.capture(FIRST_APPEND_EDIT, "typing", [{ manuscript_block_id: BLOCK, text: "Base!" }]);
+      order.push("captured");
+      await composed;
+      await session.writing.whenIdle();
+      expect({ open, order, sent: session.sent.length,
+        records: (await readJournalSnapshot(session.workspace)).records.length })
+        .toEqual({ open: [], order: ["captured", "composed"], sent: 0, records: 1 });
+    } finally {
+      await session.close();
+    }
+  });
+
 it("runs a settled command only after the captured input settles", async () => {
   const session = await openWriting();
   try {

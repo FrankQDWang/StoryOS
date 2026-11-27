@@ -404,13 +404,13 @@ function ProjectEditorView({
   };
   const [proposalRefresh, setProposalRefresh] = useState(0);
   const onEditorFailureRef = useRef<(error: unknown) => void>(() => {});
-  const onEarlierBaseRef = useRef<(shown: readonly ManuscriptParagraph[]) => void>(() => {});
+  const onEarlierBaseRef = useRef<() => void>(() => {});
   const editorState = state.editor;
   // One writing controller owns the Pending Edit Projection of this Editor Session (ADR 0046).
   const writing = useMemo(() => editorState.kind === "editor-ready"
     ? createEditorSessionWritingController({ workspace: editorState, baseUrl, fetchImpl, cryptoImpl, ...writingTimers,
       onFailure: (error) => { onEditorFailureRef.current(error); },
-      onEarlierBase: (shown) => { onEarlierBaseRef.current(shown); } })
+      onEarlierBase: () => { onEarlierBaseRef.current(); } })
     : undefined, [editorState, baseUrl, fetchImpl, cryptoImpl, writingTimers]);
   useEffect(() => () => { writing?.close(); }, [writing]);
   // Ends the hand-over: each held edit goes to the normal capture entry in its order, or the notice shows the input.
@@ -471,33 +471,52 @@ function ProjectEditorView({
       chapterId, shown, chapter });
 
   // The tab found a later Revision: it opens again on it with its text, and shows no sentence (ADR 0107, section 2).
-  // One catch-up runs for each editor part.
+  // One catch-up runs for each editor part. It waits for an open IME composition, ends input, and makes the editor
+  // read-only. It lets the captured input enter the Journal, the submission in flight settle, and an Author Undo end,
+  // and closes the controller before the reopen. The reopen uses `chapter`, or else the read of a front check in flight.
   const catchingUpRef = useRef(false);
-  const catchUp = (shown: readonly ManuscriptParagraph[], chapter?: GetChapterResponse) => {
-    if (catchingUpRef.current) return;
+  const [catchingUp, setCatchingUp] = useState(false);
+  const frontReadRef = useRef<Promise<GetChapterResponse | undefined>>(undefined);
+  const catchUp = (chapter?: GetChapterResponse) => {
+    if (catchingUpRef.current || writing === undefined) return;
     catchingUpRef.current = true;
-    void reopen(undefined, shown, chapter).then(onReopened);
+    const front = frontReadRef.current;
+    void (async () => {
+      await writing.whenComposed();
+      writing.endInput();
+      // The editor is read-only at once, so no input comes after the end of input.
+      flushSync(() => { setCatchingUp(true); });
+      await writing.whenIdle();
+      await writing.afterUndo();
+      const read = chapter ?? await front;
+      const shown = writing.snapshot().projection.blocks;
+      writing.close();
+      onReopened(await reopen(undefined, shown, read));
+    })();
   };
-  // During a structural command, its quiet step refuses with `earlier_base`, and the command catches up.
-  onEarlierBaseRef.current = (shown) => { if (!structureInFlightRef.current) catchUp(shown); };
-  // When the tab comes to the front, it saves its input and reads the Chapter one time. At a later Revision, the editor
-  // ends input, its submission in flight settles, and the reopen uses that read. A save on an earlier base catches up
-  // through `onEarlierBase`.
+  // A structural command in flight catches up when its quiet step refuses with `earlier_base`.
+  onEarlierBaseRef.current = () => {
+    if (!structureInFlightRef.current) catchUp();
+  };
+  // When the tab comes to the front, it saves its input and reads the Chapter one time. At a later Revision, the reopen
+  // uses that read. A save that finds a later Revision during the check also uses it.
   useEffect(() => {
     if (writing === undefined) return undefined;
     const front = () => {
       if (document.visibilityState !== "visible" || structureInFlightRef.current || handOverRef.current !== undefined
-        || selectedChapterIdRef.current !== currentChapterId) return;
-      void writing.runAfterQuiesce("settled", async (projection) => {
-        const read = await readCurrentChapter({ baseUrl, fetchImpl } as StoryOSQueryOptions,
+        || selectedChapterIdRef.current !== currentChapterId || frontReadRef.current !== undefined
+        || catchingUpRef.current) return;
+      const read = writing.runAfterQuiesce("settled", async (projection) => {
+        const chapter = await readCurrentChapter({ baseUrl, fetchImpl } as StoryOSQueryOptions,
           state.project.project.project_id, currentChapterId, state.project.project_scope.owner_user_id);
-        return read.chapter.current_revision.revision_id === projection.authoritative_revision_id ? undefined : read;
-      }).then(async (quiet) => {
-        if (quiet.kind !== "ran" || quiet.result === undefined || structureInFlightRef.current) return;
-        writing.endInput();
-        await writing.whenIdle();
-        catchUp(writing.snapshot().projection.blocks, quiet.result);
-      }, () => {});
+        return chapter.chapter.current_revision.revision_id === projection.authoritative_revision_id ? undefined
+          : chapter;
+      }).then((quiet) => quiet.kind === "ran" ? quiet.result : undefined, () => undefined);
+      frontReadRef.current = read;
+      void read.then((chapter) => {
+        frontReadRef.current = undefined;
+        if (chapter !== undefined && !structureInFlightRef.current) catchUp(chapter);
+      });
     };
     document.addEventListener("visibilitychange", front);
     return () => { document.removeEventListener("visibilitychange", front); };
@@ -819,7 +838,7 @@ function ProjectEditorView({
           // A save found a later Revision. The tab catches up, and the next editor part runs the selection again.
           waitingStore.current = { chapterId: goal(), contents };
           handedOff = true;
-          catchUp(writing.snapshot().projection.blocks);
+          catchUp();
         } else if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
           setSwitchRecovery(chapterSwitchRecoveryMessage(quiet.reason));
         }
@@ -897,8 +916,8 @@ function ProjectEditorView({
           onReopened(next);
         });
         // A save found a later Revision: the tab catches up, and the author deletes again on the later Revision.
-        if (quiet.kind === "refused" && quiet.reason === "earlier_base" && writing !== undefined) {
-          catchUp(writing.snapshot().projection.blocks);
+        if (quiet.kind === "refused" && quiet.reason === "earlier_base") {
+          catchUp();
         } else if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
           setSwitchRecovery(quiet.reason === "incomplete_semantic_intent" ? `无法删除${noun}：请先完成当前输入。`
             : quiet.reason === "journal_unavailable" ? `无法删除${noun}：本地编辑需要恢复。` : `无法删除${noun}。`);
@@ -1072,7 +1091,7 @@ function ProjectEditorView({
             || saveState === "saved",
           tree,
         }}
-        editable={!readOnly && !navigationCommand && !resultUnknown}
+        editable={!readOnly && !navigationCommand && !resultUnknown && !catchingUp}
         startSuggestionRead={selectedChapter.chapter.chapter_id === currentChapterId
           ? () => copies.suggestionRead(currentChapterId) : undefined}
         persistWorkspace={

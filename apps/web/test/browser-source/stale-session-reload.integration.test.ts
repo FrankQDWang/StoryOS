@@ -66,7 +66,9 @@ const RESULTS = {
     current_authoritative_revision_id: LATER_REVISION }, head: LATER_REVISION },
   proposal_head_present: { effect: { kind: "conflicted", reason: "proposal_head_present",
     current_authoritative_revision_id: REVISION }, head: REVISION },
-  refused: { effect: { kind: "refused", reason: "invalid_selection" }, head: REVISION },
+  // The Server keeps the Chapter in a payload version that its Core does not support, so it refuses each Author Edit on
+  // that Chapter, also a valid one.
+  refused: { effect: { kind: "refused", reason: "unsupported_intent_shape" }, head: REVISION },
 } as const;
 
 async function fakeServer(edit?: Result, { base, later, created: at } = REVISIONS) {
