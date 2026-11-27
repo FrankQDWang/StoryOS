@@ -213,43 +213,6 @@ export async function releaseVersion5Session(database: IDBDatabase, session: Ver
   await transactionResult(transaction);
 }
 
-/** `group` with a new v2 freeze: the same coverage and correlation, no writer generation, and a new key and digest. */
-async function version2Freeze(group: JournalSubmissionGroup, cryptoImpl: Crypto): Promise<JournalSubmissionGroup> {
-  const { writer_generation: _writer, ...rest } = group.frozen_request_body as { writer_generation?: string };
-  const request = { ...rest, command_schema: V2_AUTHOR_EDIT } as JournalSubmissionGroup["frozen_request_body"];
-  return { ...group, command_schema: V2_AUTHOR_EDIT, idempotency_key: uuidV7(cryptoImpl),
-    frozen_request_body: request, frozen_request_digest: await digestApplyAuthorEdit(request, cryptoImpl) };
-}
-
-const SEND_EVIDENCE = ["transport_capsules", "transport_attempts", "protocol_observations", "outcome_query_attempts",
-  "outcome_query_observations"];
-
-/**
- * Freezes each version 5 group that the Server rejected again as v2, unsent. The Server has no Admission of the group,
- * so a new idempotency key cannot repeat a command. The rows of the v1 send go, and the next save sends the group. A
- * group that changed after the read of this tab, as by the new freeze of another tab, stays as it is.
- */
-export async function freezeRejectedVersion5Groups(database: IDBDatabase, cryptoImpl: Crypto): Promise<void> {
-  const groups = (await requestResult(database.transaction("submission_groups", "readonly")
-    .objectStore("submission_groups").getAll()) as JournalSubmissionGroup[]).filter((group) =>
-    hasVersion5Request(group) && group.settlement.kind === "outcome_query_rejected_no_admission");
-  if (groups.length === 0) return;
-  const frozen = await Promise.all(groups.map(({ reconciliation: _reconciliation, ...group }) =>
-    version2Freeze({ ...group, settlement: { kind: "unsettled" } }, cryptoImpl)));
-  const transaction = database.transaction(["submission_groups", ...SEND_EVIDENCE], "readwrite");
-  const store = transaction.objectStore("submission_groups");
-  for (const [index, group] of groups.entries()) {
-    const id = group.journal_submission_group_id;
-    if (JSON.stringify(await requestResult(store.get(id))) !== JSON.stringify(group)) continue;
-    for (const name of SEND_EVIDENCE) {
-      const rows = transaction.objectStore(name);
-      for (const key of await requestResult(rows.index("group").getAllKeys(id))) rows.delete(key);
-    }
-    store.put(frozen[index]);
-  }
-  await transactionResult(transaction);
-}
-
 /**
  * Freezes each version 5 group that the client did not send again as v2, after the open: the same coverage and
  * correlation, no writer generation, a new idempotency key, and a new digest. No POST of that group went to the
@@ -263,7 +226,12 @@ export async function freezeUnsentVersion5Groups(database: IDBDatabase, cryptoIm
   const read = database.transaction("submission_groups", "readonly").objectStore("submission_groups");
   const groups = (await Promise.all(marker.value.map((id) => requestResult(read.get(id)))) as
     (JournalSubmissionGroup | undefined)[]).filter((group) => group !== undefined);
-  const frozen = await Promise.all(groups.map((group) => version2Freeze(group, cryptoImpl)));
+  const frozen = await Promise.all(groups.map(async (group) => {
+    const { writer_generation: _writer, ...rest } = group.frozen_request_body as { writer_generation?: string };
+    const request = { ...rest, command_schema: V2_AUTHOR_EDIT } as JournalSubmissionGroup["frozen_request_body"];
+    return { ...group, command_schema: V2_AUTHOR_EDIT, idempotency_key: uuidV7(cryptoImpl),
+      frozen_request_body: request, frozen_request_digest: await digestApplyAuthorEdit(request, cryptoImpl) };
+  }));
   const transaction = database.transaction(["metadata", "submission_groups", "transport_capsules"], "readwrite");
   const store = transaction.objectStore("submission_groups");
   for (const [index, group] of groups.entries()) {

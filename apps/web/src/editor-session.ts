@@ -36,8 +36,8 @@ import { requestResult, transactionResult } from "./indexed-db-request.ts";
 import { lockEditorSession, releaseEarlierEditorSessions } from "./editor-session-lock.ts";
 import { recoveryPrefix } from "./local-recovery-record.ts";
 import {
-  claimVersion5Session, freezeRejectedVersion5Groups, freezeUnsentVersion5Groups, releaseVersion5Session,
-  retainVersion5PartitionText, upgradeVersion5Journal, type Version5Session,
+  claimVersion5Session, freezeUnsentVersion5Groups, releaseVersion5Session, retainVersion5PartitionText,
+  upgradeVersion5Journal, type Version5Session,
 } from "./journal-version-5-upgrade.ts";
 
 export {
@@ -131,7 +131,6 @@ async function openJournalDatabase(
   }
   try {
     await freezeUnsentVersion5Groups(database, cryptoImpl);
-    await freezeRejectedVersion5Groups(database, cryptoImpl);
     await retainVersion5PartitionText(database, cryptoImpl, maxJsonStringUtf8Bytes);
   } catch (error) {
     database.close();
