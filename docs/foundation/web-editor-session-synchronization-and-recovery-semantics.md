@@ -85,9 +85,8 @@ the exact Project Scope, the protected Client Session binding, the exact
 Revision compare of an Author Edit (`stale_authoritative_head`), and the head
 compares of Acceptance, rejection, and Author Undo. When two Editor Sessions
 each name the current Revision, both Author Edits apply in their order. An
-Author Edit that names an earlier Revision gets `stale_authoritative_head`.
-Until a tab with an earlier base catches up (ADR 0107), such a save shows the
-state of today.
+Author Edit that names an earlier Revision gets `stale_authoritative_head`, and
+the tab catches up (section 2.2.1).
 
 At a load, the stored Editor Session of a tab can have a base that is not the
 Chapter that the Server reads now, because another Editor Session wrote. When
@@ -111,7 +110,9 @@ Editor Session to a later Snapshot. When the Server base of the stored Session
 has a later Project Activity Position than the base that the Journal stores,
 the check uses the stored base, because the Journal proves its groups against
 that base. When open work exists, the load keeps the stored Session and its
-recovery state, and the load does not remove or change its records.
+recovery state, and the load does not remove or change its records. A load does
+not know the text of a live tab, so until #1953 only a live tab catches up
+(section 2.2.1).
 
 A command of an Editor Session moves only the base Snapshot of that Editor
 Session. An applied Author Edit or Undo moves that base to the new Revision
@@ -120,6 +121,70 @@ Revision. An applied Acceptance moves that base only when the base is on the
 prior head. A Delete Chapter or a Delete Volume that changes the Current Chapter
 moves the base of each Editor Session of the Project to the head of the new
 Current Chapter.
+
+A page takes a Web Lock with the name of its Editor Session
+(`editorSessionLock`: `storyos-editor-session:<id>`). It ends the lock of an
+earlier Editor Session only after `sessionStorage` names the new Editor
+Session. The browser command "Duplicate tab" copies `sessionStorage`. When
+another page holds the lock of the stored Editor Session, the load opens a new
+Editor Session, so two pages never freeze or settle the records of one
+partition.
+
+#### 2.2.1 A tab with an earlier base catches up
+
+ADR 0107 section 2 applies. The Journal binds each record to the base of its
+Editor Session, so a record cannot get a new base in its partition. The tab
+catches up in a new Editor Session on the current Chapter:
+
+1. The open reads the text of the stored Editor Session: the blocks of its base,
+   and the blocks that the live tab shows, with its captured input that is not
+   in the Journal.
+2. It puts that text on the current Chapter block by block. A block that the tab
+   changed replaces the current block, so the later edit of a block wins. A
+   block that only the other tab changed keeps its current text. A block that
+   the tab added or moved goes after the nearest earlier block of the tab, with
+   its Block ID and its kind, also when it is empty. A changed block that the
+   other tab deleted goes in as a paragraph at its place with a new Block ID,
+   when it has text. A block that the tab deleted leaves only when the other tab
+   did not change it. A Chapter has one block or more: when the two tabs each
+   removed the blocks that the other kept, the result is the blocks of the tab,
+   and each one that the current Chapter does not have goes in as a paragraph
+   with a new Block ID.
+3. It creates a new Editor Session. When another tab saved between the Chapter
+   read and the creation, the base of the new Editor Session is later than the
+   read, and the open uses that base. The open appends the edits from the blocks
+   of that base to the result to the new partition as one replacement in one
+   undo group, and only then writes the new Editor Session to `sessionStorage`.
+   A stop before that point keeps the stored Editor Session and its records, and
+   until #1953 the next load shows its recovery state. Each edit has the input origin
+   `selection_replacement`, also a split, a join, or a move step, so no step
+   ends the group (section 4), and the edits go out as one Author Edit with one
+   Revision and one Author Undo. A changed block with the blocks after it that
+   the result adds or removes is one replacement, as a paste is. A block at the
+   start goes in after the first block and then moves to the start, and the
+   first block leaves after it moves after the second block.
+
+The catch-up runs when a save gets `stale_authoritative_head`. The tab waits for
+the end of an open IME composition, then ends input: the editor is read-only,
+and the controller starts no submission and no Author Undo, but captured input
+still enters the Journal. After the submission in flight ends, the tab takes the
+blocks that the editor shows, closes the controller, and opens again. The close
+abandons an Author Undo, and an abandoned Undo is never sent. An Undo that went
+out before has an effect only when the Server takes it before the stale save, so
+the Chapter read of the reopen has that effect. The quiet step of a Chapter
+switch or a deletion refuses with `earlier_base`: the tab catches up, a Chapter
+switch runs again on the new editor, and the author can delete again. The tab
+shows no sentence and no button. #1953 adds the catch-up at a load and when the
+tab comes to the front.
+
+The catch-up does not run when the stored partition has a group that went out
+with no known result, a refused Author Edit, an Author Edit that conflicted for
+another reason, a record in a Proposal candidate that no group revised, a
+decision flight, an unresolved Withdrawal, or a retained recovery row: the
+catch-up cannot know if that work applied, or the work needs its recovery. It
+also does not run when the edits have no Author Edit form, or are more than one
+Author Edit can have (240 units, or 240 normalized primitives in a unit). Such
+work keeps the stored Editor Session and its recovery state.
 
 The Admissions, Receipts, and Activity of a writer takeover from before ADR
 0107 stay in the store, and the Activity stream replays them. The migration
@@ -281,10 +346,10 @@ Editor Session of the Project shows. When the client cannot read its groups,
 the text comes from its records only.
 
 A tab opens the Session of the changed rows only when no other open tab has it:
-the tab holds a Web Lock for that Session while the page lives. A tab with no
-Editor Session in its session storage opens the first such Session. When that
-Session does not open, its text goes to local recovery, and the tab opens a new
-Session.
+the tab holds the Web Lock of that Session, as for each Editor Session. A tab
+with no Editor Session in its session storage opens the first such Session.
+When that Session does not open, its text goes to local recovery, and the tab
+opens a new Session.
 
 A version 5 group that the client sent keeps its v1 request, its digest, and
 its capsule, because the Server keeps that Admission. The next save asks for
@@ -1474,7 +1539,7 @@ Acceptance from an authoritative result or from the absence of a candidate.
 | `AuthoritativeApplied` | resulting authoritative Head and Commit become `saved` only after `AppliedReceiptConverged` and complete active-base installation | no recovery controls; retain journal payload until GC successor proof |
 | `ProposalRevised` | `ZeroAuthorityReceiptVisible` shows the exact new Proposal Revision and Forward Author Action identities; authoritative prose stays unchanged | no Authoritative Commit, Project Activity, checkpoint, authoritative projection, or active-base advance; retain payload until the exact result is visible and successor proof holds |
 | `NoEffect` | `ZeroAuthorityReceiptVisible`; the already-installed durable base and exact current surface may remain `saved` only when they independently prove the no-op | no Activity, checkpoint, projection, or base advance; retain until the unchanged durable Revision is an exact digest-equal successor |
-| `Conflicted` | `ZeroAuthorityReceiptVisible`; complete local intent remains beside the independently current authoritative projection; `needs_attention` | no Activity, checkpoint, projection, or base advance; retain payload and revalidate Heads before dependent submission |
+| `Conflicted` | `stale_authoritative_head`: the tab catches up on the current Chapter with no sentence (section 2.2.1). Another reason: `ZeroAuthorityReceiptVisible`; complete local intent remains beside the independently current authoritative projection; `needs_attention` | no Activity, checkpoint, projection, or base advance; retain payload and revalidate Heads before dependent submission |
 | `Refused` | `ZeroAuthorityReceiptVisible`; exact refusal reason and complete local intent remain visible; `needs_attention` | no Activity, checkpoint, projection, or base advance; retain payload until an explicit safe successor exists |
 
 This response-v2 table does not redefine Proposal, Draft, or recovery command
@@ -1613,6 +1678,7 @@ attempt with a new Admission.
 | applied convergence or zero-authority result visibility proven before payload collection | group becomes GC-eligible only if section 11's exact successor proof also holds |
 | payload collected before reload | reconstruct from the recorded durable successor and retained collection fence; never from missing bytes |
 | reload while another Editor Session of the Project is open | the editor accepts input as soon as it shows the Chapter; no other Editor Session makes it read-only (ADR 0107) |
+| reload of a stored Editor Session with an earlier base and unsent Author Edit text | until #1953, the load keeps the stored Editor Session and its recovery state (section 2.2.1) |
 
 Server or PostgreSQL process interruption uses this same section 10 matrix. It
 does not create a different first browser action.

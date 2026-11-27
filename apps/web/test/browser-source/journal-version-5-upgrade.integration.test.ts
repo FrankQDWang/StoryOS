@@ -4,7 +4,8 @@ import { afterEach, expect, it } from "vitest";
 
 import { openEditorWorkspace, submitOnePendingAuthorEdit } from "../../src/editor-session.ts";
 import { rebuildPendingProjection } from "../../src/local-edit-journal.ts";
-import { editorSessionLock, freezeUnsentVersion5Groups } from "../../src/journal-version-5-upgrade.ts";
+import { editorSessionLock } from "../../src/editor-session-lock.ts";
+import { freezeUnsentVersion5Groups } from "../../src/journal-version-5-upgrade.ts";
 import { LocalRecoveryPanel } from "../../src/local-recovery-panel.tsx";
 import candidateFixture from "../../../../fixtures/local-edit-journal/version-5-candidate-record.json";
 import identifierFixture from "../../../../fixtures/local-edit-journal/version-5-identifier-text-group.json";

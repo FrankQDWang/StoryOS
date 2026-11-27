@@ -22,6 +22,7 @@ import type {
   StateDifference,
 } from "./editor-types.ts";
 import { startEditorWorkspace, type EditorWorkspaceOpening } from "./editor-session.ts";
+import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 
 const { release_identity: expectedIdentity, required_capabilities: expectedCapabilities, ...expectedProtocol } = RELEASE_1_PROTOCOL_PROFILE;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -157,10 +158,13 @@ type EarlyChapterOpen = {
  * Session. The Project read stays the authority: when it names another Chapter, or an empty Project, the open discards
  * the early Chapter read and the early Editor Session read and reads as the first open does. The open of the
  * workspace ends after the Chapter read of the Chapter of the Project read, and only that open writes to the Journal.
+ * `shown` is the text of an editor whose base is earlier than the Server. The open puts it on the current Chapter
+ * (ADR 0107, section 2).
  */
 export async function reopenControlledProject(options: Omit<ProjectOpenOptions, "projectId"> & {
   opened: Pick<ProjectReadyState, "profile" | "project">;
   chapterId?: string | undefined;
+  shown?: readonly ManuscriptParagraph[] | undefined;
 }): Promise<ControlledProjectState> {
   const { baseUrl, opened, fetchImpl = globalThis.fetch, signal, indexedDBImpl = globalThis.indexedDB,
     cryptoImpl = globalThis.crypto } = options;
@@ -182,7 +186,7 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
     }
     if (read.project.project_scope.owner_user_id !== scope.owner_user_id) throw new Error("Project Scope mismatch");
     return await openProjectWorkspace({ ...options, projectId: scope.project_id }, opened.profile, read.project,
-      read.revision, early);
+      read.revision, early, options.shown);
   } catch (error) {
     void early?.opening.abandon();
     return projectUnavailable(error);
@@ -199,6 +203,7 @@ async function openProjectWorkspace(
   project: GetProjectResponse,
   revision: string,
   early?: EarlyChapterOpen,
+  shown?: readonly ManuscriptParagraph[],
 ): Promise<ControlledProjectState> {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal,
     indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto } = options;
@@ -238,8 +243,8 @@ async function openProjectWorkspace(
       void opening.abandon();
       throw chapter.error;
     }
-    const { editor } = await opening.finish(chapter.value, project);
-    return { kind: "project-ready", profile, project, revision, chapter: chapter.value, editor };
+    const opened = await opening.finish(chapter.value, project, shown);
+    return { kind: "project-ready", profile, project, revision, chapter: opened.chapter, editor: opened.editor };
   } catch (error) {
     return projectUnavailable(error);
   }
