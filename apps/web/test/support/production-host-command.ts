@@ -62,12 +62,19 @@ async function replaceAndSave(page: Page, text: string): Promise<void> {
 }
 
 /** Focuses the editor with no click, moves the caret with `key`, types `text`, and waits for its automatic save. */
-async function typeAndSave(page: Page, key: string, text: string): Promise<void> {
+async function typeAndSave(page: Page, place: "start" | "end", text: string): Promise<void> {
   const settled = page.waitForResponse((response) =>
     response.url().endsWith("/manuscript/author-edits") && response.request().method() === "POST");
   const editor = page.locator(MANUSCRIPT_EDITABLE);
   await editor.focus();
-  await editor.press(key);
+  // A DOM selection puts the caret at the start or the end of the text, with no key that differs by platform.
+  await editor.evaluate((element, atStart) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(atStart);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  }, place === "start");
   const [first, ...rest] = text.split("\n");
   if (first) await page.keyboard.insertText(first);
   for (const line of rest) {
@@ -161,7 +168,7 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     assert.equal(await manuscriptBody(writer), "Saved after replay generation two.");
 
     // Page 1 adds a second block before page 2 opens the Project.
-    await typeAndSave(writer, "ControlOrMeta+End", "\nThe second block of page one.");
+    await typeAndSave(writer, "end", "\nThe second block of page one.");
     assert.equal(await manuscriptBody(writer),
       "Saved after replay generation two.\nThe second block of page one.");
 
@@ -169,7 +176,7 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     assert.equal((await observer.goto(projectUrl))?.status(), 200);
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.notEqual(await sessionId(observer, projectId), writerId);
-    await typeAndSave(observer, "ControlOrMeta+Home", "Page two: ");
+    await typeAndSave(observer, "start", "Page two: ");
     const afterPageTwo = "Page two: Saved after replay generation two.\nThe second block of page one.";
     await observer.reload();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
@@ -178,7 +185,7 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     // Page 1 then types on the second block, which page 2 did not change.
     await writer.reload();
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
-    await typeAndSave(writer, "ControlOrMeta+End", " Page one again.");
+    await typeAndSave(writer, "end", " Page one again.");
     const afterPageOne = `${afterPageTwo} Page one again.`;
     await writer.reload();
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();

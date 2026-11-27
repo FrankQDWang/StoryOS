@@ -190,9 +190,7 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
     await page.goto(workspace());
     await expect(page.locator('[data-assistant-availability="unavailable"] .assistant-status').first())
       .toHaveText(EMPTY_LINE);
-    // The editor session of the first Server still holds the writer lease, because that Server stopped before the page
-    // released it. So the author takes over the writing, as after each other end of a session.
-    await page.locator("[data-take-over-writer]").click();
+    // The Editor Session of the first Server still writes after the restart, with no click (ADR 0107).
     await page.locator(EDITOR).click();
     await page.keyboard.press("Enter");
     await page.keyboard.insertText("雨停了，林舟把船推下了水。");
@@ -206,7 +204,7 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
       WHERE project_id = '${project}'::uuid AND command_kind = 'applyAuthorEdit'`));
     assert.ok(edits > 0);
     await assertProjectReceipts([project], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,
-      createVolume: 1, createChapter: 2, createAgentRun: 3, takeOverProjectWriter: 1, applyAuthorEdit: edits } });
+      createVolume: 1, createChapter: 2, createAgentRun: 3, applyAuthorEdit: edits } });
   } finally {
     for (const close of started.reverse()) await close();
   }

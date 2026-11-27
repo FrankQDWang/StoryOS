@@ -32,7 +32,7 @@ export function recoveryStatus(proposal: BlockProposalInspect,
     return "上次接受因编辑会话失效而被拒绝，候选文字仍保留。请恢复写作会话后再明确接受。系统不会自动提交。";
   }
   if (posture !== "current") {
-    return "当前编辑会话不能写入。候选文字仍然有效。请接管写作后再明确操作。系统不会自动提交。";
+    return "当前编辑会话不能写入。候选文字仍然有效。系统不会自动提交。";
   }
   if (proposal.latest_acceptance_refusal.kind === "present"
     && proposal.latest_acceptance_refusal.reason === "invalid_challenge") {

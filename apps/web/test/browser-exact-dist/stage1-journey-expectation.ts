@@ -350,7 +350,6 @@ function collectedFence(index: number) {
     collection_fence_id: slot("fence", sequence),
     journal_partition_id: PARTITION,
     project_scope: SCOPE,
-    partition_disposition: "current_writer_open",
     collected_groups: [{
       journal_submission_group_id: slot("group", sequence),
       covered_sequence_range: { first: sequence, last: sequence },

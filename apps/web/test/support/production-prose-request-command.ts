@@ -233,7 +233,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
           before.chapter.current_revision.revision_id });
       await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
         createChapter: 1, applyAuthorEdit: 4, updateProjectAssistance: 1, createAgentRun: 1,
-        acceptProposal: 1, takeOverProjectWriter: 1 }, authorActions: 7 });
+        acceptProposal: 1 }, authorActions: 7 });
       assert.deepEqual(errors, []);
       return;
     }

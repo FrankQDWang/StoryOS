@@ -91,10 +91,9 @@ export async function verifyProductionProjectSettings(context: BrowserContext): 
     await page.locator("[data-return-to-writing]").click();
     await confirm.locator("[data-settings-leave]").click();
 
-    // 6. The workspace has the text of step 1, and the editor accepts input with no takeover step.
+    // 6. The workspace has the text of step 1, and the editor accepts input with no click.
     await page.waitForURL(workspace);
     await expect(page.locator("[data-manuscript-editor] > p")).toHaveText([CHAPTER_TEXT]);
-    await expect(page.locator("[data-take-over-writer]")).toHaveCount(0);
     await page.locator(EDITOR).focus();
     await page.keyboard.press("End");
     await page.keyboard.insertText(NEXT_TEXT);
