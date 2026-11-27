@@ -245,9 +245,10 @@ async function openProjectWorkspace(
     const opening = used?.opening ?? startEditorWorkspace({ baseUrl, project, profile, fetchImpl, indexedDBImpl,
       cryptoImpl });
     const readCurrent = () => settle(readCurrentChapter(queryOptions, projectId, open.current_chapter_id, ownerUserId));
-    // When the Project names another Chapter than the early read of a reopen, the reopen reads the Current Chapter only
-    // when it does not set its own Chapter current again, so it does not read both Chapters.
-    let reading = used?.chapter ?? (keepChapter || discarded !== undefined ? undefined : readCurrent());
+    // A catch-up whose Project read names another Chapter than its early read reads the Current Chapter only when it
+    // does not set its own Chapter current again, so it does not read both Chapters.
+    let reading = used?.chapter
+      ?? (keepChapter || shown !== undefined && discarded !== undefined ? undefined : readCurrent());
     // Another tab set another Chapter current while this tab had text to send on its Chapter, or while this tab was
     // not at the front. The later action of this tab wins: it sets its Chapter current again and catches up there
     // (ADR 0107, section 2).
