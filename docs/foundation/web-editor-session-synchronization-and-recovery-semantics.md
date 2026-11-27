@@ -362,8 +362,9 @@ capsule was never sent. After the open, the Web freezes it again as v2 with a
 new idempotency key, and the next save sends it. When another tab completed
 that freeze first, the group keeps the freeze of that tab. A settled group
 keeps its v1 request as history. When the Server rejects a version 5 group (no
-Admission), its text stays in the editor and also shows in local recovery. The
-Web never sends a v1 request.
+Admission), the Web removes the rows of its v1 send and freezes it again as v2
+with a new idempotency key, and the next save sends it. The Web never sends a
+v1 request.
 
 The Web has no upgrade from a Journal version before 5
 ([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)). When IndexedDB asks for an upgrade from such a version,
