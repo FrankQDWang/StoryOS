@@ -90,6 +90,30 @@ async function typeAndSave(page: Page, place: "start" | "end", text: string): Pr
   await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
 }
 
+/**
+ * Types `text` at the start or the end of the text of a page that can have an earlier base, and waits until the page
+ * shows `body` and saved it. A save on an earlier base gets `stale_authoritative_head`, and the page catches up with
+ * no sentence (ADR 0107, section 2).
+ */
+async function typeOnEarlierBase(page: Page, place: "start" | "end", text: string, body: string): Promise<void> {
+  const editor = page.locator(MANUSCRIPT_EDITABLE);
+  await editor.focus();
+  await editor.evaluate((element, atStart) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(atStart);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  }, place === "start");
+  await page.keyboard.insertText(text);
+  await page.waitForFunction((expected) => {
+    const status = document.querySelector('[data-save-state="saved"][data-unsettled-intent-count="0"]');
+    const shown = [...document.querySelectorAll("[data-manuscript-editor] > p, [data-manuscript-editor] > h1")]
+      .map((block) => block.textContent ?? "").join("\n");
+    return status !== null && status.getAttribute("data-editor-failure") === "" && shown === expected;
+  }, body);
+}
+
 export async function verifyProductionHostJourney(sharedContext: BrowserContext): Promise<void> {
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "run the production journey through the Project Scope verification entry");
@@ -182,14 +206,22 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await manuscriptBody(observer), afterPageTwo);
 
-    // Page 1 then types on the second block, which page 2 did not change.
-    await writer.reload();
-    await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
-    await typeAndSave(writer, "end", " Page one again.");
+    // Page 1 did not read again, so its base is earlier. It types on the second block, which page 2 did not change, and
+    // both edits stay (ADR 0107, section 2).
     const afterPageOne = `${afterPageTwo} Page one again.`;
+    await typeOnEarlierBase(writer, "end", " Page one again.", afterPageOne);
     await writer.reload();
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await manuscriptBody(writer), afterPageOne);
+
+    // Both pages type on the first block. Page 2 types later on its earlier base, so its text of that block wins, and
+    // the second block keeps the text of page 1.
+    await typeOnEarlierBase(writer, "start", "One: ", `One: ${afterPageOne}`);
+    const afterSameBlock = `Two: ${afterPageOne}`;
+    await typeOnEarlierBase(observer, "start", "Two: ", afterSameBlock);
+    await observer.reload();
+    await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
+    assert.equal(await manuscriptBody(observer), afterSameBlock);
     // The editor can send a typed line feed and the text after it in one or two Author Edits, so the count of that
     // kind comes from the store. Each Author Edit, the Volume, and the Chapter is one author action.
     const edits = Number(await queryPostgres(`SELECT count(*)::text FROM storyos.domain_receipts
