@@ -2414,6 +2414,89 @@ it.each([
 
 const STATISTICS = `GET ${P}/manuscript/statistics`;
 
+const READY_C = { title: "Chapter C", body: "Gamma", editable: true, alert: undefined };
+
+it("reopens the Chapter that an applied command of a stale Proposal navigation gives when the author selects that Chapter",
+  async () => {
+    const workspace = await openWorkspace((server) => { seedRun(server, CHAPTER_C, [RETURN_C]); });
+    await expect.poll(() => workspace.root.querySelector("[data-proposal-return]")?.tagName).toBe("BUTTON");
+    await workspace.copy(CHAPTER_C);
+    // The Server applies the command of the navigation to Chapter C, and its response waits.
+    workspace.server.holdAnswer(SWITCH);
+    const before = workspace.server.requests.length;
+    workspace.root.querySelector<HTMLButtonElement>("[data-proposal-return]")!.click();
+    await expect.poll(() => workspace.server.isHeld(SWITCH)).toBe(true);
+    const reads = workspace.server.answered.length;
+    workspace.button(CHAPTER_C).click();
+    await expect.poll(() => workspace.server.answered.slice(reads).includes(READ_C)).toBe(true);
+    workspace.server.release(SWITCH);
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() })).toEqual({ ...READY_C, save: "saved" });
+    // The navigation moved the Current Chapter to Chapter C, so the selection needs no command and reopens Chapter C.
+    await expectRequests(workspace.server, before, [READ_C, "GET /api/v1/protocol", `GET ${P}`, "GET /api/v1/projects",
+      `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, READ_C, ...reopenSteps(CHAPTER_C)],
+      [...panelReads(CHAPTER_C), `GET ${P}/proposals/${PROPOSAL}`]);
+    expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_C]]);
+    expectSetup(workspace.server, before, ...RUN_REQUESTS, ...copyReads(CHAPTER_C));
+  });
+
+it("sends the command of a selection back to the earlier Chapter from the result of a Proposal navigation command in flight",
+  async () => {
+    const workspace = await openWorkspace((server) => { seedRun(server, CHAPTER_C, [RETURN_C]); });
+    await expect.poll(() => workspace.root.querySelector("[data-proposal-return]")?.tagName).toBe("BUTTON");
+    await workspace.copy(CHAPTER_B);
+    workspace.server.hold(READ_B);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+    // The Server applies the command of the navigation to Chapter C, and its response waits.
+    workspace.server.holdAnswer(SWITCH);
+    workspace.root.querySelector<HTMLButtonElement>("[data-proposal-return]")!.click();
+    await expect.poll(() => workspace.server.isHeld(SWITCH)).toBe(true);
+    // The newest selection is the Chapter of the editor, so the switch needs no command before the navigation ends.
+    workspace.button(CHAPTER).click();
+    workspace.server.release(READ_B);
+    await expect.poll(() => workspace.server.answered.filter((name) => name === READ_B).length).toBe(2);
+    workspace.server.release(SWITCH);
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() }))
+      .toEqual({ title: "Chapter A", body: "Base", editable: true, alert: undefined, save: "saved" });
+    // The navigation moved the Current Chapter to Chapter C, so the command of Chapter A expects Chapter C.
+    await expectRequests(workspace.server, before, [READ_B, READ_C, "GET /api/v1/protocol", `GET ${P}`,
+      "GET /api/v1/projects", `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, `GET ${P}/chapters/${CHAPTER}`,
+      CHALLENGE, SWITCH, ...reopenSteps(CHAPTER)], [...panelReads(CHAPTER), `GET ${P}/proposals/${PROPOSAL}`]);
+    expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_C], [CHAPTER_C, CHAPTER]]);
+    expectSetup(workspace.server, before, ...RUN_REQUESTS, ...copyReads(CHAPTER_B));
+  });
+
+it("sends the command of the newest selection from the Current Chapter of the read after an earlier applied command",
+  async () => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    await workspace.copy(CHAPTER_C);
+    workspace.server.holdAnswer(SWITCH);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(SWITCH)).toBe(true);
+    workspace.button(CHAPTER_C).click();
+    // The command from Chapter B to Chapter C and its repeat do not reach the Server.
+    workspace.server.unreachableSwitch = 2;
+    workspace.server.hold(SWITCH);
+    workspace.server.release(SWITCH);
+    await expect.poll(() => workspace.server.isHeld(SWITCH)).toBe(true);
+    workspace.button(CHAPTER).click();
+    workspace.server.release(SWITCH);
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() }))
+      .toEqual({ title: "Chapter A", body: "Base", editable: true, alert: undefined, save: "saved" });
+    // The read shows Chapter B, so the command of the newest selection, Chapter A, expects Chapter B.
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, READ_C, CHALLENGE, SWITCH, SWITCH,
+      ...learnReads(CHAPTER, CHAPTER_B), `GET ${P}/chapters/${CHAPTER}`, CHALLENGE, SWITCH, ...reopenSteps(CHAPTER)],
+      panelReads(CHAPTER));
+    expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_B], [CHAPTER_B, CHAPTER]]);
+    expectSetup(workspace.server, before, ...copyReads(CHAPTER_B), ...copyReads(CHAPTER_C));
+  });
+
 it("sends the command of a selection from the Current Chapter that the applied command of a stale Proposal navigation gives",
   async () => {
     const workspace = await openWorkspace((server) => { seedRun(server, CHAPTER_C, [RETURN_C]); });

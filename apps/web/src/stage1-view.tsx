@@ -609,6 +609,18 @@ function ProjectEditorView({
       // of the Server when it is the goal.
       let unknownChapter: string | undefined;
       let learned: ControlledProjectState | undefined;
+      // A command of a Proposal navigation in flight can change the Current Chapter. So a step waits for its end before
+      // a command or an end with no command, and it takes the result of that command. True when the step waited.
+      const waitForNavigation = async () => {
+        const end = navigationEndRef.current;
+        if (end === undefined) return false;
+        await end;
+        if (movedRef.current) {
+          changed = true;
+          reopenAt = serverChapterRef.current;
+        }
+        return true;
+      };
       try {
         const quiet = await active.wait.retry(() => {
           active.waiting = false;
@@ -642,17 +654,18 @@ function ProjectEditorView({
                   movedRef.current = true;
                   reopenAt = current;
                 }
-                // With no move, this editor accepts input again only when the read gives its editor with the writer.
-                // Else the tab shows the Project as the read gives it.
-                const same = !movedRef.current && next.kind === "project-ready" && next.editor.kind === "editor-ready"
+                // With no move and no writer in the read, the tab shows the Project as the read gives it.
+                const writer = next.kind === "project-ready" && next.editor.kind === "editor-ready"
                   && next.editor.session.writer.kind === "current_writer";
-                if (current === undefined || (!moved && !same)) {
+                // The command of this switch had no effect, and its Chapter is still the newest selection. This editor
+                // accepts input again only when no earlier command moved its base.
+                const noEffect = !moved && chapter === unknownChapter && chapter === goal();
+                if (current === undefined || (!moved && !writer) || (noEffect && movedRef.current)) {
                   handedOff = true;
                   onReopened(next);
                   return;
                 }
-                // The command of this switch had no effect, and its Chapter is still the newest selection.
-                if (!moved && chapter === unknownChapter && chapter === goal()) {
+                if (noEffect) {
                   setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
                   return;
                 }
@@ -686,11 +699,8 @@ function ProjectEditorView({
                   target = opened.chapter;
                   targets.set(chapter, target);
                 }
-                // A command of a Proposal navigation in flight can change the Current Chapter. So this command waits
-                // for its end, and the step starts again from its result.
-                const navigationEnd = navigationEndRef.current;
-                if (navigationEnd !== undefined || resultUnknownRef.current) {
-                  await navigationEnd;
+                // After the wait for a navigation command, or a result that is not known, the step starts again.
+                if (await waitForNavigation() || resultUnknownRef.current) {
                   if (generation !== switchGenerationRef.current) return;
                   continue;
                 }
@@ -734,6 +744,10 @@ function ProjectEditorView({
                 if (generation !== switchGenerationRef.current) return;
                 // A selection during the command goes on from the result of the command.
                 if (chapter !== goal()) continue;
+              }
+              if (await waitForNavigation()) {
+                if (generation !== switchGenerationRef.current) return;
+                continue;
               }
               // A selection back to the Current Chapter of the editor before a command had an effect needs no command.
               // Arrival Input on the settled base of this editor stays in this part as a hand-over, after an open IME
