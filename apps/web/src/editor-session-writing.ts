@@ -85,8 +85,6 @@ export interface EditorSessionWritingController {
   endInput(): void;
   /** Resolves when no IME composition is open, after the confirmation of an open composition is captured. */
   whenComposed(): Promise<void>;
-  /** Resolves when no Author Undo is in progress. */
-  afterUndo(): Promise<void>;
   fail(error: unknown): void;
   close(): void;
 }
@@ -187,7 +185,6 @@ export function createEditorSessionWritingController({
   // The tab ended input for a catch-up: no input, no new submission, and no Author Undo.
   let inputEnded = false;
   let composedWaiters: (() => void)[] = [];
-  let undoRun: Promise<unknown> | undefined;
   let composing = false;
   let abandonUndo: (() => void) | undefined;
   // A Challenge wait does not hold the queue, so input of the wait enters the Journal at once (ADR 0065).
@@ -523,7 +520,7 @@ export function createEditorSessionWritingController({
         if (abandonUndo === abandon) abandonUndo = undefined;
       };
       abandonUndo = abandon;
-      const run = (async () => {
+      return (async () => {
         await flush();
         if (!isCurrent()) return undefined;
         let waited = false;
@@ -559,8 +556,6 @@ export function createEditorSessionWritingController({
           return undefined;
         }
       })().finally(() => { if (abandonUndo === abandon) abandonUndo = undefined; });
-      undoRun = run;
-      return run;
     },
     async runAfterQuiesce(condition, command) {
       if (hasIncompleteInput()) return { kind: "refused", reason: "incomplete_semantic_intent" };
@@ -602,7 +597,6 @@ export function createEditorSessionWritingController({
     },
     whenComposed: () => composing ? new Promise<void>((resolve) => { composedWaiters.push(resolve); })
       : Promise.resolve(),
-    afterUndo: () => (undoRun ?? Promise.resolve()).then(() => undefined, () => undefined),
     fail,
     setComposing(value) {
       composing = value;

@@ -111,10 +111,7 @@ it.each(["changed_head", "legacy_editor_contract"] as const)("preserves the comp
     expect(reopened).toMatchObject({ kind: "editor-read-only-recovery", code: "local_journal_unavailable" });
     expect(await readCompleteJournal()).toEqual(before);
     expect(sessionStorage.getItem(activeSessionKey)).toBe(SESSION);
-    // At a changed head, the catch-up asks for the Challenge of a new Editor Session (ADR 0107). This Server refuses it,
-    // and the stored Session stays.
-    expect(requests).toEqual([`GET /api/v1/projects/${PROJECT}/editor-sessions/${SESSION}`,
-      ...boundary === "changed_head" ? [`POST /api/v1/projects/${PROJECT}/anti-forgery-challenges`] : []]);
+    expect(requests).toEqual([`GET /api/v1/projects/${PROJECT}/editor-sessions/${SESSION}`]);
   } finally {
     database?.close();
     sessionStorage.removeItem(activeSessionKey);

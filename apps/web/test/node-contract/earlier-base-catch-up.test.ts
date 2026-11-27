@@ -111,6 +111,16 @@ test("a block that the other tab deleted replaces the only current block when th
     "replace_block_selection", "join_blocks"], blocks: result });
 });
 
+// The tab joined the empty block into the first block, and the other tab joined the first block into the empty block.
+test("the result keeps the text of the tab when the two tabs joined the blocks in each direction", () => {
+  const current = [block(B, "")];
+  const result = blocksOnCurrent({ base: [block(A, "雨夜。"), block(B, "")], shown: [block(A, "雨夜。")] }, current,
+    mint);
+
+  assert.deepEqual(result, [block(MINTED, "雨夜。")]);
+  assert.deepEqual(applySteps(current, result).blocks, result);
+});
+
 test("a paste of many paragraphs is one replacement", () => {
   const pasted = Array.from({ length: 121 }, (_, index) => block(many(index), `第${index}段。`));
   const current = [block(A, "雨夜。"), block(B, "渡口，风起。")];

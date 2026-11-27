@@ -51,7 +51,9 @@ function movedBlocks(base: readonly ManuscriptParagraph[], shown: readonly Manus
  * the tab changed replaces the current block, so the later edit of a block wins. A block that only the other tab
  * changed keeps its current text. A block that the tab added or moved goes after the nearest earlier block of the tab,
  * with its Block ID. A changed block that the other tab deleted goes in as a paragraph at its place with `mintId()`,
- * when it has text. A block that the tab deleted leaves only when the other tab did not change it.
+ * when it has text. A block that the tab deleted leaves only when the other tab did not change it. A Chapter has one
+ * block or more: when the two tabs each removed the blocks that the other kept, the result is the blocks of the tab, and
+ * each one that the current Chapter does not have goes in as a paragraph with `mintId()`.
  */
 export function blocksOnCurrent(text: EarlierBaseText, current: readonly ManuscriptParagraph[],
   mintId: () => string): ManuscriptParagraph[] {
@@ -87,7 +89,8 @@ export function blocksOnCurrent(text: EarlierBaseText, current: readonly Manuscr
     placed.set(block.manuscript_block_id, entry.manuscript_block_id);
     result.splice(at, 0, entry);
   }
-  return result;
+  return result.length > 0 ? result : text.shown.map((block) =>
+    now.has(block.manuscript_block_id) ? copy(block) : paragraph(mintId(), block.text));
 }
 
 /**

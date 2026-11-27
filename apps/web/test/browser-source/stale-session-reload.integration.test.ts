@@ -2,8 +2,8 @@ import { afterEach, expect, it } from "vitest";
 
 import type { GetChapterResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { digestApplyAuthorEdit } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { freezeOneIntentSubmission, openEditorWorkspace, submitOnePendingAuthorEdit }
-  from "../../src/editor-session.ts";
+import { freezeOneIntentSubmission, openEditorWorkspace, rebuildPendingProjection, startEditorWorkspace,
+  submitOnePendingAuthorEdit } from "../../src/editor-session.ts";
 import type { EditorReadyState } from "../../src/editor-types.ts";
 import { appendAuthorEdit } from "../../src/local-edit-journal.ts";
 import { captureManuscriptChange } from "../../src/manuscript-doc.ts";
@@ -66,9 +66,6 @@ const RESULTS = {
     current_authoritative_revision_id: LATER_REVISION }, head: LATER_REVISION },
   proposal_head_present: { effect: { kind: "conflicted", reason: "proposal_head_present",
     current_authoritative_revision_id: REVISION }, head: REVISION },
-  // The Server keeps the Chapter in a payload version that its Core does not support, so it refuses each Author Edit on
-  // that Chapter, also a valid one.
-  refused: { effect: { kind: "refused", reason: "unsupported_intent_shape" }, head: REVISION },
 } as const;
 
 async function fakeServer(edit?: Result, { base, later, created: at } = REVISIONS) {
@@ -108,7 +105,10 @@ async function fakeServer(edit?: Result, { base, later, created: at } = REVISION
     stored = { ...first, base_snapshot: { ...first.base_snapshot, snapshot_id: MOVED_SNAPSHOT,
       project_activity_position: "1" } };
   };
-  return { fetchImpl, requests, moveBase, revisions: { base, later } };
+  // The text that the live tab shows when it opens again.
+  const live: { shown?: EditorReadyState["openedProjection"]["blocks"] } = {};
+  return { fetchImpl, requests, moveBase, revisions: { base, later }, get shown() { return live.shown; },
+    show: (blocks: EditorReadyState["openedProjection"]["blocks"]) => { live.shown = blocks; } };
 }
 
 const chapterAt = (revision: Revision, position: string): GetChapterResponse => ({ ...scenario.chapter,
@@ -127,6 +127,15 @@ async function openStored(server: Awaited<ReturnType<typeof fakeServer>>) {
 async function load(server: Awaited<ReturnType<typeof fakeServer>>) {
   const state = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
     chapter: chapterAt(server.revisions.later, "1"), profile: scenario.profile, fetchImpl: server.fetchImpl });
+  if (state.kind === "editor-ready") trackDatabase(state.database, databases);
+  return state;
+}
+
+/** Opens the Chapter of the later Revision again in the live tab, which gives the text that it shows. */
+async function reopen(server: Awaited<ReturnType<typeof fakeServer>>) {
+  const { editor: state } = await startEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
+    profile: scenario.profile, fetchImpl: server.fetchImpl }).finish(chapterAt(server.revisions.later, "1"), undefined,
+    server.shown);
   if (state.kind === "editor-ready") trackDatabase(state.database, databases);
   return state;
 }
@@ -156,6 +165,7 @@ async function prepare(edit: Result | undefined, moved: boolean, leave: Leave,
   const server = await fakeServer(edit, revisions);
   const first = await openStored(server);
   await leave(first, server);
+  server.show((await rebuildPendingProjection(first)).blocks);
   first.database.close();
   const settlements = (await journalRows("submission_groups") as { settlement: { kind: string;
     effect?: { kind: string } } }[]).filter(({ settlement }) => settlement.kind !== "unsettled")
@@ -191,7 +201,7 @@ it.each([
 });
 
 // Each case leaves Author Edit text in the Journal of the stored Session that the Server does not have.
-it.each([
+const TEXT_CASES = [
   ["a record that is not settled", undefined, false, async (workspace: EditorReadyState) => {
     await appendAuthorEdit(workspace, EDIT);
   }],
@@ -204,20 +214,36 @@ it.each([
     await appendAuthorEdit(workspace, EDIT);
     await submit(workspace, server);
   }],
-] as const)("puts the text on the current Chapter in a new Editor Session at a load when its Journal has %s",
-  async (_, edit, moved, leave) => {
-    const server = await prepare(edit, moved, leave);
-    const records = await journalRows("intents");
+] as const;
 
-    const state = await load(server);
+it.each(TEXT_CASES)("puts the text on the current Chapter in a new Editor Session when the live tab opens again and its "
+  + "Journal has %s", async (_, edit, moved, leave) => {
+  const server = await prepare(edit, moved, leave);
+  const records = await journalRows("intents");
 
-    requireEditorReady(state);
-    // The later edit of the block wins. The new partition has it, and the Session changes after it is there.
-    expect({ session: state.session.editor_session.editor_session_id, stored: sessionStorage.getItem(ACTIVE_KEY),
-      requests: server.requests, text: state.openedProjection.body, save: state.openedProjection.save_state,
-      records: (await journalRows("intents")).length - records.length }).toEqual({ session: NEW_SESSION,
-      stored: NEW_SESSION, requests: [SESSION_READ, CHALLENGE, CREATION], text: "Base!", save: "saving", records: 1 });
-  });
+  const state = await reopen(server);
+
+  requireEditorReady(state);
+  // The later edit of the block wins. The new partition has it, and the Session changes after it is there.
+  expect({ session: state.session.editor_session.editor_session_id, stored: sessionStorage.getItem(ACTIVE_KEY),
+    requests: server.requests, text: state.openedProjection.body, save: state.openedProjection.save_state,
+    records: (await journalRows("intents")).length - records.length }).toEqual({ session: NEW_SESSION,
+    stored: NEW_SESSION, requests: [SESSION_READ, CHALLENGE, CREATION], text: "Base!", save: "saving", records: 1 });
+});
+
+// The interim state of ADR 0107 stays at a load until #1953: a load does not know the text of a live tab.
+it.each(TEXT_CASES)("keeps the stored Editor Session and its input at a load when its Journal has %s", async (_, edit,
+  moved, leave) => {
+  const server = await prepare(edit, moved, leave);
+  const records = await journalRows("intents");
+
+  const state = await load(server);
+
+  expect({ kind: state.kind, stored: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests })
+    .toEqual({ kind: "editor-read-only-recovery", stored: SESSION, requests: [SESSION_READ] });
+  if (state.kind === "editor-ready") state.database.close();
+  expect(await journalRows("intents")).toEqual(records);
+});
 
 it("keeps a changed block that the current Chapter does not have as a paragraph at its place", async () => {
   const [first, second] = ["018f0000-0000-7001-8000-000000000a46", "018f0000-0000-7001-8000-000000000a47"];
@@ -233,7 +259,7 @@ it("keeps a changed block that the current Chapter does not have as a paragraph 
       createdAt: "2026-08-15T08:00:00.000Z" });
   }, revisions);
 
-  const state = await load(server);
+  const state = await reopen(server);
 
   requireEditorReady(state);
   // The steps of the catch-up go out as one Author Edit.
@@ -250,7 +276,7 @@ it("puts the text on the base of the new Editor Session when another tab saves b
   const server = await prepare(undefined, false, async (workspace) => { await appendAuthorEdit(workspace, EDIT); },
     { ...REVISIONS, created: chapterRevision(THIRD_REVISION, "Base, and the text of two other tabs") });
 
-  const state = await load(server);
+  const state = await reopen(server);
 
   requireEditorReady(state);
   expect({ revision: state.session.base_snapshot.authoritative_head_revision_id, text: state.openedProjection.body,
@@ -267,7 +293,6 @@ it.each([
     await appendAuthorEdit(workspace, EDIT);
     await freezeOneIntentSubmission(workspace);
   }],
-  ["a refused Author Edit", "refused", submitted],
   ["an Author Edit that conflicted for another reason", "proposal_head_present", submitted],
   ["Proposal candidate input that no group revised", undefined, async (workspace: EditorReadyState) => {
     await appendAuthorEdit(workspace, { kind: "candidate_selection", target: { proposal_id: PROPOSAL,
@@ -280,12 +305,12 @@ it.each([
       key: `withdraw:${workspace.partition.journal_partition_id}:${LATER_REVISION}:${NEW_SNAPSHOT}`,
       settlement: "unresolved" }));
   }],
-] as const)("keeps the stored Editor Session and its input at a load when its Journal has %s", async (_, edit,
-  leave) => {
+] as const)("keeps the stored Editor Session and its input when the live tab opens again and its Journal has %s",
+  async (_, edit, leave) => {
   const server = await prepare(edit, false, leave);
   const records = await journalRows("intents");
 
-  const state = await load(server);
+  const state = await reopen(server);
 
   expect({ kind: state.kind, stored: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests })
     .toEqual({ kind: "editor-read-only-recovery", stored: SESSION, requests: [SESSION_READ] });
