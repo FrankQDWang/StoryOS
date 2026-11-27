@@ -8,7 +8,7 @@ import type { EditorReadyState } from "../../src/editor-types.ts";
 import { appendAuthorEdit } from "../../src/local-edit-journal.ts";
 import { captureManuscriptChange } from "../../src/manuscript-doc.ts";
 import {
-  OWNER, PROJECT, REVISION, SESSION, chapterRevision, closeTrackedDatabases, createAppliedAuthorEditResponse,
+  BLOCK, OWNER, PROJECT, REVISION, SESSION, chapterRevision, closeTrackedDatabases, createAppliedAuthorEditResponse,
   createBrowserScenario, deleteJournal, jsonResponse, requestHeaders, requestResult, requireEditorReady,
   requireRequestBody, trackDatabase,
 } from "./scenario.ts";
@@ -19,11 +19,14 @@ const NEW_SESSION = "018f0000-0000-7001-8000-000000000a42";
 const NEW_SNAPSHOT = "018f0000-0000-7001-8000-000000000a43";
 const MOVED_SNAPSHOT = "018f0000-0000-7001-8000-000000000a45";
 const LATER_BODY = "Base, and the text of another tab";
+const THIRD_REVISION = "018f0000-0000-7001-8000-000000000a48";
 type Revision = { revision_id: string; body: string;
   blocks: { manuscript_block_id: string; block_kind: "paragraph" | "heading"; text: string }[] };
-const REVISIONS: { base: Revision; later: Revision } = { base: chapterRevision(REVISION, "Base"),
+const REVISIONS: { base: Revision; later: Revision; created?: Revision } = { base: chapterRevision(REVISION, "Base"),
   later: chapterRevision(LATER_REVISION, LATER_BODY) };
 const EDIT = { from: 4, to: 4, text: "!", resultingBody: "Base!" };
+const [PROPOSAL, OPERATION, PROPOSAL_REVISION] = ["018f0000-0000-7001-8000-000000000a49",
+  "018f0000-0000-7001-8000-000000000a4a", "018f0000-0000-7001-8000-000000000a4b"];
 const UNDO_GROUP = "018f0000-0000-7001-8000-000000000a44";
 // Two inputs of one group that end on the base text, so the Server gives `no_effect`.
 const NO_CHANGE = [{ from: 4, to: 4, text: "x", resultingBody: "Basex", inputOrigin: "typing" as const,
@@ -51,11 +54,22 @@ async function sha256(text: string): Promise<string> {
 
 /**
  * A fake Server whose Chapter has a later Revision than the base of the stored Editor Session. It serves only the read
- * of the stored Session, a Challenge, one creation, whose new Session has the later Revision as its base, and, with
- * `edit`, one Author Edit with that zero-authority result. After `moveBase`, the read gives the base that a deletion
+ * of the stored Session, a Challenge, one creation, whose new Session has the later Revision as its base (or `created`
+ * at a later position), and, with `edit`, one Author Edit with that zero-authority result. After `moveBase`, the read gives the base that a deletion
  * moved: a later Snapshot of the same Revision. It records each request and throws on each other request.
  */
-async function fakeServer(edit?: "no_effect" | "conflicted", { base, later } = REVISIONS) {
+type Result = keyof typeof RESULTS;
+// Each zero-authority result of an Author Edit on the base: its effect and the head of its receipt.
+const RESULTS = {
+  no_effect: { effect: { kind: "no_effect", reason: "content_unchanged" }, head: REVISION },
+  conflicted: { effect: { kind: "conflicted", reason: "stale_authoritative_head",
+    current_authoritative_revision_id: LATER_REVISION }, head: LATER_REVISION },
+  proposal_head_present: { effect: { kind: "conflicted", reason: "proposal_head_present",
+    current_authoritative_revision_id: REVISION }, head: REVISION },
+  refused: { effect: { kind: "refused", reason: "invalid_selection" }, head: REVISION },
+} as const;
+
+async function fakeServer(edit?: Result, { base, later, created: at } = REVISIONS) {
   const requests: string[] = [];
   const snapshot = async (revision: Revision) => ({ authoritative_head_revision_id: revision.revision_id,
     materialized_revision: revision, materialized_payload_digest: {
@@ -64,8 +78,8 @@ async function fakeServer(edit?: "no_effect" | "conflicted", { base, later } = R
   let stored = first;
   const created = { ...scenario.session,
     editor_session: { ...scenario.session.editor_session, editor_session_id: NEW_SESSION },
-    base_snapshot: { ...scenario.session.base_snapshot, snapshot_id: NEW_SNAPSHOT, project_activity_position: "1",
-      ...await snapshot(later) } };
+    base_snapshot: { ...scenario.session.base_snapshot, snapshot_id: NEW_SNAPSHOT,
+      project_activity_position: at === undefined ? "1" : "2", ...await snapshot(at ?? later) } };
   const fetchImpl: typeof fetch = async (input, init) => {
     const name = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
     requests.push(name);
@@ -81,10 +95,9 @@ async function fakeServer(edit?: "no_effect" | "conflicted", { base, later } = R
       const request = requireRequestBody(init);
       const answer = createAppliedAuthorEditResponse({ request, commandDigest: await digestApplyAuthorEdit(request as never),
         idempotencyKey: requestHeaders(init).get("idempotency-key")! });
-      const heads = edit === "no_effect" ? [REVISION] : [LATER_REVISION];
-      return jsonResponse({ ...answer, effect: edit === "no_effect" ? { kind: "no_effect", reason: "content_unchanged" }
-        : { kind: "conflicted", reason: "stale_authoritative_head", current_authoritative_revision_id: LATER_REVISION },
-      receipt: { ...answer.receipt, result: edit, prior_heads: heads, resulting_heads: heads, proposal_revision_ids: [],
+      const { effect, head } = RESULTS[edit];
+      return jsonResponse({ ...answer, effect, receipt: { ...answer.receipt, result: effect.kind, prior_heads: [head],
+        resulting_heads: [head], proposal_revision_ids: [],
         authoritative_revision_ids: [], authoritative_commit_ids: [], author_action_sequence: null } });
     }
     throw new Error(`unexpected request: ${name}`);
@@ -136,7 +149,7 @@ type Leave = (workspace: EditorReadyState, server: Awaited<ReturnType<typeof fak
  * Opens the stored Editor Session on the Chapter of its base, leaves the Journal work of `leave`, and proves that the
  * Author Edit of `edit` settled with that result. With `moved`, the Server then gives the base that a deletion moved.
  */
-async function prepare(edit: "no_effect" | "conflicted" | undefined, moved: boolean, leave: Leave,
+async function prepare(edit: Result | undefined, moved: boolean, leave: Leave,
   revisions = REVISIONS) {
   const server = await fakeServer(edit, revisions);
   const first = await openStored(server);
@@ -147,7 +160,7 @@ async function prepare(edit: "no_effect" | "conflicted" | undefined, moved: bool
     .map(({ settlement }) => [settlement.kind, settlement.effect?.kind]);
   expect({ edits: server.requests.filter((request) => request === AUTHOR_EDIT).length, settlements })
     .toEqual(edit === undefined ? { edits: 0, settlements: [] }
-      : { edits: 1, settlements: [["zero_authority_receipt_settled", edit]] });
+      : { edits: 1, settlements: [["zero_authority_receipt_settled", RESULTS[edit].effect.kind]] });
   if (moved) server.moveBase();
   server.requests.length = 0;
   return server;
@@ -231,19 +244,43 @@ it("keeps a changed block that the current Chapter does not have as a paragraph 
       requests: [SESSION_READ, CHALLENGE, CREATION] });
 });
 
+it("puts the text on the base of the new Editor Session when another tab saves before the creation", async () => {
+  const server = await prepare(undefined, false, async (workspace) => { await appendAuthorEdit(workspace, EDIT); },
+    { ...REVISIONS, created: chapterRevision(THIRD_REVISION, "Base, and the text of two other tabs") });
+
+  const state = await load(server);
+
+  requireEditorReady(state);
+  expect({ revision: state.session.base_snapshot.authoritative_head_revision_id, text: state.openedProjection.body,
+    stored: sessionStorage.getItem(ACTIVE_KEY) }).toEqual({ revision: THIRD_REVISION, text: "Base!",
+    stored: NEW_SESSION });
+});
+
+const submitted = (workspace: EditorReadyState, server: Awaited<ReturnType<typeof fakeServer>>) =>
+  appendAuthorEdit(workspace, EDIT).then(() => submit(workspace, server));
+
 // Each case leaves work in the Journal of the stored Session that the catch-up cannot put on the current Chapter.
 it.each([
-  ["a group that is not settled", async (workspace: EditorReadyState) => {
+  ["a group that is not settled", undefined, async (workspace: EditorReadyState) => {
     await appendAuthorEdit(workspace, EDIT);
     await freezeOneIntentSubmission(workspace);
   }],
-  ["an unresolved Withdrawal", async (workspace: EditorReadyState) => {
+  ["a refused Author Edit", "refused", submitted],
+  ["an Author Edit that conflicted for another reason", "proposal_head_present", submitted],
+  ["Proposal candidate input that no group revised", undefined, async (workspace: EditorReadyState) => {
+    await appendAuthorEdit(workspace, { kind: "candidate_selection", target: { proposal_id: PROPOSAL,
+      operation_id: OPERATION, revision_id: PROPOSAL_REVISION, manuscript_block_id: BLOCK },
+    expectedProposalHeads: [PROPOSAL_REVISION], priorText: "Candidate", from: 9, to: 9, text: "!",
+    resultingBody: "Candidate!" });
+  }],
+  ["an unresolved Withdrawal", undefined, async (workspace: EditorReadyState) => {
     await requestResult(workspace.database.transaction("metadata", "readwrite").objectStore("metadata").put({
       key: `withdraw:${workspace.partition.journal_partition_id}:${LATER_REVISION}:${NEW_SNAPSHOT}`,
       settlement: "unresolved" }));
   }],
-] as const)("keeps the stored Editor Session and its input at a load when its Journal has %s", async (_, leave) => {
-  const server = await prepare(undefined, false, leave);
+] as const)("keeps the stored Editor Session and its input at a load when its Journal has %s", async (_, edit,
+  leave) => {
+  const server = await prepare(edit, false, leave);
   const records = await journalRows("intents");
 
   const state = await load(server);

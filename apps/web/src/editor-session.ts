@@ -301,6 +301,8 @@ export interface EditorWorkspaceOpening {
 
 export interface OpenedEditorWorkspace {
   editor: EditorState;
+  /** The Chapter of the editor: the Chapter read, or the later base of a new Editor Session. */
+  chapter: GetChapterResponse;
 }
 
 type EditorSessionStart =
@@ -308,30 +310,38 @@ type EditorSessionStart =
     creation: SessionCreation | undefined }
   | { kind: "failed"; database: IDBDatabase | undefined; error: unknown };
 
-// The Editor Session that this page writes with, and the end of its lock.
-let heldSession: { editorSessionId: string; release: () => void } | undefined;
+// The Editor Sessions whose lock this page holds, and the end of each lock.
+const heldSessions = new Map<string, () => void>();
 
 /**
- * Takes the lock of an Editor Session for this page, and ends the lock of the earlier Editor Session of the page. It is
- * false when another page holds the lock: the browser command "Duplicate tab" copies `sessionStorage`, and two pages
- * of one Editor Session would freeze and settle the Journal records of each other.
+ * Takes the lock of an Editor Session for this page. It is false when another page holds the lock: the browser command
+ * "Duplicate tab" copies `sessionStorage`, and two pages of one Editor Session would freeze and settle the Journal
+ * records of each other.
  */
 async function lockEditorSession(editorSessionId: string): Promise<boolean> {
   const locks = globalThis.navigator?.locks;
-  if (heldSession?.editorSessionId === editorSessionId || locks === undefined) return true;
+  if (heldSessions.has(editorSessionId) || locks === undefined) return true;
   return new Promise<boolean>((resolve, reject) => {
     locks.request(`storyos-editor-session:${editorSessionId}`, { ifAvailable: true }, (lock) => {
       if (lock === null) {
         resolve(false);
         return undefined;
       }
-      heldSession?.release();
       return new Promise<void>((release) => {
-        heldSession = { editorSessionId, release };
+        heldSessions.set(editorSessionId, release);
         resolve(true);
       });
     }).catch(reject);
   });
+}
+
+/** Ends the lock of each Editor Session of this page other than `editorSessionId`, after `sessionStorage` names it. */
+function releaseEarlierEditorSessions(editorSessionId: string): void {
+  for (const [held, release] of heldSessions) {
+    if (held === editorSessionId) continue;
+    heldSessions.delete(held);
+    release();
+  }
 }
 
 /** Opens the Journal and reads the stored Editor Session at once, so that the read is in flight with the Chapter read. */
@@ -381,6 +391,19 @@ function baseIsNotChapter(value: unknown, chapter: GetChapterResponse): boolean 
     | undefined)?.base_snapshot;
   return base?.chapter_id !== chapter.chapter.chapter_id
     || base?.materialized_revision?.revision_id !== chapter.chapter.current_revision.revision_id;
+}
+
+/**
+ * The Chapter read with the base of a new Editor Session of the same Chapter, when that base is later than the read.
+ * Another tab can save between the Chapter read and the creation.
+ */
+function chapterAtLaterBase(chapter: GetChapterResponse, value: unknown): GetChapterResponse {
+  const base = (value as Partial<GetEditorSessionResponse> | undefined)?.base_snapshot;
+  if (base?.chapter_id !== chapter.chapter.chapter_id || base.materialized_revision === undefined
+    || !boundedU64(base.project_activity_position) || !boundedU64(chapter.project_activity_position)
+    || BigInt(base.project_activity_position) <= BigInt(chapter.project_activity_position)) return chapter;
+  return { ...chapter, project_activity_position: base.project_activity_position,
+    chapter: { ...chapter.chapter, current_revision: base.materialized_revision } };
 }
 
 /** The workspace of the stored Editor Session. A deletion moves its Server base (ADR 0107), so it has the Journal base. */
@@ -436,10 +459,13 @@ async function earlierBaseText(workspace: EditorWorkspace, chapter: GetChapterRe
   const revisedCandidate = new Set(snapshot.groups.flatMap((group) => group.settlement.kind
     === "zero_authority_receipt_settled" && group.settlement.effect.kind === "proposal_revised"
     ? group.ordered_coverage.map((item) => item.local_intent_sequence) : []));
-  if (snapshot.groups.some((group) => group.settlement.kind !== "applied_receipt_settled"
-    && group.settlement.kind !== "zero_authority_receipt_settled")
-    || snapshot.records.some((record) => record.proposal_target !== undefined
-      && !revisedCandidate.has(record.local_intent_sequence))) return undefined;
+  // Only a later head stopped the text. A refused edit, or a conflict for another reason, needs its recovery.
+  const known = ({ settlement }: (typeof snapshot.groups)[number]) => settlement.kind === "applied_receipt_settled"
+    || settlement.kind === "zero_authority_receipt_settled" && (settlement.effect.kind === "proposal_revised"
+      || settlement.effect.kind === "no_effect" || settlement.effect.kind === "conflicted"
+      && settlement.effect.reason === "stale_authoritative_head");
+  if (!snapshot.groups.every(known) || snapshot.records.some((record) => record.proposal_target !== undefined
+    && !revisedCandidate.has(record.local_intent_sequence))) return undefined;
   return { base: base.materialized_revision.blocks,
     shown: shown ?? (await rebuildPendingProjection(workspace)).blocks };
 }
@@ -457,25 +483,28 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
 }): Promise<OpenedEditorWorkspace> {
   const scope = project.project_scope;
   let start = await started;
-  // The edits that put the text of the stored Session on the current Chapter (ADR 0107, section 2).
-  let catchUp: ReturnType<typeof stepsOnCurrent> | undefined;
+  // The text of the stored Session that the new Editor Session puts on the current Chapter (ADR 0107, section 2).
+  let text: EarlierBaseText | undefined;
+  const mintId = () => uuidV7(cryptoImpl);
   // ADR 0107: another Editor Session can write, so the stored Session can have an earlier base than the Chapter read.
   // When its Journal partition has no open work, the load opens a new Editor Session, as a new tab does. When its open
-  // work is Author Edit text, the new Editor Session gets that text on the current Chapter.
+  // work is Author Edit text that has an Author Edit form on the Chapter, the new Editor Session gets that text.
   if (start.kind === "started" && start.active && baseIsNotChapter(start.sessionValue, chapter)) {
     try {
       const stored = await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl);
       if (!await partitionHasOpenWork(stored)) {
         start = { ...start, active: null };
       } else {
-        const text = await earlierBaseText(stored, chapter, shown);
+        text = await earlierBaseText(stored, chapter, shown);
         const current = chapter.chapter.current_revision.blocks;
-        catchUp = text && stepsOnCurrent(current, blocksOnCurrent(text, current, () => uuidV7(cryptoImpl)));
-        if (catchUp !== undefined) start = { ...start, active: null };
+        if (text !== undefined && stepsOnCurrent(current, blocksOnCurrent(text, current, mintId)) === undefined) {
+          text = undefined;
+        }
+        if (text !== undefined) start = { ...start, active: null };
       }
     } catch {
-      // An unreadable Journal, or text with no Author Edit form, keeps the stored Session, so its recovery runs.
-      catchUp = undefined;
+      // An unreadable Journal keeps the stored Session, so its recovery runs.
+      text = undefined;
     }
   }
   if (start.kind === "started" && !start.active) {
@@ -483,6 +512,8 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
       const options = { baseUrl, project, profile, fetchImpl, cryptoImpl };
       start = { ...start, sessionValue: await createSession(start.creation ?? prepareSessionCreation(options),
         options) };
+      // A save of another tab between the Chapter read and the creation gives the new Editor Session a later base.
+      chapter = chapterAtLaterBase(chapter, start.sessionValue);
     } catch (error) {
       start = { kind: "failed", database: start.database, error };
     }
@@ -490,7 +521,8 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
   if (start.kind === "failed") {
     start.database?.close();
     // The Journal did not open, for example a Journal of an earlier version (ADR 0099), or the Session request failed.
-    return { editor: { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error: start.error } };
+    return { editor: { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error: start.error },
+      chapter };
   }
   const { database, sessionValue } = start;
   try {
@@ -539,17 +571,21 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
       throw new Error("Another page writes with the Editor Session");
     }
     // The tab changes to the new Session only after its Journal has the text, so a stop keeps the stored Session.
+    const current = session.base_snapshot.materialized_revision.blocks;
+    const catchUp = text === undefined ? [] : stepsOnCurrent(current, blocksOnCurrent(text, current, mintId));
+    if (catchUp === undefined) throw new Error("The text of the stored Editor Session has no Author Edit form");
     const undoGroupId = uuidV7(cryptoImpl);
     const createdAt = new Date().toISOString();
-    for (const edit of catchUp ?? []) {
+    for (const edit of catchUp) {
       await appendAuthorEdit(workspace, { ...edit, inputOrigin: "selection_replacement", undoGroupId, createdAt },
         cryptoImpl);
     }
     globalThis.sessionStorage?.setItem(activeSessionKey, session.editor_session.editor_session_id);
+    releaseEarlierEditorSessions(session.editor_session.editor_session_id);
     const pending = await rebuildPendingProjection(workspace);
-    return { editor: { kind: "editor-ready", ...workspace, openedProjection: pending } };
+    return { editor: { kind: "editor-ready", ...workspace, openedProjection: pending }, chapter };
   } catch (error) {
     database.close();
-    return { editor: { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error } };
+    return { editor: { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error }, chapter };
   }
 }

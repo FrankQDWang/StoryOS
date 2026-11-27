@@ -159,12 +159,13 @@ type EarlyChapterOpen = {
  * the early Chapter read and the early Editor Session read and reads as the first open does. The open of the
  * workspace ends after the Chapter read of the Chapter of the Project read, and only that open writes to the Journal.
  * `shown` is the text of an editor whose base is earlier than the Server. The open puts it on the current Chapter
- * (ADR 0107, section 2).
+ * (ADR 0107, section 2). `chapter` is a read of the Chapter `chapterId` that the reopen uses instead of a new read.
  */
 export async function reopenControlledProject(options: Omit<ProjectOpenOptions, "projectId"> & {
   opened: Pick<ProjectReadyState, "profile" | "project">;
   chapterId?: string | undefined;
   shown?: readonly ManuscriptParagraph[] | undefined;
+  chapter?: GetChapterResponse | undefined;
 }): Promise<ControlledProjectState> {
   const { baseUrl, opened, fetchImpl = globalThis.fetch, signal, indexedDBImpl = globalThis.indexedDB,
     cryptoImpl = globalThis.crypto } = options;
@@ -175,7 +176,8 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
   // The early open requests no Challenge: when the open discards it, its replacement requests one, and one open
   // requests at most one Challenge (#1899).
   const early = chapterId === undefined ? undefined : { chapterId,
-    chapter: settle(readCurrentChapter(queryOptions, scope.project_id, chapterId, scope.owner_user_id)),
+    chapter: settle(options.chapter?.chapter.chapter_id === chapterId ? Promise.resolve(options.chapter)
+      : readCurrentChapter(queryOptions, scope.project_id, chapterId, scope.owner_user_id)),
     opening: startEditorWorkspace({ baseUrl, project: opened.project, profile: opened.profile, fetchImpl,
       indexedDBImpl, cryptoImpl, earlyChallenge: false }) };
   try {
@@ -243,14 +245,15 @@ async function openProjectWorkspace(
       void opening.abandon();
       throw chapter.error;
     }
-    const { editor } = await opening.finish(chapter.value, project, shown);
-    return { kind: "project-ready", profile, project, revision, chapter: chapter.value, editor };
+    const opened = await opening.finish(chapter.value, project, shown);
+    return { kind: "project-ready", profile, project, revision, chapter: opened.chapter, editor: opened.editor };
   } catch (error) {
     return projectUnavailable(error);
   }
 }
 
-async function readCurrentChapter(
+/** Reads the Chapter `chapterId` of the Project, and refuses a read of another Project Scope or Chapter. */
+export async function readCurrentChapter(
   queryOptions: StoryOSQueryOptions,
   projectId: string,
   chapterId: string,
