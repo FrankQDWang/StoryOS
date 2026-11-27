@@ -10,7 +10,7 @@ import type { EditorReadyState } from "./editor-types.ts";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
 import { canonicalValue as canonical } from "./canonical-value.ts";
 import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance } from "./accept-block-proposal.ts";
-import { acceptDraftCandidates, acceptedCandidateTexts } from "./selection-reference-draft.ts";
+import { acceptDraftCandidates, acceptedCandidateTexts, proposalOfRead } from "./selection-reference-draft.ts";
 import { rejectDisplayedBlockProposal, rejectionJournalState,
   retryPendingDisplayedRejection } from "./reject-block-proposal.ts";
 import { acceptanceJournalProposals, acceptanceSessionBlocked, hasPendingDisplayedAcceptance,
@@ -514,7 +514,7 @@ export function BlockProposalDisplay({
         if (response.effect.kind === "applied") {
           refreshedAcceptance.current.add(target.proposalId);
           // A reference to the accepted candidate text now refers to the same text in the Chapter (ADR 0062).
-          acceptDraftCandidates(scope, target.proposalId, await acceptedCandidates(target.proposalId,
+          acceptDraftCandidates(scope, response.receipt, await acceptedCandidates(target.proposalId,
             response.receipt), response.effect.authoritative_revision.revision_id);
         }
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
@@ -553,8 +553,7 @@ export function BlockProposalDisplay({
     if (displayed?.revision_id === receipt.proposal_revision_id) return acceptedCandidateTexts(displayed, receipt);
     const current = await getProposal({ baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
       projectId: scope.project_id, proposalId }).catch(() => undefined);
-    return acceptedCandidateTexts(current?.project_scope.project_id === scope.project_id
-      && current.proposal.proposal_id === proposalId ? current.proposal : undefined, receipt);
+    return acceptedCandidateTexts(proposalOfRead(current, scope, proposalId), receipt);
   };
 
   const retryPending = (proposalId: string) => {
@@ -578,7 +577,7 @@ export function BlockProposalDisplay({
         const refresh = response.effect.kind !== "applied" || !refreshedAcceptance.current.has(proposalId);
         if (response.effect.kind === "applied") {
           refreshedAcceptance.current.add(proposalId);
-          acceptDraftCandidates(scope, proposalId, await acceptedCandidates(proposalId, response.receipt),
+          acceptDraftCandidates(scope, response.receipt, await acceptedCandidates(proposalId, response.receipt),
             response.effect.authoritative_revision.revision_id);
         }
         if (response.effect.kind === "refused") {

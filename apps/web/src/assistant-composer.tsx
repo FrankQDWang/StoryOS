@@ -10,10 +10,15 @@ import { historicalAcknowledgementUnavailable, HISTORICAL_ACKNOWLEDGEMENT_MESSAG
   from "./historical-acknowledgement.ts";
 import {
   clearDraftReferences, draftLabels, pasteReferences, REFERENCE_CLIPBOARD_TYPE, removeDraftReference,
-  useReferenceDraft,
+  sentDraftEntries, useReferenceDraft, type DraftReference,
 } from "./selection-reference-draft.ts";
 import type { SelectionReference } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { useSkillPicker } from "./skill-picker.tsx";
+
+
+/** The references, the labels, and the keys of the draft references that a message sends. */
+const sentReferences = (entries: readonly DraftReference[]) => ({ references: entries.map((entry) => entry.reference),
+  labels: draftLabels(entries), keys: entries.map((entry) => entry.key) });
 
 export function AssistantComposer({ context, available, sending, current, run, skills, onSend, onRefresh, onStatus,
   onGuidanceRetained }: {
@@ -163,8 +168,7 @@ export function AssistantComposer({ context, available, sending, current, run, s
       if (active && context !== undefined) {
         if (pause || message.trim().length > 0) void submitControl(freezeRunControl(context, run,
           pause ? { kind: "pause" } : { kind: "guidance", text: message.trim(),
-            references: draft.entries.map((entry) => entry.reference), labels: draftLabels(draft.entries),
-            keys: draft.entries.map((entry) => entry.key) }));
+            ...sentReferences(sentDraftEntries(draft.entries)) }));
       } else if (message.trim().length > 0) {
         onSend(message.trim(), () => {
           setMessage("");

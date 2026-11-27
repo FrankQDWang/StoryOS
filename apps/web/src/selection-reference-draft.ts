@@ -88,6 +88,14 @@ export function draftEntries(scope: ProjectScope): DraftReference[] {
 }
 
 /**
+ * The references that a message sends. A reference that waits for the new blocks of an accepted candidate is not
+ * sent: its candidate is decided, and the Host refuses a reference to it (ADR 0106, section 2).
+ */
+export function sentDraftEntries(entries: readonly DraftReference[]): DraftReference[] {
+  return entries.filter((entry) => entry.split === undefined);
+}
+
+/**
  * True when at least one added reference is not in the draft yet. The next message must also hold the
  * added references with the references of the active AgentRun. A reference of the Run does not count again.
  */
@@ -162,7 +170,8 @@ export function draftLabels(entries: readonly DraftReference[]): string[] {
  * editor document at `revisionId`. Only the document of the accepted Revision names the new blocks:
  * - The target block and the next blocks have the texts of the parts: the reference becomes Chapter text of them.
  * - Else the reference leaves the draft, because the accepted Revision does not have the parts.
- * A document of another Revision changes nothing.
+ * - A document of another Revision shows first: the reference leaves with no sentence, as for deleted text
+ *   (ADR 0062, ADR 0106 section 2).
  */
 export function showAcceptedSplits(scope: ProjectScope, chapterId: string, revisionId: string,
   blocks: readonly { manuscript_block_id: string; text: string }[], tree: ChapterOrder | undefined): void {
@@ -185,8 +194,8 @@ export function showAcceptedSplits(scope: ProjectScope, chapterId: string, revis
   let changed = false;
   const entries: DraftReference[] = [];
   for (const entry of draft.entries) {
-    const next = entry.reference.chapter_id !== chapterId || entry.split?.revisionId !== revisionId ? entry
-      : shownSplit(entry, entry.split);
+    const next = entry.reference.chapter_id !== chapterId || entry.split === undefined ? entry
+      : entry.split.revisionId === revisionId ? shownSplit(entry, entry.split) : undefined;
     changed ||= next !== entry;
     if (next !== undefined) entries.push(next);
   }
@@ -275,6 +284,15 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
   if (changed) write(scope, { ...draft, entries });
 }
 
+/** The Proposal of a read response, or undefined when the response is of another Project or another Proposal. */
+export function proposalOfRead<P extends { proposal_id: string }>(
+  response: { project_scope: ProjectScope; proposal: P } | undefined, scope: ProjectScope, proposalId: string,
+): P | undefined {
+  return response?.project_scope.owner_user_id === scope.owner_user_id
+    && response.project_scope.project_id === scope.project_id && response.proposal.proposal_id === proposalId
+    ? response.proposal : undefined;
+}
+
 /**
  * The candidate text of each accepted Operation, from a read of the accepted Proposal Revision. A read of another
  * Proposal Revision gives no text (`undefined`), because its candidates can differ from the accepted candidates.
@@ -312,11 +330,13 @@ function candidateParts(text: string): { start: number; text: string }[] {
  * - A reference that ends after the first part waits for the new blocks (see `AcceptedSplit`).
  * - A start in a line feed moves to the next part, and an end in a line feed moves to the end of the part before
  *   it. A reference that then has no text leaves the draft.
- * - A reference to an accepted Operation with no known text (`undefined`) leaves the draft, because the draft
- *   cannot name its Chapter text.
+ * - A reference to an accepted Operation with no known text (`undefined`), or a reference of another Proposal
+ *   Revision than the Receipt, leaves the draft, because the draft cannot name its Chapter text.
  */
-export function acceptDraftCandidates(scope: ProjectScope, proposalId: string,
+export function acceptDraftCandidates(scope: ProjectScope,
+  receipt: { proposal_id: string; proposal_revision_id: string },
   candidates: ReadonlyMap<string, string | undefined>, revisionId: string): void {
+  const proposalId = receipt.proposal_id;
   const draft = read(scope);
   const accepted = (entry: DraftReference) => entry.reference.kind === "proposal_candidate_text"
     && entry.reference.proposal_id === proposalId && entry.candidate !== undefined
@@ -329,7 +349,8 @@ export function acceptDraftCandidates(scope: ProjectScope, proposalId: string,
       continue;
     }
     const text = candidates.get(entry.reference.operation_id);
-    if (text === undefined) continue;
+    // The offsets of a reference are offsets of its Proposal Revision. Only the accepted Revision has the text.
+    if (text === undefined || entry.reference.revision_id !== receipt.proposal_revision_id) continue;
     const parts = candidateParts(text);
     const { start_offset: from, end_offset: to } = entry.reference;
     const startPart = parts.findIndex((part) => part.start + part.text.length > from);

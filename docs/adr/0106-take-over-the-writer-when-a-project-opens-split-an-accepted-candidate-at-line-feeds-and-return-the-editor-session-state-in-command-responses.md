@@ -33,6 +33,7 @@ Measured on the personal instance at `main` `54525595` from the browser of the a
 - An empty part, from two line feeds together or from a line feed at the start or at the end of the candidate, makes no block.
 - The split is a part of the Acceptance: one command, one Revision, one Receipt. Author Undo of the Acceptance restores the earlier Revision and its members, and the Block identity restoration rule applies.
 - The candidate on the screen before the decision does not change: it is one candidate of one target block.
+- A draft reference to a later part becomes a Chapter text reference when the editor shows the accepted Revision. When the editor shows another Revision first, or the client cannot read the new Proposal state, the reference leaves with no sentence, as for deleted text (ADR 0062). The composer does not send a reference that waits for the new blocks.
 - The text of an existing Chapter does not change. A block that already has a line feed keeps it.
 - This replaces the sentence of ADR 0064 "The candidate text replaces all text of that Block" for a candidate with a line feed: the candidate text replaces the text of the target block, and the line feeds of the candidate split it. The other rules of ADR 0064 do not change.
 

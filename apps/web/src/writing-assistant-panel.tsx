@@ -37,7 +37,9 @@ import { SkillUseList } from "./skill-use-list.tsx";
 import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { mergeReferences } from "./selection-reference.ts";
-import { clearDraftReferences, draftEntries, draftLabels, setRunReferences } from "./selection-reference-draft.ts";
+import {
+  clearDraftReferences, draftEntries, draftLabels, sentDraftEntries, setRunReferences,
+} from "./selection-reference-draft.ts";
 import { SKILL_UNAVAILABLE_SENTENCE, skillSelectionUnavailable } from "./skill-selection.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 
@@ -630,7 +632,7 @@ export function WritingAssistantPanel({
         || tree.snapshot.project_scope.project_id !== context.scope.project_id) {
         throw new Error("Working Target Scope mismatch");
       }
-      const entries = draftEntries(context.scope);
+      const entries = sentDraftEntries(draftEntries(context.scope));
       const sent = frozen ?? { references: entries.map((entry) => entry.reference), labels: draftLabels(entries),
         keys: entries.map((entry) => entry.key) };
       const current: RequestReference & { idempotencyKey: string } = {
