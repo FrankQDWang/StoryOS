@@ -39,15 +39,19 @@ impl CompensationAdapter for AcceptanceCompensation {
         let Some(row) = load_revision_evidence(client, command, sequence).await? else {
             return Ok(None);
         };
-        let (Some(chapter_id), Some(resulting_revision_id), Some(prior_revision_id)) =
-            (row.get(/*idx*/ 0), row.get(/*idx*/ 1), row.get(/*idx*/ 2))
-        else {
+        let (Some(chapter_id), Some(resulting_revision_id), Some(prior_revision_id)): (
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ) = (row.get(/*idx*/ 0), row.get(/*idx*/ 1), row.get(/*idx*/ 2)) else {
             return Ok(None);
         };
         let Some(current_head_revision_id) = row.get(/*idx*/ 4) else {
             return Ok(None);
         };
         let prior_payload: Option<String> = row.get(/*idx*/ 3);
+        let split_added_blocks =
+            split_added_blocks(client, command, &resulting_revision_id, &prior_revision_id).await?;
         let loaded = LoadedAcceptance {
             sequence,
             chapter_id,
@@ -57,6 +61,7 @@ impl CompensationAdapter for AcceptanceCompensation {
             prior_payload: prior_payload.unwrap_or_default(),
             current_head_revision_id,
             prior_evidence_usable: false,
+            split_added_blocks,
             facts: None,
         };
         enrich(client, command, loaded).await.map(Some)
@@ -66,6 +71,7 @@ impl CompensationAdapter for AcceptanceCompensation {
         AuthorUndoFrontierKind::ReversibleAcceptance {
             resulting_revision_id: evidence.resulting_revision_id.clone(),
             prior_evidence_usable: evidence.prior_evidence_usable,
+            split_added_blocks: evidence.split_added_blocks,
         }
     }
 
@@ -139,6 +145,39 @@ impl CompensationAdapter for AcceptanceCompensation {
     }
 }
 
+/// True when the resulting Revision of an Acceptance has a Block member that its prior Revision
+/// does not have.
+async fn split_added_blocks(
+    client: &Client,
+    command: &UndoRequest,
+    resulting_revision_id: &str,
+    prior_revision_id: &str,
+) -> Result<bool, ProjectCommandError> {
+    Ok(client
+        .query_one(
+            "SELECT EXISTS (
+               SELECT 1 FROM storyos.manuscript_revision_members AS resulting
+                WHERE resulting.owner_user_id = $1::text::uuid
+                  AND resulting.project_id = $2::text::uuid
+                  AND resulting.revision_id = $3::text::uuid
+                  AND NOT EXISTS (
+                    SELECT 1 FROM storyos.manuscript_revision_members AS prior
+                     WHERE prior.owner_user_id = resulting.owner_user_id
+                       AND prior.project_id = resulting.project_id
+                       AND prior.revision_id = $4::text::uuid
+                       AND prior.manuscript_block_id = resulting.manuscript_block_id))",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &resulting_revision_id,
+                &prior_revision_id,
+            ],
+        )
+        .await
+        .map_err(database_error)?
+        .get(/*idx*/ 0))
+}
+
 pub(crate) struct LoadedAcceptance {
     pub sequence: u64,
     pub chapter_id: String,
@@ -147,6 +186,9 @@ pub(crate) struct LoadedAcceptance {
     pub prior_payload: String,
     pub current_head_revision_id: String,
     pub prior_evidence_usable: bool,
+    /// The resulting Revision has a Block that the prior Revision does not have: the split of the
+    /// accepted candidate added it (ADR 0106, section 2).
+    split_added_blocks: bool,
     prior_payload_present: bool,
     facts: Option<AcceptanceFacts>,
 }
@@ -343,32 +385,6 @@ pub(crate) async fn reversal_blocks(
             .iter()
             .all(|block| &block.manuscript_block_id != block_id)
     }) {
-        return Ok(None);
-    }
-    // A Reversal Proposal changes the text of Blocks and cannot remove the Blocks that the split
-    // of an accepted candidate added (ADR 0106, section 2).
-    let prior_ids: Vec<&str> = blocks
-        .iter()
-        .map(|block| block.manuscript_block_id.as_str())
-        .collect();
-    let added_by_split: bool = client
-        .query_one(
-            "SELECT EXISTS (
-               SELECT 1 FROM storyos.manuscript_revision_members
-                WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                  AND revision_id = $3::text::uuid
-                  AND manuscript_block_id::text <> ALL ($4::text[]))",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &loaded.resulting_revision_id,
-                &prior_ids,
-            ],
-        )
-        .await
-        .map_err(database_error)?
-        .get(/*idx*/ 0);
-    if added_by_split {
         return Ok(None);
     }
     Ok(Some(blocks))
