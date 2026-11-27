@@ -1562,6 +1562,8 @@ const NEW_TAB_STEPS = [
 /** The open ends with the answer of the creation (step 3). */
 const OPEN_ENDS = 3;
 
+/** The sentence of a suggestion card whose base text changed. */
+const CHANGED_BASE = "正文已变化。接受会用候选文字替换目标的当前文字。";
 /** The Chapter, the suggestion card, the save state, and the panels on the screen. */
 function screenState(root: HTMLElement | undefined) {
   return { title: root?.querySelector(".editor-panel h2")?.textContent,
@@ -1631,7 +1633,7 @@ it.each([
   // After the Acceptance, the other Proposal of the same block has a changed base.
   { decision: "acceptance", command: ACCEPTANCE, button: "accept", revision: ACCEPTED_REVISION,
     reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ, SESSION_READ],
-    card: `${OTHER.proposal_id}:${OTHER.candidate_text}正文已变化。接受会用候选文字替换目标的当前文字。✓ 接受× 拒绝` },
+    card: `${OTHER.proposal_id}:${OTHER.candidate_text}${CHANGED_BASE}✓ 接受× 拒绝` },
   { decision: "rejection", command: REJECTION, button: "reject", revision: REVISION,
     reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ], card: `${OTHER.proposal_id}:${OTHER.candidate_text}✓ 接受× 拒绝` },
 ])("shows the same screen after the $decision with no read that repeats a read of the action", async ({ command,

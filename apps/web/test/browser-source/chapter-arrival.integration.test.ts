@@ -1462,7 +1462,8 @@ it("sends no command of a Proposal navigation whose Command Challenge answers af
   // Each read of the list also reads the Proposal of the Run, and that read fails. The tests are not about it.
   const proposal = `GET ${P}/proposals/${PROPOSAL}`;
   await expectRequests(workspace.server, before, [READ_B, READ_C, "GET /api/v1/protocol", `GET ${P}`,
-    "GET /api/v1/projects", ...FULL_OPEN_READS, `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, CHALLENGE, SWITCH,
+    "GET /api/v1/projects", ...FULL_OPEN_READS,
+    `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, CHALLENGE, SWITCH,
     ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY, proposal], [CHALLENGE, AUTHOR_EDITS, SESSION_READ],
     { anyOrder: [openProposals(CHAPTER_B), proposal, `GET ${P}/manuscript/statistics`, ACTIVITY] },
     [`GET ${P}/chapters/${CHAPTER}`, CHALLENGE, SWITCH, ...reopenSteps(CHAPTER)],
@@ -2799,7 +2800,8 @@ it("sends the command of a selection back to the earlier Chapter from the result
       .toEqual({ title: "Chapter A", body: "Base", editable: true, alert: undefined, save: "saved" });
     // The navigation moved the Current Chapter to Chapter C, so the command of Chapter A expects Chapter C.
     await expectRequests(workspace.server, before, [READ_B, READ_C, "GET /api/v1/protocol", `GET ${P}`,
-      "GET /api/v1/projects", ...FULL_OPEN_READS, `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, `GET ${P}/chapters/${CHAPTER}`,
+      "GET /api/v1/projects", ...FULL_OPEN_READS,
+      `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, `GET ${P}/chapters/${CHAPTER}`,
       CHALLENGE, SWITCH, ...reopenSteps(CHAPTER)], [...panelReads(CHAPTER), `GET ${P}/proposals/${PROPOSAL}`]);
     expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_C], [CHAPTER_C, CHAPTER]]);
     expectSetup(workspace.server, before, ...RUN_REQUESTS, ...copyReads(CHAPTER_B));
@@ -2856,7 +2858,8 @@ it("sends the command of a selection from the Current Chapter that the applied c
     await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() })).toEqual({ ...READY, save: "saved" });
     // The command of Chapter B expects Chapter C, so the Server refuses no command.
     await expectRequests(workspace.server, before, [READ_C, "GET /api/v1/protocol", `GET ${P}`,
-      "GET /api/v1/projects", ...FULL_OPEN_READS, `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, ...SWITCH_STEPS,
+      "GET /api/v1/projects", ...FULL_OPEN_READS,
+      `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, ...SWITCH_STEPS,
       ...REOPEN_STEPS], [...panelReads(CHAPTER_B), `GET ${P}/proposals/${PROPOSAL}`]);
     expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_C], [CHAPTER_C, CHAPTER_B]]);
     expectSetup(workspace.server, before, ...RUN_REQUESTS, ...copyReads(CHAPTER_B));
@@ -3061,7 +3064,8 @@ it("keeps the editor read-only after an unknown result of the command of a Propo
       save: "saved", disabled: false });
     // The read of the Project shows Chapter C, so the command of Chapter B expects Chapter C.
     await expectRequests(workspace.server, before, [READ_C, "GET /api/v1/protocol", `GET ${P}`,
-      "GET /api/v1/projects", ...FULL_OPEN_READS, `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, SWITCH], [],
+      "GET /api/v1/projects", ...FULL_OPEN_READS,
+      `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, SWITCH], [],
       learnReads(CHAPTER_B, CHAPTER_C), [...SWITCH_STEPS, ...REOPEN_STEPS],
       { anyOrder: [...panelReads(CHAPTER_B), `GET ${P}/proposals/${PROPOSAL}`] });
     expect({ stopped: stopped - before, switches: workspace.server.switches }).toEqual({ stopped: 11,
@@ -3159,7 +3163,8 @@ it.each([
     await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() })).toEqual({ ...READY, save: "saved" });
     // The read of the Project shows Chapter C, so the command of Chapter B expects Chapter C.
     await expectRequests(workspace.server, before, [READ_C, "GET /api/v1/protocol", `GET ${P}`,
-      "GET /api/v1/projects", ...FULL_OPEN_READS, `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, READ_B, SWITCH], [],
+      "GET /api/v1/projects", ...FULL_OPEN_READS,
+      `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, READ_B, SWITCH], [],
       NAVIGATION_RACE_STEPS, { anyOrder: [...panelReads(CHAPTER_B), `GET ${P}/proposals/${PROPOSAL}`] });
     expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_C], [CHAPTER, CHAPTER_C], [CHAPTER_C, CHAPTER_B]]);
     expectSetup(workspace.server, before, ...RUN_REQUESTS, ...copyReads(CHAPTER_B));
@@ -3184,7 +3189,8 @@ it("sends no command of a selection after a Proposal navigation command that wen
     // The command of the selection does not go out after its Command Challenge. The read of the Project shows Chapter
     // C, so the next command of Chapter B expects Chapter C.
     await expectRequests(workspace.server, before, [READ_B, CHALLENGE, READ_C, "GET /api/v1/protocol", `GET ${P}`,
-      "GET /api/v1/projects", ...FULL_OPEN_READS, `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, SWITCH], [],
+      "GET /api/v1/projects", ...FULL_OPEN_READS,
+      `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, SWITCH], [],
       NAVIGATION_RACE_STEPS, { anyOrder: [...panelReads(CHAPTER_B), `GET ${P}/proposals/${PROPOSAL}`] });
     expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_C], [CHAPTER, CHAPTER_C], [CHAPTER_C, CHAPTER_B]]);
     expectSetup(workspace.server, before, ...RUN_REQUESTS, ...copyReads(CHAPTER_B));

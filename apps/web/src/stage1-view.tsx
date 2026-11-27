@@ -470,8 +470,8 @@ function ProjectEditorView({
   // default the Current Chapter of the page), and the Editor Session at the same time. It does not read the protocol
   // profile again.
   const reopen = (chapterId?: string, shown?: readonly ManuscriptParagraph[], reads?: ProjectReads) =>
-    reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl, opened: { profile: state.profile, project: state.project },
-      chapterId, shown, reads });
+    reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
+      opened: { profile: state.profile, project: state.project }, chapterId, shown, reads });
 
   // A save found a later Revision: the tab opens again on it with its text, and shows no sentence (ADR 0107, section 2).
   // One catch-up runs for each editor part. It waits for an open IME composition, ends input, and makes the editor
