@@ -331,6 +331,14 @@ function ProjectEditorView({
     readOnlyRef.current = value;
     setReadOnlyState(value);
   };
+  // True while the command of a Proposal navigation is in flight. Its answer can move the Editor Session base, so the
+  // editor accepts no input until the answer.
+  const [navigationCommand, setNavigationCommandState] = useState(false);
+  const navigationCommandRef = useRef(false);
+  const setNavigationCommand = (value: boolean) => {
+    navigationCommandRef.current = value;
+    setNavigationCommandState(value);
+  };
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
   // The Chapter whose switch waits for the Retry-After of a Command Challenge rate limit (#1679).
@@ -402,7 +410,7 @@ function ProjectEditorView({
   const endHandOver = (typed: ArrivalInput, capture: boolean) => {
     handOverRef.current = undefined;
     typed.stop();
-    if (capture && writing !== undefined && !readOnlyRef.current) {
+    if (capture && writing !== undefined && !readOnlyRef.current && !navigationCommandRef.current) {
       for (const item of typed.held()) writing.capture(item.edit, item.origin, item.blocks);
     } else if (typed.hasInput()) {
       unsavedNotice.show({ chapterId: typed.chapterId, blocks: typed.blocks() });
@@ -661,7 +669,7 @@ function ProjectEditorView({
               // composition ended (ADR 0105, section 4). A new read of the open suggestions of this editor decides it.
               if (!changed) {
                 const typed = inputRef.current;
-                if (typed?.chapterId !== currentChapterId || !typed.hasInput()) return;
+                if (typed?.chapterId !== currentChapterId) return;
                 await compositionEnded(typed);
                 if (generation !== switchGenerationRef.current || !typed.hasInput()
                   || typed.revisionId !== settled.authoritative_revision_id) return;
@@ -844,12 +852,16 @@ function ProjectEditorView({
       const checked = treeCheck();
       navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
-        // The Server gave the Editor Session a new base, so this editor accepts no input until a reopen, and the next
-        // selection expects the new Current Chapter.
-        onMoved: (chapterId) => {
-          serverChapterRef.current = chapterId;
-          movedRef.current = true;
-          setReadOnly(true);
+        onCommandSent: () => { setNavigationCommand(true); },
+        // After an effect, the Editor Session has a new base, so this editor accepts no input until a reopen, and the
+        // next selection expects the new Current Chapter.
+        onCommandEnded: (chapterId) => {
+          if (chapterId !== undefined) {
+            serverChapterRef.current = chapterId;
+            movedRef.current = true;
+            setReadOnly(true);
+          }
+          setNavigationCommand(false);
         },
         onOpened: (next, focus, notice) => {
           setSwitchRecovery(undefined); onProposalOpened(checked(next), focus, notice);
@@ -947,7 +959,7 @@ function ProjectEditorView({
             || saveState === "saved",
           tree,
         }}
-        editable={!readOnly}
+        editable={!readOnly && !navigationCommand}
         startSuggestionRead={selectedChapter.chapter.chapter_id === currentChapterId
           ? () => copies.suggestionRead(currentChapterId) : undefined}
         persistWorkspace={
