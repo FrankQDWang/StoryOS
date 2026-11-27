@@ -2,7 +2,7 @@ import type {
   GetChapterResponse,
   ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { readOpenProposalList } from "./block-proposal-display.tsx";
+import { readOpenProposalList } from "./open-proposal-list.ts";
 import type { ChallengeAdmissionTimers, TimerHandle } from "./challenge-admission-wait.ts";
 import { openSelectedChapter } from "./chapter-navigation.ts";
 import type { ManuscriptParagraph } from "./manuscript-doc.ts";

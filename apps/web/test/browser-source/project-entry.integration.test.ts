@@ -110,13 +110,18 @@ it("opens the URL-selected Project and fails closed before invalid entry request
         "data-authoritative-revision-id",
       ),
     ).toBe(scenario.chapter.chapter.current_revision.revision_id);
-    expect(requests.slice(0, 4).map(({ path }) => path)).toEqual([
+    // The reads of the Project start with the Chapter read (#1937).
+    expect(requests.slice(0, 8).map(({ path }) => path)).toEqual([
       "/api/v1/protocol",
       `/api/v1/projects/${PROJECT}`,
       "/api/v1/projects",
+      `/api/v1/projects/${PROJECT}/manuscript/tree`,
+      `/api/v1/projects/${PROJECT}/manuscript/statistics`,
+      `/api/v1/projects/${PROJECT}/assistance`,
+      `/api/v1/projects/${PROJECT}/skills`,
       `/api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}`,
     ]);
-    expect(requests.slice(0, 4).every(({ init }) => init?.credentials === "same-origin"))
+    expect(requests.slice(0, 8).every(({ init }) => init?.credentials === "same-origin"))
       .toBe(true);
     if (state.kind === "project-ready" && state.editor.kind === "editor-ready") {
       state.editor.database.close();

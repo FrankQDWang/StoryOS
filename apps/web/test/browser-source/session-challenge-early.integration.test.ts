@@ -25,11 +25,14 @@ const CHALLENGE = `POST ${P}/anti-forgery-challenges`;
 const CREATION = `POST ${P}/editor-sessions`;
 const SESSION_READ = `GET ${P}/editor-sessions/${SESSION}`;
 /** The exact requests of each kind of open. */
-const NEW_TAB = [PROTOCOL, PROJECT_READ, LIST, CHAPTER_READ, CHALLENGE, CREATION];
+const STATISTICS = `GET ${P}/manuscript/statistics`;
+/** The tree read and the statistics read that an open of a Chapter starts with the Chapter read (#1937). */
+const PROJECT_READS = [TREE, STATISTICS];
+const NEW_TAB = [PROTOCOL, PROJECT_READ, LIST, ...PROJECT_READS, CHAPTER_READ, CHALLENGE, CREATION];
 const EMPTY = [PROTOCOL, PROJECT_READ, LIST, TREE];
 const MISSING = [PROTOCOL, PROJECT_READ, LIST];
-const STORED = [PROTOCOL, PROJECT_READ, LIST, CHAPTER_READ, SESSION_READ];
-const FAILED_CHAPTER = [PROTOCOL, PROJECT_READ, LIST, CHAPTER_READ, CHALLENGE];
+const STORED = [PROTOCOL, PROJECT_READ, LIST, ...PROJECT_READS, CHAPTER_READ, SESSION_READ];
+const FAILED_CHAPTER = [PROTOCOL, PROJECT_READ, LIST, ...PROJECT_READS, CHAPTER_READ, CHALLENGE];
 const REOPEN = [PROJECT_READ, LIST, CHAPTER_READ, CHALLENGE, CREATION];
 /** The class `shared` of the Server: 10 new Challenges in each fixed window of 60 s (`ChallengeRateClass`). */
 const SHARED_CAPACITY = 10;
@@ -104,7 +107,12 @@ function fakeServer({ serves: defaultServes, open: initial = "current_chapter" }
       return jsonResponse({ ...scenario.chapter, chapter: { chapter_id: CHAPTER_B, title: "Chapter B",
         current_revision: chapterRevision("018f0000-0000-7001-8000-000000000904", "") } });
     }
-    if (name === TREE && state === "empty") {
+    // The open does not use the answers of these reads. Only the view uses them.
+    if (name === STATISTICS && state === "current_chapter") {
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "service_unavailable", message: "Unavailable." },
+        503);
+    }
+    if (name === TREE) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000914", project_scope: scope, tree_revision: "1",
         snapshot: { snapshot_id: scenario.session.base_snapshot.snapshot_id, project_scope: scope }, volumes: [] });

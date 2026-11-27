@@ -23,6 +23,7 @@ import type {
 } from "./editor-types.ts";
 import { startEditorWorkspace, type EditorWorkspaceOpening } from "./editor-session.ts";
 import type { ManuscriptParagraph } from "./manuscript-doc.ts";
+import { startProjectReads, type ProjectReads } from "./project-reads.ts";
 
 const { release_identity: expectedIdentity, required_capabilities: expectedCapabilities, ...expectedProtocol } = RELEASE_1_PROTOCOL_PROFILE;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -130,8 +131,11 @@ const settle = <Value,>(promise: Promise<Value>): Promise<ReadResult<Value>> => 
   (error: unknown) => ({ kind: "failed" as const, error }),
 );
 
-export async function openControlledProject(options: ProjectOpenOptions): Promise<ControlledProjectState> {
-  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal } = options;
+export async function openControlledProject(options: ProjectOpenOptions & {
+  /** The first open of the page also reads for the assistant panel, which reads only at its mount. */
+  panels?: boolean;
+}): Promise<ControlledProjectState> {
+  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal, panels = false } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
   // The protocol profile, the Project, and the list of Projects are independent reads.
   const booted = bootProtectedWebClient(queryOptions);
@@ -141,7 +145,11 @@ export async function openControlledProject(options: ProjectOpenOptions): Promis
   const read = await listed;
   if (read.kind === "failed") return projectUnavailable(read.error);
   if (read.value === undefined) return projectUnavailable();
-  return await openProjectWorkspace(options, boot.profile, read.value.project, read.value.revision);
+  // The reads of the Project start with the Chapter read. The open suggestions wait for the Editor Session (#1937).
+  const reads = read.value.project.project.open.kind === "current_chapter"
+    ? startProjectReads({ baseUrl, projectId, fetchImpl }, { panels }) : undefined;
+  return await openProjectWorkspace(options, boot.profile, read.value.project, read.value.revision, undefined,
+    undefined, reads);
 }
 
 /** The Chapter read and the Editor Session read that a reopen starts with the Project read (#1898). */
@@ -165,6 +173,8 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
   opened: Pick<ProjectReadyState, "profile" | "project">;
   chapterId?: string | undefined;
   shown?: readonly ManuscriptParagraph[] | undefined;
+  /** The reads that the reopen gives to the view, started with its reads. */
+  reads?: ProjectReads | undefined;
 }): Promise<ControlledProjectState> {
   const { baseUrl, opened, fetchImpl = globalThis.fetch, signal, indexedDBImpl = globalThis.indexedDB,
     cryptoImpl = globalThis.crypto } = options;
@@ -186,7 +196,7 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
     }
     if (read.project.project_scope.owner_user_id !== scope.owner_user_id) throw new Error("Project Scope mismatch");
     return await openProjectWorkspace({ ...options, projectId: scope.project_id }, opened.profile, read.project,
-      read.revision, early, options.shown);
+      read.revision, early, options.shown, options.reads);
   } catch (error) {
     void early?.opening.abandon();
     return projectUnavailable(error);
@@ -204,6 +214,7 @@ async function openProjectWorkspace(
   revision: string,
   early?: EarlyChapterOpen,
   shown?: readonly ManuscriptParagraph[],
+  reads?: ProjectReads,
 ): Promise<ControlledProjectState> {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal,
     indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto } = options;
@@ -244,7 +255,8 @@ async function openProjectWorkspace(
       throw chapter.error;
     }
     const opened = await opening.finish(chapter.value, project, shown);
-    return { kind: "project-ready", profile, project, revision, chapter: opened.chapter, editor: opened.editor };
+    return { kind: "project-ready", profile, project, revision, chapter: opened.chapter, editor: opened.editor,
+      ...(reads === undefined ? {} : { reads }) };
   } catch (error) {
     return projectUnavailable(error);
   }

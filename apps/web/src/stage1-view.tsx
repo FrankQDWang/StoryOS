@@ -49,6 +49,7 @@ import { ManuscriptReadableExportPanel } from "./manuscript-readable-export.tsx"
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { ManuscriptTree } from "./manuscript-tree.tsx";
 import { readManuscriptTree } from "./manuscript-tree-read.ts";
+import { startProjectReads, type ProjectReads } from "./project-reads.ts";
 import { relabelDraftReferences } from "./selection-reference-draft.ts";
 import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 import {
@@ -108,7 +109,6 @@ interface ProjectEditorStatus {
 
 interface ProjectEditorViewProps extends ProjectReadyViewProps {
   tree: GetManuscriptTreeResponse | undefined;
-  treeRead: "reading" | "settled";
   /** The number of the last tree read of the workspace. */
   treeReads: { readonly current: number };
   handle: { current: ProjectEditorHandle | undefined };
@@ -173,8 +173,6 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   const [title, setTitle] = useState(state.project.project.title);
   const [revision, setRevision] = useState(state.revision);
   const [tree, setTree] = useState<GetManuscriptTreeResponse | undefined>(undefined);
-  // The statistics wait for the tree read of each open, also when it fails.
-  const [treeRead, setTreeRead] = useState<"reading" | "settled">("reading");
   const [status, setStatus] = useState<ProjectEditorStatus>({ selectedChapterId: state.chapter.chapter.chapter_id,
     canSubmit: false });
   // The copies of Chapter text of this Project (ADR 0105). They end when the tab leaves the Project.
@@ -195,8 +193,6 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
     setShown(state);
     setTitle(state.project.project.title);
     setRevision(state.revision);
-    // The new editor part waits for the tree read of the new state.
-    setTreeRead("reading");
     setStatus((current) => ({ ...current, selectedChapterId: state.chapter.chapter.chapter_id }));
   }
   const currentChapterId = state.project.project.open.kind === "current_chapter"
@@ -205,16 +201,15 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 
   // Only the latest tree read sets the tree, so an earlier response cannot replace a later tree.
   const treeReads = useRef(0);
-  const readTree = () => {
+  const showTree = (read: Promise<GetManuscriptTreeResponse>) => {
     treeReads.current += 1;
     const sequence = treeReads.current;
-    void readManuscriptTree({ baseUrl, projectId, fetchImpl })
-      .then((next) => { if (sequence === treeReads.current) setTree(next); }).catch(() => {})
-      .finally(() => { if (sequence === treeReads.current) setTreeRead("settled"); });
+    void read.then((next) => { if (sequence === treeReads.current) setTree(next); }).catch(() => {});
   };
-  // Until the new tree arrives, the list shows the last tree.
+  const readTree = () => { showTree(readManuscriptTree({ baseUrl, projectId, fetchImpl })); };
+  // Until the new tree arrives, the list shows the last tree. The first tree read of a state can be a read of its open.
   useEffect(() => {
-    readTree();
+    showTree(state.reads?.take("tree") ?? readManuscriptTree({ baseUrl, projectId, fetchImpl }));
   }, [baseUrl, fetchImpl, projectId, state]);
   // A Chapter that the author creates, moves, renames, or removes changes the Chapter part of the draft labels.
   useEffect(() => {
@@ -235,7 +230,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
         scope: state.project.project_scope,
         chapterId: currentChapterId, tree,
         canSubmit: status.canSubmit,
-        baseUrl, fetchImpl, cryptoImpl,
+        baseUrl, fetchImpl, cryptoImpl, reads: state.reads,
       }}
       tree={(
         <>
@@ -287,7 +282,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
           </div>
         </>
       )}
-      editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeRead={treeRead} treeReads={treeReads}
+      editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeReads={treeReads}
         handle={editor}
         copies={copies}
         handOverStore={handOverStore}
@@ -301,7 +296,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 /** The editor part of the workspace. It starts again with each new Chapter or base of the Editor Session. */
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
-  proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus, copies, unsavedNotice,
+  proposalLocatorStore, writingTimers, tree, treeReads, handle, onStatus, copies, unsavedNotice,
   handOverStore, caretStore, waitingStore,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
@@ -474,8 +469,9 @@ function ProjectEditorView({
   // A reopen after a settled command of this page reads the Project, the list of Projects, the Chapter `chapterId` (by
   // default the Current Chapter of the page), and the Editor Session at the same time. It does not read the protocol
   // profile again.
-  const reopen = (chapterId?: string, shown?: readonly ManuscriptParagraph[]) => reopenControlledProject({ baseUrl,
-    fetchImpl, cryptoImpl, opened: { profile: state.profile, project: state.project }, chapterId, shown });
+  const reopen = (chapterId?: string, shown?: readonly ManuscriptParagraph[], reads?: ProjectReads) =>
+    reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl, opened: { profile: state.profile, project: state.project },
+      chapterId, shown, reads });
 
   // A save found a later Revision: the tab opens again on it with its text, and shows no sentence (ADR 0107, section 2).
   // One catch-up runs for each editor part. It waits for an open IME composition, ends input, and makes the editor
@@ -1057,11 +1053,15 @@ function ProjectEditorView({
             && JSON.stringify(pending.blocks)
               === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
         onDecisionEnd={copies.proposalsChanged}
-        onAccepted={async (settled) => {
-          // A decision with no settled response opens the Project with each check of the first open.
-          onReopened(await (settled ? reopen() : openControlledProject({ baseUrl,
-            projectId: state.project.project.project_id, fetchImpl, cryptoImpl })));
+        onAccepted={async (settled, applied) => {
+          // A decision with no settled response opens the Project with each check of the first open. The reopen of an
+          // applied Acceptance reads the tree, the statistics, and the open suggestions with its reads (#1937).
+          onReopened(await (settled ? reopen(undefined, undefined, applied ? startProjectReads({ baseUrl,
+            projectId: state.project.project.project_id, fetchImpl }, { suggestions: {
+            scope: state.project.project_scope, chapterId: currentChapterId } }) : undefined)
+            : openControlledProject({ baseUrl, projectId: state.project.project.project_id, fetchImpl, cryptoImpl })));
         }}
+        openReads={state.reads}
         onUndoCurrentChapter={(chapterId) => {
           // An Undo of a chapter switch moves the editor back to the earlier Current Chapter.
           if (chapterId === currentChapterId) return;
@@ -1104,7 +1104,8 @@ function ProjectEditorView({
         currentChapterId={currentChapterId}
         saveState={saveState}
         treeRevision={tree?.tree_revision}
-        treeRead={treeRead}
+        open={state}
+        reads={state.reads}
       />
       <small
         data-save-state={shownSaveState}

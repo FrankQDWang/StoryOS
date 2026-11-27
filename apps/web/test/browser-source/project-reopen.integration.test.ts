@@ -84,6 +84,9 @@ const RUN = "018f0000-0000-7001-8000-000000000892";
 const CONVERSATION_READ = `GET ${P}/conversations/${CONVERSATION}`;
 const RUN_READ = `GET ${P}/agent-runs/${RUN}`;
 const SOURCES_READ = `GET ${P}/agent-runs/${RUN}/research-sources`;
+/** The reads of the Project that an open starts with the Chapter read (#1937). The first open of a page also reads
+ * for the assistant panel. */
+const PROJECT_READS = [TREE, STATISTICS];
 /** The reads of the open of Chapter A and of its panels. */
 const OPEN_READS = [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER), openProposalsRead(CHAPTER), ...PANEL_READS];
 const ACCEPTANCE = `POST ${P}/proposals/${PROPOSAL.proposal_id}/acceptances`;
@@ -540,16 +543,18 @@ async function expectReopenSteps(server: ReturnType<typeof fakeServer>, command:
 }
 
 it("opens a Project with its stored Editor Session with the independent reads in flight at the same time", async () => {
-  const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER), SESSION_READ] });
+  const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER), SESSION_READ,
+    ...PROJECT_READS] });
   await deleteJournal(server.scenario.journalName);
   sessionStorage.setItem(`active_session:${OWNER}:${PROJECT}`, SESSION);
   server.hold([PROTOCOL, PROJECT_READ, LIST]);
   const opening = openControlledProject({ baseUrl: location.origin, projectId: PROJECT,
     fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
   await expect.poll(server.inFlight).toEqual([LIST, PROJECT_READ, PROTOCOL].sort());
-  server.hold([chapterRead(CHAPTER), SESSION_READ]);
+  // The reads of the Project start with the Chapter read (#1937).
+  server.hold([chapterRead(CHAPTER), SESSION_READ, ...PROJECT_READS]);
   server.release();
-  await expect.poll(server.inFlight).toEqual([chapterRead(CHAPTER), SESSION_READ].sort());
+  await expect.poll(server.inFlight).toEqual([chapterRead(CHAPTER), SESSION_READ, ...PROJECT_READS].sort());
   server.release();
   const opened = await opening;
   expect({ kind: opened.kind, editor: opened.kind === "project-ready" ? opened.editor.kind : undefined,
@@ -558,8 +563,8 @@ it("opens a Project with its stored Editor Session with the independent reads in
 
 it("creates no Editor Session when the Chapter read of a new tab fails, and the next open creates one", async () => {
   const unavailable = [chapterRead(CHAPTER)];
-  const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER)], commands: [SESSION_CREATE],
-    unavailable });
+  const server = fakeServer({ reads: [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER), ...PROJECT_READS],
+    commands: [SESSION_CREATE], unavailable });
   await deleteJournal(server.scenario.journalName);
   const open = () => openControlledProject({ baseUrl: location.origin, projectId: PROJECT,
     fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
@@ -805,8 +810,8 @@ it("reads the list of Projects, the tree, and the statistics one time for one op
   server.hold([TREE]);
   const workspace = await openWorkspace(server);
   await expect.poll(server.inFlight).toContain(TREE);
-  // The statistics wait for the tree revision, and the view uses the list of the open.
-  expect({ list: server.count(LIST), statistics: server.count(STATISTICS) }).toEqual({ list: 1, statistics: 0 });
+  // The statistics do not wait for the tree read (#1937), and the view uses the list of the open.
+  expect({ list: server.count(LIST), statistics: server.count(STATISTICS) }).toEqual({ list: 1, statistics: 1 });
   server.release();
 
   await expect.poll(() => workspace.root.querySelector("[data-manuscript-statistics]")).not.toBeNull();
@@ -820,8 +825,10 @@ it("reads the statistics one time when the tree read fails", async () => {
   await openWorkspace(server);
 
   // The tree read tries three times, with waits of 0.5 s and 1 s.
-  await expect.poll(() => server.count(STATISTICS), { timeout: 5_000 }).toBe(1);
-  expect({ tree: server.count(TREE), unexpected: server.log.unexpected }).toEqual({ tree: 3, unexpected: [] });
+  await expect.poll(() => server.count(TREE), { timeout: 5_000 }).toBe(3);
+  await expect.poll(server.inFlight).toEqual([]);
+  expect({ statistics: server.count(STATISTICS), unexpected: server.log.unexpected })
+    .toEqual({ statistics: 1, unexpected: [] });
 });
 
 it("opens the Project with each check of the first open after a decision that did not settle", async () => {
@@ -1061,20 +1068,18 @@ it("reads the statistics one time for the new view of a Chapter switch with no c
     const workspace = await openWorkspace(server);
     await expect.poll(() => server.count(STATISTICS)).toBe(1);
     await expect.poll(() => workspace.root.querySelector(`button[data-chapter-id="${CHAPTER_B}"]`)).not.toBeNull();
-    // The tree read of the new view waits, so that a statistics read before its end shows.
+    // The tree read of the new view waits. The statistics read of the new view does not wait for it (#1937).
     server.holdAfter(chapterRead(CHAPTER_B), [TREE]);
     workspace.root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`)!.click();
     await expect.poll(() => ({ title: workspace.shown().title, held: server.held() }))
       .toEqual({ title: "Chapter B", held: 1 });
     const from = server.log.events.length;
+    await expect.poll(() => server.log.events.slice(
+      server.log.events.indexOf(`end ${chapterRead(CHAPTER_B)}`)).includes(`end ${STATISTICS}`)).toBe(true);
     server.release();
 
-    // The statistics read of the new view ends after the end of its tree read.
-    await expect.poll(() => {
-      const events = server.log.events.slice(from);
-      const tree = events.indexOf(`end ${TREE}`);
-      return tree >= 0 && events.indexOf(`end ${STATISTICS}`, tree) > tree;
-    }).toBe(true);
+    await expect.poll(() => server.log.events.slice(from).includes(`end ${TREE}`)).toBe(true);
+    await expect.poll(server.inFlight).toEqual([]);
     const events = server.log.events.slice(server.log.events.indexOf(`end ${chapterRead(CHAPTER_B)}`));
     expect({ statistics: events.filter((event) => event === `start ${STATISTICS}`).length,
       tree: server.count(TREE), unexpected: server.log.unexpected })
@@ -1185,16 +1190,15 @@ const sorted = (entries: string[]) => [...entries].sort();
 const REOPEN_AFTER_DECISION = [chapterRead(CHAPTER), PROJECT_READ, LIST, TREE, `GET ${P}/activity`, STATISTICS];
 
 it.each([
-  // After the command, the requests are those of today (#1900 removes only the read before the command).
+  // After the command, the requests have no read that repeats a read of the same decision (#1937).
   { decision: "acceptance", command: ACCEPTANCE, button: "accept", reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ],
     settled: (root: HTMLElement) => root.querySelector("[data-authoritative-revision-id]")
       ?.getAttribute("data-authoritative-revision-id") === ACCEPTED_REVISION,
-    after: [...REOPEN_AFTER_DECISION, openProposalsRead(CHAPTER), PROPOSAL_READ, SESSION_READ, PROPOSAL_READ,
-      openProposalsRead(CHAPTER), PROPOSAL_READ] },
+    after: [...REOPEN_AFTER_DECISION, SESSION_READ, openProposalsRead(CHAPTER), PROPOSAL_READ] },
   { decision: "rejection", command: REJECTION, button: "reject", reads: [...OPEN_READS, PROPOSAL_READ],
     settled: (root: HTMLElement) => root.querySelector(`.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"]`)
       === null,
-    after: [openProposalsRead(CHAPTER), PROPOSAL_READ, PROPOSAL_READ] },
+    after: [openProposalsRead(CHAPTER), PROPOSAL_READ] },
 ])("sends the $decision of a Proposal Operation with no Proposal read before it", async ({ command, button, reads, settled,
   after }) => {
   const server = fakeServer({ reads, commands: [SESSION_CREATE, command], proposals: true, acceptance: "applied" });
@@ -1287,12 +1291,12 @@ it("shows the sentence of a refused rejection when another tab rejected the Oper
   await expect.poll(() => ({ status: view.status(), card: view.card() })).toEqual({ status: REFUSED_REJECTION,
     card: null });
   await expect.poll(server.inFlight).toEqual([]);
-  // With no open suggestion of this Proposal, the view reads it one more time, as after a resolved rejection
-  // (decision 5 of #1900).
+  // With no open suggestion of this Proposal, the view does not read it again: the read before the reopen is of the
+  // same decision and has the Rejection of the other tab (#1937).
   expect({ ...workspace.shown(), revision: view.revision(), text: view.text(), status: view.status(),
     later: sorted(server.log.started.slice(from)), unexpected: server.log.unexpected }).toEqual({ title: "Chapter A",
     save: "saved", failure: "", revision: REVISION, text: shownText, status: REFUSED_REJECTION,
-    later: sorted([...REFUSED_LATER, PROPOSAL_READ]), unexpected: [] });
+    later: sorted(REFUSED_LATER), unexpected: [] });
 });
 
 /** The status of an accepted Proposal whose Acceptance record the Local Edit Journal keeps. */
@@ -1524,14 +1528,15 @@ async function expectSteps(server: ReturnType<typeof fakeServer>, from: number, 
     .toEqual({ requests: steps.flat().length, unexpected: [] });
 }
 
-/** Loads the page with each request held, and mounts the view when the open ends. */
-function loadHeld(server: ReturnType<typeof fakeServer>, container: string) {
-  document.body.insertAdjacentHTML("beforeend", `<main id="${container}"></main>`);
-  const documentImpl = { querySelector: (selector: string) => selector === "#app"
-    ? document.getElementById(container) : document.querySelector(selector),
-  documentElement: document.documentElement } as unknown as Document;
+/**
+ * Loads the page with each request held, and mounts the view when the open ends. The root of an earlier tab of the test
+ * stays on the page with another id.
+ */
+function loadHeld(server: ReturnType<typeof fakeServer>) {
+  document.getElementById("app")?.setAttribute("id", "earlier-tab");
+  document.body.insertAdjacentHTML("beforeend", '<main id="app"></main>');
   server.holdEach(true);
-  const loading = loadStoryOSWebState({ documentImpl,
+  const loading = loadStoryOSWebState({ documentImpl: document,
     locationImpl: { origin: location.origin, pathname: `/projects/${PROJECT}` },
     fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
   let root: HTMLElement | undefined;
@@ -1572,7 +1577,7 @@ function screenState(root: HTMLElement | undefined) {
 it("opens a new tab with the reads of the Project in the step of the Chapter read", async () => {
   const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ], commands: [SESSION_CREATE], proposals: true });
   await deleteJournal(server.scenario.journalName);
-  const tab = loadHeld(server, "app");
+  const tab = loadHeld(server);
 
   await expectSteps(server, 0, NEW_TAB_STEPS, () => screenState(tab.root()).cards.length === 1,
     async (step) => { if (step === OPEN_ENDS) await tab.mount(); });
@@ -1588,7 +1593,7 @@ it("opens a second tab of a Project that another tab writes in with the steps of
     sessionStorage.clear();
     await expect.poll(server.inFlight).toEqual([]);
     const from = server.log.started.length;
-    const tab = loadHeld(server, "second");
+    const tab = loadHeld(server);
 
     await expectSteps(server, from, NEW_TAB_STEPS, () => screenState(tab.root()).cards.length === 1,
       async (step) => { if (step === OPEN_ENDS) await tab.mount(); });
@@ -1646,4 +1651,49 @@ it.each([
   expect({ screen: screenState(workspace.root), unexpected: server.log.unexpected }).toEqual({
     screen: { title: "Chapter A", save: "saved", revision, cards: [card], chapters: ["Chapter A", "Chapter B"],
       statistics: "unavailable" }, unexpected: [] });
+});
+
+it("reads the open suggestions of the Current Chapter of the Project read after an applied Acceptance, and does not"
+  + " show the list of the earlier Chapter", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ, SESSION_READ, chapterRead(CHAPTER_B),
+    openProposalsRead(CHAPTER_B)], commands: [SESSION_CREATE, ACCEPTANCE], proposals: true, acceptance: "applied",
+  other: true, switchAfterAcceptance: true });
+  const workspace = await openWorkspace(server);
+  const control = () => workspace.root.querySelector<HTMLButtonElement>(
+    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
+  await expect.poll(() => control()?.disabled).toBe(false);
+  await expect.poll(server.inFlight).toEqual([]);
+  const from = server.log.started.length;
+
+  control()!.click();
+
+  // The reopen read the open suggestions of Chapter A with its reads. The Project read names Chapter B, so the
+  // display of Chapter B reads its own list and does not use the list of Chapter A.
+  await expect.poll(() => workspace.shown().title).toBe("Chapter B");
+  await expect.poll(() => server.log.started.slice(from).includes(openProposalsRead(CHAPTER_B))).toBe(true);
+  await expect.poll(server.inFlight).toEqual([]);
+  expect({ cards: screenState(workspace.root).cards, lists: server.log.started.slice(from)
+    .filter((name) => name.endsWith("/open-proposals")).sort(), unexpected: server.log.unexpected })
+    .toEqual({ cards: [], lists: [openProposalsRead(CHAPTER), openProposalsRead(CHAPTER_B)].sort(), unexpected: [] });
+});
+
+it("reads a Proposal again at a change of its locator when its read in the same refresh failed", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ], commands: [SESSION_CREATE, REJECTION],
+    proposals: true });
+  const workspace = await openWorkspace(server);
+  const reject = () => workspace.root.querySelector<HTMLButtonElement>(
+    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-reject]`);
+  await expect.poll(() => reject()?.disabled).toBe(false);
+  await expect.poll(server.inFlight).toEqual([]);
+  const from = server.log.started.length;
+  server.failNext([PROPOSAL_READ]);
+
+  reject()!.click();
+
+  // The read of the refresh fails. The Journal then gives the Proposal with no Run, and the view reads it again.
+  await expect.poll(() => server.log.started.slice(from)).toEqual([CHALLENGE, REJECTION,
+    ...sorted([openProposalsRead(CHAPTER), PROPOSAL_READ]), PROPOSAL_READ]);
+  await expect.poll(server.inFlight).toEqual([]);
+  expect({ cards: screenState(workspace.root).cards, unexpected: server.log.unexpected })
+    .toEqual({ cards: [], unexpected: [] });
 });

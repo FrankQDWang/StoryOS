@@ -50,14 +50,14 @@ it("keeps the editor editable when a Proposal navigation only reorders the known
     });
     observer.observe(surface, { attributes: true, attributeFilter: ["contenteditable"] });
     const before = { projection: writing.snapshot().projection, text: surface.textContent };
-    settled = new Promise<void>((resolve) => { readsSettled = resolve; });
+    // The same refresh has a read of each Proposal, so a new order of the locators reads nothing again (#1937).
     await act(async () => { root.render(createElement(BlockProposalDisplay, { ...props, locators: [...locators].reverse() })); });
-    await act(readsApplied);
+    await act(async () => { await new Promise((resolve) => { setTimeout(resolve); }); });
     await expect.poll(() => surface.getAttribute("contenteditable")).toBe("true");
     transitions.push(...observer.takeRecords().map((record) => (record.target as Element).getAttribute("contenteditable")));
     observer.disconnect();
     expect({ reads: reads.length, transitions, projection: writing.snapshot().projection, text: surface.textContent })
-      .toEqual({ reads: 4, transitions: [], ...before });
+      .toEqual({ reads: 2, transitions: [], ...before });
   } finally {
     await act(async () => { root.unmount(); });
     writing.close(); host.remove(); await test.close(); Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
