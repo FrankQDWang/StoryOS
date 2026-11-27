@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import deleteChapterFixture from "../../../../generated/golden-wire/storyos-public-release-1/delete-chapter.json";
@@ -447,6 +448,8 @@ async function openWorkspace(prepare: (server: ReturnType<typeof arrivalServer>[
       underTitle: element.previousElementSibling?.matches(".editor-panel h2") === true };
   };
   const saveState = () => root.querySelector("[data-save-state]")?.getAttribute("data-save-state");
+  /** The text of the save state in the footer of the editor. */
+  const footer = () => root.querySelector("[data-save-state]")?.textContent;
   /** The text of each notice, in order. */
   const noticeTexts = () => [...root.querySelectorAll("[data-arrival-notice-text]")].map((text) => text.textContent);
   /**
@@ -459,7 +462,7 @@ async function openWorkspace(prepare: (server: ReturnType<typeof arrivalServer>[
     await applyTrustedInput({ operation: "insert_text", text });
   };
   return { server, root, button, editor, shown, ready, fact, pointer, stay, stays, stayTimers, copy, notice, noticeTexts,
-    saveState,
+    saveState, footer,
     typeAtEnd, waits, stopIdle, runIdle, journal: scenario.journalName };
 }
 
@@ -959,6 +962,8 @@ const SAVE_B: (string[] | AnyOrder)[] = [[CHALLENGE, AUTHOR_EDITS, SESSION_READ]
   { anyOrder: [openProposals(CHAPTER_B), `GET ${P}/manuscript/statistics`, ACTIVITY] }];
 
 const READY = { title: "Chapter B", body: "Beta", editable: true, alert: undefined };
+// The footer while an Arriving Chapter accepts no input (#1934).
+const OPENING = "正在打开本章…";
 
 type Workspace = Awaited<ReturnType<typeof openWorkspace>>;
 
@@ -1696,15 +1701,15 @@ it("accepts no input in an Arriving Chapter whose copy does not have the fact of
   await expect.poll(() => getSelection()!.toString()).toBe("Beta");
   workspace.editor().dispatchEvent(new ClipboardEvent("cut", { bubbles: true, cancelable: true,
     clipboardData: new DataTransfer() }));
-  const typed = { ...workspace.shown(), fact: workspace.fact(), save: workspace.saveState() };
+  const typed = { ...workspace.shown(), fact: workspace.fact(), save: workspace.saveState(), footer: workspace.footer() };
   workspace.server.release(READ_B);
 
-  await expect.poll(() => ({ ...workspace.ready(), notice: workspace.notice() })).toEqual({ ...READY,
-    notice: undefined });
+  await expect.poll(() => ({ ...workspace.ready(), notice: workspace.notice(), footer: workspace.footer() }))
+    .toEqual({ ...READY, notice: undefined, footer: "已保存" });
   // The copy has no fact, so the switch reads the open suggestions again with its Chapter read (#1934).
   await expectRequests(workspace.server, before, [openProposals(CHAPTER_B), ...SWITCH_STEPS, ...REOPEN_STEPS],
     [...PANEL_READS, ACTIVITY, `GET ${P}/proposals/${PROPOSAL}`]);
-  expect(typed).toEqual({ ...READY, editable: false, fact: "false", save: "saved" });
+  expect(typed).toEqual({ ...READY, editable: false, fact: "false", save: "saved", footer: OPENING });
 });
 
 // The case of the instance (#1934). The display of a Chapter that the tab shows read-only records the fact "no open
@@ -1780,6 +1785,37 @@ it.each([
   expect({ afterFirst, stored: workspace.server.texts[CHAPTER_B]!.body }).toEqual({ afterFirst: false,
     stored: "Beta?" });
 });
+
+it("keeps the focus and the caret of a click in an Arriving Chapter that accepts no input, until it accepts input",
+  async () => {
+    const workspace = await openWorkspace((server) => {
+      server.lists[CHAPTER_B] = "018f0000-0000-7001-8000-000000000474";
+    });
+    await workspace.copy(CHAPTER_B);
+    workspace.stopIdle();
+    workspace.server.hold(READ_B);
+    workspace.server.hold(openProposals(CHAPTER_B));
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => [READ_B, openProposals(CHAPTER_B)].every(workspace.server.isHeld)).toBe(true);
+
+    await userEvent.click(workspace.editor().querySelector("p")!);
+    const clicked = { footer: workspace.footer(), editable: workspace.shown().editable,
+      focus: workspace.editor().contains(document.activeElement), offset: getSelection()!.anchorOffset };
+    // Another tab decided the Proposal, so the list of the switch has none.
+    delete workspace.server.lists[CHAPTER_B];
+    workspace.server.release(openProposals(CHAPTER_B));
+    await expect.poll(() => workspace.shown().editable).toBe(true);
+    await applyTrustedInput({ operation: "insert_text", text: "?" });
+    workspace.server.acceptEdits = true;
+    workspace.server.release(READ_B);
+    await expect.poll(workspace.runIdle).toBe(true);
+
+    const body = `${"Beta".slice(0, clicked.offset)}?${"Beta".slice(clicked.offset)}`;
+    await expect.poll(() => ({ ...workspace.ready(), footer: workspace.footer() }))
+      .toEqual({ ...READY, body, footer: "已保存" });
+    expect({ ...clicked, stored: workspace.server.texts[CHAPTER_B]!.body }).toEqual({ footer: OPENING, editable: false,
+      focus: true, offset: clicked.offset, stored: body });
+  });
 
 it("accepts no new input while the switch waits for a Challenge rate limit", async () => {
   const workspace = await openWorkspace();

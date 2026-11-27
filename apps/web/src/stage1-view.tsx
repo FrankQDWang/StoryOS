@@ -1066,7 +1066,8 @@ function ProjectEditorView({
         data-arrival-no-open-suggestion={arriving !== undefined ? String(arriving.noOpenSuggestion)
           : handOver === undefined ? "" : String(copies.get(currentChapterId)?.noOpenSuggestion === true)}
       >
-        {shownSaveState === "saved" ? "已保存"
+        {arrival !== undefined && !accepting ? "正在打开本章…"
+          : shownSaveState === "saved" ? "已保存"
           : shownSaveState === "saving" ? "保存中"
           : shownSaveState === "needs_attention" ? "需要处理"
           : "未保存"}

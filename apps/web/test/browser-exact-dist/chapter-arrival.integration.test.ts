@@ -192,4 +192,20 @@ it("stores the input of the earlier Chapter at the selection, stores the keys in
     await assertPageProjectReceipts({ projectId, kinds: "listed", receipts: { setCurrentChapter: 6 },
       lastResults: [{ result: "authoritative_applied", heads: [headA] },
         { result: "authoritative_applied", heads: [await revisionOf(last, projectId, b)] }] });
+
+    // After the new load, the tab has no copy of Chapter C. The switch reads its open suggestions together with its
+    // Chapter read, so the Arriving Chapter accepts a key while the command waits (#1934).
+    await updateAuthorEditSubmissionHold({ action: "hold_set_current_chapter" });
+    await selectTreeChapter(root(), c, { arrival: "in-progress" });
+    await expect.poll(() => ({ ...shown(manuscriptEditor(root(), last)), held: last.document.documentElement.dataset
+      .storyosHeldRequests }), { timeout: SWITCH_WAIT }).toEqual({ title: "Chapter C", body: "", editable: true,
+      held: "1" });
+    focusManuscriptEnd(manuscriptEditor(root(), last), last);
+    await applyTrustedInput({ operation: "insert_text", text: "Theta" });
+    await updateAuthorEditSubmissionHold({ action: "release" });
+    await switched("Chapter C", "Theta", last);
+    const thetaLoad = await reloadProject(frame, projectId);
+    const theta = applicationWindow(frame);
+    expect({ shown: shown(manuscriptEditor(thetaLoad, theta)), stored: await storedText(theta, projectId, c) })
+      .toEqual({ shown: { title: "Chapter C", body: "Theta", editable: true }, stored: ["Theta"] });
   }, 240_000);

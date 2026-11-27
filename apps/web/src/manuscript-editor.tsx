@@ -263,7 +263,12 @@ export function ManuscriptEditor({
 
   useEffect(() => {
     editor?.setEditable(editable);
-  }, [editable, editor]);
+    // A read-only Arriving Chapter keeps the focus of a click, so that the caret shows at the click when it accepts
+    // input (#1934).
+    if (editor === null || arrival === undefined) return;
+    if (editable) editor.view.dom.removeAttribute("tabindex");
+    else editor.view.dom.tabIndex = -1;
+  }, [editable, editor, arrival]);
 
   // The editor of a hand-over starts with the caret of the Arriving Chapter.
   useEffect(() => {
