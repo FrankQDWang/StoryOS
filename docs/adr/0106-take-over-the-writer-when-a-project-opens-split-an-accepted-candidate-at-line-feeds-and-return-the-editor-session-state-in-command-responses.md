@@ -20,6 +20,8 @@ Measured on the personal instance at `main` `54525595` from the browser of the a
 
 ### 1. Take over the writer when a Project opens
 
+[ADR 0107](0107-let-each-tab-of-a-project-write-and-remove-the-project-writer-lock.md) replaces this section: no tab takes over the writer, because the Project writer lock goes. Section 3 stays without the writer and without the command Take Over Project Writer.
+
 - When the tab opens a Project and the Server gives the new Editor Session `writer: read_only` with the reason `secondary_session`, the tab sends `TakeOverProjectWriter` one time, with no action of the author. It is the same command, with the same journal, idempotency, and Challenge rules, as the takeover of the button.
 - The tab sends this command only at the open of a Project, which includes a new load of the page. It never sends it for the reason `superseded_by_takeover` or `binding_invalid`, after a failed or uncertain takeover, or at a later event of the same open. Thus two open tabs do not take the writer from each other in a loop.
 - The tab that lost the writer shows the sentence `已在另一个标签页继续写作。` and the button `接管写作`. Its input that the Server did not get stays in that tab, as today. No hidden channel sends it.
