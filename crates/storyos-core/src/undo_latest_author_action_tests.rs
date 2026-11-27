@@ -15,6 +15,7 @@ fn acceptance(resulting: &str, prior_evidence_usable: bool) -> UndoLatestAuthorA
         kind: AuthorUndoFrontierKind::ReversibleAcceptance {
             resulting_revision_id: resulting.to_owned(),
             prior_evidence_usable,
+            split_added_blocks: false,
         },
     });
     command
@@ -159,6 +160,34 @@ fn a_drifted_acceptance_head_with_usable_evidence_requires_reversal() {
         TransitionOutcome::Applied(UndoLatestAuthorActionApplied::ReversalRequired {
             source_sequence: 1
         })
+    );
+}
+
+#[test]
+fn a_drifted_acceptance_head_after_a_split_is_unavailable() {
+    let mut drifted = acceptance(HEAD, /*prior_evidence_usable*/ true);
+    if let Some(AuthorUndoFrontier {
+        kind:
+            AuthorUndoFrontierKind::ReversibleAcceptance {
+                split_added_blocks, ..
+            },
+        ..
+    }) = &mut drifted.current_author_undo_frontier
+    {
+        *split_added_blocks = true;
+    }
+    let restoring = drifted.clone();
+    drifted.current_head_revision_id = OTHER.to_owned();
+    drifted.current_head_lineage_revision_id = OTHER.to_owned();
+    drifted.expected_head_revision_id = OTHER.to_owned();
+    assert_eq!(
+        [&drifted, &restoring].map(undo_latest_author_action),
+        [
+            TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::SourceUnavailable),
+            TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
+                source_sequence: 1
+            }),
+        ]
     );
 }
 
