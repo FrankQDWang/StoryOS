@@ -377,10 +377,10 @@ export function BlockProposalDisplay({
     const baseMatches = proposal?.base_authoritative_revision_id === authoritativeRevisionId;
     // Acceptance of a Proposal on an earlier base replaces the current text of its target (ADR 0064).
     const acceptableValidation = (result: string) => result === "valid" || result === "conflicted";
-    const writerOpen = editorProps.persistWorkspace !== undefined;
+    const sessionOpen = editorProps.persistWorkspace !== undefined;
     const sessionBlocked = proposal !== undefined && sessionBlockedIds.includes(proposal.proposal_id);
     const controlsReady = proposal !== undefined && allHeadsKnown && acceptanceChecked && !recoveryUnavailable
-      && journalPendingIds.length === 0 && writerOpen && !sessionBlocked
+      && journalPendingIds.length === 0 && sessionOpen && !sessionBlocked
       && editorProps.editable && accepting !== proposal.proposal_id;
     if (!anchored || proposal === undefined || operation === undefined) {
       unavailable.push({ locator, proposal });
@@ -436,10 +436,10 @@ export function BlockProposalDisplay({
       earlierBase: eligible && !baseMatches,
       withdrawEligible,
       copyEligible: operation.candidate_text.length > 0
-        && (condition !== "absent" || proposal.validation === "invalid" || !writerOpen || sessionBlocked),
+        && (condition !== "absent" || proposal.validation === "invalid" || !sessionOpen || sessionBlocked),
       conditionKind: condition,
       validity: proposal.validation,
-      sessionEligible: writerOpen && !sessionBlocked,
+      sessionEligible: sessionOpen && !sessionBlocked,
       expectedHeads,
       localPending: localText !== undefined,
     });
@@ -705,7 +705,7 @@ export function BlockProposalDisplay({
     })();
   };
 
-  const writerReady = () => editorProps.persistWorkspace !== undefined;
+  const sessionReady = () => editorProps.persistWorkspace !== undefined;
 
   const withdrawControl = {
     baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
@@ -728,7 +728,7 @@ export function BlockProposalDisplay({
     dispatchDisplayedWithdraw({
       ...withdrawControl, target, pending: pendingWithdrawals.includes(target.proposalId),
       busy: acceptingRef.current, displayedRevisionId: displayed?.revision_id,
-      eligible: projection?.withdrawEligible === true, writerReady: writerReady(),
+      eligible: projection?.withdrawEligible === true, sessionReady: sessionReady(),
     });
   };
   const retryWithdraw = (proposalId: string) => {
@@ -780,7 +780,7 @@ export function BlockProposalDisplay({
         <ProposalDecisionStatus key={locator.proposalId} proposalId={locator.proposalId}
           proposal={proposal} problem={knownProblems[locator.proposalId]}
           rejectionResult={settledRejections[locator.proposalId]}
-          writerOpen={editorProps.persistWorkspace !== undefined}
+          sessionOpen={editorProps.persistWorkspace !== undefined}
           sessionBlocked={sessionBlockedIds.includes(locator.proposalId)}
           pendingRejection={pendingRejections.includes(locator.proposalId)}
           pendingWithdraw={pendingWithdrawals.includes(locator.proposalId)}

@@ -77,7 +77,12 @@ impl ApplyAuthorEditOutcomeResolver for PostgresProjectReader {
             && arbiter.get::<_, String>(6) == "POST"
             && arbiter.get::<_, String>(7)
                 == "/api/v1/projects/{project_id}/manuscript/author-edits"
-            && arbiter.get::<_, String>(8) == "storyos.command.apply-author-edit.request.v2"
+            // An Author Edit admitted before ADR 0107 has the v1 request form, and its outcome stays readable.
+            && matches!(
+                arbiter.get::<_, String>(8).as_str(),
+                "storyos.command.apply-author-edit.request.v1"
+                    | "storyos.command.apply-author-edit.request.v2"
+            )
             && arbiter.get::<_, String>(9) == arbiter.get::<_, String>(14)
             && arbiter.get::<_, String>(10) == query.nonce_digest;
         if !exact_binding {
@@ -295,6 +300,12 @@ async fn load_outcome_relation(
                        FROM jsonb_object_keys(admission.command_payload)) =
                       15 + CASE WHEN admission.command_payload ? 'proposal_target'
                                 THEN 1 ELSE 0 END
+                         + CASE WHEN admission.command_schema =
+                                  'storyos.command.apply-author-edit.request.v1'
+                                THEN 1 ELSE 0 END
+                      AND (admission.command_schema <>
+                             'storyos.command.apply-author-edit.request.v1'
+                        OR admission.command_payload ? 'writer_generation')
                       AND (NOT admission.command_payload ? 'proposal_target'
                         OR (jsonb_typeof(admission.command_payload->'proposal_target') = 'object'
                           AND (SELECT count(*) FROM jsonb_object_keys(

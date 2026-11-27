@@ -262,7 +262,7 @@ export function dispatchDisplayedWithdraw(input: DisplayedWithdrawControl & {
   busy: boolean;
   displayedRevisionId: string | undefined;
   eligible: boolean;
-  writerReady: boolean;
+  sessionReady: boolean;
 }): void {
   if (input.busy) return;
   if (input.pending) {
@@ -271,7 +271,7 @@ export function dispatchDisplayedWithdraw(input: DisplayedWithdrawControl & {
   }
   const workspace = input.workspace;
   if (input.displayedRevisionId === undefined || workspace === undefined || !input.eligible
-    || !input.writerReady || input.displayedRevisionId !== input.target.revisionId) {
+    || !input.sessionReady || input.displayedRevisionId !== input.target.revisionId) {
     input.report(input.target.proposalId, "候选文字已变化。请检查当前版本。");
     input.refresh();
     return;

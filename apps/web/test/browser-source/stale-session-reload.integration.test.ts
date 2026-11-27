@@ -2,10 +2,13 @@ import { afterEach, expect, it } from "vitest";
 
 import type { GetChapterResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { openEditorWorkspace } from "../../src/editor-session.ts";
+import { freezeOneIntentSubmission } from "../../src/author-edit-submission.ts";
+import { uuidV7 } from "../../src/client-identity.ts";
+import type { EditorReadyState } from "../../src/editor-types.ts";
 import { appendAuthorEdit } from "../../src/local-edit-journal.ts";
 import {
   OWNER, PROJECT, SESSION, chapterRevision, closeTrackedDatabases, createBrowserScenario, deleteJournal,
-  jsonResponse, requireEditorReady, trackDatabase,
+  jsonResponse, requestResult, requireEditorReady, trackDatabase,
 } from "./scenario.ts";
 
 // ADR 0107: another Editor Session can write, so the stored Editor Session of a tab can have an earlier base.
@@ -13,6 +16,7 @@ const LATER_REVISION = "018f0000-0000-7001-8000-000000000a41";
 const NEW_SESSION = "018f0000-0000-7001-8000-000000000a42";
 const NEW_SNAPSHOT = "018f0000-0000-7001-8000-000000000a43";
 const LATER_BODY = "Base, and the text of another tab";
+const EDIT = { from: 4, to: 4, text: "!", resultingBody: "Base!" };
 const ACTIVE_KEY = `active_session:${OWNER}:${PROJECT}`;
 const SESSION_READ = `GET /api/v1/projects/${PROJECT}/editor-sessions/${SESSION}`;
 const CHALLENGE = `POST /api/v1/projects/${PROJECT}/anti-forgery-challenges`;
@@ -80,23 +84,40 @@ it("opens a new Editor Session at a load when the stored Session has an earlier 
     requests: [SESSION_READ, CHALLENGE, CREATION] });
 });
 
-it("keeps the stored Editor Session and its input at a load when its Journal has a record that is not settled",
-  async () => {
-    await deleteJournal(scenario.journalName);
-    sessionStorage.setItem(ACTIVE_KEY, SESSION);
-    const server = await fakeServer();
-    const first = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
-      chapter: scenario.chapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
-    requireEditorReady(first);
-    await appendAuthorEdit(first, { from: 4, to: 4, text: "!", resultingBody: "Base!" });
-    first.database.close();
-    server.requests.length = 0;
+// Each case leaves work in the Journal of the stored Session that the Server does not have.
+it.each([
+  ["a record that is not settled", async (workspace: EditorReadyState) => {
+    await appendAuthorEdit(workspace, EDIT);
+  }],
+  ["a conflicted Author Edit", async (workspace: EditorReadyState) => {
+    await appendAuthorEdit(workspace, EDIT);
+    const group = await freezeOneIntentSubmission(workspace, crypto);
+    await requestResult(workspace.database.transaction("submission_groups", "readwrite").objectStore("submission_groups")
+      .put({ ...group, settlement: { kind: "zero_authority_receipt_settled", command_id: uuidV7(),
+        author_command_admission_id: uuidV7(), receipt: {}, effect: { kind: "conflicted",
+          reason: "stale_authoritative_head", current_authoritative_revision_id: LATER_REVISION } } }));
+  }],
+  ["an unresolved Withdrawal", async (workspace: EditorReadyState) => {
+    await requestResult(workspace.database.transaction("metadata", "readwrite").objectStore("metadata").put({
+      key: `withdraw:${workspace.partition.journal_partition_id}:${LATER_REVISION}:${NEW_SNAPSHOT}`,
+      settlement: "unresolved" }));
+  }],
+] as const)("keeps the stored Editor Session and its input at a load when its Journal has %s", async (_, leave) => {
+  await deleteJournal(scenario.journalName);
+  sessionStorage.setItem(ACTIVE_KEY, SESSION);
+  const server = await fakeServer();
+  const first = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
+    chapter: scenario.chapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
+  requireEditorReady(first);
+  await leave(first);
+  first.database.close();
+  server.requests.length = 0;
 
-    const state = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
-      chapter: laterChapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
+  const state = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
+    chapter: laterChapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
 
-    if (state.kind === "editor-ready") trackDatabase(state.database, databases);
-    // The interim state of ADR 0107 stays until a tab with an earlier base catches up (#1945).
-    expect({ kind: state.kind, stored: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests })
-      .toEqual({ kind: "editor-read-only-recovery", stored: SESSION, requests: [SESSION_READ] });
-  });
+  if (state.kind === "editor-ready") trackDatabase(state.database, databases);
+  // The interim state of ADR 0107 stays until a tab with an earlier base catches up (#1945).
+  expect({ kind: state.kind, stored: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests })
+    .toEqual({ kind: "editor-read-only-recovery", stored: SESSION, requests: [SESSION_READ] });
+});

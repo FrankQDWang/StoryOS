@@ -126,6 +126,10 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "applyAuthorEdit")]
     #[ts(rename = "applyAuthorEdit")]
     ApplyAuthorEdit,
+    // A history kind: the Receipt of a writer takeover from before ADR 0107. No command makes it now.
+    #[serde(rename = "takeOverProjectWriter")]
+    #[ts(rename = "takeOverProjectWriter")]
+    TakeOverProjectWriter,
     #[serde(rename = "createProject")]
     #[ts(rename = "createProject")]
     CreateProject,

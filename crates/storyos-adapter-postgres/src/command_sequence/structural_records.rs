@@ -7,7 +7,7 @@ use super::records::insert_applied_activity;
 use super::{ActionDisposition, PersistFacts, PersistInput, insert_author_action, unavailable};
 use crate::structural_authority_settlement::{
     StructureCommitBinding, StructureTransitionSequences, persist_structure_commit,
-    update_session_base,
+    update_each_session_base, update_session_base,
 };
 
 /// The settlement facts that `Structural` and `ChapterSelection` read: the locked Project facts
@@ -164,13 +164,11 @@ pub(super) async fn persist_structural_records(
                 .map_err(unavailable)?
                 .map(|row| row.get::<_, String>(/*idx*/ 0))
                 .ok_or_else(|| unavailable("the Current Chapter has no authoritative head"))?;
-            update_session_base(
+            update_each_session_base(
                 client,
                 scope,
-                None,
                 chapter_id,
                 &head,
-                records.snapshot_id,
                 records.project_activity_position,
             )
             .await?;
@@ -183,7 +181,7 @@ pub(super) async fn persist_structural_records(
             let moved = update_session_base(
                 client,
                 scope,
-                Some(editor_session_id),
+                editor_session_id,
                 chapter_id,
                 revision_id,
                 records.snapshot_id,

@@ -111,6 +111,8 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
   const [chapterAId = "", chapterBId = "", chapterCId = ""] = story.chapterIds;
   const session = await story.openEditorSession();
   assert.equal(session.base_snapshot.chapter_id, chapterAId);
+  // A second Editor Session of the Project (ADR 0107). A deletion that changes the Current Chapter moves each base.
+  const other = await story.openEditorSession();
 
   const removedB = (await story.send("deleteChapter", deleteChapterInput(story, chapterBId, "5"))).response;
   assert.equal(removedB.effect.kind, "authoritative_applied");
@@ -133,6 +135,12 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
   if (removedA.project.open.kind === "current_chapter") {
     assert.equal(removedA.project.open.current_chapter_id, chapterCId);
   }
+  const headC = (await getChapter({ baseUrl, projectId, chapterId: chapterCId, fetchImpl })).chapter.current_revision;
+  const bases = await Promise.all([session, other].map(async (opened) => (await getEditorSession({ baseUrl, projectId,
+    editorSessionId: opened.editor_session.editor_session_id, fetchImpl })).base_snapshot));
+  assert.deepEqual(bases.map((base) => [base.chapter_id, base.authoritative_head_revision_id]),
+    [[chapterCId, headC.revision_id], [chapterCId, headC.revision_id]]);
+  assert.notEqual(bases[0]?.snapshot_id, bases[1]?.snapshot_id);
 
   const removedC = (await story.send("deleteChapter", deleteChapterInput(story, chapterCId, "7"))).response;
   assert.equal(removedC.effect.kind, "authoritative_applied");

@@ -27,6 +27,7 @@ import {
 } from "./local-edit-journal.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
+import { recoveryPrefix } from "./local-recovery-record.ts";
 
 export {
   freezeOneIntentSubmission,
@@ -47,6 +48,12 @@ async function openJournalDatabase(
   const name = `storyos-local-edit-journal:${scope.owner_user_id}:${scope.project_id}`;
   const request = indexedDBImpl.open(name, JOURNAL_DATABASE_VERSION);
   request.onupgradeneeded = (event) => {
+    // A version 5 Journal keeps each row. Its partition identifiers have the writer generation of before ADR 0107, so
+    // no version 6 partition has them, and no reader reads them or sends their records.
+    if (event.oldVersion === 5) {
+      request.transaction!.objectStore("metadata").put({ key: "schema", version: JOURNAL_DATABASE_VERSION });
+      return;
+    }
     // A Journal of an earlier version has no upgrade path (ADR 0099). The abort keeps it, and the open fails.
     if (event.oldVersion !== 0) {
       request.transaction!.abort();
@@ -333,9 +340,14 @@ function baseIsNotChapter(value: unknown, chapter: GetChapterResponse): boolean 
     || base?.materialized_revision?.revision_id !== chapter.chapter.current_revision.revision_id;
 }
 
+/** The settlements that leave no local work: an applied Author Edit, and a settled or refused decision. */
+const CLOSED_SETTLEMENTS = new Set(["applied_receipt_settled", "settled", "refused", "pre_admission_problem"]);
+
 /**
- * Tells if the Journal partition of the stored Editor Session has work that is not settled: a record that no settled
- * group covers, a group with no settlement or with an outcome query, or a decision flight.
+ * Tells if the Journal partition of the stored Editor Session has work that is not settled: a record that no closed
+ * group covers, a group that is not closed, a decision flight, an unresolved Withdrawal, or a retained recovery row.
+ * A zero-authority Author Edit, for example a conflicted one, is open unless it revised a Proposal, because the
+ * Server does not have its text. Work that this check counts as open keeps the stored Editor Session.
  */
 async function partitionHasOpenWork(database: IDBDatabase, value: unknown, scope: ProjectScope,
   profile: Release1ProtocolProfile): Promise<boolean> {
@@ -343,16 +355,22 @@ async function partitionHasOpenWork(database: IDBDatabase, value: unknown, scope
   const transaction = database.transaction(["metadata", "intents", "submission_groups"], "readonly");
   const working = (store: string) => requestResult(transaction.objectStore(store).index("working_partition")
     .getAll(partitionId));
-  const flights = (prefix: string) => requestResult(transaction.objectStore("metadata").count(IDBKeyRange.bound(
-    `${prefix}:${partitionId}:`, `${prefix}:${partitionId}:\uffff`)));
-  const [records, groups, acceptances, rejections] = await Promise.all([working("intents"),
-    working("submission_groups"), flights("acceptance"), flights("rejection")]) as [
-    { local_intent_sequence: number }[], JournalSubmissionGroup[], number, number];
+  const rows = (prefix: string) => requestResult(transaction.objectStore("metadata").getAll(IDBKeyRange.bound(
+    `${prefix}${partitionId}:`, `${prefix}${partitionId}:\uffff`)));
+  const [records, groups, acceptances, rejections, withdrawals, retained] = await Promise.all([working("intents"),
+    working("submission_groups"), rows("acceptance:"), rows("rejection:"), rows("withdraw:"), rows(recoveryPrefix),
+  ]) as [{ local_intent_sequence: number }[], JournalSubmissionGroup[], unknown[], unknown[],
+    { settlement?: unknown }[], unknown[]];
   await transactionResult(transaction);
-  const settled = groups.filter((group) => group.reconciliation === undefined
-    && (group.settlement.kind === "applied_receipt_settled" || group.settlement.kind === "zero_authority_receipt_settled"));
-  const covered = new Set(settled.flatMap((group) => group.ordered_coverage.map((item) => item.local_intent_sequence)));
-  return acceptances + rejections > 0 || settled.length !== groups.length
+  const closed = groups.filter((group) => {
+    const settlement = group.settlement as { kind?: string; effect?: { kind?: string } };
+    return group.reconciliation === undefined && (CLOSED_SETTLEMENTS.has(settlement.kind ?? "")
+      || (settlement.kind === "zero_authority_receipt_settled" && settlement.effect?.kind === "proposal_revised"));
+  });
+  const covered = new Set(closed.flatMap((group) => (group.ordered_coverage ?? [])
+    .map((item) => item.local_intent_sequence)));
+  return acceptances.length + rejections.length + retained.length > 0 || closed.length !== groups.length
+    || withdrawals.some((row) => row.settlement === "unresolved")
     || records.some((record) => !covered.has(record.local_intent_sequence));
 }
 

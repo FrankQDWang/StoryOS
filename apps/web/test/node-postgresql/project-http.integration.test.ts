@@ -1,6 +1,7 @@
 // Verification: {"phase":"http-bootstrap","after":["apps/web/test/node-postgresql/protocol-http-host.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import type { IncomingHttpHeaders, RequestOptions } from "node:http";
 import { test } from "vitest";
@@ -712,6 +713,47 @@ test("each Editor Session settles its own Author Edit and exact retries return o
     }
     assert.deepEqual(repeatedCommitted.outcome.response, settlement);
     assert.deepEqual(await projectAuthoritySnapshot(), authorityAfterLostAcknowledgement);
+    // An Author Edit admitted before ADR 0107 has the v1 request form, whose payload names a writer generation. The
+    // statements give the stored rows that form and the digest of its payload, and the outcome stays readable.
+    const rowOf = `owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
+      AND idempotency_key = '${authorEditKey}'::uuid`;
+    const storedPayload = JSON.parse(await queryPostgres(`SELECT command_payload::text
+      FROM storyos.author_command_admissions WHERE ${rowOf}`)) as Record<string, unknown>;
+    const sorted = (value: unknown): unknown => Array.isArray(value) ? value.map(sorted)
+      : typeof value === "object" && value !== null ? Object.fromEntries(Object.entries(value)
+        .sort(([left], [right]) => left < right ? -1 : 1).map(([key, entry]) => [key, sorted(entry)])) : value;
+    const digestOf = (payload: Record<string, unknown>) => `sha256:storyos.command.applyAuthorEdit.jcs.v1:${
+      createHash("sha256").update(JSON.stringify(sorted(payload))).digest("hex")}`;
+    assert.equal(digestOf(storedPayload), await queryPostgres(`SELECT canonical_command_digest
+      FROM storyos.author_command_admissions WHERE ${rowOf}`));
+    const storedForm = (payload: Record<string, unknown>) => {
+      const digest = digestOf(payload);
+      return queryPostgres(`WITH challenge AS (
+        UPDATE storyos.project_command_challenges SET command_schema = '${String(payload.command_schema)}',
+          canonical_command_digest = '${digest}' WHERE ${rowOf} RETURNING 1
+      ), idempotency AS (
+        UPDATE storyos.command_idempotency SET canonical_command_digest = '${digest}'
+         WHERE ${rowOf} AND command_kind = 'applyAuthorEdit' RETURNING 1
+      ), receipt AS (
+        UPDATE storyos.domain_receipts SET command_digest = '${digest}' WHERE ${rowOf} RETURNING 1
+      ) UPDATE storyos.author_command_admissions SET command_schema = '${String(payload.command_schema)}',
+          canonical_command_digest = '${digest}',
+          command_payload = '${JSON.stringify(payload).replaceAll("'", "''")}'::jsonb
+        FROM challenge, idempotency, receipt WHERE ${rowOf}`);
+    };
+    const earlierPayload = { ...storedPayload, command_schema: "storyos.command.apply-author-edit.request.v1",
+      writer_generation: "1" };
+    await storedForm(earlierPayload);
+    const earlierForm = await getApplyAuthorEditOutcome({
+      baseUrl, projectId: PROJECT_A, idempotencyKey: authorEditKey,
+      antiForgery: authorEditChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    // The Receipt names the digest of the v1 request.
+    const { receipt } = repeatedCommitted.outcome.response;
+    assert.deepEqual(earlierForm.outcome, { outcome_kind: "committed", response: {
+      ...repeatedCommitted.outcome.response, receipt: { ...receipt, command_digest: { ...receipt.command_digest,
+        value_hex_lowercase: digestOf(earlierPayload).split(":").at(-1) } } } });
+    await storedForm(storedPayload);
 
     const outcomeRequests: Array<{
       effect: ApplyAuthorEditEffect;

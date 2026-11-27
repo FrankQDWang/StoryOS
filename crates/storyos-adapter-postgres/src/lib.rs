@@ -38,6 +38,10 @@ mod create_project_tests;
 mod recovery_visibility_proof_tests;
 
 #[cfg(test)]
+#[path = "each_editor_session_writes_migration_tests.rs"]
+mod each_editor_session_writes_migration_tests;
+
+#[cfg(test)]
 #[path = "project_settings_tests.rs"]
 mod project_settings_tests;
 

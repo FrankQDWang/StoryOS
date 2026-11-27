@@ -200,7 +200,7 @@ async fn persist_current_chapter_compensation(
     let base_updates = update_session_base(
         client,
         &command.project_scope,
-        Some(command.editor_session_id.as_ref()),
+        command.editor_session_id.as_ref(),
         &frontier.prior_chapter_id,
         &prior_head,
         &sequences.snapshot_id,

@@ -192,7 +192,7 @@ async fn connect_admin(admin_url: &str) -> Client {
     admin
 }
 
-async fn create_empty_project(store: &PostgresProjectReader, suffix: &str) -> String {
+pub(crate) async fn create_empty_project(store: &PostgresProjectReader, suffix: &str) -> String {
     let issue = create_project_issue(
         USER_A,
         &format!("018f0000-0000-7001-8000-00000000{suffix}"),

@@ -92,10 +92,13 @@ state of today.
 At a load, the stored Editor Session of a tab can have a base that is not the
 Chapter that the Server reads now, because another Editor Session wrote. When
 the Journal partition of the stored Session has no open work, the load opens a
-new Editor Session, as a new tab does. Open work is a record that no settled
-group covers, a group with no settlement or with an outcome query, or a
-decision flight. When open work exists, the load keeps the stored Session and
-its recovery state.
+new Editor Session, as a new tab does. Open work is a record that no closed
+group covers, a group that is not closed, a decision flight, an unresolved
+Withdrawal, or a retained recovery row. A closed group has no outcome query,
+and it is an applied Author Edit, a zero-authority Author Edit that revised a
+Proposal, or a settled or refused decision. A conflicted or refused Author Edit
+is open work, because the Server does not have its text. When open work exists,
+the load keeps the stored Session and its recovery state.
 
 A command of an Editor Session moves only the base Snapshot of that Editor
 Session. An applied Author Edit or Undo moves that base to the new Revision
@@ -248,8 +251,11 @@ and the editor enters read-only local recovery with `needs_attention`. A reader
 that finds a binding that names no earlier group also enters local
 recovery. The records stay immutable in each case.
 
-The Web has no upgrade from an earlier Journal version
-([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)). When IndexedDB asks for an upgrade from an earlier Journal version,
+A version 5 Journal upgrades to version 6 and keeps each row (ADR 0107). Its
+partition identifiers have the earlier writer generation, so no version 6
+partition has them, and the Web does not read or send their records. The Web
+has no upgrade from a Journal version before 5
+([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)). When IndexedDB asks for an upgrade from such a version,
 the Web aborts the version-change transaction. The open fails, and the earlier Journal keeps its
 version and each row. The editor enters read-only local recovery with
 `local_journal_unavailable`, as for a Journal of an unknown version. It does
