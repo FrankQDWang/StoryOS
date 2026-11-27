@@ -280,8 +280,8 @@ it("puts the text on the base of the new Editor Session when another tab saves b
 
   requireEditorReady(state);
   expect({ revision: state.session.base_snapshot.authoritative_head_revision_id, text: state.openedProjection.body,
-    stored: sessionStorage.getItem(ACTIVE_KEY) }).toEqual({ revision: THIRD_REVISION, text: "Base!",
-    stored: NEW_SESSION });
+    stored: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests }).toEqual({ revision: THIRD_REVISION,
+    text: "Base!", stored: NEW_SESSION, requests: [SESSION_READ, CHALLENGE, CREATION] });
 });
 
 const submitted = (workspace: EditorReadyState, server: Awaited<ReturnType<typeof fakeServer>>) =>
