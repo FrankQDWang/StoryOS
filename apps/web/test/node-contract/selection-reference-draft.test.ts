@@ -124,7 +124,8 @@ function withCandidate(candidate: string, revision = CANDIDATE_REVISION) {
 }
 
 /** The Acceptance Receipt fields of an Acceptance of the Proposal at `revision`. */
-const receiptOf = (revision = CANDIDATE_REVISION) => ({ proposal_id: PROPOSAL!, proposal_revision_id: revision! });
+const receiptOf = (revision = CANDIDATE_REVISION) => ({ proposal_id: PROPOSAL!, proposal_revision_id: revision!,
+  prior_authoritative_revision_ids: [REVISION!] });
 
 function candidateEntry(start: number, end: number): Omit<DraftReference, "key"> {
   return { reference: { kind: "proposal_candidate_text", chapter_id: CHAPTER, proposal_id: PROPOSAL,
@@ -169,7 +170,7 @@ test("an accepted candidate reference keeps the accepted Revision when a hydrate
   assert.deepEqual(trackableDraftReferences(project, CHAPTER, NEXT), [key]);
 });
 
-const ADDED = id("b10");
+const [ADDED, LATER] = [id("b10"), id("b11")];
 
 /** A document of paragraphs, each with its block id and text. */
 function paragraphs(...blocks: [string, string][]) {
@@ -195,8 +196,10 @@ test("an accepted candidate with line feeds maps each reference to the parts of 
     : item.reference.kind, item.split]), [
     [reference(FIRST!, 1, 3, NEXT), undefined],
     [reference(FIRST!, 0, 1, NEXT), undefined],
-    ["proposal_candidate_text", { revisionId: NEXT, parts, start: { part: 1, offset: 0 }, end: { part: 1, offset: 2 } }],
-    ["proposal_candidate_text", { revisionId: NEXT, parts, start: { part: 0, offset: 2 }, end: { part: 1, offset: 1 } }],
+    ["proposal_candidate_text", { revisionId: NEXT, priorRevisionIds: [REVISION], parts,
+      start: { part: 1, offset: 0 }, end: { part: 1, offset: 2 } }],
+    ["proposal_candidate_text", { revisionId: NEXT, priorRevisionIds: [REVISION], parts,
+      start: { part: 0, offset: 2 }, end: { part: 1, offset: 1 } }],
   ]);
 });
 
@@ -204,9 +207,11 @@ test("a reference across a line feed becomes Chapter text in an editor of the ac
   const project = scope();
   const [key] = addDraftReferences(project, [candidateEntry(3, 7)])!;
   acceptDraftCandidates(project, receiptOf(), new Map([[OPERATION!, SPLIT_CANDIDATE]]), NEXT);
-  // A hydrate does not change a reference that waits for the new blocks.
-  trackDraftReferences(project, CHAPTER, new Set(),
-    hydrate(withCandidate(SPLIT_CANDIDATE), paragraphs([FIRST!, "雨夜。"], [SECOND!, "船夫在等着。"])), tree);
+  // The Proposals refresh can show the Revision before the acceptance first. Its hydrate, and its editor, do not
+  // change a reference that waits for the new blocks.
+  const older = paragraphs([FIRST!, "雨夜。"], [SECOND!, "船夫在等着。"]);
+  trackDraftReferences(project, CHAPTER, new Set(), hydrate(withCandidate(SPLIT_CANDIDATE), older), tree);
+  showAcceptedSplits(project, CHAPTER, REVISION, readManuscriptParagraphs(older.doc)!, tree);
   assert.equal(draftEntries(project)[0]!.reference.kind, "proposal_candidate_text");
   showAcceptedSplits(project, CHAPTER, NEXT, readManuscriptParagraphs(
     paragraphs([FIRST!, "雨停了。"], [ADDED, "风起了。"], [SECOND!, "船夫在等着。"]).doc)!, tree);
@@ -223,8 +228,8 @@ test("a reference to a later part leaves when the editor shows another Revision 
   // While the reference waits, its candidate is decided, and the Host refuses a reference to it.
   assert.deepEqual(sentDraftEntries(draftEntries(project)).map((item) => item.reference),
     [reference(FIRST!, 0, 2, NEXT)]);
-  // An editor of another Revision cannot name the new blocks: the reference leaves, as for deleted text.
-  showAcceptedSplits(project, CHAPTER, REVISION, readManuscriptParagraphs(
+  // An editor of a later Revision cannot name the new blocks: the reference leaves, as for deleted text.
+  showAcceptedSplits(project, CHAPTER, LATER, readManuscriptParagraphs(
     paragraphs([FIRST!, "雨停了。"], [ADDED, "风起了。"], [SECOND!, "船夫在等着。"]).doc)!, tree);
   assert.deepEqual(draftEntries(project).map((item) => item.reference), [reference(FIRST!, 0, 2, NEXT)]);
 });

@@ -31,7 +31,14 @@ type PartPoint = { part: number; offset: number };
  * blocks yet, so the reference becomes Chapter text when the editor shows the target block and the next blocks
  * with the texts of the parts.
  */
-export type AcceptedSplit = { revisionId: string; parts: string[]; start: PartPoint; end: PartPoint };
+export type AcceptedSplit = {
+  revisionId: string;
+  /** The Chapter Revisions before the acceptance, which an editor can still show after it. */
+  priorRevisionIds: string[];
+  parts: string[];
+  start: PartPoint;
+  end: PartPoint;
+};
 
 /** The clipboard type of the references that a copy from the editor gives to the composer. */
 export const REFERENCE_CLIPBOARD_TYPE = "application/x-storyos-selection-reference+json";
@@ -170,6 +177,8 @@ export function draftLabels(entries: readonly DraftReference[]): string[] {
  * editor document at `revisionId`. Only the document of the accepted Revision names the new blocks:
  * - The target block and the next blocks have the texts of the parts: the reference becomes Chapter text of them.
  * - Else the reference leaves the draft, because the accepted Revision does not have the parts.
+ * - A document of the Revision before the acceptance changes nothing: the editor can show it before it loads the
+ *   accepted Revision.
  * - A document of another Revision shows first: the reference leaves with no sentence, as for deleted text
  *   (ADR 0062, ADR 0106 section 2).
  */
@@ -195,7 +204,8 @@ export function showAcceptedSplits(scope: ProjectScope, chapterId: string, revis
   const entries: DraftReference[] = [];
   for (const entry of draft.entries) {
     const next = entry.reference.chapter_id !== chapterId || entry.split === undefined ? entry
-      : entry.split.revisionId === revisionId ? shownSplit(entry, entry.split) : undefined;
+      : entry.split.revisionId === revisionId ? shownSplit(entry, entry.split)
+        : entry.split.priorRevisionIds.includes(revisionId) ? entry : undefined;
     changed ||= next !== entry;
     if (next !== undefined) entries.push(next);
   }
@@ -334,7 +344,7 @@ function candidateParts(text: string): { start: number; text: string }[] {
  *   Revision than the Receipt, leaves the draft, because the draft cannot name its Chapter text.
  */
 export function acceptDraftCandidates(scope: ProjectScope,
-  receipt: { proposal_id: string; proposal_revision_id: string },
+  receipt: { proposal_id: string; proposal_revision_id: string; prior_authoritative_revision_ids: readonly string[] },
   candidates: ReadonlyMap<string, string | undefined>, revisionId: string): void {
   const proposalId = receipt.proposal_id;
   const draft = read(scope);
@@ -361,7 +371,8 @@ export function acceptDraftCandidates(scope: ProjectScope,
     if (start.part === end.part && start.offset >= end.offset) continue;
     const label = { chapter: entry.label.chapter, part: entry.label.part };
     if (end.part > 0) {
-      entries.push({ ...entry, split: { revisionId, parts: parts.map((part) => part.text), start, end } });
+      entries.push({ ...entry, split: { revisionId, priorRevisionIds: [...receipt.prior_authoritative_revision_ids],
+        parts: parts.map((part) => part.text), start, end } });
       continue;
     }
     const point = (offset: number) => ({ manuscript_block_id: entry.candidate!.blockId, offset });
