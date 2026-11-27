@@ -56,7 +56,7 @@ use skeleton::{
     ChallengeUse, FirstUse, consume_challenge, record_ids, record_result, replay_problem,
 };
 pub(crate) use structural::{
-    CurrentChapterChange, Structural, StructureIdentity, StructureWrite, WriterBase,
+    CurrentChapterChange, SessionBase, Structural, StructureIdentity, StructureWrite,
 };
 pub(crate) use surface::{
     AppliedReceipt, Classification, Classified, CommandSpec, CommandWrite, Conflict, NoEffect,

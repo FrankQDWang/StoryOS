@@ -40,7 +40,9 @@ pub(crate) enum ActionDisposition {
 pub(crate) enum RevisionBase {
     /// Moves the base when it is on the prior Revision. Another base stays.
     WhenOnPrior,
-    /// Moves the base. A base that is not on the prior Revision is a binding conflict.
+    /// Moves the base when it is on the Chapter of the new Revision, also from an earlier Revision of that Chapter,
+    /// because another Editor Session can write the Chapter (ADR 0107). A base on another Chapter is a binding
+    /// conflict.
     Required,
 }
 
@@ -65,7 +67,7 @@ pub(crate) struct RevisionWrite<E> {
     pub(crate) disposition: ActionDisposition,
     /// The Editor Session whose base Snapshot moves to the new Revision.
     pub(crate) editor_session_id: String,
-    pub(crate) writer_base: RevisionBase,
+    pub(crate) session_base: RevisionBase,
 }
 
 pub(crate) struct AuthoritativeRevision;
@@ -352,7 +354,8 @@ pub(crate) async fn write_revision<E>(
               WHERE snapshot.owner_user_id = $1::text::uuid
                 AND snapshot.project_id = $2::text::uuid
                 AND snapshot.editor_session_id = $3::text::uuid
-                AND snapshot.authoritative_revision_id = $7::text::uuid",
+                AND snapshot.chapter_object_id = $8::text::uuid
+                AND ($9::bool OR snapshot.authoritative_revision_id = $7::text::uuid)",
             &[
                 &owner_user_id,
                 &project_id,
@@ -361,11 +364,13 @@ pub(crate) async fn write_revision<E>(
                 &revision.revision_id,
                 &position,
                 &write.prior_revision_id,
+                &write.chapter_id,
+                &matches!(write.session_base, RevisionBase::Required),
             ],
         )
         .await
         .map_err(unavailable)?;
-    match write.writer_base {
+    match write.session_base {
         RevisionBase::WhenOnPrior => {}
         RevisionBase::Required => {
             if base_updates != 1 {

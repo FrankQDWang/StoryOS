@@ -29,7 +29,7 @@ impl PersistInput for StructuralInput {
 }
 
 /// The Editor Session base Snapshots that move to the new canonical Snapshot.
-pub(super) enum WriterBaseRebind<'a> {
+pub(super) enum SessionBaseRebind<'a> {
     Keep,
     /// The base of each Editor Session of the Project moves to the current head of the Chapter.
     EachSession {
@@ -65,11 +65,11 @@ pub(super) struct StructuralRecords<'a> {
     pub(super) activity_field: (&'static str, String),
     /// `ChapterSelection` has no Authoritative Commit.
     pub(super) commit: Option<StructureCommit<'a>>,
-    pub(super) writer_base: WriterBaseRebind<'a>,
+    pub(super) session_base: SessionBaseRebind<'a>,
 }
 
 /// Writes the guarded Project update, the Activity record, the Authoritative Commit, the Forward
-/// Author Action, the canonical Snapshot, and the writer base rebind, in this order.
+/// Author Action, the canonical Snapshot, and the session base rebind, in this order.
 pub(super) async fn persist_structural_records(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
@@ -144,9 +144,9 @@ pub(super) async fn persist_structural_records(
     )
     .await
     .map_err(unavailable)?;
-    match records.writer_base {
-        WriterBaseRebind::Keep => {}
-        WriterBaseRebind::EachSession { chapter_id } => {
+    match records.session_base {
+        SessionBaseRebind::Keep => {}
+        SessionBaseRebind::EachSession { chapter_id } => {
             let head = client
                 .query_opt(
                     "SELECT head.current_revision_id::text
@@ -175,7 +175,7 @@ pub(super) async fn persist_structural_records(
             )
             .await?;
         }
-        WriterBaseRebind::Session {
+        SessionBaseRebind::Session {
             editor_session_id,
             chapter_id,
             revision_id,

@@ -1,4 +1,4 @@
-// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/takeover-late-result-http.integration.test.ts"]}
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { test } from "vitest";
 

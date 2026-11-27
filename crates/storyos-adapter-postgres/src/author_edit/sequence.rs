@@ -370,7 +370,7 @@ impl ProjectCommand for AuthorEdit<'_> {
                     members,
                     disposition: crate::command_sequence::ActionDisposition::Forward,
                     editor_session_id: command.editor_session_id.as_ref().to_owned(),
-                    writer_base: RevisionBase::Required,
+                    session_base: RevisionBase::Required,
                 }))
             }
             AuthorEditApplied::ProposalRevised { candidate_text } => {
