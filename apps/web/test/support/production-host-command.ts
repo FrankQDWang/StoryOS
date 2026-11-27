@@ -190,8 +190,13 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     await writer.reload();
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await manuscriptBody(writer), afterPageOne);
+    // The editor can send a typed line feed and the text after it in one or two Author Edits, so the count of that
+    // kind comes from the store. Each Author Edit, the Volume, and the Chapter is one author action.
+    const edits = Number(await queryPostgres(`SELECT count(*)::text FROM storyos.domain_receipts
+      WHERE project_id = '${projectId}'::uuid AND command_kind = 'applyAuthorEdit'`));
+    assert.ok(edits >= 5);
     await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
-      createChapter: 1, applyAuthorEdit: 5 }, authorActions: 7 });
+      createChapter: 1, applyAuthorEdit: edits }, authorActions: edits + 2 });
     assert.deepEqual(errors, []);
     assert.ok(requests.length > 0 && requests.every((url) => url.origin === origin));
     assert.ok(requests.some((url) => url.pathname.startsWith("/assets/")));

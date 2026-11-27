@@ -55,7 +55,6 @@ const PARTITION = [
   USER_A,
   PROJECT_A,
   "editor-session",
-  "1",
   "client-session",
   "1",
   CLIENT_CONTRACT,
@@ -478,7 +477,7 @@ export function normalizeStage1Journey(observed: ObservedStage1Journey): unknown
   const partitionParts = stringAt(firstRow(journal.groups, "Journal groups"), "journal_partition_id")
     .split(":");
   bind(ids, partitionParts[2], "editor-session");
-  bind(ids, partitionParts[4], "client-session");
+  bind(ids, partitionParts[3], "client-session");
   journal.groups.forEach((group, index) => {
     const sequence = index + 1;
     bind(ids, valueAt(group, "journal_submission_group_id"), slot("group", sequence));
