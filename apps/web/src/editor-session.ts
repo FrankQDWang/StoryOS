@@ -520,15 +520,20 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
   const mintId = () => uuidV7(cryptoImpl);
   // ADR 0107: another Editor Session can write, so the stored Session can have an earlier base than the Chapter read.
   // When its Journal partition has no open work, the load opens a new Editor Session, as a new tab does. When its open
-  // work is Author Edit text that has an Author Edit form on the Chapter, the new Editor Session gets that text. The
-  // check uses the base that the Journal binds: a Set Current Chapter of a catch-up that stopped before the copy moved
-  // the Server base to the current Revision, and the records still bind the earlier base (#1953).
+  // work is Author Edit text that has an Author Edit form on the Chapter, the new Editor Session gets that text. Open
+  // work binds the base of the Journal: a Set Current Chapter of a catch-up that stopped before the copy moved the
+  // Server base to the current Revision, and the records still bind the earlier base (#1953). With no open work, a
+  // command of this Session moved its base, as a Chapter switch does, and the Session stays (ADR 0105).
   const stored = start.kind === "started" && start.active
     ? await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl).catch(() => undefined)
     : undefined;
-  if (start.kind === "started" && start.active && baseIsNotChapter(stored?.session ?? start.sessionValue, chapter)) {
+  const journalBound = stored !== undefined && start.kind === "started" && stored.session.base_snapshot.snapshot_id
+    !== (start.sessionValue as GetEditorSessionResponse).base_snapshot.snapshot_id
+    && await partitionHasOpenWork(stored).catch(() => false);
+  if (start.kind === "started" && start.active
+    && baseIsNotChapter(journalBound ? stored!.session : start.sessionValue, chapter)) {
     // A stored Session that keeps its recovery keeps the base of its Journal.
-    if (stored !== undefined) start = { ...start, sessionValue: stored.session };
+    if (journalBound) start = { ...start, sessionValue: stored!.session };
     try {
       if (stored === undefined) throw new Error("The Journal of the stored Editor Session is not readable");
       if (!await partitionHasOpenWork(stored)) {
@@ -539,7 +544,14 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
         if (text !== undefined && stepsOnCurrent(current, blocksOnCurrent(text, current, mintId)) === undefined) {
           text = undefined;
         }
-        if (text !== undefined) start = { ...start, active: null };
+        if (text !== undefined) {
+          start = { ...start, active: null };
+        } else if (stored.session.base_snapshot.chapter_id !== chapter.chapter.chapter_id) {
+          // Another tab set another Chapter current, and the text of this tab has no change to send, so `otherChapter`
+          // opened that Chapter. Nothing is lost, and the open shows it in a new Editor Session.
+          const own = await earlierBaseText(stored, stored.session.base_snapshot.chapter_id, shown);
+          if (own !== undefined && paragraphsEqual(own.shown, own.base)) start = { ...start, active: null };
+        }
       }
     } catch {
       // An unreadable Journal keeps the stored Session, so its recovery runs.

@@ -507,20 +507,21 @@ function ProjectEditorView({
   onEarlierBaseRef.current = () => {
     if (!structureInFlightRef.current) catchUp();
   };
-  // When the tab comes to the front, it saves its input and reads the Chapter one time. At a later Revision, the reopen
-  // uses that read. A save that finds a later Revision during the check also uses it.
+  // When the tab comes to the front, it waits for the end of an open IME composition, saves its input, and reads the
+  // Chapter one time. At a later Revision, the reopen uses that read. A save that finds a later Revision during the
+  // check also uses it.
   useEffect(() => {
     if (writing === undefined) return undefined;
     const front = () => {
       if (document.visibilityState !== "visible" || structureInFlightRef.current || handOverRef.current !== undefined
         || selectedChapterIdRef.current !== currentChapterId || frontReadRef.current !== undefined
         || catchingUpRef.current) return;
-      const read = writing.runAfterQuiesce("settled", async (projection) => {
+      const read = writing.whenComposed().then(() => writing.runAfterQuiesce("settled", async (projection) => {
         const chapter = await readCurrentChapter({ baseUrl, fetchImpl } as StoryOSQueryOptions,
           state.project.project.project_id, currentChapterId, state.project.project_scope.owner_user_id);
         return chapter.chapter.current_revision.revision_id === projection.authoritative_revision_id ? undefined
           : chapter;
-      }).then((quiet) => quiet.kind === "ran" ? quiet.result : undefined, () => undefined);
+      })).then((quiet) => quiet.kind === "ran" ? quiet.result : undefined, () => undefined);
       frontReadRef.current = read;
       void read.then((chapter) => {
         frontReadRef.current = undefined;

@@ -13,7 +13,7 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/sto
 import { loadStoryOSWebState } from "../../src/app.ts";
 import type { ChallengeAdmissionTimers } from "../../src/challenge-admission-wait.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
-import { applyTrustedInput } from "../support/browser-command-client.ts";
+import { applyImeComposition, applyTrustedInput } from "../support/browser-command-client.ts";
 import { focusManuscriptEnd, manuscriptBody, manuscriptEditor, manuscriptIsEditable }
   from "../support/manuscript-surface.ts";
 import {
@@ -41,6 +41,7 @@ const revision = (revisionId: string, first: string, second = "渡口。") => ({
     { manuscript_block_id: SECOND, block_kind: "paragraph" as const, text: second }] });
 const BASE = revision(REVISION, "雨夜。");
 const LATER = revision(LATER_REVISION, "雨夜，风起。");
+const LATEST = revision("018f0000-0000-7001-8000-000000000a6a", "雨夜，风停。");
 const REVISION_B = "018f0000-0000-7001-8000-000000000a68";
 const BLOCK_B = "018f0000-0000-7001-8000-000000000a69";
 const IN_B: Revision = { revision_id: REVISION_B, body: "乙章。",
@@ -70,13 +71,16 @@ function gate() {
  * Author Edit on the current Revision applies and gives that Revision; without it, it gets no response, so the test sees
  * that it went out. The first creation gives the Editor Session on the base, the second one a new Editor Session on the
  * current Revision. A Chapter read waits for `gates.chapter`, a Project read for `gates.project`, an Author Edit on
- * the base for `gates.edit`, and a creation after the first for `gates.creation`, when the test gives them. It records each request, and it records and throws on each
- * request that it does not serve.
+ * the base for `gates.edit`, and a creation after the first for `gates.creation`, when the test gives them.
+ * `beforeSwitch` runs one time before the Server classifies the next Set Current Chapter. It records each request and
+ * the body of each Author Edit, and it records and throws on each request that it does not serve.
  */
 function fakeServer(applies?: Revision) {
   const requests: string[] = [];
   const unexpected: string[] = [];
   const switches: unknown[] = [];
+  const edits: Record<string, unknown>[] = [];
+  const hooks: { beforeSwitch?: () => void } = {};
   const gates: { chapter?: Promise<void>; project?: Promise<void>; edit?: Promise<void>; creation?: Promise<void> } = {};
   // The head of the Chapter and the base of the stored Editor Session, with their activity positions.
   const world = { head: BASE, position: 0, stored: BASE, storedPosition: 0, current: CHAPTER };
@@ -120,17 +124,33 @@ function fakeServer(applies?: Revision) {
       const input = requireRequestBody(init).set_current_chapter_input as Record<string, unknown>;
       switches.push({ chapter_id: input.chapter_id, expected_current_chapter_id: input.expected_current_chapter_id,
         expected_target_revision_id: input.expected_target_revision_id, editor_session_id: input.editor_session_id });
+      const before = hooks.beforeSwitch;
+      delete hooks.beforeSwitch;
+      before?.();
+      const reply = (effect: Record<string, unknown>) => jsonResponse({ ...setCurrentChapterFixture,
+        project_scope: scenario.project.project_scope, effect, receipt: { ...setCurrentChapterFixture.receipt,
+          result: effect.kind }, project: { ...setCurrentChapterFixture.project, project_id: PROJECT,
+          open: { kind: "current_chapter", current_chapter_id: world.current } } });
+      // The Server checks the Current Chapter, then the head of the target (`set_current_chapter.rs`).
+      const target = input.chapter_id === CHAPTER ? world.head : IN_B;
+      if (input.expected_current_chapter_id !== world.current) {
+        return reply({ kind: "conflicted", reason: "stale_current_chapter" });
+      }
+      if (input.expected_target_revision_id !== target.revision_id) {
+        return reply({ kind: "conflicted", reason: "wrong_target_head" });
+      }
       world.current = input.chapter_id as string;
       world.position += 1;
-      // The Server moves the base of the named Editor Session to the head of the Chapter (`chapter_selection.rs`).
-      if (input.editor_session_id === SESSION && world.current === CHAPTER) {
-        world.stored = world.head;
-        world.storedPosition = world.position;
+      // The Server moves the base of the named Editor Session to the head of the Chapter (`chapter_selection.rs`), and
+      // the effect names that base, as the read of the Editor Session does.
+      if (input.editor_session_id !== SESSION || world.current !== CHAPTER) {
+        throw new Error("the fake moves only the base of the stored Editor Session to Chapter A");
       }
-      return jsonResponse({ ...setCurrentChapterFixture, project_scope: scenario.project.project_scope,
-        effect: { ...setCurrentChapterFixture.effect, current_chapter_id: world.current },
-        project: { ...setCurrentChapterFixture.project, project_id: PROJECT,
-          open: { kind: "current_chapter", current_chapter_id: world.current } } });
+      world.stored = world.head;
+      world.storedPosition = world.position;
+      const installed = (await session(SESSION, world.stored, world.storedPosition)).base_snapshot;
+      return reply({ ...setCurrentChapterFixture.effect, current_chapter_id: world.current,
+        base_snapshot_id: installed.snapshot_id, project_activity_position: installed.project_activity_position });
     }
     if (route === CHAPTER_READ) {
       await gates.chapter;
@@ -182,6 +202,7 @@ function fakeServer(applies?: Revision) {
     }
     if (route === AUTHOR_EDIT) {
       const request = requireRequestBody(init);
+      edits.push(request);
       const expected = request.expected_authoritative_revision_id;
       if (expected === world.head.revision_id && (applies === undefined || expected !== REVISION)) {
         return new Promise<Response>(() => {});
@@ -217,7 +238,7 @@ function fakeServer(applies?: Revision) {
     world.current = chapterId;
     world.position += 1;
   };
-  return { fetchImpl, requests, unexpected, switches, gates, writeInOtherTab, setCurrentInOtherTab };
+  return { fetchImpl, requests, unexpected, switches, edits, gates, hooks, writeInOtherTab, setCurrentInOtherTab };
 }
 
 /** Timers that never fire, so the input of the tab stays unsent until the tab comes to the front. */
@@ -348,6 +369,26 @@ it("keeps its Chapter and shows the later Revision when the tab with no input co
   });
 });
 
+it("reads its Chapter again and sets it current when another tab saves it after the front read", async () => {
+  const server = fakeServer();
+  await withView(server, async (root) => {
+    server.writeInOtherTab();
+    server.setCurrentInOtherTab(CHAPTER_B);
+    server.hooks.beforeSwitch = () => { server.writeInOtherTab(LATEST); };
+    server.requests.length = 0;
+
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜，风停。\n渡口。", editable: true,
+      save: "saved", failure: "", stored: NEW_SESSION });
+    const switched = { chapter_id: CHAPTER, expected_current_chapter_id: CHAPTER_B, editor_session_id: SESSION };
+    expect({ chapterReads: count(server, CHAPTER_READ), otherReads: count(server, CHAPTER_B_READ),
+      switches: server.switches, unexpected: server.unexpected }).toEqual({ chapterReads: 2, otherReads: 0,
+      switches: [{ ...switched, expected_target_revision_id: LATER_REVISION },
+        { ...switched, expected_target_revision_id: LATEST.revision_id }], unexpected: [] });
+  });
+});
+
 it("puts the unsent input on the later Revision when the save at the front finds it", async () => {
   const server = fakeServer();
   await withView(server, async (root) => {
@@ -383,6 +424,45 @@ it("accepts no input after the front found the later Revision and before the tab
       save: "saved", failure: "", stored: NEW_SESSION });
     expect({ edits: server.requests.filter((request) => request === AUTHOR_EDIT).length,
       unexpected: server.unexpected }).toEqual({ edits: 0, unexpected: [] });
+  });
+});
+
+it("sends nothing and stays writable when the tab comes to the front and the Chapter has no later Revision",
+  async () => {
+    const server = fakeServer();
+    await withView(server, async (root) => {
+      server.requests.length = 0;
+      document.dispatchEvent(new Event("visibilitychange"));
+      await expect.poll(() => count(server, CHAPTER_READ)).toBe(1);
+      // A second return to the front reads again only after the first check ended with no catch-up.
+      document.dispatchEvent(new Event("visibilitychange"));
+      await expect.poll(() => count(server, CHAPTER_READ)).toBe(2);
+
+      await type(root, "无人");
+      expect({ ...shown(root), requests: server.requests.filter((request) => request !== AUTHOR_EDIT),
+        unexpected: server.unexpected }).toEqual({ text: "雨夜。\n渡口。无人", editable: true, save: "saving",
+        failure: "", stored: SESSION, requests: [CHAPTER_READ, CHAPTER_READ], unexpected: [] });
+    });
+  });
+
+it("reads the Chapter when an IME composition that is open when the tab comes to the front ends", async () => {
+  const server = fakeServer();
+  await withView(server, async (root) => {
+    focusManuscriptEnd(manuscriptEditor(root, window), window);
+    // The offsets are positions of the editor, and 8 is the end of the second block.
+    await applyImeComposition({ text: "zhong", replacementStart: 8, replacementEnd: 8, selectionStart: 5,
+      selectionEnd: 5 });
+    await expect.poll(() => manuscriptBody(manuscriptEditor(root, window))).toBe("雨夜。\n渡口。zhong");
+    server.writeInOtherTab();
+    server.requests.length = 0;
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    await applyImeComposition({ operation: "cancel" });
+
+    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜，风起。\n渡口。", editable: true,
+      save: "saved", failure: "", stored: NEW_SESSION });
+    expect({ chapterReads: count(server, CHAPTER_READ), edits: count(server, AUTHOR_EDIT),
+      unexpected: server.unexpected }).toEqual({ chapterReads: 1, edits: 0, unexpected: [] });
   });
 });
 
@@ -449,6 +529,16 @@ it("keeps a keystroke behind a save that applies when the front read finds the R
     }, revision(APPLIED_REVISION, "雨夜。", "渡口。无"), { text: "雨夜。\n渡口。无人", stored: SESSION });
   });
 
+// The response of the save comes first, so the front read finds the Revision of the editor and starts no catch-up.
+it("keeps a keystroke behind a save that applies when the save answers before the front read", async () => {
+  await saveDuringFrontRead(async (root, open) => {
+    open.edit();
+    await expect.poll(() => root.querySelector("[data-save-state]")?.getAttribute("data-authoritative-revision-id"))
+      .toBe(APPLIED_REVISION);
+    open.chapter();
+  }, revision(APPLIED_REVISION, "雨夜。", "渡口。无"), { text: "雨夜。\n渡口。无人", stored: SESSION });
+});
+
 /** Types "无人" in Chapter A and leaves it unsent, then another tab saves Chapter A and sets Chapter B current. */
 async function leaveTextAndSetB(server: ReturnType<typeof fakeServer>, text: string) {
   await withView(server, async (root) => {
@@ -490,11 +580,53 @@ it("continues the catch-up with the unsent text at the next load when the page c
     await withView(server, async (root) => {
       await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜，风起。\n渡口。无人", editable: true,
         save: "saving", failure: "", stored: NEW_SESSION });
-      // The save of the text goes out, and the fake gives it no response.
+      // The save of the text goes out on the later Revision, and the fake gives it no response.
       fire();
       await expect.poll(() => count(server, AUTHOR_EDIT)).toBe(1);
+      expect({ expected: server.edits[0]!.expected_authoritative_revision_id,
+        text: JSON.stringify(server.edits[0]).includes("无人") }).toEqual({ expected: LATER_REVISION, text: true });
       expect({ switches: server.switches.length, unexpected: server.unexpected }).toEqual({ switches: 1, unexpected: [] });
     }, timers, true);
+  });
+
+it("reads only its Chapter when a save finds that another tab saved it and set another Chapter current", async () => {
+  const server = fakeServer();
+  const { timers, fire } = manualTimers();
+  await withView(server, async (root) => {
+    await type(root, "无人");
+    await expect.poll(() => unsettled(root)).toBe("1");
+    server.writeInOtherTab();
+    server.setCurrentInOtherTab(CHAPTER_B);
+    server.requests.length = 0;
+
+    fire();
+
+    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜，风起。\n渡口。无人", editable: true,
+      save: "saving", failure: "", stored: NEW_SESSION });
+    expect({ chapterReads: count(server, CHAPTER_READ), otherReads: count(server, CHAPTER_B_READ),
+      switches: server.switches.length, unexpected: server.unexpected }).toEqual({ chapterReads: 1, otherReads: 0,
+      switches: 1, unexpected: [] });
+  }, timers);
+});
+
+it("opens the Chapter that another tab set current at a load when the unsent text of the tab has no change",
+  async () => {
+    const server = fakeServer();
+    await withView(server, async (root) => {
+      await type(root, "无");
+      await expect.poll(() => unsettled(root)).toBe("1");
+      await applyTrustedInput({ operation: "backspace" });
+      await expect.poll(() => manuscriptBody(manuscriptEditor(root, window))).toBe("雨夜。\n渡口。");
+      await expect.poll(() => unsettled(root)).toBe("2");
+    });
+    server.setCurrentInOtherTab(CHAPTER_B);
+    server.requests.length = 0;
+
+    await withView(server, async (root) => {
+      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "乙章。", editable: true,
+        save: "saved", failure: "", stored: NEW_SESSION });
+      expect({ switches: server.switches, unexpected: server.unexpected }).toEqual({ switches: [], unexpected: [] });
+    }, heldTimers, true);
   });
 
 it("opens the Chapter that another tab set current at a load when the tab has no text to send", async () => {

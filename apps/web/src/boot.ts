@@ -189,8 +189,9 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
     }
     if (read.project.project_scope.owner_user_id !== scope.owner_user_id) throw new Error("Project Scope mismatch");
     // A tab at the front keeps its Chapter: the reopen with its Chapter read sets that Chapter current again.
+    const keepChapter = options.chapter !== undefined;
     return await openProjectWorkspace({ ...options, projectId: scope.project_id }, opened.profile, read.project,
-      read.revision, early, options.shown, options.chapter !== undefined);
+      read.revision, early, options.shown, keepChapter);
   } catch (error) {
     void early?.opening.abandon();
     return projectUnavailable(error);
@@ -244,8 +245,9 @@ async function openProjectWorkspace(
     const opening = used?.opening ?? startEditorWorkspace({ baseUrl, project, profile, fetchImpl, indexedDBImpl,
       cryptoImpl });
     const readCurrent = () => settle(readCurrentChapter(queryOptions, projectId, open.current_chapter_id, ownerUserId));
-    // A tab that keeps its Chapter reads the Current Chapter only when it does not set its own Chapter current again.
-    let reading = used?.chapter ?? (keepChapter ? undefined : readCurrent());
+    // When the Project names another Chapter than the early read of a reopen, the reopen reads the Current Chapter only
+    // when it does not set its own Chapter current again, so it does not read both Chapters.
+    let reading = used?.chapter ?? (keepChapter || discarded !== undefined ? undefined : readCurrent());
     // Another tab set another Chapter current while this tab had text to send on its Chapter, or while this tab was
     // not at the front. The later action of this tab wins: it sets its Chapter current again and catches up there
     // (ADR 0107, section 2).
@@ -271,8 +273,9 @@ async function openProjectWorkspace(
 
 /**
  * Sets the Chapter of the stored Editor Session current again, with that Session. `read` is a read of that Chapter,
- * when the reopen has one. It gives the Project and the Chapter after the command, or `undefined` when the command
- * had no effect.
+ * when the reopen has one. A save of another tab after the read gives `wrong_target_head`, and the tab then reads the
+ * Chapter again and sends the command one more time. It gives the Project and the Chapter after the command, or
+ * `undefined` when the command had no effect.
  */
 async function setChapterBack(options: ProjectOpenOptions, project: GetProjectResponse,
   other: { chapterId: string; editorSessionId: string }, read: GetChapterResponse | undefined) {
@@ -280,11 +283,17 @@ async function setChapterBack(options: ProjectOpenOptions, project: GetProjectRe
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
   const open = project.project.open;
   if (open.kind !== "current_chapter") return undefined;
-  const chapter = read?.chapter.chapter_id === other.chapterId ? read
-    : await readCurrentChapter(queryOptions, projectId, other.chapterId, project.project_scope.owner_user_id);
-  const switched = await setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId,
+  const readChapter = () =>
+    readCurrentChapter(queryOptions, projectId, other.chapterId, project.project_scope.owner_user_id);
+  const send = (target: GetChapterResponse) => setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId,
     chapterId: other.chapterId, expectedCurrentChapterId: open.current_chapter_id,
-    expectedTargetRevisionId: chapter.chapter.current_revision.revision_id, editorSessionId: other.editorSessionId });
+    expectedTargetRevisionId: target.chapter.current_revision.revision_id, editorSessionId: other.editorSessionId });
+  let chapter = read?.chapter.chapter_id === other.chapterId ? read : await readChapter();
+  let switched = await send(chapter);
+  if (switched.effect.kind === "conflicted" && switched.effect.reason === "wrong_target_head") {
+    chapter = await readChapter();
+    switched = await send(chapter);
+  }
   if (switched.effect.kind !== "authoritative_applied") return undefined;
   const after = await readSessionProject(queryOptions, projectId, "together");
   const reopened = after?.project.project.open;
