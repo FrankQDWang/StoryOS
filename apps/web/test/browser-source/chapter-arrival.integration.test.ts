@@ -2306,6 +2306,20 @@ it("keeps the editor of Chapter A read-only when the command back to it applied 
 
 // ICS-06 (#1928): four cases between the tickets of the chain.
 
+// The requests of the open of the workspace, and of the Run of `seedRun`.
+const OPEN_REQUESTS = ["GET /api/v1/protocol", `GET ${P}`, "GET /api/v1/projects", `GET ${P}/chapters/${CHAPTER}`,
+  CHALLENGE, `POST ${P}/editor-sessions`, openProposals(CHAPTER), `GET ${P}/assistance`, `GET ${P}/skills`,
+  `GET ${P}/manuscript/tree`, ACTIVITY, `GET ${P}/manuscript/statistics`];
+const RUN_REQUESTS = [`GET ${P}/agent-runs/${RUN}`, openProposals(CHAPTER), `GET ${P}/proposals/${PROPOSAL}`,
+  `GET ${P}/agent-runs/${RUN}/research-sources`];
+/** The reads of `copy(chapterId)`. */
+const copyReads = (chapterId: string) => [`GET ${P}/chapters/${chapterId}`, openProposals(chapterId)];
+
+/** Each request before `before`, with no order: the open of the workspace and the `setup` requests of the test. */
+function expectSetup(server: { requests: string[] }, before: number, ...setup: string[]) {
+  expect(server.requests.slice(0, before).sort()).toEqual([...OPEN_REQUESTS, ...setup].sort());
+}
+
 it("hands the Arrival Input of a return to the Current Chapter over to its editor when the read of the replaced selection answers",
   async () => {
     const workspace = await openWorkspace();
@@ -2332,6 +2346,7 @@ it("hands the Arrival Input of a return to the Current Chapter over to its edito
       { anyOrder: [openProposals(CHAPTER), `GET ${P}/manuscript/statistics`, ACTIVITY] });
     expect({ stored: workspace.server.texts[CHAPTER]!.body, switches: workspace.server.switches }).toEqual({
       stored: "Base?", switches: [] });
+    expectSetup(workspace.server, before);
   });
 
 it("keeps an IME composition with no text open in a return to the Current Chapter until it ends", async () => {
@@ -2356,6 +2371,7 @@ it("keeps an IME composition with no text open in a return to the Current Chapte
   await expectRequests(workspace.server, before, [READ_B], []);
   expect({ composing, switches: workspace.server.switches }).toEqual({ composing: { same: true, arriving: "true" },
     switches: [] });
+  expectSetup(workspace.server, before);
 });
 
 it.each([
@@ -2384,6 +2400,7 @@ it.each([
       .toEqual({ ...shown, save: "saved", notice: undefined });
     await expectRequests(workspace.server, before, [...SWITCH_STEPS, READ_C, CHALLENGE, SWITCH, ...after], panels);
     expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_B], [CHAPTER, CHAPTER_C]]);
+    expectSetup(workspace.server, before, ...copyReads(CHAPTER_B), ...copyReads(CHAPTER_C));
   });
 
 const STATISTICS = `GET ${P}/manuscript/statistics`;
@@ -2419,19 +2436,20 @@ it.each([
     }
     await expect.poll(() => workspace.server.answered.filter((name) => name === SWITCH).length).toBe(2);
     await expect.poll(workspace.ready).toEqual(STOPPED_A);
-    // A read-only editor cannot have the focus, so a trusted key goes to the contents. The input event of a key also
-    // goes to the editor of Chapter A at the end of its text. Neither changes the text.
-    await workspace.typeAtEnd("!", CHAPTER);
-    caretAt(workspace.editor(), 4);
-    workspace.editor().dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: "!", bubbles: true,
-      cancelable: true }));
+    const stopped = { ...workspace.ready(), save: workspace.saveState(), refused };
+    // A read-only editor cannot have the focus. So that a trusted key reaches the editor of Chapter A, the test makes
+    // its element editable for the browser. The editor ignores the key: it sends no Author Edit and starts no save.
+    workspace.editor().setAttribute("contenteditable", "true");
+    focusManuscriptEnd(workspace.editor(), window);
+    await applyTrustedInput({ operation: "insert_text", text: "!" });
 
-    expect({ ...workspace.ready(), save: workspace.saveState(), idle: workspace.runIdle(), refused }).toEqual({
-      ...STOPPED_A, save: "saved", idle: false, refused: answerFirst ? undefined : STOPPED_A });
+    expect({ stopped, idle: workspace.runIdle(), save: workspace.saveState() }).toEqual({ stopped: { ...STOPPED_A,
+      save: "saved", refused: answerFirst ? undefined : STOPPED_A }, idle: false, save: "saved" });
     // The navigation reads Chapter C and opens the Project. After its command, it sends no request.
     await expectRequests(workspace.server, before, [READ_C, "GET /api/v1/protocol", `GET ${P}`,
       "GET /api/v1/projects", `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, ...SWITCH_STEPS], []);
     expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_C], [CHAPTER, CHAPTER_B]]);
+    expectSetup(workspace.server, before, ...RUN_REQUESTS, ...copyReads(CHAPTER_B));
   });
 
 it.each([
@@ -2472,4 +2490,5 @@ it.each([
     // controller before a save.
     await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
       ...after);
+    expectSetup(workspace.server, before, ...copyReads(CHAPTER_B));
   });
