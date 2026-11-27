@@ -118,8 +118,6 @@ interface ProjectEditorViewProps extends ProjectReadyViewProps {
   handOverStore: { current: ArrivalInput | undefined };
   /** The waiting selection. It stays through the change of the editor part (ADR 0105, section 6). */
   waitingStore: { current: WaitingSelection | undefined };
-  /** True until the first editor part of the open sends the automatic takeover (ADR 0106, section 1). */
-  automaticTakeover: { pending: boolean };
   onAutomaticTakeoverEnded: () => void;
 }
 
@@ -192,10 +190,9 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   useEffect(() => () => { copies.close(); }, [copies]);
   const handOverStore = useRef<ArrivalInput | undefined>(undefined);
   const waitingStore = useRef<WaitingSelection | undefined>(undefined);
-  // Only the open takes over the writer with no action of the author, one time. A reopen, a switch, or a decision of
-  // the same open does not (ADR 0106, section 1).
-  const [automaticTakeover] = useState(() => ({ pending: secondarySession(state) }));
-  const [takingOver, setTakingOver] = useState(automaticTakeover.pending);
+  // The open of a Session that never held the writer takes it over (ADR 0106, section 1). A later event of the same
+  // open gives a Session that held the writer, so its reason is not `secondary_session`.
+  const [takingOver, setTakingOver] = useState(() => secondarySession(state));
   // The start of the read of an open is not known here, so the open writes only a copy that does not exist.
   useEffect(() => {
     if (copies.get(state.chapter.chapter.chapter_id) === undefined) {
@@ -315,7 +312,6 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
         copies={copies}
         handOverStore={handOverStore}
         waitingStore={waitingStore}
-        automaticTakeover={automaticTakeover}
         onAutomaticTakeoverEnded={() => { setTakingOver(false); }}
         onStatus={setStatus} />}
     />
@@ -326,7 +322,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
   proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus, copies, unsavedNotice,
-  handOverStore, waitingStore, automaticTakeover, onAutomaticTakeoverEnded,
+  handOverStore, waitingStore, onAutomaticTakeoverEnded,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -336,6 +332,8 @@ function ProjectEditorView({
   const [takeover, setTakeover] = useState<"automatic" | "button">();
   // True after an Author Edit of this tab got `editor_writer_stale`: another tab took the writer.
   const [fenced, setFenced] = useState(false);
+  // True after a takeover that the Server did not apply: the writer generation of the open can be old.
+  const generationStaleRef = useRef(false);
   const currentChapterId = state.project.project.open.kind === "current_chapter"
     ? state.project.project.open.current_chapter_id
     : state.chapter.chapter.chapter_id;
@@ -561,6 +559,11 @@ function ProjectEditorView({
   // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026). The result is true
   // when the command changed the Current Chapter and the workspace opens again at the Chapter.
   const selectChapter = (chapterId: string, contents = false): Promise<boolean> => {
+    // A selection during a takeover waits until the takeover ended, so the screen keeps its Chapter.
+    if (takeOverInFlightRef.current) {
+      waitingStore.current = { chapterId, contents };
+      return Promise.resolve(false);
+    }
     // The latest click of the author wins: with no Arrival Input, a click ends the wait of an earlier switch (#1679).
     const earlier = switchWaitRef.current;
     if (structureInFlightRef.current && earlier?.waiting !== true) {
@@ -937,33 +940,37 @@ function ProjectEditorView({
     setTakeover(kind);
     const shownChapterId = selectedChapterIdRef.current;
     void (async () => {
+      let reopened = false;
       try {
         const next = await takeOverWriter({ baseUrl, fetchImpl, cryptoImpl, projectId, editorSessionId,
-          observedWriterGeneration: readOnlyWriter?.observed_writer_generation, reopen: () => reopen() });
+          observedWriterGeneration: generationStaleRef.current ? undefined : readOnlyWriter?.observed_writer_generation,
+          reopen: () => reopen() });
         if (next === undefined) {
+          generationStaleRef.current = true;
           setSwitchRecovery("无法接管写作。");
           return;
         }
-        // The takeover keeps the Chapter on the screen: the next editor part selects it (ADR 0106, section 1).
-        if (next.kind === "project-ready" && next.editor.kind === "editor-ready"
+        // The takeover keeps the Chapter on the screen, or goes to the Chapter of a selection during the takeover: the
+        // next editor part selects it (ADR 0106, section 1).
+        if (waitingStore.current === undefined && next.kind === "project-ready" && next.editor.kind === "editor-ready"
           && next.chapter.chapter.chapter_id !== shownChapterId) {
           waitingStore.current = { chapterId: shownChapterId, contents: true };
         }
+        reopened = true;
         onReopened(next);
       } catch {
+        generationStaleRef.current = true;
         setSwitchRecovery("无法接管写作。");
       } finally {
         takeOverInFlightRef.current = false;
         setTakeover(undefined);
         if (kind === "automatic") onAutomaticTakeoverEnded();
+        // This editor part stays after a takeover with no reopen, so it runs the selection of the takeover time.
+        if (!reopened) runWaiting();
       }
     })();
   };
-  useEffect(() => {
-    if (!automaticTakeover.pending) return;
-    automaticTakeover.pending = false;
-    runTakeover("automatic");
-  }, []);
+  useEffect(() => { if (secondarySession(state)) runTakeover("automatic"); }, []);
   const editorBlocks = handOver !== undefined ? handOver.blocks()
     : selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
     ? pendingParagraphs(pending)

@@ -279,6 +279,10 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     assert.equal(await manuscriptBody(observer), "Saved after replay generation two.");
     await replaceAndSave(observer, "Saved by the new production writer.");
     assertPreservedJournal(oldJournal, await readJournal(observer, projectId));
+    // The text that the second tab typed after its takeover at open is the stored text after a new load.
+    await observer.reload();
+    await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
+    assert.equal(await manuscriptBody(observer), "Saved by the new production writer.");
     assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
     await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
       createChapter: 1, applyAuthorEdit: 3, takeOverProjectWriter: 1 }, authorActions: 5 });

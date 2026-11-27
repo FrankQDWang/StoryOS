@@ -99,7 +99,7 @@ type Writer = GetEditorSessionResponse["writer"];
  * The writer of a stored Editor Session of this tab that another tab took. The open of such a tab sends no takeover,
  * so the tab stays read-only until a click of the button (ADR 0106 section 1).
  */
-const LOST_WRITER = { kind: "read_only", observed_writer_generation: "1", reason: "superseded_by_takeover" } as const;
+const LOST_WRITER = { kind: "read_only", observed_writer_generation: "2", reason: "superseded_by_takeover" } as const;
 
 /** The command of each route template that a Challenge names. */
 const CHALLENGE_ROUTES: Record<string, string> = {
@@ -362,12 +362,17 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
           current_heads: [REVISION], reason: "writer_generation_advanced_after_admission" } });
     }
     if (name === TAKEOVER) {
-      state.writer = { kind: "current_writer", writer_generation: "2" };
+      // The takeover gives this Session the generation after the observed generation.
+      const observed = (JSON.parse(String(init?.body)) as { observed_writer_generation: string })
+        .observed_writer_generation;
+      const resulting = String(Number(observed) + 1);
+      state.writer = { kind: "current_writer", writer_generation: resulting };
       settle(TAKEOVER_SNAPSHOT);
       return jsonResponse({ ...takeoverFixture,
         receipt: { ...takeoverFixture.receipt, expected_heads: [REVISION], prior_heads: [REVISION],
           resulting_heads: [REVISION] },
-        result: { ...takeoverFixture.result, prior_editor_session_id: PRIOR_SESSION,
+        result: { ...takeoverFixture.result, prior_editor_session_id: PRIOR_SESSION, prior_writer_generation: observed,
+          resulting_writer_generation: resulting,
           resulting_editor_session_id: SESSION, resulting_heads: [REVISION], resulting_snapshot_id: TAKEOVER_SNAPSHOT,
           resulting_snapshot_activity_position: state.snapshot.position } });
     }
@@ -969,11 +974,12 @@ it("runs the takeover check at the first open after a takeover in this tab, and 
     takeOver()!.click();
     await takenOver();
 
-    // The refused open has no writer, so the page shows no takeover button.
+    // The refused open has no writer, so the page shows no takeover button. The reopen sends no takeover of its own.
     await expect.poll(() => ({ save: workspace.shown().save, takeOver: takeOver(), inFlight: server.inFlight() }))
       .toEqual({ save: "needs_attention", takeOver: null, inFlight: [] });
-    expect({ check: checkReads(server.log.started.slice(before)), unexpected: server.log.unexpected })
-      .toEqual({ check: [SESSION_READ, TREE, snapshotRead(TAKEOVER_SNAPSHOT), SESSION_READ], unexpected: [] });
+    expect({ check: checkReads(server.log.started.slice(before)), takeovers: server.count(TAKEOVER),
+      unexpected: server.log.unexpected }).toEqual({
+      check: [SESSION_READ, TREE, snapshotRead(TAKEOVER_SNAPSHOT), SESSION_READ], takeovers: 1, unexpected: [] });
   });
 
 it("runs the takeover check at a reload with an empty local database, and refuses a changed Session", async () => {
@@ -996,7 +1002,7 @@ it("runs the takeover check at a reload with an empty local database, and refuse
     .toEqual({ check: [SESSION_READ, TREE, snapshotRead(EDITOR_SNAPSHOT), SESSION_READ], unexpected: [] });
 });
 
-it("refuses the open after a Chapter switch when another Editor Session took over with writer generation 3",
+it("shows the open after a Chapter switch read-only when another Editor Session took over with writer generation 3",
   async () => {
     const server = fakeServer({ reads: [...SWITCH_READS, snapshotRead(EDITOR_SNAPSHOT)],
       writer: { kind: "current_writer", writer_generation: "2" }, commands: [SWITCH] });
@@ -1496,12 +1502,9 @@ it("shows the sentence of a refused takeover and makes the button usable again",
   const server = fakeServer({ reads: OPEN_READS,
     writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
     commands: [SESSION_CREATE, TAKEOVER], takeover: "compare_failed" });
+  // The Server refuses the automatic takeover of the open: another tab took the writer after the admission.
   const workspace = await openWorkspace(server);
   const button = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
-  await expect.poll(() => button()?.disabled).toBe(false);
-
-  // The Server refuses the takeover: another tab took the writer after the admission.
-  button()!.click();
 
   await expect.poll(() => ({ alert: workspace.root.querySelector('.editor-panel [role="alert"]')?.textContent,
     disabled: button()?.disabled, text: button()?.textContent }))

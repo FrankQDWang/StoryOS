@@ -5,8 +5,10 @@ import { takeOverOwnedProjectWriter } from "./take-over-writer.ts";
 
 /**
  * Takes over the writer for the Editor Session `editorSessionId` and opens the Project again (ADR 0106 section 1). With
- * no `observedWriterGeneration`, it first reads the Session for it: the refusal of an Author Edit gives no generation.
- * The result is undefined when the Server applied no takeover.
+ * no `observedWriterGeneration`, it first reads the Session for it: the refusal of an Author Edit gives no generation,
+ * and a takeover that the Server did not apply can leave an old one. When the read shows that the Session holds the
+ * writer, an earlier takeover with a lost response applied, so it only opens the Project again. The result is
+ * undefined when the Server applied no takeover.
  */
 export async function takeOverWriter(options: {
   baseUrl: string;
@@ -21,8 +23,10 @@ export async function takeOverWriter(options: {
   let observed = options.observedWriterGeneration;
   if (observed === undefined) {
     const read = await getEditorSession({ baseUrl, projectId, editorSessionId, fetchImpl });
-    if (read.project_scope.project_id !== projectId || read.editor_session.editor_session_id !== editorSessionId
-      || read.writer.kind !== "read_only") return undefined;
+    if (read.project_scope.project_id !== projectId || read.editor_session.editor_session_id !== editorSessionId) {
+      return undefined;
+    }
+    if (read.writer.kind === "current_writer") return options.reopen();
     observed = read.writer.observed_writer_generation;
   }
   const takeover = await takeOverOwnedProjectWriter({ baseUrl, fetchImpl, cryptoImpl: options.cryptoImpl, projectId,
