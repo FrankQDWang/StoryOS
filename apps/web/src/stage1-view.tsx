@@ -324,7 +324,21 @@ function ProjectEditorView({
     state.editor.kind === "editor-ready" ? state.editor.openedProjection.save_state : "needs_attention",
   );
   const [editorFailure, setEditorFailure] = useState<string>();
-  const [readOnly, setReadOnly] = useState(state.editor.kind !== "editor-ready");
+  const [readOnly, setReadOnlyState] = useState(state.editor.kind !== "editor-ready");
+  // The input state of the editor now. The hand-over reads it when it decides (ADR 0105, section 4).
+  const readOnlyRef = useRef(readOnly);
+  const setReadOnly = (value: boolean) => {
+    readOnlyRef.current = value;
+    setReadOnlyState(value);
+  };
+  // True while the command of a Proposal navigation is in flight. Its answer can move the Editor Session base, so the
+  // editor accepts no input until the answer.
+  const [navigationCommand, setNavigationCommandState] = useState(false);
+  const navigationCommandRef = useRef(false);
+  const setNavigationCommand = (value: boolean) => {
+    navigationCommandRef.current = value;
+    setNavigationCommandState(value);
+  };
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
   // The Chapter whose switch waits for the Retry-After of a Command Challenge rate limit (#1679).
@@ -346,19 +360,21 @@ function ProjectEditorView({
   const handOverRef = useRef(handOver);
   useSyncExternalStore(handOver?.subscribe ?? noChanges, () => handOver?.version());
   // Each end of an arrival with no hand-over shows the Arrival Input as text that is not saved.
-  const showUnsaved = () => {
-    for (const ended of [inputRef.current, handOverRef.current]) {
-      if (ended?.hasInput() === true) unsavedNotice.show({ chapterId: ended.chapterId, blocks: ended.blocks() });
-    }
-    inputRef.current = undefined;
-    handOverRef.current = undefined;
+  const showUnsaved = (ended: ArrivalInput | undefined) => {
+    if (ended?.hasInput() === true) unsavedNotice.show({ chapterId: ended.chapterId, blocks: ended.blocks() });
   };
   const endArrival = () => {
-    showUnsaved();
+    showUnsaved(inputRef.current);
+    inputRef.current = undefined;
     setArrival(undefined);
   };
   // A Proposal navigation or a reopen can close this part during a switch, and its Arrival Input then goes to a notice.
-  useEffect(() => () => { showUnsaved(); }, []);
+  useEffect(() => () => {
+    showUnsaved(inputRef.current);
+    showUnsaved(handOverRef.current);
+    inputRef.current = undefined;
+    handOverRef.current = undefined;
+  }, []);
   // The wait of the current switch, from the click to its end. Closing the view ends it.
   const switchWaitRef = useRef<{ wait: ChallengeAdmissionWait; waiting: boolean } | undefined>(undefined);
   useEffect(() => () => { switchWaitRef.current?.wait.cancel(); }, []);
@@ -394,7 +410,7 @@ function ProjectEditorView({
   const endHandOver = (typed: ArrivalInput, capture: boolean) => {
     handOverRef.current = undefined;
     typed.stop();
-    if (capture && writing !== undefined) {
+    if (capture && writing !== undefined && !readOnlyRef.current && !navigationCommandRef.current) {
       for (const item of typed.held()) writing.capture(item.edit, item.origin, item.blocks);
     } else if (typed.hasInput()) {
       unsavedNotice.show({ chapterId: typed.chapterId, blocks: typed.blocks() });
@@ -402,7 +418,8 @@ function ProjectEditorView({
   };
   // The answer of the read of the open suggestions of this editor decides the hand-over, after an open IME
   // composition ended. A complete list with no Proposal gives the input to the writing controller. A Proposal, an
-  // incomplete list, a failed read, a Local Edit Journal that stops input, or a refusal sends the input to the notice.
+  // incomplete list, a failed read, a Local Edit Journal that stops input, an editor that accepts no input, or a refusal
+  // sends the input to the notice.
   // The report of a Proposal starts a new read of the list, and an answer of an earlier read does not decide.
   const reportedRef = useRef(0);
   const decideHandOver = (heads: readonly string[] | undefined, refreshKey = reportedRef.current) => {
@@ -563,9 +580,9 @@ function ProjectEditorView({
     return (async () => {
       let reopened = false;
       let cancelled = false;
-      // True when the switch gave a state to the workspace. Then the next editor part runs the waiting selection. A
-      // Project with no Current Chapter has no contents of Chapters to select, so the waiting selection ends with the
-      // workspace.
+      // True when the switch gave a state to the workspace or a hand-over to this editor part. Then the next editor part
+      // or the end of the hand-over runs the waiting selection. A Project with no Current Chapter has no contents of
+      // Chapters to select, so the waiting selection ends with the workspace.
       let handedOff = false;
       // A repeat uses the Chapter of the first read, so the command and its idempotency key stay the same.
       const targets = new Map<string, GetChapterResponse>();
@@ -630,6 +647,9 @@ function ProjectEditorView({
                 if (switched === undefined) continue;
                 if (switched.effect.kind !== "authoritative_applied"
                   && switched.effect.kind !== "no_effect") {
+                  // The command had no effect, so the switch goes on to the newest selection from the Current Chapter
+                  // that the tab knows (ADR 0105, section 6).
+                  if (generation === switchGenerationRef.current && chapter !== goal()) continue;
                   setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
                   return;
                 }
@@ -645,7 +665,22 @@ function ProjectEditorView({
                 if (chapter !== goal()) continue;
               }
               // A selection back to the Current Chapter of the editor before a command had an effect needs no command.
-              if (!changed) return;
+              // Arrival Input on the settled base of this editor stays in this part as a hand-over, after an open IME
+              // composition ended (ADR 0105, section 4). A new read of the open suggestions of this editor decides it.
+              if (!changed) {
+                const typed = inputRef.current;
+                if (typed?.chapterId !== currentChapterId) return;
+                await compositionEnded(typed);
+                if (generation !== switchGenerationRef.current || !typed.hasInput()
+                  || typed.revisionId !== settled.authoritative_revision_id) return;
+                inputRef.current = undefined;
+                handOverRef.current = typed;
+                setHandOver(typed);
+                reportedRef.current += 1;
+                setProposalRefresh(reportedRef.current);
+                handedOff = true;
+                return;
+              }
               const next = await reopen(reopenAt);
               // No editor mounts for a Chapter that a later selection replaced.
               if (chapter !== goal()) continue;
@@ -817,6 +852,17 @@ function ProjectEditorView({
       const checked = treeCheck();
       navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
+        onCommandSent: () => { setNavigationCommand(true); },
+        // After an effect, the Editor Session has a new base, so this editor accepts no input until a reopen, and the
+        // next selection expects the new Current Chapter.
+        onCommandEnded: (chapterId) => {
+          if (chapterId !== undefined) {
+            serverChapterRef.current = chapterId;
+            movedRef.current = true;
+            setReadOnly(true);
+          }
+          setNavigationCommand(false);
+        },
         onOpened: (next, focus, notice) => {
           setSwitchRecovery(undefined); onProposalOpened(checked(next), focus, notice);
         }, onFailure: setSwitchRecovery, onLocator: openedProposal,
@@ -913,7 +959,7 @@ function ProjectEditorView({
             || saveState === "saved",
           tree,
         }}
-        editable={!readOnly}
+        editable={!readOnly && !navigationCommand}
         startSuggestionRead={selectedChapter.chapter.chapter_id === currentChapterId
           ? () => copies.suggestionRead(currentChapterId) : undefined}
         persistWorkspace={
