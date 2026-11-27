@@ -305,23 +305,30 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     // candidate stays one candidate of its block until the Acceptance splits it (ADR 0106, section 2).
     const unsplit = (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === secondaryOutcome.operation_id)!.candidate_text;
-    await page.evaluate(({ proposalId, operationId }) => {
+    // The caret stays in the candidate text: the author types the paragraph first and then starts it with Enter.
+    const caretInCandidate = (offset: number) => page.evaluate(({ proposalId, operationId, offset }) => {
       const editor = document.querySelector<HTMLElement & { editor?: import('@tiptap/core').Editor }>(
         '[data-manuscript-editor]')?.editor;
-      let end: number | undefined;
+      let start: number | undefined;
       editor?.state.doc.descendants((node, position) => {
         if (node.type.name === 'blockProposal' && node.attrs.proposalId === proposalId
-          && node.attrs.operationId === operationId) end = position + 1 + node.content.size;
+          && node.attrs.operationId === operationId) start = position + 1;
       });
-      if (editor === undefined || end === undefined) throw new Error('The candidate is not in the editor');
-      editor.commands.setTextSelection(end);
+      if (editor === undefined || start === undefined) throw new Error('The candidate is not in the editor');
+      editor.commands.setTextSelection(start + offset);
       editor.view.focus();
-    }, { proposalId, operationId: secondaryOutcome.operation_id });
-    await page.keyboard.press('Enter');
+    }, { proposalId, operationId: secondaryOutcome.operation_id, offset });
+    const savedCandidate = (text: string) => expect.poll(async () => (await getProposal({ ...options, proposalId }))
+      .proposal.operations.find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text,
+    { timeout: 10_000 }).toBe(text);
+    await caretInCandidate(unsplit.length);
     await page.keyboard.insertText('A second paragraph.');
+    await savedCandidate(`${unsplit}A second paragraph.`);
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    await caretInCandidate(unsplit.length);
+    await page.keyboard.press('Enter');
     const splitText = `${unsplit}\nA second paragraph.`;
-    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
-      .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text).toBe(splitText);
+    await savedCandidate(splitText);
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await expect(candidate()).toHaveCount(1);
     assert.equal(await candidate().locator('.block-proposal-text').textContent(), splitText);
