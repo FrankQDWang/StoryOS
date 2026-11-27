@@ -42,7 +42,8 @@ interface EditorWritingSnapshot {
 }
 
 /** Why the quiet entry did not run a structural command. */
-export type QuietRefusal = "incomplete_semantic_intent" | "unsettled_input" | "journal_unavailable";
+/** `earlier_base`: a save found a later Revision, and the editor waits for the catch-up (ADR 0107, section 2). */
+export type QuietRefusal = "incomplete_semantic_intent" | "unsettled_input" | "journal_unavailable" | "earlier_base";
 
 /** The only owner of the Pending Edit Projection of one current-writer Editor Session (ADR 0046). */
 export interface EditorSessionWritingController {
@@ -77,6 +78,10 @@ export interface EditorSessionWritingController {
   canAcceptInput(hardBoundary: boolean, candidate?: { proposalId: string; operationId: string }): boolean;
   /** An IME composition holds submission until it ends. */
   setComposing(composing: boolean): void;
+  /** Ends input and submission before the tab opens again on a later Revision. A submission in flight still settles. */
+  endInput(): void;
+  /** False after `endInput` and after a save found a later Revision: the editor then refuses each input. */
+  acceptsInput(): boolean;
   fail(error: unknown): void;
   close(): void;
 }
@@ -173,6 +178,8 @@ export function createEditorSessionWritingController({
   let failed = false;
   // After a failed edit, later captured input stays visible and held. The Journal refuses appends (ADR 0046).
   let attention = false;
+  // A save found a later Revision, or the tab ended input for a catch-up (ADR 0107, section 2).
+  let earlierBase = false;
   let composing = false;
   let abandonUndo: (() => void) | undefined;
   // A Challenge wait does not hold the queue, so input of the wait enters the Journal at once (ADR 0065).
@@ -331,6 +338,7 @@ export function createEditorSessionWritingController({
       }
     }
     if (projection.save_state === "needs_attention" && onEarlierBase !== undefined && await hasEarlierBase(workspace)) {
+      earlierBase = true;
       attention = true;
       submissionClosed = true;
       onEarlierBase(state.projection.blocks);
@@ -548,6 +556,7 @@ export function createEditorSessionWritingController({
       const capturedBefore = captured;
       if (condition === "settled") await flush();
       await whenIdle();
+      if (earlierBase) return { kind: "refused", reason: "earlier_base" };
       if (hasIncompleteInput()) return { kind: "refused", reason: "incomplete_semantic_intent" };
       let projection: PendingEditProjection;
       try {
@@ -575,6 +584,13 @@ export function createEditorSessionWritingController({
       if (key !== undefined && (key === openCandidate || key === capturedCandidate)) return true;
       return !submissionClosed && (!hardBoundary || pendingIntentCount === 0 && unjournaled === 0);
     },
+    endInput() {
+      earlierBase = true;
+      attention = true;
+      submissionClosed = true;
+      clearIdle();
+    },
+    acceptsInput: () => !earlierBase,
     fail,
     setComposing(value) {
       composing = value;

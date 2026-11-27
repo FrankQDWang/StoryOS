@@ -154,7 +154,7 @@ export function ManuscriptEditor({
         (hardBoundary, candidate) => !candidateCompositionBlockedRef.current
           && writingRef.current?.canAcceptInput(hardBoundary, candidate) === true,
         () => composingRef.current && crossingCompositionRef.current !== undefined,
-        (origin) => arrivalRef.current?.accepts(origin) !== false),
+        (origin) => arrivalRef.current?.accepts(origin) !== false && writingRef.current?.acceptsInput() !== false),
     ],
     content: manuscriptBlocksJson(blocks),
     editable,

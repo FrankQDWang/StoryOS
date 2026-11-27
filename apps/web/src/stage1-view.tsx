@@ -6,7 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import {
   createProject,
   createProjectChallenge,
-  getChapter,
   getManuscriptTree,
   listProjects,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -15,9 +14,10 @@ import type {
   GetManuscriptTreeResponse,
   GetProjectResponse,
   ProjectListItem,
+  StoryOSQueryOptions,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { openControlledProject, reopenControlledProject } from "./boot.ts";
+import { openControlledProject, readCurrentChapter, reopenControlledProject } from "./boot.ts";
 import {
   CHAPTER_SWITCH_WAITING_SENTENCE,
   chapterSwitchRecoveryMessage,
@@ -466,28 +466,37 @@ function ProjectEditorView({
   // A reopen after a settled command of this page reads the Project, the list of Projects, the Chapter `chapterId` (by
   // default the Current Chapter of the page), and the Editor Session at the same time. It does not read the protocol
   // profile again.
-  const reopen = (chapterId?: string, shown?: readonly ManuscriptParagraph[]) => reopenControlledProject({ baseUrl,
-    fetchImpl, cryptoImpl, opened: { profile: state.profile, project: state.project }, chapterId, shown });
+  const reopen = (chapterId?: string, shown?: readonly ManuscriptParagraph[], chapter?: GetChapterResponse) =>
+    reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl, opened: { profile: state.profile, project: state.project },
+      chapterId, shown, chapter });
 
-  // A save found a later Revision: the tab opens again on it with its text, and shows no sentence (ADR 0107).
-  onEarlierBaseRef.current = (shown) => {
-    if (structureInFlightRef.current) {
-      onEditorFailureRef.current(new Error("Author Edit requires attention"));
-      return;
-    }
-    void reopen(undefined, shown).then(onReopened);
+  // The tab found a later Revision: it opens again on it with its text, and shows no sentence (ADR 0107, section 2).
+  // One catch-up runs for each editor part.
+  const catchingUpRef = useRef(false);
+  const catchUp = (shown: readonly ManuscriptParagraph[], chapter?: GetChapterResponse) => {
+    if (catchingUpRef.current) return;
+    catchingUpRef.current = true;
+    void reopen(undefined, shown, chapter).then(onReopened);
   };
-  // When the tab comes to the front, it saves its input and reads the Chapter one time. A later Revision opens the tab
-  // again on it. A save on an earlier base catches up through `onEarlierBase`.
+  // During a structural command, its quiet step refuses with `earlier_base`, and the command catches up.
+  onEarlierBaseRef.current = (shown) => { if (!structureInFlightRef.current) catchUp(shown); };
+  // When the tab comes to the front, it saves its input and reads the Chapter one time. At a later Revision, the editor
+  // ends input, its submission in flight settles, and the reopen uses that read. A save on an earlier base catches up
+  // through `onEarlierBase`.
   useEffect(() => {
     if (writing === undefined) return undefined;
     const front = () => {
       if (document.visibilityState !== "visible" || structureInFlightRef.current || handOverRef.current !== undefined
         || selectedChapterIdRef.current !== currentChapterId) return;
-      void writing.runAfterQuiesce("settled", async (projection) => (await getChapter({ baseUrl, fetchImpl,
-        projectId: state.project.project.project_id, chapterId: currentChapterId })).chapter.current_revision
-        .revision_id !== projection.authoritative_revision_id).then((quiet) => {
-        if (quiet.kind === "ran" && quiet.result && !structureInFlightRef.current) void reopen().then(onReopened);
+      void writing.runAfterQuiesce("settled", async (projection) => {
+        const read = await readCurrentChapter({ baseUrl, fetchImpl } as StoryOSQueryOptions,
+          state.project.project.project_id, currentChapterId, state.project.project_scope.owner_user_id);
+        return read.chapter.current_revision.revision_id === projection.authoritative_revision_id ? undefined : read;
+      }).then(async (quiet) => {
+        if (quiet.kind !== "ran" || quiet.result === undefined || structureInFlightRef.current) return;
+        writing.endInput();
+        await writing.whenIdle();
+        catchUp(writing.snapshot().projection.blocks, quiet.result);
       }, () => {});
     };
     document.addEventListener("visibilitychange", front);
@@ -805,6 +814,12 @@ function ProjectEditorView({
         });
         if (quiet === undefined) {
           cancelled = true;
+        } else if (quiet.kind === "refused" && quiet.reason === "earlier_base"
+          && generation === switchGenerationRef.current) {
+          // A save found a later Revision. The tab catches up, and the next editor part runs the selection again.
+          waitingStore.current = { chapterId: goal(), contents };
+          handedOff = true;
+          catchUp(writing.snapshot().projection.blocks);
         } else if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
           setSwitchRecovery(chapterSwitchRecoveryMessage(quiet.reason));
         }
@@ -881,7 +896,10 @@ function ProjectEditorView({
           if (generation !== switchGenerationRef.current) return;
           onReopened(next);
         });
-        if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
+        // A save found a later Revision: the tab catches up, and the author deletes again on the later Revision.
+        if (quiet.kind === "refused" && quiet.reason === "earlier_base" && writing !== undefined) {
+          catchUp(writing.snapshot().projection.blocks);
+        } else if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
           setSwitchRecovery(quiet.reason === "incomplete_semantic_intent" ? `无法删除${noun}：请先完成当前输入。`
             : quiet.reason === "journal_unavailable" ? `无法删除${noun}：本地编辑需要恢复。` : `无法删除${noun}。`);
         }

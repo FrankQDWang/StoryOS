@@ -122,8 +122,8 @@ moves the base of each Editor Session of the Project to the head of the new
 Current Chapter.
 
 A page takes a Web Lock with the name of its Editor Session
-(`storyos-editor-session:<id>`), and keeps it until it changes to another Editor
-Session. The browser command "Duplicate tab" copies `sessionStorage`. When
+(`storyos-editor-session:<id>`). It ends the lock of an earlier Editor Session
+only after `sessionStorage` names the new Editor Session. The browser command "Duplicate tab" copies `sessionStorage`. When
 another page holds the lock of the stored Editor Session, the load opens a new
 Editor Session, so two pages never freeze or settle the records of one
 partition.
@@ -139,29 +139,44 @@ catches up in a new Editor Session on the current Chapter:
    input that is not in the Journal; a load takes the Pending Edit Projection).
 2. It puts that text on the current Chapter block by block. A block that the tab
    changed replaces the current block, so the later edit of a block wins. A
-   block that only the other tab changed keeps its current text. A changed block
-   that the current Chapter does not have goes in as a paragraph after the
-   nearest earlier block of the tab. A block that the tab added keeps its id; a
-   block that the other tab deleted gets a new id. A block that the tab deleted
-   leaves only when the other tab did not change it. At the start, the first
-   current block gets the text of the tab, and its own text goes to a new block
-   after it, because the primitives insert a block only after a block.
-3. It creates a new Editor Session, appends the edits from the current blocks to
-   that result to the new partition as one replacement in one undo group, and
-   only then writes the new Editor Session to `sessionStorage`. A stop before
-   that point keeps the stored Editor Session and its records, so the next load
-   catches up again. Each edit has the input origin `selection_replacement`,
-   also a split or a join step, so no step ends the group (section 4), and the
-   edits go out as one Author Edit with one Revision and one Author Undo.
+   block that only the other tab changed keeps its current text. A block that
+   the tab added or moved goes after the nearest earlier block of the tab, with
+   its Block ID and its kind, also when it is empty. A changed block that the
+   other tab deleted goes in as a paragraph at its place with a new Block ID,
+   when it has text. A block that the tab deleted leaves only when the other tab
+   did not change it.
+3. It creates a new Editor Session. When another tab saved between the Chapter
+   read and the creation, the base of the new Editor Session is later than the
+   read, and the open uses that base. The open appends the edits from the blocks
+   of that base to the result to the new partition as one replacement in one
+   undo group, and only then writes the new Editor Session to `sessionStorage`.
+   A stop before that point keeps the stored Editor Session and its records, so
+   the next load catches up again. Each edit has the input origin
+   `selection_replacement`, also a split, a join, or a move step, so no step
+   ends the group (section 4), and the edits go out as one Author Edit with one
+   Revision and one Author Undo. A changed block with the blocks after it that
+   the result adds or removes is one replacement, as a paste is. A block at the
+   start goes in after the first block and then moves to the start, and the
+   first block leaves after it moves after the second block.
 
 The catch-up runs at a load, when a save gets `stale_authoritative_head`, and
 when the tab comes to the front (`visibilitychange`). At the front, the tab
-saves its input, then reads the Chapter one time; a later Revision opens the tab
-again. It shows no sentence and no button. The catch-up does not run when the
-stored partition has a group that went out with no known result, a record in a
-Proposal candidate that no group revised, a decision flight, an unresolved
-Withdrawal, or a retained recovery row: the catch-up cannot know if that work
-applied. Such work keeps the stored Editor Session and its recovery state.
+saves its input, then reads the Chapter one time; at a later Revision, the
+editor refuses input, its submission in flight settles, and the reopen uses
+that read. After a save gets `stale_authoritative_head`, the editor also
+refuses input until the reopen. The quiet step of a Chapter switch or a
+deletion then refuses with `earlier_base`: the tab catches up, a Chapter switch
+runs again on the new editor, and the author can delete again. The tab shows no
+sentence and no button.
+
+The catch-up does not run when the stored partition has a group that went out
+with no known result, a refused Author Edit, an Author Edit that conflicted for
+another reason, a record in a Proposal candidate that no group revised, a
+decision flight, an unresolved Withdrawal, or a retained recovery row: the
+catch-up cannot know if that work applied, or the work needs its recovery. It
+also does not run when the edits have no Author Edit form, or are more than one
+Author Edit can have (240 units, or 240 normalized primitives in a unit). Such
+work keeps the stored Editor Session and its recovery state.
 
 The Admissions, Receipts, and Activity of a writer takeover from before ADR
 0107 stay in the store, and the Activity stream replays them. The migration
