@@ -377,6 +377,7 @@ export function WritingAssistantPanel({
 
   const inspect = async (current: RequestReference): Promise<GetAgentRunResponse | undefined> => {
     if (context === undefined) return;
+    const selection = openSequence.current;
     const stillCurrent = () =>
       readReference(current.scope)?.correlationId === current.correlationId;
     let runId = current.runId;
@@ -417,19 +418,19 @@ export function WritingAssistantPanel({
     }
     // The Run exists, so its references go from the composer also after a lost acknowledgement.
     clearDraftReferences(current.scope, current.referenceKeys ?? []);
-    if (!await showProposals(current, result)) return;
+    if (!await showProposals(current, result, selection)) return;
     setStatus("");
     return result;
   };
 
   /**
-   * Gives each Proposal of the Run to the editor. Gives false and no locator when the request record changed, or the
-   * author selected a Conversation, during a read. The Proposal reads go together, and the locators go in their order
-   * in one step, so the editor refreshes one time.
+   * Gives each Proposal of the Run to the editor. Gives false and no locator when the request record changed, or when
+   * the author selected a Conversation after `selection`. The Proposal reads go together, and the locators go in their
+   * order in one step, so the editor refreshes one time.
    */
-  const showProposals = async (current: RequestReference, result: GetAgentRunResponse): Promise<boolean> => {
+  const showProposals = async (current: RequestReference, result: GetAgentRunResponse,
+    selection = openSequence.current): Promise<boolean> => {
     if (context === undefined) return false;
-    const selection = openSequence.current;
     const stillCurrent = () => selection === openSequence.current
       && readReference(current.scope)?.correlationId === current.correlationId;
     const shown = shownProposals(result);
