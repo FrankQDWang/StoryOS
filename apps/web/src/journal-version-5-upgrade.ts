@@ -2,6 +2,7 @@ import { digestApplyAuthorEdit } from "../../../generated/typescript/storyos-pub
 import type { GetEditorSessionResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { EditorWorkspace, JournalPartition, JournalSubmissionGroup } from "./editor-types.ts";
 import { uuidV7 } from "./client-identity.ts";
+import { lockEditorSession } from "./editor-session-lock.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 import {
   candidateTextsFromJournal, hasCurrentSubmissionShape, journalHasOpenWork, readJournalSnapshot,
@@ -173,34 +174,6 @@ export function upgradeVersion5Journal(transaction: IDBTransaction): void {
 /** The Editor Session of a changed partition with rows, and the version 6 identifier of that partition. */
 export interface Version5Session { editor_session_id: string; journal_partition_id: string }
 
-const heldHere = new Set<string>();
-
-/**
- * Holds the Web Lock of `session` while this page lives, so that no other tab opens that Session. The browser releases
- * the lock when the page closes. It tells if this page holds the lock.
- */
-function holdSession(session: Version5Session): Promise<boolean> {
-  const name = editorSessionLock(session.editor_session_id);
-  const locks = globalThis.navigator?.locks;
-  if (heldHere.has(name) || locks === undefined) return Promise.resolve(true);
-  return new Promise((resolve) => {
-    void locks.request(name, { ifAvailable: true }, (lock) => {
-      resolve(lock !== null);
-      if (lock === null) return undefined;
-      heldHere.add(name);
-      return new Promise<void>(() => {});
-    });
-  });
-}
-
-/**
- * The name of the Web Lock of an Editor Session. The tab that has the Session open holds it, so that no other open tab
- * opens that Session.
- */
-export function editorSessionLock(editorSessionId: string): string {
-  return `storyos-editor-session:${editorSessionId}`;
-}
-
 /**
  * Selects the Editor Session that a tab opens after the upgrade of a version 5 Journal. A tab with a `stored` Session
  * of the version 5 rows opens it when no other open tab has it, else the tab opens a new Session. A tab with no stored
@@ -214,10 +187,12 @@ export async function claimVersion5Session(database: IDBDatabase, stored: string
   const sessions = marker?.value ?? [];
   if (stored) {
     const session = sessions.find((item) => item.editor_session_id === stored);
-    return { active: session === undefined || await holdSession(session) ? stored : null };
+    return { active: session === undefined || await lockEditorSession(session.editor_session_id) ? stored : null };
   }
   for (const session of sessions) {
-    if (await holdSession(session)) return { active: session.editor_session_id, claimed: session };
+    if (await lockEditorSession(session.editor_session_id)) {
+      return { active: session.editor_session_id, claimed: session };
+    }
   }
   return { active: stored };
 }

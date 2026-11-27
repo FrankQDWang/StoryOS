@@ -50,6 +50,7 @@ import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { ManuscriptTree } from "./manuscript-tree.tsx";
 import { readManuscriptTree } from "./manuscript-tree-read.ts";
 import { relabelDraftReferences } from "./selection-reference-draft.ts";
+import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
   historicalAcknowledgementUnavailable,
@@ -402,11 +403,13 @@ function ProjectEditorView({
   };
   const [proposalRefresh, setProposalRefresh] = useState(0);
   const onEditorFailureRef = useRef<(error: unknown) => void>(() => {});
+  const onEarlierBaseRef = useRef<() => void>(() => {});
   const editorState = state.editor;
   // One writing controller owns the Pending Edit Projection of this Editor Session (ADR 0046).
   const writing = useMemo(() => editorState.kind === "editor-ready"
     ? createEditorSessionWritingController({ workspace: editorState, baseUrl, fetchImpl, cryptoImpl, ...writingTimers,
-      onFailure: (error) => { onEditorFailureRef.current(error); } })
+      onFailure: (error) => { onEditorFailureRef.current(error); },
+      onEarlierBase: () => { onEarlierBaseRef.current(); } })
     : undefined, [editorState, baseUrl, fetchImpl, cryptoImpl, writingTimers]);
   useEffect(() => () => { writing?.close(); }, [writing]);
   // Ends the hand-over: each held edit goes to the normal capture entry in its order, or the notice shows the input.
@@ -462,8 +465,33 @@ function ProjectEditorView({
   // A reopen after a settled command of this page reads the Project, the list of Projects, the Chapter `chapterId` (by
   // default the Current Chapter of the page), and the Editor Session at the same time. It does not read the protocol
   // profile again.
-  const reopen = (chapterId?: string) => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
-    opened: { profile: state.profile, project: state.project }, chapterId });
+  const reopen = (chapterId?: string, shown?: readonly ManuscriptParagraph[]) => reopenControlledProject({ baseUrl,
+    fetchImpl, cryptoImpl, opened: { profile: state.profile, project: state.project }, chapterId, shown });
+
+  // A save found a later Revision: the tab opens again on it with its text, and shows no sentence (ADR 0107, section 2).
+  // One catch-up runs for each editor part. It waits for an open IME composition, ends input, and makes the editor
+  // read-only. It lets the captured input enter the Journal and the submission in flight settle, and closes the
+  // controller before the reopen. The close abandons an Author Undo, so the Undo is not sent after the reopen.
+  const catchingUpRef = useRef(false);
+  const [catchingUp, setCatchingUp] = useState(false);
+  const catchUp = () => {
+    if (catchingUpRef.current || writing === undefined) return;
+    catchingUpRef.current = true;
+    void (async () => {
+      await writing.whenComposed();
+      writing.endInput();
+      // The editor is read-only at once, so no input comes after the end of input.
+      flushSync(() => { setCatchingUp(true); });
+      await writing.whenIdle();
+      const shown = writing.snapshot().projection.blocks;
+      writing.close();
+      onReopened(await reopen(undefined, shown));
+    })();
+  };
+  // A structural command in flight catches up when its quiet step refuses with `earlier_base`.
+  onEarlierBaseRef.current = () => {
+    if (!structureInFlightRef.current) catchUp();
+  };
 
   // A read-only editor has no writing controller and no input to wait for.
   const runWhenQuiet = <Result,>(condition: "journaled" | "settled",
@@ -776,6 +804,12 @@ function ProjectEditorView({
         });
         if (quiet === undefined) {
           cancelled = true;
+        } else if (quiet.kind === "refused" && quiet.reason === "earlier_base"
+          && generation === switchGenerationRef.current) {
+          // A save found a later Revision. The tab catches up, and the next editor part runs the selection again.
+          waitingStore.current = { chapterId: goal(), contents };
+          handedOff = true;
+          catchUp();
         } else if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
           setSwitchRecovery(chapterSwitchRecoveryMessage(quiet.reason));
         }
@@ -852,7 +886,10 @@ function ProjectEditorView({
           if (generation !== switchGenerationRef.current) return;
           onReopened(next);
         });
-        if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
+        // A save found a later Revision: the tab catches up, and the author deletes again on the later Revision.
+        if (quiet.kind === "refused" && quiet.reason === "earlier_base") {
+          catchUp();
+        } else if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
           setSwitchRecovery(quiet.reason === "incomplete_semantic_intent" ? `无法删除${noun}：请先完成当前输入。`
             : quiet.reason === "journal_unavailable" ? `无法删除${noun}：本地编辑需要恢复。` : `无法删除${noun}。`);
         }
@@ -1025,7 +1062,7 @@ function ProjectEditorView({
             || saveState === "saved",
           tree,
         }}
-        editable={!readOnly && !navigationCommand && !resultUnknown}
+        editable={!readOnly && !navigationCommand && !resultUnknown && !catchingUp}
         startSuggestionRead={selectedChapter.chapter.chapter_id === currentChapterId
           ? () => copies.suggestionRead(currentChapterId) : undefined}
         persistWorkspace={
