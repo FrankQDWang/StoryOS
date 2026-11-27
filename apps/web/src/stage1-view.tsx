@@ -98,6 +98,8 @@ interface ProjectEditorHandle {
   navigateProposal: (destination: ProposalDestination) => void;
   openedProposal: (locator: ProposalLocator) => void;
   showRecovery: (sentence: string) => void;
+  /** Sends the automatic takeover of the open (ADR 0106, section 1). */
+  takeOver: () => void;
 }
 
 /** The state of the editor part that the contents list and the assistant panel show. */
@@ -190,9 +192,10 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   useEffect(() => () => { copies.close(); }, [copies]);
   const handOverStore = useRef<ArrivalInput | undefined>(undefined);
   const waitingStore = useRef<WaitingSelection | undefined>(undefined);
-  // The open of a Session that never held the writer takes it over (ADR 0106, section 1). A later event of the same
-  // open gives a Session that held the writer, so its reason is not `secondary_session`.
+  // Only the open takes over the writer with no action of the author (ADR 0106, section 1). This view mounts one time
+  // for each open of a Project, so a later event of the same open (a reopen, a switch, a decision) sends no takeover.
   const [takingOver, setTakingOver] = useState(() => secondarySession(state));
+  useEffect(() => { if (takingOver) editor.current?.takeOver(); }, []);
   // The start of the read of an open is not known here, so the open writes only a copy that does not exist.
   useEffect(() => {
     if (copies.get(state.chapter.chapter.chapter_id) === undefined) {
@@ -334,6 +337,8 @@ function ProjectEditorView({
   const [fenced, setFenced] = useState(false);
   // True after a takeover that the Server did not apply: the writer generation of the open can be old.
   const generationStaleRef = useRef(false);
+  // True after a takeover whose reopen has no ready editor: that state can keep this editor part.
+  const waitAfterReopenRef = useRef(false);
   const currentChapterId = state.project.project.open.kind === "current_chapter"
     ? state.project.project.open.current_chapter_id
     : state.chapter.chapter.chapter_id;
@@ -867,6 +872,12 @@ function ProjectEditorView({
   };
   // A switch that gave no Arrival Input to this editor part ended, so the waiting selection runs.
   useEffect(() => { if (handOverRef.current === undefined) runWaiting(); }, []);
+  // The reopen of a takeover kept this editor part, so the selection of the takeover time runs now.
+  useEffect(() => {
+    if (!waitAfterReopenRef.current) return;
+    waitAfterReopenRef.current = false;
+    runWaiting();
+  }, [state]);
 
   const removeFromTree = (noun: "章节" | "卷", remove: (expectedTreeRevision: string) => Promise<{
     effect: { kind: string };
@@ -957,6 +968,7 @@ function ProjectEditorView({
           waitingStore.current = { chapterId: shownChapterId, contents: true };
         }
         reopened = true;
+        if (next.kind === "project-ready" && next.editor.kind !== "editor-ready") waitAfterReopenRef.current = true;
         onReopened(next);
       } catch {
         generationStaleRef.current = true;
@@ -970,7 +982,6 @@ function ProjectEditorView({
       }
     })();
   };
-  useEffect(() => { if (secondarySession(state)) runTakeover("automatic"); }, []);
   const editorBlocks = handOver !== undefined ? handOver.blocks()
     : selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
     ? pendingParagraphs(pending)
@@ -999,6 +1010,7 @@ function ProjectEditorView({
   };
   const own: ProjectEditorHandle = {
     selectChapter, removeChapter, removeVolume, openedProposal, showRecovery: setSwitchRecovery,
+    takeOver: () => { runTakeover("automatic"); },
     navigateProposal: (destination) => {
       if (handOverComposing()) {
         setSwitchRecovery("请先完成当前输入。");

@@ -58,8 +58,7 @@ async function sha256(body: string): Promise<string> {
  * `secondary_session`. With "this_tab", this Session holds generation 1. With "lost", this Session held generation 1
  * and the other tab took over with generation 2, so this Session is `superseded_by_takeover`. With "binding_invalid",
  * the Server refuses the binding of this Session. A takeover with the current generation gives this Session the next
- * generation and settles a new Snapshot. The Server refuses a takeover with an older generation before Admission.
- * `failures` are the answers to the first takeovers: a compare failure (the other tab takes over after the Admission),
+ * generation and settles a new Snapshot. `failures` are the answers to the first takeovers: a compare failure (the other tab takes over after the Admission),
  * a lost response, or an applied takeover with a lost response. `takeOverElsewhere` is a takeover by the other tab:
  * an Author Edit of this Session then gets `412 editor_writer_stale`. A switch sets the Current Chapter.
  * `hold(name)` holds the next request of that name until `release`.
@@ -151,11 +150,6 @@ function fakeServer({ serves, failures = [], writer = "elsewhere" }: {
       log.takeovers.push(request.observed_writer_generation);
       const failure = failures[log.takeovers.length - 1];
       if (failure === "lost") throw new TypeError("Failed to fetch");
-      if (request.observed_writer_generation !== String(state.generation)) {
-        // A stale generation is a pre-admission Problem (`takeover.rs` of `storyos-server`).
-        return jsonResponse({ schema_id: "storyos.problem.v1", code: "idempotency_binding_conflict",
-          message: "The writer takeover binding conflicts." }, 409);
-      }
       const receipt = { ...takeoverFixture.receipt, expected_heads: [REVISION], prior_heads: [REVISION],
         resulting_heads: [REVISION] };
       if (failure === "compare_failed") {
@@ -279,6 +273,8 @@ async function loadPage(server: Server) {
 /** The reads of an open of Chapter A, with no Editor Session request. */
 const OPEN = [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER), openProposals(CHAPTER), TREE, ACTIVITY,
   ...UNAVAILABLE_PANELS];
+/** The reads of an open that ends with no ready editor before a read of Project Activity. */
+const OPEN_NO_ACTIVITY = OPEN.filter((name) => name !== ACTIVITY);
 /** The requests of a takeover and its reopen with the takeover check of the Journal (#1897). */
 const TAKEOVER_STEPS = [CHALLENGE, TAKEOVER, SESSION_READ, snapshotRead(SNAPSHOTS[1]!)];
 
@@ -322,8 +318,7 @@ function storedSession(writer: "lost" | "binding_invalid", serves: string[]) {
 }
 
 it("sends no takeover at the open of a stored Session with binding_invalid", async () => {
-  // The open of a refused binding reads no Project Activity.
-  const server = storedSession("binding_invalid", OPEN.filter((name) => name !== ACTIVITY));
+  const server = storedSession("binding_invalid", OPEN_NO_ACTIVITY);
   const page = await loadPage(server);
 
   await expect.poll(page.shown).toEqual({ title: "Chapter A", editable: false, footer: "需要处理", reason: undefined,
@@ -423,8 +418,8 @@ it("keeps the Current Chapter on the screen while the automatic takeover runs, a
   });
 
 it("shows the Chapter of a selection during an automatic takeover that the Server did not apply", async () => {
-  const server = fakeServer({ failures: ["compare_failed"], serves: [...OPEN, SESSION_CREATE, CHALLENGE, TAKEOVER,
-    chapterRead(CHAPTER_B), openProposals(CHAPTER_B)] });
+  const server = fakeServer({ failures: ["compare_failed"], serves: [...OPEN_NO_ACTIVITY, SESSION_CREATE, CHALLENGE,
+    TAKEOVER, chapterRead(CHAPTER_B), openProposals(CHAPTER_B)] });
   server.hold([TAKEOVER]);
   const page = await loadPage(server);
   await expect.poll(server.inFlight).toEqual([TAKEOVER]);
@@ -447,7 +442,9 @@ it("keeps the shown Chapter after a takeover from the button, and stores it as t
   page.root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`)!.click();
   await expect.poll(page.shown).toEqual({ title: "Chapter B", footer: "只读", editable: false,
     reason: LOST_SENTENCE, button: "接管写作" });
-  // The observer records the title and the text of the editor part at each change from the click.
+  // The observer records the title and the text of the editor part at each change from the click. The browser paints
+  // only between tasks, and the observer gets the screen at the end of each task, so the screen never shows a Chapter
+  // that the observer does not record: not the Current Chapter A of the Server.
   const screens = new Set<string>();
   const observer = new MutationObserver(() => {
     screens.add(`${page.root.querySelector(".editor-panel h2")?.textContent ?? ""}: `
@@ -488,3 +485,28 @@ it("opens the Chapter of a selection during a takeover from the button, not the 
   expect({ takeovers: server.log.takeovers, unexpected: server.log.unexpected })
     .toEqual({ takeovers: ["2"], unexpected: [] });
 });
+
+it("shows the Chapter of a selection during a takeover whose reopen finds that another tab took the writer again",
+  async () => {
+    const server = storedSession("lost", [...OPEN_NO_ACTIVITY, CHALLENGE, TAKEOVER, chapterRead(CHAPTER_B),
+      openProposals(CHAPTER_B)]);
+    const page = await loadPage(server);
+    await expect.poll(() => page.shown().button).toBe("接管写作");
+    server.hold([TAKEOVER]);
+    page.takeOver()!.click();
+    await expect.poll(server.inFlight).toEqual([TAKEOVER]);
+    page.root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`)!.click();
+    // The reopen reads the Editor Session after the other tab took the writer again.
+    server.hold([SESSION_READ]);
+    server.release();
+    await expect.poll(server.inFlight).toEqual([SESSION_READ]);
+    server.takeOverElsewhere();
+
+    server.release();
+
+    await expect.poll(() => ({ ...page.shown(), inFlight: server.inFlight() }))
+      .toEqual({ title: "Chapter B", footer: "只读", editable: false, reason: LOST_SENTENCE, button: "接管写作",
+        inFlight: [] });
+    expect({ takeovers: server.log.takeovers, unexpected: server.log.unexpected })
+      .toEqual({ takeovers: ["2"], unexpected: [] });
+  });
