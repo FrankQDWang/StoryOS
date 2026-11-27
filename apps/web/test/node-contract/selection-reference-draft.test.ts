@@ -3,10 +3,11 @@ import { getSchema } from "@tiptap/core";
 import { EditorState } from "@tiptap/pm/state";
 import { test } from "vitest";
 
+import { readManuscriptParagraphs } from "../../src/manuscript-doc.ts";
 import { storyosManuscriptExtensions } from "../../src/manuscript-tiptap-adapter.ts";
 import type { ChapterTextReference } from "../../src/selection-reference.ts";
 import {
-  acceptDraftCandidates, acceptedCandidateTexts, addDraftReferences, clearDraftReferences, copiedReferences, pasteReferences, draftCanAdd, draftEntries, rebaseDraftReferences, removeDraftReference, setRunReferences,
+  acceptDraftCandidates, acceptedCandidateTexts, addDraftReferences, showAcceptedSplits, clearDraftReferences, copiedReferences, pasteReferences, draftCanAdd, draftEntries, rebaseDraftReferences, removeDraftReference, setRunReferences,
   trackableDraftReferences, trackDraftReferences, type DraftReference,
 } from "../../src/selection-reference-draft.ts";
 
@@ -208,6 +209,19 @@ test("a reference to a later part of an accepted candidate becomes Chapter text 
   ]);
   // The editor then tracks each reference from the accepted Revision.
   assert.deepEqual(trackableDraftReferences(project, CHAPTER, NEXT), keys.slice(0, 4));
+});
+
+test("a new editor of the accepted Revision makes a reference to a later part Chapter text", () => {
+  const project = scope();
+  addDraftReferences(project, [candidateEntry(6, 8)]);
+  acceptDraftCandidates(project, PROPOSAL, new Map([[OPERATION!, SPLIT_CANDIDATE]]), NEXT);
+  // A new editor gets its document with no transaction. An editor of the Revision before the acceptance waits.
+  const blocks = (view: EditorState) => readManuscriptParagraphs(view.doc)!;
+  showAcceptedSplits(project, CHAPTER, blocks(paragraphs([FIRST!, "雨夜。"], [SECOND!, "船夫在等着。"])), tree);
+  assert.equal(draftEntries(project)[0]!.reference.kind, "proposal_candidate_text");
+  showAcceptedSplits(project, CHAPTER,
+    blocks(paragraphs([FIRST!, "雨停了。"], [ADDED, "风起了。"], [SECOND!, "船夫在等着。"])), tree);
+  assert.deepEqual(draftEntries(project).map((item) => item.reference), [reference(ADDED, 0, 2, NEXT)]);
 });
 
 test("a reference to a later part leaves when the editor shows the accepted text with no new block after it", () => {

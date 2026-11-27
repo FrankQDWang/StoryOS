@@ -158,6 +158,49 @@ export function draftLabels(entries: readonly DraftReference[]): string[] {
 }
 
 /**
+ * The entry of a reference that waits for the new blocks of an accepted candidate, after the editor shows `blocks`.
+ * `whole` is true when the editor shows a new document, as a hydrate or a new editor does.
+ */
+function shownSplit(entry: DraftReference, split: AcceptedSplit, chapterId: string,
+  blocks: readonly { manuscript_block_id: string; text: string }[], tree: ChapterOrder | undefined,
+  whole: boolean): DraftReference | undefined {
+  const target = entry.candidate === undefined ? -1
+    : blocks.findIndex((block) => block.manuscript_block_id === entry.candidate!.blockId);
+  if (target < 0) return entry;
+  const shown = blocks.slice(target, target + split.parts.length);
+  if (shown.length !== split.parts.length || shown.some((block, index) => block.text !== split.parts[index])) {
+    // The target block shows the accepted text, but the next blocks are not the parts: the reference leaves.
+    // A document of the Revision before the acceptance does not show the accepted text, so the reference waits.
+    return whole && shown[0]!.text === split.parts[0] ? undefined : entry;
+  }
+  const point = ({ part, offset }: PartPoint) => ({ manuscript_block_id: shown[part]!.manuscript_block_id, offset });
+  const reference: ChapterTextReference = { kind: "chapter_text", chapter_id: chapterId,
+    base_authoritative_revision_id: split.revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+    start: point(split.start), end: point(split.end) };
+  const label = tree === undefined ? undefined : referenceLabel(tree, blocks, { reference });
+  return { key: entry.key, moved: false, reference,
+    label: label ?? { chapter: entry.label.chapter, part: entry.label.part } };
+}
+
+/**
+ * Gives each reference of one Chapter that waits for the new blocks of an accepted candidate the blocks of a new
+ * editor. A new editor gets its document with no transaction, for example after an acceptance.
+ */
+export function showAcceptedSplits(scope: ProjectScope, chapterId: string,
+  blocks: readonly { manuscript_block_id: string; text: string }[], tree: ChapterOrder | undefined): void {
+  const draft = read(scope);
+  let changed = false;
+  const entries: DraftReference[] = [];
+  for (const entry of draft.entries) {
+    const next = entry.reference.chapter_id !== chapterId || entry.split === undefined ? entry
+      : shownSplit(entry, entry.split, chapterId, blocks, tree, true);
+    changed ||= next !== entry;
+    if (next !== undefined) entries.push(next);
+  }
+  if (changed) write(scope, { ...draft, entries });
+}
+
+/**
  * Moves the references of one Chapter with an editor change.
  * - A Chapter text reference moves only while the editor tracks it. A reference whose text is all deleted
  *   disappears. A change that the editor cannot map keeps the reference and stops its tracking. Its base
@@ -225,30 +268,11 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
     return JSON.stringify(next) === JSON.stringify(reference) ? entry : { ...entry, reference: next };
   };
 
-  const splitEntry = (entry: DraftReference, split: AcceptedSplit): DraftReference | undefined => {
-    const target = entry.candidate === undefined ? -1
-      : blocks.findIndex((block) => block.manuscript_block_id === entry.candidate!.blockId);
-    if (target < 0) return entry;
-    const shown = blocks.slice(target, target + split.parts.length);
-    if (shown.length !== split.parts.length || shown.some((block, index) => block.text !== split.parts[index])) {
-      // The target block shows the accepted text, but the next blocks are not the parts: the reference leaves.
-      // A hydrate of the Revision before the acceptance does not show the accepted text, so the reference waits.
-      return hydrate && shown[0]!.text === split.parts[0] ? undefined : entry;
-    }
-    const point = ({ part, offset }: PartPoint) => ({ manuscript_block_id: shown[part]!.manuscript_block_id, offset });
-    const reference: ChapterTextReference = { kind: "chapter_text", chapter_id: chapterId,
-      base_authoritative_revision_id: split.revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-      start: point(split.start), end: point(split.end) };
-    const label = tree === undefined ? undefined : referenceLabel(tree, blocks, { reference });
-    return { key: entry.key, moved: false, reference,
-      label: label ?? { chapter: entry.label.chapter, part: entry.label.part } };
-  };
-
   let changed = false;
   const entries: DraftReference[] = [];
   for (const entry of draft.entries) {
     const next = entry.reference.chapter_id !== chapterId ? entry
-      : entry.split !== undefined ? splitEntry(entry, entry.split)
+      : entry.split !== undefined ? shownSplit(entry, entry.split, chapterId, blocks, tree, hydrate)
         : entry.reference.kind === "chapter_text" ? chapterEntry(entry, entry.reference)
           : candidateEntry(entry, entry.reference);
     changed ||= next !== entry;

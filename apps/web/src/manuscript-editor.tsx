@@ -31,7 +31,7 @@ import {
 import type { ProposalFocus } from "./proposal-navigation.ts";
 import { AddReferenceControl, type EditorReferenceSource } from "./selection-reference-control.tsx";
 import {
-  rebaseDraftReferences, trackableDraftReferences, trackDraftReferences,
+  rebaseDraftReferences, showAcceptedSplits, trackableDraftReferences, trackDraftReferences,
 } from "./selection-reference-draft.ts";
 
 export interface ManuscriptEditorProps {
@@ -279,6 +279,10 @@ export function ManuscriptEditor({
     if (referenceSource === undefined) return;
     const tracked = trackedReferencesRef.current;
     tracked.clear();
+    const shown = editor === null ? undefined : readManuscriptParagraphs(editor.state.doc);
+    if (shown !== undefined) {
+      showAcceptedSplits(referenceSource.scope, referenceSource.chapterId, shown, referenceSource.tree);
+    }
     for (const key of trackableDraftReferences(referenceSource.scope, referenceSource.chapterId,
       referenceSource.revisionId)) tracked.add(key);
   }, [editor, referenceSource?.chapterId]);
