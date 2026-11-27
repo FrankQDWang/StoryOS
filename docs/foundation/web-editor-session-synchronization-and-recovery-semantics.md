@@ -271,13 +271,20 @@ field and key that stores it, and it removes the writer fields from each row.
 It changes no other text, so the text of the author stays. A frozen request
 keeps the form that the client sent, because its digest names that form. Each
 version 6 identifier gets the partition of the highest writer generation that
-has records or groups. The rows of another partition stay as they are, also the
-rows of a partition with an identifier that does not match its fields. When
-such a partition has work that the Server does not have, its last Chapter text
-and the text of each candidate with unsent input go to the retained local
-recovery rows, which each Editor Session of the Project shows. A tab with no
-Editor Session in its session storage opens the Session of the changed rows,
-and each such Session goes to one tab only.
+has records or groups. The rows of another partition stay as they are: a
+partition with an identifier that does not match its fields, a partition with
+a group that has no version 5 request, and a partition whose version 6
+identifier is the identifier of a stored partition. When such a partition has
+work that the Server does not have, its last Chapter text and the text of each
+candidate with unsent input go to the retained local recovery rows, which each
+Editor Session of the Project shows. When the client cannot read its groups,
+the text comes from its records only.
+
+A tab opens the Session of the changed rows only when no other open tab has it:
+the tab holds a Web Lock for that Session while the page lives. A tab with no
+Editor Session in its session storage opens the first such Session. When that
+Session does not open, its text goes to local recovery, and the tab opens a new
+Session.
 
 A version 5 group that the client sent keeps its v1 request, its digest, and
 its capsule, because the Server keeps that Admission. The next save asks for
@@ -285,7 +292,9 @@ its outcome as today, and no POST of it goes again. A version 5 group with no
 capsule was never sent. After the open, the Web freezes it again as v2 with a
 new idempotency key, and the next save sends it. When another tab completed
 that freeze first, the group keeps the freeze of that tab. A settled group
-keeps its v1 request as history. The Web never sends a v1 request.
+keeps its v1 request as history. When the Server rejects a version 5 group (no
+Admission), its text stays in the editor and also shows in local recovery. The
+Web never sends a v1 request.
 
 The Web has no upgrade from a Journal version before 5
 ([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)). When IndexedDB asks for an upgrade from such a version,

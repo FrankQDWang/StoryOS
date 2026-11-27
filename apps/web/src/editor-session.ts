@@ -29,7 +29,8 @@ import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 import { recoveryPrefix } from "./local-recovery-record.ts";
 import {
-  claimVersion5Session, freezeUnsentVersion5Groups, retainVersion5PartitionText, upgradeVersion5Journal,
+  claimVersion5Session, freezeUnsentVersion5Groups, releaseVersion5Session, retainVersion5PartitionText,
+  upgradeVersion5Journal, type Version5Session,
 } from "./journal-version-5-upgrade.ts";
 
 export {
@@ -312,17 +313,19 @@ export interface OpenedEditorWorkspace {
 
 type EditorSessionStart =
   | { kind: "started"; database: IDBDatabase; active: string | null | undefined; sessionValue: unknown;
-    creation: SessionCreation | undefined }
-  | { kind: "failed"; database: IDBDatabase | undefined; error: unknown };
+    creation: SessionCreation | undefined; claimed?: Version5Session }
+  | { kind: "failed"; database: IDBDatabase | undefined; error: unknown; claimed?: Version5Session };
 
 /** Opens the Journal and reads the stored Editor Session at once, so that the read is in flight with the Chapter read. */
-export function startEditorWorkspace({
-  baseUrl, project, profile, fetchImpl = globalThis.fetch,
-  indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto, earlyChallenge = true,
-}: EditorWorkspaceOptions): EditorWorkspaceOpening {
+export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWorkspaceOpening {
+  const {
+    baseUrl, project, profile, fetchImpl = globalThis.fetch,
+    indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto, earlyChallenge = true,
+  } = options;
   const scope = project.project_scope;
   const started = (async (): Promise<EditorSessionStart> => {
     let database: IDBDatabase | undefined;
+    let claimed: Version5Session | undefined;
     try {
       const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
       const stored = globalThis.sessionStorage
@@ -331,21 +334,41 @@ export function startEditorWorkspace({
       const creation = !stored && earlyChallenge
         ? prepareSessionCreation({ baseUrl, project, profile, fetchImpl, cryptoImpl }) : undefined;
       database = await openJournalDatabase(indexedDBImpl, scope, cryptoImpl, profile.max_json_string_utf8_bytes);
-      // A tab with no stored Editor Session opens the Session of the rows of an upgraded version 5 Journal.
-      const active = await claimVersion5Session(database, stored);
+      // A tab with no stored Editor Session opens a Session of the rows of an upgraded version 5 Journal.
+      const choice = await claimVersion5Session(database, stored);
+      const active = choice.active;
+      claimed = choice.claimed;
       // A stored Session read changes nothing on the Server, so it runs with the Chapter read.
       const sessionValue: unknown = active
         ? await getEditorSession({ baseUrl, projectId: scope.project_id,
           editorSessionId: active, fetchImpl })
         : undefined;
-      return { kind: "started", database, active, sessionValue, creation };
+      return { kind: "started", database, active, sessionValue, creation, ...(claimed ? { claimed } : {}) };
     } catch (error) {
-      return { kind: "failed", database, error };
+      return { kind: "failed", database, error, ...(claimed ? { claimed } : {}) };
     }
   })();
   return {
-    finish: (chapter, read = project) => finishEditorWorkspace(started, { baseUrl, project: read, chapter, profile,
-      fetchImpl, cryptoImpl }),
+    finish: async (chapter, read = project) => {
+      const opened = await finishEditorWorkspace(started, { baseUrl, project: read, chapter, profile, fetchImpl,
+        cryptoImpl });
+      const { claimed } = await started;
+      if (claimed === undefined || opened.editor.kind === "editor-ready") return opened;
+      // The claimed Session of the version 5 rows did not open. Its text goes to local recovery, and the tab opens a
+      // new Session.
+      try {
+        const database = await openJournalDatabase(indexedDBImpl, scope, cryptoImpl,
+          profile.max_json_string_utf8_bytes);
+        try {
+          await releaseVersion5Session(database, claimed, cryptoImpl, profile.max_json_string_utf8_bytes);
+        } finally {
+          database.close();
+        }
+      } catch {
+        return opened;
+      }
+      return startEditorWorkspace(options).finish(chapter, read);
+    },
     abandon: () => started.then((start) => { start.database?.close(); }),
   };
 }
