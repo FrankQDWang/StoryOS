@@ -222,51 +222,6 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     await observer.reload();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await manuscriptBody(observer), afterSameBlock);
-
-    // #1953: page 3 has unsent text on the Chapter, and page 2 writes it and then selects another Chapter. A new load
-    // of page 3 sets its Chapter current again, puts its text on the later Revision, and sends it. Page 3 has its own
-    // browser context, so the paused clock that keeps its text unsent stops no timer of page 2.
-    const late = await browser.newContext();
-    await late.clock.install();
-    const third = await late.newPage();
-    third.setDefaultTimeout(10_000);
-    third.on("pageerror", (error) => errors.push(error.message));
-    third.on("request", (request) => requests.push(new URL(request.url())));
-    assert.equal((await third.goto(projectUrl))?.status(), 200);
-    await third.locator(MANUSCRIPT_EDITABLE).waitFor();
-    assert.equal(await manuscriptBody(third), afterSameBlock);
-    await late.clock.pauseAt(Date.now() + 60_000);
-    await third.locator(MANUSCRIPT_EDITABLE).focus();
-    await third.locator(MANUSCRIPT_EDITABLE).evaluate((element) => {
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      range.collapse(false);
-      window.getSelection()?.removeAllRanges();
-      window.getSelection()?.addRange(range);
-    });
-    await third.keyboard.insertText(" Unsent on page three.");
-    await third.locator('[data-save-state="saving"][data-unsettled-intent-count="1"]').waitFor();
-    await typeAndSave(observer, "start", "Three: ");
-    await observer.locator("[data-add-chapter]").click();
-    await observer.locator('[data-chapter-placement="append"]').click();
-    await observer.locator('input[name="chapter-title"]').fill("Second Chapter");
-    await observer.locator('input[name="chapter-title"]').press("Enter");
-    await observer.locator("button[data-chapter-id]", { hasText: "Second Chapter" }).click();
-    await observer.waitForFunction(() => document.querySelector("[data-manuscript-editor]")?.textContent === "");
-    await third.reload();
-    await late.clock.resume();
-    const afterLoad = `Three: ${afterSameBlock} Unsent on page three.`;
-    await third.waitForFunction((expected) => {
-      const status = document.querySelector('[data-save-state="saved"][data-unsettled-intent-count="0"]');
-      const shown = [...document.querySelectorAll("[data-manuscript-editor] > p, [data-manuscript-editor] > h1")]
-        .map((block) => block.textContent ?? "").join("\n");
-      return status !== null && status.getAttribute("data-editor-failure") === "" && shown === expected;
-    }, afterLoad);
-    await typeAndSave(third, "end", " Typed after the load.");
-    await third.reload();
-    await third.locator(MANUSCRIPT_EDITABLE).waitFor();
-    assert.equal(await manuscriptBody(third), `${afterLoad} Typed after the load.`);
-    await late.close();
     // The editor can send a typed line feed and the text after it in one or two Author Edits, so the count of that
     // kind comes from the store. Each applied Author Edit, the Volume, and the Chapter is one author action. Each save
     // on an earlier base also has a conflicted Receipt, which is no author action.
@@ -276,12 +231,108 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     const [applied, conflicted] = [await count("= 'authoritative_applied'"), await count("= 'conflicted'")];
     assert.ok(applied >= 5 && conflicted === 2);
     await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
-      createChapter: 2, setCurrentChapter: 2, applyAuthorEdit: applied + conflicted }, authorActions: applied + 5 });
+      createChapter: 1, applyAuthorEdit: applied + conflicted }, authorActions: applied + 2 });
     assert.deepEqual(errors, []);
     assert.ok(requests.length > 0 && requests.every((url) => url.origin === origin));
     assert.ok(requests.some((url) => url.pathname.startsWith("/assets/")));
     assert.ok(requests.every((url) => !url.pathname.startsWith("/@vite/")));
   } finally {
+    await context.close();
+  }
+}
+
+/**
+ * #1953: page 1 has unsent text on Chapter A, and page 2 writes on A and then selects Chapter B. A new load of page 1
+ * sets A current again, puts its text on the later Revision of A, and sends it. The journey has its own Project, so its
+ * Command Challenges stay in the budget of one Project.
+ */
+export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserContext): Promise<void> {
+  const configured = process.env.STORYOS_DEV_SERVER;
+  assert.ok(configured, "run the production journey through the Project Scope verification entry");
+  const origin = new URL(configured).origin;
+  const browser = sharedContext.browser();
+  assert.ok(browser, "the production journey needs an owned browser context");
+  // Page 1 has its own browser context, so the paused clock that keeps its text unsent stops no timer of page 2.
+  const context = await browser.newContext();
+  const late = await browser.newContext();
+  try {
+    await late.clock.install();
+    const observer = await context.newPage();
+    const writer = await late.newPage();
+    const errors: string[] = [];
+    for (const page of [observer, writer]) {
+      page.setDefaultTimeout(10_000);
+      page.on("pageerror", (error) => errors.push(error.message));
+    }
+    assert.equal((await observer.goto(`${origin}/`))?.status(), 200);
+    await observer.locator('#app[data-boot-state="protected-ready"]').waitFor();
+    await observer.locator('input[name="title"]').fill("Chapter switch at a load");
+    await observer.locator('input[name="title"]').press("Enter");
+    await observer.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
+    const projectId = await observer.locator("[data-project-id]").getAttribute("data-project-id");
+    assert.ok(projectId !== null && UUID.test(projectId));
+    await observer.locator("[data-add-chapter]").click();
+    await observer.locator("[data-create-volume-action]").click();
+    await observer.locator('input[name="volume-title"]').fill("Switch Volume");
+    await observer.locator('input[name="volume-title"]').press("Enter");
+    const addChapter = async (title: string) => {
+      await observer.locator("[data-add-chapter]").click();
+      await observer.locator('[data-chapter-placement="append"]').click();
+      await observer.locator('input[name="chapter-title"]').fill(title);
+      await observer.locator('input[name="chapter-title"]').press("Enter");
+    };
+    await addChapter("Chapter A");
+    await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
+    await typeAndSave(observer, "end", "The first block.\nThe second block.");
+
+    assert.equal((await writer.goto(`${origin}/projects/${projectId}`))?.status(), 200);
+    await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
+    assert.equal(await manuscriptBody(writer), "The first block.\nThe second block.");
+    // The pause moves the clock of page 1 only a little, so page 1 sees no time of the Server as late.
+    await late.clock.pauseAt(Date.now() + 100);
+    await writer.locator(MANUSCRIPT_EDITABLE).focus();
+    await writer.locator(MANUSCRIPT_EDITABLE).evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      range.collapse(false);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+    });
+    // Page 1 types on the second block, and page 2 types on the first block, so both edits stay (ADR 0107, section 2).
+    await writer.keyboard.insertText(" Unsent on page one.");
+    await writer.locator('[data-save-state="saving"][data-unsettled-intent-count="1"]').waitFor();
+
+    await typeAndSave(observer, "start", "Later: ");
+    await addChapter("Chapter B");
+    const selected = observer.waitForResponse((response) =>
+      response.url().endsWith("/current-chapter") && response.request().method() === "PUT");
+    await observer.locator("button[data-chapter-id]", { hasText: "Chapter B" }).click();
+    assert.equal((await selected).status(), 200);
+
+    await writer.reload();
+    await late.clock.resume();
+    const afterLoad = "Later: The first block.\nThe second block. Unsent on page one.";
+    await writer.waitForFunction((expected) => {
+      const status = document.querySelector('[data-save-state="saved"][data-unsettled-intent-count="0"]');
+      const shown = [...document.querySelectorAll("[data-manuscript-editor] > p, [data-manuscript-editor] > h1")]
+        .map((block) => block.textContent ?? "").join("\n");
+      return status !== null && status.getAttribute("data-editor-failure") === "" && shown === expected;
+    }, afterLoad);
+    await typeAndSave(writer, "end", " Typed after the load.");
+    await writer.reload();
+    await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
+    assert.equal(await manuscriptBody(writer), `${afterLoad} Typed after the load.`);
+    // Each applied Author Edit, the Volume, each Chapter, and each Set Current Chapter is one author action.
+    const count = async (result: string) => Number(await queryPostgres(`SELECT count(*)::text
+      FROM storyos.domain_receipts WHERE project_id = '${projectId}'::uuid AND command_kind = 'applyAuthorEdit'
+      AND result_kind ${result}`));
+    const [applied, conflicted] = [await count("= 'authoritative_applied'"), await count("<> 'authoritative_applied'")];
+    assert.ok(applied >= 4);
+    await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
+      createChapter: 2, setCurrentChapter: 2, applyAuthorEdit: applied + conflicted }, authorActions: applied + 5 });
+    assert.deepEqual(errors, []);
+  } finally {
+    await late.close();
     await context.close();
   }
 }
