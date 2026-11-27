@@ -1,0 +1,311 @@
+{
+ "note": "main 54525595: GET /api/v1/projects/018f0000-0000-7001-8000-000000000002/editor-sessions/018f0000-0000-7001-8000-000000000021; then one candidate record \"!\" on the candidate \"Candidate\", which no group covers",
+ "version": 5,
+ "stores": [
+  {
+   "name": "intents",
+   "keyPath": [
+    "journal_partition_id",
+    "local_intent_sequence"
+   ],
+   "indexes": [
+    {
+     "name": "partition",
+     "keyPath": "journal_partition_id",
+     "unique": false
+    },
+    {
+     "name": "working_partition",
+     "keyPath": "working_set_partition_id",
+     "unique": false
+    }
+   ],
+   "rows": [
+    {
+     "working_set_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "completed_intent_record_id": "01a21e88-5ee0-7cab-b690-064d52a030fd",
+     "local_intent_sequence": 1,
+     "journal_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000002"
+     },
+     "editor_session_id": "018f0000-0000-7001-8000-000000000021",
+     "writer_generation": "1",
+     "limit_profile_revision": "storyos.foundation.absolute.v1",
+     "batch_policy_revision": "storyos.author-edit-batch.release-1.preview.v1",
+     "input_origin": "typing",
+     "chapter_object_id": "018f0000-0000-7001-8000-000000000003",
+     "base_snapshot_id": "018f0000-0000-7001-8000-000000000022",
+     "base_activity_position": "0",
+     "target_refs": [
+      "manuscript:018f0000-0000-7001-8000-000000000003"
+     ],
+     "expected_authoritative_heads": [
+      "018f0000-0000-7001-8000-000000000004"
+     ],
+     "expected_proposal_heads": [
+      "018f0000-0000-7001-8000-000000000c03"
+     ],
+     "proposal_target": {
+      "proposal_id": "018f0000-0000-7001-8000-000000000c01",
+      "operation_id": "018f0000-0000-7001-8000-000000000c02",
+      "revision_id": "018f0000-0000-7001-8000-000000000c03",
+      "manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1"
+     },
+     "proposal_anchors": [],
+     "observed_ownership_partition": "mixed",
+     "author_edit_unit": {
+      "normalized_primitives": [
+       {
+        "kind": "replace_selection",
+        "from": 9,
+        "to": 9,
+        "text": "!"
+       }
+      ],
+      "selection_snapshot": {
+       "coordinate_profile": "storyos.editor.utf16-code-unit.v1",
+       "from": 9,
+       "to": 9
+      }
+     },
+     "retry_source": {
+      "kind": "fresh_editor_intent"
+     },
+     "editor_contract_revision": "storyos.editor-contract.release-1.v3",
+     "undo_group_binding": {
+      "kind": "direct_author_input",
+      "undo_group_id": "01a21e88-5edf-78d2-9f43-f63576e77526"
+     },
+     "payload_chain_ref": "01a21e88-5ee0-7bac-99ff-3ebb99ff0df4",
+     "payload_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.local-edit-journal.payload.sha256.v1",
+      "value_hex_lowercase": "28501fc646ebb062f8a4f8b7d928d04a19413c75b0004065cda7c19665ad922d"
+     },
+     "projection_dependency": {
+      "snapshot_id": "018f0000-0000-7001-8000-000000000022",
+      "prior_sequence": 0
+     },
+     "created_at": "2026-08-15T08:00:01.000Z"
+    }
+   ]
+  },
+  {
+   "name": "metadata",
+   "keyPath": "key",
+   "indexes": [],
+   "rows": [
+    {
+     "key": "active_base:018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "value": {
+      "snapshot_id": "018f0000-0000-7001-8000-000000000022",
+      "chapter_id": "018f0000-0000-7001-8000-000000000003",
+      "project_activity_position": "0",
+      "authoritative_head_revision_id": "018f0000-0000-7001-8000-000000000004",
+      "proposal_head_revision_ids": [],
+      "target_refs": [
+       "manuscript:018f0000-0000-7001-8000-000000000003"
+      ],
+      "observed_ownership_partition": "authoritative",
+      "materialized_revision": {
+       "revision_id": "018f0000-0000-7001-8000-000000000004",
+       "body": "Base",
+       "blocks": [
+        {
+         "manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1",
+         "block_kind": "paragraph",
+         "text": "Base"
+        }
+       ]
+      },
+      "materialized_payload_digest": {
+       "algorithm": "sha256",
+       "profile": "storyos.canonical-payload.sha256.v1",
+       "value_hex_lowercase": "7b47361aad19bb483aeab081a7df0a55f7cb0fdb3327efe6dd016e6353a17880"
+      },
+      "created_at": "2026-08-13T08:00:00.000Z"
+     }
+    },
+    {
+     "key": "durable_high_watermark:018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "value": 1
+    },
+    {
+     "key": "local_intent_sequence",
+     "value": 1
+    },
+    {
+     "key": "schema",
+     "version": 5
+    }
+   ]
+  },
+  {
+   "name": "outcome_query_attempts",
+   "keyPath": "outcome_query_attempt_id",
+   "indexes": [
+    {
+     "name": "group",
+     "keyPath": "journal_submission_group_id",
+     "unique": false
+    }
+   ],
+   "rows": []
+  },
+  {
+   "name": "outcome_query_observations",
+   "keyPath": "outcome_query_observation_id",
+   "indexes": [
+    {
+     "name": "group",
+     "keyPath": "journal_submission_group_id",
+     "unique": false
+    }
+   ],
+   "rows": []
+  },
+  {
+   "name": "partitions",
+   "keyPath": "journal_partition_id",
+   "indexes": [],
+   "rows": [
+    {
+     "journal_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000002"
+     },
+     "editor_session_id": "018f0000-0000-7001-8000-000000000021",
+     "writer_generation": "1",
+     "client_session_binding_ref": "binding:test",
+     "client_session_generation": "1",
+     "client_contract_revision": "storyos.web-client.release-1.v3",
+     "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+     "limit_profile_revision": "storyos.foundation.absolute.v1",
+     "created_at": "2026-08-13T08:00:00.000Z",
+     "disposition": "current_writer_open"
+    }
+   ]
+  },
+  {
+   "name": "payload_chains",
+   "keyPath": "payload_chain_id",
+   "indexes": [
+    {
+     "name": "partition",
+     "keyPath": "journal_partition_id",
+     "unique": false
+    },
+    {
+     "name": "working_partition",
+     "keyPath": "working_set_partition_id",
+     "unique": false
+    }
+   ],
+   "rows": [
+    {
+     "working_set_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "payload_chain_id": "01a21e88-5ee0-7bac-99ff-3ebb99ff0df4",
+     "journal_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "checkpoint_ref": {
+      "chapter_object_id": "018f0000-0000-7001-8000-000000000003",
+      "materialized_payload": "Candidate",
+      "materialized_payload_digest": {
+       "algorithm": "sha256",
+       "profile": "storyos.local-edit-journal.payload.sha256.v1",
+       "value_hex_lowercase": "db6efafb36497e3314b9535cfae8057d1ef7fa7ba0d12fe1bd8b0fb8d52cd9b7"
+      },
+      "source_snapshot_id": "018f0000-0000-7001-8000-000000000022",
+      "source_heads": [
+       "018f0000-0000-7001-8000-000000000004"
+      ],
+      "proposal_target": {
+       "proposal_id": "018f0000-0000-7001-8000-000000000c01",
+       "operation_id": "018f0000-0000-7001-8000-000000000c02",
+       "revision_id": "018f0000-0000-7001-8000-000000000c03",
+       "manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1"
+      },
+      "proposal_head_revision_ids": [
+       "018f0000-0000-7001-8000-000000000c03"
+      ]
+     },
+     "ordered_patch_refs": [
+      {
+       "patch_id": "01a21e88-5ee0-7f64-9682-13c7ee1c8c54",
+       "completed_intent_record_id": "01a21e88-5ee0-7cab-b690-064d52a030fd",
+       "local_intent_sequence": 1,
+       "normalized_primitives": [
+        {
+         "kind": "replace_selection",
+         "from": 9,
+         "to": 9,
+         "text": "!"
+        }
+       ],
+       "resulting_payload_digest": {
+        "algorithm": "sha256",
+        "profile": "storyos.local-edit-journal.payload.sha256.v1",
+        "value_hex_lowercase": "cfe00b2449eae4908c03f1e6c60124a49bdeb470cbc41f3adc5b4fe6e5f0d6f1"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "protocol_observations",
+   "keyPath": "protocol_observation_id",
+   "indexes": [
+    {
+     "name": "group",
+     "keyPath": "journal_submission_group_id",
+     "unique": false
+    }
+   ],
+   "rows": []
+  },
+  {
+   "name": "submission_groups",
+   "keyPath": "journal_submission_group_id",
+   "indexes": [
+    {
+     "name": "partition",
+     "keyPath": "journal_partition_id",
+     "unique": false
+    },
+    {
+     "name": "working_partition",
+     "keyPath": "working_set_partition_id",
+     "unique": false
+    }
+   ],
+   "rows": []
+  },
+  {
+   "name": "transport_attempts",
+   "keyPath": "transport_attempt_id",
+   "indexes": [
+    {
+     "name": "group",
+     "keyPath": "journal_submission_group_id",
+     "unique": false
+    }
+   ],
+   "rows": []
+  },
+  {
+   "name": "transport_capsules",
+   "keyPath": "exact_transport_retry_capsule_id",
+   "indexes": [
+    {
+     "name": "group",
+     "keyPath": "journal_submission_group_id",
+     "unique": false
+    }
+   ],
+   "rows": []
+  }
+ ]
+}
