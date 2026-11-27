@@ -911,7 +911,9 @@ function pendingProjectionFromSnapshot(
     : snapshot.bodyBySequence.get(authoritativeRecords.at(-1)!.local_intent_sequence))!;
   return {
     body,
-    ...(snapshot.groups.some((group) => group.settlement.kind === "outcome_query_requires_reconfirmation"
+    // A version 5 group that the Server rejected has its text in local recovery too (#1947).
+    ...(snapshot.groups.some((group) => (group.settlement.kind === "outcome_query_requires_reconfirmation"
+      || (group.settlement.kind === "outcome_query_rejected_no_admission" && hasVersion5Request(group)))
       && !group.ordered_coverage.every((item) => resolvedSequences.has(item.local_intent_sequence)))
       ? { requires_local_reconfirmation: true } : {}),
     blocks: cloneBlocks(blocks),
