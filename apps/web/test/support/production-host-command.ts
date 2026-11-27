@@ -223,12 +223,15 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await manuscriptBody(observer), afterSameBlock);
     // The editor can send a typed line feed and the text after it in one or two Author Edits, so the count of that
-    // kind comes from the store. Each Author Edit, the Volume, and the Chapter is one author action.
-    const edits = Number(await queryPostgres(`SELECT count(*)::text FROM storyos.domain_receipts
-      WHERE project_id = '${projectId}'::uuid AND command_kind = 'applyAuthorEdit'`));
-    assert.ok(edits >= 5);
+    // kind comes from the store. Each applied Author Edit, the Volume, and the Chapter is one author action. Each save
+    // on an earlier base also has a conflicted Receipt, which is no author action.
+    const count = async (result: string) => Number(await queryPostgres(`SELECT count(*)::text
+      FROM storyos.domain_receipts WHERE project_id = '${projectId}'::uuid AND command_kind = 'applyAuthorEdit'
+      AND result_kind ${result}`));
+    const [applied, conflicted] = [await count("= 'authoritative_applied'"), await count("= 'conflicted'")];
+    assert.ok(applied >= 5 && conflicted === 2);
     await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
-      createChapter: 1, applyAuthorEdit: edits }, authorActions: edits + 2 });
+      createChapter: 1, applyAuthorEdit: applied + conflicted }, authorActions: applied + 2 });
     assert.deepEqual(errors, []);
     assert.ok(requests.length > 0 && requests.every((url) => url.origin === origin));
     assert.ok(requests.some((url) => url.pathname.startsWith("/assets/")));
