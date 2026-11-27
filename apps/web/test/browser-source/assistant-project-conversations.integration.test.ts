@@ -299,8 +299,9 @@ it.each([
   ["a Conversation that the Host does not give", { requested: id("f04") }, [`GET /conversations/${id("f04")}`], NOT_FOUND],
   ["a response of another Project Scope", { requested: A,
     conversationOverride: { project_scope: { ...scope, project_id: id("f98") } } }, [`GET /conversations/${A}`], NOT_FOUND],
+  // The Run reads go together, so the second read starts before the first one answers.
   ["a Run read of another Conversation", { requested: A, runOverride: { conversation_id: B } },
-    [`GET /conversations/${A}`, `GET /agent-runs/${id("f11")}`], NOT_FOUND],
+    [`GET /conversations/${A}`, `GET /agent-runs/${id("f11")}`, `GET /agent-runs/${id("f12")}`], NOT_FOUND],
   ["a panel with a request that is not settled", { requested: A, stored: run(id("f15"), B, "B waits", { status: "queued" }) },
     [`GET /agent-runs/${id("f15")}`], NOT_FOUND],
 ] as const)("opens the Conversation of the address for %s, or gives one sentence", async (_, setup, requests, status) => {
