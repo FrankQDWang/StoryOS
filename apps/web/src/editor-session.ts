@@ -391,13 +391,15 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
       const start = await started;
       if (start.kind !== "started" || !start.active) return undefined;
       try {
+        // A command of this Editor Session that set another Chapter current moved its Server base there.
+        if ((start.sessionValue as GetEditorSessionResponse).base_snapshot.chapter_id === currentChapterId) {
+          return undefined;
+        }
         const stored = await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl);
         const base = stored.session.base_snapshot;
-        if (base.chapter_id === currentChapterId) return undefined;
         // A tab with no text to send opens the Current Chapter that the other tab set.
-        if ((shown === undefined || paragraphsEqual(shown, base.materialized_revision.blocks))
-          && !await partitionHasOpenWork(stored)) return undefined;
-        return await earlierBaseText(stored, base.chapter_id, shown) === undefined ? undefined
+        const text = await earlierBaseText(stored, base.chapter_id, shown);
+        return text === undefined || paragraphsEqual(text.shown, text.base) ? undefined
           : { chapterId: base.chapter_id, editorSessionId: start.active };
       } catch {
         // An unreadable Journal keeps the stored Session, so its recovery runs.
