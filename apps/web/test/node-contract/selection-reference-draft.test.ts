@@ -6,7 +6,7 @@ import { test } from "vitest";
 import { storyosManuscriptExtensions } from "../../src/manuscript-tiptap-adapter.ts";
 import type { ChapterTextReference } from "../../src/selection-reference.ts";
 import {
-  acceptDraftCandidates, addDraftReferences, clearDraftReferences, copiedReferences, pasteReferences, draftCanAdd, draftEntries, rebaseDraftReferences, removeDraftReference, setRunReferences,
+  acceptDraftCandidates, acceptedCandidateTexts, addDraftReferences, clearDraftReferences, copiedReferences, pasteReferences, draftCanAdd, draftEntries, rebaseDraftReferences, removeDraftReference, setRunReferences,
   trackableDraftReferences, trackDraftReferences, type DraftReference,
 } from "../../src/selection-reference-draft.ts";
 
@@ -164,14 +164,69 @@ test("an accepted candidate reference keeps the accepted Revision when a hydrate
   assert.deepEqual(trackableDraftReferences(project, CHAPTER, NEXT), [key]);
 });
 
-test("an accepted candidate with line feeds keeps only a reference in its first part, as Chapter text", () => {
+const ADDED = id("b10");
+
+/** A document of paragraphs, each with its block id and text. */
+function paragraphs(...blocks: [string, string][]) {
+  return EditorState.create({ doc: schema.nodeFromJSON({ type: "doc", content: blocks.map(([block, text]) =>
+    ({ type: "paragraph", attrs: { id: block }, content: [{ type: "text", text }] })) }) });
+}
+
+/** A hydrate transaction that replaces the document `from` with the document `to`. */
+const hydrate = (from: EditorState, to: EditorState) => from.tr.replaceWith(0, from.doc.content.size, to.doc.content);
+
+/** The Server splits "\n雨停了。\n风起了。" into 雨停了。 in the target block and 风起了。 in a new block (ADR 0106). */
+const SPLIT_CANDIDATE = "\n雨停了。\n风起了。";
+
+test("a reference to a later part of an accepted candidate becomes Chapter text when the editor shows the new block", () => {
   const project = scope();
-  // The Server splits the candidate at each line feed, and only the first part keeps the target block (ADR 0106).
-  addDraftReferences(project, [candidateEntry(2, 4), candidateEntry(1, 2), candidateEntry(6, 8), candidateEntry(3, 7)]);
-  acceptDraftCandidates(project, PROPOSAL, new Map([[OPERATION!, "\n雨停了。\n风起了。"]]), NEXT);
-  // A reference to a later part, or across a line feed, leaves the draft: the draft does not know the new blocks.
-  assert.deepEqual(draftEntries(project).map((item) => item.reference),
-    [reference(FIRST!, 1, 3, NEXT), reference(FIRST!, 0, 1, NEXT)]);
+  const keys = addDraftReferences(project, [candidateEntry(2, 4), candidateEntry(1, 2), candidateEntry(6, 8),
+    candidateEntry(3, 7), candidateEntry(5, 6)])!;
+  acceptDraftCandidates(project, PROPOSAL, new Map([[OPERATION!, SPLIT_CANDIDATE]]), NEXT);
+  // A reference in the first part becomes Chapter text at once. A reference of only a line feed has no text.
+  assert.deepEqual(draftEntries(project).map((item) => item.reference.kind),
+    ["chapter_text", "chapter_text", "proposal_candidate_text", "proposal_candidate_text"]);
+  const tracked = new Set<string>();
+  // The Proposals refresh shows the Revision before the acceptance first, so the later references wait.
+  const before = withCandidate(SPLIT_CANDIDATE);
+  const older = paragraphs([FIRST!, "雨夜。"], [SECOND!, "船夫在等着。"]);
+  trackDraftReferences(project, CHAPTER, tracked, hydrate(before, older), tree);
+  assert.equal(draftEntries(project).filter((item) => item.split !== undefined).length, 2);
+  const accepted = paragraphs([FIRST!, "雨停了。"], [ADDED, "风起了。"], [SECOND!, "船夫在等着。"]);
+  trackDraftReferences(project, CHAPTER, tracked, hydrate(older, accepted), tree);
+  assert.deepEqual(draftEntries(project).map(({ key, reference: value, label, moved, candidate, split }) =>
+    ({ key, value, label, moved, candidate, split })), [
+    { key: keys[0], value: reference(FIRST!, 1, 3, NEXT), moved: false, candidate: undefined, split: undefined,
+      label: { chapter: "第 1 章 渡口", part: { kind: "paragraphs", first: 1, last: 1 } } },
+    { key: keys[1], value: reference(FIRST!, 0, 1, NEXT), moved: false, candidate: undefined, split: undefined,
+      label: { chapter: "第 1 章 渡口", part: { kind: "paragraphs", first: 1, last: 1 } } },
+    { key: keys[2], value: reference(ADDED, 0, 2, NEXT), moved: false, candidate: undefined, split: undefined,
+      label: { chapter: "第 1 章 渡口", part: { kind: "paragraphs", first: 2, last: 2 } } },
+    { key: keys[3], value: { ...reference(FIRST!, 2, 1, NEXT), end: { manuscript_block_id: ADDED, offset: 1 } },
+      moved: false, candidate: undefined, split: undefined,
+      label: { chapter: "第 1 章 渡口", part: { kind: "paragraphs", first: 1, last: 2 } } },
+  ]);
+  // The editor then tracks each reference from the accepted Revision.
+  assert.deepEqual(trackableDraftReferences(project, CHAPTER, NEXT), keys.slice(0, 4));
+});
+
+test("a reference to a later part leaves when the editor shows the accepted text with no new block after it", () => {
+  const project = scope();
+  addDraftReferences(project, [candidateEntry(6, 8)]);
+  acceptDraftCandidates(project, PROPOSAL, new Map([[OPERATION!, SPLIT_CANDIDATE]]), NEXT);
+  const before = withCandidate(SPLIT_CANDIDATE);
+  trackDraftReferences(project, CHAPTER, new Set(),
+    hydrate(before, paragraphs([FIRST!, "雨停了。"], [SECOND!, "船夫在等着。"])), tree);
+  assert.deepEqual(draftEntries(project), []);
+});
+
+test("only a read of the accepted Proposal Revision gives the accepted candidate texts", () => {
+  const displayed = (revision: string) => ({ revision_id: revision, operations: [
+    { operation_id: OPERATION!, candidate_text: "雨停了。" }, { operation_id: SECOND!, candidate_text: "风起了。" }] });
+  const receipt = { proposal_revision_id: NEXT_CANDIDATE!, selected_operation_ids: [OPERATION!] };
+  assert.deepEqual([...acceptedCandidateTexts(displayed(NEXT_CANDIDATE!), receipt)], [[OPERATION, "雨停了。"]]);
+  // A read of an earlier Proposal Revision can show other candidates, so it gives no text.
+  assert.deepEqual([...acceptedCandidateTexts(displayed(CANDIDATE_REVISION!), receipt)], []);
 });
 
 test("a candidate reference stays while a replaced document keeps its text, and goes with its candidate", () => {

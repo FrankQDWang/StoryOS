@@ -19,7 +19,19 @@ export type DraftReference = {
   label: ReferenceLabel;
   /** The range of a Chapter text reference moved with author edits that its base Revision does not have yet. */
   moved: boolean;
+  /** The parts of an accepted candidate that the Server split into new Blocks, for a range after its first part. */
+  split?: AcceptedSplit;
 };
+
+/** A point in one part of an accepted candidate. Part 0 is the target block, and each next part is a new block. */
+type PartPoint = { part: number; offset: number };
+
+/**
+ * A reference to an accepted candidate whose range is after the first part. The draft does not know the new
+ * blocks yet, so the reference becomes Chapter text when the editor shows the target block and the next blocks
+ * with the texts of the parts.
+ */
+export type AcceptedSplit = { revisionId: string; parts: string[]; start: PartPoint; end: PartPoint };
 
 /** The clipboard type of the references that a copy from the editor gives to the composer. */
 export const REFERENCE_CLIPBOARD_TYPE = "application/x-storyos-selection-reference+json";
@@ -213,12 +225,32 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
     return JSON.stringify(next) === JSON.stringify(reference) ? entry : { ...entry, reference: next };
   };
 
+  const splitEntry = (entry: DraftReference, split: AcceptedSplit): DraftReference | undefined => {
+    const target = entry.candidate === undefined ? -1
+      : blocks.findIndex((block) => block.manuscript_block_id === entry.candidate!.blockId);
+    if (target < 0) return entry;
+    const shown = blocks.slice(target, target + split.parts.length);
+    if (shown.length !== split.parts.length || shown.some((block, index) => block.text !== split.parts[index])) {
+      // The target block shows the accepted text, but the next blocks are not the parts: the reference leaves.
+      // A hydrate of the Revision before the acceptance does not show the accepted text, so the reference waits.
+      return hydrate && shown[0]!.text === split.parts[0] ? undefined : entry;
+    }
+    const point = ({ part, offset }: PartPoint) => ({ manuscript_block_id: shown[part]!.manuscript_block_id, offset });
+    const reference: ChapterTextReference = { kind: "chapter_text", chapter_id: chapterId,
+      base_authoritative_revision_id: split.revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+      start: point(split.start), end: point(split.end) };
+    const label = tree === undefined ? undefined : referenceLabel(tree, blocks, { reference });
+    return { key: entry.key, moved: false, reference,
+      label: label ?? { chapter: entry.label.chapter, part: entry.label.part } };
+  };
+
   let changed = false;
   const entries: DraftReference[] = [];
   for (const entry of draft.entries) {
     const next = entry.reference.chapter_id !== chapterId ? entry
-      : entry.reference.kind === "chapter_text" ? chapterEntry(entry, entry.reference)
-        : candidateEntry(entry, entry.reference);
+      : entry.split !== undefined ? splitEntry(entry, entry.split)
+        : entry.reference.kind === "chapter_text" ? chapterEntry(entry, entry.reference)
+          : candidateEntry(entry, entry.reference);
     changed ||= next !== entry;
     if (next !== undefined) entries.push(next);
   }
@@ -226,11 +258,43 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
 }
 
 /**
+ * The candidate text of each accepted Operation, from the displayed read of the accepted Proposal Revision. A read
+ * of another Proposal Revision gives no text, because its candidates can differ from the accepted candidates.
+ */
+export function acceptedCandidateTexts(
+  displayed: { revision_id: string; operations: readonly { operation_id: string; candidate_text: string }[] }
+    | undefined,
+  receipt: { proposal_revision_id: string; selected_operation_ids: readonly string[] },
+): Map<string, string> {
+  return new Map(displayed?.revision_id !== receipt.proposal_revision_id ? [] : displayed.operations
+    .filter((operation) => receipt.selected_operation_ids.includes(operation.operation_id))
+    .map((operation) => [operation.operation_id, operation.candidate_text]));
+}
+
+/**
+ * The parts of a candidate that the Server makes into blocks: the text between line feeds that is not empty
+ * (ADR 0106, section 2). Each part has its start offset in the candidate.
+ */
+function candidateParts(text: string): { start: number; text: string }[] {
+  const parts: { start: number; text: string }[] = [];
+  let start = 0;
+  for (const part of text.split("\n")) {
+    if (part.length > 0) parts.push({ start, text: part });
+    start += part.length + 1;
+  }
+  return parts;
+}
+
+/**
  * Makes each reference to an accepted candidate a Chapter text reference at the Revision after the
- * acceptance. `candidates` gives the accepted candidate text of each Operation. The Server splits the candidate
- * at each line feed, and only the first part with text stays in its target block (ADR 0106, section 2). Thus only
- * a reference in that part becomes Chapter text, with the offsets of the part. Each other reference to an accepted
- * candidate leaves the draft, because the draft does not know the new blocks.
+ * acceptance (ADR 0062). `candidates` gives the accepted candidate text of each Operation. The Server splits the
+ * candidate at each line feed: the first part with text stays in the target block, and each next part is a new
+ * block after it (ADR 0106, section 2).
+ * - A reference in the first part becomes Chapter text at once, with the offsets of the part.
+ * - A reference that ends after the first part waits for the new blocks (see `AcceptedSplit`).
+ * - A start in a line feed moves to the next part, and an end in a line feed moves to the end of the part before
+ *   it. A reference that then has no text leaves the draft.
+ * - A reference to an Operation with no accepted text stays a candidate reference.
  */
 export function acceptDraftCandidates(scope: ProjectScope, proposalId: string,
   candidates: ReadonlyMap<string, string>, revisionId: string): void {
@@ -246,16 +310,24 @@ export function acceptDraftCandidates(scope: ProjectScope, proposalId: string,
       entries.push(entry);
       continue;
     }
-    const start = Math.max(text.search(/[^\n]/), 0);
-    const lineFeed = text.indexOf("\n", start);
-    const end = lineFeed < 0 ? text.length : lineFeed;
-    if (entry.reference.start_offset < start || entry.reference.end_offset > end) continue;
-    const { blockId } = entry.candidate;
-    const point = (offset: number) => ({ manuscript_block_id: blockId, offset: offset - start });
-    entries.push({ key: entry.key, moved: false, label: { chapter: entry.label.chapter, part: entry.label.part },
+    const parts = candidateParts(text);
+    const { start_offset: from, end_offset: to } = entry.reference;
+    const startPart = parts.findIndex((part) => part.start + part.text.length > from);
+    const endPart = parts.filter((part) => part.start < to).length - 1;
+    if (startPart < 0 || endPart < startPart) continue;
+    const start = { part: startPart, offset: Math.max(from - parts[startPart]!.start, 0) };
+    const end = { part: endPart, offset: Math.min(to - parts[endPart]!.start, parts[endPart]!.text.length) };
+    if (start.part === end.part && start.offset >= end.offset) continue;
+    const label = { chapter: entry.label.chapter, part: entry.label.part };
+    if (end.part > 0) {
+      entries.push({ ...entry, split: { revisionId, parts: parts.map((part) => part.text), start, end } });
+      continue;
+    }
+    const point = (offset: number) => ({ manuscript_block_id: entry.candidate!.blockId, offset });
+    entries.push({ key: entry.key, moved: false, label,
       reference: { kind: "chapter_text", chapter_id: entry.reference.chapter_id,
         base_authoritative_revision_id: revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        start: point(entry.reference.start_offset), end: point(entry.reference.end_offset) } });
+        start: point(start.offset), end: point(end.offset) } });
   }
   write(scope, { ...draft, entries });
 }

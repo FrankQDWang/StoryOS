@@ -10,7 +10,7 @@ import type { EditorReadyState } from "./editor-types.ts";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
 import { canonicalValue as canonical } from "./canonical-value.ts";
 import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance } from "./accept-block-proposal.ts";
-import { acceptDraftCandidates } from "./selection-reference-draft.ts";
+import { acceptDraftCandidates, acceptedCandidateTexts } from "./selection-reference-draft.ts";
 import { rejectDisplayedBlockProposal, rejectionJournalState,
   retryPendingDisplayedRejection } from "./reject-block-proposal.ts";
 import { acceptanceJournalProposals, acceptanceSessionBlocked, hasPendingDisplayedAcceptance,
@@ -543,14 +543,9 @@ export function BlockProposalDisplay({
     })();
   };
 
-  /** The candidate text of each accepted Operation, from the displayed read of the accepted Proposal Revision. */
   const acceptedCandidates = (proposalId: string,
-    receipt: { proposal_revision_id: string; selected_operation_ids: readonly string[] }) => {
-    const displayed = reads.find(({ proposal }) => proposal?.proposal_id === proposalId)?.proposal;
-    return new Map(displayed?.revision_id !== receipt.proposal_revision_id ? [] : displayed.operations
-      .filter((operation) => receipt.selected_operation_ids.includes(operation.operation_id))
-      .map((operation) => [operation.operation_id, operation.candidate_text]));
-  };
+    receipt: { proposal_revision_id: string; selected_operation_ids: readonly string[] }) =>
+    acceptedCandidateTexts(reads.find(({ proposal }) => proposal?.proposal_id === proposalId)?.proposal, receipt);
 
   const retryPending = (proposalId: string) => {
     const workspace = editorProps.persistWorkspace;

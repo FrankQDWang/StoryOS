@@ -305,8 +305,8 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     // candidate stays one candidate of its block until the Acceptance splits it (ADR 0106, section 2).
     const unsplit = (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === secondaryOutcome.operation_id)!.candidate_text;
-    // The caret stays in the candidate text: the author types the paragraph first and then starts it with Enter.
-    const caretInCandidate = (offset: number) => page.evaluate(({ proposalId, operationId, offset }) => {
+    // A selection, or the caret when `from` is `to`, at offsets of the secondary candidate text.
+    const selectInCandidate = (from: number, to: number) => page.evaluate(({ proposalId, operationId, from, to }) => {
       const editor = document.querySelector<HTMLElement & { editor?: import('@tiptap/core').Editor }>(
         '[data-manuscript-editor]')?.editor;
       let start: number | undefined;
@@ -315,9 +315,11 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
           && node.attrs.operationId === operationId) start = position + 1;
       });
       if (editor === undefined || start === undefined) throw new Error('The candidate is not in the editor');
-      editor.commands.setTextSelection(start + offset);
+      editor.commands.setTextSelection({ from: start + from, to: start + to });
       editor.view.focus();
-    }, { proposalId, operationId: secondaryOutcome.operation_id, offset });
+    }, { proposalId, operationId: secondaryOutcome.operation_id, from, to });
+    // The caret stays in the candidate text: the author types the paragraph first and then starts it with Enter.
+    const caretInCandidate = (offset: number) => selectInCandidate(offset, offset);
     const savedCandidate = (text: string) => expect.poll(async () => (await getProposal({ ...options, proposalId }))
       .proposal.operations.find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text,
     { timeout: 10_000 }).toBe(text);
@@ -333,18 +335,6 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await expect(candidate()).toHaveCount(1);
     assert.equal(await candidate().locator('.block-proposal-text').textContent(), splitText);
     // The author adds a part of each paragraph of the candidate to the message.
-    const selectInCandidate = (from: number, to: number) => page.evaluate(({ proposalId, operationId, from, to }) => {
-      const editor = document.querySelector<HTMLElement & { editor?: import('@tiptap/core').Editor }>(
-        '[data-manuscript-editor]')?.editor;
-      let start: number | undefined;
-      editor?.state.doc.descendants((node, position) => {
-        if (node.type.name === 'blockProposal' && node.attrs.proposalId === proposalId
-          && node.attrs.operationId === operationId) start = position + 1;
-      });
-      if (editor === undefined || start === undefined) throw new Error('The candidate is not in the editor');
-      editor.commands.setTextSelection({ from: start + from, to: start + to });
-      editor.view.focus();
-    }, { proposalId, operationId: secondaryOutcome.operation_id, from, to });
     for (const [from, to] of [[0, 4], [unsplit.length + 1, splitText.length]] as const) {
       await selectInCandidate(from, to);
       await page.locator('[data-add-selection-reference]').click();
@@ -366,36 +356,18 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await expect(addedBlock).toHaveText('A second paragraph.');
     const addedId = await addedBlock.getAttribute('data-id');
     assert.ok(addedId !== null && addedId !== secondary.manuscript_block_id);
-    const split = (await getChapter({ ...options, chapterId: secondary.chapter_id })).chapter.current_revision.blocks;
-    const at = split.findIndex(block => block.manuscript_block_id === secondary.manuscript_block_id);
-    assert.deepEqual(split.slice(at, at + 2).map(block => [block.manuscript_block_id, block.text]),
-      [[secondary.manuscript_block_id, unsplit], [addedId, 'A second paragraph.']]);
-    // A later selection in the new paragraph gives a reference to its own block.
-    await page.evaluate((blockId) => {
-      const editor = document.querySelector<HTMLElement & { editor?: import('@tiptap/core').Editor }>(
-        '[data-manuscript-editor]')?.editor;
-      let range: { from: number; to: number } | undefined;
-      editor?.state.doc.descendants((node, position) => {
-        if (node.attrs.id === blockId) range = { from: position + 1, to: position + 1 + node.content.size };
-      });
-      if (editor === undefined || range === undefined) throw new Error('The new block is not in the editor');
-      editor.commands.setTextSelection(range);
-      editor.view.focus();
-    }, addedId);
-    await page.locator('[data-add-selection-reference]').click();
-    // The reference to the first paragraph of the candidate is now Chapter text of its target block. The reference
-    // to the second paragraph left the draft, and the later selection names the new block.
+    // Each reference to the accepted candidate is now Chapter text of the block that shows its paragraph (ADR 0062).
     await expect(page.locator('[data-selection-reference-label]')).toHaveCount(2);
-    assert.deepEqual(await page.evaluate((projectId) => {
+    await expect.poll(() => page.evaluate((projectId) => {
       const key = Object.keys(sessionStorage).find((name) => name.startsWith('selection_references:')
         && name.endsWith(`:${projectId}`));
       const draft = JSON.parse(sessionStorage.getItem(key ?? '') ?? '{"entries":[]}') as
-        { entries: { reference: { start?: { manuscript_block_id: string; offset: number };
+        { entries: { reference: { kind: string; start?: { manuscript_block_id: string; offset: number };
           end?: { manuscript_block_id: string; offset: number } } }[] };
-      return draft.entries.map(({ reference }) => [reference.start?.manuscript_block_id, reference.start?.offset,
-        reference.end?.manuscript_block_id, reference.end?.offset]);
-    }, projectId), [[secondary.manuscript_block_id, 0, secondary.manuscript_block_id, 4],
-      [addedId, 0, addedId, 'A second paragraph.'.length]]);
+      return draft.entries.map(({ reference }) => [reference.kind, reference.start?.manuscript_block_id,
+        reference.start?.offset, reference.end?.manuscript_block_id, reference.end?.offset]);
+    }, projectId)).toEqual([['chapter_text', secondary.manuscript_block_id, 0, secondary.manuscript_block_id, 4],
+      ['chapter_text', addedId, 0, addedId, 'A second paragraph.'.length]]);
     // The later request of the journey works on the whole Chapter, so the author removes the references again.
     for (const left of [1, 0]) {
       await page.locator('[data-selection-reference-label] [data-remove-selection-reference]').first().click();
