@@ -3,6 +3,7 @@ export const storyOSBrowserCommandNames = {
   clipboardPermission: "storyosClipboardPermission",
   clientSessionCookie: "storyosClientSessionCookie",
   commandChallengeRateWindows: "storyosCommandChallengeRateWindows",
+  frameRequests: "storyosFrameRequests",
   imeComposition: "storyosImeComposition",
   projectReceipts: "storyosProjectReceipts",
   trustedInput: "storyosTrustedInput",
@@ -251,6 +252,30 @@ export function parseProductionHostRequest(value: unknown): ProductionHostReques
 
 export function parseProductionHostResult(value: unknown): ProductionHostResult {
   return parseResult(value, "production_host_verified", "production host");
+}
+
+/**
+ * `start` records each request of the application frame when it starts, as its method and its path. `read` ends the
+ * record and gives its requests in their order.
+ */
+export type FrameRequestsRequest = Readonly<{ action: "start" | "read" }>;
+export type FrameRequestsResult = Readonly<{ kind: "frame_requests_recorded"; requests: readonly string[] }>;
+
+export function parseFrameRequestsRequest(value: unknown): FrameRequestsRequest {
+  const request = exactObject(value, ["action"], "Frame request record request");
+  const action = property(request, "action");
+  if (action !== "start" && action !== "read") throw new TypeError("Frame request record action is unsupported");
+  return { action };
+}
+
+export function parseFrameRequestsResult(value: unknown): FrameRequestsResult {
+  const result = exactObject(value, ["kind", "requests"], "Frame request record result");
+  const requests: unknown = property(result, "requests");
+  if (property(result, "kind") !== "frame_requests_recorded" || !Array.isArray(requests)
+    || requests.some((request) => typeof request !== "string")) {
+    throw new TypeError("Frame request record result is invalid");
+  }
+  return { kind: "frame_requests_recorded", requests: requests as string[] };
 }
 
 export function parseCommandChallengeRateWindowsRequest(

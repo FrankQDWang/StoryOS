@@ -14,6 +14,8 @@ export interface ArrivalSink extends Pick<EditorSessionWritingController,
   accepts(origin: unknown): boolean;
   /** The editor gives each selection, so the editor of the hand-over can keep the caret. */
   select(selection: EditorSelection): void;
+  /** The editor gives each change of its focus, so that the editor of a newer text can keep the focus. */
+  focus(focused: boolean): void;
 }
 
 /** A selection in the editor document, as ProseMirror positions. */
@@ -49,13 +51,18 @@ export interface ArrivalInput extends ArrivalSink {
   composing(): boolean;
   /** The last selection in the Arriving Chapter. */
   selection(): EditorSelection | undefined;
+  /** True while the editor of the Arriving Chapter has the focus. */
+  focused(): boolean;
+  /** The selection that the editor takes, with the focus, when it starts: the caret of an earlier input. */
+  focusAt(): EditorSelection | undefined;
   stop(): void;
   subscribe(listener: () => void): () => void;
   /** A number that each change makes larger. */
   version(): number;
 }
 
-export function createArrivalInput(chapterId: string, copy: ChapterText): ArrivalInput {
+/** `focusAt` is the caret of an earlier input of the same Arriving Chapter whose editor had the focus. */
+export function createArrivalInput(chapterId: string, copy: ChapterText, focusAt?: EditorSelection): ArrivalInput {
   const held: HeldEdit[] = [];
   let shown = copy.blocks;
   // The text with an open IME composition, which is not a held edit until the composition ends.
@@ -63,6 +70,7 @@ export function createArrivalInput(chapterId: string, copy: ChapterText): Arriva
   let halted = false;
   let composition = false;
   let selected: EditorSelection | undefined;
+  let hasFocus = false;
   let version = 0;
   const listeners = new Set<() => void>();
   const changed = () => {
@@ -95,6 +103,7 @@ export function createArrivalInput(chapterId: string, copy: ChapterText): Arriva
       changed();
     },
     select(selection) { selected = selection; },
+    focus(focused) { hasFocus = focused; },
     showSaving(blocks) {
       if (blocks === undefined) return;
       composed = blocks;
@@ -107,6 +116,8 @@ export function createArrivalInput(chapterId: string, copy: ChapterText): Arriva
     stopped: () => halted,
     composing: () => composition,
     selection: () => selected,
+    focused: () => hasFocus,
+    focusAt: () => focusAt,
     stop() {
       if (halted) return;
       halted = true;

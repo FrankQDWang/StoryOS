@@ -1,15 +1,17 @@
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { requestResult } from "../../src/indexed-db-request.ts";
+import { JOURNAL_DATABASE_VERSION } from "../../src/local-edit-journal.ts";
 import {
-  applyTrustedInput, assertPageProjectReceipts, updateAuthorEditSubmissionHold, updateClientSessionCookie, updateClipboardPermission,
+  applyTrustedInput, assertPageProjectReceipts, recordFrameRequests, updateAuthorEditSubmissionHold, updateClientSessionCookie, updateClipboardPermission,
 } from "../support/browser-command-client.ts";
-import { selectTreeChapter } from "../support/inline-chapter-creation.ts";
+import { beginTreeAction, selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import {
   focusManuscriptEnd, manuscriptBody, manuscriptEditor, manuscriptIsEditable,
 } from "../support/manuscript-surface.ts";
 import {
-  appRoot, applicationWindow, chapterButton, closeApplicationFrame, openApplicationFrame,
+  appRoot, applicationWindow, chapterButton, closeApplicationFrame, nextFrameLoad, openApplicationFrame,
   openFirstChapterForm, reloadProject, submitChapterForm, submitProjectForm, submitVolumeForm, typeIntoCurrent,
   waitLastChapter, waitSaved,
 } from "../support/exact-dist-frame.ts";
@@ -24,9 +26,10 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-// The journey sends 11 Shared Command Challenges: 5 for the Project, the Volume, and the Chapters, and 6 for Set Current
-// Chapter. The Server gives 10 in one minute, so a switch can wait for the Retry-After, at most 61 s (#1679). Each
-// wait for a switch, and the time limit of the journey, permit that wait.
+// The journey sends 14 Shared Command Challenges: 5 for the Project, the Volume, and the Chapters, 8 for Set Current
+// Chapter, and 1 for the removal of a Chapter. The Server gives 10 in one minute, so a switch or the removal can wait
+// for the Retry-After, at most 61 s (#1679). Each wait for a switch or a removal, and the time limit of the journey,
+// permit that wait.
 const SWITCH_WAIT = 75_000;
 
 /** The text of each block of the Chapter as the Server stores it. */
@@ -192,4 +195,68 @@ it("stores the input of the earlier Chapter at the selection, stores the keys in
     await assertPageProjectReceipts({ projectId, kinds: "listed", receipts: { setCurrentChapter: 6 },
       lastResults: [{ result: "authoritative_applied", heads: [headA] },
         { result: "authoritative_applied", heads: [await revisionOf(last, projectId, b)] }] });
-  }, 240_000);
+
+    // After the new load, the tab has no copy of Chapter C. The switch reads its open suggestions together with its
+    // Chapter read, so the Arriving Chapter accepts a key while the command waits (#1934).
+    await updateAuthorEditSubmissionHold({ action: "hold_set_current_chapter" });
+    await selectTreeChapter(root(), c, { arrival: "in-progress" });
+    await expect.poll(() => ({ ...shown(manuscriptEditor(root(), last)), held: last.document.documentElement.dataset
+      .storyosHeldRequests }), { timeout: SWITCH_WAIT }).toEqual({ title: "Chapter C", body: "", editable: true,
+      held: "1" });
+    focusManuscriptEnd(manuscriptEditor(root(), last), last);
+    await applyTrustedInput({ operation: "insert_text", text: "Theta" });
+    await updateAuthorEditSubmissionHold({ action: "release" });
+    await switched("Chapter C", "Theta", last);
+    const thetaLoad = await reloadProject(frame, projectId);
+    const theta = applicationWindow(frame);
+    const thetaStep = { shown: shown(manuscriptEditor(thetaLoad, theta)),
+      stored: await storedText(theta, projectId, c) };
+
+    // The case of the instance (#1934). A Journal of a later version does not open, so the tab opens in read-only
+    // local recovery, and it shows Chapter B read-only. The display of Chapter B records the fact "no open
+    // suggestion". A removal of Chapter A opens the Project again with a ready editor of Chapter C, and the Arriving
+    // Chapter B accepts a key at once: the switch reads no list of Chapter B.
+    const journal = (await theta.indexedDB.databases()).map((database) => database.name)
+      .find((name) => name?.startsWith("storyos-local-edit-journal:") === true && name.endsWith(`:${projectId}`)) ?? "";
+    const home = nextFrameLoad(frame);
+    frame.src = "/";
+    await home;
+    (await requestResult(indexedDB.open(journal, JOURNAL_DATABASE_VERSION + 1))).close();
+    const recovery = await reloadProject(frame, projectId);
+    const recoveryWindow = applicationWindow(frame);
+    await expect.poll(() => shown(manuscriptEditor(recovery, recoveryWindow))).toEqual({ title: "Chapter C",
+      body: "Theta", editable: false });
+    const listsOfB = () => recoveryWindow.performance.getEntriesByType("resource")
+      .filter((entry) => entry.name.endsWith(`/chapters/${b}/open-proposals`)).length;
+    await selectTreeChapter(root(), b, { arrival: "in-progress" });
+    await expect.poll(() => ({ ...shown(manuscriptEditor(root(), recoveryWindow)), lists: listsOfB() }))
+      .toEqual({ title: "Chapter B", body: "Beta", editable: false, lists: 1 });
+    await requestResult(indexedDB.deleteDatabase(journal));
+    await beginTreeAction(root(), `li[data-chapter-id="${a}"]`, "[data-delete-chapter]");
+    root().querySelector<HTMLButtonElement>(`[data-delete-chapter="${a}"]`)?.click();
+    await expect.poll(() => root().querySelector(`[data-confirm-delete-chapter="${a}"]`)?.tagName).toBe("BUTTON");
+    root().querySelector<HTMLButtonElement>(`[data-confirm-delete-chapter="${a}"]`)?.click();
+    await expect.poll(() => shown(manuscriptEditor(root(), recoveryWindow)), { timeout: SWITCH_WAIT })
+      .toEqual({ title: "Chapter C", body: "Theta", editable: true });
+    await updateAuthorEditSubmissionHold({ action: "hold_set_current_chapter" });
+    // Each request of the page from the selection to the key, recorded when it starts.
+    await recordFrameRequests({ action: "start" });
+    await selectTreeChapter(root(), b, { arrival: "in-progress" });
+    await expect.poll(() => ({ ...shown(manuscriptEditor(root(), recoveryWindow)), held: recoveryWindow.document
+      .documentElement.dataset.storyosHeldRequests }), { timeout: SWITCH_WAIT }).toEqual({ title: "Chapter B",
+      body: "Beta", editable: true, held: "1" });
+    focusManuscriptEnd(manuscriptEditor(root(), recoveryWindow), recoveryWindow);
+    await applyTrustedInput({ operation: "insert_text", text: " Iota" });
+    const atKey = (await recordFrameRequests({ action: "read" }))
+      .map((request) => request.replace(projectId, "P").replaceAll(b, "B"));
+    await updateAuthorEditSubmissionHold({ action: "release" });
+    await switched("Chapter B", "Beta Iota", recoveryWindow);
+    const iotaLoad = await reloadProject(frame, projectId);
+    const iota = applicationWindow(frame);
+    expect({ thetaStep, atKey, shown: shown(manuscriptEditor(iotaLoad, iota)),
+      stored: await storedText(iota, projectId, b) }).toEqual({
+      thetaStep: { shown: { title: "Chapter C", body: "Theta", editable: true }, stored: ["Theta"] },
+      // The switch reads no list of Chapter B: the Chapter read, the Challenge, and the held command.
+      atKey: ["GET /api/v1/projects/P/chapters/B", "POST /api/v1/projects/P/anti-forgery-challenges",
+        "PUT /api/v1/projects/P/current-chapter"], shown: { title: "Chapter B", body: "Beta Iota", editable: true }, stored: ["Beta Iota"] });
+  }, 300_000);
