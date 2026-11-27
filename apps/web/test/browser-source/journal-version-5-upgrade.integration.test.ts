@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
 
 import { openEditorWorkspace, submitOnePendingAuthorEdit } from "../../src/editor-session.ts";
-import { freezeUnsentVersion5Groups, version5SessionLock } from "../../src/journal-version-5-upgrade.ts";
+import { rebuildPendingProjection } from "../../src/local-edit-journal.ts";
+import { editorSessionLock, freezeUnsentVersion5Groups } from "../../src/journal-version-5-upgrade.ts";
 import { LocalRecoveryPanel } from "../../src/local-recovery-panel.tsx";
 import candidateFixture from "../../../../fixtures/local-edit-journal/version-5-candidate-record.json";
 import identifierFixture from "../../../../fixtures/local-edit-journal/version-5-identifier-text-group.json";
@@ -193,9 +194,7 @@ it.each([["no stored Editor Session", null], ["the same stored Editor Session", 
     stored) => {
   const fixture = otherSession(unsentFixture as Fixture);
   await restore(fixture);
-  const [partition] = rows(fixture, "partitions");
-  const lock = version5SessionLock(String(partition!.journal_partition_id).replace(`:${OTHER_SESSION}:1:`,
-    `:${OTHER_SESSION}:`));
+  const lock = editorSessionLock(OTHER_SESSION);
   const frame = document.createElement("iframe");
   document.body.append(frame);
   let release!: () => void;
@@ -234,6 +233,12 @@ it("puts the text of the Session of the version 5 rows in local recovery when th
   const next = fakeServer([CHALLENGE, SESSION_CREATE]);
   await openStored(next, null);
   expect(next.requests).toEqual([CHALLENGE, SESSION_CREATE]);
+
+  // A tab that has that Session stored opens it when the Server reads it again. The recovery text does not stop it.
+  closeTrackedDatabases(databases);
+  const stored = fakeServer([SESSION_READ]);
+  expect({ body: (await openStored(stored)).openedProjection.body, requests: stored.requests })
+    .toEqual({ body: "Base!?", requests: [SESSION_READ] });
 });
 
 // Two tabs opened the version 5 Journal at the same time, and both read the marker of the unsent group. The first tab
@@ -435,12 +440,20 @@ it("shows the text of a version 5 group that the Server rejected in local recove
   expect(server.requests).toEqual([SESSION_READ, `${OUTCOME}${String(sent!.idempotency_key)}`]);
 });
 
-it("keeps the rows of a version 5 partition with a group that has no version 5 request, and shows their text", async () => {
-  const fixture = sentFixture as Fixture;
-  const [group] = rows(fixture, "submission_groups");
-  const { writer_generation: _writer, ...request } = group!.frozen_request_body as Record<string, unknown>;
+// The unsent group "!" of the recording is changed, and the record "?" follows it. The groups of the partition do not
+// pass the checks of the client, so its text comes from its records.
+it.each([
+  ["a group that has no version 5 request", (group: Record<string, unknown>) => {
+    const { writer_generation: _writer, ...request } = group.frozen_request_body as Record<string, unknown>;
+    return { ...group, frozen_request_body: request };
+  }],
+  ["a version 5 group with a settlement that the client does not know", (group: Record<string, unknown>) =>
+    ({ ...group, settlement: { kind: "unknown_settlement" } })],
+] as const)("keeps the rows of a version 5 partition with %s, and shows their text", async (_, change) => {
+  const fixture = unsentFixture as Fixture;
   const changed = { ...fixture, stores: fixture.stores.map((store) => store.name !== "submission_groups" ? store
-    : { ...store, rows: [{ ...group!, frozen_request_body: request }] }) };
+    : { ...store, rows: store.rows.map((group) => (group.settlement as { kind: string }).kind === "unsettled"
+      ? change(group) : group) }) };
   await restore(changed);
   const [partition] = rows(changed, "partitions");
   const server = fakeServer([SESSION_READ]);
@@ -448,7 +461,7 @@ it("keeps the rows of a version 5 partition with a group that has no version 5 r
   const state = await openStored(server);
 
   expect(state.openedProjection.body).toBe("Base");
-  expect(await recoveryItems(state, 1)).toEqual([["正文修改", "Base!"]]);
+  expect(await recoveryItems(state, 1)).toEqual([["正文修改", "Base!?"]]);
   expect({ rows: await partitionRows(String(partition!.journal_partition_id)), requests: server.requests })
     .toEqual({ rows: [rows(changed, "intents"), rows(changed, "submission_groups")], requests: [SESSION_READ] });
 });
@@ -469,4 +482,63 @@ it("keeps a version 5 partition when a stored partition has its version 6 identi
     rows: await partitionRows(String(partition!.journal_partition_id)), requests: server.requests })
     .toEqual({ partitions: [partition, blocking], rows: [rows(fixture, "intents"), rows(fixture, "submission_groups")],
       requests: [CHALLENGE, SESSION_CREATE] });
+});
+
+it("shows the text of a rejected version 5 group in a recovery panel that was open before the rejection", async () => {
+  const fixture = sentFixture as Fixture;
+  await restore(fixture);
+  const [sent] = rows(fixture, "submission_groups");
+  const server = fakeServer([SESSION_READ, `${OUTCOME}${String(sent!.idempotency_key)}`], { outcome: "rejected" });
+  const state = await openStored(server);
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  // The page gives the panel the key of the projection, as `stage1-view.tsx` does.
+  const render = (projection: typeof state.openedProjection) => act(async () => root.render(createElement(
+    LocalRecoveryPanel, { workspace: state, refreshKey: String(projection.requires_local_reconfirmation === true),
+      onContinue: async () => {} })));
+  try {
+    await render(state.openedProjection);
+    expect(host.querySelectorAll("[data-local-recovery-text]").length).toBe(0);
+
+    await submitOnePendingAuthorEdit({ workspace: state, baseUrl: location.origin, fetchImpl: server.fetchImpl,
+      cryptoImpl: crypto });
+    await render(await rebuildPendingProjection(state));
+
+    await expect.poll(() => host.querySelector("[data-local-recovery-text]")?.textContent).toBe("Base!");
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it("shows the next-page button of local recovery when a rejected version 5 group comes before a full page", async () => {
+  const fixture = sentFixture as Fixture;
+  await restore(fixture);
+  const [sent] = rows(fixture, "submission_groups");
+  const server = fakeServer([SESSION_READ, `${OUTCOME}${String(sent!.idempotency_key)}`], { outcome: "rejected" });
+  const state = await openStored(server);
+  await submitOnePendingAuthorEdit({ workspace: state, baseUrl: location.origin, fetchImpl: server.fetchImpl,
+    cryptoImpl: crypto });
+  // A full page of stored recovery texts of other partitions.
+  const metadata = state.database.transaction("metadata", "readwrite").objectStore("metadata");
+  for (let index = 10; index < 30; index += 1) {
+    const value = { format_version: 1, disposition: "retained_from_earlier_journal",
+      project_scope: scenario.project.project_scope, journal_partition_id: `other-${index}`, text: `T${index}` };
+    metadata.put({ key: `local_retained_recovery:other-${index}:earlier_journal`, value });
+  }
+  await requestResult(metadata.get("schema"));
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(createElement(LocalRecoveryPanel, { workspace: state, refreshKey: "0",
+      onContinue: async () => {} })));
+    await expect.poll(() => host.querySelectorAll("[data-local-recovery-text]").length).toBe(21);
+
+    expect([...host.querySelectorAll("button")].map((button) => button.textContent)).toContain("更多恢复内容");
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
 });

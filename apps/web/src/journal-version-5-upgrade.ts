@@ -4,7 +4,8 @@ import type { EditorWorkspace, JournalPartition, JournalSubmissionGroup } from "
 import { uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 import {
-  candidateTextsFromJournal, journalHasOpenWork, readJournalSnapshot, rebuildPendingProjection, validateJournalSnapshot,
+  candidateTextsFromJournal, hasCurrentSubmissionShape, journalHasOpenWork, readJournalSnapshot,
+  rebuildPendingProjection, validatePayloadChains,
 } from "./local-edit-journal.ts";
 import { earlierJournalKey, type EarlierJournalText } from "./local-recovery-record.ts";
 
@@ -40,6 +41,15 @@ export function hasVersion5Request(group: { command_schema?: unknown; frozen_req
   const request = group.frozen_request_body as { command_schema?: unknown; writer_generation?: unknown } | undefined;
   return group.command_schema === V1_AUTHOR_EDIT && request?.command_schema === V1_AUTHOR_EDIT
     && positiveU64(request.writer_generation);
+}
+
+const SETTLEMENTS = ["unsettled", "applied_receipt_settled", "zero_authority_receipt_settled",
+  "outcome_query_rejected_no_admission", "outcome_query_requires_reconfirmation"];
+
+/** Tells if version 6 reads the version 5 `group`. */
+function supportedGroup(group: Row): boolean {
+  return hasVersion5Request(group) && SETTLEMENTS.includes(String((group.settlement as { kind?: unknown })?.kind))
+    && hasCurrentSubmissionShape(group as JournalSubmissionGroup);
 }
 
 function identifier(partition: Version5Partition, generation: string[]): string {
@@ -108,9 +118,10 @@ export function upgradeVersion5Journal(transaction: IDBTransaction): void {
       const rows = groups.length + await requestResult(transaction.objectStore("intents").index("partition")
         .count(id)) > 0;
       if (rows) withRows.push(id);
-      // The version 5 client wrote each group with a v1 request and a writer generation.
+      // The version 5 client wrote each group with a v1 request and a writer generation, and with a settlement that
+      // version 6 reads.
       if (!positiveU64(partition.writer_generation) || id !== identifier(partition, [partition.writer_generation])
-        || !groups.every(hasVersion5Request) || stored.has(identifier(partition, []))) continue;
+        || !groups.every(supportedGroup) || stored.has(identifier(partition, []))) continue;
       const next = identifier(partition, []);
       const prior = chosen.get(next);
       if (prior === undefined || (rows && !prior.rows) || (rows === prior.rows
@@ -169,7 +180,7 @@ const heldHere = new Set<string>();
  * the lock when the page closes. It tells if this page holds the lock.
  */
 function holdSession(session: Version5Session): Promise<boolean> {
-  const name = version5SessionLock(session.journal_partition_id);
+  const name = editorSessionLock(session.editor_session_id);
   const locks = globalThis.navigator?.locks;
   if (heldHere.has(name) || locks === undefined) return Promise.resolve(true);
   return new Promise((resolve) => {
@@ -182,9 +193,12 @@ function holdSession(session: Version5Session): Promise<boolean> {
   });
 }
 
-/** The name of the Web Lock that the tab of a version 5 Session holds. */
-export function version5SessionLock(partitionId: string): string {
-  return `storyos-version-5-session:${partitionId}`;
+/**
+ * The name of the Web Lock of an Editor Session. The tab that has the Session open holds it, so that no other open tab
+ * opens that Session.
+ */
+export function editorSessionLock(editorSessionId: string): string {
+  return `storyos-editor-session:${editorSessionId}`;
 }
 
 /**
@@ -311,13 +325,14 @@ async function retainPartitionTexts(
       }
     } catch {
       try {
-        // The groups do not pass the checks of the client. The last text of each target comes from the records.
+        // The groups do not pass the checks of the client. The last text of each target comes from the records and
+        // their payloads, and the groups and records stay as they are.
         const snapshot = await readJournalSnapshot(workspace);
-        const validated = await validateJournalSnapshot(workspace, { ...snapshot, groups: [] });
+        const { bodyBySequence } = await validatePayloadChains(workspace, snapshot.records, snapshot.payloadChains);
         const last = new Map<string, { text: string; target?: EarlierJournalText["proposal_target"] }>();
-        for (const record of validated.records) {
+        for (const record of snapshot.records) {
           const target = record.proposal_target;
-          const value = validated.bodyBySequence.get(record.local_intent_sequence);
+          const value = bodyBySequence.get(record.local_intent_sequence);
           if (value === undefined) continue;
           last.set(target ? `${target.proposal_id}:${target.operation_id}` : "", { text: value, ...(target
             ? { target: { proposal_id: target.proposal_id, operation_id: target.operation_id } } : {}) });

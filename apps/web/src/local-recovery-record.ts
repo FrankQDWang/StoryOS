@@ -44,7 +44,9 @@ export async function readRecoveryDispositions(transaction: IDBTransaction, work
     IDBKeyRange.bound(prefix, prefix + "\uffff"), MAX_WORKING_JOURNAL_ITEMS + 1,
   )) as { value: LocalRecoveryMaterial }[];
   if (rows.length > MAX_WORKING_JOURNAL_ITEMS) throw new Error("Local recovery limit failed");
-  return rows.map((row) => row.value);
+  // A text of a version 5 Journal has no group. Only the local recovery panel reads it.
+  return rows.map((row) => row.value).filter((value) =>
+    (value as { disposition?: unknown }).disposition !== "retained_from_earlier_journal");
 }
 
 export function validateRecoveryDispositions(snapshot: ValidatedJournalSnapshot): void {
